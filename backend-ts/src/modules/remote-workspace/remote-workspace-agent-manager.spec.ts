@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { RemoteAgentManager } from "./remote-workspace-agent-manager";
-import { RpcClient } from "./rpc";
+import { RpcClient, WsRpcTransport } from "./rpc";
 
 /**
  * 断线自动恢复测试:
@@ -48,7 +48,7 @@ describe("RemoteAgentManager auto-reconnect on disconnect", () => {
         ws.once("open", () => resolve());
         ws.once("error", (e) => reject(e));
       });
-      const rpc = new RpcClient(ws);
+      const rpc = new RpcClient(new WsRpcTransport(ws));
       rpc.setConnected();
       return { rpc, ws, sshClient: null as any };
     });
@@ -120,7 +120,7 @@ describe("RemoteAgent.execute error wording", () => {
         ws.once("open", () => resolve());
         ws.once("error", (e) => reject(e));
       });
-      const rpc = new RpcClient(ws);
+      const rpc = new RpcClient(new WsRpcTransport(ws));
       rpc.setConnected();
       return { rpc, ws, sshClient: null as any };
     });

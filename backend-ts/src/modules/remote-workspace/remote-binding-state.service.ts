@@ -18,7 +18,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { ContentBlock } from "../../common/types/conversation.types";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
-import { RemoteWorkspaceService } from "./remote-workspace.service";
+import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 
 /** ssh 连接绑定状态（按会话存储） */
 interface BindingState {
@@ -113,6 +113,27 @@ export class RemoteBindingStateService {
 
   // ── 渲染 ──
 
+  /**
+   * 连接描述（清单与变更注入共用）：按连接类型渲染。
+   * SSH → user@host:port<path>；Docker → 容器名（容器内路径）。
+   * 模型据此理解 workspace 目标的物理含义（远端主机 / 本机容器）。
+   */
+  private describeConnection(c: RemoteConnection): { list: string; short: string } {
+    if (c.config.kind === "docker") {
+      const container = c.config.container || "?";
+      const path = c.config.path ? ` (path: ${c.config.path})` : "";
+      return {
+        list: `docker container "${container}"${path}`,
+        short: `docker container "${container}"`,
+      };
+    }
+    const cfg = c.config;
+    return {
+      list: `${cfg.username || "root"}@${cfg.host}:${cfg.port || 22}${cfg.path || ""}`,
+      short: `${cfg.username || "root"}@${cfg.host}`,
+    };
+  }
+
   private async renderList(ids: string[]): Promise<string> {
     if (ids.length === 0) return "";
     const connections = await this.workspaceService.getConnections();
@@ -125,9 +146,7 @@ export class RemoteBindingStateService {
         lines.push(`- (removed connection: ${id})`);
         continue;
       }
-      lines.push(
-        `- "${c.name}": ${c.config.username || "root"}@${c.config.host}:${c.config.port || 22}${c.config.path || ""}`,
-      );
+      lines.push(`- "${c.name}": ${this.describeConnection(c).list}`);
     }
     return lines.join("\n");
   }
@@ -137,7 +156,7 @@ export class RemoteBindingStateService {
     const byId = new Map(connections.map((c) => [c.id, c]));
     const describe = (id: string): string => {
       const c = byId.get(id);
-      return c ? `"${c.name}" (${c.config.username || "root"}@${c.config.host})` : `"${id}" (removed)`;
+      return c ? `"${c.name}" (${this.describeConnection(c).short})` : `"${id}" (removed)`;
     };
     const beforeSet = new Set(before);
     const afterSet = new Set(after);

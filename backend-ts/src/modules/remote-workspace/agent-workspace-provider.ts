@@ -1,9 +1,10 @@
 /**
- * SshWorkspaceProvider — WorkspaceProvider 的远程（SSH 连接）实现。
+ * AgentWorkspaceProvider — WorkspaceProvider 的"agent 后端"实现（SSH 远端与 Docker 容器共用）。
  *
- * 通过 RemoteAgent（WebSocket JSON-RPC → 远端 guada-agent）执行文件/搜索/进程操作，
- * 连接生命周期（部署、缓存、空闲回收）由 RemoteAgentManager 管理，
+ * 通过 RemoteAgent（JSON-RPC → 目标端 guada-agent）执行文件/搜索/进程操作；
+ * 传输差异（SSH 隧道 WebSocket / 容器 docker exec stdio）由连接层统一封装，
  * 本类只做无状态的协议映射，实例可按调用即用即弃。
+ * scheme 由连接类型传入（"ssh" / "docker"），供需要区分目标形态的调用方使用。
  *
  * 已知语义差异（工具层负责对齐，见 file.plugin 远程分支）：
  * - replaceInFile：agent 原语为"全部替换"且不做 CRLF 归一；工具层经 readFile+writeFile
@@ -48,13 +49,17 @@ export function parseRemoteProcessId(
   return { connectionName: rest.slice(0, idx), pid: rest.slice(idx + 1) };
 }
 
-export class SshWorkspaceProvider implements WorkspaceProvider {
-  readonly scheme = "ssh";
+export class AgentWorkspaceProvider implements WorkspaceProvider {
+  readonly scheme: string;
 
   constructor(
     private readonly agent: RemoteAgent,
     private readonly connectionName = "",
-  ) {}
+    /** 连接类型（"ssh" / "docker"）；缺省 ssh 保持既有调用方语义 */
+    scheme = "ssh",
+  ) {
+    this.scheme = scheme;
+  }
 
   // ── Lifecycle（连接由 RemoteAgentManager 管理，这里无操作）──
   async connect(): Promise<void> {}

@@ -22,7 +22,7 @@
             </div>
             <div>
               <div class="text-sm font-medium">{{ conn.name }}</div>
-              <div class="text-xs text-gray-400">SSH</div>
+              <div class="text-xs text-gray-400">{{ connectionKind(conn) === 'docker' ? 'Docker' : 'SSH' }}</div>
             </div>
           </div>
           <div class="flex gap-1">
@@ -31,7 +31,7 @@
           </div>
         </div>
         <div class="text-xs text-gray-400 truncate">
-          {{ conn.config.username }}@{{ conn.config.host }}:{{ conn.config.port || 22 }}
+          {{ connectionTargetLine(conn.config) }}
         </div>
         <div class="text-xs text-gray-400 truncate mt-0.5">
           {{ conn.config.path }}
@@ -72,7 +72,7 @@
         <!-- 右侧内容区 -->
         <div class="flex-1 pl-6 flex flex-col min-w-0">
           <!-- Step 0: 填写配置 -->
-          <div v-if="currentStep === 0" class="flex flex-col gap-4 flex-1">
+          <div v-if="currentStep === 0" class="flex flex-col gap-4 flex-1 overflow-auto">
             <div>
               <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ t('settings.connection.fillConfig') }}</h3>
               <p class="text-xs text-gray-400 mt-0.5">{{ t('settings.connection.fillConfigDesc') }}</p>
@@ -83,49 +83,105 @@
               <el-input v-model="editName" placeholder="my-server" />
             </div>
 
-            <div class="flex gap-3 items-end">
-              <div class="flex-1 min-w-0">
-                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Host <span class="text-red-500">*</span></label>
-                <el-input v-model="editConfig.host" placeholder="192.168.1.100" />
-              </div>
-              <div class="shrink-0" style="width: 110px;">
-                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Port</label>
-                <el-input-number v-model="editConfig.port" :min="1" :max="65535" controls-position="right" style="width: 110px;" />
-              </div>
-            </div>
-
-            <div class="flex gap-3 items-end">
-              <div class="flex-1 min-w-0">
-                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Username <span class="text-red-500">*</span></label>
-                <el-input v-model="editConfig.username" placeholder="root" />
-              </div>
-              <div class="shrink-0" style="width: 130px;">
-                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Auth</label>
-                <el-select v-model="editConfig.authMethod" style="width: 130px;">
-                  <el-option v-for="opt in authOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-                </el-select>
-              </div>
-            </div>
-
-            <div v-if="editConfig.authMethod === 'password'">
-              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.passwordLabel') }}</label>
-              <el-input v-model="editConfig.password" type="password" show-password />
-            </div>
-            <div v-if="editConfig.authMethod === 'privateKey'">
-              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.privateKeyPathLabel') }}</label>
-              <div class="flex gap-2">
-                <el-input v-model="editConfig.privateKeyPath" class="flex-1 min-w-0"
-                  :placeholder="isElectron ? t('settings.connection.privateKeyPathPlaceholderElectron') : t('settings.connection.privateKeyPathPlaceholderWeb')" />
-                <el-button v-if="isElectron" @click="selectPrivateKeyFile">
-                  {{ t('settings.connection.browse') }}
-                </el-button>
+            <!-- 连接类型：SSH 远程主机 / 本机（或远程 daemon）上的 Docker 容器 -->
+            <div>
+              <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.typeLabel') }}</label>
+              <div class="flex w-fit rounded-lg overflow-hidden border border-(--gd-color-border) dark:border-gray-700">
+                <button
+                  v-for="opt in typeOptions"
+                  :key="opt.value"
+                  type="button"
+                  class="px-4 py-1.5 text-xs font-medium transition-colors whitespace-nowrap cursor-pointer"
+                  :class="editConfig.kind === opt.value
+                    ? 'bg-(--gd-color-primary) text-white border-(--gd-color-primary)'
+                    : 'text-(--gd-color-text-gray) hover:bg-(--gd-color-primary-100) hover:text-(--gd-color-primary)'"
+                  @click="switchType(opt.value)">
+                  {{ opt.label }}
+                </button>
               </div>
               <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
-                {{ t('settings.connection.privateKeyPathDesc') }}
+                {{ editConfig.kind === 'docker' ? t('settings.connection.typeDockerDesc') : t('settings.connection.typeSshDesc') }}
               </div>
             </div>
 
-            <!-- 权限模式:横向切换按钮 -->
+            <!-- SSH 字段 -->
+            <template v-if="editConfig.kind === 'ssh'">
+              <div class="flex gap-3 items-end">
+                <div class="flex-1 min-w-0">
+                  <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Host <span class="text-red-500">*</span></label>
+                  <el-input v-model="editConfig.host" placeholder="192.168.1.100" />
+                </div>
+                <div class="shrink-0" style="width: 110px;">
+                  <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Port</label>
+                  <el-input-number v-model="editConfig.port" :min="1" :max="65535" controls-position="right" style="width: 110px;" />
+                </div>
+              </div>
+
+              <div class="flex gap-3 items-end">
+                <div class="flex-1 min-w-0">
+                  <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Username <span class="text-red-500">*</span></label>
+                  <el-input v-model="editConfig.username" placeholder="root" />
+                </div>
+                <div class="shrink-0" style="width: 130px;">
+                  <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Auth</label>
+                  <el-select v-model="editConfig.authMethod" style="width: 130px;">
+                    <el-option v-for="opt in authOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+                  </el-select>
+                </div>
+              </div>
+
+              <div v-if="editConfig.authMethod === 'password'">
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.passwordLabel') }}</label>
+                <el-input v-model="editConfig.password" type="password" show-password />
+              </div>
+              <div v-if="editConfig.authMethod === 'privateKey'">
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.privateKeyPathLabel') }}</label>
+                <div class="flex gap-2">
+                  <el-input v-model="editConfig.privateKeyPath" class="flex-1 min-w-0"
+                    :placeholder="isElectron ? t('settings.connection.privateKeyPathPlaceholderElectron') : t('settings.connection.privateKeyPathPlaceholderWeb')" />
+                  <el-button v-if="isElectron" @click="selectPrivateKeyFile">
+                    {{ t('settings.connection.browse') }}
+                  </el-button>
+                </div>
+                <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
+                  {{ t('settings.connection.privateKeyPathDesc') }}
+                </div>
+              </div>
+            </template>
+
+            <!-- Docker 字段 -->
+            <template v-else>
+              <div>
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.containerLabel') }} <span class="text-red-500">*</span></label>
+                <div class="flex gap-2">
+                  <el-select v-model="editConfig.container" filterable allow-create default-first-option
+                    class="flex-1 min-w-0" :placeholder="t('settings.connection.containerPlaceholder')"
+                    :loading="containersLoading" @visible-change="onContainerDropdown">
+                    <el-option v-for="c in runningContainers" :key="c.name" :label="c.name" :value="c.name">
+                      <span class="text-sm">{{ c.name }}</span>
+                      <span class="text-xs text-gray-400 ml-2">{{ c.image }}</span>
+                    </el-option>
+                  </el-select>
+                  <el-button :loading="containersLoading" @click="loadContainers()">
+                    {{ t('settings.connection.refreshContainers') }}
+                  </el-button>
+                </div>
+                <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
+                  {{ t('settings.connection.containerDesc') }}
+                </div>
+                <div v-if="containersError" class="text-xs text-red-500 mt-1">{{ containersError }}</div>
+              </div>
+
+              <div>
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.dockerHostLabel') }}</label>
+                <el-input v-model="editConfig.dockerHost" :placeholder="t('settings.connection.dockerHostPlaceholder')" />
+                <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
+                  {{ t('settings.connection.dockerHostDesc') }}
+                </div>
+              </div>
+            </template>
+
+            <!-- 权限模式:横向切换按钮（两种连接类型共用，agent 端强制） -->
             <div>
               <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
                 {{ t('settings.connection.permTitle') }}
@@ -160,9 +216,9 @@
                 <span class="text-lg text-red-500">✗</span>
               </div>
               <div class="flex-1 min-w-0">
-                <p v-if="testing" class="text-sm text-gray-500">{{ t('settings.connection.testing') }} {{ editConfig.username }}@{{ editConfig.host }}:{{ editConfig.port }}...</p>
-                <p v-else-if="testResult?.success" class="text-sm text-green-600 dark:text-green-400 font-medium">{{ t('settings.connection.sshConnected') }}</p>
-                <p v-else-if="testResult" class="text-sm text-red-500 font-medium">{{ t('settings.connection.sshFailed') }}</p>
+                <p v-if="testing" class="text-sm text-gray-500">{{ t('settings.connection.testing') }} {{ connectionTargetLine(editConfig) }}...</p>
+                <p v-else-if="testResult?.success" class="text-sm text-green-600 dark:text-green-400 font-medium">{{ t('settings.connection.connectedOk') }}</p>
+                <p v-else-if="testResult" class="text-sm text-red-500 font-medium">{{ t('settings.connection.connectedFailed') }}</p>
               </div>
             </div>
 
@@ -172,11 +228,15 @@
             </div>
           </div>
 
-          <!-- Step 2: 选择远端目录 -->
+          <!-- Step 2: 选择工作目录（远端 / 容器内） -->
           <div v-if="currentStep === 2" class="flex flex-col flex-1 min-h-0 gap-3">
             <div>
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ t('settings.connection.browseTitle') }}</h3>
-              <p class="text-xs text-gray-400 mt-0.5">{{ t('settings.connection.browseDesc') }}</p>
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                {{ editConfig.kind === 'docker' ? t('settings.connection.browseTitleDocker') : t('settings.connection.browseTitle') }}
+              </h3>
+              <p class="text-xs text-gray-400 mt-0.5">
+                {{ editConfig.kind === 'docker' ? t('settings.connection.browseDescDocker') : t('settings.connection.browseDesc') }}
+              </p>
             </div>
             <!-- 路径栏 -->
             <div class="flex gap-2 shrink-0">
@@ -245,10 +305,10 @@
             <span v-else></span>
             <div class="flex gap-2">
               <el-button v-if="currentStep === 0" type="primary" @click="goToTest"
-                :disabled="!editConfig.host || !editConfig.username || !editName.trim()">
+                :disabled="!canProceedFromConfig">
                 {{ t('settings.connection.next') }}
               </el-button>
-              <el-button v-if="currentStep === 1 && !testing" @click="testConn" :disabled="!editConfig.host">
+              <el-button v-if="currentStep === 1 && !testing" @click="testConn" :disabled="!canProceedFromConfig">
                 {{ t('settings.connection.retest') }}
               </el-button>
               <el-button v-if="currentStep === 1 && testResult?.success" type="primary" @click="goToBrowse">
@@ -279,7 +339,14 @@ import { useI18n } from 'vue-i18n'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'
 import { useRemoteWorkspaceStore } from '@/stores/remoteWorkspace'
-import type { RemoteConnection, DirEntry } from '@/services/modules/remote-workspace.api'
+import {
+  connectionKind,
+  connectionTargetLine,
+  type RemoteConnection,
+  type RemoteConnectionConfig,
+  type DockerContainerInfo,
+  type DirEntry,
+} from '@/services/modules/remote-workspace.api'
 
 const { t } = useI18n()
 
@@ -307,9 +374,65 @@ const connections = computed(() => remoteWorkspaceStore.connections)
 const editing = ref(false)
 const editConnId = ref<string | null>(null)
 const editName = ref('')
-const editConfig = ref<RemoteConnection['config']>({
-  host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKeyPath: '', path: '', perm: 'workspace'
-})
+
+/** 新连接的默认配置（SSH 形状；切到 Docker 时由 switchType 替换字段组） */
+function defaultConfig(kind: 'ssh' | 'docker' = 'ssh'): RemoteConnectionConfig {
+  return kind === 'docker'
+    ? { kind: 'docker', container: '', dockerHost: '', path: '', perm: 'workspace' }
+    : {
+        kind: 'ssh',
+        host: '', port: 22, username: 'root', authMethod: 'password',
+        password: '', privateKeyPath: '', path: '', perm: 'workspace',
+      }
+}
+const editConfig = ref<RemoteConnectionConfig>(defaultConfig())
+
+/** 连接类型切换：替换为对应类型的默认字段组（已填的公共项 perm 保留） */
+function switchType(kind: 'ssh' | 'docker') {
+  if (editConfig.value.kind === kind) return
+  const perm = editConfig.value.perm
+  editConfig.value = { ...defaultConfig(kind), perm }
+  // 路径属于目标侧概念：类型切换后原路径不再适用，浏览态一并重置
+  browserPath.value = kind === 'docker' ? '/' : '/'
+  browserEntries.value = []
+  browserExists.value = false
+  testResult.value = null
+  testLog.value = ''
+  deployResult.value = null
+  deployLog.value = ''
+}
+
+const typeOptions = computed(() => [
+  { value: 'ssh' as const, label: t('settings.connection.typeSsh') },
+  { value: 'docker' as const, label: t('settings.connection.typeDocker') },
+])
+
+// ── 容器选择器（Docker 类型）──
+const runningContainers = ref<DockerContainerInfo[]>([])
+const containersLoading = ref(false)
+const containersError = ref('')
+
+async function loadContainers() {
+  if (editConfig.value.kind !== 'docker') return
+  containersLoading.value = true
+  containersError.value = ''
+  try {
+    const result = await apiService.listDockerContainers(editConfig.value.dockerHost || undefined)
+    runningContainers.value = result?.containers || []
+    if (result?.error) containersError.value = result.error
+  } catch (e) {
+    containersError.value = getErrorMessage(e)
+  } finally {
+    containersLoading.value = false
+  }
+}
+
+/** 下拉展开时按需刷新容器列表（避免进入向导即调用 docker） */
+function onContainerDropdown(visible: boolean) {
+  if (visible && runningContainers.value.length === 0) void loadContainers()
+}
+
+
 // Electron 环境判断(有文件选择能力)
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 
@@ -370,7 +493,7 @@ function startNew() {
   editing.value = true
   editConnId.value = null
   editName.value = ''
-  editConfig.value = { host: '', port: 22, username: 'root', authMethod: 'password', password: '', privateKeyPath: '', path: '', perm: 'workspace' }
+  editConfig.value = defaultConfig()
   testResult.value = null
   testLog.value = ''
   deployResult.value = null
@@ -378,6 +501,8 @@ function startNew() {
   browserPath.value = '/'
   browserEntries.value = []
   browserExists.value = false
+  runningContainers.value = []
+  containersError.value = ''
   currentStep.value = 0
 }
 
@@ -385,8 +510,9 @@ function editConn(conn: RemoteConnection) {
   editing.value = true
   editConnId.value = conn.id
   editName.value = conn.name
-  // 从未选择过权限的旧连接:默认 workspace(按钮高亮体现)
-  editConfig.value = { ...conn.config, perm: conn.config.perm || 'workspace' }
+  // 从未选择过权限的旧连接:默认 workspace(按钮高亮体现);
+  // kind 缺省(旧数据)由后端归一为 ssh,此处补上以便表单分支判断
+  editConfig.value = { kind: 'ssh', ...conn.config, perm: conn.config.perm || 'workspace' }
   testResult.value = null
   testLog.value = ''
   deployResult.value = null
@@ -394,8 +520,17 @@ function editConn(conn: RemoteConnection) {
   browserPath.value = conn.config.path || '/'
   browserEntries.value = []
   browserExists.value = false
+  runningContainers.value = []
+  containersError.value = ''
   currentStep.value = 0
 }
+
+/** Step 0 必填校验（按连接类型） */
+const canProceedFromConfig = computed(() => {
+  if (!editName.value.trim()) return false
+  if (editConfig.value.kind === 'docker') return !!editConfig.value.container?.trim()
+  return !!editConfig.value.host && !!editConfig.value.username
+})
 
 async function goToTest() {
   currentStep.value = 1

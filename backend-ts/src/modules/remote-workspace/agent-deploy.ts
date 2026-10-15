@@ -22,7 +22,7 @@ import * as net from "net";
 import * as https from "https";
 import * as crypto from "crypto";
 import type { ParsedWorkspaceUri } from "../../common/workspace/workspace-provider.interface";
-import { RpcClient } from "./rpc";
+import { RpcClient, WsRpcTransport } from "./rpc";
 
 const REMOTE_DIR = ".guada-agent";
 const REMOTE_BINARY_NAME = "guada-agent";
@@ -460,7 +460,7 @@ export async function verifyAndDeployAgent(
         verifyWs.once("open", () => resolve());
         verifyWs.once("error", (err) => reject(err));
       });
-      const verifyRpc = new RpcClient(verifyWs);
+      const verifyRpc = new RpcClient(new WsRpcTransport(verifyWs));
       verifyRpc.setConnected();
       const ping = await verifyRpc.call<{ pong: string }>("ping");
       if (!ping.pong) throw new Error("Agent ping failed");
@@ -505,7 +505,7 @@ export interface AgentLatestInfo {
  *   {"version":"0.4.1","downloadUrl":"https://.../guada-agent-{os}-{arch}-v{version}"}
  * 第二种格式可直接在检测接口中携带下载地址,无需单独配置。
  */
-function fetchLatestVersion(latestUrl: string): Promise<AgentLatestInfo> {
+export function fetchLatestVersion(latestUrl: string): Promise<AgentLatestInfo> {
   return new Promise((resolve, reject) => {
     const req = https.get(latestUrl, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302 && res.headers.location) {
@@ -551,7 +551,7 @@ function fetchLatestVersion(latestUrl: string): Promise<AgentLatestInfo> {
  * 2. 无 latest 配置 → 使用本地缓存;缓存缺失且配置了 downloadUrl → 下载。
  * 3. 均未配置 → 保持调试行为:报错提示手动复制二进制。
  */
-async function ensureLocalBinary(
+export async function ensureLocalBinary(
   osName: string,
   goArch: string,
   downloadUrl?: string,

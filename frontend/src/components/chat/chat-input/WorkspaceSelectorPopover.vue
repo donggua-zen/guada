@@ -82,7 +82,7 @@
       <template v-if="attachedConnections.length > 0">
         <div v-for="conn in attachedConnections" :key="conn.id" class="attached-row flex items-center gap-1.25 px-2 py-1 rounded-md transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)">
           <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-            <Cloud16Regular />
+            <component :is="conn.kind === 'docker' ? Cube16Regular : Cloud16Regular" />
           </el-icon>
           <div class="flex-1 flex flex-col gap-0.5 min-w-0">
             <div class="flex items-baseline gap-1.5 min-w-0">
@@ -127,7 +127,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElIcon, ElMessage } from 'element-plus'
-import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular, Cloud16Regular, Add16Regular, ChevronRight24Regular, Dismiss16Regular, Folder16Regular } from '@vicons/fluent'
+import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular, Cloud16Regular, Cube16Regular, Add16Regular, ChevronRight24Regular, Dismiss16Regular, Folder16Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import GdTooltip from '../../ui/GdTooltip.vue'
 import ConnectionBindingMenu from './ConnectionBindingMenu.vue'
@@ -157,7 +157,7 @@ const recentList = computed(() => workspaceStore.recentList)
 
 // ── 附加工作目录：remote-workspace 全局连接清单（store 共享，设置页新建后自动可见；
 //    弹层打开时确保已加载，失败静默为空态） ──
-interface RemoteConnectionOption { id: string; name: string; description: string; path?: string }
+interface RemoteConnectionOption { id: string; name: string; kind?: 'ssh' | 'docker'; description: string; path?: string }
 const remoteWorkspaceStore = useRemoteWorkspaceStore()
 
 watch(() => props.visible, (visible) => {

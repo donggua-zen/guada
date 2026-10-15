@@ -8,19 +8,21 @@
 import * as fs from "fs";
 import * as path from "path";
 import WebSocket from "ws";
-import { Client as SshClient } from "ssh2";
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import * as iconv from "iconv-lite";
 import { deployAgent } from "./agent-deploy";
-import { RpcClient, isUnknownMethodError, isTransportError } from "./rpc";
+import { connectDockerAgent } from "./docker-agent-connect";
+import { RpcClient, WsRpcTransport, isUnknownMethodError, isTransportError } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 import { StreamingSanitizer } from "../shell/stream-sanitizer";
 import type { FileStat, DirEntry } from "../../common/workspace/workspace-provider.interface";
 
 interface CachedAgent {
   rpc: RpcClient;
-  ws: WebSocket;
-  sshClient: SshClient | null;
+  /** 传输是否仍可用（SSH: ws OPEN；Docker: stdio 子进程存活） */
+  isOpen: () => boolean;
+  /** 释放底层资源（关闭 ws/ssh 连接或结束 stdio 子进程）；不触碰目标容器/远端 */
+  dispose: () => void;
   busy: boolean;
   /** 最近一次被使用的时间戳(ms),用于空闲回收判断 */
   lastActive: number;
@@ -47,7 +49,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     this.scanTimer.unref?.();
   }
 
-  /** 扫描并回收空闲超时的连接(关闭 ws/ssh 并从缓存移除) */
+  /** 扫描并回收空闲超时的连接(关闭 ws/ssh 或 stdio 子进程并从缓存移除) */
   private reapIdleConnections(): void {
     const now = Date.now();
     for (const [name, cached] of this.cache) {
@@ -56,10 +58,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
           `Recycling idle agent connection '${name}' (idle > 2h)`,
         );
         try {
-          cached.ws.close();
-        } catch {}
-        try {
-          cached.sshClient?.end();
+          cached.dispose();
         } catch {}
         this.cache.delete(name);
       }
@@ -89,7 +88,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     }[] = [];
     for (const [key, cached] of this.cache) {
       if (!key.startsWith(prefix)) continue;
-      if (cached.ws.readyState !== WebSocket.OPEN) continue;
+      if (!cached.isOpen()) continue;
       const connectionName = key.slice(prefix.length);
       try {
         const rows = (await cached.rpc.call("drainCompleted", {
@@ -128,10 +127,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     }
     for (const [name, cached] of this.cache) {
       try {
-        cached.ws.close();
-      } catch {}
-      try {
-        cached.sshClient?.end();
+        cached.dispose();
       } catch {}
     }
     this.cache.clear();
@@ -156,7 +152,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     const connectionIds: string[] = sessionAttachments?.["ssh-connection"] || [];
     if (connectionIds.length === 0) {
       throw new Error(
-        "No SSH connections bound to this session. Use the + button to add a remote connection.",
+        "No remote or container connections bound to this session. Add one in the workspace picker first.",
       );
     }
 
@@ -181,7 +177,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
       if (stale) {
         this.cache.delete(cacheKey);
         try {
-          stale.ws.close();
+          stale.dispose();
         } catch {}
       }
       throw new Error(
@@ -192,17 +188,14 @@ export class RemoteAgentManager implements OnModuleDestroy {
 
     // Check cache
     const cached = this.cache.get(cacheKey);
-    // 缓存命中但底层 WebSocket 已断开 → 视为失效,清理并重建
+    // 缓存命中但底层传输已断开(ws 关闭 / stdio 子进程退出) → 视为失效,清理并重建
     if (cached && !cached.busy) {
-      if (cached.ws.readyState !== WebSocket.OPEN) {
+      if (!cached.isOpen()) {
         this.logger.warn(
-          `Agent connection '${cacheKey}' ws closed, reconnecting...`,
+          `Agent connection '${cacheKey}' transport closed, reconnecting...`,
         );
         try {
-          cached.ws.close();
-        } catch {}
-        try {
-          cached.sshClient?.end();
+          cached.dispose();
         } catch {}
         this.cache.delete(cacheKey);
       } else {
@@ -215,8 +208,8 @@ export class RemoteAgentManager implements OnModuleDestroy {
     const connInfo = await this.deployAndConnect(conn);
     const cached2: CachedAgent = {
       rpc: connInfo.rpc,
-      ws: connInfo.ws,
-      sshClient: connInfo.sshClient,
+      isOpen: connInfo.isOpen,
+      dispose: connInfo.dispose,
       busy: false,
       lastActive: Date.now(),
     };
@@ -233,11 +226,54 @@ export class RemoteAgentManager implements OnModuleDestroy {
     return new RemoteAgent(cached2.rpc, conn.config);
   }
 
+  /**
+   * 按连接类型建立 agent 连接。
+   * 返回的 isOpen/dispose 让缓存层（命中判定/空闲回收/解绑清理）与传输实现解耦。
+   */
   private async deployAndConnect(conn: RemoteConnection): Promise<{
     rpc: RpcClient;
-    ws: WebSocket;
-    sshClient: SshClient | null;
+    isOpen: () => boolean;
+    dispose: () => void;
   }> {
+    return conn.config.kind === "docker"
+      ? this.connectDocker(conn)
+      : this.connectSsh(conn);
+  }
+
+  /**
+   * Docker 容器链路：docker cp 注入 agent → `docker exec -i <c> agent --stdio` 管道连接。
+   * 无 SSH、无端口转发、无 token；连接生命周期随 stdio 管道，容器本身绝不停止/删除。
+   */
+  private async connectDocker(conn: RemoteConnection): Promise<{
+    rpc: RpcClient;
+    isOpen: () => boolean;
+    dispose: () => void;
+  }> {
+    if (conn.config.kind !== "docker") throw new Error("connectDocker called with non-docker connection");
+    const downloadUrl = await this.service.getAgentDownloadUrl();
+    const latestVersionUrl = await this.service.getAgentLatestVersionUrl();
+    const result = await connectDockerAgent(conn.config, { downloadUrl, latestVersionUrl });
+    // RemoteAgent 的 basePath 取 config.path：容器未显式配置时以容器 WorkingDir 生效，
+    // 此处回写生效值，保证后端侧相对路径解析与 agent --root 一致
+    if (!conn.config.path) conn.config.path = result.rootPath;
+    return {
+      rpc: result.rpc,
+      isOpen: () => result.transport.isOpen(),
+      dispose: () => {
+        try {
+          result.rpc.close();
+        } catch {}
+      },
+    };
+  }
+
+  /** SSH 链路（既有）：部署 Go agent → SSH 端口转发 → WebSocket 连接 */
+  private async connectSsh(conn: RemoteConnection): Promise<{
+    rpc: RpcClient;
+    isOpen: () => boolean;
+    dispose: () => void;
+  }> {
+    if (conn.config.kind !== "ssh") throw new Error("connectSsh called with non-ssh connection");
     const config = conn.config;
     const params = new URLSearchParams();
     if (config.authMethod === "password" && config.password) {
@@ -280,7 +316,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
       ws.once("error", (err) => reject(err));
     });
 
-    const rpc = new RpcClient(ws);
+    const rpc = new RpcClient(new WsRpcTransport(ws));
     rpc.setConnected();
 
     // Verify connection(版本一致性由部署链路保证:不一致会自动重新下载推送)
@@ -292,7 +328,18 @@ export class RemoteAgentManager implements OnModuleDestroy {
       throw new Error(`Agent handshake failed: ${err}`);
     }
 
-    return { rpc, ws, sshClient: connInfo.sshClient };
+    return {
+      rpc,
+      isOpen: () => ws.readyState === WebSocket.OPEN,
+      dispose: () => {
+        try {
+          ws.close();
+        } catch {}
+        try {
+          connInfo.sshClient?.end();
+        } catch {}
+      },
+    };
   }
 }
 
@@ -325,7 +372,7 @@ function decodeAgentOutput<T extends Record<string, any>>(
  * RemoteAgent — wraps RPC client, provides high-level methods for tools.
  *
  * 两层方法：
- * - 原语层（*Raw / stat / readdir / ...）：透传 agent RPC，供 SshWorkspaceProvider
+ * - 原语层（*Raw / stat / readdir / ...）：透传 agent RPC，供 AgentWorkspaceProvider
  *   （WorkspaceProvider 实现）与工具远程分支使用；
  * - 工具层（readFile/execute 等带输出加工）：供 legacy remote_* 工具使用。
  */
@@ -338,6 +385,11 @@ export class RemoteAgent {
   /** 连接的工作目录基准（相对路径解析用） */
   get basePath(): string {
     return this.config.path || "/";
+  }
+
+  /** 连接类型（ssh / docker）：供 provider.scheme 与展示层区分目标形态 */
+  get connectionKind(): "ssh" | "docker" {
+    return this.config?.kind === "docker" ? "docker" : "ssh";
   }
 
   /** 相对路径 → 远端绝对路径（posix 语义；绝对路径原样返回） */
@@ -536,7 +588,7 @@ export class RemoteAgent {
 
   /**
    * 原生 glob RPC（agent >= 0.5.0）：服务端模式匹配，返回相对 cwd 的文件清单。
-   * 旧版 agent 抛 unknown method，由 SshWorkspaceProvider 降级到 find|wc 模拟。
+   * 旧版 agent 抛 unknown method，由 AgentWorkspaceProvider 降级到 find|wc 模拟。
    */
   async globRaw(
     pattern: string,

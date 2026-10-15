@@ -1,14 +1,14 @@
 import {
-  SshWorkspaceProvider,
+  AgentWorkspaceProvider,
   REMOTE_PROCESS_ID_PREFIX,
-} from "./ssh-workspace-provider";
+} from "./agent-workspace-provider";
 
 /**
- * SshWorkspaceProvider — WorkspaceProvider 协议映射测试（stub RemoteAgent）：
+ * AgentWorkspaceProvider — WorkspaceProvider 协议映射测试（stub RemoteAgent）：
  * 主路径原生 RPC（glob/grep），旧版 agent（unknown method）降级路径，
  * 进程方法的前缀命名空间映射与 encoding 透传。
  */
-describe("SshWorkspaceProvider", () => {
+describe("AgentWorkspaceProvider", () => {
   /** 模拟旧版 agent：不认识 0.5.0 新增的 RPC */
   const unknownMethod = (method: string) =>
     new Error(`unknown method: ${method}`);
@@ -32,7 +32,7 @@ describe("SshWorkspaceProvider", () => {
       ...agentOverrides,
     };
     return {
-      provider: new SshWorkspaceProvider(agent, "conn-a"),
+      provider: new AgentWorkspaceProvider(agent, "conn-a"),
       agent,
     };
   };

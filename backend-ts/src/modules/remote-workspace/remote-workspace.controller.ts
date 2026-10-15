@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
@@ -71,5 +72,15 @@ export class RemoteWorkspaceController {
     @Body() body: { config: any; path: string },
   ) {
     return this.service.browsePath(body.config, body.path);
+  }
+
+  /** 运行中的 Docker 容器列表（连接向导的容器选择器用；dockerHost 为空 = 本机） */
+  @Get("docker/containers")
+  async listDockerContainers(@Query("dockerHost") dockerHost?: string) {
+    try {
+      return { containers: await this.service.listContainers(dockerHost) };
+    } catch (err: any) {
+      return { containers: [], error: err?.message || String(err) };
+    }
   }
 }
