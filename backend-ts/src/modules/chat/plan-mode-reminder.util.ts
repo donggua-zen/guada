@@ -22,24 +22,55 @@ const READ_ONLY_NOTE =
     : "they run in a read-only sandbox";
 
 /**
+ * 提问工具名（plugins/builtins/ask-user.plugin.ts）。
+ * 本地常量而非 import：避免 chat → plugins/builtins 的模块依赖（该方向由 ToolExecutor 解析工具面统一收口）。
+ */
+const ASK_USER_TOOL_NAME = "ask_user";
+
+/**
  * 首迭代注入的完整工作流。
  *
- * Phase 1 的探索方式按"本会话有没有子代理工具"二选一。`subagent_spawn` 可能因为插件被全局关闭、
- * 智能体 toolkit deny、或当前就是子代理会话而根本不在册——那时绝不能引导模型去派子代理：
- * 引导指向一个不存在的工具，模型只会空转。判据取"本会话实际解析出的工具"，
- * 而不是全局插件开关（后者覆盖不了后两种"没打开"）。
+ * 两处"工具面二选一"（判据一律取"本会话实际解析出的工具"，而不是全局插件开关——
+ * 后者覆盖不了 toolkit deny / 会话类型导致的"没打开"）：
+ * - Phase 1 的探索方式：按"本会话有没有子代理工具"。`subagent_spawn` 可能因为插件被全局关闭、
+ *   智能体 toolkit deny、或当前就是子代理会话而根本不在册——那时绝不能引导模型去派子代理，
+ *   引导指向一个不存在的工具，模型只会空转。
+ * - Phase 3/4 的提问方式：按"本会话有没有 ask_user 工具"。不在册时退回"结束回合用文本提问"。
  */
-function buildFullReminder(hasSubAgentTool: boolean): string {
+function buildFullReminder(
+  hasSubAgentTool: boolean,
+  hasAskTool: boolean,
+): string {
+  // 提问工具在册时，"有疑问先问清"才有工具载体；否则只能靠结束回合提问
+  const phase1Goal = hasAskTool
+    ? "Goal: Gain a comprehensive understanding of the user's request by reading the code and asking questions. When a decision is genuinely the user's to make and you cannot resolve it from the code or sensible defaults, ask with the ask_user tool instead of guessing."
+    : "Goal: Gain a comprehensive understanding of the user's request by reading the code and asking questions.";
+
   const phase1 = hasSubAgentTool
     ? `### Phase 1: Initial Understanding
-Goal: Gain a comprehensive understanding of the user's request by reading the code and asking questions.
+${phase1Goal}
 1. Broad search first: launch up to 3 read-only research sub-agents in parallel (a single message with multiple tool calls), one search focus each (the code path, existing patterns worth reusing, tests). Use a single sub-agent when the task is isolated to known files. Once you delegate a search, do not also run it yourself — wait for the result.
 2. Read-only commands are available (${READ_ONLY_NOTE}). Use them to inspect repository state, or to investigate directly when delegating is not worthwhile.
 3. Focus on understanding the request and the code it touches. Actively search for existing functions, utilities, and patterns that can be reused — avoid proposing new code when suitable implementations already exist.`
     : `### Phase 1: Initial Understanding
-Goal: Gain a comprehensive understanding of the user's request by reading the code and asking questions.
+${phase1Goal}
 1. Focus on understanding the request and the code it touches. Actively search for existing functions, utilities, and patterns that can be reused — avoid proposing new code when suitable implementations already exist.
 2. Read-only commands are available (${READ_ONLY_NOTE}). Use them to investigate the repository state.`;
+
+  const phase3Step3 = hasAskTool
+    ? "3. Use the ask_user tool to clarify any remaining questions with the user before finalizing your plan."
+    : "3. If anything is genuinely ambiguous, end your turn with your question.";
+
+  const phase4Tail = hasAskTool
+    ? " This is critical — your turn must only end with either the ask_user tool (to clarify requirements) or ExitPlanMode (to request plan approval)."
+    : "";
+
+  // 职责切分：存在提问工具时，把"批准"这件事明确锁给 ExitPlanMode，避免模型用 ask_user 问"计划行不行"
+  const important = hasAskTool
+    ? "**Important:** Use ask_user ONLY to clarify requirements or choose between approaches. " +
+      "Ask for plan approval ONLY via ExitPlanMode — never via plain text, and never via ask_user. " +
+      'Phrases like "Is this plan okay?", "Should I proceed?", "How does this plan look?", or similar MUST use ExitPlanMode.'
+    : "**Important:** Do NOT ask for plan approval in plain text. ExitPlanMode is what requests approval.";
 
   return `Plan mode is active. The user does not want you to execute yet — you MUST NOT make any edits, run any non-readonly tools, or otherwise make any changes to the system. This supersedes any other instructions you have received.
 
@@ -60,18 +91,24 @@ Goal: Design an implementation approach.
 ### Phase 3: Review
 1. Re-read the critical files to deepen your understanding.
 2. Make sure the plan matches the user's original request.
-3. If anything is genuinely ambiguous, end your turn with your question.
+${phase3Step3}
 
 ### Phase 4: Call ExitPlanMode
-At the very end of your turn, once you are happy with your final plan, call ExitPlanMode to present it for approval. Do not stop for any other reason.
+At the very end of your turn, once you are happy with your final plan, call ExitPlanMode to present it for approval. Do not stop for any other reason.${phase4Tail}
 
-**Important:** Do NOT ask for plan approval in plain text. ExitPlanMode is what requests approval.`;
+${important}`;
 }
 
-/** 稀疏提醒（同一 run 的后续迭代，控制 token 成本） */
-const PLAN_MODE_SPARSE_REMINDER =
-  "Plan mode still active (see the full instructions earlier in the conversation). " +
-  "Read-only. Follow the 4-phase workflow. End your turn with ExitPlanMode when the plan is ready.";
+/** 稀疏提醒（同一 run 的后续迭代，控制 token 成本）——提问方式同样按工具面二选一 */
+function buildSparseReminder(hasAskTool: boolean): string {
+  const ending = hasAskTool
+    ? "End your turn with either the ask_user tool (for clarifications) or ExitPlanMode (for plan approval)."
+    : "End your turn with ExitPlanMode when the plan is ready.";
+  return (
+    "Plan mode still active (see the full instructions earlier in the conversation). " +
+    `Read-only. Follow the 4-phase workflow. ${ending}`
+  );
+}
 
 /** 退出提醒（一次性：计划模式由 true 变 false 后的下一个迭代） */
 const PLAN_MODE_EXIT_REMINDER = `## Exited Plan Mode
@@ -106,13 +143,18 @@ export function buildPlanModeTurnEntries(
   if (!ToolExecutor.findTool(resolved, "ExitPlanMode")) return entries;
 
   if (sessionContext.getPlanEnabled()) {
+    // 提问工具是否在册：ask_user 可被 plugins_config 关闭、也可被智能体 toolkit deny 摘掉
+    // （子代理会话还会被工具包 handler 整体隐藏）——只有真的在册才引导模型去调它。
+    // 与 ExitPlanMode 同一判据口径。
+    const hasAskTool = !!ToolExecutor.findTool(resolved, ASK_USER_TOOL_NAME);
     entries.push(
       planModeReminderMessage(
         iterationCount === 1
           ? buildFullReminder(
               !!ToolExecutor.findTool(resolved, "subagent_spawn"),
+              hasAskTool,
             )
-          : PLAN_MODE_SPARSE_REMINDER,
+          : buildSparseReminder(hasAskTool),
       ),
     );
   }
