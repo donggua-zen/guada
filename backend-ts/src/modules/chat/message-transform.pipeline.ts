@@ -19,7 +19,8 @@
  *                          → 绝对路径副本，使 adapter 侧的 fileBlockToText 无需会话上下文；
  *                          存储层仍保留相对引用（工作目录迁移后仍可重新桥接）
  *   4. reasoning-policy   — 思考模式：最后一轮（currentTurnId）完整携带/填充思考，
- *                          历史轮次剥离；fullReasoningRelay（deepseek-v4 系）例外全量携带；
+ *                          历史轮次剥离；fullReasoningRelay（DeepSeek V4/V4.1 系，含
+ *                          改名后的 deepseek-flash / deepseek-pro）例外全量携带；
  *                          非思考模式剥离全部 reasoning 块
  *                          （剥离含 metadata 中的 signature/redactedData 思考私有元数据）
  *   5. empty-content-compat — assistant 空 content 兼容（KIMI 等，重建为 '\n' 文本块）
@@ -48,7 +49,8 @@ export interface TransformContext {
    */
   currentTurnId?: string | null;
   /**
-   * 该模型家族要求全部轮次完整回传思考（如 deepseek-v4 系端点）：
+   * 该模型家族要求全部轮次完整回传思考（如 DeepSeek V4/V4.1 系端点，
+   * 含改名后的 deepseek-flash / deepseek-pro）：
    * 思考模式下历史轮次也不剥离（缺失填充）。由会话层依据 modelName 派生。
    */
   fullReasoningRelay?: boolean;
@@ -206,18 +208,31 @@ export const filePathBridgeStep: TransformStep = {
 };
 
 /**
+ * 全量思考回传模型族模式表（大小写不敏感，不锚定前后缀；连字符精确匹配，
+ * 下划线/空格变体不命中，与既有用例边界一致）。
+ * 覆盖 DeepSeek V4/V4.1 系：旧名（deepseek-v4 / -flash / -pro）与 2026-09
+ * 官方改名（deepseek-v4-flash → deepseek-flash、deepseek-v4-pro → deepseek-pro）。
+ */
+const FULL_REASONING_RELAY_PATTERNS: readonly RegExp[] = [
+  /deepseek-v4/,
+  /deepseek-flash/,
+  /deepseek-pro/,
+];
+
+/**
  * 全量思考回传模型族判定（思考模式下历史轮次也不剥离思考）。
- * 目前仅 deepseek-v4 系：模型名包含 "deepseek-v4" 即命中（不分前后缀，大小写不敏感）。
+ * 模型名命中任一模式即命中（不分前后缀，大小写不敏感）。
  */
 export function isFullReasoningRelayModel(modelName?: string): boolean {
   if (!modelName) return false;
-  return modelName.toLowerCase().includes('deepseek-v4');
+  const lower = modelName.toLowerCase();
+  return FULL_REASONING_RELAY_PATTERNS.some((p) => p.test(lower));
 }
 
 /**
  * 步骤 2：reasoning 策略（存储原样保留，读取时按当前模式过滤）。
  * - 非思考模式 → 剥离全部 reasoning 块；
- * - 思考模式 + fullReasoningRelay（deepseek-v4 系，端点要求 reasoning 跨轮持续回传）
+ * - 思考模式 + fullReasoningRelay（DeepSeek V4/V4.1 系，端点要求 reasoning 跨轮持续回传）
  *   → 全部 assistant 消息保留/填充（无块补 `{summary:''}`、空 summary 填 `''`）；
  * - 思考模式（默认）→ 仅最后一轮（turnId === ctx.currentTurnId 的 assistant 消息）
  *   保留/填充，历史轮次剥离。currentTurnId 缺省时全部视为最后一轮（保守回退）。

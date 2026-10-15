@@ -6,7 +6,8 @@
  *   其余字段（usage 等）保留——否则 anthropic.adapter 会依据 metadata 仍注入
  *   thinking/redacted_thinking（泄漏路径回归）
  * - 思考模式默认：历史轮剥离+清理；当前轮保留且 metadata 原样
- * - fullReasoningRelay（deepseek-v4 系）：全量保留、metadata 不动
+ * - fullReasoningRelay（DeepSeek V4/V4.1 系，含改名后的 deepseek-flash / deepseek-pro）：
+ *   全量保留、metadata 不动
  * - currentTurnId 缺省：保守回退全量携带（行为不回退）
  * - 无思考元数据的消息剥离后 metadata 引用不变（不额外复制）
  * - 纯函数契约：入参消息对象不被修改
@@ -68,7 +69,7 @@ describe('reasoningPolicyStep', () => {
     expect(out[1].metadata).toEqual({ signature: 'sig-new' });
   });
 
-  it('fullReasoningRelay：全量保留，metadata 不动（deepseek-v4 系回归保护）', () => {
+  it('fullReasoningRelay：全量保留，metadata 不动（DeepSeek V4/V4.1 系回归保护）', () => {
     const history = makeAssistantMsg('a1', {
       metadata: { signature: 'sig-old', redactedData: 'enc-old' },
     });

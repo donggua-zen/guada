@@ -55,8 +55,9 @@ L1 上下文管线（新增 message-transform.pipeline.ts，挂在 loadVisibleMe
    ① imageProjection —— supportsImageInput=true：保留 image 块（不动字节）
                         false：替换为占位文本（含 attachmentId，引导模型调 image_recognize）
    ② reasoningPolicy —— 思考模式：仅最后一轮（turnId === ctx.currentTurnId，beginTurn 记录）
-                        完整携带/填充思考，历史轮次剥离；fullReasoningRelay（deepseek-v4 系，
-                        /deepseek.*v4/i 命中）例外全量携带；非思考模式剥离（见 §4.4）
+                        完整携带/填充思考，历史轮次剥离；fullReasoningRelay（DeepSeek V4/V4.1 系，
+                        deepseek-v4* / deepseek-flash / deepseek-pro 命中）例外全量携带；
+                        非思考模式剥离（见 §4.4）
    ③ providerCompat —— KIMI 空 content 兼容等，注册为命名步骤，不再内联 if
    输出：归一化的 ContentBlock 消息数组（此时图片仍是引用或占位文本，无 base64）
 
@@ -137,7 +138,7 @@ export class MessageTransformPipeline {
 | 思考模式 + fullReasoningRelay | 保留 + 填充 | 保留 + 填充 |
 
 - **最后一轮以 `currentTurnId` 显式判定**（`JsonlSessionContext.beginTurn` 记录，经 `TransformContext.currentTurnId` 传入）：消息 `turnId === currentTurnId` 即最后一轮。按回合而非按「最后一条 assistant」界定，保证 agent 工具调用循环中同回合多条 assistant 均完整携带（Anthropic 签名回传依赖）。变换与视图位置/时序无关，O(Δ) 增量拼接永远正确。`currentTurnId` 缺省时全部视为最后一轮（保守回退 = 历史全量携带）。
-- **`fullReasoningRelay`** 由会话层依据 `isFullReasoningRelayModel(modelName)`（`/deepseek.*v4/i`，与 model-preset-library deepseek-v4 预设 pattern 一致）派生：该族端点要求 reasoning 跨轮持续回传。仅在思考模式生效，非思考模式一律剥离。
+- **`fullReasoningRelay`** 由会话层依据 `isFullReasoningRelayModel(modelName)` 派生，模式表（大小写不敏感、不锚定前后缀；下划线/空格变体不命中）：`deepseek-v4`（旧名全系）、`deepseek-flash`（V4.1 Flash 2026-09 改名）、`deepseek-pro`（V4 Pro 改名）。该族端点要求 reasoning 跨轮持续回传——仅思考模式生效，非思考模式一律剥离。
 - **快照联动**`currentTurnId` 计入 `transformKey`（回合变化即全量重建）；`appendToSnapshot` 增量拼接前校验指纹，不一致即作废快照防御（正常生命周期内 context 限单回合，此分支不触发）。
 
 ## 5. 实施计划（三阶段，零 DB 迁移）

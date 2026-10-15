@@ -295,7 +295,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   /**
    * 全量思考回传判定：声明式 compat（requiresReasoningContentOnAssistantMessages）
-   * 优先，未声明回退 deepseek-v4 名字启发式（存量行为兜底）。
+   * 优先，未声明回退 DeepSeek V4/V4.1 系名字启发式（含改名后的 deepseek-flash /
+   * deepseek-pro，存量行为兜底）。
    */
   private resolveFullReasoningRelay(): boolean {
     const declared = this.modelConfig.requiresReasoningRelay;

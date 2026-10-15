@@ -38,7 +38,8 @@ export interface ModelConfig {
   /**
    * 全量思考回传声明（对齐 DSH requiresReasoningContentOnAssistantMessages）：
    * true = 思考模式下历史轮次 reasoning 也回传；false = 仅最后一轮；
-   * undefined = 未声明，回退 deepseek-v4 名字启发式。
+   * undefined = 未声明，回退 DeepSeek V4/V4.1 系名字启发式（含改名后的
+   * deepseek-flash / deepseek-pro）。
    */
   requiresReasoningRelay?: boolean;
   /** 完整模型参数（含原生配置和运行时调用参数） */
