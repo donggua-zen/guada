@@ -17,6 +17,7 @@
   <a href="#-project-introduction"><b>💡 Introduction</b></a> ·
   <a href="#-comparison"><b>📊 Comparison</b></a> ·
   <a href="#-core-capabilities"><b>🧠 Core Capabilities</b></a> ·
+  <a href="#-remote-workspace-local-brain-remote-hands"><b>🖥️ Remote Workspace</b></a> ·
   <a href="#-quick-start-5-minute-setup"><b>🚀 Quick Start</b></a> ·
   <a href="https://gitee.com/zhendongdong/guada_ai/issues"><b>💬 Feedback</b></a> ·
   <a href="#-community"><b>🤝 Community</b></a>
@@ -37,6 +38,8 @@
 GuaDa is a **local-first** open-source AI workstation — it's not just a chat box, but an AI workbench that can actually get things done: reading/writing files, executing commands, and controlling an embedded browser. Tasks go from planning to execution in a fully automated loop.
 
 **One Agent engine, three ways to use it:** the **Desktop** app works out of the box, the **Web** version supports private deployment, and you can summon it directly in **QQ / WeCom / Feishu / Discord / WeChat** groups. Combined with the RAG knowledge base, long-term memory, and scheduled tasks, it remembers your materials, works the way you do, and keeps going while you sleep. Data stays on your own machine by default — safe and controllable.
+
+When the work lives on a **server, NAS, VM, or dev board**, it can mount several of them into the same session over SSH — the AI stays on your machine and just reaches in. See [🖥️ Remote Workspace](#-remote-workspace-local-brain-remote-hands).
 
 Whether you're a **content creator** writing scripts and chasing trends, a **programmer** who wants the Agent to write code, a **writer** who needs it to remember character settings, or a **team** that wants an internal AI assistant with a bound knowledge base and IM integration — GuaDa is ready to use out of the box. If this project helps you, please light up the Star ⭐ — your support keeps the updates coming.
 
@@ -72,6 +75,7 @@ Whether you're a **content creator** writing scripts and chasing trends, a **pro
 | **Knowledge Base (RAG)** | ✅ Hybrid retrieval·40+ formats | ❌ | ❌ | ⚠️ Code index |
 | **Browser Automation** | ✅ Embedded·Visual control | ✅ Embedded·Visual control (2026.7) | ⚠️ Needs Chrome extension·Preview only | ⚠️ Remote screen·Preview only |
 | **Sandbox** | ✅ Lightweight sandbox | ✅ File+network isolation | ✅ Cloud container+local | ✅ Cloud container+local file permissions |
+| **Remote / Multi-Machine Dev** | ✅ Direct SSH to your own servers·NAS·VMs·dev boards; local + multiple remotes in one session | ⚠️ No remote directory (run the whole CLI there) | ⚠️ Cloud sandbox·code upload | ⚠️ Cloud container |
 | **Long-term Memory** | ✅ Editable & reversible | ⚠️ File-based | ⚠️ File-based | ❌ |
 | **Scheduled Tasks** | ✅ | ❌ | ❌ | ❌ |
 | **Multi-Agent** | ✅ Full independent config (character/model/tools/knowledge base) | ⚠️ Sub-agents only·Claude only·No nesting | ⚠️ Sub-agents only·No nesting | ❌ |
@@ -95,10 +99,33 @@ Whether you're a **content creator** writing scripts and chasing trends, a **pro
 | **🌐 Browser Automation** | Electron-embedded Chromium, Agent real-time visual control | [→ Details](docs/browser-automation.md) |
 | **🧩 Multi-Model Management** | 5 protocol adapters × **17 vendors** (OpenAI / Claude / Gemini / Azure / DeepSeek / Qwen / ERNIE / Zhipu / Kimi / Volcano / MiniMax etc.), role-level/session-level/global-level config | [→ Details](docs/models.md) |
 | **🛡️ Sandbox Mode** | Shell commands execute in an isolated sandbox process, Agent acts more safely | [→ Details](docs/windows-sandbox-isolation-design.md) |
+| **🖥️ Remote Workspace** | Attach servers·NAS·VMs·dev boards as "additional working directories" over SSH; local + multiple remotes in one session, remote needs only a ~10 MB static binary | [→ Details](#-remote-workspace-local-brain-remote-hands) |
 | **🔗 MCP Integration** | Native MCP protocol support, connect to external tool ecosystem | — |
 | **📦 Multiple Deployment Options** | Electron desktop + Web app + Docker containerization, ready out of the box | [→ Deployment Guide](#-quick-start-5-minute-setup) |
 | **🗄️ Enterprise-Grade Data** | SQLite by default, Prisma 7 ORM for seamless switch to MySQL / PostgreSQL | — |
 | **🎨 Custom Wallpaper** | Custom backgrounds, transparency, glassmorphism — create your own workstation | — |
+
+---
+
+## 🖥️ Remote Workspace: Local Brain, Remote Hands
+
+**Don't move your dev environment onto the server — just let the AI reach in.** The primary working directory always stays local; remote directories are attached to the same session as "additional working directories", so the local machine and several remotes are **usable at the same time**. The Agent picks a target with `workspace="connection-name"`.
+
+Embedded Linux development is where this design shines: a Windows host for editing, serial console and flashing tools; one Linux VM per project for cross-compilation; the target board at runtime — all three are needed at once, and the AI only needs one entry point.
+
+| The three layers of embedded development | What it does | In GuaDa |
+|------|------|------|
+| **Windows host** | IDE, serial console, flashing & debugging tools | **Primary working directory** — the AI is right there, your flashing scripts and debug tools within reach |
+| **Per-project Linux VM** | Cross-compilation, SDK/BSP, kernel sources | **Additional remote directory** — edit sources and run `make` without installing anything in the VM |
+| **Target board** | Device tree, rootfs, kernel modules, serial logs | **Additional remote directory** — read `dmesg`, swap `.ko` files, optionally read-only |
+
+- **Zero remote dependencies**: the execution agent is a single static binary (~10 MB, no cgo, no Node or glibc required); current builds cover linux / macOS × amd64 / arm64, so lean systems with older glibc work too.
+- **One session, many machines**: local plus multiple remotes mounted together — cross-machine diffs, patch porting, and log-vs-source analysis all happen in one conversation.
+- **Model keys never leave your machine**: the remote side holds only a Bearer token; scheduled tasks and sub-agents inherit the session's remote bindings, so unattended runs work as well.
+- **Permissions enforced on the server side**: `readonly / workspace / unrestricted`, defaulting to "read-write inside the working directory, read-only outside", with symlink-escape protection before any write.
+- **Zero footprint on the remote**: the agent exits as soon as the connection closes — no resident daemon; real-world NAS quirks (missing `$HOME`, chrooted SFTP) already have built-in fallbacks (automatic install-dir fallback, byte-verified upload over the exec channel).
+
+> Design doc: [Unified interface for primary and additional working directories](docs/统一工作目录操作接口-合并远程工作目录方案.md)
 
 ---
 
@@ -154,7 +181,7 @@ pnpm run dev
 |------|------|----------|
 | **Frontend Entry** | User interaction | Vue 3, Electron (embedded Chromium), QQ/WeCom/Feishu/Discord/WeChat Bot |
 | **Entry Layer** | Routing & protocol conversion | REST + SSE API, Bot Gateway, Bridge (named pipe ↔ Electron) |
-| **Core Service Layer** | Agent engine + Sub-Agent + Plugins + RAG + Skills + LLM adapters | Agent Engine (ReAct loop), Sub-Agent Manager, Plugin System, Skills Framework, Context Compression, RAG, MCP, Scheduled Tasks, Shell Sandbox, LLM Adapters |
+| **Core Service Layer** | Agent engine + Sub-Agent + Plugins + RAG + Skills + LLM adapters | Agent Engine (ReAct loop), Sub-Agent Manager, Plugin System, Skills Framework, Context Compression, RAG, MCP, Scheduled Tasks, Shell Sandbox, Remote Workspace (SSH), LLM Adapters |
 | **Data Layer** | Persistent storage | SQLite (Prisma 7, switchable to MySQL/PostgreSQL), sqlite-vec + FTS5, file system |
 
 **Browser automation chain:** Agent decision (backend) → named-pipe Bridge → Electron controls embedded Chromium → accessibility snapshot compressed in 6 layers back → Agent continues reasoning.
@@ -179,6 +206,7 @@ ai_chat/
 │   │       ├── bot-gateway/     # Bot gateway (QQ/WeCom/Feishu/Discord/WeChat)
 │   │       ├── scheduler/       # Scheduled tasks (Cron, session isolation)
 │   │       ├── shell/           # Shell execution + lightweight sandbox
+│   │       ├── remote-workspace/ # ⭐ Remote workspace (SSH attached dirs, tool routing, deploy & RPC)
 │   │       ├── bridge/          # Named-pipe communication (↔ Electron)
 │   │       ├── tools/           # Tool orchestration
 │   │       ├── mcp-servers/     # MCP server integration
@@ -189,6 +217,7 @@ ai_chat/
 ├── frontend/                    # Vue 3 Frontend (Vite + Pinia + Element Plus + Tailwind 4)
 ├── electron/                    # Electron Desktop (embedded Chromium browser automation)
 ├── sandbox/                     # Sandbox process (sandbox executable)
+├── guada-agent/                 # Remote execution agent (Go static binary, deployed to remotes)
 ├── docs/                        # Documentation
 └── LICENSE
 ```
