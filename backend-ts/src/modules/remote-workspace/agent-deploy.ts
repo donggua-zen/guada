@@ -27,6 +27,18 @@ import { RpcClient } from "./rpc";
 const REMOTE_DIR = ".guada-agent";
 const REMOTE_BINARY_NAME = "guada-agent";
 
+/**
+ * 远端 agent 安装根目录的候选(按序探测第一个可写的)。
+ * 部分 NAS/精简系统(如群晖、QNAP)的账号 $HOME 指向并不存在的目录,
+ * 且该账号无权创建(常见于「用户主目录」服务未启用),此时直接
+ * mkdir -p $HOME/.guada-agent 会失败并中断整个部署;探测到可写目录后回退安装。
+ */
+const REMOTE_BASE_CANDIDATES = ["$HOME", "$PWD", "/tmp", "/var/tmp", "/dev/shm"];
+
+/** agent 安装根目录探测结果标记 */
+const BASE_HOME_MARK = "GUADA_BASE:HOME:";
+const BASE_FALLBACK_MARK = "GUADA_BASE:FALLBACK:";
+
 // 下载地址模板(任务#3 会改为从配置读取;{os}/{arch}/{version} 会被替换)
 // 调试阶段不使用网络下载,二进制通过本地文件夹复制放入缓存目录。
 // const AGENT_DOWNLOAD_URL = `https://.../guada-agent-{os}-{arch}`;
@@ -78,6 +90,50 @@ async function writeRemoteToken(
   );
 }
 
+export interface RemoteBaseDir {
+  /** 可用于安装 agent 的目录(空串表示所有候选都不可写) */
+  path: string;
+  /** 该目录是否为 $HOME(为 false 表示走了回退目录,通常是临时目录) */
+  isHome: boolean;
+}
+
+/**
+ * 构造探测命令:依次尝试候选目录,用「实际创建探针目录」确认可写 ——
+ * 只看 [ -w ] 会漏掉只读挂载、配额耗尽等情况,而 mkdir 的成败就是最终判据。
+ */
+export function buildRemoteBaseCommand(): string {
+  // 候选逐个加引号:未加引号的 $HOME 在 for 列表里会被再次分词,含空格的路径会断成两个
+  const candidates = REMOTE_BASE_CANDIDATES.map((c) => `"${c}"`).join(" ");
+  return (
+    `for c in ${candidates}; do ` +
+    `[ -n "$c" ] || continue; ` +
+    `[ -d "$c" ] || mkdir -p "$c" 2>/dev/null || continue; ` +
+    `mkdir -p "$c/.guada-probe-$$" 2>/dev/null || continue; ` +
+    `rmdir "$c/.guada-probe-$$" 2>/dev/null; ` +
+    `if [ "$c" = "$HOME" ]; then echo "${BASE_HOME_MARK}$c"; else echo "${BASE_FALLBACK_MARK}$c"; fi; ` +
+    `break; ` +
+    `done`
+  );
+}
+
+/** 解析探测命令输出(纯函数,便于单测);未命中返回空 path */
+export function parseRemoteBaseDir(raw: string): RemoteBaseDir {
+  for (const line of raw.split("\n")) {
+    if (line.startsWith(BASE_HOME_MARK)) {
+      return { path: line.slice(BASE_HOME_MARK.length).trim(), isHome: true };
+    }
+    if (line.startsWith(BASE_FALLBACK_MARK)) {
+      return { path: line.slice(BASE_FALLBACK_MARK.length).trim(), isHome: false };
+    }
+  }
+  return { path: "", isHome: false };
+}
+
+/** 探测远端可写安装根目录 */
+async function resolveRemoteBaseDir(sshClient: Client): Promise<RemoteBaseDir> {
+  return parseRemoteBaseDir(await execCommand(sshClient, buildRemoteBaseCommand()));
+}
+
 export interface AgentConnectionInfo {
   wsUrl: string;
   localPort: number;
@@ -102,8 +158,15 @@ export async function deployAgent(
 
   try {
     // Step 1: ensure remote dir exists
-    const remoteHome = (await execCommand(sshClient, "echo $HOME")).trim();
-    const remoteDir = `${remoteHome}/${REMOTE_DIR}`;
+    // $HOME 可能不存在且不可创建(部分 NAS):探测可写目录后再安装
+    const remoteBase = await resolveRemoteBaseDir(sshClient);
+    if (!remoteBase.path) {
+      throw new Error(
+        `远端未找到可用于安装 agent 的可写目录(已尝试 ${REMOTE_BASE_CANDIDATES.join("、")})。` +
+          `请确认该账号有可写目录后再连接。`,
+      );
+    }
+    const remoteDir = `${remoteBase.path}/${REMOTE_DIR}`;
     const remoteBinary = `${remoteDir}/${REMOTE_BINARY_NAME}`;
     await execCommand(sshClient, `mkdir -p ${remoteDir}`);
 
@@ -141,8 +204,8 @@ export async function deployAgent(
       // 先清理远端旧 agent 进程:运行中的二进制被占用时,fastPut 覆盖会失败(ETXTBSY → code 4)
       await execCommand(sshClient, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
 
-      // Upload via SFTP
-      await uploadFile(sshClient, localBinary, remoteBinary);
+      // Upload via SFTP(不可用时回退 exec 通道)
+      await uploadBinary(sshClient, localBinary, remoteBinary);
       await execCommand(sshClient, `chmod +x ${remoteBinary}`);
     }
 
@@ -156,6 +219,9 @@ export async function deployAgent(
     );
 
     // Step 5: port forward
+    // 先探测:被 sshd 拒绝端口转发时(AllowTcpForwarding no)提前报明确原因,
+    // 否则上层只会看到 WS 的 socket hang up
+    await probePortForward(sshClient, remotePort);
     const localPort = await setupPortForward(sshClient, remotePort);
 
     return {
@@ -227,12 +293,27 @@ export async function verifyAndDeployAgent(
     push("Connecting to remote server via SSH...");
     sshClient = await sshConnect(sshConfig);
     throwIfAborted();
-    const remoteHome = (await execCommand(sshClient, "echo $HOME")).trim();
+    // 安装目录根:优先 $HOME,部分 NAS 账号的 $HOME 不存在且不可创建,回退到可写目录
+    const remoteBase = await resolveRemoteBaseDir(sshClient);
     throwIfAborted();
-    const remoteDir = `${remoteHome}/${REMOTE_DIR}`;
+    if (!remoteBase.path) {
+      push(
+        `No writable directory found on ${sshConfig.host} to install the agent ` +
+          `(tried: ${REMOTE_BASE_CANDIDATES.join(", ")}).`,
+      );
+      return { success: false, installed: false, version: "", log };
+    }
+    const remoteDir = `${remoteBase.path}/${REMOTE_DIR}`;
     const remoteBinary = `${remoteDir}/${REMOTE_BINARY_NAME}`;
     await execCommand(sshClient, `mkdir -p ${remoteDir}`);
     push(`Remote directory ready: ${remoteDir}`);
+    if (!remoteBase.isHome) {
+      push(
+        `Home directory is missing or not writable on ${sshConfig.host}; ` +
+          `installing the agent under ${remoteBase.path} instead — ` +
+          `if that location is a temp filesystem, the agent is re-deployed after a reboot.`,
+      );
+    }
 
     // 工作目录预校验:连接配置的 path 就是 agent 的 --root(命令默认 cwd)。
     // 路径不存在时 agent(0.5.1+)会拒绝启动;这里提前给出明确原因,
@@ -344,10 +425,10 @@ export async function verifyAndDeployAgent(
     push("Stopping old agent processes on remote...");
     await execCommand(sshClient, `pkill -f "${remoteBinary}" 2>/dev/null || true`);
 
-    // 上传 + 授权
+    // 上传 + 授权(SFTP 不可用时回退 exec 通道)
     throwIfAborted();
     push("Uploading deployment resource...");
-    await uploadFile(sshClient, localBinary, remoteBinary);
+    await uploadBinary(sshClient, localBinary, remoteBinary, push);
     throwIfAborted();
     await execCommand(sshClient, `chmod +x ${remoteBinary}`);
     push("Binary uploaded");
@@ -366,7 +447,10 @@ export async function verifyAndDeployAgent(
 
     // 握手验证:建立临时 WS 连接 ping 确认可联通,随后断开。
     // agent 为"断开即退出"模式,验证完成后连接关闭 → agent 自动退出,不留残留进程。
+    // 先探测端口转发:被 sshd 拒绝(AllowTcpForwarding no)时给出明确原因,
+    // 否则 WS 只会报 "socket hang up",用户无从判断。
     push("Verifying agent handshake...");
+    await probePortForward(sshClient, remotePort);
     try {
       const localPort = await setupPortForward(sshClient, remotePort);
       const verifyWs = new WebSocket(`ws://127.0.0.1:${localPort}/ws`, {
@@ -769,6 +853,134 @@ function uploadFile(
           resolve();
         }
       });
+    });
+  });
+}
+
+/** 单引号包裹 shell 参数(POSIX 方式转义内嵌单引号) */
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * 经 exec 通道上传文件(cat > 远端路径),作为 SFTP 不可用时的回退。
+ *
+ * 部分 NAS 的 SFTP 子系统被 chroot 到共享目录视图,与实际文件系统不是同一命名空间:
+ * 同一路径在 exec 下存在、在 SFTP 下却报 No such file,导致 fastPut 必然失败。
+ * exec 看到的是真实文件系统(与 mkdir/test -d 一致),因此回退到 exec 上传。
+ * 二进制必须按原始字节写入,不做 base64/文本转换。
+ */
+function uploadViaExec(client: Client, localPath: string, remotePath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const data = fs.readFileSync(localPath);
+    client.exec(`cat > ${shQuote(remotePath)}`, (err, stream) => {
+      if (err) {
+        reject(new Error(`exec 通道上传失败: ${err.message || err}`));
+        return;
+      }
+      let stderr = "";
+      let exitCode: number | null = null;
+      stream.on("data", () => { /* 上传无输出 */ });
+      stream.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+      stream.on("exit", (code: number | null) => { exitCode = code; });
+      stream.on("close", () => {
+        if (exitCode !== null && exitCode !== 0) {
+          reject(new Error(`exec 通道上传失败(exit ${exitCode}): ${stderr.trim() || "(no output)"}`));
+          return;
+        }
+        resolve();
+      });
+      // 分块写入并处理背压:一次性 end() 整个二进制会在慢链路上堆积在内存里
+      const CHUNK = 512 * 1024;
+      let offset = 0;
+      const writeNext = (): void => {
+        while (offset < data.length) {
+          const chunk = data.subarray(offset, offset + CHUNK);
+          offset += chunk.length;
+          if (!stream.write(chunk)) {
+            stream.once("drain", writeNext);
+            return;
+          }
+        }
+        stream.end();
+      };
+      writeNext();
+    });
+  });
+}
+
+/**
+ * 上传 agent 二进制:优先 SFTP,失败则回退 exec 通道并校验字节数。
+ * 回退命中通常意味着该主机 SFTP 视图与实际文件系统不一致(NAS 常见),
+ * 需要把原因写进日志,否则用户只看到一句无上下文的 SFTP 报错。
+ */
+export async function uploadBinary(
+  client: Client,
+  localPath: string,
+  remotePath: string,
+  onWarn?: (line: string) => void,
+): Promise<void> {
+  try {
+    await uploadFile(client, localPath, remotePath);
+    return;
+  } catch (sftpErr: unknown) {
+    const reason = sftpErr instanceof Error ? sftpErr.message : String(sftpErr);
+    onWarn?.(`SFTP upload failed (${reason}); retrying over the SSH channel`);
+  }
+
+  await uploadViaExec(client, localPath, remotePath);
+  // 校验远端字节数:字节流被截断/转换时能立刻发现,而不是等到 agent 启动才报奇怪错误
+  const expected = fs.statSync(localPath).size;
+  const raw = await execCommand(client, `wc -c < ${shQuote(remotePath)}`);
+  const actual = parseInt(raw.trim(), 10);
+  if (!Number.isFinite(actual) || actual !== expected) {
+    throw new Error(
+      `Uploaded binary size mismatch (local ${expected} bytes, remote ${actual} bytes)`,
+    );
+  }
+  onWarn?.(`Uploaded ${expected} bytes over the SSH channel`);
+}
+
+/**
+ * 把 direct-tcpip 打开失败翻译成可操作的原因。
+ * ssh2 把服务端 reason 码放在 err.reason:
+ *   1 = ADMINISTRATIVELY_PROHIBITED(sshd 关闭了 TCP 转发)
+ *   2 = CONNECT_FAILED(转发通道建好但目标端口连不上)
+ * 纯函数,便于单测。
+ */
+export function forwardFailureMessage(
+  reason: number | string | undefined,
+  remotePort: number,
+  rawMessage: string,
+): string {
+  if (reason === 1) {
+    return (
+      `端口转发被服务器拒绝(sshd AllowTcpForwarding 已关闭)。` +
+      `远程工作区依赖 SSH 端口转发访问 Agent 的本地端口,` +
+      `请在服务器 sshd 配置中开启 AllowTcpForwarding(NAS 上通常在 SSH 设置里允许端口转发)后重试。`
+    );
+  }
+  if (reason === 2) {
+    return `端口转发通道已建立,但远端 127.0.0.1:${remotePort} 不可达(Agent 未在监听或已退出)。`;
+  }
+  return `端口转发失败: ${rawMessage}`;
+}
+
+/**
+ * 探测 direct-tcpip 端口转发是否可用:通道能打开即说明转发被允许且远端端口可达。
+ * 部分主机(尤其 NAS)的 sshd 关闭了 TCP 转发,此时 WS 只会报 "socket hang up",
+ * 看不出原因;这里提前给出明确判断,避免用户对着无上下文的报错排查。
+ */
+function probePortForward(client: Client, remotePort: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    client.forwardOut("127.0.0.1", 0, "127.0.0.1", remotePort, (err, channel) => {
+      if (!err) {
+        channel.close();
+        resolve();
+        return;
+      }
+      const reason = (err as Error & { reason?: number | string }).reason;
+      reject(new Error(forwardFailureMessage(reason, remotePort, err.message || String(err))));
     });
   });
 }

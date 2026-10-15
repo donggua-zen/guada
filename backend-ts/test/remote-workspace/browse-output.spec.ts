@@ -75,6 +75,13 @@ describe('buildBrowseCommand（远端浏览命令构造）', () => {
     expect(cmd).toContain('echo "GUADA_PATH:$d"');
   });
 
+  it('$HOME 不存在时依次回退到登录目录与 /（NAS 账号 $HOME 可能指向不存在的目录）', () => {
+    const cmd = buildBrowseCommand('');
+
+    expect(cmd).toContain('[ -d "$d" ] || d="$PWD"');
+    expect(cmd).toContain('[ -d "$d" ] || d=/');
+  });
+
   it('路径用单引号包裹并转义内嵌单引号，避免远端展开 $ 与反引号', () => {
     const dirPath = "/home/a b/it's";
     const cmd = buildBrowseCommand(dirPath);
