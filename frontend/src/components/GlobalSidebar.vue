@@ -34,14 +34,17 @@
             @click="toggleGroupExpand(group.id)" @contextmenu.prevent="handleGroupContextMenu($event, group)">
             <div class="flex items-center gap-1">
               <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
+                <!-- 置顶分区与普通分组同一套"图标 ↔ 箭头"hover 互换约定：
+                     图标常显、hover 淡出，箭头只在 hover 时出现（两者都是 absolute inset-0，
+                     同时可见就会重叠） -->
                 <Pin20Regular v-if="group.id === PINNED_GROUP_ID"
-                  class="absolute inset-0 w-4 h-4 text-(--gd-color-primary)" />
+                  class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-(--gd-color-primary)" />
                 <FolderOpen16Regular v-else class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-(--gd-color-primary)" />
                 <!-- <svg class="w-3.5 h-3.5 absolute inset-0 transition-opacity duration-200 group-hover:opacity-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
                 </svg> -->
-                <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200"
-                  :class="[isGroupExpanded(group.id) ? '' : '-rotate-90', group.id === PINNED_GROUP_ID ? '' : 'opacity-0 group-hover:opacity-100']" />
+                <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200 opacity-0 group-hover:opacity-100"
+                  :class="isGroupExpanded(group.id) ? '' : '-rotate-90'" />
               </span>
               <span class="text-sm font-medium">{{ group.name }}</span>
             </div>

@@ -226,8 +226,14 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          # 两个平台的 job 并发执行：先到的建 Release，后到的容忍"已存在"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --generate-notes || true
+          # 更新说明取仓库里的 docs/releases/<tag>.md（与官网 changelog 同一份内容，发版时一起写），
+          # 没有该文件就退回按提交自动生成。两个平台的 job 并发执行：先到的建 Release、后到的容忍"已存在"。
+          if [ -f "docs/releases/$tag.md" ]; then
+            notes=(--notes-file "docs/releases/$tag.md")
+          else
+            notes=(--generate-notes)
+          fi
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" "${notes[@]}" || true
           # 草稿要显式发布：删掉带 Release 的 tag 再重建时，GitHub 会把原 Release 转为草稿，
           # 那样附件传上去了对外仍不可见（1.0.1 重指 tag 时踩到过）。
           gh release edit "$tag" --draft=false --latest 2>/dev/null || true
