@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { Toolkit } from "../../plugins/toolkit/toolkit";
 import { UniversalToolsPlugin } from "./universal-tools.plugin";
 import type { ToolCallResponse } from "../interfaces/tool-provider.interface";
 
@@ -127,5 +129,124 @@ describe("UniversalToolsPlugin tool_use 结果透传", () => {
 
     expect(result).toContain("Error");
     expect(calls).toHaveLength(0);
+  });
+});
+
+/**
+ * tool_learn 的 schema 形状透传契约。
+ *
+ * 懒加载工具（workflow 的 workflow_run 等）模型只能经 tool_learn 学到定义，
+ * 所以这里是"模型到底看得见什么形状"的唯一入口。此前 buildToolkitContent 手写投影
+ * 只保留 type/description/required/enum/default，嵌套的 items/properties 被丢弃，
+ * 模型看不到 phases 的元素形状（写成字符串数组 → 参数校验失败）。
+ * 现改为按原生 {name, description, parameters} 形状输出单个 JSON 对象，
+ * parameters 直接复用 toolkit 已限深展平的 JSON Schema，与 eager 工具形态一致。
+ */
+describe("UniversalToolsPlugin tool_learn：schema 形状透传", () => {
+  /** 经真实 Toolkit 注册，复现 workflow_run 的注册链路（z.toJSONSchema + 限深展平） */
+  const makeToolDef = (inputSchema: any) => {
+    const tk = new Toolkit({ id: "t", name: "t" } as any, "plugin-x");
+    tk.registerTool({
+      name: "workflow_run",
+      description: "run a workflow",
+      inputSchema,
+      execute: async () => "ok",
+    } as any);
+    return tk.getTools()[0];
+  };
+
+  const buildContent = async (toolDef: any) => {
+    const plugin = new UniversalToolsPlugin({} as any, {} as any, {} as any);
+    return (plugin as any).buildToolkitContent("workflow", [toolDef], "plugin-x", [], {
+      session: { sessionId: "s1" },
+      toolCallId: "tc",
+    } as any) as Promise<string>;
+  };
+
+  /** 取出 <tool_definition> 块并解析为 JSON（同时验证其内容确为合法 JSON） */
+  const parseTool = (content: string) =>
+    JSON.parse(
+      content
+        .split("<tool_definition>")[1]
+        .split("</tool_definition>")[0]
+        .trim(),
+    );
+
+  it("按原生 {name, description, parameters} 形状输出单个 JSON 对象", async () => {
+    const toolDef = makeToolDef(
+      z.object({ name: z.string().describe("Workflow name") }),
+    );
+
+    const tool = parseTool(await buildContent(toolDef));
+
+    expect(Object.keys(tool)).toEqual(["name", "description", "parameters"]);
+    expect(tool.name).toBe("workflow_run");
+    expect(tool.description).toBe("run a workflow");
+    expect(tool.parameters.type).toBe("object");
+  });
+
+  it("保留嵌套 items/properties/required —— phases 元素形状对模型可见", async () => {
+    const toolDef = makeToolDef(
+      z.object({
+        name: z.string().describe("Workflow name"),
+        phases: z
+          .array(
+            z.object({
+              title: z.string().describe("Phase title"),
+              detail: z
+                .string()
+                .optional()
+                .describe("What happens in this phase"),
+            }),
+          )
+          .optional()
+          .describe("Optional phase declarations"),
+      }),
+    );
+
+    const { parameters } = parseTool(await buildContent(toolDef));
+
+    expect(parameters.required).toEqual(["name"]);
+    expect(parameters.properties.phases.type).toBe("array");
+    expect(parameters.properties.phases.items.type).toBe("object");
+    expect(parameters.properties.phases.items.properties.title).toEqual({
+      type: "string",
+      description: "Phase title",
+    });
+    expect(parameters.properties.phases.items.required).toEqual(["title"]);
+  });
+
+  it("标量参数形状不变（回归）", async () => {
+    const toolDef = makeToolDef(
+      z.object({
+        name: z.string().describe("Workflow name"),
+        description: z.string().optional().describe("One-line description"),
+      }),
+    );
+
+    const { parameters } = parseTool(await buildContent(toolDef));
+
+    expect(parameters.properties.name).toEqual({
+      type: "string",
+      description: "Workflow name",
+    });
+    expect(parameters.properties.description).toEqual({
+      type: "string",
+      description: "One-line description",
+    });
+    expect(parameters.required).toEqual(["name"]);
+  });
+
+  it("描述里的裸尖括号走 JSON 转义，不再产生畸形标签", async () => {
+    const desc = "end with `return <value>` and `return <json-value>`";
+    const toolDef = makeToolDef(
+      z.object({ name: z.string().describe("Workflow name") }),
+    );
+    toolDef.description = desc; // 复现 workflow_run 的真实描述内容
+
+    const content = await buildContent(toolDef);
+
+    expect(parseTool(content).description).toBe(desc);
+    expect(content).not.toContain("<description>");
   });
 });
