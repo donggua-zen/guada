@@ -548,9 +548,9 @@ function handleScrollToBottomClick() {
 }
 
 // ── 会话滚动记忆（切走再回来恢复阅读位置，而不是每次强制贴底） ──
-// 参考实现 zcode 按 session 记忆绝对 scrollTop + 贴底态；本实现的差异是恢复要等
-// 内容就位后重试：屏外回合带 content-visibility，首帧按 contain-intrinsic-size 估算，
-// 记忆位置可能超出当时的可滚动范围（被浏览器钳到上限），内容撑高后需再落一次。
+// 按 session 记忆绝对 scrollTop + 贴底态；恢复要等内容就位后重试：屏外回合带
+// content-visibility，首帧按 contain-intrinsic-size 估算，记忆位置可能超出当时的
+// 可滚动范围（被浏览器钳到上限），内容撑高后需再落一次。
 
 function scrollMemoryKeyFor(sessionId: string | null | undefined): string | null {
   if (!sessionId) return null;

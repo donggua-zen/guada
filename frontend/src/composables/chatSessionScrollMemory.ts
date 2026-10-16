@@ -1,5 +1,5 @@
 /**
- * 按会话记忆滚动位置（对齐参考实现 zcode 的 packages/ui/src/lib/chatSessionScrollMemory.ts）。
+ * 按会话记忆滚动位置。
  *
  * 目的：会话切走再切回、或刷新页面后重建 ChatPanel 时，恢复用户原来的阅读位置——
  * 贴底态继续贴底，读到中间就回到中间，而不是每次都强制滚到最新消息。
