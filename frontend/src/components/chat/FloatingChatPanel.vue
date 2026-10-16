@@ -475,9 +475,12 @@ function startResize(edge: FloatingResizeEdge, e: MouseEvent): void {
 }
 
 /* ── 极简模式 ──
-   浮窗宽度只有默认对话列（--gd-chat-column-width = 744px）的一半多，ChatPanel 里
-   为宽屏写的固定尺寸必须收窄。这些类名全部来自 ChatPanel/ChatInput/ScrollContainer，
-   对方改名会静默失效，改动那几处时请一起回归。 */
+   面板默认只有 430px 宽，这里只收「输入区自身」的边距与外框，把空间让给输入框。
+   消息列那侧的纵向留白一律不动：末回合的 25px 尾距 + .chat-messages 的 20px 下内边距
+   合计 45px，是给状态胶囊（.composer-status-row 浮在输入区上方 6px）留的避让位——
+   收掉之后胶囊一出现就会压住最后一条消息。看起来像"白占空间"，实则不是。
+   下列类名全部来自 ChatPanel/ChatInput/ScrollContainer，对方改名会静默失效，
+   改动那几处时请一起回归。 */
 .fcp-compact :deep(.chat-column) {
   max-width: 100% !important;
 }
@@ -491,13 +494,19 @@ function startResize(edge: FloatingResizeEdge, e: MouseEvent): void {
   padding: 0 !important;
 }
 
+/* 输入区容器：pb-2 的 8px 下边距归零，输入框直接贴面板底边 */
+.fcp-compact :deep(.chat-input-area) {
+  padding-bottom: 0 !important;
+}
+
+/* 输入框：去掉为圆角卡片留的外框，只留一条顶部分隔线，内边距 12/10/10 → 8 */
 .fcp-compact :deep(.input-area) {
   border: none !important;
   border-top: 1px solid var(--gd-color-input-border, #e5e7eb) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   min-height: auto !important;
-  padding: 12px 10px 10px !important;
+  padding: 8px !important;
 }
 
 /* 模型选择器在 430px 里放不下，浮窗模式隐藏（改用会话默认模型） */
@@ -514,7 +523,7 @@ function startResize(edge: FloatingResizeEdge, e: MouseEvent): void {
   display: none;
 }
 
-/* 末尾对话的呼吸位是为整屏高度准备的，浮窗里只会白占空间 */
+/* 末尾对话的呼吸位（last:min-h-[60vh]）是为整屏高度准备的，浮窗里只会白占空间 */
 .fcp-compact :deep(.turn-wrapper--last) {
   min-height: 0 !important;
 }
