@@ -43,9 +43,9 @@
       <div class="w-full relative z-30">
         <!-- files 必须双向绑定：单向 :files 会让 ChatInput 里选好的附件全部丢失
              （ChatInput 只 emit('update:files')，父组件不接就没人保存） -->
-        <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
+        <ChatInput v-model:value="draftContent" :config="chatInputConfig" mode="create"
           :agent-id="currentSession.agentId || ''" @config-change="handleConfigChange"
-          :buttons="chatInputButtons" v-model:files="inputMessage.files" :streaming="false" @send="sendMessage" />
+          :buttons="chatInputButtons" v-model:files="draftFiles" :streaming="false" @send="sendMessage" />
       </div>
 
     </div>
@@ -62,6 +62,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { storeToRefs } from "pinia";
 import { useI18n } from "vue-i18n";
 const { t } = useI18n()
 import { useStorage } from "@vueuse/core"
@@ -77,6 +78,7 @@ import { fixFrontendAssetUrl } from '@/utils/url'
 import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrefillInput } from '@/composables/usePrefillInput';
 import { useSelectedAgent } from '@/composables/useSelectedAgent';
+import { useNewSessionDraftStore, type NewSessionDraftConfig } from '@/stores/newSessionDraft';
 // 组件导入
 import { ChatInput, Avatar } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
@@ -127,10 +129,10 @@ const rememberedSandboxMode = computed(() =>
     : 'workspace-write'
 );
 
-const inputMessage = ref({
-  content: "",
-  files: []
-});
+// 新建页草稿上提到 store：本组件切走即整体卸载，组件本地状态会随之丢失；
+// 与会话页用 sessionStore.inputMessage 存草稿同构（见 stores/newSessionDraft.ts）
+const draftStore = useNewSessionDraftStore();
+const { content: draftContent, files: draftFiles } = storeToRefs(draftStore);
 
 // 打字机效果相关状态
 const fullText = t('chat.welcome.greeting');
@@ -198,7 +200,28 @@ interface DraftSession {
   settings: DraftSessionSettings
 }
 
-const currentSession = ref<DraftSession>({
+/** 面板草稿态 → 草稿快照（只保留可恢复字段） */
+const toDraftConfig = (session: DraftSession): NewSessionDraftConfig => ({
+  agentId: session.agentId,
+  modelId: session.model_id,
+  workspacePath: session.workspacePath,
+  groupId: session.groupId ?? null,
+  settings: { ...session.settings },
+});
+
+/** 草稿快照 → 面板草稿态（title 由内容派生、avatar_url 面板未用，取固定值） */
+const fromDraftConfig = (config: NewSessionDraftConfig): DraftSession => ({
+  agentId: config.agentId,
+  model_id: config.modelId,
+  avatar_url: null,
+  title: t('chat.welcome.newSession'),
+  workspacePath: config.workspacePath,
+  groupId: config.groupId,
+  settings: { ...config.settings },
+});
+
+/** 无快照（本次运行首次进入新建页）时的草稿初始值，沿用各 localStorage 偏好记忆 */
+const defaultDraftSession = (): DraftSession => ({
   agentId: null,  // 必须绑定智能体
   model_id: null,
   avatar_url: null,
@@ -213,7 +236,22 @@ const currentSession = ref<DraftSession>({
     planEnabled: false,
     maxTokensLimit: null
   }
-})
+});
+
+/** 本次进入是否由暂存草稿恢复（loadAgents 据此不再用"上次选择/第一个"覆盖智能体） */
+const restoredFromDraft = draftStore.config !== null;
+
+const currentSession = ref<DraftSession>(
+  draftStore.config ? fromDraftConfig(draftStore.config) : defaultDraftSession()
+);
+
+// 面板配置改动即写回草稿快照（"快照 = 当前状态"，不依赖卸载时机）。
+// 已提交（等待创建结果）时不再写：否则初始化异步任务晚到改配置会在 ChatPage
+// 清空草稿之后又落下一份快照，下次进新建页会带着上次的配置
+watch(currentSession, (value) => {
+  if (draftStore.submitted) return;
+  draftStore.saveConfig(toDraftConfig(value));
+}, { deep: true });
 
 // const currentModel = computed(() => {
 //   if (currentSession.value.model_id) {
@@ -347,6 +385,13 @@ const loadAgents = async (): Promise<void> => {
 
     // 优先使用上次选择的智能体
     if (agents.value.length > 0) {
+      // 草稿已恢复的智能体若仍在列表中，原样保留其智能体与模型，
+      // 不用"上次选择/第一个智能体"覆盖（已不存在则走下面的回退）
+      if (restoredFromDraft && currentSession.value.agentId
+        && agents.value.some(c => c.id === currentSession.value.agentId)) {
+        return;
+      }
+
       // 设置初始化标志，防止 watch 干扰
       isInitializing.value = true;
 
@@ -584,10 +629,10 @@ onMounted(() => {
   }
   // 根据上次选择初始化工作目录
   initWorkspacePath()
-  // 消费跨页面预填文本（如定时任务页"在对话中创建"）
+  // 消费跨页面预填文本（如定时任务页"在对话中创建"）——显式带文本进入，覆盖暂存草稿正文
   const prefill = consumePrefill()
   if (prefill) {
-    inputMessage.value.content = prefill
+    draftContent.value = prefill
   }
 });
 
@@ -653,21 +698,26 @@ onUnmounted(() => {
 });
 
 const autoTitle = (): string => {
-  if (inputMessage.value.content && inputMessage.value.content.length > 0) {
-    return inputMessage.value.content.substring(0, 20);
+  if (draftContent.value && draftContent.value.length > 0) {
+    return draftContent.value.substring(0, 20);
   }
   return t('chat.welcome.newSession')
 }
 
 /**
  * @param payload ChatInput 的 send 载荷。附件以载荷为准——它带的是 ChatInput 内部
- *   归一后的列表；直接读 inputMessage.files 在双向绑定之外的场景（粘贴等）可能还是旧的。
+ *   归一后的列表；直接读草稿态（store）在双向绑定之外的场景（粘贴等）可能还是旧的。
  */
 const sendMessage = async (payload?: { content?: string; files?: ChatFileView[]; knowledgeBaseIds?: string[] }): Promise<void> => {
   if (!currentSession.value.agentId) {
     notify.error(t('common.createFailed'), t('chat.welcome.createFailedNoAgent'));
     return;
   }
+  const content = payload?.content ?? draftContent.value;
+  const files = payload?.files ?? draftFiles.value ?? [];
+  // 记录提交快照：ChatInput 紧接着会自清空编辑器与附件列表，
+  // 创建失败时由 ChatPage 回填（成功则随草稿一并清空）
+  draftStore.markSubmitted({ content, files });
   // 修复：传递完整的 payload，包含 knowledgeBaseIds
   // modelId / groupId 运行时可为 null（未绑定模型 / 未分组，后端创建接口接受 null），
   // 而 CreateSessionRequest 仅声明 string | undefined，故按实际 wire 形状断言
@@ -679,8 +729,8 @@ const sendMessage = async (payload?: { content?: string; files?: ChatFileView[];
     workspacePath: currentSession.value.workspacePath || null,
     groupId: currentSession.value.groupId || null
   } as CreateSessionRequest, {
-    content: payload?.content ?? inputMessage.value.content,
-    files: payload?.files ?? inputMessage.value.files ?? [],
+    content,
+    files,
     knowledgeBaseIds: payload?.knowledgeBaseIds ?? currentSession.value.settings?.referencedKbs ?? [],
     // isWaiting 初值：ChatPage 在消费前必置 true，此处仅为满足 InputMessageState 契约
     isWaiting: false

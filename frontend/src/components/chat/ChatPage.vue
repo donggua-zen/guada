@@ -142,6 +142,7 @@ import { NEW_SESSION_ID } from "@/constants";
 import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
 import { useSessionStore } from "@/stores/session";
+import { useNewSessionDraftStore } from "@/stores/newSessionDraft";
 import { useAuthStore } from "@/stores/auth";
 import { useLayoutStore } from "@/stores/layout";
 import { useBrowserWebviewStore } from "@/stores/browserWebview";
@@ -436,6 +437,8 @@ const tabStore = useTabStore();
 // 登录信息
 const authStore = useAuthStore();
 const sessionStore = useSessionStore();
+// 新建页暂存草稿（切换走再切回时恢复输入内容；创建成功即清空）
+const newSessionDraftStore = useNewSessionDraftStore();
 
 // 流状态消费说明:stream_status_changed 已由 useSessionEvents(MainLayout 常驻)统一订阅并写入
 // sessionStore.streamStatus,消费方(概览"子代理"区/侧边栏标签等)直接读 store 派生,
@@ -603,8 +606,11 @@ const updateSelectedSession = async (sessionId: string) => {
 
 
 const handleCreateSessionWithMessage = async (session: CreateSessionRequest, inputMessage: InputMessageState) => {
-  if (!authStore.isAuthenticated)
+  if (!authStore.isAuthenticated) {
+    // 未登录早退：内容已被输入框自清空，还回草稿避免白丢
+    newSessionDraftStore.restoreSubmitted();
     return;
+  }
   try {
     const response = await apiService.createSession(session)
     // 写入统一数据源，侧边栏通过响应式自动更新
@@ -614,9 +620,13 @@ const handleCreateSessionWithMessage = async (session: CreateSessionRequest, inp
       inputMessage.isWaiting = true
       sessionStore.setInputMessage(response.id, inputMessage)
     }
+    // 内容已转移给新会话：清掉新建页暂存草稿，下次进入新建页应为空白
+    newSessionDraftStore.clear();
     await goChatRoute(response.id);
   } catch (error) {
     console.error('创建对话失败:', error);
+    // 创建失败：把提交的正文与附件还回输入框，用户可直接按发送重试
+    newSessionDraftStore.restoreSubmitted();
     toast.error(t('common.createFailed'));
   }
 };

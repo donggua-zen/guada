@@ -78,8 +78,6 @@
     autoCreateDesc: 'Create a working directory with a random name',
     selectLocalFolder: 'Select Local Folder',
     selectFolderFailed: 'Failed to select folder',
-    attachedDir: 'Attached Directories (Remote)',
-    addRemoteAttachedDir: 'Add Remote Directory',
   },
 
   // ── 工具栏 ──
@@ -90,6 +88,12 @@
     autoCreate: 'Auto Create',
     publicDir: 'Public Directory',
     taskList: 'Task List',
+    // RemoteDirButton.vue：未选「远程目录」；已选「远程目录：首个连接名」（多个再跟数量徽章，
+    // 名称未就绪时为骨架占位）；hover 提示完整名单（超 3 个折叠计数）
+    remoteDir: 'Remote Dir',
+    remoteDirPrefix: 'Remote dirs: ',
+    remoteDirTooltip: 'Remote dirs: {names}',
+    remoteDirMore: 'and {n} more',
   },
 
   // ── 上传 ──
