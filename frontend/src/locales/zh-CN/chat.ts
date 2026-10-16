@@ -78,8 +78,6 @@ export default {
     autoCreateDesc: '创建随机名称的工作目录',
     selectLocalFolder: '选择本地文件夹',
     selectFolderFailed: '选择文件夹失败',
-    attachedDir: '附加工作目录',
-    addRemoteAttachedDir: '添加远程工作目录',
   },
 
   // ── 工具栏 ──
@@ -90,6 +88,12 @@ export default {
     autoCreate: '自动创建',
     publicDir: '公共目录',
     taskList: '任务列表',
+    // RemoteDirButton.vue：未选「远程目录」；已选「远程目录：首个连接名」（多个再跟数量徽章，
+    // 名称未就绪时为骨架占位）；hover 提示完整名单（超 3 个折叠计数）
+    remoteDir: '远程目录',
+    remoteDirPrefix: '远程目录：',
+    remoteDirTooltip: '远程目录：{names}',
+    remoteDirMore: '等 {n} 个',
   },
 
   // ── 上传 ──

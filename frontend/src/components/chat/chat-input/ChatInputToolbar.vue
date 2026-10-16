@@ -13,6 +13,10 @@
       </el-icon>
     </el-button>
 
+    <!-- 远程目录（附加工作目录）：独立按钮，已选后收起文案只留图标 + 数量角标 -->
+    <RemoteDirButton :attachments="config?.attachments"
+      @update:attachments="emit('config-change', { attachments: $event })" />
+
     <!-- 分组选择按钮 -->
     <el-button ref="groupButtonRef" class="workspace-btn mr-0.5" @click.stop="openGroupSelector" text>
       <span class="text-xs font-medium">
@@ -29,11 +33,9 @@
     <div class="flex-1"></div>
   </div>
 
-  <!-- 工作目录选择弹窗 -->
+  <!-- 工作目录选择弹窗（纯本地目录：远程附加目录已拆为独立的 RemoteDirButton） -->
   <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el ?? null"
-    :current-workspace-path="config?.workspacePath || null" :public-path="publicPath"
-    :current-attachments="config?.attachments" @select="handleWorkspaceSelect"
-    @toggle-attachment="handleToggleAttachment" />
+    :current-workspace-path="config?.workspacePath || null" :public-path="publicPath" @select="handleWorkspaceSelect" />
 
   <!-- 分组选择弹窗 -->
   <GdPopover :show="groupSelectorVisible" @update:show="groupSelectorVisible = $event" :width="280"
@@ -63,10 +65,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FolderOpen24Regular, ChevronUpDown16Regular, Folder20Regular, Checkmark16Filled } from '@vicons/fluent'
 import WorkspaceSelectorPopover from './WorkspaceSelectorPopover.vue'
+import RemoteDirButton from './RemoteDirButton.vue'
 import GdPopover from '../../ui/GdPopover.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { toggleConnectionBinding } from '@/stores/remoteWorkspace'
 
 const { t } = useI18n()
 
@@ -169,14 +171,6 @@ const handleWorkspaceSelect = (workspacePath: string | null) => {
     workspaceStore.addRecent(workspacePath)
   }
   emit('config-change', { workspacePath })
-}
-
-// ── 附加工作目录（远程连接绑定，多选）：toggle 后整体写回 attachments。
-//    绑定数不体现在按钮文案上——按钮宽度变化会让弹层重新锚定，产生跳变 ──
-const handleToggleAttachment = (connectionId: string) => {
-  emit('config-change', {
-    attachments: toggleConnectionBinding(props.config?.attachments, connectionId),
-  })
 }
 </script>
 

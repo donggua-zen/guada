@@ -31,6 +31,9 @@
               <span class="text-xs font-medium ml-1 max-w-32 truncate">{{ displayWorkspacePath }}</span>
               <el-icon size="14" class="ml-0.5"><ChevronUpDown16Regular /></el-icon>
             </el-button>
+            <!-- 远程目录（附加工作目录）：与新建页共用同一个独立按钮 -->
+            <RemoteDirButton v-if="form.targetMode === 'new_session'" :attachments="form.attachments"
+              @update:attachments="form.attachments = $event" />
             <button v-if="form.targetMode === 'new_session'" ref="modelButtonRef" type="button" class="bar-btn"
               @click.stop="modelPanelVisible = !modelPanelVisible">
               <Avatar v-if="currentModel"
@@ -43,11 +46,10 @@
             </button>
           </div>
 
-          <!-- 工作目录选择弹窗 -->
+          <!-- 工作目录选择弹窗（纯本地目录：远程附加目录已拆为独立的 RemoteDirButton） -->
           <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el ?? null"
             :current-workspace-path="form.workspacePath || null" :public-path="publicPath"
-            :current-attachments="form.attachments" @select="handleWorkspaceSelect"
-            @toggle-attachment="handleToggleAttachment" />
+            @select="handleWorkspaceSelect" />
 
           <!-- 模型选择弹窗（复用 ChatInput 的完整选择器：全部模型/收藏/推理强度级联） -->
           <ModelSelectorPanel v-model:visible="modelPanelVisible" :anchor-el="modelButtonRef" :models="modelList"
@@ -257,9 +259,9 @@ import GdDialog from '@/components/ui/GdDialog.vue'
 import GdPopover from '@/components/ui/GdPopover.vue'
 import Avatar from '@/components/ui/Avatar.vue'
 import WorkspaceSelectorPopover from '@/components/chat/chat-input/WorkspaceSelectorPopover.vue'
+import RemoteDirButton from '@/components/chat/chat-input/RemoteDirButton.vue'
 import ModelSelectorPanel from '@/components/chat/chat-input/ModelSelectorPanel.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { toggleConnectionBinding } from '@/stores/remoteWorkspace'
 import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getDefaultThinkingEffort, getThinkingEffortLabelWithKey } from '@/utils/modelUtils'
 
 const { t } = useI18n()
@@ -696,10 +698,6 @@ function handleWorkspaceSelect(workspacePath: string | null) {
   workspaceStore.setLastChoice(mode, workspacePath)
   if (workspacePath) workspaceStore.addRecent(workspacePath)
   form.value.workspacePath = workspacePath || ''
-}
-
-function handleToggleAttachment(connectionId: string) {
-  form.value.attachments = toggleConnectionBinding(form.value.attachments, connectionId)
 }
 
 // ── 智能体选择（工具条同款轻量弹层）──
