@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { McpClientService } from "../../common/mcp/mcp-client.service";
+import { McpConnectionManager } from "../../common/mcp/mcp-connection-manager.service";
 import { McpFileStore } from "./mcp-file.store";
 import { PluginManager } from "../plugins/plugin.manager";
 import { findToolNameConflicts } from "./mcp-tool-name";
@@ -12,6 +13,7 @@ export class McpServerService {
     private mcpStore: McpFileStore,
     private mcpClient: McpClientService,
     private pluginManager: PluginManager,
+    private connections: McpConnectionManager,
   ) {}
 
   /**
@@ -67,6 +69,8 @@ export class McpServerService {
 
   /**
    * 从 MCP 服务器获取工具列表
+   *
+   * @param serverId 已落盘的服务器 id；创建流程中尚未落盘时为 undefined
    */
   private async fetchToolsFromServer(
     serverUrl: string | null,
@@ -76,21 +80,25 @@ export class McpServerService {
     args?: any[],
     env?: Record<string, string>,
     cwd?: string,
+    serverId?: string,
   ): Promise<Record<string, any>> {
     try {
       this.logger.log(
         `Attempting to fetch tools from: ${serverUrl || command}`,
       );
 
-      const toolsDict = await this.mcpClient.listTools({
-        url: serverUrl || undefined,
-        headers: headers || undefined,
-        type: type as "sse" | "streamableHttp" | "stdio" | undefined,
-        command,
-        args,
-        env,
-        cwd,
-      });
+      const toolsDict = await this.mcpClient.listTools(
+        {
+          url: serverUrl || undefined,
+          headers: headers || undefined,
+          type: type as "sse" | "streamableHttp" | "stdio" | undefined,
+          command,
+          args,
+          env,
+          cwd,
+        },
+        { serverId },
+      );
 
       if (Object.keys(toolsDict).length > 0) {
         this.logger.log(
@@ -338,6 +346,10 @@ export class McpServerService {
       throw new Error("MCP Server not found or unauthorized");
     }
 
+    // 配置已变 → 旧连接必然失效（连接键含传输参数哈希，取用时也会自然换代）。
+    // 这里显式释放是为了立刻回收 stdio 子进程，而不是等空闲 TTL 到期。
+    await this.connections.invalidate(id);
+
     // 如果需要且提供了必要的信息，重新获取工具列表
     if (needRefreshTools) {
       try {
@@ -353,10 +365,20 @@ export class McpServerService {
             effectiveArgs as any[],
             effectiveEnv as Record<string, string>,
             effectiveCwd || undefined,
+            id,
           );
         } else if (serverUrl) {
           // HTTP 协议
-          toolsDict = await this.fetchToolsFromServer(serverUrl, headers, effectiveType);
+          toolsDict = await this.fetchToolsFromServer(
+            serverUrl,
+            headers,
+            effectiveType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            id,
+          );
         } else {
           return server;
         }
@@ -387,6 +409,9 @@ export class McpServerService {
     }
     this.logger.log(`Deleted MCP server: ${id}`);
 
+    // 先释放连接再重载插件：否则已删服务器的 stdio 子进程会活到空闲 TTL 才被回收
+    await this.connections.invalidate(id);
+
     // 刷新插件注册，清除已删除服务器的工具
     await this.pluginManager.reloadPlugin("mcp");
 
@@ -401,6 +426,11 @@ export class McpServerService {
     this.logger.log(
       `Toggled MCP server status: ${id} -> ${enabled ? "enabled" : "disabled"}`,
     );
+
+    // 禁用时立刻断开（不留后台连接）；启用时无需预连——首次工具调用会按需建立
+    if (!enabled) {
+      await this.connections.invalidate(id);
+    }
 
     // 刷新插件注册，使启禁用状态生效
     await this.pluginManager.reloadPlugin("mcp");
@@ -430,13 +460,23 @@ export class McpServerService {
           server.args as any[],
           server.env as Record<string, string>,
           server.cwd || undefined,
+          id,
         );
       } else {
         // HTTP 协议
         if (!server.url) {
           throw new Error("Server URL is required");
         }
-        toolsDict = await this.fetchToolsFromServer(server.url, headers, server.type);
+        toolsDict = await this.fetchToolsFromServer(
+          server.url,
+          headers,
+          server.type,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          id,
+        );
       }
 
       if (Object.keys(toolsDict).length === 0) {
@@ -467,5 +507,35 @@ export class McpServerService {
       // 否则包装错误
       throw new Error(`Failed to refresh tools: ${error.message}`);
     }
+  }
+
+  /**
+   * 连通性测试（设置页「测试连接」按钮）
+   *
+   * 与 refreshTools 的关键差别：**不改任何状态**。抓工具失败会被包装成异常，
+   * 且空工具列表也算失败；而「服务器连得上但没暴露工具」是完全合法的状态，
+   * 用户需要能和「连不上」区分开。所以这里只做 ping，结果如实返回。
+   */
+  async testConnection(id: string): Promise<{ ok: boolean; error?: string }> {
+    await this.mcpStore.initialize();
+    const server = this.mcpStore.getRow(id);
+    if (!server) {
+      throw new Error("MCP Server not found or unauthorized");
+    }
+
+    const ok = await this.mcpClient.healthCheck(
+      {
+        url: server.url || undefined,
+        headers: (server.headers as Record<string, any>) || undefined,
+        type: server.type as "sse" | "streamableHttp" | "stdio" | undefined,
+        command: server.command || undefined,
+        args: (server.args as string[]) || undefined,
+        env: (server.env as Record<string, string>) || undefined,
+        cwd: server.cwd || undefined,
+      },
+      { serverId: id },
+    );
+
+    return ok ? { ok } : { ok, error: "Connection failed" };
   }
 }

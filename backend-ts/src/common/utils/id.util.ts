@@ -36,6 +36,8 @@ export const ID_PREFIXES = {
   conn: "conn-",
   id: "id-",
   proc: "proc-",
+  /** 子进程环境里的执行标记（进程树回收用），非持久实体 */
+  execToken: "exec-",
 } as const;
 
 /** 铸造实体 id：`<prefix> + UUID v4`（原 file-store-kit 实现，此处为唯一实现） */

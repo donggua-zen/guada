@@ -34,12 +34,14 @@ describe("McpServerService.createServer 工具名冲突", () => {
     } as any;
 
     const pluginManager = { reloadPlugin: jest.fn(async () => undefined) } as any;
+    const connections = { invalidate: jest.fn(async () => 0) } as any;
 
     return {
-      service: new McpServerService(store, client, pluginManager),
+      service: new McpServerService(store, client, pluginManager, connections),
       store,
       client,
       pluginManager,
+      connections,
     };
   }
 
@@ -117,5 +119,104 @@ describe("McpServerService.createServer 工具名冲突", () => {
     expect(store.create).toHaveBeenCalled();
     expect(store.writeTools).not.toHaveBeenCalled();
     expect(pluginManager.reloadPlugin).toHaveBeenCalledWith("mcp");
+  });
+});
+
+/**
+ * 配置变更时对已建连接的释放。
+ *
+ * 运行期工具调用走池化长连接，所以"服务器被删/被禁用/配置被改"必须显式通知连接管理器，
+ * 否则 stdio 子进程会活到空闲 TTL 到期才被回收。
+ */
+describe("McpServerService 连接释放", () => {
+  function build(row: any) {
+    const store = {
+      initialize: jest.fn(async () => undefined),
+      getRow: () => row,
+      getConfig: () => row,
+      delete: jest.fn(async () => true),
+      update: jest.fn(async (_id: string, data: any) => ({ ...row, ...data })),
+      writeTools: jest.fn(async () => undefined),
+    } as any;
+    const client = { listTools: jest.fn(async () => ({})), healthCheck: jest.fn() } as any;
+    const pluginManager = { reloadPlugin: jest.fn(async () => undefined) } as any;
+    const connections = { invalidate: jest.fn(async () => 1) } as any;
+
+    return {
+      service: new McpServerService(store, client, pluginManager, connections),
+      store,
+      client,
+      pluginManager,
+      connections,
+    };
+  }
+
+  const row = {
+    id: "srv1",
+    name: "服务器",
+    url: "https://example.com/mcp",
+    type: "streamableHttp",
+    command: null,
+    args: null,
+    env: null,
+    cwd: null,
+    headers: null,
+    enabled: true,
+  };
+
+  it("删除服务器时立即释放连接", async () => {
+    const { service, connections, pluginManager } = build(row);
+
+    await service.deleteServer("srv1");
+
+    expect(connections.invalidate).toHaveBeenCalledWith("srv1");
+    expect(pluginManager.reloadPlugin).toHaveBeenCalledWith("mcp");
+  });
+
+  it("禁用服务器时断开连接", async () => {
+    const { service, connections } = build(row);
+
+    await service.toggleServerStatus("srv1", false);
+
+    expect(connections.invalidate).toHaveBeenCalledWith("srv1");
+  });
+
+  it("启用服务器时不预连（留给首次工具调用按需建立）", async () => {
+    const { service, connections } = build(row);
+
+    await service.toggleServerStatus("srv1", true);
+
+    expect(connections.invalidate).not.toHaveBeenCalled();
+  });
+
+  it("改配置时释放旧连接（不等空闲 TTL）", async () => {
+    const { service, connections } = build(row);
+
+    await service.updateServer("srv1", { name: "改了名字" });
+
+    expect(connections.invalidate).toHaveBeenCalledWith("srv1");
+  });
+
+  it("测试连接只探测链路，不改动任何状态", async () => {
+    const { service, client, connections, store } = build(row);
+    client.healthCheck.mockResolvedValueOnce(true);
+
+    await expect(service.testConnection("srv1")).resolves.toEqual({ ok: true });
+
+    expect(client.healthCheck).toHaveBeenCalledTimes(1);
+    expect(client.healthCheck.mock.calls[0][1]).toEqual({ serverId: "srv1" });
+    // 关键：不释放连接、不写缓存、不刷新插件
+    expect(connections.invalidate).not.toHaveBeenCalled();
+    expect(store.writeTools).not.toHaveBeenCalled();
+  });
+
+  it("测试连接失败时如实返回 ok=false 而不是抛错", async () => {
+    const { service, client } = build(row);
+    client.healthCheck.mockResolvedValueOnce(false);
+
+    await expect(service.testConnection("srv1")).resolves.toEqual({
+      ok: false,
+      error: "Connection failed",
+    });
   });
 });

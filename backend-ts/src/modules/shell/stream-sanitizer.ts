@@ -217,16 +217,19 @@ export class StreamingSanitizer {
 }
 
 // ============================================================================
-// SanitizerTransform — 将 StreamingSanitizer 适配为 Transform 流
-// 接收 Buffer → 解码 → 清洗 → push string，同时触发副作用回调
+// OutputDecoder — 解码 + 清洗的状态机（无流依赖）
+//
+// 为什么单独成一个类：命令输出不再经过 Node 管道。子进程直写文件 fd，父进程按偏移
+// 增量把字节喂进这里（见 output-tailer.ts）。做成纯状态机之后，"喂完即已产出文本"
+// 是同步确定的事实，读路径不需要任何 flush 协调——旧管道实现里
+// `await finished(writeStream)` 那一整套正是为此而存在。
+//
+// 全部状态都在这里：iconv 流式解码器（跨 chunk 多字节）、粘性编码判定，
+// 以及 StreamingSanitizer（ANSI 擦除 / \r 帧折叠 / 未结束行缓冲）。
 // ============================================================================
 
-export class SanitizerTransform extends Transform {
+export class OutputDecoder {
   private sanitizer = new StreamingSanitizer();
-  /** 空闲超时计时器：数据流停顿超过阈值时冲刷 partialLine */
-  private idleTimer: NodeJS.Timeout | null = null;
-  /** 空闲冲刷延迟（毫秒）。curl 进度条更新间隔约 1s，500ms 足以区分进度条与交互提示 */
-  private readonly IDLE_FLUSH_MS = 500;
   /**
    * 流式解码器：跨 chunk 被切断的多字节字符由它内部缓冲并在下个 chunk 补全
    * （每个 chunk 独立 iconv.decode 会把切断的字符变成 U+FFFD）。
@@ -236,26 +239,34 @@ export class SanitizerTransform extends Transform {
   /** 已判定为 GBK（Windows 上首个非 ASCII chunk 非合法 UTF-8）→ 锁定，避免后续来回翻 */
   private gbkLocked = false;
 
-  constructor(
-    private encoding: string,
-    private onCleaned?: (text: string) => void,
-  ) {
-    super();
+  constructor(private encoding: string) {}
+
+  /** 喂一段原始字节 → 清洗后的文本（可能为空：不完整的行会被缓冲） */
+  feed(chunk: Buffer): string {
+    const encoding = this.resolveEncoding(chunk);
+    return this.sanitizer.feed(this.decodeChunk(chunk, encoding));
   }
 
-  /** 重置空闲计时器，每个 chunk 到达时调用 */
-  private resetIdleTimer(): void {
-    if (this.idleTimer) clearTimeout(this.idleTimer);
-    this.idleTimer = setTimeout(() => {
-      this.idleTimer = null;
-      const flushed = this.sanitizer.flushPartialLine();
-      if (flushed) {
-        // 追加 \n 分隔帧：idle 冲刷是人为断行，避免后续数据与此拼接
-        const output = flushed + "\n";
-        this.push(output);
-        this.onCleaned?.(output);
-      }
-    }, this.IDLE_FLUSH_MS);
+  /**
+   * 空闲冲刷：交出滞留的未结束行（交互式命令的提示词不以 \n 结尾）。
+   * 不重置 partialEsc（ANSI 序列仍在等补全），也不动解码器。
+   */
+  flushPartialLine(): string {
+    return this.sanitizer.flushPartialLine();
+  }
+
+  /** 进程结束：先交出解码器残留字节，再冲刷行缓冲并清空全部状态（之后可继续 feed 新数据） */
+  flush(): string {
+    let remaining = "";
+    if (this.decoder) {
+      const tail = this.decoder.end() ?? "";
+      if (tail) remaining += this.sanitizer.feed(tail);
+      // 结束后必须丢掉解码器：iconv 的解码器 end() 之后不能再 write，
+      // 后续还有字节（孤儿进程继续写 spool）时要重新开一个。
+      this.decoder = null;
+      this.decoderEncoding = null;
+    }
+    return remaining + this.sanitizer.flush();
   }
 
   /**
@@ -287,11 +298,46 @@ export class SanitizerTransform extends Transform {
     }
     return this.decoder.write(chunk);
   }
+}
+
+// ============================================================================
+// SanitizerTransform — OutputDecoder 的流适配器
+// 接收 Buffer → 解码 → 清洗 → push string，同时触发副作用回调
+// （保留给仍走管道的调用方与既有测试；命令输出本身已改走文件 fd）
+// ============================================================================
+
+export class SanitizerTransform extends Transform {
+  private output: OutputDecoder;
+  /** 空闲超时计时器：数据流停顿超过阈值时冲刷 partialLine */
+  private idleTimer: NodeJS.Timeout | null = null;
+  /** 空闲冲刷延迟（毫秒）。curl 进度条更新间隔约 1s，500ms 足以区分进度条与交互提示 */
+  private readonly IDLE_FLUSH_MS = 500;
+
+  constructor(
+    encoding: string,
+    private onCleaned?: (text: string) => void,
+  ) {
+    super();
+    this.output = new OutputDecoder(encoding);
+  }
+
+  /** 重置空闲计时器，每个 chunk 到达时调用 */
+  private resetIdleTimer(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      const flushed = this.output.flushPartialLine();
+      if (flushed) {
+        // 追加 \n 分隔帧：idle 冲刷是人为断行，避免后续数据与此拼接
+        const output = flushed + "\n";
+        this.push(output);
+        this.onCleaned?.(output);
+      }
+    }, this.IDLE_FLUSH_MS);
+  }
 
   _transform(chunk: Buffer, _enc: string, cb: () => void) {
-    const encoding = this.resolveEncoding(chunk);
-    const raw = this.decodeChunk(chunk, encoding);
-    const cleaned = this.sanitizer.feed(raw);
+    const cleaned = this.output.feed(chunk);
     if (cleaned) {
       this.push(cleaned);
       this.onCleaned?.(cleaned);
@@ -305,13 +351,7 @@ export class SanitizerTransform extends Transform {
       clearTimeout(this.idleTimer);
       this.idleTimer = null;
     }
-    // 解码器里可能还留着最后一个多字节字符的残字节：先喂给清洗器再冲刷行缓冲
-    let remaining = "";
-    if (this.decoder) {
-      const tail = this.decoder.end() ?? "";
-      if (tail) remaining += this.sanitizer.feed(tail);
-    }
-    remaining += this.sanitizer.flush();
+    const remaining = this.output.flush();
     if (remaining) {
       this.push(remaining);
       this.onCleaned?.(remaining);

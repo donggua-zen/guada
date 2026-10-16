@@ -30,7 +30,14 @@ export interface McpApi {
   deleteMcpServer(serverId: string): Promise<boolean>;
   toggleMcpServer(serverId: string, enabled: boolean): Promise<McpServer>;
   refreshMcpTools(serverId: string): Promise<McpServer>;
+  testMcpConnection(serverId: string): Promise<McpConnectionTestResult>;
   getMcpServers(): Promise<PaginatedResponse<McpServer>>;
+}
+
+/** 连通性测试结果：只探测链路，不改任何状态（区别于 refreshMcpTools） */
+export interface McpConnectionTestResult {
+  ok: boolean;
+  error?: string;
 }
 
 export const mcpApi: McpApi = {
@@ -71,9 +78,16 @@ export const mcpApi: McpApi = {
   },
 
   async refreshMcpTools(this: ApiContext, serverId: string) {
-    return await this._request<McpServer>(`/mcp-servers/${serverId}/refresh-tools`, {
+    return await this._request<McpServer>("/mcp-servers/" + serverId + "/refresh-tools", {
       method: "POST",
     });
+  },
+
+  async testMcpConnection(this: ApiContext, serverId: string) {
+    return await this._request<McpConnectionTestResult>(
+      "/mcp-servers/" + serverId + "/test-connection",
+      { method: "POST" },
+    );
   },
 
   getMcpServers(this: ApiContext & McpApi) {

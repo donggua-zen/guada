@@ -109,18 +109,18 @@
 
 ### 3.4 集成层（机器人网关 / MCP / Skills / 插件）（health 30 — 最薄弱）
 
-**总览**：bot-gateway 多平台适配（自研 iLink 个人微信 SDK / Discord / 企业微信 / 飞书）；MCP 双向角色（common/mcp 客户端 + modules/mcp-servers 服务器，配置存 `<MCP根>/<id>.yaml`，工具缓存同目录 `<id>.tools.json`）；skills 动态能力扩展（版本管理/文件监听/元数据校验）；plugins 插件生态（后端 plugins/ 目录 + 前端 PluginSlot）。
+**总览**：bot-gateway 多平台适配（自研 iLink 个人微信 SDK / Discord / 企业微信 / 飞书）；MCP 双向角色（common/mcp 客户端 + modules/mcp-servers 服务器，配置存 `<MCP根>/<id>.yaml`，工具缓存同目录 `<id>.tools.json`；客户端连接由 `mcp-connection-manager.service.ts` 池化复用并按空闲回收，配置变更按连接键自动换代）；skills 动态能力扩展（版本管理/文件监听/元数据校验）；plugins 插件生态（后端 plugins/ 目录 + 前端 PluginSlot）。
 
-**设计模式**：适配器（多 IM 协议）、插件/扩展点架构（前后端双扩展点）、观察者/事件驱动（skill-watcher）、MCP 协议双向角色。
+**设计模式**：适配器（多 IM 协议）、插件/扩展点架构（前后端双扩展点）、观察者/事件驱动（skill-watcher）、MCP 协议双向角色、连接池 + 引用/空闲回收 + 单飞建连。
 
 **主要风险**（该层风险最集中）：
 1. 个人微信通道：自研协议映射依赖逆向维护，违反平台条款、易封号、协议变更即失效 — 合规与稳定性风险最高
 2. 多平台适配器一致性缺乏统一抽象证据：无事件归一化/幂等去重/重试限流 — 推测
-3. common/mcp 全局单例客户端在多实例场景的并发隔离与攻击面 — 推测
+3. MCP 连接为**全应用共享**（每服务器一条，非按会话隔离）：有状态服务器（浏览器自动化类）被多个会话共用同一份服务器状态；MCP 服务器无来源白名单/信任分级 — 推测
 4. skills 动态加载无代码级校验/沙箱，第三方 skill 任意代码执行风险 — 推测
 5. 前端插件插槽无 Manifest/权限白名单/CSP 隔离，XSS 与供应链风险 — 推测
 
-**改进建议**：定义统一平台无关 BotAdapter/ChannelPort 契约；个人微信通道隔离部署 + 健康检查/断线重连/协议升级熔断 + ADR 记录合规决策；MCP 客户端按会话实例化 + 连接池 + 白名单；skills 加载加代码级校验 + 非信任 skill 沙箱运行 + 可回滚；前端插件定义 Manifest + 受限 iframe/CSP。
+**改进建议**：定义统一平台无关 BotAdapter/ChannelPort 契约；个人微信通道隔离部署 + 健康检查/断线重连/协议升级熔断 + ADR 记录合规决策；MCP 补 `isolation` 配置项以支持按会话隔离 + 服务器来源白名单（连接池本身已落地：复用/单飞建连/空闲回收/进程树终止/取消透传）；skills 加载加代码级校验 + 非信任 skill 沙箱运行 + 可回滚；前端插件定义 Manifest + 受限 iframe/CSP。
 
 ### 3.5 执行层（子代理 / 工作流 / 调度 / 终端 / 工具）（health 52）
 

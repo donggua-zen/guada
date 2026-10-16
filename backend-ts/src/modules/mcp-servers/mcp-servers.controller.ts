@@ -58,4 +58,9 @@ export class McpServersController {
   async refreshTools(@Param("id") id: string) {
     return this.mcpService.refreshTools(id);
   }
+
+  @Post(":id/test-connection")
+  async testConnection(@Param("id") id: string) {
+    return this.mcpService.testConnection(id);
+  }
 }

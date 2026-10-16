@@ -121,9 +121,6 @@ backend-ts 现有 185 个 spec / 2770 个用例，但分布极不均衡：chat /
 | `dangerLevel` 字段无消费方 | 全链路只声明与存储，执行器、AgentEngine、前端均不读取，不做拦截或 UI 分级 | `types/plugin.types.ts`、`toolkit/toolkit.ts`、`api/plugin-api.ts`、`builtins/file.plugin.ts` 等赋值处 |
 | `params` 字段无消费方 | 角色插件条目的预留扩展位，解析器只读 `toolkits_filter/deny/allow`，前端读写也不含它 | `types/plugin.types.ts`（`RolePluginEntryConfig`）、`plugin.manager.ts`（`applyRoleLayer`） |
 | 跨插件工具重名无仲裁 | 同名工具都会进入发送给 LLM 的 tools 数组（供应商会因此报 400），执行时按注册顺序命中第一个，后注册者不可达。**MCP 侧已处理**：添加服务器时检测重名并报错，注册期对运行期引入的冲突确定性保留创建更早的那个、跳过另一个并记 error；其余插件仍无仲裁 | `tool-executor.service.ts`（`findTool` / `toFlatToolDefs`）、`registry/plugin-registry.ts`、`mcp-servers/mcp-tool-name.ts` |
-| MCP 每次调用新建连接 | `withClient` 为每次 `listTools`/`callTool` 新建 transport 与 Client，用完即关；无连接复用/池化、无重试、无单次调用超时（仅有 10s 连接超时） | `common/mcp/mcp-client.service.ts`；架构文档亦已列出该项 |
-
-> MCP 连接池一项在 [`PROJECT_ARCHITECTURE.md`](./PROJECT_ARCHITECTURE.md) 中也有记录，此处仅作交叉引用，避免两处描述漂移。
 
 ### 暂缓项 · 插件系统重构期间发现（2026-09-15）
 
@@ -131,13 +128,15 @@ backend-ts 现有 185 个 spec / 2770 个用例，但分布极不均衡：chat /
 
 | 问题 | 现状 | 关联文件 |
 |---|---|---|
-| MCP `streamableHttp` 分支是死代码 | 先 `config.type?.toLowerCase()`，随后却与 `"streamableHttp"` 比较，永不成立。功能无影响（落入同一 else 分支），但该分支的专属调试日志失效 | `common/mcp/mcp-client.service.ts`（`withClient` 的协议判定） |
-| MCP `callTool` 不透传 `isError` | 异常被吞成 `{success:false, content:"Error: …"}`，而插件只返回 `result.content` → **LLM 无法区分工具失败与正常输出**，会把错误当数据用 | `common/mcp/mcp-client.service.ts`、`modules/mcp-servers/tools/mcp.plugin.ts` |
-| MCP `healthCheck()` 无调用方 | 死 API；前端也没有"测试连接"按钮，连通性只在创建/更新/刷新抓工具时被间接验证 | `common/mcp/mcp-client.service.ts` |
 | `registerPlugin` 的 catch 兜底与其它保护不一致 | 只认 `category === "core"`，不认 `system`/`essential`。配置读取异常时 system 非 essential 插件（mcp/skill/sub_agent）会被置为 disabled | `modules/plugins/plugin.manager.ts`（`registerPlugin` 的 catch） |
 | 外部插件可自declare `category` / `essential` | `validateManifest` 只校验 id/name/version/description，不剥离这两个字段；外部插件借此获得"不可启停 + 免于批量禁用"。`governance` 已堵，`category`/`essential` 未堵 | `modules/plugins/external/external-plugin-loader.ts` |
 | Skills 的逐技能过滤只在 prompt 生效 | `settings.skills` 的过滤作用在 skill 插件的提示词上，`skill_learn` 工具本身不校验 → 被角色关掉的技能仍可被 learn 到 | `modules/skills/plugins/skill.plugin.ts` |
 | `category: "system"` 兼任三种职责 | 不可启停、不进通用启停列表、`/plugins/query` 的过滤判据。工具包治理已拆为工具包级 `governance`，插件级的这三项仍混在 `category` 上 | `modules/plugins/plugin.manager.ts`、`plugins.controller.ts` |
+
+> 同轮记录的另三项 MCP 问题（`streamableHttp` 死分支、`callTool` 不透传 `isError`、`healthCheck` 无调用方）
+> 已随 MCP 连接池改造一并修复：连接与生命周期现由 `common/mcp/mcp-connection-manager.service.ts` 负责，
+> `healthCheck` 接入了设置页的「测试连接」（`POST /mcp-servers/:id/test-connection`）。
+> 另：原先记在此处的「MCP 每次调用新建连接」也已解决，故不再列入本清单。
 
 ### 暂缓项 · 防休眠与错过窗口（2026-10-15）
 

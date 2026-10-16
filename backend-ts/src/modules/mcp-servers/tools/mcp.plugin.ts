@@ -106,9 +106,20 @@ export class McpPlugin extends PluginBase {
               },
               toolName,
               args,
-              mcpToolName,
+              {
+                // 服务器 id 决定连接归属：同一服务器的所有工具共用一条连接，
+                // 也便于配置变更/删除时按 id 精确释放
+                serverId: server.id,
+                // 透传取消信号，否则用户点「停止生成」后 MCP 请求仍会跑到超时
+                signal: abortSignal,
+              },
             );
-            return result.content || "";
+            // isError 必须一路带到工具执行器：只返回 content 的话，模型会把
+            // 「连接失败/工具报错」的文字当成工具的正常输出使用
+            return {
+              content: result.content || "",
+              ...(result.success ? {} : { isError: true }),
+            };
           },
         });
       }

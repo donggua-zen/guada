@@ -149,6 +149,12 @@
                             <div class="text-sm text-gray-600 dark:text-[#8b8d95]">
                                 {{ t('plugins.mcp.toolsCount', { count: toolsList.length }) }}
                             </div>
+                            <el-button size="small" @click="handleTestConnection" :loading="testingConnection">
+                                <el-icon class="mr-1" :class="{ 'is-loading': testingConnection }">
+                                    <CableOutlined />
+                                </el-icon>
+                                {{ t('plugins.mcp.testConnection') }}
+                            </el-button>
                             <el-button size="small" @click="handleRefreshTools" :loading="refreshingTools">
                                 <el-icon class="mr-1" :class="{ 'is-loading': refreshingTools }">
                                     <RefreshRight />
@@ -265,7 +271,8 @@ import {
     RemoveCircleOutlineRound,
     InboxOutlined,
     UploadOutlined,
-    InfoOutlined
+    InfoOutlined,
+    CableOutlined
 } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
@@ -286,6 +293,7 @@ const importing = ref(false)
 const importJsonText = ref('')
 const activeTab = ref('config')
 const refreshingTools = ref(false)
+const testingConnection = ref(false)
 const toolsList = ref([])
 
 const formRef = ref(null)
@@ -734,6 +742,30 @@ const handleRefreshTools = async () => {
         toast.error(error.message || t('plugins.mcp.refreshToolsFailed'))
     } finally {
         refreshingTools.value = false
+    }
+}
+
+// 测试连接：只探测链路（后端 ping），不改动工具缓存与服务器状态
+const handleTestConnection = async () => {
+    if (!serverForm.value.id) {
+        toast.warning(t('plugins.mcp.testConnectionWarning'))
+        return
+    }
+
+    try {
+        testingConnection.value = true
+        const result = await apiService.testMcpConnection(serverForm.value.id)
+
+        if (result?.ok) {
+            toast.success(t('plugins.mcp.testConnectionSuccess'))
+        } else {
+            toast.error(result?.error || t('plugins.mcp.testConnectionFailed'))
+        }
+    } catch (error) {
+        console.error('测试连接失败:', error)
+        toast.error(error.message || t('plugins.mcp.testConnectionFailed'))
+    } finally {
+        testingConnection.value = false
     }
 }
 
