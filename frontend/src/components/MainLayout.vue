@@ -1,4 +1,7 @@
 <template>
+  <!-- 全屏模式下悬浮对话面板（必须在 SidebarLayout 之前确保 #floating-chat 先于 Teleport 挂载） -->
+  <FloatingChatPanel />
+
   <!-- Windows 标题栏行：左 logo/图标按钮，右窗口控制。
        Mac 无此行（红绿灯悬浮侧栏顶部），Web 无窗口按钮需求 -->
   <CustomTitlebar v-if="isElectron && !isMac" />
@@ -38,6 +41,7 @@ import SidebarLayout from './ui/SidebarLayout.vue'
 import GlobalSidebar from './GlobalSidebar.vue'
 import CustomTitlebar from './CustomTitlebar.vue'
 import BrowserWebviewLayer from './BrowserWebviewLayer.vue'
+import FloatingChatPanel from './chat/FloatingChatPanel.vue'
 
 const layoutStore = useLayoutStore()
 const sessionStore = useSessionStore()

@@ -30,7 +30,7 @@
 | `evictFileTab()` 只遍历 `type === 'file'`，agent 标签天然不参与 LRU | `frontend/src/stores/tab.ts:99-117` |
 | `sessionsMap` 是唯一数据源且包含 sub_agent 会话（`sessionsList` 过滤视图反证） | `frontend/src/stores/session.ts:24, 150` |
 | 死代码：`SessionAgentList.vue` 已 import 未使用；`AgentTabBar.vue` 全项目无引用 | `WorkspaceSidebar.vue:169` |
-| 全屏浮动容器（**已于 2026-10-08 摘除，见 §3.1**）：Teleport + FloatingChatPanel，仅 MainLayout 一处引用 | `ChatPage.vue:69, 358-364`、`FloatingChatPanel.vue`、`MainLayout.vue:3` |
+| 全屏浮动容器（2026-10-08 摘除、**2026-10-15 恢复并重写**，见 §3.1 状态变更）：Teleport + FloatingChatPanel，仅 MainLayout 一处引用 | `ChatPage.vue:69, 358-364`、`FloatingChatPanel.vue`、`MainLayout.vue:3` |
 
 ### 后端
 
@@ -104,6 +104,17 @@ await this.sessionRepo.deleteById(sessionId);
 > 实际改动比本表多三处收尾：删除 i18n `chat.floating.*`（中英）、清理 `components.d.ts` 陈旧声明（自动生成文件，重建即可）、
 > 清理遗留 localStorage 键 `floatingChatPosition`（`stores/layout.ts` 既有遗留键清理惯例）。
 > 全屏期间主对话不可见（pane1 `display:none`），数据层照常流式写入；退出全屏滚动落点：原本贴底仍贴底，原本上滚保留位置。
+
+> **状态变更（2026-10-15）**：本项已回滚 —— 全屏时对话重新以悬浮面板呈现，语义回到「全屏 = 对话悬浮、工作目录占满窗口」。
+> 但实现换了写法，与上表的删除范围不对应：
+> - `ChatPage.vue` 恢复 `<Teleport :disabled="!workspaceFullscreen" to="#floating-chat">` 包裹 ChatPanel（**同步**翻转，
+>   不再需要旧的 `teleportDisabled` 延迟一帧竞态补丁）；浮窗模式下面板/避让宽钉 0（430px 容不下概览）。
+> - `FloatingChatPanel.vue` 重写（非还原旧文件）：几何钳制抽到 `composables/useFloatingChatPanel.ts` 并配单测。
+> - 相对旧实现的行为变更：可拖拽调整大小 + 尺寸持久化；头部双击复位；「用户主动隐藏」与「视口太小自动隐藏」
+>   拆成两个状态（旧实现共用一个标志，窗口缩放会抹掉用户意图）；隐藏后给贴边恢复条（旧实现只能退出全屏再进）；
+>   收起/隐藏期间用 `visibility` 而非 `display:none`，消息滚动位置不再丢失；标题栏禁入区按实际标题栏高而非硬编码 44px。
+> - 仍然必须在 `.content-card` **之外**：卡片自带 z-index 会形成层叠上下文，卡片内的任何层级都压不过
+>   `BrowserWebviewLayer`（z-40），全屏工作区里浏览器预览会盖住浮窗。
 
 | 文件 | 操作 |
 |---|---|

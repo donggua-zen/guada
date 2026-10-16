@@ -171,6 +171,14 @@
     allLoaded: 'All {n} sessions loaded',
   },
 
+  // ── Floating panel (chat bubble while the workspace is fullscreen) ──
+  floating: {
+    // hide / show are shared by the panel's ✕ and the workspace toolbar toggle (same action)
+    hide: 'Hide floating chat',
+    show: 'Show floating chat',
+    chat: 'Chat',
+  },
+
   // ── 大纲 ──
   outline: {},
 

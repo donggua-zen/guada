@@ -6,6 +6,12 @@ import { apiService } from '@/services/ApiService'
 import { NEW_SESSION_ID, SIDEBAR_AUTO_COLLAPSE_WIDTH } from '@/constants'
 import { useTheme } from '@/composables/useTheme'
 import { applyLanguageFromAppearance } from '@/composables/useLanguage'
+import {
+  FLOATING_CHAT_DEFAULT_H,
+  FLOATING_CHAT_DEFAULT_W,
+  panelFits,
+  resolveTopReserve,
+} from '@/composables/useFloatingChatPanel'
 import type { AppearanceGroupSettings } from '@/types/service'
 import { useSessionStore } from '@/stores/session'
 
@@ -29,7 +35,7 @@ export const useLayoutStore = defineStore('layout', () => {
   const sidebarEffectiveVisible = computed(() => sidebarVisible.value && !sidebarAutoCollapsed.value)
 
   // 窗口宽度跨过阈值时切换；immediate 保证在小窗里启动也直接是收起态
-  const { width: windowWidth } = useWindowSize()
+  const { width: windowWidth, height: windowHeight } = useWindowSize()
   const isNarrowWindow = computed(() => windowWidth.value > 0 && windowWidth.value < SIDEBAR_AUTO_COLLAPSE_WIDTH)
   watch(isNarrowWindow, (narrow) => {
     sidebarAutoCollapsed.value = narrow
@@ -87,14 +93,48 @@ export const useLayoutStore = defineStore('layout', () => {
     /* localStorage 不可用时忽略 */
   }
 
-  // 工作目录全屏模式（非持久化，会话级运行时状态）：全屏 = pane1 收起、工作目录占满窗口
+  // 工作目录全屏模式（非持久化，会话级运行时状态）：全屏 = pane1 收起（对话搬入悬浮面板）、
+  // 工作目录占满窗口
   const workspaceFullscreen = ref(false)
 
-  // 全屏悬浮对话面板已摘除，清理遗留的位置持久化键
-  try {
-    localStorage.removeItem('floatingChatPosition')
-  } catch {
-    /* localStorage 不可用时忽略 */
+  // ── 全屏时的悬浮对话面板 ──
+  // 用户隐藏（运行时）：入口有两个且等价——工作区工具栏的悬浮对话图标、面板头部的 ✕。
+  // 与「视口太小自动隐藏」严格分离：旧实现共用一个标志，窗口缩小触发自动隐藏会把用户的
+  // 隐藏意图一起抹掉，放大后又自作主张弹回来
+  const floatingChatUserHidden = ref(false)
+  // 右下角相对坐标 (0~1)：面板**右下角**在视口中的比例位置，窗口缩放按比例跟随
+  const floatingChatPosition = useStorage('floatingChatPosition', { rx: 1, ry: 1 })
+  // 面板尺寸（持久化；四边/四角把手调整，头部双击复位）
+  const floatingChatSize = useStorage('floatingChatSize', {
+    w: FLOATING_CHAT_DEFAULT_W,
+    h: FLOATING_CHAT_DEFAULT_H,
+  })
+
+  const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI
+  const isMacEnv = isElectronEnv && window.electronAPI?.platform === 'darwin'
+
+  /**
+   * 视口是否放得下面板下限——放不下就整块自动隐藏，避免浮窗占满屏幕。
+   *
+   * 放在 store 而不是面板里：工作区工具栏的开关图标要读它来判断自己该显示"开"还是"关"，
+   * 两处必须是同一份真相，否则会出现「图标显示已开、面板其实没渲染」的死状态。
+   */
+  const floatingChatAutoHidden = computed(() => {
+    const w = windowWidth.value
+    const h = windowHeight.value
+    // 尺寸未知（非浏览器环境）时不判定为放不下，别把开关钉死在"关"
+    if (w <= 0 || h <= 0) return false
+    return !panelFits({ w, h }, resolveTopReserve({ isElectron: isElectronEnv, isMac: isMacEnv }))
+  })
+
+  /** 悬浮面板此刻是否应当可见（页面级条件——是否在会话页、会话是否有效——由面板自己再收敛） */
+  const floatingChatVisible = computed(
+    () => workspaceFullscreen.value && !floatingChatUserHidden.value && !floatingChatAutoHidden.value,
+  )
+
+  /** 切换悬浮面板显示/隐藏（工具栏图标与面板 ✕ 共用） */
+  const toggleFloatingChat = (): void => {
+    floatingChatUserHidden.value = !floatingChatUserHidden.value
   }
 
   // 壁纸与透明度设置（持久化到 localStorage）
@@ -157,9 +197,31 @@ export const useLayoutStore = defineStore('layout', () => {
 
   /**
    * 切换工作目录全屏模式
+   *
+   * 进入全屏时清掉「主动隐藏」（否则进去就是空的，用户会以为按钮坏了）；
+   * 收起态/位置/尺寸沿用上次，退出再进即恢复原样。
    */
   const toggleWorkspaceFullscreen = (): void => {
     workspaceFullscreen.value = !workspaceFullscreen.value
+    if (workspaceFullscreen.value) {
+      floatingChatUserHidden.value = false
+    }
+  }
+
+  /** 设置悬浮面板位置（相对坐标；拖拽松手时写入，非逐帧） */
+  const setFloatingChatPosition = (position: { rx: number; ry: number }): void => {
+    floatingChatPosition.value = position
+  }
+
+  /** 设置悬浮面板尺寸（像素；缩放松手时写入） */
+  const setFloatingChatSize = (size: { w: number; h: number }): void => {
+    floatingChatSize.value = size
+  }
+
+  /** 复位悬浮面板布局（位置回右下角、尺寸回默认；头部双击入口） */
+  const resetFloatingChatLayout = (): void => {
+    floatingChatPosition.value = { rx: 1, ry: 1 }
+    floatingChatSize.value = { w: FLOATING_CHAT_DEFAULT_W, h: FLOATING_CHAT_DEFAULT_H }
   }
 
   /**
@@ -350,6 +412,11 @@ export const useLayoutStore = defineStore('layout', () => {
     workspaceVisible,
     workspaceSplitSize,
     workspaceFullscreen,
+    floatingChatUserHidden,
+    floatingChatPosition,
+    floatingChatSize,
+    floatingChatAutoHidden,
+    floatingChatVisible,
     wallpaperUrl,
     sidebarOpacity,
     contentOpacity,
@@ -362,6 +429,10 @@ export const useLayoutStore = defineStore('layout', () => {
     setWorkspaceVisible,
     setWorkspaceSplitSize,
     toggleWorkspaceFullscreen,
+    toggleFloatingChat,
+    setFloatingChatPosition,
+    setFloatingChatSize,
+    resetFloatingChatLayout,
     setWallpaperUrl,
     setSidebarOpacity,
     setContentOpacity,

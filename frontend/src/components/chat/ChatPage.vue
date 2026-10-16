@@ -82,21 +82,27 @@
               </PageHeader>
 
               <!-- 主体：会话面板（恒显主会话；子代理在侧边栏标签打开，同屏并存）。
-                   工作区全屏时 pane1 整列收起（display:none），对话不可见、数据照常流式写入 -->
-              <ChatPanel ref="chatPanelRef" :session="mainSession" :session-id="routeSessionId ?? undefined"
-                :sub-sessions="subSessions"
-                :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
-                @container-resize="onChatContainerResize"
-                @save-settings="handleSaveSessionSettings"
-                @select-agent="handleSelectAgent">
-                <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
-                     overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
-                <template #aside>
-                  <div ref="asideSlotRef" class="h-full w-full">
-                    <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null" />
-                  </div>
-                </template>
-              </ChatPanel>
+                   工作区全屏时 pane1 整列收起（display:none），ChatPanel 经 Teleport 搬进
+                   悬浮面板（#floating-chat，见 FloatingChatPanel.vue）——组件实例不重建，
+                   数据照常流式写入、草稿与滚动位置都保留。
+                   搬运而非原位改定位：浮窗必须挂在 .content-card 之外才能压过
+                   BrowserWebviewLayer（卡片自带 z-index 会形成层叠上下文把浮窗困在下层） -->
+              <Teleport :disabled="!layoutStore.workspaceFullscreen" to="#floating-chat">
+                <ChatPanel ref="chatPanelRef" :session="mainSession" :session-id="routeSessionId ?? undefined"
+                  :sub-sessions="subSessions"
+                  :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
+                  @container-resize="onChatContainerResize"
+                  @save-settings="handleSaveSessionSettings"
+                  @select-agent="handleSelectAgent">
+                  <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
+                       overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
+                  <template #aside>
+                    <div ref="asideSlotRef" class="h-full w-full">
+                      <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null" />
+                    </div>
+                  </template>
+                </ChatPanel>
+              </Teleport>
 
               <!-- 大纲导航：聊天区左缘垂直居中（定位见 ChatOutline .chat-outline-container）。
                    数据源 = ChatPanel 实际渲染的 visibleTurns（回合制）；
@@ -233,11 +239,15 @@ const overviewPanelShown = computed(
   () => (overviewVisible.value && asideFit.value) || overviewTempExpanded.value,
 );
 
-/** 避让占位宽：仅"用户意图开 && 空间足够"时占位（撑开避让列让消息列让位）——与浮层面板各管各的 */
-const asideReserveWidth = computed(() => (overviewVisible.value && asideFit.value ? ASIDE_WIDTH : 0));
+/** 避让占位宽：仅"用户意图开 && 空间足够"时占位（撑开避让列让消息列让位）——与浮层面板各管各的。
+ *  工作区全屏时对话搬进悬浮面板（默认宽 430px），概览必然放不下：直接钉 0，
+ *  省掉 asideFit 的反复翻转与 OverviewPanel（异步重组件）的创建销毁 */
+const asideReserveWidth = computed(() =>
+  layoutStore.workspaceFullscreen ? 0 : (overviewVisible.value && asideFit.value ? ASIDE_WIDTH : 0));
 
 /** 浮层面板宽：面板可见即恒为浮层渲染（占位归占位、浮层归浮层） */
-const asideWidth = computed(() => (overviewPanelShown.value ? ASIDE_WIDTH : 0));
+const asideWidth = computed(() =>
+  layoutStore.workspaceFullscreen ? 0 : (overviewPanelShown.value ? ASIDE_WIDTH : 0));
 
 // 空间变化即清临时展开：变不足 → 自动折叠；变足够 → 按 overviewVisible 还原
 watch(asideFit, () => {
