@@ -17,7 +17,7 @@
       </el-icon>
     </div>
 
-    <!-- 展开态：文件列表（点击整行 → 侧边栏「编辑记录」标签） -->
+    <!-- 展开态：文件列表（点文件名 → 打开文件标签；点行其余部分 → 侧边栏「编辑记录」标签） -->
     <transition name="fcb-expand">
       <div v-if="expanded" class="fcb__list">
         <div
@@ -26,7 +26,8 @@
           class="fcb__file-row"
           @click="$emit('openDiff', entry)"
         >
-          <span class="fcb__file-path" :title="entry.filePath">{{ entry.fileName }}</span>
+          <span class="fcb__file-path is-link" :title="entry.filePath"
+            @click.stop="$emit('openFile', entry)">{{ entry.fileName }}</span>
           <span class="fcb__file-dir">{{ dirPath(entry.filePath) }}</span>
           <span class="fcb__file-stats">
             <span class="fcb__added" v-if="entry.totalAdded">+{{ entry.totalAdded }}</span>
@@ -66,6 +67,7 @@ const props = defineProps<{
 
 defineEmits<{
   openDiff: [entry: FileChangeEntry];
+  openFile: [entry: FileChangeEntry];
 }>();
 
 const expanded = ref(false);
@@ -186,6 +188,17 @@ function dirPath(filePath: string): string {
   color: var(--el-text-color-primary);
   font-weight: 500;
   white-space: nowrap;
+}
+
+/* 文件名＝「打开文件」入口：用链接样式提示（hover 主题色 + 下划线），不加 tooltip；
+   行的其余部分（目录/增删统计/空白）仍是「编辑记录」入口 */
+.fcb__file-path.is-link {
+  cursor: pointer;
+}
+
+.fcb__file-path.is-link:hover {
+  color: var(--el-color-primary);
+  text-decoration: underline;
 }
 
 .fcb__file-dir {

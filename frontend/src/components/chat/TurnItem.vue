@@ -183,9 +183,9 @@
           </div>
         </div>
 
-        <!-- 文件变更摘要 -->
+        <!-- 文件变更摘要（文件名 → 文件标签；行其余部分 → 编辑记录标签） -->
         <FileChangesBar v-if="!streamingState.isStreaming && fileChanges.length > 0" :changes="fileChanges"
-          @open-diff="openDiffDialog" />
+          @open-diff="openDiffDialog" @open-file="openFilePreview" />
       </div>
     </template>
 
@@ -273,6 +273,7 @@ import { useElapsedTicker } from '@/composables/useElapsedTicker';
 import { useTabStore } from '@/stores/tab';
 import { useLayoutStore } from '@/stores/layout';
 import { isHiddenBlock, stripSystemReminder, getThinkingPreview } from '@/utils/messageUtils';
+import { previewFile } from '@/utils/workspacePreview';
 
 const { t } = useI18n();
 
@@ -424,6 +425,12 @@ const tabStore = useTabStore();
 const openDiffDialog = (entry: FileChangeEntry) => {
   layoutStore.setWorkspaceVisible(true);
   nextTick(() => tabStore.openDiffTab(entry, props.turn.id));
+};
+
+// 点击文件名：在侧边栏以文件标签打开该文件（复用统一预览入口：展开侧栏 + 挂载后开预览标签，
+// 同名文件复用同一个预览标签，不会堆标签）。路径原样透传——后端按工作目录解析相对路径。
+const openFilePreview = (entry: FileChangeEntry) => {
+  void previewFile(entry.filePath);
 };
 
 // 激活分组内容更新时自动滚动到底部（用户手动滚动后不干扰）
