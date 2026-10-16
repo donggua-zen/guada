@@ -1,11 +1,9 @@
 import { ref, type Ref } from 'vue'
 
 /**
- * 聊天滚动底部锚定：(following) 表达用户滚动权，不是瞬时几何快照。
+ * 聊天滚动底部锚定：following 表达用户滚动权，不是瞬时几何快照。
  *
- * 语义对齐参考实现 zcode 的 v4 timeline 滚动状态机
- * （packages/ui/src/v4/timelineScrollAnchor.ts + ConversationTimeline.tsx）：
- * - 用户位于底部 → following=true，新内容（流式 delta / 测高变化 / 新回合）自动贴底；
+ * - 用户位于底部 → following=true，新内容（流式 delta / 尺寸增长 / 新回合）自动贴底；
  * - 用户上滚离底 → following=false，流式增量不得拉回阅读位置，回到底部按钮出现；
  * - 用户手动滚回底部（或点按钮）→ 恢复跟随。
  *
@@ -14,10 +12,9 @@ import { ref, type Ref } from 'vue'
  * 旧实现用「scroll 事件里 scrollTop 回退超 10px」反推用户上滚，而内容增高的瞬间
  * ResizeObserver 会抢先贴底，用户上滚与内容增高落在同一帧时启发式直接失效。
  *
- * 本文件与参考实现的两处刻意的简化（本列表未虚拟化）：
- * - 无 virtualizer：不需要测高补偿裁决、prepend 虚拟锚点、live tail 分离；
- * - scroll 事件来源只分 user / layout 两类：prepend 平移、会话恢复、跳转校正都由
- *   本模块自己写入且立刻回读入账，不存在「第三方程序化滚动」需要单独归类。
+ * 本列表未虚拟化，因此相比通用实现少两层：不需要测高补偿裁决、prepend 虚拟锚点、
+ * live tail 分离；scroll 事件来源也只分 user / layout 两类——前插平移、会话恢复、
+ * 跳转校正都由本模块自己写入且立刻回读入账，不存在「第三方程序化滚动」需要单独归类。
  */
 
 // ── 纯函数区（无 DOM 依赖，可直接单测） ──

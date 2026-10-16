@@ -7,8 +7,7 @@
         <!-- overflow-anchor: none —— 内容子树里放着一个 sticky 底部的写作区（chat 输入区），
              它能被 Chrome 的原生滚动锚定选作锚点候选，并在高度变化后覆盖我们 layout 阶段的
              贴底/恢复值。贴底、会话恢复、加载更多的位置补偿一律由 ScrollContainer 自管
-             （useScrollAnchor 状态机），原生锚定必须关掉，否则两套锚定互相打架。
-             （对齐参考实现 zcode ConversationTimeline.tsx 的 overflowAnchor: 'none'。） -->
+             （useScrollAnchor 状态机），原生锚定必须关掉，否则两套锚定互相打架。 -->
         <div ref="contentElement" style="overflow-anchor: none">
             <slot></slot>
         </div>
@@ -120,8 +119,8 @@ function initScrollObservers() {
     const contentEl = contentElement.value;
     if (!contentEl) return;
     // 内容尺寸变化兜底（图片加载、流式正文、展开折叠等异步高度变化）：
-    // 宽度判定与贴底动作都在状态机内（对齐参考实现的做法——宽高都从条目拿，
-    // 回调里不读布局，避免每帧插入强制布局）。
+    // 宽度判定与贴底动作都在状态机内——宽高都从 ResizeObserver 条目拿，
+    // 回调里不读布局，避免每帧插入强制布局。
     resizeObserver.value = new ResizeObserver((entries) => {
         const entry = entries[entries.length - 1];
         if (entry) handleContentResize(entry);
