@@ -1,8 +1,13 @@
 <template>
     <div class="workspace-sidebar h-full flex flex-col relative">
-        <!-- 顶部工具栏：资源管理器按钮 + 浏览器标签 + 窗口控制 -->
+        <!-- 顶部工具栏：资源管理器按钮 + 浏览器标签 + 窗口控制。
+             空白处充当窗口拖拽区**仅限 macOS**：mac 没有独立标题栏行，内容首行必须能拖窗口；
+             Windows/Linux 已有 CustomTitlebar 那一整行预留标题区，这里再挂一个拖拽区是多余的，
+             而且 Electron 的拖拽区按布局计算、不看层叠顺序——浮窗/弹窗盖在这些空白处上会收不到
+             鼠标事件，反而把窗口拖走。 -->
         <div
-            class="flex items-center h-10 drag-region shrink-0 border-b border-(--gd-color-surface-border) dark:border-[#2e3035]">
+            class="flex items-center h-10 shrink-0 border-b border-(--gd-color-surface-border) dark:border-[#2e3035]"
+            :class="{ 'drag-region': isMacDragRegion }">
             <!-- 所有类型标签统一一行（文件 / 浏览器 / Git 审阅） -->
 
             <!-- 标签栏（可横向滚动）+ 新建按钮（固定，不随标签滚出视野） -->
@@ -87,6 +92,20 @@
             <!-- 弹性占位（拖拽区域） -->
             <div class="flex-1"></div>
 
+            <!-- 悬浮对话开关：只在全屏（= 对话搬进悬浮面板）时出现。
+                 它是隐藏面板后的唯一回程入口，与面板头部的 ✕ 完全等价。
+                 面板自身因此不必常驻悬浮球之类的小图标 -->
+            <GdTooltip v-if="layoutStore.workspaceFullscreen"
+                :content="layoutStore.floatingChatVisible ? t('chat.floating.hide') : t('chat.floating.show')"
+                placement="bottom">
+                <button class="sidebar-tool-btn no-drag mr-1.5" :class="{ active: layoutStore.floatingChatVisible }"
+                    @click="layoutStore.toggleFloatingChat()">
+                    <el-icon :size="16">
+                        <Chat16Regular />
+                    </el-icon>
+                </button>
+            </GdTooltip>
+
             <!-- 全屏按钮 -->
             <GdTooltip :content="layoutStore.workspaceFullscreen ? t('chat.workspace.exitFullscreen') : t('chat.workspace.fullscreen')" placement="bottom">
                 <button class="sidebar-tool-btn no-drag mr-1.5" @click="layoutStore.toggleWorkspaceFullscreen()">
@@ -170,7 +189,7 @@ import { ref, reactive, computed, watch, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Plus, Close } from '@element-plus/icons-vue';
-import { Branch20Regular, Pulse20Regular, Bot20Regular, PeopleTeam20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Code20Regular, Notepad20Regular } from '@vicons/fluent';
+import { Branch20Regular, Pulse20Regular, Bot20Regular, PeopleTeam20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Chat16Regular, Code20Regular, Notepad20Regular } from '@vicons/fluent';
 import { getFileIcon } from '@/composables/useFileIcon';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
@@ -245,6 +264,9 @@ function isSubAgentRunning(tabKey: string): boolean {
 
 // 检测是否为 Electron 环境
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
+
+/** 工具栏空白处是否当窗口拖拽区：仅 macOS（无独立标题栏行，见模板注释） */
+const isMacDragRegion = isElectron && window.electronAPI?.platform === 'darwin';
 
 // 浏览器 webview store（用于预览占位与文件预览互斥）
 const browserStore = useBrowserWebviewStore();
@@ -743,6 +765,13 @@ onUnmounted(() => {
 }
 
 .sidebar-tool-btn:hover:not(:disabled) {
+    background: var(--gd-color-sidebar-bg-hover);
+    color: var(--gd-color-text);
+}
+
+/* 开关类按钮的开启态：与 hover 同款高亮。工具栏原先只有普通按钮，没有 active 变体
+   （browser-tab / seg-btn 各自有一套，与此处无关） */
+.sidebar-tool-btn.active {
     background: var(--gd-color-sidebar-bg-hover);
     color: var(--gd-color-text);
 }

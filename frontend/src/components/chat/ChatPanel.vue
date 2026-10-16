@@ -143,8 +143,10 @@
                 </ChatInput>
               </div>
 
-              <!-- 工作目录条：输入框底部外侧（边框容器外）；只读（子代理）不渲染；弹窗待答时随输入区隐藏 -->
-              <WorkingDirBar v-if="!props.readonly && effectiveSessionId && !hasPendingAsk" class="mt-1"
+              <!-- 工作目录条：输入框底部外侧（边框容器外）；只读（子代理）不渲染；弹窗待答时随输入区隐藏；
+                   工作区全屏时 ChatPanel 被 Teleport 进 430px 宽的悬浮面板，这一条会占掉整行高度（路径换行），直接隐藏 -->
+              <WorkingDirBar v-if="!props.readonly && effectiveSessionId && !hasPendingAsk && !inFloatingPanel"
+                class="mt-1"
                 :session-id="effectiveSessionId"
                 :attachments="(props.session?.settings?.attachments as Record<string, string[]> | undefined)"
                 @attachments-change="handleAttachmentsChange" />
@@ -240,6 +242,12 @@ const router = useRouter();
 
 // 有壁纸时隐藏底部渐变遮罩（壁纸已有视觉层次，不透明遮罩会像补丁）
 const hasWallpaper = computed(() => !!layoutStore.wallpaperUrl);
+
+/**
+ * 当前是否渲染在悬浮面板里（工作区全屏 → ChatPage 把本组件 Teleport 进 #floating-chat）。
+ * 面板默认宽仅 430px，宽屏下按整行排布的元素要据此收窄或隐藏（如工作目录条）。
+ */
+const inFloatingPanel = computed(() => layoutStore.workspaceFullscreen);
 
 // 新发送消息动画追踪：只有通过 handleSendMessage 发送的消息才播放入场动画
 const animateIds = ref<string[]>([]);
