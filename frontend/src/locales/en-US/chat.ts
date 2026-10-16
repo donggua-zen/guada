@@ -363,6 +363,7 @@
     viewportCustom: 'Custom',
     preview: 'Preview',
     source: 'Source',
+    viewSource: 'View Source',
     refreshPreview: 'Refresh Preview',
     imageAlt: 'Image Preview',
     unsupportedPreview: 'This file does not support preview',

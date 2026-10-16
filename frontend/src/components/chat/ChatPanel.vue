@@ -2,7 +2,8 @@
   <!-- 消息+输入 区域容器 -->
   <div class="flex-1 overflow-hidden w-full relative">
     <ScrollContainer ref="scrollContainerRef" class="h-full chat-scroll-container transition-opacity duration-300 px-5"
-      :auto-scroll="needScrollToBottom" @scroll="handleScroll">
+      :auto-scroll="isFollowingScroll" @scroll="handleScroll" @near-top="handleNearTop"
+      @following-change="handleFollowingChange" @content-resize="handleContentResizeForScrollRestore">
       <!-- 消息行：flex row（消息列 + 避让占位列）；占位在滚动内容右端 = 滚动条左侧 -->
       <div class="scroll-inner">
         <div class="scroll-main">
@@ -189,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, provide, type VNode } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, type VNode } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 const { t } = useI18n()
@@ -211,6 +212,14 @@ import type { Turn, TurnContent, MessageBundle } from '@/types/message';
 
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
+import {
+  buildChatSessionScrollMemoryKey,
+  clampScrollTop,
+  loadChatSessionScrollMemory,
+  saveChatSessionScrollMemory,
+  shouldRetryScrollMemoryRestore,
+  type ChatSessionScrollMemoryState,
+} from '@/composables/chatSessionScrollMemory'
 import { useMessageOperations, toPayloadFileRefs } from '@/composables/useMessageOperations'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
@@ -362,9 +371,27 @@ const {
 // 响应式数据
 const scrollContainerRef = ref<InstanceType<typeof ScrollContainer> | null>(null);
 const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null);
-const needScrollToBottom = ref(true);
-let scrollTicking = false;
-let lastScrollTop = 0;
+/** 跟随态镜像（滚动权状态机在 ScrollContainer 内，经 following-change 事件回传）。 */
+const isFollowingScroll = ref(true);
+/**
+ * 待恢复的会话滚动位置（见下方「会话滚动记忆」）。
+ * 声明必须在滚动区函数之前：handleFollowingChange 在用户滚动时要清它，
+ * 而该函数会在 setup 完成前（ScrollContainer 的事件）就被调用。
+ */
+let pendingScrollRestore: { key: string; state: ChatSessionScrollMemoryState } | null = null;
+/**
+ * 待恢复位置是否已经写入过至少一次。
+ * 内容撑高的 content-resize 可能早于首次写入到达，那时 scrollTop 还是「刚换完内容」
+ * 的初始值（通常 0），拿它去判定「是否已到位」会把待恢复误清、永久停在顶部。
+ * 因此未应用前一律不判定到位。
+ */
+let scrollRestoreApplied = false;
+/**
+ * 正在执行「会话滚动位置恢复」。
+ * 恢复过程会 setFollowing，触发 following-change；该标记让 handleFollowingChange
+ * 区分「恢复自己的程序化改动」与「用户真实滚动」，不靠语句先后顺序。
+ */
+let applyingScrollRestore = false;
 
 // ── 右侧 aside（工作区概览）自适应 ──
 // 滚动条恒定 10px（ScrollContainer ::-webkit-scrollbar + scrollbar-gutter），
@@ -405,22 +432,21 @@ watch(scrollContainerRef, (ref) => {
    （dx = round(布局位置 × dpr) / dpr − 布局位置，历史实现见 git 357effa1），
    不要用整 CSS px 网格（125% 下实测发虚）。 */
 
-/**
- * 锁定自动滚动到底部，供子组件通过 inject 调用。
- * 展开思考框/工具调用分组等操作时调用，防止内容高度变化触发自动滚动。
- * 用户下次滚动到底部时自动恢复。
- */
-const lockScrollAnchor = () => {
-  needScrollToBottom.value = false;
-};
-provide('lockScrollAnchor', lockScrollAnchor);
+// ── 滚动锚定：状态机在 ScrollContainer（useScrollAnchor）内 ──
+/* 旧实现在这里用「scroll 事件里 scrollTop 回退超 10px」反推用户上滚，并配一个
+   provide('lockScrollAnchor') 全局开关——展开思考框时锁住自动贴底、靠用户下次贴底恢复。
+   启发式与 ScrollContainer 的 ResizeObserver 无条件贴底存在竞态：内容增高的同一帧里
+   用户的上滚会被掩盖，随后的贴底把人拽回底部。现已整体换成显式状态机：
+   following = 用户滚动权，只有真实用户输入能改变它，布局/程序化滚动不得改变。
+   TurnItem.vue / MessageThinkingSection.vue 里的 inject('lockScrollAnchor') 带 no-op
+   默认值，provider 撤掉后自动降级——展开分组不再是「需要锁的例外」，
+   它是布局变化，按状态机语义本就动不了 following。 */
 
 // 消息分页加载相关状态
 const INITIAL_PAGE_SIZE = 30 // 首次加载消息数量
 const MESSAGES_PAGE_SIZE = 15 // 后续每次加载消息数量
 const isLoadingMore = ref(false)
 const hasMoreMessages = ref(true)
-const SCROLL_TOP_THRESHOLD = 80 // 距离顶部多少像素触发加载更多
 
 // 骨架屏智能显示控制
 const showSkeleton = ref(false)
@@ -455,35 +481,16 @@ const messageQueue = computed(() => {
 });
 const queueLength = computed(() => messageQueue.value.length);
 
-// 滚动管理相关状态和方法
-const showScrollToBottomBtn = ref(false)
-
-/**
- * 更新滚动按钮显示状态
- *
- * 只跟随滚动位置，与流式状态完全无关：不在底部就显示、贴底就隐藏。
- * 此前用会话级 isStreaming 门控——它由最晚的 stream_status_changed 复位（晚于回合级 turn_end），
- * 会让按钮在回合结束后再滞留百毫秒才消失；而它是 28px 的实占控件，增删会改变 scrollHeight
- * 把上方消息顶跳。
- * 贴底判定与 handleScroll 同式：ScrollContainer 暴露的是滚动元素，不是 isAtBottom 状态
- * （其内部 ref 从未被写入，读它恒为 undefined）。
- */
-const updateScrollButtonVisibility = useDebounceFn(() => {
-  const scrollElement = scrollContainerRef.value?.getScrollElement?.()
-  const isAtBottom = scrollElement
-    ? scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight <= 5
-    : true
-
-  showScrollToBottomBtn.value = !isAtBottom
-}, 100)
+// 滚动管理相关状态和方法（按钮显隐的展示态定义在 visibleTurns 之后）
 
 /**
  * 平滑滚动到底部
  */
 function scrollToBottom() {
-  if (scrollContainerRef.value) {
-    scrollContainerRef.value.smoothScrollToBottom()
-  }
+  // 点按钮是明确的「靠近底部」用户意图：登记后平滑滚动途中的 scroll 事件
+  // 按用户滚动裁决（落点贴底 → 恢复跟随，按钮自然消失）。
+  scrollContainerRef.value?.markUserIntent?.('towardBottom');
+  scrollContainerRef.value?.smoothScrollToBottom();
 }
 
 /**
@@ -493,54 +500,44 @@ function immediateScrollToBottom() {
   scrollContainerRef.value?.immediateScrollToBottom()
 }
 
+/**
+ * 跟随态变化（滚动权事件，非几何快照）：只更新镜像状态。
+ * 按钮显隐统一由 showScrollToBottomBtn computed 派生（定义在 visibleTurns 之后，
+ * 避免初始化顺序依赖——watch 注册时会立即求值一次 getter，读到 TDZ 里的
+ * visibleTurns 就是 ReferenceError）。
+ */
+function handleFollowingChange(following: boolean) {
+  isFollowingScroll.value = following;
+  // 用户重新拿到滚动权就放弃待恢复（别跟用户抢位置）。
+  // 但会话恢复自己也会 setFollowing，那不是用户意图——用 applyingScrollRestore
+  // 显式排除，不靠调用顺序（否则恢复登记会被自己这一步同步清掉，位置永远停在顶部）。
+  if (!following && pendingScrollRestore && !applyingScrollRestore) {
+    pendingScrollRestore = null;
+  }
+}
+
+/** 到顶：按分页游标拉取更早一页（在途标记与游标判定留在本组件）。 */
+function handleNearTop() {
+  if (!hasMoreMessages.value || isLoadingMore.value || !currentSessionId.value) return;
+  // 分页游标：事件页的 nextBeforeSeq（null = 无更早内容）
+  const eventCursor =
+    sessionStore.getSessionState(currentSessionId.value)?.eventCursor ?? null;
+  if (eventCursor != null) {
+    // 立即设置标记，防止重复触发
+    isLoadingMore.value = true;
+    loadMoreMessages(currentSessionId.value, eventCursor);
+  }
+}
 
 /**
  * 处理滚动事件
+ *
+ * 滚动权裁决全部在状态机内完成（ScrollContainer 的 useScrollAnchor），
+ * 这里只做展示层同步——按钮显隐是 computed 派生的，无需额外动作。
  */
-function handleScroll(event: Event) {
-  // 滚动按钮显隐在 rAF 之外触发：本环境 rAF 可能被节流/不触发（同 ComposerStatusBar 的注释），
-  // 而 scrollTicking 守卫会让 rAF 未回调时的后续滚动事件全部被丢弃——若只在 rAF 里更新，
-  // 按钮会永不出现。防抖收在 updateScrollButtonVisibility 内部，逐次调用无额外开销。
-  updateScrollButtonVisibility();
-
-  if (scrollTicking) return;
-  scrollTicking = true;
-
-  requestAnimationFrame(() => {
-    // 从 ScrollContainer 的滚动元素获取 scrollTop，确保准确性
-    const scrollElement = scrollContainerRef.value?.getScrollElement?.();
-    const scrollTop = scrollElement?.scrollTop ?? (event.target as HTMLElement | null)?.scrollTop ?? 0;
-    // 滚动元素缺失时原表达式为 NaN（NaN <= 5 === false），?? NaN 保持同一结果
-    const isAtBottom =
-      (scrollElement?.scrollHeight ?? NaN) - scrollTop - (scrollElement?.clientHeight ?? NaN) <= 5;
-
-    // 检测是否滚动到顶部附近，触发加载更多历史消息
-    if (
-      scrollTop < SCROLL_TOP_THRESHOLD &&
-      hasMoreMessages.value &&
-      !isLoadingMore.value &&
-      currentSessionId.value
-    ) {
-      // 分页游标：事件页的 nextBeforeSeq（null = 无更早内容）
-      const eventCursor =
-        sessionStore.getSessionState(currentSessionId.value)?.eventCursor ?? null;
-      if (eventCursor != null) {
-        // 立即设置标记，防止重复触发
-        isLoadingMore.value = true;
-        loadMoreMessages(currentSessionId.value, eventCursor);
-      }
-    }
-
-    // 注意，容器变小导致的滚动不应该视为向上滚动
-    if (needScrollToBottom.value && lastScrollTop - scrollTop > 10 && !isAtBottom) {
-      needScrollToBottom.value = false;
-    } else if (!needScrollToBottom.value && isAtBottom) {
-      needScrollToBottom.value = true;
-    }
-    lastScrollTop = scrollTop;
-    updateScrollButtonVisibility();
-    scrollTicking = false;
-  });
+function handleScroll() {
+  // 按钮显隐由 showScrollToBottomBtn（跟随态 + 回合数派生），无需在此写入状态。
+  // 保留本函数作为 @scroll 的接线点：ScrollContainer 的 emit 需要监听方。
 }
 
 /**
@@ -550,8 +547,96 @@ function handleScrollToBottomClick() {
   scrollToBottom()
 }
 
-// 滚动按钮显隐只由滚动事件驱动（updateScrollButtonVisibility 在 handleScroll 中触发）；
-// 不再监听 isStreaming——流式状态与按钮无关。
+// ── 会话滚动记忆（切走再回来恢复阅读位置，而不是每次强制贴底） ──
+// 参考实现 zcode 按 session 记忆绝对 scrollTop + 贴底态；本实现的差异是恢复要等
+// 内容就位后重试：屏外回合带 content-visibility，首帧按 contain-intrinsic-size 估算，
+// 记忆位置可能超出当时的可滚动范围（被浏览器钳到上限），内容撑高后需再落一次。
+
+function scrollMemoryKeyFor(sessionId: string | null | undefined): string | null {
+  if (!sessionId) return null;
+  return buildChatSessionScrollMemoryKey(sessionId);
+}
+
+/** 离开会话前保存滚动位置与跟随态（须在容器内容被替换之前调用）。 */
+function captureScrollMemoryForSession(sessionId: string | null) {
+  if (!sessionId) return;
+  const metrics = scrollContainerRef.value?.getScrollMetrics?.();
+  if (!metrics) return;
+  const key = scrollMemoryKeyFor(sessionId);
+  if (!key) return;
+  saveChatSessionScrollMemory(key, {
+    scrollTop: metrics.scrollTop,
+    scrollHeight: metrics.contentHeight,
+    clientHeight: metrics.viewportHeight,
+    wasPinnedToBottom: isFollowingScroll.value,
+    updatedAt: Date.now(),
+  });
+}
+
+/** 会话加载完成后按记忆恢复位置；无记忆（首次打开）保持贴底默认。 */
+async function applyScrollRestoreForSession() {
+  await nextTick();
+  const sessionId = currentSessionId.value;
+  if (!sessionId) return;
+  const key = scrollMemoryKeyFor(sessionId);
+  const container = scrollContainerRef.value;
+  if (!key || !container) return;
+  const state = loadChatSessionScrollMemory(key);
+  if (!state) {
+    pendingScrollRestore = null;
+    container.setFollowing(true);
+    container.scrollToBottomProgrammatic('auto');
+    return;
+  }
+  // 贴底记忆直接贴底：内容可能已大幅变化，绝对位置无意义；后续内容撑高由
+  // 状态机的尺寸增长贴底路径继续跟随，无需恢复重试。
+  // 非贴底记忆先取回用户滚动权（读到中间时按钮该出现），再落到记忆位置。
+  applyingScrollRestore = true;
+  container.setFollowing(state.wasPinnedToBottom);
+  // setFollowing(true) 在值未变时不发事件，按钮状态需手动收敛一次
+  handleFollowingChange(container.isFollowing());
+  if (state.wasPinnedToBottom) {
+    applyingScrollRestore = false;
+    container.scrollToBottomProgrammatic('auto');
+    return;
+  }
+  // 待恢复登记放在 setFollowing 之后：handleFollowingChange 里「失去跟随权就放弃
+  // 待恢复」的分支是给用户中途滚动用的，不能把它自己这步 setFollowing 也算进去。
+  // （applyingScrollRestore 已兜住；顺序 + 标记双保险。）
+  scrollRestoreApplied = false;
+  pendingScrollRestore = { key, state };
+  applyPendingScrollRestore();
+  applyingScrollRestore = false;
+}
+
+function applyPendingScrollRestore() {
+  if (!pendingScrollRestore) return;
+  const container = scrollContainerRef.value;
+  if (!container) return;
+  const metrics = container.getScrollMetrics?.();
+  if (!metrics) return;
+  scrollRestoreApplied = true;
+  container.applyScrollTop(clampScrollTop(pendingScrollRestore.state, metrics));
+}
+
+/**
+ * 内容尺寸变化时的恢复重试：内容首帧不足（屏外回合仍按 contain-intrinsic-size 估算）
+ * 会把目标钳到上限之下，等撑高后补落一次；到位或用户滚动（意图优先）即放弃。
+ * 贴底记忆不在此列——后续撑高由状态机的尺寸增长贴底路径继续跟随。
+ */
+function handleContentResizeForScrollRestore() {
+  if (!pendingScrollRestore || isFollowingScroll.value) return;
+  // 首次写入之前一律不判定到位：此刻 scrollTop 还是替换内容后的初始值，
+  // 拿它比目标只会把待恢复误清掉（切换会话回来停在顶部就是这个原因）。
+  if (scrollRestoreApplied) {
+    const metrics = scrollContainerRef.value?.getScrollMetrics?.();
+    if (metrics && !shouldRetryScrollMemoryRestore(pendingScrollRestore.state, metrics.scrollTop)) {
+      pendingScrollRestore = null;
+      return;
+    }
+  }
+  applyPendingScrollRestore();
+}
 
 // （旧扁平 activeMessages computed 已删：回合制重构后 store 的扁平 messages 数组无人写入，
 //  该 computed 恒返回 []，曾连带导致 ChatOutline 大纲与首轮标题自动生成双双失效。
@@ -590,6 +675,16 @@ const visibleTurns = computed(() =>
   turns.value.filter((t) => userOfTurn(t) || t.kind === 'event'),
 );
 
+/**
+ * 「回到底部」按钮显隐：跟随态 + 有内容，全部由状态派生。
+ * 定义位置必须在 visibleTurns 之后——模板/setter 的注册期求值不会踩 TDZ。
+ * 不做防抖：跟随态是由明确输入驱动的离散状态，按钮又是绝对定位浮层，
+ * 显隐不改变 scrollHeight，不存在旧实现担心的「按钮增删顶跳消息」问题。
+ */
+const showScrollToBottomBtn = computed(() =>
+  !isFollowingScroll.value && visibleTurns.value.length > 0,
+);
+
 // 监听轮次变化：仅 handleSendMessage 发送的新消息才标记动画
 watch(() => visibleTurns.value.length, (newLen, oldLen) => {
   if (!expectingNewMessage || newLen <= (oldLen || 0)) return;
@@ -602,6 +697,9 @@ watch(() => visibleTurns.value.length, (newLen, oldLen) => {
   }, 600);
   expectingNewMessage = false;
   nextTick(() => {
+    // 发消息是明确的「看新回合」意图：即便此前在上滚阅读，也取回跟随——
+    // 否则新回复流式增长时内容继续在视野外长高，底部位置不再跟随。
+    scrollContainerRef.value?.setFollowing(true);
     immediateScrollToBottom()
   })
 });
@@ -761,8 +859,9 @@ const debouncedSaveSession = useDebounceFn(() => {
 watch(() => props.session?.id || props.sessionId, async (newSessionId: string | undefined, oldSessionId: string | undefined) => {
   const newId = newSessionId ?? props.sessionId ?? null;
   const effectiveOldId = oldSessionId ?? null;
+  captureScrollMemoryForSession(effectiveOldId);
   await handleSessionChange(newId, effectiveOldId);
-  needScrollToBottom.value = true;
+  await applyScrollRestoreForSession();
 }, { immediate: true });
 
 /**
@@ -894,10 +993,14 @@ async function loadMessages(
     } else if (page.events.length > 0) {
       // 恢复滚动位置，避免跳到顶部（rebuild 替换整树，需补偿高度差）
       nextTick(() => {
-        const newScrollHeight = scrollElement?.scrollHeight || 0;
+        const el = scrollContainerRef.value?.getScrollElement?.();
+        const newScrollHeight = el?.scrollHeight || 0;
         const heightDiff = newScrollHeight - oldScrollHeight;
-        if (scrollElement && heightDiff > 0) {
-          scrollElement.scrollTop = heightDiff;
+        if (el && heightDiff > 0) {
+          // 程序化补偿，必须先声明为布局滚动：否则 scroll 事件会被判成
+          // 「未经登记的上滚」而解除跟随（用户本来贴在底部读历史）。
+          scrollContainerRef.value?.markLayoutScroll?.();
+          el.scrollTop = heightDiff;
         }
       });
     }
@@ -984,7 +1087,6 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   isLoading.value = true;
   startSkeletonDelay();
   try {
-    lastScrollTop = 0;
     currentSessionId.value = newSessionId;
     // 打开会话:直接拉历史快照(loadSession 返回 lastSeq 作为订阅游标)。
     // StreamEventHub 邮箱常驻收事件,无需 startBuffering——订阅时按 prevSeq >= lastSeq 取增量。
@@ -1242,6 +1344,8 @@ function regenerateResponse(turn: Turn) {
   const replaceTurnId = turn.id;
 
   nextTick(() => {
+    // 重答同「发消息」：取回跟随并贴底（新回合从底部重新长起）
+    scrollContainerRef.value?.setFollowing(true);
     immediateScrollToBottom();
     if (currentSessionId.value) {
       // 发送链路独立:只调 apiService.chat 发起(重答=replaceTurnId 触发 turn/delete+新建),
@@ -1294,6 +1398,7 @@ function scrollToMessage(messageId: string) {
 
   // 用容器级滚动，避免 scrollIntoView 导致整个页面位移
   // 消息锚点元素是 TurnItem 根 div（HTMLElement），offsetTop 仅存在于 HTMLElement 上
+  scrollContainerRef.value?.markLayoutScroll?.()
   container.scrollTo({ top: (targetElement as HTMLElement).offsetTop, behavior: 'smooth' })
 
   // 屏外回合带 content-visibility，跳转途中它们才按真实高度展开，落点会偏；
@@ -1301,7 +1406,10 @@ function scrollToMessage(messageId: string) {
   const correct = () => {
     const drift =
       targetElement.getBoundingClientRect().top - container.getBoundingClientRect().top
-    if (Math.abs(drift) > 2) container.scrollBy({ top: drift, behavior: 'smooth' })
+    if (Math.abs(drift) > 2) {
+      scrollContainerRef.value?.markLayoutScroll?.()
+      container.scrollBy({ top: drift, behavior: 'smooth' })
+    }
   }
   container.addEventListener('scrollend', correct, { once: true })
 }

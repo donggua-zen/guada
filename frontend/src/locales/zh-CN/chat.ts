@@ -363,6 +363,7 @@ export default {
     viewportCustom: '自定义',
     preview: '预览',
     source: '源码',
+    viewSource: '查看源码',
     refreshPreview: '刷新预览',
     imageAlt: '图片预览',
     unsupportedPreview: '此文件暂不支持预览',

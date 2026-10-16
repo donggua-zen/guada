@@ -4,21 +4,30 @@
      非权威落盘 diff；二进制/办公文件无法逐行比对，走兜底提示。 -->
 <template>
   <div class="file-diff-panel">
-    <!-- 操作切换标签：同一文件被多次 write/edit 时逐次展示 -->
-    <div class="fdp__tabs" v-if="entry && entry.operations.length > 1">
-      <button
-        v-for="(op, i) in entry.operations"
-        :key="op.toolCallId"
-        class="fdp__tab"
-        :class="{ 'is-active': activeOpIndex === i }"
-        @click="activeOpIndex = i"
-      >
-        <span class="fdp__tab-index">#{{ i + 1 }}</span>
-        <span class="fdp__tab-name">{{ op.toolName }}</span>
-        <span class="fdp__tab-lines">
-          <span class="fdp__add" v-if="op.addedLines">+{{ op.addedLines }}</span>
-          <span class="fdp__del" v-if="op.removedLines">−{{ op.removedLines }}</span>
-        </span>
+    <!-- 顶部一行：左侧操作切换标签（同一文件被多次 write/edit 时逐次展示），
+         右侧快捷动作（在文件标签中打开本文件，看完整内容/继续编辑）。
+         两者同排——动作不单独占一行（多操作时该行高度由标签决定，零额外开销）。
+         不放文件名——侧栏标签已承担标题；按钮语汇对齐 FilePreviewPanel 头部工具按钮。 -->
+    <div class="fdp__topbar">
+      <div class="fdp__tabs" v-if="entry && entry.operations.length > 1">
+        <button
+          v-for="(op, i) in entry.operations"
+          :key="op.toolCallId"
+          class="fdp__tab"
+          :class="{ 'is-active': activeOpIndex === i }"
+          @click="activeOpIndex = i"
+        >
+          <span class="fdp__tab-index">#{{ i + 1 }}</span>
+          <span class="fdp__tab-name">{{ op.toolName }}</span>
+          <span class="fdp__tab-lines">
+            <span class="fdp__add" v-if="op.addedLines">+{{ op.addedLines }}</span>
+            <span class="fdp__del" v-if="op.removedLines">−{{ op.removedLines }}</span>
+          </span>
+        </button>
+      </div>
+      <button class="fdp__action" @click="openInFileTab">
+        <el-icon :size="14"><Code20Regular /></el-icon>
+        <span>{{ t('chat.workspace.viewSource') }}</span>
       </button>
     </div>
 
@@ -56,9 +65,10 @@
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElIcon } from "element-plus";
-import { Info24Regular } from "@vicons/fluent";
+import { Info24Regular, Code20Regular } from "@vicons/fluent";
 import { diffLines as computeDiffLines } from "diff";
 import { useHighlight } from "@/composables/useHighlight";
+import { previewFile } from "@/utils/workspacePreview";
 import type { FileChangeEntry, FileChangeOperation } from "@/composables/useFileChanges";
 
 const { t } = useI18n();
@@ -68,6 +78,13 @@ const props = defineProps<{
 }>();
 
 const { highlightCode, getLanguageFromExtension, escapeHtml } = useHighlight();
+
+/** 在文件标签中打开本文件（与变更条点文件名同一入口；路径原样透传，后端按工作目录解析） */
+function openInFileTab(): void {
+  const path = props.entry?.filePath;
+  if (!path) return;
+  void previewFile(path);
+}
 
 const activeOpIndex = ref(0);
 
@@ -164,14 +181,49 @@ function highlightLine(line: string): string {
   font-size: 14px;
 }
 
+/* 顶部一行：操作标签（左，可换行）+ 快捷动作（右）。分隔线落在这一行，
+   多操作时行高仍由标签决定——动作不额外占高度 */
+.fdp__topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
+}
+
+/* 快捷动作按钮（语汇对齐 FilePreviewPanel 的 .preview-tool-btn：无边框 + hover 底色）。
+   margin-left:auto：没有操作标签时也贴右 */
+.fdp__action {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gd-color-text-gray);
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.fdp__action:hover {
+  background: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-text);
+}
+
 /* 操作切换标签 */
 .fdp__tabs {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  flex-shrink: 0;
+  /* 占满剩余宽度，把快捷动作挤到行尾 */
+  flex: 1;
+  min-width: 0;
 }
 
 .fdp__tab {
