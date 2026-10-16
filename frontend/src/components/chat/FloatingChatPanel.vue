@@ -136,6 +136,19 @@ function anchorStyle(anchor: FloatingPoint, size: FloatingSize): CSSProperties {
 const panelStyle = computed<CSSProperties>(() => ({
   ...anchorStyle(panelAnchor.value, resolvedSize.value),
   visibility: panelVisible.value ? 'visible' : 'hidden',
+  /**
+   * 隐藏时必须**同时**压 opacity，不能只靠 visibility。
+   *
+   * visibility 是可过渡属性，且后代是继承它的——面板一置 hidden，每个后代的 computed
+   * visibility 也跟着变，凡是带 `transition: all` 的元素（输入区那排 .tool-btn / .send-btn
+   * 都是，见 ChatInput.vue）都会把它当过渡处理；规范规定 visible→hidden 的插值在进度
+   * 未满 100% 前一律取 visible，于是这些按钮会**完整可见地滞留整个过渡时长**（0.2s），
+   * 而面板自身没有过渡、背景立刻消失 → 看起来就是几个按钮的残影晚几帧才没。
+   *
+   * opacity 不继承、按组作用于整棵子树，后代无论如何过渡都改不动它，是唯一能一次性
+   * 兜住这类"后代 transition: all"的开关；visibility 保留是为了让浏览器整棵子树跳过绘制。
+   */
+  opacity: panelVisible.value ? '1' : '0',
   pointerEvents: panelVisible.value ? 'auto' : 'none',
 }))
 
