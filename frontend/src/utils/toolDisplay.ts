@@ -101,12 +101,23 @@ export const DEFAULT_CONFIG: ToolDisplayConfig = {
   icon: "wrench",
 };
 
-/** 获取带 i18n 翻译的默认工具展示配置 */
-function getDefaultConfig(): ToolDisplayConfig {
+/**
+ * 获取带 i18n 翻译的默认工具展示配置（后端没给文案的工具走这里）
+ *
+ * 有工具名时文案带上工具名本身：注册表里没有它的工具（如 MCP 插件注册的 mcp__*，
+ * 后端压根没声明 display）如果只说「已调用工具」，用户看不出调的是哪个工具；
+ * 显示原始名字（保留 mcp__ 前缀）与其它无文案工具统一，后续要改成专属措辞再动这里。
+ */
+function getDefaultConfig(tool?: ToolCall): ToolDisplayConfig {
+  const name = tool ? resolveToolName(tool) : "";
   return {
     text: {
-      executing: t("common.tool.calling"),
-      completed: t("common.tool.called"),
+      executing: name
+        ? t("common.tool.callingNamed", { name })
+        : t("common.tool.calling"),
+      completed: name
+        ? t("common.tool.calledNamed", { name })
+        : t("common.tool.called"),
     },
     aggregate: {
       executing: t("common.tool.executingSteps"),
@@ -128,7 +139,16 @@ const pluginToolDisplays = ref<Record<string, ToolDisplayConfig>>({});
 export function setPluginToolDisplays(
   displays: Record<string, ToolDisplayConfig>,
 ) {
-  pluginToolDisplays.value = displays;
+  // 丢弃"空配置"条目：后端对没声明 display 的工具也会下发一条 `{}`（字段全 undefined，
+  // 如 MCP 插件的 mcp__* 工具）。留着会被 getArgsText 当成"已知工具"，从而抑制参数摘要兜底；
+  // 过滤后"后端没给文案"与"注册表里没有它"语义一致，两条链路表现相同。
+  pluginToolDisplays.value = Object.fromEntries(
+    Object.entries(displays).filter(
+      ([, cfg]) =>
+        cfg &&
+        (cfg.text || cfg.aggregate || cfg.argsKey || cfg.icon || cfg.renderer),
+    ),
+  );
 }
 
 export function resolveToolName(tool: ToolCall): string {
@@ -147,9 +167,10 @@ export function resolveToolName(tool: ToolCall): string {
 export function getToolConfig(tool: ToolCall): ToolDisplayConfig {
   const name = resolveToolName(tool);
   const custom = pluginToolDisplays.value[name];
-  if (!custom) return getDefaultConfig();
+  if (!custom) return getDefaultConfig(tool);
   // 防御性合并:插件注册的配置可能缺少 text/aggregate 等字段,补齐默认值避免渲染崩溃
-  const defaults = getDefaultConfig();
+  // （缺 text 的工具同样降级到"带工具名"的默认文案）
+  const defaults = getDefaultConfig(tool);
   return {
     ...custom,
     text: {

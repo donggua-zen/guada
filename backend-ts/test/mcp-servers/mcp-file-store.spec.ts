@@ -101,6 +101,38 @@ describe('McpFileStore', () => {
     expect(stdio.enabled).toBe(false);
   });
 
+  it('解析 timeoutMs：数字与带引号的字符串等价，非法值视为未设置', async () => {
+    // 手工编辑 YAML 时常把数字写成带引号的字符串；非法值不该让整份配置加载失败
+    fs.writeFileSync(path.join(dir, 't-num.yaml'), 'name: 数字\ntimeoutMs: 600000\n', 'utf8');
+    fs.writeFileSync(path.join(dir, 't-str.yaml'), 'name: 字符串\ntimeoutMs: "90000"\n', 'utf8');
+    fs.writeFileSync(path.join(dir, 't-bad.yaml'), 'name: 非法\ntimeoutMs: abc\n', 'utf8');
+    fs.writeFileSync(path.join(dir, 't-zero.yaml'), 'name: 零\ntimeoutMs: 0\n', 'utf8');
+    fs.writeFileSync(path.join(dir, 't-none.yaml'), 'name: 未设置\n', 'utf8');
+    await store.reload();
+
+    expect(store.getRow('t-num')!.timeoutMs).toBe(600000);
+    expect(store.getRow('t-str')!.timeoutMs).toBe(90000);
+    expect(store.getRow('t-bad')!.timeoutMs).toBeNull();
+    expect(store.getRow('t-zero')!.timeoutMs).toBeNull();
+    expect(store.getRow('t-none')!.timeoutMs).toBeNull();
+    // 非法值只是被忽略，文件本身仍然可用
+    expect(store.listLoadErrors()).toHaveLength(1);
+  });
+
+  it('timeoutMs 落盘：设置时写入，未设置时不占字段', async () => {
+    await store.reload();
+
+    await store.update('srv-http', { timeoutMs: 600000 });
+    expect(fs.readFileSync(path.join(dir, 'srv-http.yaml'), 'utf8')).toContain(
+      'timeoutMs: 600000',
+    );
+
+    const created = await store.create({ name: '新服务器', command: 'node' });
+    expect(
+      fs.readFileSync(path.join(dir, `${created.id}.yaml`), 'utf8'),
+    ).not.toContain('timeoutMs');
+  });
+
   it('工具缓存与配置分离：写 tools 落到 .tools.json，读时合并进行视图', async () => {
     await store.initialize();
 

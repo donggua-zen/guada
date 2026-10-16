@@ -102,6 +102,66 @@ describe("MCP 连接复用（端到端）", () => {
   });
 });
 
+/**
+ * 调用超时的预算分配。
+ *
+ * 这里守的是一次真实回归：曾在客户端硬编码 30s 超时，把跑几十秒到几分钟的工具
+ * （用户实例是 Ghidra 反编译分析，其自身启动超时被配到 10 分钟）全部判死，报
+ * `MCP error -32001: Request timed out`。超时长度只能由每服务器配置决定，
+ * 未配置时必须让 SDK 默认（60s）生效。
+ */
+describe("MCP 调用超时预算（端到端）", () => {
+  let manager: McpConnectionManager;
+  let service: McpClientService;
+
+  beforeEach(() => {
+    manager = new McpConnectionManager();
+    service = new McpClientService(manager);
+  });
+
+  afterEach(async () => {
+    await manager.shutdown();
+  });
+
+  it("显式配置的超时被真正执行（超时即报 RequestTimeout）", async () => {
+    const result = await service.callTool(
+      CONFIG,
+      "sleep",
+      { ms: 3_000 },
+      { serverId: "fixture", timeoutMs: 500 },
+    );
+
+    expect(result.success).toBe(false);
+    // -32001 = ErrorCode.RequestTimeout
+    expect(result.error).toContain("-32001");
+  });
+
+  it("未配置超时时不施加上限：超过旧 30s 上限的长任务也能跑完", async () => {
+    // 35s：旧实现（硬编码 30s）必然在这里失败
+    const result = await service.callTool(
+      CONFIG,
+      "sleep",
+      { ms: 35_000 },
+      { serverId: "fixture" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.content).toBe("slept 35000");
+  }, 70_000);
+
+  it("配置了更大的超时后，长任务在预算内正常完成", async () => {
+    const result = await service.callTool(
+      CONFIG,
+      "sleep",
+      { ms: 3_000 },
+      { serverId: "fixture", timeoutMs: 30_000 },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.content).toBe("slept 3000");
+  });
+});
+
 async function waitUntil(
   predicate: () => boolean,
   timeoutMs: number,

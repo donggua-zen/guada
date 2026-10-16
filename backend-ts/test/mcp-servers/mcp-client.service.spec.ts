@@ -1,7 +1,4 @@
 import { McpClientService } from "../../src/common/mcp/mcp-client.service";
-import {
-  DEFAULT_MCP_REQUEST_TIMEOUT_MS,
-} from "../../src/common/mcp/mcp-connection-manager.service";
 
 /**
  * McpClientService 的协议请求组装与结果塑形。
@@ -91,7 +88,7 @@ describe("McpClientService.callTool", () => {
     expect(result.content).toContain("Error:");
   });
 
-  it("signal 与超时落在 SDK 的第三参数位（传错位置会让取消静默失效）", async () => {
+  it("signal 落在 SDK 的第三参数位（传错位置会让取消静默失效）", async () => {
     const { service, client } = build();
     const controller = new AbortController();
 
@@ -101,15 +98,32 @@ describe("McpClientService.callTool", () => {
     expect(params).toEqual({ name: "echo", arguments: {} });
     expect(resultSchema).toBeUndefined();
     expect(options.signal).toBe(controller.signal);
-    expect(options.timeout).toBe(DEFAULT_MCP_REQUEST_TIMEOUT_MS);
   });
 
-  it("调用方指定的超时覆盖默认值", async () => {
+  it("未配置超时时不传 timeout，交给 SDK 默认（不得擅自收紧）", async () => {
     const { service, client } = build();
 
-    await service.callTool(CONFIG, "echo", {}, { timeoutMs: 1234 });
+    await service.callTool(CONFIG, "echo", {});
 
-    expect(client.callTool.mock.calls[0][2].timeout).toBe(1234);
+    // 曾经这里被硬编码成 30s，把 Ghidra 这类跑几分钟的分析工具全部判死。
+    // 超时长度只能由每服务器配置决定，默认必须是"不干预"。
+    expect(client.callTool.mock.calls[0][2].timeout).toBeUndefined();
+  });
+
+  it("开启进度续期：服务器报进度即延长预算（长任务的正确解法）", async () => {
+    const { service, client } = build();
+
+    await service.callTool(CONFIG, "echo", {});
+
+    expect(client.callTool.mock.calls[0][2].resetTimeoutOnProgress).toBe(true);
+  });
+
+  it("服务器配置了超时则如实透传", async () => {
+    const { service, client } = build();
+
+    await service.callTool(CONFIG, "echo", {}, { timeoutMs: 600_000 });
+
+    expect(client.callTool.mock.calls[0][2].timeout).toBe(600_000);
   });
 
   it("serverId 透传给管理器，决定连接归属", async () => {
@@ -157,7 +171,7 @@ describe("McpClientService.listTools", () => {
     expect(connections.withEphemeralConnection.mock.calls[0][1]).toBe("srv-1");
   });
 
-  it("超时与 signal 落在 listTools 的第二参数位", async () => {
+  it("超时与 signal 落在 listTools 的第二参数位；未配置时不干预", async () => {
     const { service, client } = build();
     const controller = new AbortController();
 
@@ -166,7 +180,7 @@ describe("McpClientService.listTools", () => {
     const [params, options] = client.listTools.mock.calls[0];
     expect(params).toBeUndefined();
     expect(options.signal).toBe(controller.signal);
-    expect(options.timeout).toBe(DEFAULT_MCP_REQUEST_TIMEOUT_MS);
+    expect(options.timeout).toBeUndefined();
   });
 });
 

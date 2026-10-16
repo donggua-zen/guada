@@ -6,6 +6,7 @@
  * - `count` 返回内存里的自增计数 → 复用则 1,2,3…；每次重连都会从 1 重新开始
  * - `fail`  返回协议级 isError → 验证失败标记有没有被透传
  * - `slow`  睡 3s 才返回 → 验证取消信号能否真正中断在途请求
+ * - `sleep` 按参数睡任意毫秒 → 用来验证超时预算（默认值是否够长、显式配置是否生效）
  *
  * 注意：stdout 是 MCP 协议通道，任何调试输出都必须走 stderr。
  */
@@ -34,6 +35,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     { name: "count", description: "内存自增计数", inputSchema: emptySchema },
     { name: "fail", description: "总是返回协议级错误", inputSchema: emptySchema },
     { name: "slow", description: "3 秒后返回", inputSchema: emptySchema },
+    {
+      name: "sleep",
+      description: "按 ms 参数睡眠后返回",
+      inputSchema: {
+        type: "object",
+        properties: { ms: { type: "number", description: "睡眠毫秒数" } },
+        required: ["ms"],
+      },
+    },
   ],
 }));
 
@@ -49,6 +59,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     case "slow":
       await new Promise((resolve) => setTimeout(resolve, 3000));
       return { content: [{ type: "text", text: "done" }] };
+    case "sleep": {
+      const ms = Number(request.params.arguments?.ms ?? 0);
+      await new Promise((resolve) => setTimeout(resolve, ms));
+      return { content: [{ type: "text", text: `slept ${ms}` }] };
+    }
     default:
       return {
         isError: true,

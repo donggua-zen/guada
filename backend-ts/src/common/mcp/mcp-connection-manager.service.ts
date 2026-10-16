@@ -43,14 +43,16 @@ import {
  *   服务器，池化会让这类连接白占 5 分钟，故走「连一次、用完即关」的短连接路径。
  */
 
-/** 单次请求默认超时。低于 SDK 的 DEFAULT_REQUEST_TIMEOUT_MSEC（60s），避免挂死一整轮对话 */
-export const DEFAULT_MCP_REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * ping 探测的超时。
+ *
+ * 只用于 `checkHealth` 的第一步：ping 本该是瞬时的，给它 5s 足够。
+ * 超时也不判死——会退到 `tools/list` 复核，所以这个值只会影响快慢，不影响结论。
+ */
+const PING_TIMEOUT_MS = 5_000;
 
 /** 建连超时（含 initialize 握手） */
 const CONNECT_TIMEOUT_MS = 10_000;
-
-/** ping 超时：挂在设置页刷新路径上，必须短 */
-const PING_TIMEOUT_MS = 5_000;
 
 /** 池内连接的空闲存活时间 */
 const DEFAULT_IDLE_TTL_MS = 5 * 60_000;
@@ -296,10 +298,10 @@ export class McpConnectionManager implements OnApplicationShutdown {
             );
           }
 
-          await client.listTools(undefined, {
-            timeout: DEFAULT_MCP_REQUEST_TIMEOUT_MS,
-            signal: options.signal,
-          });
+          // 刻意与「刷新工具」用完全相同的超时（不传 = SDK 默认 60s）：
+          // 若这里给个更短的预算，就会出现"刷新能成功、测试连接却失败"的矛盾结论，
+          // 而那种不一致正是这次要消除的问题。
+          await client.listTools(undefined, { signal: options.signal });
           return true;
         },
         { signal: options.signal },

@@ -187,6 +187,8 @@
   tool: {
     calling: 'Calling tool',
     called: 'Tool called',
+    callingNamed: 'Calling {name}',
+    calledNamed: 'Called {name}',
     executingSteps: 'Executing {n} steps',
     executedSteps: '{n} steps executed',
   },

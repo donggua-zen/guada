@@ -24,6 +24,7 @@ export class McpServerService {
     headers?: Record<string, any>,
     type?: string,
     command?: string,
+    timeoutMs?: any,
   ): {
     valid: boolean;
     errors: string[];
@@ -58,6 +59,14 @@ export class McpServerService {
         if (typeof value !== "string") {
           errors.push(`Header '${key}' value must be a string`);
         }
+      }
+    }
+
+    // 验证单次调用超时：仅在显式给出时校验，未设置（null/undefined/空串）= 用 SDK 默认
+    if (timeoutMs !== undefined && timeoutMs !== null && timeoutMs !== "") {
+      const n = typeof timeoutMs === "string" ? Number(timeoutMs) : timeoutMs;
+      if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) {
+        errors.push("timeoutMs must be a positive number of milliseconds");
       }
     }
 
@@ -168,7 +177,7 @@ export class McpServerService {
     const effectiveType = data.type || (data.command ? "stdio" : undefined);
 
     // 验证配置
-    const validation = this.validateServerConfig(data.url, data.headers, effectiveType, data.command);
+    const validation = this.validateServerConfig(data.url, data.headers, effectiveType, data.command, data.timeoutMs);
     if (!validation.valid) {
       throw new Error(`Invalid server configuration: ${validation.errors.join(", ")}`);
     }
@@ -191,6 +200,7 @@ export class McpServerService {
       args: data.args || null,
       env: data.env || null,
       cwd: data.cwd || null,
+      timeoutMs: data.timeoutMs ?? null,
       enabled: data.enabled !== undefined ? data.enabled : true,
     });
 
@@ -274,12 +284,13 @@ export class McpServerService {
     }
 
     // 如果更新了 URL、headers 或 type，验证新配置
-    if (data.url !== undefined || data.headers !== undefined || data.type !== undefined) {
+    if (data.url !== undefined || data.headers !== undefined || data.type !== undefined || data.timeoutMs !== undefined) {
       const urlToValidate = data.url !== undefined ? data.url : currentServer.url;
       const headersToValidate = data.headers !== undefined ? data.headers : currentServer.headers;
       const typeToValidate = data.type !== undefined ? data.type : currentServer.type;
       const commandToValidate = data.command !== undefined ? data.command : currentServer.command;
-      const validation = this.validateServerConfig(urlToValidate, headersToValidate, typeToValidate, commandToValidate);
+      const timeoutToValidate = data.timeoutMs !== undefined ? data.timeoutMs : currentServer.timeoutMs;
+      const validation = this.validateServerConfig(urlToValidate, headersToValidate, typeToValidate, commandToValidate, timeoutToValidate);
       if (!validation.valid) {
         throw new Error(`Invalid server configuration: ${validation.errors.join(", ")}`);
       }
@@ -338,6 +349,7 @@ export class McpServerService {
     if (data.args !== undefined) updateData.args = data.args || null;
     if (data.env !== undefined) updateData.env = data.env || null;
     if (data.cwd !== undefined) updateData.cwd = data.cwd || null;
+    if (data.timeoutMs !== undefined) updateData.timeoutMs = data.timeoutMs || null;
     if (data.enabled !== undefined) updateData.enabled = data.enabled;
 
     // 执行更新（带权限校验）

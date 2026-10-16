@@ -112,6 +112,10 @@ export class McpPlugin extends PluginBase {
                 serverId: server.id,
                 // 透传取消信号，否则用户点「停止生成」后 MCP 请求仍会跑到超时
                 signal: abortSignal,
+                // 每服务器的单次调用超时；未配置时交给 SDK 默认（60s）。
+                // 长任务型服务器（如 Ghidra 反编译分析）必须能让用户显式放大，
+                // 不能由全局默认值替它决定。
+                timeoutMs: server.timeoutMs ?? undefined,
               },
             );
             // isError 必须一路带到工具执行器：只返回 content 的话，模型会把

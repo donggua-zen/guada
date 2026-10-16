@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// toolDisplay 依赖链中的 locales / 图标组件在 node 测试环境不可用，mock 掉
-vi.mock("@/locales", () => ({ t: (k: string) => k }));
+// toolDisplay 依赖链中的 locales / 图标组件在 node 测试环境不可用，mock 掉。
+// t 用 vi.fn 包一层：默认仍是返回 key（既有断言不变），但可断言具名插值确实传了。
+vi.mock("@/locales", () => ({ t: vi.fn((k: string) => k) }));
 vi.mock("@/components/icons/Terminal.vue", () => ({ default: {} }));
+import { t } from "@/locales";
 import {
   setPluginToolDisplays,
+  getToolConfig,
   getToolRenderer,
   getRendererArgs,
   getArgsText,
@@ -12,6 +15,8 @@ import {
   resolvePlanCardStatus,
   type ToolCall,
 } from "./toolDisplay";
+
+const tMock = vi.mocked(t);
 
 /**
  * 工具定制渲染器配置测试
@@ -284,5 +289,66 @@ describe("resolvePlanCardStatus", () => {
 
   it("成功但没有批准标记不出徽标（如历史数据缺 meta）", () => {
     expect(resolvePlanCardStatus("success", undefined)).toBeUndefined();
+  });
+});
+
+describe("无 display 文案的工具（MCP 等）降级为显示工具名", () => {
+  beforeEach(() => {
+    setPluginToolDisplays({});
+    tMock.mockClear();
+  });
+
+  it("未注册工具：文案带工具原始名（保留 mcp__ 前缀）", () => {
+    const tool: ToolCall = { name: "mcp__binary_overview", arguments: "{}" };
+    const config = getToolConfig(tool);
+    expect(config.text.completed).toBe("common.tool.calledNamed");
+    expect(config.text.executing).toBe("common.tool.callingNamed");
+    expect(tMock).toHaveBeenCalledWith("common.tool.calledNamed", {
+      name: "mcp__binary_overview",
+    });
+    expect(tMock).toHaveBeenCalledWith("common.tool.callingNamed", {
+      name: "mcp__binary_overview",
+    });
+    // 聚合与图标保持通用兜底（不因工具有没有名字而变）
+    expect(config.aggregate!.completed).toBe("common.tool.executedSteps");
+    expect(config.icon).toBe("wrench");
+  });
+
+  it("已注册且带文案的工具不受影响", () => {
+    setPluginToolDisplays({
+      read: { text: { executing: "正在读取文件", completed: "已读取文件" }, icon: "read" },
+    });
+    const tool: ToolCall = { name: "read" };
+    expect(getToolConfig(tool).text.completed).toBe("已读取文件");
+    expect(getToolConfig(tool).icon).toBe("read");
+  });
+
+  it("已注册但没配 text 的工具：同样降级到带名字的文案", () => {
+    setPluginToolDisplays({
+      mcp__ping: { text: undefined, icon: "wrench" } as any,
+    });
+    expect(getToolConfig({ name: "mcp__ping" }).text.completed).toBe(
+      "common.tool.calledNamed",
+    );
+    expect(tMock).toHaveBeenCalledWith("common.tool.calledNamed", { name: "mcp__ping" });
+  });
+
+  it("legacy tool_use 二跳后显示真实工具名", () => {
+    const tool: ToolCall = {
+      name: "tool_use",
+      arguments: JSON.stringify({ tool_name: "mcp__binary_overview", arguments: {} }),
+    };
+    expect(getToolConfig(tool).text.completed).toBe("common.tool.calledNamed");
+    expect(tMock).toHaveBeenCalledWith("common.tool.calledNamed", {
+      name: "mcp__binary_overview",
+    });
+  });
+
+  it("空配置条目被过滤：参数摘要兜底不再被抑制（回归）", () => {
+    // 后端对没声明 display 的工具会下发 {}；过滤前 isKnownTool 为 true 会把摘要吞掉
+    setPluginToolDisplays({ mcp__binary_overview: {} } as any);
+    expect(
+      getArgsText({ name: "mcp__binary_overview", arguments: '{"query":"hello"}' }),
+    ).toBe("hello");
   });
 });

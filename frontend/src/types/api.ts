@@ -168,6 +168,8 @@ export interface McpServer {
     args?: string[] | null
     env?: Record<string, string> | null
     cwd?: string | null
+    /** 单次工具调用超时（毫秒）；未设置 = 后端用 SDK 默认（60s） */
+    timeoutMs?: number | null
     tools: McpTool[]
     isActive: boolean
     enabled?: boolean

@@ -187,6 +187,8 @@ export default {
   tool: {
     calling: '正在调用工具',
     called: '已调用工具',
+    callingNamed: '正在调用 {name}',
+    calledNamed: '已调用 {name}',
     executingSteps: '正在执行{n}个步骤',
     executedSteps: '已执行{n}个步骤',
   },

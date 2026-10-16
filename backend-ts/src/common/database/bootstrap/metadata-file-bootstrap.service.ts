@@ -293,6 +293,8 @@ export class MetadataFileBootstrapService {
           ? this.toStringMap(row.env)
           : null,
       cwd: row.cwd ?? null,
+      // 原 mcp_server 表没有超时列：迁移后一律为空，由用户按需在管理页补填
+      timeoutMs: null,
       enabled: row.enabled !== false,
       tools:
         row.tools && typeof row.tools === "object" && !Array.isArray(row.tools)

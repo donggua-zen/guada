@@ -128,6 +128,12 @@
                                 :placeholder="t('plugins.mcp.descPlaceholder')" />
                         </el-form-item>
 
+                        <el-form-item :label="t('plugins.mcp.timeoutLabel')">
+                            <el-input v-model="serverForm.timeoutMs" type="number"
+                                :placeholder="t('plugins.mcp.timeoutPlaceholder')" />
+                            <div class="text-xs text-gray-400 mt-1">{{ t('plugins.mcp.timeoutHint') }}</div>
+                        </el-form-item>
+
                         <el-form-item :label="t('plugins.mcp.enabledLabel')">
                             <el-switch v-model="serverForm.enabled" inline-prompt :active-text="t('plugins.mcp.enabledOn')" :inactive-text="t('plugins.mcp.enabledOff')"
                                 size="large" />
@@ -309,6 +315,9 @@ const serverForm = ref({
     args: '',
     env: '',
     cwd: '',
+    // 单次工具调用超时：单位与 YAML 的 timeoutMs 一致（毫秒），避免两处单位不同要换算。
+    // 空串 = 不设置，由后端用 SDK 默认（60s）
+    timeoutMs: '',
     enabled: true
 })
 
@@ -385,6 +394,7 @@ const handleAddServer = () => {
         args: '',
         env: '',
         cwd: '',
+        timeoutMs: '',
         enabled: true
     }
     showModal.value = true
@@ -421,7 +431,9 @@ const handleEditServer = (server) => {
         command: server.command || '',
         args: argsText,
         env: envText,
-        cwd: server.cwd || ''
+        cwd: server.cwd || '',
+        // 后端存毫秒；未设置时转成空串，让输入框显示占位提示
+        timeoutMs: server.timeoutMs ?? ''
     }
 
     // 加载工具列表
@@ -476,6 +488,12 @@ const handleSaveServer = async () => {
         // 解析 env 多行文本为对象
         const envObj = parseEnvVariables(serverForm.value.env)
 
+        // 调用超时：空串/非法值 → null（交给后端用 SDK 默认 60s）
+        const timeoutNum = Number(serverForm.value.timeoutMs)
+        const timeoutMs = serverForm.value.timeoutMs !== '' && Number.isFinite(timeoutNum) && timeoutNum > 0
+            ? Math.floor(timeoutNum)
+            : null
+
         // 准备提交的数据
         const submitData = {
             name: serverForm.value.name,
@@ -487,6 +505,7 @@ const handleSaveServer = async () => {
             args: serverForm.value.type === 'stdio' ? argsArray : null,
             env: serverForm.value.type === 'stdio' ? envObj : null,
             cwd: serverForm.value.type === 'stdio' ? (serverForm.value.cwd || null) : null,
+            timeoutMs,
             enabled: serverForm.value.enabled
         }
 
@@ -661,6 +680,11 @@ const handleImportJson = async () => {
                     args: isStdio ? (serverData.args || []) : null,
                     env: isStdio ? (serverData.env || {}) : null,
                     cwd: isStdio ? (serverData.cwd || null) : null,
+                    // 只认我们自己的字段名。刻意不映射外部配置里的 `timeout`——
+                    // 各家对它的单位（秒/毫秒）并无统一约定，猜错会把超时放大或缩小上千倍。
+                    timeoutMs: Number.isFinite(Number(serverData.timeoutMs)) && Number(serverData.timeoutMs) > 0
+                        ? Math.floor(Number(serverData.timeoutMs))
+                        : null,
                 }
 
                 // 验证必填字段

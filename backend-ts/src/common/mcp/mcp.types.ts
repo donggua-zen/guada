@@ -53,7 +53,13 @@ export interface McpCallOptions {
   serverId?: string;
   /** 取消信号；透传到 SDK 的 RequestOptions，使「停止生成」能真正中断在途请求 */
   signal?: AbortSignal;
-  /** 单次请求超时（毫秒）；缺省 DEFAULT_MCP_REQUEST_TIMEOUT_MS */
+  /**
+   * 单次请求超时（毫秒）。**不做兜底默认**：不传即用 SDK 默认（60s）。
+   *
+   * 超时该多长只取决于服务器做什么，外部无从推断——检索类工具几秒返回，
+   * 而带重型后端的服务器可能跑上几分钟。因此由每服务器配置（`timeoutMs`）决定，
+   * 而不是让某个全局默认值替所有服务器拍板。
+   */
   timeoutMs?: number;
 }
 

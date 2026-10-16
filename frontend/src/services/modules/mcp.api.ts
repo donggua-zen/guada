@@ -18,6 +18,8 @@ export interface McpServerPayload {
     args?: string[] | null
     env?: Record<string, string> | null
     cwd?: string | null
+    /** 单次工具调用超时（毫秒）；null/缺省 = 用 SDK 默认（60s） */
+    timeoutMs?: number | null
     enabled?: boolean
 }
 

@@ -1,9 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import {
-  DEFAULT_MCP_REQUEST_TIMEOUT_MS,
-  McpConnectionManager,
-} from "./mcp-connection-manager.service";
+import { McpConnectionManager } from "./mcp-connection-manager.service";
 import {
   McpCallOptions,
   McpServerConfig,
@@ -49,7 +46,8 @@ export class McpClientService {
       async (client: Client) => {
         const result = await client.listTools(undefined, {
           signal: options.signal,
-          timeout: options.timeoutMs ?? DEFAULT_MCP_REQUEST_TIMEOUT_MS,
+          // 同上：不替服务器决定超时长度，仅在配置里显式给出时覆盖
+          timeout: options.timeoutMs,
         });
         const tools = result.tools || [];
 
@@ -99,8 +97,14 @@ export class McpClientService {
             undefined,
             {
               signal: options.signal,
-              // 显式设超时：SDK 缺省是 60s，挂死的服务器会拖住整轮对话
-              timeout: options.timeoutMs ?? DEFAULT_MCP_REQUEST_TIMEOUT_MS,
+              // 只在服务器配置里显式给了超时才传：不传即用 SDK 默认（60s）。
+              // 这里**不要**塞一个自认为合理的默认值——超时该多长完全取决于服务器做什么，
+              // 检索类工具几秒返回，而带重型后端的（如 Ghidra 反编译分析，用户自己就把
+              // 启动超时配成 10 分钟）可能跑几分钟。曾经强行设成 30s，把这些长任务全判死。
+              timeout: options.timeoutMs,
+              // 服务器发进度通知即续期：这是 SDK 为长任务准备的机制，
+              // 让"确实在干活"的调用不受固定超时限制，同时不会放宽"完全没动静"的判定。
+              resetTimeoutOnProgress: true,
             },
           );
 

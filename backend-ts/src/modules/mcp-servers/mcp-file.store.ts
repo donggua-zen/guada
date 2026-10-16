@@ -47,6 +47,15 @@ export interface McpServerConfig {
   args: any[] | null;
   env: Record<string, string> | null;
   cwd: string | null;
+  /**
+   * 单次工具调用的超时（毫秒）；null = 用 SDK 默认（60s）。
+   *
+   * 需要它是因为超时长度只取决于服务器做什么，外部无从推断：普通检索类工具几秒内返回，
+   * 而带重型后端的服务器可能跑上几分钟。典型例子是 Ghidra 反编译分析（其自身的启动就
+   * 可能耗时数分钟，用户还会用 REA_GHIDRA_STARTUP_TIMEOUT_MS 把它开到 10 分钟）。
+   * 用一个全局值去适配两者，必然要么误杀长任务、要么让短任务的白等时间失控。
+   */
+  timeoutMs: number | null;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -180,6 +189,7 @@ export class McpFileStore {
       args: data.args ?? null,
       env: data.env ?? null,
       cwd: data.cwd ?? null,
+      timeoutMs: data.timeoutMs ?? null,
       enabled: data.enabled !== false,
       createdAt: data.createdAt ?? now,
       updatedAt: now,
@@ -337,6 +347,7 @@ export class McpFileStore {
       args: Array.isArray(raw.args) ? raw.args : null,
       env: this.strMap(raw.env),
       cwd: this.str(raw.cwd),
+      timeoutMs: this.posInt(raw.timeoutMs),
       enabled: raw.enabled !== false,
       createdAt: iso(raw.createdAt) ?? now,
       updatedAt: iso(raw.updatedAt) ?? now,
@@ -368,6 +379,19 @@ export class McpFileStore {
   private obj(value: any): Record<string, any> | null {
     return value && typeof value === "object" && !Array.isArray(value)
       ? (value as Record<string, any>)
+      : null;
+  }
+
+  /**
+   * 正整数字段（超时等）。
+   *
+   * 宽容处理手工编辑：YAML 里写 `"600000"`（带引号的字符串）与写 `600000` 等价；
+   * 非法值视为未设置而不是抛错——一个填错的超时不该让整个服务器配置无法加载。
+   */
+  private posInt(value: any): number | null {
+    const n = typeof value === "string" ? Number(value.trim()) : value;
+    return typeof n === "number" && Number.isFinite(n) && n > 0
+      ? Math.floor(n)
       : null;
   }
 
