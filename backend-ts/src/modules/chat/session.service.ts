@@ -14,6 +14,10 @@ import { toRuntimeProviderConfig } from "../llm-core/utils/provider-runtime.util
 import { assertResolvableModelRef } from "../llm-core/utils/model-reference.util";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { LLMService } from "../llm-core/llm.service";
+import type {
+  LLMCompletionResult,
+  StreamChunk,
+} from "../llm-core/types/llm.types";
 import {
   IMessageStore,
   MESSAGE_STORE_TOKEN,
@@ -879,7 +883,7 @@ export class SessionService {
 
       // 调用 LLM 生成标题
       // 注意：使用 model.id 或 model.code 作为 API 请求的模型标识，而非 name
-      const response = await this.llmService.completions({
+      const response = (await this.llmService.completions({
         model: model.modelName,
         messages: [
           {
@@ -896,7 +900,9 @@ export class SessionService {
         thinkingEffort: resolveThinkingEffort(model, "none"), // 禁用思考功能
         stream: false,
         providerConfig: toRuntimeProviderConfig(model.provider),
-      });
+        purpose: "session_title",
+        usageContext: { sessionId },
+      })) as LLMCompletionResult;
 
       this.logger.log(
         `Title generation response for session ${sessionId}:`,
@@ -1031,7 +1037,7 @@ ${diffText}
 生成的提交信息：`;
 
       // 3. 流式调用 LLM（禁用思考）
-      const stream = await this.llmService.completions({
+      const stream = (await this.llmService.completions({
         model: model.modelName,
         messages: [
           {
@@ -1049,7 +1055,9 @@ ${diffText}
         stream: true,
         abortSignal,
         providerConfig: toRuntimeProviderConfig(model.provider),
-      });
+        purpose: "commit_message",
+        usageContext: { sessionId },
+      })) as AsyncGenerator<StreamChunk>;
 
       let fullText = "";
       let finishReason: string | undefined;

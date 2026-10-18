@@ -89,6 +89,9 @@
                             <template v-else-if="currentTabValue === 'session-archived'">
                                 <ArchivedSessions />
                             </template>
+                            <template v-else-if="currentTabValue === 'usage'">
+                                <UsageStats />
+                            </template>
                             <template v-else-if="currentTabValue === 'profile'">
                                 <UserProfile />
                             </template>
@@ -126,6 +129,7 @@ import BrowserSettings from './BrowserSettings.vue'
 import AboutPanel from '../plugins/AboutPanel.vue'
 import SessionGroupManage from './SessionGroupManage.vue'
 import ArchivedSessions from './ArchivedSessions.vue'
+import UsageStats from './UsageStats.vue'
 import UserProfile from './UserProfile.vue'
 import UserSecurity from './UserSecurity.vue'
 import ConnectionSettings from './ConnectionSettings.vue'
@@ -147,6 +151,7 @@ import {
     Chat24Regular,
     Database24Regular,
     ShieldCheckmark16Regular,
+    ChartMultiple24Regular,
 } from '@vicons/fluent'
 
 import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } from '@vicons/material'
@@ -176,6 +181,7 @@ const groupMap = computed<Record<string, string>>(() => ({
     community: t('settings.system.groups.system'),
     'session-groups': t('settings.system.groups.dataManagement'),
     'session-archived': t('settings.system.groups.dataManagement'),
+    usage: t('settings.system.groups.dataManagement'),
     plugin: t('settings.system.groups.system'),
     profile: t('settings.system.groups.account'),
     security: t('settings.system.groups.account'),
@@ -263,6 +269,11 @@ const sidebarItems = computed(() => [
         label: t('settings.system.tabs.sessionArchived'),
         path: 'session-archived',
         icon: Archive20Regular,
+    },
+    {
+        label: t('settings.system.tabs.usage'),
+        path: 'usage',
+        icon: ChartMultiple24Regular,
     },
     {
         label: t('settings.system.tabs.profile'),

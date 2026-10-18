@@ -156,6 +156,8 @@ export class AgentEngine {
         const stream = (await this.llmService.completions({
           ...params,
           stream: true,
+          // 同一 messageId 的重试尝试各自落一行，靠 attemptIndex 区分
+          usageContext: { ...params.usageContext, attemptIndex: attempt },
         })) as AsyncGenerator<StreamChunk>;
 
         for await (const chunk of stream) {
@@ -532,6 +534,15 @@ export class AgentEngine {
             SessionLlmRequestBuilder.buildCompletionParams(sessionContext, {
               messages: requestMessages,
               abortSignal,
+              usageContext: {
+                turnId,
+                requestId: messageId,
+                assistantMessageId: messageId,
+                source:
+                  sessionContext.sessionType === "sub_agent"
+                    ? "subagent"
+                    : "main_turn",
+              },
             }),
           );
           for await (const result of streamResult) {

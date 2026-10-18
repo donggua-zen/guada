@@ -20,6 +20,7 @@
     "db:migrate:gen": "node scripts/gen-migration.js",
     "db:generate-baseline": "prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > src/common/database/migrations/0001_baseline.sql",
     "db:rollback": "ts-node src/scripts/rollback.ts",
+    "usage:backfill": "ts-node src/scripts/usage-backfill.ts",
     "kb:reembed": "ts-node src/scripts/kb-reembed.ts",
     "kb:eval": "ts-node src/scripts/kb-eval.ts",
     "test:wecom-adapter": "ts-node scripts/test-wecom-adapter.ts",

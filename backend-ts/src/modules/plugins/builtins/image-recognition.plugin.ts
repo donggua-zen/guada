@@ -267,6 +267,7 @@ export class ImageRecognitionPlugin extends PluginBase {
         providerConfig: toRuntimeProviderConfig(visualModelConfig.provider),
         thinkingEffort,
         abortSignal,
+        purpose: "image_recognition",
       })) as AsyncGenerator<any, void, unknown>;
 
       for await (const chunk of stream) {

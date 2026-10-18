@@ -31,6 +31,7 @@ import { GitModule } from './modules/git/git.module';
 import { TerminalModule } from './modules/terminal/terminal.module';
 import { PersistenceModule } from './common/persistence/persistence.module';
 import { HealthModule } from './modules/health/health.module';
+import { UsageModule } from './modules/usage/usage.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -50,6 +51,7 @@ import { HealthModule } from './modules/health/health.module';
     // Nest 的模块钩子跨模块串行 await，故它的 ProviderFileStore 预热必然早于这里的
     // 迁移导出；store 以「预热 + 门控放行后重扫」兜底（providers 域），不依赖数组顺序。
     PersistenceModule,
+    UsageModule, // Token 用量统计（@Global；LLMService 经全局导出注入 UsageService）
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     WorkspaceModule, // 全局 WorkspaceProvider 抽象层
     UploadModule, // 全局上传路径模块

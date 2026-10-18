@@ -175,6 +175,7 @@ Scan history. ONLY trigger an update if:
             SessionLlmRequestBuilder.buildCompletionParams(sessionContext, {
               messages: messages.concat(shadowMessages),
               abortSignal,
+              purpose: "memory_sync",
             }),
           )) as AsyncGenerator<import("../llm-core/types/llm.types").StreamChunk>;
 

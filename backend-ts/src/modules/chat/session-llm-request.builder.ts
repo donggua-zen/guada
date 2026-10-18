@@ -6,7 +6,10 @@
  * - 主循环：组装后交给 agent-engine 私有重试执行器（对齐 DSH retryPolicy 在 agent 层）
  * - 影子轮次 / 摘要：组装后单次 completions（无重试，对齐 DSH 辅助调用单次）
  */
-import type { LLMCompletionParams } from "../llm-core/types/llm.types";
+import type {
+  LLMCompletionParams,
+  LLMUsageContext,
+} from "../llm-core/types/llm.types";
 import type { Message } from "../../common/types/conversation.types";
 import type { ISessionContext } from "./session-context";
 import { ToolExecutor } from "../tools/tool-executor.service";
@@ -19,6 +22,8 @@ export interface BuildCompletionParamsOptions {
   maxTokens?: number;
   /** 请求用途（对齐 DSH purpose）：adapter 可映射为传输元数据 */
   purpose?: string;
+  /** 用量统计上下文（builder 自动补 sessionId） */
+  usageContext?: LLMUsageContext;
   stream?: boolean;
 }
 
@@ -50,6 +55,10 @@ export function buildSessionLlmParams(
     thinkingEffort: ctx.getThinkingEffort(),
     abortSignal: opts.abortSignal,
     ...(opts.purpose === undefined ? {} : { purpose: opts.purpose }),
+    usageContext: {
+      ...opts.usageContext,
+      sessionId: opts.usageContext?.sessionId ?? ctx.sessionId,
+    },
   };
 }
 

@@ -45,7 +45,7 @@ import { ID_PREFIXES } from "../../common/utils/id.util";
 
 export const META_DB_FILE = "_meta.db";
 /** 当前 schema 版本；结构调整 +1 并在 migrate() 追加一步 */
-export const SESSION_META_DB_VERSION = 4;
+export const SESSION_META_DB_VERSION = 5;
 /** _bootstrap 表内的一次性转换完成标记键（真值在库内：库删则自动从主库重转） */
 export const META_DB_MIGRATED_KEY = "migrated_from_db_at";
 
@@ -187,6 +187,60 @@ CREATE TABLE IF NOT EXISTS _bootstrap (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+`;
+
+/**
+ * v5：Token 用量明细表。
+ *
+ * 一行 = 一次 LLM 请求尝试；回合/会话/日维度由 SQL 聚合，不另建 turn 表。
+ * 放在 `_meta.db` 是为了直接 JOIN sessions（标题/类型）并在删除会话时清理。
+ * `usage_missing` 标记供应商未返回 usage 的请求（计入请求数，不贡献 token）。
+ */
+const USAGE_DDL = `
+CREATE TABLE IF NOT EXISTS model_usage (
+  id TEXT PRIMARY KEY,
+  logical_request_id TEXT,
+  attempt_index INTEGER NOT NULL DEFAULT 0,
+  session_id TEXT,
+  turn_id TEXT,
+  assistant_message_id TEXT,
+  source TEXT NOT NULL DEFAULT 'main_turn',
+  provider_id TEXT NOT NULL DEFAULT '',
+  model_id TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'completed',
+  started_at INTEGER NOT NULL,
+  first_token_at INTEGER,
+  completed_at INTEGER,
+  duration_ms INTEGER,
+  time_to_first_token_ms INTEGER,
+  finish_reason TEXT,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
+  provider_total_tokens INTEGER,
+  computed_total_tokens INTEGER NOT NULL DEFAULT 0,
+  usage_missing INTEGER NOT NULL DEFAULT 0,
+  error_type TEXT,
+  error_message TEXT,
+  raw_usage_json TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_model_usage_started
+  ON model_usage(started_at);
+CREATE INDEX IF NOT EXISTS idx_model_usage_session_turn
+  ON model_usage(session_id, turn_id);
+CREATE INDEX IF NOT EXISTS idx_model_usage_message
+  ON model_usage(assistant_message_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_model_usage_message_attempt
+  ON model_usage(assistant_message_id, attempt_index)
+  WHERE assistant_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_model_usage_provider_model
+  ON model_usage(provider_id, model_id);
+CREATE INDEX IF NOT EXISTS idx_model_usage_source
+  ON model_usage(source);
 `;
 
 // ============ 行 ↔ 领域对象 ============
@@ -333,13 +387,14 @@ export function openMetaDb(baseDir: string): Database.Database {
 
 export function migrateMetaDbSchema(db: Database.Database): void {
   const version = (db.pragma("user_version", { simple: true }) as number) ?? 0;
-  if (version >= SESSION_META_DB_VERSION) return;
-  if (version < 1) db.exec(V1_DDL);
   // v2/v3 教训：dev 热重载可能在编辑中途加载「VERSION 已升、迁移步骤未加」的瞬时代码，
   // 把 user_version 误标记而实际没跑迁移，纯版本门控会永久跳过——
-  // 因此后续步骤一律按**列存在性**判断，任何误标记状态都可自愈
+  // 因此后续步骤一律按**列存在性**判断，任何误标记状态都可自愈。
+  if (version < 1) db.exec(V1_DDL);
   if (version < 3) migrateToDataColumn(db);
   if (version < 4) migrateToPinnedColumn(db);
+  // v5 用量表：全部 IF NOT EXISTS，无条件执行，顺带修复热重载误标记。
+  db.exec(USAGE_DDL);
   db.pragma(`user_version = ${SESSION_META_DB_VERSION}`);
 }
 
@@ -928,6 +983,13 @@ export class SessionMetaStore implements OnModuleDestroy {
     const existed = this.has(id);
     await this.removeDirWithRetry(this.sessionDir(id));
     if (existed) this.deleteRowStmt.run(id);
+    // 用量账本与 sessions 同库：会话删除即清理，避免统计残留已删除会话。
+    // 表不存在时（旧库尚未迁移）忽略——下次 openMetaDb 会补建。
+    try {
+      this.db?.prepare(`DELETE FROM model_usage WHERE session_id = ?`).run(id);
+    } catch {
+      /* schema 迁移前删除会话：无用量表，忽略 */
+    }
     return existed;
   }
 

@@ -322,9 +322,9 @@ describe("SessionMetaStore", () => {
       probe.close();
       expect(cols).toContain("data");
       expect(cols).not.toContain("settings");
-      // v4：pinned 列（置顶）由迁移补齐
+      // v4：pinned 列（置顶）由迁移补齐；v5：model_usage 用量表
       expect(cols).toContain("pinned");
-      expect(version).toBe(4);
+      expect(version).toBe(5);
     });
   });
 
