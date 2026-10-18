@@ -222,7 +222,7 @@ ai_chat/
 ├── frontend/                    # Vue 3 Frontend (Vite + Pinia + Element Plus + Tailwind 4)
 ├── electron/                    # Electron Desktop (embedded Chromium browser automation)
 ├── sandbox/                     # Sandbox process (sandbox executable)
-├── guada-agent/                 # Remote execution agent (Go static binary, deployed to remotes)
+├── guada-agent/                 # Independent Go project (not tracked here; often placed alongside for development): remote execution agent
 ├── docs/                        # Documentation
 └── LICENSE
 ```

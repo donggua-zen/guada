@@ -241,7 +241,7 @@ ai_chat/
 ├── frontend/                    # Vue 3 前端（Vite + Pinia + Element Plus + Tailwind 4）
 ├── electron/                    # Electron 桌面端（内嵌 Chromium 浏览器自动化）
 ├── sandbox/                     # 沙箱进程（sandbox.exe）
-├── guada-agent/                 # 远程执行代理（Go 静态二进制，部署到远端）
+├── guada-agent/                 # 独立 Go 项目（不在本仓库跟踪，开发时常放在同目录）：远程执行代理
 ├── docs/                        # 文档
 └── LICENSE
 ```
