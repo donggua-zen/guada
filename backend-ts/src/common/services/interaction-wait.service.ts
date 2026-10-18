@@ -11,24 +11,42 @@
  */
 
 import { Injectable, Logger } from "@nestjs/common";
-import type { AskAnswerItem, AskKind, AskQuestion } from "../types/ask.types";
+import type { AskAnswerItem, AskCardKind, AskKind, AskQuestion } from "../types/ask.types";
+import { AUTO_APPROVABLE_CARD_KINDS } from "../types/ask.types";
 
 /** 挂起中的一次交互（供 /chat/pending-asks 恢复卡片用） */
 export interface PendingAskView {
   sessionId: string;
   requestId: string;
   kind: AskKind;
+  /** 卡片类型（显式分类；旧帧可能缺省） */
+  cardKind?: AskCardKind;
   title?: string;
   toolCallId?: string;
   toolName?: string;
   questions: AskQuestion[];
 }
 
+/**
+ * 等待表的内部元数据：展示字段 + 自动放行答案。
+ *
+ * `autoAllowLabel` 只在进程内使用（"本轮内自动放行"触发批量应答），
+ * 不进入 `PendingAskView`——前端不需要知道，也不该据此自行作答。
+ */
+interface PendingAskMeta {
+  kind: AskKind;
+  cardKind?: AskCardKind;
+  title?: string;
+  toolCallId?: string;
+  toolName?: string;
+  autoAllowLabel?: string;
+}
+
 interface PendingEntry {
   resolve: (answers: AskAnswerItem[]) => void;
   questions: AskQuestion[];
   /** 恢复卡片所需的展示元数据（历史遗留调用可能缺省） */
-  meta: Omit<PendingAskView, "sessionId" | "requestId" | "questions">;
+  meta: PendingAskMeta;
 }
 
 @Injectable()
@@ -46,7 +64,7 @@ export class InteractionWaitService {
     sessionId: string,
     requestId: string,
     questions: AskQuestion[],
-    meta: Omit<PendingAskView, "sessionId" | "requestId" | "questions"> = { kind: "ask" },
+    meta: PendingAskMeta = { kind: "ask" },
   ): Promise<AskAnswerItem[]> {
     const key = this.key(sessionId, requestId);
     if (this.pending.has(key)) {
@@ -79,14 +97,49 @@ export class InteractionWaitService {
       const sid = key.slice(0, sep);
       const requestId = key.slice(sep + 1);
       if (sessionId && sid !== sessionId) continue;
+      // 显式投影：autoAllowLabel 等内部元数据不外泄给 /chat/pending-asks
       out.push({
         sessionId: sid,
         requestId,
+        kind: entry.meta.kind,
+        cardKind: entry.meta.cardKind,
+        title: entry.meta.title,
+        toolCallId: entry.meta.toolCallId,
+        toolName: entry.meta.toolName,
         questions: entry.questions,
-        ...entry.meta,
       });
     }
     return out;
+  }
+
+  /**
+   * 本轮自动放行：把该会话中"可自动放行"的挂起审批一并按允许应答。
+   *
+   * 资格按**卡片类型白名单**判定（`AUTO_APPROVABLE_CARD_KINDS`），而不是"有没有
+   * 某个字段"——计划审批 / 提问 / 通用审批默认不参与；多问题卡也不能用单个
+   * label 代替逐题作答。
+   *
+   * @returns 实际应答的条目数（0 = 没有可放行的挂起项）
+   */
+  resolveAutoAllowable(sessionId: string): number {
+    const prefix = `${sessionId}:`;
+    let resolved = 0;
+    // 先取快照：resolveAnswers 会删表，不能边遍历边改
+    for (const [key, entry] of [...this.pending]) {
+      if (!key.startsWith(prefix)) continue;
+      const { cardKind, autoAllowLabel } = entry.meta;
+      if (!cardKind || !AUTO_APPROVABLE_CARD_KINDS.has(cardKind)) continue;
+      if (!autoAllowLabel || entry.questions.length !== 1) continue;
+      const requestId = key.slice(prefix.length);
+      const answers: AskAnswerItem[] = [
+        { id: entry.questions[0].id, selected: [autoAllowLabel] },
+      ];
+      if (this.resolveAnswers(sessionId, requestId, answers)) resolved++;
+    }
+    if (resolved > 0) {
+      this.logger.log(`[ask] auto-allowed ${resolved} pending ask(s) for session ${sessionId}`);
+    }
+    return resolved;
   }
 
   /**

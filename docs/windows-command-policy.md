@@ -87,8 +87,13 @@ policy-rules.service 用户文件读写 / 迁移 / 校验 / mtime 缓存
 
 **敏感路径怎么判定**：对命令逐段取 token（**读类命令也算**），展开变量 + 归一后与 `sensitive` 的 glob 比对
 （`**/.env`、`**/id_rsa`、`**/*.pem` 这类"只有文件名"的条目额外按 basename 匹配，所以 `cat id_rsa`、`type .env` 也拦得住）。
-命中后：工作档弹「敏感文件访问」卡（显示目标路径 + 读/写/删；本次允许 / 放通此类（写路径规则）/ 拒绝），
+命中后：工作档弹「敏感文件访问」卡（显示目标路径 + 读/写/删；本次允许 / 本轮内自动放行 / 放通此类（写路径规则）/ 拒绝），
 **本会话内记住该目标**（同一个文件第二次不再问）；只读档直接拒绝。
+
+**「本轮内自动放行」**：任意一张审批卡（命令 / 敏感路径 / 越界写入）上都有这个选项。选中后**本回合内**
+后续所有审批直接按"允许"通过、不再弹卡，范围包括命令、敏感路径与越界写入；本轮已排队未答的卡也会被
+一并放行。它是**回合内存态**（不写 `policy.yaml`、不落盘），下一条用户消息开新回合即恢复逐次询问。
+计划审批（`ExitPlanMode`）与 `ask_user` 提问不在自动放行范围内（前者会结束计划模式，后者不是"允许/拒绝"）。
 
 ### 放行率（真实数据测量，2367 条历史命令）
 
@@ -113,7 +118,8 @@ policy-rules.service 用户文件读写 / 迁移 / 校验 / mtime 缓存
 | `common/services/policy-rules.service.ts` | 用户文件：读写 / **旧 schema 迁移** / 校验 / mtime 缓存 / `appendRule` / `resetUser` |
 | `modules/policy/policy.controller.ts` | `GET /policy/rules`、`PUT /policy/rules`、`POST /policy/reset`（AuthGuard） |
 | `shell.plugin.ts` → `enforceCommandPolicy()` | 策略门 + 审批（敏感路径走「敏感文件访问」卡）+ 规则落盘 + 会话记忆 + 无人值守拒绝 |
-| `ask.service.ts` → `requestCommandApproval()` | 四选项审批卡（命令 / 路径两种规则；敏感路径卡显示目标与操作） |
+| `ask.service.ts` → `requestCommandApproval()` | 五选项审批卡（本次允许 / 本轮内自动放行 / 命令与路径两种规则 / 拒绝；敏感路径卡显示目标与操作） |
+| `common/services/turn-approval-memory.ts` | 「本轮内自动放行」状态（按会话、回合内有效；`beginTurn` 清空） |
 | `file.plugin.ts` | 写：`evaluateWritePath`（敏感路径 ask/deny → 可写根 → 工作区）+ `ensureWriteApproval`；读：`ensureSensitiveRead`（敏感路径工作档问一次 / 只读档拒绝） |
 | `session-context.ts` → `hasAnswerSurface()` | 是否有人能应答（子代理/机器人/无订阅者 → false） |
 | 前端 `setting/CommandPolicySettings.vue` | 设置页：只读名单 / 必问项 + 敏感路径 / 可写根 三个视图（都能看到内置行、删除即写一条改动）+ 清空我的改动 |

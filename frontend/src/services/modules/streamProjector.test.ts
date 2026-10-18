@@ -730,12 +730,15 @@ describe("重放不带实时副作用", () => {
 
   it("并发审批：连续两个 ask_requested 都入队，ask_resolved 只摘对应的那个", () => {
     applyLiveChunk(store as any, "s1", {
-      type: "ask_requested", requestId: "A", kind: "approval", title: "写文件", toolCallId: "c1", questions: [],
+      type: "ask_requested", requestId: "A", kind: "approval", cardKind: "command-approval", title: "写文件", toolCallId: "c1", questions: [],
     } as any);
     applyLiveChunk(store as any, "s1", {
-      type: "ask_requested", requestId: "B", kind: "approval", title: "写文件", toolCallId: "c2", questions: [],
+      type: "ask_requested", requestId: "B", kind: "approval", cardKind: "write-approval", title: "写文件", toolCallId: "c2", questions: [],
     } as any);
     expect(Object.keys(store.state.pendingAsks ?? {})).toEqual(["A", "B"]);
+    // 显式卡片类型随帧落到待答队列（前端不再靠 toolName/title 反推）
+    expect(store.state.pendingAsks?.A?.cardKind).toBe("command-approval");
+    expect(store.state.pendingAsks?.B?.cardKind).toBe("write-approval");
 
     // 答掉 B：A 必须还在（旧实现会整队清空 → A 永远无人应答 → 回合挂死）
     applyLiveChunk(store as any, "s1", { type: "ask_resolved", requestId: "B", outcome: "answered" } as any);

@@ -2,16 +2,22 @@ import {
   AskService,
   WRITE_ALLOW_ONCE,
   WRITE_ALLOW_SESSION,
+  WRITE_ALLOW_TURN,
   WRITE_DENY,
 } from "../../src/common/services/ask.service";
 import { InteractionWaitService } from "../../src/common/services/interaction-wait.service";
+import { turnApprovalMemory } from "../../src/common/services/turn-approval-memory";
 import { AskDeniedError } from "../../src/common/types/ask.types";
 
 /**
- * 文件写入审批卡（工作区外路径）：三选项文案 + 答案映射 + 自定义回复=拒绝反馈。
+ * 文件写入审批卡（工作区外路径）：选项文案 + 答案映射 + 自定义回复=拒绝反馈。
  * 前端按 label 原样渲染（SessionCards 的通用选项列表），所以标签是契约的一部分。
  */
 describe("AskService.requestWriteApproval", () => {
+  // 本轮放行是进程内单例：用例之间必须清空，否则会串
+  beforeEach(() => turnApprovalMemory.clear());
+  afterEach(() => turnApprovalMemory.clear());
+
   function makeSession() {
     const published: any[] = [];
     return {
@@ -37,6 +43,25 @@ describe("AskService.requestWriteApproval", () => {
     throw new Error("ask_requested was not registered in time");
   }
 
+  /** 等到第 n 个请求已发出且登记到等待表（前面的可能已被应答） */
+  async function awaitRequestCount(
+    wait: InteractionWaitService,
+    session: any,
+    n: number,
+  ) {
+    for (let i = 0; i < 200; i++) {
+      const requests = session.published.filter((c: any) => c.type === "ask_requested");
+      if (
+        requests.length >= n &&
+        wait.getPendingQuestions(session.sessionId, requests[n - 1].requestId)
+      ) {
+        return requests;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    throw new Error(`${n} ask_requested were not registered in time`);
+  }
+
   function answer(
     wait: InteractionWaitService,
     session: any,
@@ -49,7 +74,7 @@ describe("AskService.requestWriteApproval", () => {
     ]);
   }
 
-  it("三选项齐备：本次允许 / 本会话内始终允许该路径 / 拒绝，detail 带路径、操作与预览", async () => {
+  it("选项齐备：本次允许 / 本轮内自动放行 / 本会话内始终允许该路径 / 拒绝", async () => {
     const wait = new InteractionWaitService();
     const service = new AskService(wait);
     const session = makeSession();
@@ -64,8 +89,10 @@ describe("AskService.requestWriteApproval", () => {
     const requested = await awaitRequest(wait, session);
 
     const question = requested.questions[0];
+    expect(requested.cardKind).toBe("write-approval");
     expect(question.options.map((o: any) => o.label)).toEqual([
       WRITE_ALLOW_ONCE,
+      WRITE_ALLOW_TURN,
       WRITE_ALLOW_SESSION,
       WRITE_DENY,
     ]);
@@ -128,5 +155,43 @@ describe("AskService.requestWriteApproval", () => {
       outcome: "rejected",
       feedback: "改成写进工作区的 docs/ 下面",
     });
+  });
+
+  it("「本轮内自动放行」→ once；同会话后续写入审批不再弹卡，新回合恢复", async () => {
+    const wait = new InteractionWaitService();
+    const service = new AskService(wait);
+    const session = makeSession();
+
+    const first = service.requestWriteApproval(session, {
+      resolvedPath: "/data/outside/a.txt",
+      operation: "write",
+      toolName: "write",
+    });
+    const requested = await awaitRequest(wait, session);
+    answer(wait, session, requested, [WRITE_ALLOW_TURN]);
+    await expect(first).resolves.toBe("once");
+    expect(turnApprovalMemory.isAllowed(session.sessionId)).toBe(true);
+
+    // 同一轮：直接放行，不发布新卡（即使是另一个路径）
+    await expect(
+      service.requestWriteApproval(session, {
+        resolvedPath: "/data/outside/b.txt",
+        operation: "edit",
+        toolName: "edit",
+      }),
+    ).resolves.toBe("once");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(session.published.filter((c: any) => c.type === "ask_requested")).toHaveLength(1);
+
+    // 新回合恢复询问
+    turnApprovalMemory.beginTurn(session.sessionId);
+    const third = service.requestWriteApproval(session, {
+      resolvedPath: "/data/outside/c.txt",
+      operation: "write",
+      toolName: "write",
+    });
+    const requests = await awaitRequestCount(wait, session, 2);
+    answer(wait, session, requests[1], [WRITE_ALLOW_ONCE]);
+    await expect(third).resolves.toBe("once");
   });
 });

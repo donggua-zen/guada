@@ -12,20 +12,37 @@
 
 import { Injectable, Logger } from "@nestjs/common";
 import { InteractionWaitService } from "./interaction-wait.service";
+import { turnApprovalMemory } from "./turn-approval-memory";
 import { deriveAllowRule } from "./command-policy";
-import type { AskAnswerItem, AskRequest, AskSession } from "../types/ask.types";
-import { AskDeniedError } from "../types/ask.types";
+import type { AskAnswerItem, AskCardKind, AskRequest, AskSession } from "../types/ask.types";
+import { AskDeniedError, AUTO_APPROVABLE_CARD_KINDS } from "../types/ask.types";
 
 /** 命令审批的选项（前端按 label 原样渲染） */
 export const COMMAND_ALLOW_ONCE = "本次允许";
+export const COMMAND_ALLOW_TURN = "本轮内自动放行";
 export const COMMAND_ALLOW_PROJECT = "放通此类（本项目）";
 export const COMMAND_ALLOW_GLOBAL = "放通此类（全局）";
 export const COMMAND_DENY = "拒绝";
 
-/** 文件写入审批的三个选项（工作区外路径；前端按 label 原样渲染） */
+/** 文件写入审批的选项（工作区外路径；前端按 label 原样渲染） */
 export const WRITE_ALLOW_ONCE = "本次允许";
+export const WRITE_ALLOW_TURN = "本轮内自动放行";
 export const WRITE_ALLOW_SESSION = "本会话内始终允许该路径";
 export const WRITE_DENY = "拒绝";
+
+/**
+ * 卡片类型 → "本轮内自动放行"选项的 label（唯一映射）。
+ *
+ * 返回 undefined = 该类型不参与本轮自动放行（计划审批 / 提问 / 通用审批）。
+ * 资格由 `AUTO_APPROVABLE_CARD_KINDS` 白名单兜底，调用方只声明 cardKind。
+ */
+function turnAllowLabel(cardKind: AskCardKind | undefined): string | undefined {
+  if (cardKind === "write-approval") return WRITE_ALLOW_TURN;
+  if (cardKind === "command-approval" || cardKind === "sensitive-path") {
+    return COMMAND_ALLOW_TURN;
+  }
+  return undefined;
+}
 
 @Injectable()
 export class AskService {
@@ -51,6 +68,23 @@ export class AskService {
       throw new AskDeniedError("用户已停止", "cancelled");
     }
 
+    // 本轮自动放行只对白名单内的单问题审批生效：多问题卡需要逐题作答，不能用一个 label 代替
+    const autoAllowLabel =
+      request.autoApprove === "turn" &&
+      request.cardKind !== undefined &&
+      AUTO_APPROVABLE_CARD_KINDS.has(request.cardKind) &&
+      request.questions.length === 1
+        ? turnAllowLabel(request.cardKind)
+        : undefined;
+    const autoAnswers = (): AskAnswerItem[] =>
+      request.questions.map((q) => ({ id: q.id, selected: [autoAllowLabel!] }));
+
+    // 用户本轮已选择"自动放行"：直接按允许返回，不建卡、不写 ask 审计事件
+    if (autoAllowLabel && turnApprovalMemory.isAllowed(session.sessionId)) {
+      this.logger.log(`[ask] auto-allowed by turn policy: ${request.title ?? request.kind}`);
+      return autoAnswers();
+    }
+
     const requestId = crypto.randomUUID();
 
     // 1. 审计 ask/asked（持久事件；先入库后发事件）
@@ -58,6 +92,7 @@ export class AskService {
       await session.appendAskAsked({
         requestId,
         kind: request.kind,
+        cardKind: request.cardKind,
         title: request.title,
         questions: request.questions,
       });
@@ -70,6 +105,7 @@ export class AskService {
       type: "ask_requested",
       requestId,
       kind: request.kind,
+      cardKind: request.cardKind,
       title: request.title,
       toolCallId: request.toolCallId,
       toolName: request.toolName,
@@ -81,14 +117,21 @@ export class AskService {
       session.sessionId,
       requestId,
       request.questions,
-      // 恢复卡片（/chat/pending-asks）要用的展示元数据
+      // 恢复卡片（/chat/pending-asks）要用的展示元数据；autoAllowLabel 只在进程内使用
       {
         kind: request.kind,
+        cardKind: request.cardKind,
         title: request.title,
         toolCallId: request.toolCallId,
         toolName: request.toolName,
+        autoAllowLabel,
       },
     );
+    // 竞态兜底：预检与登记之间用户可能刚在另一张卡上点了「本轮内自动放行」，
+    // 登记后再确认一次，否则这一路会永久挂起。
+    if (autoAllowLabel && turnApprovalMemory.isAllowed(session.sessionId)) {
+      this.wait.resolveAnswers(session.sessionId, requestId, autoAnswers());
+    }
     let resolveAbort!: (value: "abort") => void;
     const abortPromise = new Promise<"abort">((resolve) => {
       resolveAbort = resolve;
@@ -150,10 +193,14 @@ export class AskService {
       abortSignal?: AbortSignal;
     },
   ): Promise<void> {
+    // 本轮内自动放行：用户已在同一轮里授权过
+    if (turnApprovalMemory.isAllowed(session.sessionId)) return;
+
     const answers = await this.ask(
       session,
       {
         kind: "approval",
+        cardKind: "generic-approval",
         title: "需要审批",
         toolCallId: params.toolCallId,
         toolName: params.toolName,
@@ -179,10 +226,11 @@ export class AskService {
   }
 
   /**
-   * 命令审批（Windows 命令策略层用）：本次允许 / 本会话内始终允许 / 拒绝。
+   * 命令审批（Windows 命令策略层用）：本次允许 / 本轮内自动放行 / 放通此类 / 拒绝。
    *
    * 与 requestApproval 分开是为了不动既有调用方（文件写入 / 计划审批仍是两选一）。
-   * 「放通此类」会由调用方把推导出的前缀规则写入 policy.yaml（本项目 / 全局），这里只负责问。
+   * 「放通此类」会由调用方把推导出的前缀规则写入 policy.yaml（本项目 / 全局），这里只负责问；
+   * 「本轮内自动放行」是本轮内存态（不写规则、不落盘），由本方法直接消费。
    *
    * @throws AskDeniedError('rejected', feedback) 拒绝或自定义回复
    * @throws AskDeniedError('cancelled') 用户停止
@@ -207,6 +255,9 @@ export class AskService {
       abortSignal?: AbortSignal;
     },
   ): Promise<"once" | { scope: "project" | "global" }> {
+    // 本轮内自动放行：直接放行（不写规则、不建卡）
+    if (turnApprovalMemory.isAllowed(session.sessionId)) return "once";
+
     // 从命令推导"放通此类"的前缀规则（灾难级命令不提供放通选项）
     const rule =
       params.allowRule === undefined ? deriveAllowRule(params.command) : params.allowRule;
@@ -214,6 +265,10 @@ export class AskService {
     const ruleLabel = isPath ? `路径「${rule}」` : `「${rule}」`;
     const options = [
       { label: COMMAND_ALLOW_ONCE, description: "仅本次执行" },
+      {
+        label: COMMAND_ALLOW_TURN,
+        description: "本轮后续所有审批直接通过（下一轮恢复询问）",
+      },
       ...(rule
         ? [
             {
@@ -244,9 +299,11 @@ export class AskService {
       session,
       {
         kind: "approval",
+        cardKind: sensitive ? "sensitive-path" : "command-approval",
         title: sensitive ? "敏感文件访问" : "命令需要批准",
         toolCallId: params.toolCallId,
         toolName: "run_command",
+        autoApprove: "turn",
         questions: [
           {
             id: "command-approval",
@@ -270,6 +327,10 @@ export class AskService {
     // 自定义回复 = 拒绝 + 用户文本反馈模型（与 requestApproval 同语义）
     if (answer.custom && answer.custom.trim()) {
       throw new AskDeniedError(answer.custom.trim(), "rejected", answer.custom.trim());
+    }
+    if (answer.selected.includes(COMMAND_ALLOW_TURN)) {
+      this.allowForTurn(session);
+      return "once";
     }
     if (answer.selected.includes(COMMAND_ALLOW_PROJECT)) return { scope: "project" };
     if (answer.selected.includes(COMMAND_ALLOW_GLOBAL)) return { scope: "global" };
@@ -300,6 +361,9 @@ export class AskService {
       abortSignal?: AbortSignal;
     },
   ): Promise<"once" | "session"> {
+    // 本轮内自动放行：直接放行（不写会话记忆、不建卡）
+    if (turnApprovalMemory.isAllowed(session.sessionId)) return "once";
+
     const detailParts = [
       `Path: ${params.resolvedPath}`,
       `Operation: ${params.operation}`,
@@ -312,9 +376,11 @@ export class AskService {
       session,
       {
         kind: "approval",
+        cardKind: "write-approval",
         title: "文件写入需要批准",
         toolCallId: params.toolCallId,
         toolName: params.toolName,
+        autoApprove: "turn",
         questions: [
           {
             id: "write-approval",
@@ -322,6 +388,10 @@ export class AskService {
             detail: detailParts.join("\n"),
             options: [
               { label: WRITE_ALLOW_ONCE, description: "仅本次写入" },
+              {
+                label: WRITE_ALLOW_TURN,
+                description: "本轮后续所有审批直接通过（下一轮恢复询问）",
+              },
               {
                 label: WRITE_ALLOW_SESSION,
                 description: "本会话内遇到完全相同的路径不再询问",
@@ -339,8 +409,23 @@ export class AskService {
     if (answer.custom && answer.custom.trim()) {
       throw new AskDeniedError(answer.custom.trim(), "rejected", answer.custom.trim());
     }
+    if (answer.selected.includes(WRITE_ALLOW_TURN)) {
+      this.allowForTurn(session);
+      return "once";
+    }
     if (answer.selected.includes(WRITE_ALLOW_SESSION)) return "session";
     if (answer.selected.includes(WRITE_ALLOW_ONCE)) return "once";
     throw new AskDeniedError("用户拒绝写入该路径", "rejected");
+  }
+
+  /**
+   * 打开"本轮内自动放行"，并把本轮已排队、还没回答的审批卡一并放行。
+   *
+   * 只影响 `AUTO_APPROVABLE_CARD_KINDS` 白名单内的挂起项（命令 / 敏感路径 / 写入）；
+   * 计划审批、提问、通用审批不会被自动应答。
+   */
+  private allowForTurn(session: AskSession): void {
+    turnApprovalMemory.allowForTurn(session.sessionId);
+    this.wait.resolveAutoAllowable(session.sessionId);
   }
 }

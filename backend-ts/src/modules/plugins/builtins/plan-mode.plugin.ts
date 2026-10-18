@@ -223,6 +223,7 @@ Ensure your plan is complete and unambiguous:
       session,
       {
         kind: "approval",
+        cardKind: "plan-approval",
         title: "计划审批",
         toolCallId: ctx?.toolCallId,
         toolName: "ExitPlanMode",

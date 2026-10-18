@@ -97,6 +97,7 @@ describe('AskService（统一人机交互闭环，无超时）', () => {
         type: 'ask_requested' as const,
         requestId: expect.any(String),
         kind: 'approval' as const,
+        cardKind: 'generic-approval' as const,
         title: '需要审批',
         toolCallId: 'call_1',
         toolName: 'run_command',

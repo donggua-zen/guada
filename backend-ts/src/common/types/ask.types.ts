@@ -46,9 +46,37 @@ export interface AskAnswerItem {
  */
 export type AskKind = "approval" | "ask";
 
+/**
+ * 卡片类型（显式分类，唯一事实源）。
+ *
+ * `kind` 只保留"审批 / 询问"的粗粒度（前端徽章、侧栏文案）；具体是哪一种审批
+ * 由 cardKind 决定——不要再靠 title / toolName / 是否带 pathDetail 反推。
+ */
+export type AskCardKind =
+  | "command-approval" // 命令策略（含 out-of-scope）
+  | "sensitive-path" // 敏感文件访问（命令策略的路径命中）
+  | "write-approval" // 工作区外文件写入
+  | "plan-approval" // ExitPlanMode 计划审批
+  | "generic-approval" // requestApproval（通用两选一）
+  | "question"; // ask_user 提问
+
+/**
+ * 可以参与"本轮内自动放行"的卡片类型（白名单）。
+ *
+ * 按类型判定，而不是"调用方有没有传某个字段"——新增卡片类型默认不参与，
+ * 想参与必须显式加进这里并给出对应的放行 label。
+ */
+export const AUTO_APPROVABLE_CARD_KINDS: ReadonlySet<AskCardKind> = new Set([
+  "command-approval",
+  "sensitive-path",
+  "write-approval",
+]);
+
 /** 一次 ask 请求 */
 export interface AskRequest {
   kind: AskKind;
+  /** 卡片类型（显式分类；缺省时消费方回退到旧启发式，仅用于升级瞬间的在途帧） */
+  cardKind?: AskCardKind;
   /** 卡片标题（如"进行文档处理"） */
   title?: string;
   /** 关联工具调用（"命令…"行展示 + 工具层定位） */
@@ -56,6 +84,13 @@ export interface AskRequest {
   toolName?: string;
   /** 问题单（至少一个） */
   questions: AskQuestion[];
+  /**
+   * 本轮内自动放行能力（只有 AUTO_APPROVABLE_CARD_KINDS 里的类型会设置）。
+   *
+   * AskService 按 cardKind 选择"本轮内自动放行"选项的 label；资格由类型白名单
+   * 决定，调用方不再直接传 label。
+   */
+  autoApprove?: "turn";
 }
 
 // ==================== wire 流帧（进 SessionStreamEvent 联合，由 chat/event-chunk 引用） ====================
@@ -66,6 +101,8 @@ export interface AskRequestedEvent {
   /** 临时凭证（uuid），前端应答回传匹配等待者 */
   requestId: string;
   kind: AskKind;
+  /** 卡片类型（显式分类；旧帧可能缺省） */
+  cardKind?: AskCardKind;
   title?: string;
   toolCallId?: string;
   toolName?: string;
@@ -105,6 +142,8 @@ export interface AskSession {
   appendAskAsked(data: {
     requestId: string;
     kind: AskKind;
+    /** 卡片类型（显式分类，审计/诊断用） */
+    cardKind?: AskCardKind;
     title?: string;
     questions: AskQuestion[];
   }): Promise<void>;

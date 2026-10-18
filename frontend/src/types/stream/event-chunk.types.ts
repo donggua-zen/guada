@@ -224,11 +224,27 @@ export interface AskAnswerItem {
 
 export type AskKind = "approval" | "ask";
 
+/**
+ * 卡片类型（显式分类，与后端 common/types/ask.types.ts 同构）。
+ *
+ * `kind` 只区分审批/询问；具体卡片（命令、敏感路径、写入、计划、提问）看这里，
+ * 不要再靠 title / toolName 反推。旧帧可能缺省。
+ */
+export type AskCardKind =
+  | "command-approval"
+  | "sensitive-path"
+  | "write-approval"
+  | "plan-approval"
+  | "generic-approval"
+  | "question";
+
 export interface AskRequestedEvent {
   type: "ask_requested";
   /** 临时凭证（uuid），应答回传匹配等待者 */
   requestId: string;
   kind: AskKind;
+  /** 卡片类型（显式分类；旧帧可能缺省） */
+  cardKind?: AskCardKind;
   /** 卡片标题（如"进行文档处理"） */
   title?: string;
   toolCallId?: string;

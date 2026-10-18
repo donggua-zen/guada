@@ -109,6 +109,7 @@ export function useSessionEvents() {
               sessionStore.upsertSessionPendingAsk(ask.sessionId, {
                 requestId: ask.requestId,
                 kind: ask.kind,
+                cardKind: ask.cardKind,
                 title: ask.title,
                 toolCallId: ask.toolCallId,
                 toolName: ask.toolName,

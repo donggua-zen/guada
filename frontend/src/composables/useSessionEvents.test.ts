@@ -124,6 +124,7 @@ describe("useSessionEvents 统一订阅器", () => {
           sessionId: "s1",
           requestId: "r1",
           kind: "approval",
+          cardKind: "write-approval",
           title: "写文件",
           toolCallId: "c1",
           questions: [],
@@ -138,6 +139,7 @@ describe("useSessionEvents 统一订阅器", () => {
 
     expect(store.peekSessionPendingAsk("s1")?.requestId).toBe("r1");
     expect(store.peekSessionPendingAsk("s1")?.title).toBe("写文件");
+    expect(store.peekSessionPendingAsk("s1")?.cardKind).toBe("write-approval");
     // 补写语义：本地既有的仍保留（清空会把仍可应答的卡片弄丢）
     expect(store.peekSessionPendingAsk("s-local")?.requestId).toBe("local-1");
   });

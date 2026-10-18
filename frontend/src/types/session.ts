@@ -123,6 +123,8 @@ export interface PendingAsk {
     requestId: string
     /** 卡片分类：approval=审批（ask 特例）/ ask=询问 */
     kind: 'approval' | 'ask'
+    /** 卡片类型（显式分类；旧帧可能缺省，消费方按需回退） */
+    cardKind?: import('./stream/event-chunk.types').AskCardKind
     /** 卡片标题（如"进行文档处理"） */
     title?: string
     toolCallId?: string

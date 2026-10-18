@@ -671,6 +671,7 @@ function toPendingAsk(
   return {
     requestId: chunk.requestId,
     kind: chunk.kind,
+    cardKind: chunk.cardKind,
     title: chunk.title,
     toolCallId: chunk.toolCallId,
     toolName: chunk.toolName,

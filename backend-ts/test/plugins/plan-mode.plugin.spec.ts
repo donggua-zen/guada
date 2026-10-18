@@ -21,6 +21,8 @@ describe("PlanModePlugin", () => {
   let kitDef: ToolKitDef | undefined;
   let askResult: any[];
   let planFile: PlanFileService;
+  /** beforeEach 实例的 ask 替身（断言卡片契约用） */
+  let askMock: jest.Mock;
 
   function createSession(overrides: Record<string, any> = {}) {
     let planEnabled = overrides.planEnabled !== false;
@@ -88,7 +90,9 @@ describe("PlanModePlugin", () => {
     workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "plan-mode-spec-"));
     planFile = new PlanFileService();
     kitDef = undefined;
-    plugin = (await createPlugin()).plugin;
+    const built = await createPlugin();
+    plugin = built.plugin;
+    askMock = built.askService.ask as jest.Mock;
   });
 
   afterEach(async () => {
@@ -124,6 +128,9 @@ describe("PlanModePlugin", () => {
     const result = (await exitTool().handler({ plan: "# 计划\n\n步骤一" }, { session, toolCallId: "tc1" } as any)) as any;
 
     expect(result.isError).toBeUndefined();
+
+    // 卡片类型显式声明（前端据此走计划专属渲染，不再靠 toolName 反推）
+    expect(askMock.mock.calls[0][1].cardKind).toBe("plan-approval");
 
     // 落盘：路径由 workspace + sessionId + planId(toolCallId) 推导（每份计划一个文件）
     const found = await planFile.readPlan({

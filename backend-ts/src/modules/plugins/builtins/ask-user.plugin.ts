@@ -197,6 +197,7 @@ export class AskUserPlugin extends PluginBase {
       session,
       {
         kind: "ask",
+        cardKind: "question",
         title: CARD_TITLE,
         toolCallId: ctx?.toolCallId,
         toolName: TOOL_NAME,

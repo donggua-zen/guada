@@ -32,8 +32,32 @@ interface AskQuestion { id: string; question: string; detail?: string;
                         options: AskOption[]; multiSelect?: boolean } // 缺省单选
 interface AskAnswerItem { id: string; selected: string[]; custom?: string }
 type AskKind = 'approval' | 'ask';   // 'continue' 已于 2026-10-05 移除
-interface AskRequest { kind; title?; toolCallId?; toolName?; questions: AskQuestion[] }
+type AskCardKind =                    // 显式卡片类型（2026-10-18）
+  | 'command-approval' | 'sensitive-path' | 'write-approval'
+  | 'plan-approval' | 'generic-approval' | 'question';
+interface AskRequest {
+  kind; cardKind?; title?; toolCallId?; toolName?; questions: AskQuestion[];
+  autoApprove?: 'turn';               // 本轮内自动放行能力（仅白名单类型）
+}
 ```
+
+**卡片类型（`cardKind`）是唯一事实源**：`kind` 只保留"审批 / 询问"的粗粒度（徽章、侧栏文案），
+具体是哪一种卡由 `cardKind` 决定。不要再靠 `title` / `toolName` / 是否带 `pathDetail` 反推——
+计划卡前端曾用 `toolName === 'ExitPlanMode'` 判定，现已改为 `cardKind === 'plan-approval'`
+（旧帧缺省时回退到 toolName，仅用于升级瞬间的在途流）。
+
+| cardKind | 来源 | 参与本轮自动放行 |
+|---|---|---|
+| `command-approval` | `requestCommandApproval`（无 pathDetail） | ✅ |
+| `sensitive-path` | `requestCommandApproval`（有 pathDetail） | ✅ |
+| `write-approval` | `requestWriteApproval` | ✅ |
+| `plan-approval` | `ExitPlanMode` | ❌ |
+| `generic-approval` | `requestApproval` | ❌ |
+| `question` | `ask_user` | ❌ |
+
+白名单常量：`AUTO_APPROVABLE_CARD_KINDS`（`common/types/ask.types.ts`）。新增卡片类型默认不参与
+自动放行；`AskService` 按 `cardKind` 映射"本轮内自动放行"选项的 label，调用方不再直接传 label。
+`/chat/pending-asks` 的 `PendingAskView` 也带 `cardKind`（`autoAllowLabel` 是内部字段，不外泄）。
 
 DSH 对照:`AskUserQuestionItem`(user-questions/src/types.ts:35-50)同构;差异:DSH 审批与提问是两个并行服务(approval waterfall / question provider),本项目按需求统一为一个 AskService,审批即预置问题的 ask;DSH question 无持久审计,本项目统一带 ask/asked|answered 审计对。
 
@@ -61,9 +85,11 @@ DSH 对照:`AskUserQuestionItem`(user-questions/src/types.ts:35-50)同构;差异
   = 预置问题「是否同意?」(同意/拒绝)+ 解释器:同意→返回;拒绝→抛 AskDeniedError('rejected');
   自定义→抛 AskDeniedError('rejected', feedback=用户文本)。
 - **执行许可审批**（命令策略 / 工作区外文件写入）= requestCommandApproval / requestWriteApproval
-  （命令卡四选项：本次允许 / **放通此类·本项目** / **放通此类·全局** / 拒绝——「放通此类」把服务端
-  推导出的前缀规则写进 `policy.yaml` 的 `workspaceWrite.allow`；
-  文件写入卡三选项：本次允许 / 本会话内始终允许该路径 / 拒绝；
+  （命令卡五选项：本次允许 / **本轮内自动放行** / **放通此类·本项目** / **放通此类·全局** / 拒绝——
+  「放通此类」把服务端推导出的前缀规则写进 `policy.yaml` 的 `workspaceWrite.allow`；
+  文件写入卡四选项：本次允许 / **本轮内自动放行** / 本会话内始终允许该路径 / 拒绝；
+  「本轮内自动放行」是回合内存态，选中后本轮后续审批（含敏感路径与越界写入）直接通过，
+  本轮已排队的卡一并放行，新回合由 `JsonlSessionContext.beginTurn` 清空；
   两处均无人应答 fail-closed）。
   ~~**沙盒提权** = 插件侧组合:parseEscalationArgs/assertStrictlyWider + requestApproval + one-shot 放宽~~
   → **已移除**(2026-10)：模型不能自我提权，能力放宽只由用户在审批卡上授予，或用户自行切换档位。

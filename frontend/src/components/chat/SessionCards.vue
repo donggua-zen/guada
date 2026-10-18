@@ -185,10 +185,15 @@ const kindBadgeClass = computed(() =>
     : "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
 );
 
-/** 计划审批（ExitPlanMode 的 approval）：其 detail 是计划全文，弹窗内不渲染（见模板注释） */
-const isPlanApproval = computed(
-  () => askCtx.value?.kind === "approval" && askCtx.value?.toolName === "ExitPlanMode",
-);
+/** 计划审批：其 detail 是计划全文，弹窗内不渲染（见模板注释）。
+ *  新后端带显式 cardKind；旧帧（升级瞬间的在途流）回退到 toolName。 */
+const isPlanApproval = computed(() => {
+  const ask = askCtx.value
+  if (!ask) return false
+  return ask.cardKind
+    ? ask.cardKind === 'plan-approval'
+    : ask.kind === 'approval' && ask.toolName === 'ExitPlanMode'
+});
 
 function isSelected(label: string): boolean {
   return answers.value[question.value?.id ?? ""]?.selected.includes(label) ?? false;

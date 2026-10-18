@@ -28,6 +28,7 @@ import { PluginManager } from '../plugins/plugin.manager';
 import { SessionStreamManager } from './session-stream.manager';
 import { PromptCollector } from '../plugins/prompt-collector.service';
 import { WorkspaceService } from '../../common/services/workspace.service';
+import { turnApprovalMemory } from '../../common/services/turn-approval-memory';
 import { TokenMeterService } from './token-meter.service';
 import { generateOrderedMessageId } from '../../common/utils/ordered-id.util';
 import { ID_PREFIXES, mintId } from '../../common/utils/id.util';
@@ -513,6 +514,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     });
     // 记录当前回合 id：reasoning 策略以 turnId 判定「最后一轮」（见 message-transform.pipeline.ts）
     this.currentTurnId = turnId;
+    // 审批卡的「本轮内自动放行」只活一个回合：新回合开始即恢复逐次询问
+    turnApprovalMemory.beginTurn(this.sessionId);
     // turn/start 不改变消息视图，仅版本号前进 → 续期快照 revision（写入方提供），避免每轮误重建
     this.refreshSnapshotRevision(revision);
     return turnId;

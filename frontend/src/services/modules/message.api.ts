@@ -208,6 +208,7 @@ export interface MessageApi {
       sessionId: string;
       requestId: string;
       kind: 'approval' | 'ask';
+      cardKind?: import("@/types/stream/event-chunk.types").AskCardKind;
       title?: string;
       toolCallId?: string;
       toolName?: string;

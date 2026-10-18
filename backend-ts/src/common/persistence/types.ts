@@ -270,6 +270,8 @@ export interface AskAskedData {
   requestId: string;
   /** 卡片分类：approval=审批（ask 特例）/ ask=询问 */
   kind: import("../types/ask.types").AskKind;
+  /** 卡片类型（显式分类，审计/诊断用；旧记录可能缺省） */
+  cardKind?: import("../types/ask.types").AskCardKind;
   title?: string;
   questions: import("../types/ask.types").AskQuestion[];
 }

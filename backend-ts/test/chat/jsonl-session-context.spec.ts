@@ -12,6 +12,7 @@
  *   随消息删除消失 → 重答后自动重新注入）；hidden 注入消息（kind=model）不污染基准检测
  */
 import { JsonlSessionContext } from '../../src/modules/chat/jsonl-session-context';
+import { turnApprovalMemory } from '../../src/common/services/turn-approval-memory';
 import type { Message } from '../../src/common/types/conversation.types';
 
 /// <reference types="jest" />
@@ -155,6 +156,17 @@ describe('hasAnswerSurface（命令策略层 fail-closed 判据）', () => {
 });
 
 describe('JsonlSessionContext 读取层直通', () => {
+  it('beginTurn 清空该会话的"本轮内自动放行"状态（新回合恢复逐次询问）', async () => {
+    const { ctx } = createContext();
+    turnApprovalMemory.allowForTurn('s1');
+    expect(turnApprovalMemory.isAllowed('s1')).toBe(true);
+
+    await ctx.beginTurn();
+
+    expect(turnApprovalMemory.isAllowed('s1')).toBe(false);
+    turnApprovalMemory.clear();
+  });
+
   it('publishStream 组装 prevSeq 续传游标并透传 streamManager.publish（唯一发布面）', async () => {
     const { ctx, streamManager } = createContext({
       messageStore: { getLastProcessedSeq: jest.fn(async () => 42) },

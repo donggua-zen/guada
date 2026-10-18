@@ -1184,6 +1184,7 @@ export class JsonlMessageService implements IMessageStore {
       data: {
         requestId: data.requestId,
         kind: data.kind,
+        ...data.cardKind === undefined ? {} : { cardKind: data.cardKind },
         ...data.title === undefined ? {} : { title: data.title },
         questions: data.questions,
       },

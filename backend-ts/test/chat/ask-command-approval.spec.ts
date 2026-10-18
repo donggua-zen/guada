@@ -3,9 +3,11 @@ import {
   COMMAND_ALLOW_GLOBAL,
   COMMAND_ALLOW_ONCE,
   COMMAND_ALLOW_PROJECT,
+  COMMAND_ALLOW_TURN,
   COMMAND_DENY,
 } from "../../src/common/services/ask.service";
 import { InteractionWaitService } from "../../src/common/services/interaction-wait.service";
+import { turnApprovalMemory } from "../../src/common/services/turn-approval-memory";
 import { AskDeniedError } from "../../src/common/types/ask.types";
 
 /**
@@ -13,6 +15,10 @@ import { AskDeniedError } from "../../src/common/types/ask.types";
  * 前端按 label 原样渲染（SessionCards 的通用选项列表），所以标签是契约的一部分。
  */
 describe("AskService.requestCommandApproval", () => {
+  // 本轮放行是进程内单例：用例之间必须清空，否则会串
+  beforeEach(() => turnApprovalMemory.clear());
+  afterEach(() => turnApprovalMemory.clear());
+
   function makeSession() {
     const published: any[] = [];
     return {
@@ -38,6 +44,25 @@ describe("AskService.requestCommandApproval", () => {
     throw new Error("ask_requested was not registered in time");
   }
 
+  /** 等到第 n 个请求已发出且登记到等待表（前面的可能已被应答） */
+  async function awaitRequestCount(
+    wait: InteractionWaitService,
+    session: any,
+    n: number,
+  ) {
+    for (let i = 0; i < 200; i++) {
+      const requests = session.published.filter((c: any) => c.type === "ask_requested");
+      if (
+        requests.length >= n &&
+        wait.getPendingQuestions(session.sessionId, requests[n - 1].requestId)
+      ) {
+        return requests;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    throw new Error(`${n} ask_requested were not registered in time`);
+  }
+
   function answer(
     wait: InteractionWaitService,
     session: any,
@@ -50,7 +75,7 @@ describe("AskService.requestCommandApproval", () => {
     ]);
   }
 
-  it("三选项齐备：本次允许 / 本会话内始终允许 / 拒绝，detail 带命令原文", async () => {
+  it("选项齐备：本次允许 / 本轮内自动放行 / 放通此类 / 拒绝，detail 带命令原文", async () => {
     const wait = new InteractionWaitService();
     const service = new AskService(wait);
     const session = makeSession();
@@ -63,8 +88,10 @@ describe("AskService.requestCommandApproval", () => {
     const requested = await awaitRequest(wait, session);
 
     const question = requested.questions[0];
+    expect(requested.cardKind).toBe("command-approval");
     expect(question.options.map((o: any) => o.label)).toEqual([
       COMMAND_ALLOW_ONCE,
+      COMMAND_ALLOW_TURN,
       COMMAND_ALLOW_PROJECT,
       COMMAND_ALLOW_GLOBAL,
       COMMAND_DENY,
@@ -76,6 +103,35 @@ describe("AskService.requestCommandApproval", () => {
     expect(question.detail).toContain("不在只读白名单内");
     expect(requested.toolName).toBe("run_command");
     expect(requested.toolCallId).toBe("call-9");
+
+    answer(wait, session, requested, [COMMAND_ALLOW_ONCE]);
+    await expect(answerPromise).resolves.toBe("once");
+  });
+
+  it("敏感路径卡：cardKind = sensitive-path，detail 带目标与操作", async () => {
+    const wait = new InteractionWaitService();
+    const service = new AskService(wait);
+    const session = makeSession();
+
+    const answerPromise = service.requestCommandApproval(session, {
+      command: "read ~/.ssh/id_rsa",
+      reason: "命中敏感路径规则（**/.ssh/**）",
+      allowRule: "**/.ssh/**",
+      allowRuleKind: "path",
+      pathDetail: { target: "~/.ssh/id_rsa", op: "read" },
+    });
+    const requested = await awaitRequest(wait, session);
+
+    expect(requested.cardKind).toBe("sensitive-path");
+    expect(requested.title).toBe("敏感文件访问");
+    expect(requested.questions[0].detail).toContain("目标：~/.ssh/id_rsa（读取）");
+    expect(requested.questions[0].options.map((o: any) => o.label)).toEqual([
+      COMMAND_ALLOW_ONCE,
+      COMMAND_ALLOW_TURN,
+      COMMAND_ALLOW_PROJECT,
+      COMMAND_ALLOW_GLOBAL,
+      COMMAND_DENY,
+    ]);
 
     answer(wait, session, requested, [COMMAND_ALLOW_ONCE]);
     await expect(answerPromise).resolves.toBe("once");
@@ -105,7 +161,7 @@ describe("AskService.requestCommandApproval", () => {
     await expect(answerPromise).resolves.toEqual({ scope: "global" });
   });
 
-  it("灾难级命令不提供放通选项（只有本次允许 / 拒绝）", async () => {
+  it("灾难级命令不提供放通选项（本次允许 / 本轮内自动放行 / 拒绝）", async () => {
     const wait = new InteractionWaitService();
     const service = new AskService(wait);
     const session = makeSession();
@@ -116,6 +172,7 @@ describe("AskService.requestCommandApproval", () => {
     const requested = await awaitRequest(wait, session);
     expect(requested.questions[0].options.map((o: any) => o.label)).toEqual([
       COMMAND_ALLOW_ONCE,
+      COMMAND_ALLOW_TURN,
       COMMAND_DENY,
     ]);
 
@@ -134,6 +191,7 @@ describe("AskService.requestCommandApproval", () => {
     const requested = await awaitRequest(wait, session);
     expect(requested.questions[0].options.map((o: any) => o.label)).toEqual([
       COMMAND_ALLOW_ONCE,
+      COMMAND_ALLOW_TURN,
       COMMAND_DENY,
     ]);
 
@@ -166,5 +224,89 @@ describe("AskService.requestCommandApproval", () => {
       outcome: "rejected",
       feedback: "先别装，改用 pnpm",
     });
+  });
+
+  it("「本轮内自动放行」→ once；同会话后续审批不再弹卡，新回合恢复询问", async () => {
+    const wait = new InteractionWaitService();
+    const service = new AskService(wait);
+    const session = makeSession();
+
+    const first = service.requestCommandApproval(session, { command: "npm run build" });
+    const requested = await awaitRequest(wait, session);
+    answer(wait, session, requested, [COMMAND_ALLOW_TURN]);
+    await expect(first).resolves.toBe("once");
+    expect(turnApprovalMemory.isAllowed(session.sessionId)).toBe(true);
+
+    // 同一轮：直接放行，不发布新卡
+    await expect(
+      service.requestCommandApproval(session, { command: "rm -rf build" }),
+    ).resolves.toBe("once");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(session.published.filter((c: any) => c.type === "ask_requested")).toHaveLength(1);
+
+    // 新回合（beginTurn）恢复逐次询问
+    turnApprovalMemory.beginTurn(session.sessionId);
+    const third = service.requestCommandApproval(session, { command: "rm -rf build" });
+    const requests = await awaitRequestCount(wait, session, 2);
+    answer(wait, session, requests[1], [COMMAND_ALLOW_ONCE]);
+    await expect(third).resolves.toBe("once");
+  });
+
+  it("并发排队卡：选择本轮放行后，其余挂起审批一并放行", async () => {
+    const wait = new InteractionWaitService();
+    const service = new AskService(wait);
+    const session = makeSession();
+
+    const first = service.requestCommandApproval(session, { command: "npm run a" });
+    const second = service.requestCommandApproval(session, { command: "npm run b" });
+    const requests = await awaitRequestCount(wait, session, 2);
+
+    answer(wait, session, requests[0], [COMMAND_ALLOW_TURN]);
+
+    await expect(first).resolves.toBe("once");
+    await expect(second).resolves.toBe("once");
+    // 两张卡都收到了终结帧（第二张是自动放行收掉的）
+    expect(session.published.filter((c: any) => c.type === "ask_resolved")).toHaveLength(2);
+  });
+
+  it("竞态兜底：等待登记之后才置位本轮放行，也会立即返回", async () => {
+    const wait = new InteractionWaitService();
+    const service = new AskService(wait);
+    const session = makeSession();
+
+    // 模拟"预检通过 → 登记 → 另一张卡刚被用户选择本轮放行"的时序
+    const original = wait.waitForAnswers.bind(wait);
+    const spy = jest.spyOn(wait, "waitForAnswers").mockImplementation(((
+      ...args: any[]
+    ) => {
+      const promise = (original as any)(...args);
+      turnApprovalMemory.allowForTurn(session.sessionId);
+      return promise;
+    }) as any);
+
+    await expect(
+      service.requestCommandApproval(session, { command: "npm run x" }),
+    ).resolves.toBe("once");
+    expect(spy).toHaveBeenCalled();
+    // 卡片发出过（竞态窗口），但已自动收卡
+    expect(session.published.some((c: any) => c.type === "ask_resolved")).toBe(true);
+  });
+
+  it("本轮放行不影响 ask_user 提问（question 类型不在自动放行白名单）", async () => {
+    const wait = new InteractionWaitService();
+    const service = new AskService(wait);
+    const session = makeSession();
+    turnApprovalMemory.allowForTurn(session.sessionId);
+
+    const answerPromise = service.ask(session, {
+      kind: "ask",
+      title: "选择",
+      questions: [{ id: "q1", question: "选哪个？", options: [{ label: "A" }] }],
+    });
+    const requested = await awaitRequest(wait, session);
+    expect(requested.kind).toBe("ask");
+
+    answer(wait, session, requested, ["A"]);
+    await expect(answerPromise).resolves.toEqual([{ id: "q1", selected: ["A"] }]);
   });
 });

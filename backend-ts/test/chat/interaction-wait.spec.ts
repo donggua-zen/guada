@@ -75,6 +75,98 @@ describe("InteractionWaitService：同会话并发待答", () => {
   });
 });
 
+describe("InteractionWaitService：本轮自动放行批量应答", () => {
+  const Q1: AskQuestion[] = [
+    { id: "q1", question: "同意？", options: [{ label: "本次允许" }] },
+  ];
+
+  it("只解带 autoAllowLabel 的单问题条目，其它会话/条目保持挂起", async () => {
+    const wait = new InteractionWaitService();
+    const p1 = wait.waitForAnswers("s1", "r1", Q1, {
+      kind: "approval",
+      cardKind: "command-approval",
+      autoAllowLabel: "本次允许",
+    });
+    const p2 = wait.waitForAnswers("s1", "r2", Q1, { kind: "approval" }); // 无 cardKind / 无 label
+    const p3 = wait.waitForAnswers("s1", "r3", Q1, {
+      kind: "approval",
+      cardKind: "sensitive-path",
+      autoAllowLabel: "本轮内自动放行",
+    });
+    const p4 = wait.waitForAnswers("s2", "r4", Q1, {
+      kind: "approval",
+      cardKind: "write-approval",
+      autoAllowLabel: "本次允许",
+    });
+
+    expect(wait.resolveAutoAllowable("s1")).toBe(2);
+    await expect(p1).resolves.toEqual([{ id: "q1", selected: ["本次允许"] }]);
+    await expect(p3).resolves.toEqual([{ id: "q1", selected: ["本轮内自动放行"] }]);
+    expect(wait.listPending("s1").map((x) => x.requestId)).toEqual(["r2"]);
+    // 其它会话不受影响
+    expect(wait.listPending("s2").map((x) => x.requestId)).toEqual(["r4"]);
+
+    wait.resolveAnswers("s1", "r2", [{ id: "q1", selected: ["本次允许"] }]);
+    await p2;
+    wait.resolveAnswers("s2", "r4", [{ id: "q1", selected: ["本次允许"] }]);
+    await p4;
+  });
+
+  it("多问题条目不参与（不能用单个 label 代替逐题作答）", () => {
+    const wait = new InteractionWaitService();
+    const multi: AskQuestion[] = [
+      { id: "a", question: "A?", options: [{ label: "yes" }] },
+      { id: "b", question: "B?", options: [{ label: "yes" }] },
+    ];
+    void wait.waitForAnswers("s1", "r1", multi, {
+      kind: "ask",
+      cardKind: "question",
+      autoAllowLabel: "yes",
+    });
+
+    expect(wait.resolveAutoAllowable("s1")).toBe(0);
+    expect(wait.listPending("s1")).toHaveLength(1);
+    wait.cancel("s1", "r1");
+  });
+
+  it("卡片类型白名单：question / plan-approval 即使带 label 也不自动放行", () => {
+    const wait = new InteractionWaitService();
+    void wait.waitForAnswers("s1", "r1", Q1, {
+      kind: "ask",
+      cardKind: "question",
+      autoAllowLabel: "本次允许",
+    });
+    void wait.waitForAnswers("s1", "r2", Q1, {
+      kind: "approval",
+      cardKind: "plan-approval",
+      autoAllowLabel: "本次允许",
+    });
+
+    expect(wait.resolveAutoAllowable("s1")).toBe(0);
+    expect(wait.listPending("s1")).toHaveLength(2);
+    wait.cancel("s1", "r1");
+    wait.cancel("s1", "r2");
+  });
+
+  it("没有可放行条目时返回 0", () => {
+    const wait = new InteractionWaitService();
+    expect(wait.resolveAutoAllowable("s1")).toBe(0);
+  });
+
+  it("listPending 带 cardKind，但不泄露 autoAllowLabel（内部元数据不外泄）", () => {
+    const wait = new InteractionWaitService();
+    void wait.waitForAnswers("s1", "r1", Q1, {
+      kind: "approval",
+      cardKind: "command-approval",
+      autoAllowLabel: "本次允许",
+    });
+    const view = wait.listPending("s1")[0];
+    expect(view.cardKind).toBe("command-approval");
+    expect(view).not.toHaveProperty("autoAllowLabel");
+    wait.cancel("s1", "r1");
+  });
+});
+
 describe("AskService：并发审批两路并行，互不阻塞", () => {
   function makeSession(sessionId: string) {
     const published: any[] = [];
