@@ -29,6 +29,15 @@ export interface ContextStatsPayload {
   breakdown?: TokenBreakdown;
 }
 
+/** 单次模型请求（小轮次）结束后的上下文占用快照。
+ *  agent loop 每次迭代落库 assistant 消息后发布，环形指示器无需等待 turn_end。 */
+export interface ContextStatsEvent {
+  type: "context_stats";
+  /** 所属回合外壳 id（前端按会话切片消费，不改变回合状态） */
+  turnId?: string;
+  contextStats: ContextStatsPayload;
+}
+
 /** 回合开始（正常流）：只携带回合外壳信息 */
 export interface TurnStartEvent {
   type: "turn_start";
@@ -248,6 +257,7 @@ export type MessageChunkEvent = StreamChunk & {
 // ==================== 联合 ====================
 
 export type SessionStreamEvent =
+  | ContextStatsEvent
   | TurnStartEvent
   | TurnEndEvent
   | TurnDeleteEvent

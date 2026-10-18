@@ -823,6 +823,14 @@ export function applyChunkToStore(
 
   // workflow_event 流块由 stores/workflowRuns.ts 常驻消费（方案 B/C）——投影器不再处理
 
+  // 小轮次占用快照：每次 LLM 请求落库 assistant 消息后推送，环形指示器无需等到 turn_end
+  if (chunk.type === "context_stats") {
+    if (chunk.contextStats) {
+      updateTokenStatsFromSSE(sessionId, chunk.contextStats);
+    }
+    return;
+  }
+
   // 回合级
   if (chunk.type === "turn_start") {
     const turns = sessionStore.getTurns(sessionId) || [];

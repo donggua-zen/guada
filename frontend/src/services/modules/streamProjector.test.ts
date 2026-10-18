@@ -13,7 +13,12 @@
  *   applyLiveChunk（实时/暂存消费）两者照常执行
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { ref } from "vue";
 vi.mock("@/services/ApiService", () => ({ apiService: {} }));
+import {
+  clearTokenStats,
+  useSessionTokenStats,
+} from "@/composables/useSessionTokenStats";
 import {
   foldEvents,
   applyLiveChunk,
@@ -111,7 +116,7 @@ function parallelToolCalls(
 
 describe("StreamProjector 折叠器", () => {
   let store: ReturnType<typeof createStore>;
-  beforeEach(() => { store = createStore(); });
+  beforeEach(() => { store = createStore(); clearTokenStats(); });
 
   it("foldEvents 事件页 → turn 树（user/assistant 各为消息束，消息级字段挂 bundle）", () => {
     foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
@@ -540,6 +545,44 @@ describe("StreamProjector 折叠器", () => {
     expect(c1.metadata.toolCallsResponse[0].content).toBe("结果A");
     expect(c2.metadata.toolCallsResponse[0].content).toBe("结果B");
     expect(c2.metadata.toolCalls.find((tc: any) => tc.id === "call_2").outcome).toBe("error");
+  });
+
+  it("context_stats：每次小轮次请求后即时更新环形指示器", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    applyLiveChunk(store as any, "s1", {
+      type: "context_stats",
+      turnId: "T1",
+      contextStats: {
+        usedTokens: 321,
+        effectiveContextWindow: 1000,
+        messageCount: 4,
+        breakdown: { systemPrompt: 100, history: 200, tools: 21 },
+      },
+    } as any);
+
+    const tokenStats = useSessionTokenStats(ref("s1")).tokenStats;
+    expect(tokenStats.value).toMatchObject({
+      usedTokens: 321,
+      totalTokens: 1000,
+      remainingTokens: 679,
+      percentage: 32.1,
+      messageCount: 4,
+      breakdown: { systemPrompt: 100, history: 200, tools: 21 },
+    });
+    // 终态事件入 eventLog：同会话切走再切回可按锚点恢复最新小轮次值
+    expect(store.state.eventLog.map((e: any) => e.type)).toContain("context_stats");
+  });
+
+  it("context_stats 不影响回合工作态（只更新占用）", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    applyLiveChunk(store as any, "s1", { type: "turn_start", turnId: "T2" } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "context_stats",
+      turnId: "T2",
+      contextStats: { usedTokens: 10, effectiveContextWindow: 1000 },
+    } as any);
+    const turn = store.state.turns.find((t: any) => t.id === "T2");
+    expect(turn.state.isWorking).toBe(true);
   });
 
 });

@@ -667,6 +667,10 @@ export class AgentEngine {
 
           await sessionContext.appendMessages([assistantMessage]);
 
+          // 小轮次占用快照：每次 LLM 请求落库后立即推送，环形指示器无需等到 turn_end。
+          // 统计为 O(1)（快照增量 + 前缀和），失败只告警，不影响对话主链路。
+          await this.publishContextStats(sessionContext, turnId);
+
           const hasToolCalls = assistantMessage.content.some(
             (b) => b.type === "tool-call",
           );
@@ -697,6 +701,9 @@ export class AgentEngine {
                 await sessionContext.appendMessages(result.toolParts);
                 appendedResults = result.toolParts;
                 await sessionContext.publishStream(result.toolEvent!);
+                // 工具结果同样计入上下文：落库后补发一次占用快照，
+                // 避免长工具执行期间圆环停留在上一次请求的数值。
+                await this.publishContextStats(sessionContext, turnId);
               }
               execResult = result;
             } catch (error) {
@@ -809,6 +816,33 @@ export class AgentEngine {
       finishReason: finalFinishReason,
       ...(pendingFollowUpInput ? { followUpUserInput: pendingFollowUpInput } : {}),
     };
+  }
+
+  /**
+   * 发布单次 LLM 请求后的上下文占用快照（小轮次）。
+   *
+   * 调用时机必须在 assistant 消息 appendMessages 之后：最新 usage 锚点即本次请求，
+   * 结果与回合结束的 turn_end.contextStats 同口径。统计/推送失败只影响环形指示器，
+   * 不能中断 agent loop（否则会跳过 finalizeTurn，回合永不闭合）。
+   */
+  private async publishContextStats(
+    sessionContext: ISessionContext,
+    turnId: string,
+  ): Promise<void> {
+    try {
+      const contextStats = await sessionContext.getContextStats();
+      await sessionContext.publishStream({
+        type: "context_stats",
+        turnId,
+        contextStats,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to publish per-request context stats: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   /**

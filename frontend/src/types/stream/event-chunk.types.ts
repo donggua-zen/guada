@@ -22,6 +22,26 @@ import type { ContentBlock } from "./content-block.types";
 
 // ==================== 回合级事件 ====================
 
+/** 单次模型请求（小轮次）结束后的上下文占用快照。
+ *  后端 agent loop 每次迭代落库 assistant 消息后推送，环形指示器无需等待 turn_end。 */
+export interface ContextStatsEvent {
+  type: "context_stats";
+  /** 所属回合外壳 id（仅作关联，不改变回合状态） */
+  turnId?: string;
+  contextStats: {
+    usedTokens: number;
+    effectiveContextWindow: number;
+    /** 可见视图消息数（旧锚点/旧后端缺省） */
+    messageCount?: number;
+    /** 细分 token（旧锚点/旧后端缺省） */
+    breakdown?: {
+      systemPrompt: number;
+      history: number;
+      tools: number;
+    };
+  };
+}
+
 /** 回合开始（正常流）：只携带回合外壳信息 */
 export interface TurnStartEvent {
   type: "turn_start";
@@ -312,6 +332,7 @@ export interface PlanModeChangedEvent {
 // ==================== 联合 ====================
 
 export type SessionStreamEvent =
+  | ContextStatsEvent
   | TurnStartEvent
   | TurnEndEvent
   | TurnDeleteEvent

@@ -410,6 +410,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     switch (type) {
       case "turn_start": return EVENT_METHOD.STREAM_TURN_START;
       case "turn_end": return EVENT_METHOD.STREAM_TURN_END;
+      case "context_stats": return EVENT_METHOD.STREAM_CONTEXT_STATS;
       case "turn_delete": return EVENT_METHOD.STREAM_TURN_DELETE;
       case "user_message": return EVENT_METHOD.STREAM_USER_MESSAGE;
       case "retry": return EVENT_METHOD.STREAM_RETRY;

@@ -80,6 +80,32 @@ describe("SessionEventsService 连接补发", () => {
     expect(received[2].payload.streamBootId).toBeTruthy();
   });
 
+  it("context_stats 映射为 stream/context_stats 并随连接补发重放", () => {
+    streamManager.startStream("s1", new AbortController(), "chat");
+    streamManager.publish("s1", {
+      type: "context_stats",
+      turnId: "t1",
+      contextStats: {
+        usedTokens: 120,
+        effectiveContextWindow: 1000,
+        messageCount: 3,
+        breakdown: { systemPrompt: 50, history: 60, tools: 10 },
+      },
+    } as any);
+
+    const { observable } = service.subscribe("client-1");
+    const received: any[] = [];
+    observable.subscribe((e) => received.push(parse(e)));
+
+    const ctx = received.find((e) => e.method === "stream/context_stats");
+    expect(ctx).toBeTruthy();
+    expect(ctx.payload.contextStats).toMatchObject({
+      usedTokens: 120,
+      effectiveContextWindow: 1000,
+      messageCount: 3,
+    });
+  });
+
   it("补发在前、live 事件在后，顺序无缝衔接", () => {
     streamManager.startStream("s1", new AbortController(), "chat");
     streamManager.publish("s1", {

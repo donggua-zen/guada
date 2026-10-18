@@ -16,6 +16,7 @@ export const EVENT_METHOD = {
   // 回合级
   STREAM_TURN_START: "stream/turn_start",
   STREAM_TURN_END: "stream/turn_end",
+  STREAM_CONTEXT_STATS: "stream/context_stats",
   STREAM_TURN_DELETE: "stream/turn_delete",
   STREAM_USER_MESSAGE: "stream/user_message",
   STREAM_RETRY: "stream/retry",
