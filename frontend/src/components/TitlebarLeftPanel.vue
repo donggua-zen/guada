@@ -53,18 +53,24 @@
         </button>
       </GdTooltip>
 
-      <!-- 更新提示 -->
-      <GdTooltip v-if="updateStore.hasUpdate" :content="t('ui.titlebar.newVersionTip')" placement="bottom">
-        <div
-          class="titlebar-menu-btn relative flex items-center px-2 cursor-pointer"
-          @click="handleUpdateClick">
-          <svg class="w-4 h-4" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-            <path d="M512 128c-211.744 0-384 172.256-384 384 0 211.744 172.256 384 384 384 211.744 0 384-172.256 384-384 0-211.744-172.256-384-384-384z m0 704c-176.448 0-320-143.552-320-320 0-176.448 143.552-320 320-320 176.448 0 320 143.552 320 320 0 176.448-143.552 320-320 320z" fill="currentColor" />
-            <path d="M512 320c-17.664 0-32 14.336-32 32v160c0 17.664 14.336 32 32 32s32-14.336 32-32v-160c0-17.664-14.336-32-32-32z" fill="currentColor" />
-            <path d="M480 608a32 32 0 1 0 64 0 32 32 0 1 0-64 0z" fill="currentColor" />
-          </svg>
-          <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-        </div>
+      <!-- 更新提示：胶囊式版本标签，直接显示「新版本 / 下载中 / 待安装」 -->
+      <GdTooltip v-if="updateStore.hasUpdate" :content="updateTooltip" placement="bottom">
+        <button
+          type="button"
+          class="update-badge"
+          :class="updateBadgeClass"
+          :aria-label="updateTooltip"
+          @click="handleUpdateClick"
+        >
+          <span v-if="updateStore.status === 'available'" class="update-badge__dot"></span>
+          <component
+            v-else-if="isUpdateSpinning"
+            :is="ArrowSync16Regular"
+            class="update-badge__icon animate-spin"
+          />
+          <ArrowDownload16Regular v-else class="update-badge__icon" />
+          <span>{{ updateBadgeLabel }}</span>
+        </button>
       </GdTooltip>
     </div>
   </div>
@@ -80,7 +86,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Bug16Regular, Search16Regular } from '@vicons/fluent'
+import { ArrowDownload16Regular, ArrowSync16Regular, Bug16Regular, Search16Regular } from '@vicons/fluent'
 import UpdateDialog from './UpdateDialog.vue'
 import SessionSearchDialog from './SessionSearchDialog.vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
@@ -110,6 +116,54 @@ const handleUpdateClick = () => {
     showUpdateDialog.value = true
   }
 }
+
+const updateVersion = computed(() => String(updateStore.info?.version || ''))
+const updatePercent = computed(() =>
+  Math.max(0, Math.min(100, Math.round(updateStore.progress?.percent || 0))),
+)
+const isUpdateSpinning = computed(
+  () => updateStore.status === 'downloading' || updateStore.status === 'installing',
+)
+
+const updateBadgeLabel = computed(() => {
+  const version = updateVersion.value
+  switch (updateStore.status) {
+    case 'downloading':
+      return t('ui.titlebar.updateDownloading', { percent: updatePercent.value })
+    case 'downloaded':
+      return version
+        ? t('ui.titlebar.updateReady', { version })
+        : t('ui.titlebar.updateReadyNoVersion')
+    case 'installing':
+      return t('ui.titlebar.updateInstalling')
+    default:
+      return version
+        ? t('ui.titlebar.updateAvailable', { version })
+        : t('ui.titlebar.updateAvailableNoVersion')
+  }
+})
+
+const updateTooltip = computed(() => {
+  const version = updateVersion.value
+  switch (updateStore.status) {
+    case 'downloading':
+      return t('ui.titlebar.updateTooltipDownloading', { percent: updatePercent.value })
+    case 'downloaded':
+      return t('ui.titlebar.updateTooltipReady')
+    case 'installing':
+      return t('ui.titlebar.updateTooltipInstalling')
+    default:
+      return version
+        ? t('ui.titlebar.updateTooltipAvailable', { version })
+        : t('ui.titlebar.newVersionTip')
+  }
+})
+
+const updateBadgeClass = computed(() => ({
+  'update-badge--downloading': updateStore.status === 'downloading',
+  'update-badge--ready': updateStore.status === 'downloaded',
+  'update-badge--installing': updateStore.status === 'installing',
+}))
 
 // 自动弹窗：只在“发现新版本”时弹一次；下载/已下载状态不重复打扰。
 watch(
@@ -228,5 +282,104 @@ onUnmounted(() => {
 .titlebar-menu-btn:hover {
   background: var(--gd-titlebar-hover-bg, rgba(255,255,255,0.1));
   color: var(--gd-titlebar-text-color, rgba(255,255,255,0.7));
+}
+
+/* 更新徽标：胶囊式版本标签，比单独的小圆点更醒目 */
+.update-badge {
+  --update-accent: #ea580c;
+  --update-accent-bg: rgba(249, 115, 22, 0.13);
+  --update-accent-border: rgba(249, 115, 22, 0.38);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  margin-left: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--update-accent-border);
+  border-radius: 999px;
+  background: var(--update-accent-bg);
+  color: var(--update-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.update-badge:hover {
+  background: color-mix(in srgb, var(--update-accent) 24%, transparent);
+  border-color: color-mix(in srgb, var(--update-accent) 62%, transparent);
+  transform: translateY(-0.5px);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--update-accent) 18%, transparent);
+}
+
+.update-badge:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.update-badge__icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.update-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: update-badge-pulse 1.6s ease-in-out infinite;
+}
+
+.update-badge--downloading,
+.update-badge--installing {
+  --update-accent: #2563eb;
+  --update-accent-bg: rgba(59, 130, 246, 0.12);
+  --update-accent-border: rgba(59, 130, 246, 0.35);
+}
+
+.update-badge--ready {
+  --update-accent: #059669;
+  --update-accent-bg: rgba(16, 185, 129, 0.13);
+  --update-accent-border: rgba(16, 185, 129, 0.38);
+}
+
+html.dark .update-badge {
+  --update-accent: #fb923c;
+  --update-accent-bg: rgba(251, 146, 60, 0.14);
+  --update-accent-border: rgba(251, 146, 60, 0.36);
+}
+
+html.dark .update-badge--downloading,
+html.dark .update-badge--installing {
+  --update-accent: #60a5fa;
+  --update-accent-bg: rgba(96, 165, 250, 0.14);
+  --update-accent-border: rgba(96, 165, 250, 0.36);
+}
+
+html.dark .update-badge--ready {
+  --update-accent: #34d399;
+  --update-accent-bg: rgba(52, 211, 153, 0.14);
+  --update-accent-border: rgba(52, 211, 153, 0.36);
+}
+
+@keyframes update-badge-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 </style>
