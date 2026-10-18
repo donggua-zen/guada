@@ -13,6 +13,10 @@ import {
   Headers,
   HttpException,
   HttpStatus,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+  PayloadTooLargeException,
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { JwtService } from "@nestjs/jwt";
@@ -322,7 +326,7 @@ export class SessionsController {
     }
 
     if (!filePath) {
-      throw new Error("File path is required");
+      throw new BadRequestException("File path is required");
     }
 
     // 确定工作目录路径（已自动确保目录存在）
@@ -333,20 +337,25 @@ export class SessionsController {
 
     // 确保文件在工作目录内
     if (!resolvedPath.startsWith(workspaceDir + path.sep) && resolvedPath !== workspaceDir) {
-      throw new Error("Access denied: File is outside workspace directory");
+      throw new ForbiddenException("Access denied: File is outside workspace directory");
     }
 
-    // 读取文件内容
-
-    if (!fs.existsSync(resolvedPath)) {
-      throw new Error("File not found");
+    // statSync 同时覆盖「文件不存在」与 existsSync→statSync 之间的 TOCTOU，
+    // 统一映射为 404/403，避免文件消失时冒泡成 500
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(resolvedPath);
+    } catch (error: any) {
+      if (error?.code === "ENOENT") throw new NotFoundException("File not found");
+      if (error?.code === "EACCES" || error?.code === "EPERM") {
+        throw new ForbiddenException("Access denied: File is not readable");
+      }
+      throw error;
     }
-
-    const stat = fs.statSync(resolvedPath);
 
     // 如果是目录，返回错误
     if (stat.isDirectory()) {
-      throw new Error("Cannot read directory as file");
+      throw new BadRequestException("Cannot read directory as file");
     }
 
     // 检查文件大小（限制为 5MB）
@@ -361,29 +370,40 @@ export class SessionsController {
     let encoding: FileSniffResult['encoding'] = 'utf-8';
     let detectedExtension = '';
     let mimeType = this.getMimeType(ext);
-    if (wantSniff) {
-      const sniffResult = await sniffFileHead(resolvedPath);
-      isBinary = sniffResult.isBinary;
-      encoding = sniffResult.encoding;
-      detectedExtension = sniffResult.detectedExtension;
-      if (sniffResult.mimeType) {
-        mimeType = sniffResult.mimeType;
-      } else if (!isBinary) {
-        // 无后缀/未登记后缀的纯文本：报 text/plain，而不是扩展名表的 octet-stream 兜底
-        mimeType = 'text/plain';
-      }
-    }
 
     // 只有文本才读内容：二进制直接返回元数据，既不再把 mojibake 当文本传出去，
     // 也避免超大二进制先撞上 5MB 上限（前端据此显示「二进制不可预览」而不是报错）
     let content = '';
-    if (!isBinary) {
-      if (stat.size > MAX_FILE_SIZE) {
-        throw new Error("File too large to preview (max 5MB)");
+    try {
+      if (wantSniff) {
+        const sniffResult = await sniffFileHead(resolvedPath);
+        isBinary = sniffResult.isBinary;
+        encoding = sniffResult.encoding;
+        detectedExtension = sniffResult.detectedExtension;
+        if (sniffResult.mimeType) {
+          mimeType = sniffResult.mimeType;
+        } else if (!isBinary) {
+          // 无后缀/未登记后缀的纯文本：报 text/plain，而不是扩展名表的 octet-stream 兜底
+          mimeType = 'text/plain';
+        }
       }
-      content = wantSniff
-        ? decodeTextWithEncoding(await fsPromises.readFile(resolvedPath), encoding)
-        : await fsPromises.readFile(resolvedPath, 'utf-8');
+
+      if (!isBinary) {
+        if (stat.size > MAX_FILE_SIZE) {
+          throw new PayloadTooLargeException("File too large to preview (max 5MB)");
+        }
+        content = wantSniff
+          ? decodeTextWithEncoding(await fsPromises.readFile(resolvedPath), encoding)
+          : await fsPromises.readFile(resolvedPath, 'utf-8');
+      }
+    } catch (error: any) {
+      // 嗅探/读取阶段文件被删除或不可读：与 stat 阶段保持一致的错误语义
+      if (error instanceof HttpException) throw error;
+      if (error?.code === "ENOENT") throw new NotFoundException("File not found");
+      if (error?.code === "EACCES" || error?.code === "EPERM") {
+        throw new ForbiddenException("Access denied: File is not readable");
+      }
+      throw error;
     }
 
     // 设置预览 Cookie：让后续 html-preview 图片请求自动携带鉴权（URL 无需 token）

@@ -30,6 +30,14 @@ export const useTabStore = defineStore('tab', () => {
     const activeTabKey = ref<string | null>(null)
 
     /**
+     * tabs 当前归属的会话 id（运行时状态，不持久化）。
+     * 会话切换时 currentSessionId 先于 WorkspaceSidebar 的标签快照保存变化：
+     * 浏览器同步器若此时按新会话裁剪，会把旧会话的浏览器标签（含选中态）
+     * 从 tabStore 删除，导致快照丢失。syncBrowserTabs 以此判断同步时机。
+     */
+    const boundSessionId = ref<string | null>(null)
+
+    /**
      * diff 标签的运行时数据源：tab.key → FileChangeEntry。
      * 刻意不进 UnifiedTab（标签会被 previewTabCache 序列化到 localStorage，
      * 而 entry 携带 oldText/newText 可能很大）；标签只存骨架，内容留在这里。
@@ -361,6 +369,11 @@ export const useTabStore = defineStore('tab', () => {
 
     // ── 浏览器 store 同步 ──
 
+    /** 标记 tabs 归属的会话（恢复流程在替换标签前调用） */
+    function bindSession(sessionId: string | null): void {
+        boundSessionId.value = sessionId
+    }
+
     /** 外部激活浏览器窗口时，同步 activeTabKey */
     function syncActiveWindowId(): void {
         const active = browserStore.activeWindowId
@@ -369,8 +382,22 @@ export const useTabStore = defineStore('tab', () => {
         }
     }
 
-    /** 浏览器标签增删 + 元数据同步（由 WorkspaceSidebar 的 watch 调用） */
-    function syncBrowserTabs(webviews: { windowId: string; title: string; favicon?: string; url: string }[]): void {
+    /**
+     * 浏览器标签增删 + 元数据同步（由 BrowserWebviewLayer 的 watch 调用）。
+     *
+     * @param sessionId 本次同步数据所属的会话（调用方传 browserStore.currentSessionId）。
+     *
+     * 门禁：仅当与 tabs 当前归属会话一致时才执行。会话切换时 currentSessionId
+     * 先变化，而 tabStore 还持有旧会话标签、WorkspaceSidebar 尚未保存快照；
+     * 若此时按新会话裁剪，旧会话的浏览器标签（含选中态）会在保存前被删掉。
+     * 切换期间标签迁移由 WorkspaceSidebar 的 restorePreviewCache 独占完成。
+     */
+    function syncBrowserTabs(
+        webviews: { windowId: string; title: string; favicon?: string; url: string }[],
+        sessionId: string | null,
+    ): void {
+        if (sessionId !== boundSessionId.value) return
+
         const ids = new Set(webviews.map(w => w.windowId))
 
         // 移除已关闭的浏览器标签
@@ -401,12 +428,14 @@ export const useTabStore = defineStore('tab', () => {
     function clearAll(): void {
         tabs.value = []
         activeTabKey.value = null
+        boundSessionId.value = null
         diffEntries.clear()
     }
 
     return {
         tabs,
         activeTabKey,
+        boundSessionId,
         openGitTab,
         openNewTab,
         openWorkspaceBrowseTab,
@@ -428,6 +457,7 @@ export const useTabStore = defineStore('tab', () => {
         reorderTab,
         syncActiveWindowId,
         syncBrowserTabs,
+        bindSession,
         clearAll,
     }
 })

@@ -269,6 +269,85 @@ describe("tabStore.pinTab", () => {
 });
 
 /**
+ * tabStore.syncBrowserTabs 会话归属门禁
+ *
+ * 约束：
+ * - 只有 tabStore 归属会话与同步数据所属会话一致时才允许增删浏览器标签
+ * - 会话切换窗口内（currentSessionId 已指向新会话、旧会话快照尚未保存）
+ *   同步必须跳过，否则旧会话的浏览器标签（含选中态）会在保存前被删掉，
+ *   表现为「切回会话后网页标签没有被选中」
+ */
+describe("tabStore.syncBrowserTabs 会话归属门禁", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("归属会话不一致：不裁剪、不追加，选中态保持不变（会话切换回归）", () => {
+    const store = useTabStore();
+    store.bindSession("s1");
+    store.addTab({
+      type: "browser", key: "browser:win_1", windowId: "win_1",
+      title: "A", url: "https://a.example",
+    });
+    store.selectTab("browser:win_1");
+
+    // 切到 s2 的瞬间：BrowserWebviewLayer 以 s2 的 webviews 触发同步
+    store.syncBrowserTabs(
+      [{ windowId: "win_2", title: "B", url: "https://b.example" }],
+      "s2",
+    );
+
+    expect(store.tabs.map((t) => t.key)).toEqual(["browser:win_1"]);
+    expect(store.activeTabKey).toBe("browser:win_1");
+  });
+
+  it("归属会话一致：正常移除已关闭窗口、追加新窗口并刷新元数据", () => {
+    const store = useTabStore();
+    store.bindSession("s1");
+    store.addTab({
+      type: "browser", key: "browser:win_1", windowId: "win_1",
+      title: "A", url: "https://a.example",
+    });
+    store.addTab({
+      type: "browser", key: "browser:win_2", windowId: "win_2",
+      title: "B", url: "https://b.example",
+    });
+    store.selectTab("browser:win_2");
+
+    store.syncBrowserTabs(
+      [
+        { windowId: "win_2", title: "B2", url: "https://b.example/2" },
+        { windowId: "win_3", title: "C", url: "https://c.example" },
+      ],
+      "s1",
+    );
+
+    expect(store.tabs.map((t) => t.key)).toEqual(["browser:win_2", "browser:win_3"]);
+    expect(store.tabs[0].title).toBe("B2");
+    expect(store.tabs[0].url).toBe("https://b.example/2");
+    expect(store.activeTabKey).toBe("browser:win_2");
+  });
+
+  it("clearAll 重置归属会话；未重新绑定前同步不会改动新标签", () => {
+    const store = useTabStore();
+    store.bindSession("s1");
+    store.clearAll();
+    expect(store.boundSessionId).toBeNull();
+
+    store.addTab({
+      type: "browser", key: "browser:win_1", windowId: "win_1",
+      title: "A", url: "https://a.example",
+    });
+    store.syncBrowserTabs(
+      [{ windowId: "win_2", title: "B", url: "https://b.example" }],
+      "s1",
+    );
+
+    expect(store.tabs.map((t) => t.key)).toEqual(["browser:win_1"]);
+  });
+});
+
+/**
  * tabStore.openProcessLogTab 后台进程日志标签
  *
  * 约束：

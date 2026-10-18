@@ -57,6 +57,9 @@ watch(
         favicon: w.favicon,
         url: w.url,
       })),
+      // 传当前会话：会话切换瞬间 currentSessionId 已变而 tabStore 仍属旧会话，
+      // store 内会据此跳过一次同步，避免旧会话浏览器标签在快照保存前被裁掉
+      store.currentSessionId,
     );
   },
 );

@@ -113,7 +113,8 @@
           </template>
 
           <template #pane2>
-            <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id"
+            <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession && mainSession.id === routeSessionId"
+              :session-id="mainSession.id"
               :sub-sessions="subSessions"
               @insert-to-input="handleInsertToInput" @insert-snip="handleInsertSnip" />
           </template>
@@ -451,18 +452,26 @@ let unsubscribeSubAgentClosed: (() => void) | null = null;
 
 // 业务逻辑函数
 
+/** 会话详情请求代际：快速连切时丢弃过期响应，保证 mainSession 不落后于路由 */
+let sessionFetchGeneration = 0;
+
 /**
  * 根据会话 ID 从 API 获取会话详情
  */
 const fetchSession = async (sessionId: string) => {
+  const generation = ++sessionFetchGeneration;
   try {
     const session = await apiService.fetchSession(sessionId);
+    // 期间路由已再次变化 → 丢弃，避免旧会话覆盖新会话
+    if (generation !== sessionFetchGeneration || routeSessionId.value !== sessionId) return;
     mainSession.value = session;
 
     // 子会话列表（含已冻结的，供概览"子代理"区与侧边栏标签解析元数据；
     // isStreaming 由后端注入）
     subSessions.value = session.subSessions || [];
   } catch (error) {
+    // 路由已切走时不要用旧会话的失败把用户重定向到新建页
+    if (generation !== sessionFetchGeneration || routeSessionId.value !== sessionId) return;
     console.error('获取会话详情失败:', error);
     toast.error(t('common.error.loadFailed'));
     goChatRoute(null);

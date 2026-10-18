@@ -434,8 +434,18 @@ async function resolveAssetUrl(filePath: string): Promise<string | null> {
 
 // ── 文件加载 ──
 
+/** 加载代际：会话/路径变化后丢弃迟到的响应，避免旧会话内容写进当前面板 */
+let loadGeneration = 0
+
+/** 当前响应是否仍属于最新一次加载且会话未变 */
+function isCurrentLoad(generation: number, sessionId: string): boolean {
+    return generation === loadGeneration && sessionId === props.sessionId
+}
+
 async function loadFilePreview(): Promise<void> {
     if (!props.sessionId || props.tab.type !== 'file') return
+    // 新一次预览开始：作废所有在途加载（旧响应不得再回写状态）
+    loadGeneration++
     // 空态标签（path 为空）：显示"新建标签页"提示，不加载内容
     if (!props.tab.path) {
         selectedFile.value = null
@@ -512,13 +522,17 @@ async function prepareTextExtras(filePath: string): Promise<void> {
  */
 async function probeUnknownFile(filePath: string): Promise<void> {
     if (!props.sessionId) return
+    const generation = ++loadGeneration
+    const sessionId = props.sessionId
     previewLoading.value = true
     previewError.value = ''
     fileNotFound.value = false
     binaryNotPreviewable.value = false
 
     try {
-        const response = await apiService.getWorkspaceFile(props.sessionId, filePath, { sniff: true })
+        const response = await apiService.getWorkspaceFile(sessionId, filePath, { sniff: true })
+        // 会话已切换（或又发起了新的加载）：丢弃迟到响应
+        if (!isCurrentLoad(generation, sessionId)) return
 
         // 回填嗅探出的真实后缀：图标、预览/源码切换按钮都按它判断
         if (response.detectedExtension) {
@@ -544,6 +558,7 @@ async function probeUnknownFile(filePath: string): Promise<void> {
         previewType.value = 'unsupported'
         binaryNotPreviewable.value = true
     } catch (error) {
+        if (!isCurrentLoad(generation, sessionId)) return
         const status = getApiErrorStatus(error)
         const msg = getErrorMessage(error)
         if (status === 404 || msg.includes('not found') || msg.includes('does not exist') || msg.includes('ENOENT')) {
@@ -555,7 +570,9 @@ async function probeUnknownFile(filePath: string): Promise<void> {
         }
         console.error('Failed to probe file:', error)
     } finally {
-        previewLoading.value = false
+        // 只清理本次加载的 loading：有更新的加载时保持它的状态；
+        // 会话已切走但还没发起新加载时也应收起 spinner
+        if (generation === loadGeneration) previewLoading.value = false
     }
 }
 
@@ -576,6 +593,8 @@ async function refreshAssetUrl(): Promise<void> {
 
 async function loadFileContent(filePath: string, force = false, skipLoading = false): Promise<void> {
     if (!props.sessionId) return
+    const generation = ++loadGeneration
+    const sessionId = props.sessionId
 
     if (!skipLoading) {
         previewLoading.value = true
@@ -586,7 +605,9 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
     try {
         // 后缀不可信时继续让后端嗅探：否则刷新后 GBK 等非 UTF-8 文本会按 UTF-8 解出乱码
         const sniff = getPreviewKind(currentExtension.value) === 'unknown'
-        const response = await apiService.getWorkspaceFile(props.sessionId, filePath, { sniff })
+        const response = await apiService.getWorkspaceFile(sessionId, filePath, { sniff })
+        // 会话已切换（或又发起了新的加载）：丢弃迟到响应
+        if (!isCurrentLoad(generation, sessionId)) return
 
         const newHash = hashString(response.content)
 
@@ -603,6 +624,7 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
             htmlPreviewVersion.value++
         }
     } catch (error) {
+        if (!isCurrentLoad(generation, sessionId)) return
         const status = getApiErrorStatus(error)
         const msg = getErrorMessage(error)
         if (status === 404 || msg.includes('not found') || msg.includes('does not exist') || msg.includes('ENOENT')) {
@@ -614,7 +636,9 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
         }
         console.error('Failed to load file:', error)
     } finally {
-        previewLoading.value = false
+        // 只清理本次加载的 loading：有更新的加载时保持它的状态；
+        // 会话已切走但还没发起新加载时也应收起 spinner
+        if (generation === loadGeneration) previewLoading.value = false
     }
 }
 

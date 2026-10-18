@@ -61,6 +61,26 @@ export interface SessionPreviewCache {
 const MAX_SESSIONS = 10
 
 /**
+ * 解析会话切换时的「迁出会话」。
+ *
+ * - 本组件实例同步过旧会话（prevSessionId 非空）：以它为准；
+ * - 组件因路由守卫卸载后重挂载（prevSessionId 为 null）：用 tabStore 的
+ *   boundSessionId 判断 —— 仅当它仍是另一个会话时才算真实切换。
+ *
+ * @returns 需要保存快照并清空的旧会话 id；null 表示同会话重挂载/首次挂载，保留既有标签。
+ */
+export function resolveOutgoingSessionId(
+    prevSessionId: string | null,
+    boundSessionId: string | null,
+    newSessionId: string | null,
+): string | null {
+    const candidate = prevSessionId !== null
+        ? prevSessionId
+        : (boundSessionId !== null && boundSessionId !== newSessionId ? boundSessionId : null)
+    return candidate !== null && candidate !== newSessionId ? candidate : null
+}
+
+/**
  * 预览标签缓存 composable
  *
  * 使用 localStorage 持久化每个会话的完整预览状态（标签列表 + 预览模式开关 + 激活标签）。
