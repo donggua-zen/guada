@@ -78,8 +78,8 @@
               <el-icon size="16">
                 <component :is="sandboxModeIcon" :class="isUnrestrictedMode ? 'text-red-500' : 'text-gray-600'" />
               </el-icon>
-              <span class="text-xs font-medium" :class="isUnrestrictedMode ? 'text-red-500' : ''">{{ sandboxModeLabel
-                }}</span>
+              <span class="run-mode-label text-xs font-medium" :class="isUnrestrictedMode ? 'text-red-500' : ''">{{
+                sandboxModeLabel }}</span>
             </button>
             <SandboxModePopover v-model:visible="sandboxModePopoverVisible" :anchor-el="sandboxModeButtonRef"
               :current-value="currentSandboxMode" :plan-enabled="planModeEnabled" @select="handleSandboxModeChange"
@@ -92,7 +92,7 @@
                   <Lightbulb24Regular class="plan-mode-icon-default" />
                   <Dismiss16Regular class="plan-mode-icon-hover" />
                 </el-icon>
-                <span class="text-xs font-medium">{{ t('chat.input.planMode') }}</span>
+                <span class="plan-mode-label text-xs font-medium">{{ t('chat.input.planMode') }}</span>
               </button>
             </GdTooltip>
             <!-- <el-divider direction="vertical"></el-divider> -->
@@ -101,7 +101,10 @@
 
         </div>
         <div class="right-actions flex items-center gap-1">
-          <slot name="right-actions-before" />
+          <!-- 次要操作（上下文用量环等）：窄容器下整体让位，只留必要按钮 -->
+          <div class="right-actions-before-slot">
+            <slot name="right-actions-before" />
+          </div>
           <!-- 模型选择按钮 -->
           <button ref="modelButtonRef" @click.stop="openModelPanel" class="model-selector-btn"
             :class="{ 'is-open': modelButtonExpanded, 'cursor-not-allowed': props.readonly }"
@@ -113,7 +116,8 @@
             }}</span>
           </button>
           <!-- 会话设置按钮 -->
-          <GdTooltip v-if="!props.readonly" :content="t('chat.input.tokenLimit')" placement="top">
+          <GdTooltip v-if="!props.readonly" class="token-limit-control" :content="t('chat.input.tokenLimit')"
+            placement="top">
             <button ref="settingsButtonRef" class="tool-btn" @click.stop="toggleSettingsPopover">
               <span class="text-xs font-medium">{{ maxTokensLabel }}</span>
             </button>
@@ -1615,6 +1619,9 @@ defineExpose({ insertText, insertBadge });
 .input-area {
   position: relative;
   z-index: 10;
+  /* 工具条按输入框自身宽度自适应（容器查询），窗口/浮窗/侧栏变窄都能命中 */
+  container-type: inline-size;
+  container-name: composer;
 }
 
 /* 拖拽悬停高亮 */
@@ -1697,6 +1704,13 @@ defineExpose({ insertText, insertBadge });
   align-items: center;
 }
 
+/* 右侧次要操作（父级插槽：上下文用量环等）——与右侧按钮组同轴对齐 */
+.right-actions-before-slot {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 
 /* 工具按钮 - 原生 button（12px：与模型选择器、工作目录条 chips 同字号） */
 .tool-btn {
@@ -1709,6 +1723,7 @@ defineExpose({ insertText, insertBadge });
   align-items: center;
   justify-content: center;
   gap: 4px;
+  white-space: nowrap;
   transition: all 0.2s;
   background: transparent;
   border: none;
@@ -1858,5 +1873,18 @@ defineExpose({ insertText, insertBadge });
   word-break: break-word;
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Menlo', monospace;
   color: var(--gd-color-text, #303133);
+}
+
+/* 窄容器（窄窗口 / 悬浮窗 / 侧栏）：只保留「+、权限（图标）、发送/停止」。
+   模型、Token 上限、上下文用量环整体退场；权限与计划模式收起文字，仅留图标。
+   放在样式末尾：display:none 需要压过下方各按钮的 display:flex 声明。 */
+@container composer (max-width: 380px) {
+  .right-actions .model-selector-btn,
+  .right-actions .token-limit-control,
+  .right-actions .right-actions-before-slot,
+  .left-tools .run-mode-label,
+  .left-tools .plan-mode-label {
+    display: none;
+  }
 }
 </style>
