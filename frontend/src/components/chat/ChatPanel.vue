@@ -1378,8 +1378,17 @@ defineExpose({
 });
 
 /**
- * 滚动到指定消息
+ * 滚动到指定消息（大纲/引用跳转）。
+ *
+ * 点击大纲是明确的「离开底部去读历史」用户导航，必须登记用户意图：否则状态机
+ * 把它当程序化滚动（保持原有 following），跳转途中的内容撑高就被当成「新内容」
+ * 贴回底部——远距离跳转被立刻撤销；近距离因为不触发高度变化，侥幸正常。
+ *
+ * 落点校正做有界多轮：屏外回合带 content-visibility，真实高度要等进入视口才展开，
+ * 且每新展开一行都会再把目标推走一次，单轮校正不足以收敛。
  */
+const SCROLL_TO_MESSAGE_MAX_CORRECTIONS = 4
+
 function scrollToMessage(messageId: string) {
   // 使用外层容器作为滚动上下文
   const container = scrollContainerRef.value?.getScrollElement?.() || null;
@@ -1396,20 +1405,26 @@ function scrollToMessage(messageId: string) {
     return
   }
 
-  // 用容器级滚动，避免 scrollIntoView 导致整个页面位移
+  const anchor = scrollContainerRef.value
+  // 目标相对容器顶部的实测偏移；跳转落地后用它校正（屏外回合展开会推走目标）
+  const driftToTarget = () =>
+    targetElement.getBoundingClientRect().top - container.getBoundingClientRect().top
+
+  // 先取走滚动权，再用容器级滚动（避免 scrollIntoView 导致整个页面位移）。
   // 消息锚点元素是 TurnItem 根 div（HTMLElement），offsetTop 仅存在于 HTMLElement 上
-  scrollContainerRef.value?.markLayoutScroll?.()
+  anchor?.markUserIntent?.('awayFromBottom')
   container.scrollTo({ top: (targetElement as HTMLElement).offsetTop, behavior: 'smooth' })
 
-  // 屏外回合带 content-visibility，跳转途中它们才按真实高度展开，落点会偏；
-  // 滚动结束后按实测位置校正一次
+  let corrections = 0
   const correct = () => {
-    const drift =
-      targetElement.getBoundingClientRect().top - container.getBoundingClientRect().top
-    if (Math.abs(drift) > 2) {
-      scrollContainerRef.value?.markLayoutScroll?.()
-      container.scrollBy({ top: drift, behavior: 'smooth' })
-    }
+    const drift = driftToTarget()
+    if (Math.abs(drift) <= 2) return
+    if (corrections >= SCROLL_TO_MESSAGE_MAX_CORRECTIONS) return
+    corrections += 1
+    anchor?.markUserIntent?.('awayFromBottom')
+    container.scrollBy({ top: drift, behavior: 'smooth' })
+    // 每轮等滚动再次停稳后重测，直到落在容差内或用尽轮次
+    container.addEventListener('scrollend', correct, { once: true })
   }
   container.addEventListener('scrollend', correct, { once: true })
 }
