@@ -656,18 +656,76 @@ grep "ERROR" ~/Library/Application\ Support/GuaDa/logs/error-*.log | tail -50
 https://ai.dingd.cn/api/check_update?version=<当前版本>&platform=<win|mac|linux>
 ```
 
-接口返回 `hasUpdate` 及 `downloadUrl` / `releaseNotes` 等字段，界面据此显示「有新版本」并
-给出下载按钮 —— 点击后用系统浏览器打开 `downloadUrl`。**没有自动下载，也没有静默安装**，
-项目未使用 electron-updater。
+接口返回 `hasUpdate`、`downloadUrl`、`releaseNotes`，以及（1.0.6 起）按平台分组的
+`downloads` 字段：
 
-> 该接口由本仓库之外的服务提供，因此**发布新版本时除了产出安装包，还要同步更新它的数据**
-> （新版本号与下载地址），否则应用内的「检查更新」查不到新版本。这一步目前是手工的。
+```json
+"downloads": {
+  "win": {
+    "url": "https://gitcode.com/donggua_sherlock/GuaDaAI/releases/download/v1.0.6/GuaDa-Setup-1.0.6.exe",
+    "fileName": "GuaDa-Setup-1.0.6.exe",
+    "sha512": "<base64>",
+    "size": 187000000,
+    "blockmapUrl": "https://gitcode.com/donggua_sherlock/GuaDaAI/releases/download/v1.0.6/GuaDa-Setup-1.0.6.exe.blockmap"
+  }
+}
+```
 
-### 自动更新（未实现）
+### 应用内更新（Windows，1.0.6 起）
 
-electron-builder 的 `publish` 配置（GitHub + 自建 generic 源）目前不参与实际分发：应用内没有
-electron-updater，`publish.owner` 也仍是占位符 `your-username`。若要启用自动更新，需要先补齐
-这两处。
+1. 检查更新仍请求官网 `check_update`；
+2. 用户点击「下载更新」后，主进程优先尝试 **electron-updater 的 NSIS 差量下载**：
+   - 从 `downloads.win.url` 推导同版本 GitCode release 目录，读取其中的 `latest.yml`；
+   - electron-updater 同时下载旧、新两个 `.blockmap`，只对新版安装包中发生变化的字节
+     范围发 HTTP Range 请求；
+   - 未变化的块从本地 `%LOCALAPPDATA%\guada-updater\installer.exe`（NSIS 安装器自缓存）
+     复制；
+3. 差量不可用（缺少新旧 blockmap、旧安装包缓存、Range 不支持、网络异常）时自动回退为
+   整包下载（Electron `net` + 官网 sha512 校验）；
+4. 校验通过后提示「重启并安装」；
+5. 用户确认后先执行完整的优雅退出（后端、Bridge、浏览器自动化），再以
+   `/S --updated --force-run` 启动安装包：静默覆盖安装、沿用原安装目录、保留用户数据，
+   安装完成后自动重启应用。
+
+差量下载成功后还会用官网 `downloads.win.sha512` 再校验一次，避免完全信任 GitCode 上的
+`latest.yml`。强制整包可用环境变量 `GUADA_DISABLE_DIFFERENTIAL=1`；本地联调用
+`GUADA_UPDATE_ALLOW_LOCALHOST=1`。
+
+macOS 未签名/未公证，暂不支持应用内安装；非 Windows 平台和缺少 `downloads` 字段的旧接口
+都会回退为「手动下载」（打开官网下载页）。
+
+#### 差量更新依赖（发版必做）
+
+- GitCode 每个版本目录必须同时有安装包、`latest.yml` 和 `<安装包>.blockmap`；
+  `scripts/upload-gitcode-release.mjs` 已把 `.blockmap` 纳入上传列表。
+- **旧版本的 `.blockmap` 不能删**：跨越该版本的差量需要它；缺失时客户端自动整包下载。
+- 旧安装包缓存 `%LOCALAPPDATA%\guada-updater\installer.exe` 由 NSIS 安装器写入；用户删除
+  缓存或更换系统用户运行时，首次更新会退化为整包。
+- 用 `scripts/estimate-blockmap-delta.mjs --old <旧.blockmap> --new <新.blockmap>` 可离线
+  估算差量比例（理论下限，不含 HTTP 开销）。
+- 本地实测（Windows）：仅版本号变化的更新约 **1.2 MB（0.7%）**；包含新依赖的一次较大
+  改动约 **54 MB（30%）**。实际下载量可在客户端日志里看 `download-progress.total`。
+
+### 发版时同步官网数据
+
+GitCode 补传完成后运行：
+
+```bash
+node scripts/sync-official-update-config.mjs
+```
+
+脚本会从 GitCode 的 `latest.yml` 读取文件名、sha512、大小，写入
+`../ai_web/backend/config.json` 的 `downloads.win`（含 `blockmapUrl`），并更新版本号与
+发布日期；同时校验安装包和 blockmap 是否都可达。随后部署 ai_web 后端使 `check_update`
+返回新数据：
+
+```powershell
+cd ../ai_web
+.\deploy-backend.ps1
+```
+
+> 注意：1.0.6 是第一个带应用内更新能力的版本，用户仍需手动安装一次；之后的版本才能
+> 在应用内直接升级（1.0.6 的 blockmap 会在本次发版时一并上传，作为首次差量的基线）。
 
 ### 手动更新
 

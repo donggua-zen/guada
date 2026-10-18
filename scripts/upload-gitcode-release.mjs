@@ -27,7 +27,8 @@ import path from 'node:path';
 const GITCODE_REPO = 'donggua_sherlock/GuaDaAI';
 const GITHUB_REPO = 'donggua-zen/guada';
 const GITCODE_API = `https://api.gitcode.com/api/v5/repos/${GITCODE_REPO}`;
-const UPLOAD_EXTS = ['.dmg', '.exe', '.yml'];
+// .blockmap 是 NSIS 差量更新的元数据，必须和新版安装包放在同一个 release 目录。
+const UPLOAD_EXTS = ['.dmg', '.exe', '.yml', '.blockmap'];
 
 const args = process.argv.slice(2);
 const tag = args.find((a) => !a.startsWith('--'));
@@ -125,7 +126,7 @@ async function main() {
       return !skipped;
     });
   if (!ghAssets.length) {
-    console.error('❌ GitHub release 里没有可上传的 dmg/exe/yml 资产');
+    console.error('❌ GitHub release 里没有可上传的 dmg/exe/blockmap/yml 资产');
     process.exit(1);
   }
 

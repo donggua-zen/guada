@@ -206,6 +206,8 @@ export default {
     downloadUpdate: '下载更新包',
     viewChangelog: '查看更新日志',
     checkFailed: '检查更新失败: {error}',
+    downloadFailed: '下载失败: {error}',
+    installFailed: '安装失败: {error}',
     checkUpdate: '检查更新',
     unknownError: '未知错误',
     desktopOnly: '此功能仅在桌面客户端中可用',

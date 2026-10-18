@@ -206,6 +206,8 @@
     downloadUpdate: 'Download Update',
     viewChangelog: 'View Changelog',
     checkFailed: 'Update check failed: {error}',
+    downloadFailed: 'Download failed: {error}',
+    installFailed: 'Installation failed: {error}',
     checkUpdate: 'Check for Updates',
     unknownError: 'Unknown error',
     desktopOnly: 'This feature is only available in the desktop client',

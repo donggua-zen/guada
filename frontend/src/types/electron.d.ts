@@ -4,10 +4,56 @@ export interface BrowserWindowHandle {
   [key: string]: unknown
 }
 
-/** 自动更新状态推送（主进程 → 前端；status 取值对齐 electron-updater 事件名） */
+/** 更新包下载信息（由官网 check_update 下发） */
+export interface UpdateDownloadAsset {
+  url: string
+  fileName?: string
+  sha512?: string
+  size?: number
+  /** 差量下载所需的 blockmap 直链（可选，客户端会按 URL 规则推导）。 */
+  blockmapUrl?: string
+}
+
+/** 官网 check_update 返回的更新信息 */
+export interface UpdateInfo {
+  version?: string
+  clientVersion?: string
+  description?: string
+  publishDate?: string
+  mandatory?: boolean
+  downloadUrl?: string
+  releaseNotes?: string
+  downloads?: {
+    win?: UpdateDownloadAsset
+  }
+  [key: string]: unknown
+}
+
+export interface UpdateProgress {
+  percent: number
+  transferred: number
+  total: number
+  bytesPerSecond: number
+}
+
+export type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'installing'
+  | 'error'
+
+/** 自动更新状态推送（主进程 → 前端） */
 export interface UpdateStatusPayload {
-  status: string
-  info?: { version?: string; [key: string]: unknown }
+  status: UpdateStatus | string
+  info?: UpdateInfo
+  progress?: UpdateProgress
+  version?: string
+  filePath?: string
+  phase?: 'check' | 'download' | 'install'
   error?: string
   [key: string]: unknown
 }
@@ -147,6 +193,10 @@ export interface ElectronAPI {
 
   // 自动更新相关
   checkForUpdates: () => Promise<{ success: boolean; data?: unknown; error?: string }>
+  downloadUpdate: () => Promise<{ success: boolean; error?: string }>
+  cancelUpdateDownload: () => Promise<{ success: boolean }>
+  installUpdate: () => Promise<{ success: boolean; error?: string }>
+  getUpdateState: () => Promise<UpdateStatusPayload>
   onUpdateStatus: (callback: (status: UpdateStatusPayload) => void) => void
 
   // 打开外部链接

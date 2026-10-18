@@ -54,7 +54,7 @@
       </GdTooltip>
 
       <!-- 更新提示 -->
-      <GdTooltip v-if="updateAvailable" :content="t('ui.titlebar.newVersionTip')" placement="bottom">
+      <GdTooltip v-if="updateStore.hasUpdate" :content="t('ui.titlebar.newVersionTip')" placement="bottom">
         <div
           class="titlebar-menu-btn relative flex items-center px-2 cursor-pointer"
           @click="handleUpdateClick">
@@ -70,7 +70,7 @@
   </div>
 
   <!-- 更新弹窗 -->
-  <UpdateDialog v-model:visible="showUpdateDialog" :update-info="updateInfo" :is-skipped="skipVersion === updateInfo?.version" @dont-remind="handleDontRemind" @cancel-skip="handleCancelSkip" />
+  <UpdateDialog v-model:visible="showUpdateDialog" :is-skipped="updateStore.isSkipped" @dont-remind="updateStore.dontRemind" @cancel-skip="updateStore.cancelSkip" />
 
   <!-- 会话搜索弹窗 -->
   <SessionSearchDialog v-model="showSearchDialog" />
@@ -78,7 +78,7 @@
 
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Bug16Regular, Search16Regular } from '@vicons/fluent'
 import UpdateDialog from './UpdateDialog.vue'
@@ -86,57 +86,40 @@ import SessionSearchDialog from './SessionSearchDialog.vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useAuthStore } from '@/stores/auth'
-import type { UpdateStatusPayload } from '@/types/electron'
+import { useUpdateStore } from '@/stores/update'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const isMac = isElectron && window.electronAPI?.platform === 'darwin'
 
 const authStore = useAuthStore()
+const updateStore = useUpdateStore()
 
 const { t } = useI18n()
 
 const logoPath = computed(() => fixFrontendAssetUrl('/images/guada_logo_small.png'))
 
-const updateAvailable = ref(false)
-const updateInfo = ref<UpdateStatusPayload['info'] | null>(null)
 const showDebugMenu = ref(false)
 const showUpdateDialog = ref(false)
 const showSearchDialog = ref(false)
-const skipVersion = ref<string | null>(localStorage.getItem('update-skip-version'))
 const migrationStatus = ref<string>('')
 const isMigrating = ref(false)
 
-const handleUpdateStatus = (status: UpdateStatusPayload) => {
-  if (status.status === 'available') {
-    updateInfo.value = status.info
-    updateAvailable.value = true
-    if (skipVersion.value !== status.info?.version) {
-      showUpdateDialog.value = true
-    }
-  } else if (status.status === 'not-available' || status.status === 'error') {
-    updateAvailable.value = false
-    updateInfo.value = null
-  }
-}
-
 const handleUpdateClick = () => {
-  if (updateInfo.value) {
+  if (updateStore.hasUpdate) {
     showUpdateDialog.value = true
   }
 }
 
-const handleDontRemind = () => {
-  if (updateInfo.value?.version) {
-    skipVersion.value = updateInfo.value.version
-    localStorage.setItem('update-skip-version', updateInfo.value.version)
-  }
-}
-
-const handleCancelSkip = () => {
-  skipVersion.value = null
-  localStorage.removeItem('update-skip-version')
-}
+// 自动弹窗：只在“发现新版本”时弹一次；下载/已下载状态不重复打扰。
+watch(
+  () => updateStore.status,
+  (status) => {
+    if (status === 'available' && !updateStore.isSkipped) {
+      showUpdateDialog.value = true
+    }
+  },
+)
 
 const toggleDebugMenu = () => {
   showDebugMenu.value = !showDebugMenu.value
@@ -202,11 +185,11 @@ const handleClickOutside = (event: MouseEvent) => {
 
 onMounted(() => {
   loadMigrationStatus()
-
-  if (window.electronAPI && typeof window.electronAPI.onUpdateStatus === 'function') {
-    window.electronAPI.onUpdateStatus(handleUpdateStatus)
+  updateStore.init()
+  // init() 里的状态查询是异步的；若检查结果已在挂载前到达，这里补一次自动弹窗。
+  if (updateStore.status === 'available' && !updateStore.isSkipped) {
+    showUpdateDialog.value = true
   }
-
   document.addEventListener('click', handleClickOutside)
 })
 

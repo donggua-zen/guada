@@ -26,6 +26,12 @@ import {
   generateBridgeToken,
 } from "./bridge-server";
 import { BrowserAutomationService } from "./browser-automation-service";
+import {
+  UpdateManager,
+  launchInstaller,
+  type UpdateEvent,
+  type UpdateInfo,
+} from "./updater";
 let backendProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 let windowManager: BrowserWebviewManager | null = null; // 窗口管理器
@@ -46,6 +52,12 @@ let trayStats = { running: 0, unread: 0 };
 /** 悬浮窗设置（默认隐藏，用户在设置页开启后生效） */
 let traySettings = { enabled: false, opacity: 95 };
 let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
+/** 最近一次检查更新的原始响应，供下载/安装流程复用（不接受渲染层传入 URL）。 */
+let lastUpdateInfo: UpdateInfo | null = null;
+/** 6 小时定时检查器：did-finish-load 会多次触发，必须保证只创建一次。 */
+let updateCheckTimer: NodeJS.Timeout | null = null;
+/** 防止重复点击“立即安装”拉起多个安装器。 */
+let isInstallingUpdate = false;
 
 /**
  * 防休眠（keep-awake）：主进程持有 powerSaveBlocker("prevent-app-suspension")，
@@ -464,30 +476,51 @@ async function doCheckForUpdates() {
         : process.platform === "darwin"
           ? "mac"
           : "linux";
-    const apiUrl = `https://ai.dingd.cn/api/check_update?version=${currentVersion}&platform=${platform}`;
+    // GUADA_UPDATE_API_URL 仅用于本地联调，生产默认走官网。
+    const baseUrl =
+      process.env.GUADA_UPDATE_API_URL ||
+      "https://ai.dingd.cn/api/check_update";
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    const apiUrl = `${baseUrl}${separator}version=${encodeURIComponent(currentVersion)}&platform=${platform}`;
 
-    const response = await fetch(apiUrl);
+    const response = await fetch(apiUrl, {
+      signal: AbortSignal.timeout(15000),
+    });
     if (!response.ok) {
       throw new Error(`API 请求失败: ${response.status}`);
     }
 
-    const data: any = await response.json();
+    type CheckUpdateResponse = UpdateInfo & { hasUpdate?: boolean };
+    const data = (await response.json()) as CheckUpdateResponse;
+
+    // 缓存给下载/安装流程使用：渲染层只负责触发，不能替换下载地址。
+    lastUpdateInfo = data;
+    updateManager.setAvailableInfo(data.hasUpdate ? data : null);
 
     if (data.hasUpdate) {
-      mainWindow?.webContents.send("update-status", {
-        status: "available",
-        info: data,
-      });
+      // 已经下载过同一版本（含上次启动留下的安装包）时直接进入“已下载”。
+      const downloaded = updateManager.getDownloadedForVersion(
+        String(data.version || ""),
+      );
+      if (downloaded) {
+        sendUpdateEvent({
+          status: "downloaded",
+          version: downloaded.version,
+          filePath: downloaded.filePath,
+          info: data,
+        });
+      } else {
+        sendUpdateEvent({ status: "available", info: data });
+      }
     } else {
-      mainWindow?.webContents.send("update-status", {
-        status: "not-available",
-      });
+      sendUpdateEvent({ status: "not-available" });
     }
 
     return { success: true, data };
   } catch (error: any) {
-    mainWindow?.webContents.send("update-status", {
+    sendUpdateEvent({
       status: "error",
+      phase: "check",
       error: error.message,
     });
     return { success: false, error: error.message };
@@ -518,6 +551,14 @@ if (GUADA_DEV_DATA) {
   app.setPath("userData", path.join(app.getPath("appData"), "guada-prod-debug"));
 }
 // 锁键基于 userData —— 上述 setPath 必须在 requestSingleInstanceLock() 之前
+
+function sendUpdateEvent(event: UpdateEvent): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("update-status", event);
+  }
+}
+
+const updateManager = new UpdateManager(sendUpdateEvent);
 
 crashReporter.start({
   uploadToServer: false,
@@ -1803,14 +1844,16 @@ function createWindow() {
     log.info("Frontend loaded, checking for updates...");
     doCheckForUpdates();
 
-    // 每 6 小时定期检查更新
-    setInterval(
-      () => {
-        log.info("Periodic update check...");
-        doCheckForUpdates();
-      },
-      6 * 60 * 60 * 1000,
-    );
+    // 每 6 小时定期检查更新（did-finish-load 可能多次触发，只创建一次）
+    if (!updateCheckTimer) {
+      updateCheckTimer = setInterval(
+        () => {
+          log.info("Periodic update check...");
+          doCheckForUpdates();
+        },
+        6 * 60 * 60 * 1000,
+      );
+    }
   });
 
   // 关闭按钮最小化到托盘（hide 事件中执行 applyTraySettings，避免重复触发闪烁）
@@ -2068,9 +2111,83 @@ function setupIpcHandlers() {
     }
   });
 
-  // 自动更新相关 IPC（自定义 API 检测）
+  // 自动更新相关 IPC（官网检查 + GitCode 下载 + 静默安装）
   ipcMain.handle("check-for-updates", async () => {
     return doCheckForUpdates();
+  });
+
+  ipcMain.handle("update:get-state", () => {
+    const current = updateManager.getPublicState();
+    if (current.status !== "not-available") {
+      return { ...current, info: lastUpdateInfo || undefined };
+    }
+    if (lastUpdateInfo?.hasUpdate) {
+      return { status: "available", info: lastUpdateInfo };
+    }
+    if (lastUpdateInfo) {
+      return { status: "not-available" };
+    }
+    return { status: "idle" };
+  });
+
+  ipcMain.handle("update:download", async () => {
+    if (!updateManager.getDownloadAsset()) {
+      return {
+        success: false,
+        error: "当前平台不支持应用内更新，请手动下载",
+      };
+    }
+    // 下载耗时较长，立即返回；进度与结果通过 update-status 推送。
+    void updateManager.download().catch((error: any) => {
+      log.error("[updater] 下载更新失败:", error);
+      sendUpdateEvent({
+        status: "error",
+        phase: "download",
+        error: error?.message || String(error),
+      });
+    });
+    return { success: true };
+  });
+
+  ipcMain.handle("update:cancel-download", () => {
+    updateManager.cancel();
+    return { success: true };
+  });
+
+  ipcMain.handle("update:install", async () => {
+    if (isInstallingUpdate) {
+      return { success: false, error: "正在安装更新" };
+    }
+    const installerPath = updateManager.getDownloadedFile();
+    if (!installerPath) {
+      return { success: false, error: "安装包不存在，请重新下载" };
+    }
+
+    isInstallingUpdate = true;
+    sendUpdateEvent({ status: "installing" });
+
+    try {
+      // 先完成完整的优雅退出（后端、Bridge、浏览器自动化），
+      // 再交给安装器静默覆盖安装；--force-run 会在安装完成后重启应用。
+      await performShutdown();
+      await launchInstaller(installerPath);
+      setTimeout(() => app.exit(0), 200);
+      return { success: true };
+    } catch (error: any) {
+      isInstallingUpdate = false;
+      log.error("[updater] 启动安装程序失败:", error);
+      sendUpdateEvent({
+        status: "error",
+        phase: "install",
+        error: error?.message || String(error),
+      });
+      // 安装器没起来时恢复应用，避免停留在“正在退出”画面。
+      setTimeout(() => {
+        app.relaunch();
+        app.exit(1);
+      }, 500);
+      return { success: false, error: error?.message || String(error) };
+    }
   });
 
   // 显示调试菜单（固定菜单项）
@@ -2858,14 +2975,16 @@ app.on("activate", () => {
   }
 });
 
-// 应用退出前清理
+// 应用退出前清理（before-quit 与更新安装流程共用）
 let isCleaningUp = false;
-app.on("before-quit", async (event) => {
-  (app as AppExtended).isQuiting = true;
 
+async function performShutdown(): Promise<void> {
   if (isCleaningUp) return;
   isCleaningUp = true;
-  event.preventDefault();
+  (app as AppExtended).isQuiting = true;
+
+  // 下载中的更新包直接中断，避免半包残留
+  updateManager.abortSilently();
 
   // 停掉健康看门狗，避免退出流程中误报
   if (backendWatchdogTimer) {
@@ -2928,6 +3047,15 @@ app.on("before-quit", async (event) => {
     automationService = null;
   }
 
-  // 继续退出流程
+  // 后续由调用方决定：普通退出调用 app.quit()，更新安装则启动安装器后 app.exit()
+}
+
+app.on("before-quit", async (event) => {
+  (app as AppExtended).isQuiting = true;
+
+  if (isCleaningUp) return;
+  event.preventDefault();
+
+  await performShutdown();
   app.quit();
 });

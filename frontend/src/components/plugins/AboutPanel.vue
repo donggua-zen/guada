@@ -11,37 +11,71 @@
             <!-- 更新状态区域 -->
             <div class="w-full bg-(--gd-color-surface-elevated) rounded-lg p-6 border border-(--gd-color-border)">
                 <div class="flex flex-col items-center space-y-4">
-                    <div v-if="updateStatus === 'checking'" class="flex items-center space-x-2 text-blue-500">
+                    <div v-if="updateStore.status === 'checking'" class="flex items-center space-x-2 text-blue-500">
                         <el-icon class="is-loading"><Loading /></el-icon>
                         <span>{{ t('plugins.about.checking') }}</span>
                     </div>
-                    
-                    <div v-else-if="updateStatus === 'not-available'" class="text-green-500 flex items-center space-x-2">
+
+                    <div v-else-if="updateStore.status === 'not-available'" class="text-green-500 flex items-center space-x-2">
                         <el-icon><CircleCheck /></el-icon>
                         <span>{{ t('plugins.about.upToDate') }}</span>
                     </div>
 
-                    <div v-else-if="updateStatus === 'available'" class="space-y-3 w-full">
-                        <div class="text-orange-500 font-medium">{{ t('plugins.about.newVersion', { version: updateInfo?.version }) }}</div>
-                        <p class="text-xs text-(--gd-color-text-secondary) whitespace-pre-wrap">{{ updateInfo?.description || t('plugins.about.noUpdateDesc') }}</p>
+                    <div v-else-if="showUpdateSection" class="space-y-3 w-full">
+                        <div class="text-orange-500 font-medium">{{ t('plugins.about.newVersion', { version: updateStore.info?.version }) }}</div>
+                        <p class="text-xs text-(--gd-color-text-secondary) whitespace-pre-wrap">{{ updateStore.info?.description || t('plugins.about.noUpdateDesc') }}</p>
+
+                        <!-- 下载进度 -->
+                        <div v-if="updateStore.isDownloading" class="space-y-2 rounded-lg bg-(--gd-color-surface) p-3 text-left">
+                            <div class="flex items-center justify-between text-xs text-(--gd-color-text-secondary)">
+                                <span>{{ t('ui.update.downloading', { percent: progressPercent }) }}</span>
+                                <span>{{ speedText }}</span>
+                            </div>
+                            <el-progress :percentage="progressPercent" :stroke-width="8" :show-text="false" :indeterminate="!updateStore.progress?.total" />
+                        </div>
+
+                        <!-- 已下载 / 安装中 -->
+                        <div v-else-if="updateStore.isDownloaded" class="space-y-1 rounded-lg bg-green-500/10 p-3 text-xs text-green-600 dark:text-green-400 text-left">
+                            <div>{{ t('ui.update.downloadComplete') }}</div>
+                            <div class="opacity-80">{{ t('ui.update.installTip') }}</div>
+                        </div>
+                        <div v-else-if="updateStore.status === 'installing'" class="flex items-center justify-center gap-2 rounded-lg bg-blue-500/10 p-3 text-xs text-blue-500">
+                            <span class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></span>
+                            <span>{{ t('ui.update.installing') }}</span>
+                        </div>
+
                         <div class="flex gap-2">
-                            <el-button type="primary" @click="handleDownload" class="flex-1">
-                                {{ t('plugins.about.downloadUpdate') }}
-                            </el-button>
-                            <el-button @click="handleViewChangelog" class="flex-1">
-                                {{ t('plugins.about.viewChangelog') }}
-                            </el-button>
+                            <template v-if="updateStore.isDownloading">
+                                <el-button class="flex-1" @click="updateStore.cancelDownload()">
+                                    {{ t('ui.update.cancelDownload') }}
+                                </el-button>
+                            </template>
+                            <template v-else-if="updateStore.isDownloaded">
+                                <el-button type="primary" class="flex-1" @click="updateStore.installAndRestart()">
+                                    {{ t('ui.update.installAndRestart') }}
+                                </el-button>
+                            </template>
+                            <template v-else-if="updateStore.status === 'installing'">
+                                <el-button type="primary" class="flex-1" disabled>
+                                    {{ t('ui.update.installing') }}
+                                </el-button>
+                            </template>
+                            <template v-else>
+                                <el-button type="primary" class="flex-1" @click="handleDownload">
+                                    {{ t('plugins.about.downloadUpdate') }}
+                                </el-button>
+                                <el-button class="flex-1" @click="updateStore.openChangelog()">
+                                    {{ t('plugins.about.viewChangelog') }}
+                                </el-button>
+                            </template>
                         </div>
                     </div>
 
-                    <div v-else-if="updateStatus === 'error'" class="text-red-500 text-sm">
-                        {{ t('plugins.about.checkFailed', { error: errorMessage }) }}
+                    <div v-else-if="updateStore.status === 'error'" class="text-red-500 text-sm">
+                        {{ errorText }}
                     </div>
 
-                    <el-button v-if="updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error'" 
-                               @click="checkForUpdates" 
-                               :disabled="isChecking" 
-                               class="w-full">
+                    <el-button v-if="canCheck" @click="updateStore.checkForUpdates()" :disabled="updateStore.isChecking" class="w-full">
                         {{ t('plugins.about.checkUpdate') }}
                     </el-button>
                 </div>
@@ -73,23 +107,18 @@
 </template>
 
 <script setup lang="ts">
-import { getErrorMessage } from '@/utils/errorMessage'
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton, ElIcon } from 'element-plus'
+import { ElButton, ElIcon, ElProgress } from 'element-plus'
 import { Loading, CircleCheck, Link } from '@element-plus/icons-vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
-import type { UpdateStatusPayload } from '@/types/electron'
+import { useUpdateStore } from '@/stores/update'
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 const { t } = useI18n()
+const updateStore = useUpdateStore()
 const appVersion = ref('')
-const updateStatus = ref<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle')
-/** electron-updater 更新信息载荷（version/downloadUrl/releaseNotes/description 为动态字段） */
-const updateInfo = ref<UpdateStatusPayload['info'] | null>(null)
-const isChecking = ref(false)
-const errorMessage = ref<string | undefined>('')
 
 const repositories = [
     { name: 'GitHub', url: 'https://github.com/donggua-zen/guada', icon: '🐙' },
@@ -104,54 +133,41 @@ const openRepo = (url: string) => {
 // 计算属性：自适应 Logo 路径
 const logoPath = computed(() => fixFrontendAssetUrl('/images/logo.png'))
 
-const checkForUpdates = async () => {
-    if (!window.electronAPI) return
-    isChecking.value = true
-    updateStatus.value = 'checking'
-    errorMessage.value = ''
-    
-    try {
-        const res = await window.electronAPI.checkForUpdates()
-        if (!res.success) {
-            updateStatus.value = 'error'
-            errorMessage.value = res.error || ''
-        }
-    } catch (e) {
-        updateStatus.value = 'error'
-        errorMessage.value = getErrorMessage(e) || t('plugins.about.unknownError')
-    } finally {
-        isChecking.value = false
+const showUpdateSection = computed(() =>
+    ['available', 'downloading', 'downloaded', 'installing'].includes(updateStore.status),
+)
+
+const canCheck = computed(() =>
+    ['idle', 'not-available', 'error'].includes(updateStore.status),
+)
+
+const progressPercent = computed(() =>
+    Math.max(0, Math.min(99, Math.round(updateStore.progress?.percent || 0))),
+)
+
+const speedText = computed(() => {
+    const speed = updateStore.progress?.bytesPerSecond || 0
+    if (!speed) return ''
+    if (speed >= 1024 * 1024) return `${(speed / (1024 * 1024)).toFixed(1)} MB/s`
+    return `${Math.max(1, Math.round(speed / 1024))} KB/s`
+})
+
+const errorText = computed(() => {
+    const error = updateStore.error || ''
+    if (updateStore.errorPhase === 'download') {
+        return t('plugins.about.downloadFailed', { error })
     }
-}
+    if (updateStore.errorPhase === 'install') {
+        return t('plugins.about.installFailed', { error })
+    }
+    return t('plugins.about.checkFailed', { error })
+})
 
 const handleDownload = () => {
-    if (!window.electronAPI || !updateInfo.value?.downloadUrl) return
-    // downloadUrl 为开放载荷里的动态字段，消费点按 URL 字符串使用
-    window.electronAPI.openExternal(updateInfo.value.downloadUrl as string)
-}
-
-const handleViewChangelog = () => {
-    if (!window.electronAPI || !updateInfo.value?.releaseNotes) return
-    window.electronAPI.openExternal(updateInfo.value.releaseNotes as string)
-}
-
-const handleUpdateStatus = (status: UpdateStatusPayload) => {
-    switch (status.status) {
-        case 'checking':
-            updateStatus.value = 'checking'
-            break
-        case 'available':
-            updateStatus.value = 'available'
-            updateInfo.value = status.info
-            break
-        case 'not-available':
-            updateStatus.value = 'not-available'
-            break
-        case 'error':
-            updateStatus.value = 'error'
-            errorMessage.value = status.error
-            isChecking.value = false
-            break
+    if (updateStore.canInPlaceUpdate) {
+        void updateStore.startDownload()
+    } else {
+        updateStore.openManualDownload()
     }
 }
 
@@ -159,15 +175,8 @@ onMounted(async () => {
     if (window.electronAPI) {
         const info = await window.electronAPI.getAppInfo()
         appVersion.value = info.version
-        
-        // 监听更新状态
-        window.electronAPI.onUpdateStatus(handleUpdateStatus)
+        updateStore.init()
     }
-})
-
-onUnmounted(() => {
-    // 注意：ipcRenderer 监听器在 preload 中处理，这里无需手动移除
-    // 如果需要更精细的控制，可以在 preload 中返回一个取消监听的函数
 })
 </script>
 

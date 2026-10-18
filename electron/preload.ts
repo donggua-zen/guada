@@ -33,6 +33,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 自动更新相关
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  cancelUpdateDownload: () => ipcRenderer.invoke('update:cancel-download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   onUpdateStatus: (callback: (status: any) => void) => {
     ipcRenderer.on('update-status', (_, status) => callback(status))
   },

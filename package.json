@@ -1,6 +1,6 @@
 {
   "name": "guada",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "GuaDa Application with Web and Electron support",
   "private": true,
   "main": "electron/dist/main.js",
@@ -186,6 +186,7 @@
         }
       ],
       "icon": "icon.ico",
+      "artifactName": "GuaDa-Setup-${version}.${ext}",
       "sign": null,
       "signDlls": false,
       "forceCodeSigning": false,
@@ -267,7 +268,15 @@
     ]
   },
   "dependencies": {
+    "builder-util-runtime": "9.2.10",
     "electron-log": "^5.4.3",
-    "js-yaml": "^4.1.1"
+    "electron-updater": "6.3.9",
+    "fs-extra": "^10.1.0",
+    "js-yaml": "^4.1.1",
+    "lazy-val": "^1.0.5",
+    "lodash.escaperegexp": "^4.1.2",
+    "lodash.isequal": "^4.5.0",
+    "semver": "^7.8.5",
+    "tiny-typed-emitter": "^2.1.0"
   }
 }
