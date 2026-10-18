@@ -172,9 +172,11 @@ defineExpose({
         el.scrollTop = top;
         scrollAnchor.recordScrollTop(el.scrollTop);
     },
-    /** 登记用户滚动意图（点「回到底部」等组件级入口）：按钮触发的平滑滚动按用户滚动处理。 */
+    /** 登记用户滚动意图（组件级导航入口，如大纲跳转）：这类入口没有 wheel/touch/key 经过容器。 */
     markUserIntent: (intent: 'awayFromBottom' | 'towardBottom' | 'unknown') =>
         scrollAnchor.markUserIntent(intent),
+    /** 清除未决的用户滚动意图（点「回到底部」时调用，避免残留上滚意图改写跟随态）。 */
+    clearUserScrollIntent: () => scrollAnchor.clearUserScrollIntent(),
 });
 
 function immediateScrollToBottom(): void {

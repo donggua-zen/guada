@@ -484,13 +484,31 @@ const queueLength = computed(() => messageQueue.value.length);
 // 滚动管理相关状态和方法（按钮显隐的展示态定义在 visibleTurns 之后）
 
 /**
- * 平滑滚动到底部
+ * 回到底部（点击输入区上方的悬浮按钮）。
+ *
+ * 语义是「恢复跟随」而不是「跑一次滚动」：
+ * - 只做一次滚动、靠落点事后判回跟随，流式内容继续增长时目标会过期——
+ *   平滑动画追的是点击瞬间的 scrollHeight，落点可能距新底部很远，
+ *   且动画中间帧会把跟随态按落点重算回 false，贴底路径不再接管。
+ * - 因此先置 following=true（后续任何尺寸增长都会继续贴底），再选滚动方式。
+ *
+ * 滚动方式：流式中底部是移动目标，平滑动画的固定终点天然追不上，用即时跳转；
+ * 非流式内容静止，保留平滑动画。
  */
 function scrollToBottom() {
-  // 点按钮是明确的「靠近底部」用户意图：登记后平滑滚动途中的 scroll 事件
-  // 按用户滚动裁决（落点贴底 → 恢复跟随，按钮自然消失）。
-  scrollContainerRef.value?.markUserIntent?.('towardBottom');
-  scrollContainerRef.value?.smoothScrollToBottom();
+  const container = scrollContainerRef.value
+  if (!container) return
+  // 用户接管：放弃未决的会话位置恢复，避免两套机制抢位置
+  pendingScrollRestore = null
+  // 清掉残留滚动意图：刚上滚过时 awayFromBottom 仍在 1.2s 有效期内，
+  // 会把按钮驱动的滚动重新判成用户上滚，跟随态被中间落点算回 false
+  container.clearUserScrollIntent?.()
+  container.setFollowing(true)
+  if (isStreaming.value) {
+    container.immediateScrollToBottom()
+  } else {
+    container.smoothScrollToBottom()
+  }
 }
 
 /**

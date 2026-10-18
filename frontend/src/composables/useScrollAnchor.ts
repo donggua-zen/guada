@@ -504,9 +504,9 @@ export function useScrollAnchor(options: ScrollAnchorOptions = {}) {
   }
 
   /**
-   * 登记用户滚动意图（点击「回到底部」按钮等组件级用户输入入口调用）。
-   * 按钮触发的平滑滚动要按用户滚动处理，否则滚动途中的 scroll 事件会被当成
-   * 布局滚动，回到底部按钮整段动画都消不掉。
+   * 登记用户滚动意图（组件级用户输入入口调用，如大纲跳转到历史消息）。
+   * 这类入口由组件外部发起，没有 wheel/touch/key 事件经过滚动容器，
+   * 必须显式表态，否则会被当成程序化滚动。
    */
   function markUserIntent(intent: UserScrollIntent): void {
     markUserScrollIntent(intent)
@@ -524,6 +524,7 @@ export function useScrollAnchor(options: ScrollAnchorOptions = {}) {
     getScrollMetrics,
     recordScrollTop,
     setFollowing,
+    clearUserScrollIntent,
     markUserIntent,
   }
 }
