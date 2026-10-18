@@ -67,8 +67,11 @@
                             <div v-for="week in snapshot.heatmap.weeks" :key="week.weekIndex"
                                 class="flex flex-col gap-[3px]">
                                 <div v-for="(day, index) in week.days" :key="index" class="w-3 h-3 rounded-sm"
-                                    :class="day ? heatmapClass(day.level) : 'bg-transparent'"
-                                    :title="day ? `${day.date} · ${formatCompactTokens(day.totalTokens)} tokens · ${day.requestCount}` : ''" />
+                                    :class="[
+                                        day ? heatmapClass(day.level) : 'bg-transparent',
+                                        day?.future ? 'opacity-50' : '',
+                                    ]"
+                                    :title="day && !day.future ? `${day.date} · ${formatCompactTokens(day.totalTokens)} tokens · ${day.requestCount}` : ''" />
                             </div>
                         </div>
                         <!-- 月份标签：与周列左对齐 -->

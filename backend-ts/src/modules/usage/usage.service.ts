@@ -307,7 +307,20 @@ function buildHeatmap(
     }
   }
   if (week.length > 0) {
-    while (week.length < 7) week.push(null);
+    // 当前周不满 7 天：用未来日期补成浅色占位格，避免最右列只显示 1 个格子
+    const lastDate = daily[daily.length - 1]?.date ?? dayIndexToDate(endDayIndex);
+    let cursor = Date.parse(`${lastDate}T00:00:00Z`);
+    if (!Number.isFinite(cursor)) cursor = Date.UTC(1970, 0, 1);
+    while (week.length < 7) {
+      cursor += DAY_MS;
+      week.push({
+        date: new Date(cursor).toISOString().slice(0, 10),
+        level: 0,
+        totalTokens: 0,
+        requestCount: 0,
+        future: true,
+      });
+    }
     weeks.push({ weekIndex: weeks.length, days: week });
   }
 

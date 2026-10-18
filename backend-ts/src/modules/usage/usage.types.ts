@@ -160,6 +160,8 @@ export interface UsageHeatmapCell {
   level: 0 | 1 | 2 | 3 | 4;
   totalTokens: number;
   requestCount: number;
+  /** 未来日期占位：仅用于补齐当前周，不参与统计 */
+  future?: boolean;
 }
 
 export interface UsageHeatmapWeek {
