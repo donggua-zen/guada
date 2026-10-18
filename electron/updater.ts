@@ -72,7 +72,7 @@ const STATE_FILE_NAME = "update-state.json";
 const PROGRESS_INTERVAL_MS = 250;
 const STALL_TIMEOUT_MS = 60_000;
 const MIN_FREE_SPACE_MARGIN = 50 * 1024 * 1024;
-const INSTALLER_ARGS = ["/S", "--updated", "--force-run"];
+const INSTALLER_ARGS = ["--updated"];
 
 /** 允许的更新下载域名（GitCode 会 302 到 file-cdn.gitcode.com）。 */
 const ALLOWED_UPDATE_HOSTS = new Set([
@@ -148,12 +148,12 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /**
- * 启动 NSIS 安装包的静默升级。
+ * 启动 NSIS 安装包，显示正常安装向导。
  *
  * 参数说明（electron-builder assisted installer 模板）：
- * - `/S`：静默安装，不显示向导。
- * - `--updated`：沿用原安装目录，并让旧卸载器保留用户数据。
- * - `--force-run`：静默安装结束后自动启动新版本。
+ * - `--updated`：沿用原安装目录、跳过目录选择页，并让旧卸载器保留用户数据。
+ * - 不传 `/S`：显示安装向导（安装进度页 + 完成页），避免应用退出后长时间空白。
+ *   完成页默认勾选「运行 GuaDa」，安装完成后会启动新版本。
  *
  * 返回的 Promise 在子进程成功创建后 resolve；创建失败（如安装包被删除）时 reject。
  */
@@ -164,7 +164,6 @@ export function launchInstaller(filePath: string): Promise<void> {
       cwd: path.dirname(filePath),
       detached: true,
       stdio: "ignore",
-      windowsHide: true,
     });
 
     child.once("spawn", () => {

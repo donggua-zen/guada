@@ -131,7 +131,7 @@ async function main() {
     releaseNotes: "https://ai.dingd.cn/changelog",
     mandatory: false,
     publishDate: new Date().toISOString().slice(0, 10),
-    description: "本地 mock 更新：用于验证下载、差量、校验与静默安装流程。",
+    description: "本地 mock 更新：用于验证下载、差量、校验与安装向导流程。",
     downloads: {
       win: {
         url: downloadUrl,

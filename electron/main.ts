@@ -2111,7 +2111,7 @@ function setupIpcHandlers() {
     }
   });
 
-  // 自动更新相关 IPC（官网检查 + GitCode 下载 + 静默安装）
+  // 自动更新相关 IPC（官网检查 + GitCode 下载 + 安装向导）
   ipcMain.handle("check-for-updates", async () => {
     return doCheckForUpdates();
   });
@@ -2168,7 +2168,7 @@ function setupIpcHandlers() {
 
     try {
       // 先完成完整的优雅退出（后端、Bridge、浏览器自动化），
-      // 再交给安装器静默覆盖安装；--force-run 会在安装完成后重启应用。
+      // 再打开安装向导；用户在向导中完成后会自动启动新版本。
       await performShutdown();
       await launchInstaller(installerPath);
       setTimeout(() => app.exit(0), 200);

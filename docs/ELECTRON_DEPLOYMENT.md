@@ -683,9 +683,8 @@ https://ai.dingd.cn/api/check_update?version=<当前版本>&platform=<win|mac|li
 3. 差量不可用（缺少新旧 blockmap、旧安装包缓存、Range 不支持、网络异常）时自动回退为
    整包下载（Electron `net` + 官网 sha512 校验）；
 4. 校验通过后提示「重启并安装」；
-5. 用户确认后先执行完整的优雅退出（后端、Bridge、浏览器自动化），再以
-   `/S --updated --force-run` 启动安装包：静默覆盖安装、沿用原安装目录、保留用户数据，
-   安装完成后自动重启应用。
+5. 用户确认后先执行完整的优雅退出（后端、Bridge、浏览器自动化），再打开安装向导
+   （`--updated`）：向导沿用原安装目录、保留用户数据，用户完成安装后自动启动新版本。
 
 差量下载成功后还会用官网 `downloads.win.sha512` 再校验一次，避免完全信任 GitCode 上的
 `latest.yml`。强制整包可用环境变量 `GUADA_DISABLE_DIFFERENTIAL=1`；本地联调用
