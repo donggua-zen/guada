@@ -56,9 +56,9 @@ export const useRemoteWorkspaceStore = defineStore('remoteWorkspace', () => {
     connections.value.map((c) => ({
       id: c.id,
       name: c.name,
-      /** 连接类型：绑定入口据此选图标（SSH 云 / 容器方块） */
+      /** 连接类型：绑定入口据此选图标（SSH 云 / 容器方块 / 本机发行版桌面） */
       kind: connectionKind(c),
-      /** 目标摘要：SSH → user@host；Docker → 容器名 */
+      /** 目标摘要：SSH → user@host；Docker → 容器名；WSL → 发行版名 */
       description: connectionTargetLine(c.config),
       /** 工作目录（清单行与提示展示用；未配置时兜底空串） */
       path: c.config.path || '',

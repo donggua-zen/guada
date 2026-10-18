@@ -115,8 +115,8 @@ export class RemoteBindingStateService {
 
   /**
    * 连接描述（清单与变更注入共用）：按连接类型渲染。
-   * SSH → user@host:port<path>；Docker → 容器名（容器内路径）。
-   * 模型据此理解 workspace 目标的物理含义（远端主机 / 本机容器）。
+   * SSH → user@host:port<path>；Docker → 容器名（容器内路径）；WSL → 发行版名（发行版内路径）。
+   * 模型据此理解 workspace 目标的物理含义（远端主机 / 本机容器 / 本机 WSL 发行版）。
    */
   private describeConnection(c: RemoteConnection): { list: string; short: string } {
     if (c.config.kind === "docker") {
@@ -125,6 +125,14 @@ export class RemoteBindingStateService {
       return {
         list: `docker container "${container}"${path}`,
         short: `docker container "${container}"`,
+      };
+    }
+    if (c.config.kind === "wsl") {
+      const distro = c.config.distro || "default distro";
+      const path = c.config.path ? ` (path: ${c.config.path})` : "";
+      return {
+        list: `wsl distro "${distro}"${path}`,
+        short: `wsl distro "${distro}"`,
       };
     }
     const cfg = c.config;

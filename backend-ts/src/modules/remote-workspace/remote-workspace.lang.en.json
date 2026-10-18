@@ -1,7 +1,7 @@
 {
   "remoteWorkspace.name": "Remote Workspace",
-  "remoteWorkspace.description": "Bind remote servers (SSH) or running Docker containers as additional workspaces; standard file tools operate on them via the workspace parameter, plus a file transfer tool",
-  "remoteWorkspace.toolkitName": "Additional Workspaces (Remote / Container)",
+  "remoteWorkspace.description": "Bind remote servers (SSH), running Docker containers, or local WSL distros as additional workspaces; standard file tools operate on them via the workspace parameter, plus a file transfer tool",
+  "remoteWorkspace.toolkitName": "Additional Workspaces (Remote / Container / WSL)",
   "remote_read.executing": "Reading remote file",
   "remote_read.completed": "Read remote file",
   "remote_write.executing": "Writing remote file",
@@ -20,5 +20,5 @@
   "remote_transfer.completed": "Transferred files",
   "remote_transfer.aggregate.executing": "Transferring {n} files",
   "remote_transfer.aggregate.completed": "Transferred {n} files",
-  "remoteWorkspace.toolkitDescription": "Remote servers (SSH) or Docker containers as additional workspaces: once bound, use read/glob/write/edit/grep/run_command with workspace=\"<connection name>\" to operate on them; remote_transfer moves files between local and remote"
+  "remoteWorkspace.toolkitDescription": "Remote servers (SSH), Docker containers, or WSL distros as additional workspaces: once bound, use read/glob/write/edit/grep/run_command with workspace=\"<connection name>\" to operate on them; remote_transfer moves files between local and remote"
 }

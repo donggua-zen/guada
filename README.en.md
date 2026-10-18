@@ -99,7 +99,7 @@ Whether you're a **content creator** writing scripts and chasing trends, a **pro
 | **🌐 Browser Automation** | Electron-embedded Chromium, Agent real-time visual control | [→ Details](docs/browser-automation.md) |
 | **🧩 Multi-Model Management** | 5 protocol adapters × **17 vendors** (OpenAI / Claude / Gemini / Azure / DeepSeek / Qwen / ERNIE / Zhipu / Kimi / Volcano / MiniMax etc.), role-level/session-level/global-level config | [→ Details](docs/models.md) |
 | **🛡️ Sandbox Mode** | Shell commands execute in an isolated sandbox process, Agent acts more safely | [→ Details](docs/windows-sandbox-isolation-design.md) |
-| **🖥️ Remote Workspace** | Attach servers·NAS·VMs·dev boards (SSH) **and running Docker containers** as "additional working directories"; local + multiple remotes in one session, remote needs only a ~10 MB static binary, containers stay untouched | [→ Details](#-remote-workspace-local-brain-remote-hands) |
+| **🖥️ Remote Workspace** | Attach servers·NAS·VMs·dev boards (SSH), **running Docker containers**, and **local WSL distros** as "additional working directories"; local + multiple remotes in one session, remote needs only a ~10 MB static binary, containers and distros stay untouched | [→ Details](#-remote-workspace-local-brain-remote-hands) |
 | **🔗 MCP Integration** | Native MCP protocol support, connect to external tool ecosystem | — |
 | **📦 Multiple Deployment Options** | Electron desktop + Web app + Docker containerization, ready out of the box | [→ Deployment Guide](#-quick-start-5-minute-setup) |
 | **🗄️ Enterprise-Grade Data** | SQLite by default, Prisma 7 ORM for seamless switch to MySQL / PostgreSQL | — |
@@ -111,7 +111,7 @@ Whether you're a **content creator** writing scripts and chasing trends, a **pro
 
 **Don't move your dev environment onto the server — just let the AI reach in.** The primary working directory always stays local; remote directories are attached to the same session as "additional working directories", so the local machine and several remotes are **usable at the same time**. The Agent picks a target with `workspace="connection-name"`.
 
-Two kinds of attachable targets: **SSH hosts** (server / NAS / VM / dev board) and **running Docker containers** (devcontainers, `docker compose` services, and so on).
+Three kinds of attachable targets: **SSH hosts** (server / NAS / VM / dev board), **running Docker containers** (devcontainers, `docker compose` services, and so on), and **local WSL distros** (Windows Subsystem for Linux — no sshd setup needed inside the distro).
 
 Embedded Linux development is where this design shines: a Windows host for editing, serial console and flashing tools; one Linux VM per project for cross-compilation; the target board at runtime — all three are needed at once, and the AI only needs one entry point.
 
@@ -123,13 +123,14 @@ Embedded Linux development is where this design shines: a Windows host for editi
 
 - **Zero remote dependencies**: the execution agent is a single static binary (~10 MB, no cgo, no Node or glibc required); current builds cover linux / macOS × amd64 / arm64, so lean systems with older glibc work too.
 - **Zero container intrusion**: the agent is injected into an existing container's `/tmp` via `docker cp` and talks over a stdio pipe — no image changes, no published ports, automatic reconnect after a container restart, and GuaDa never stops or removes your container.
+- **Zero-config WSL**: a local WSL distro works the same way — the agent is streamed in over stdin (into `$HOME/.guada-agent`, ~10 MB) and talks over a `wsl.exe --exec` stdio pipe, so **no sshd is needed inside the distro**. A stopped distro is auto-started on connect (exactly like typing `wsl` in a terminal), and GuaDa never terminates or unregisters it. The working directory can be a distro path (`/home/you/proj`) or a mounted Windows drive (`/mnt/d/proj`).
 - **One session, many machines**: local plus multiple remotes mounted together — cross-machine diffs, patch porting, and log-vs-source analysis all happen in one conversation.
 - **Model keys never leave your machine**: the remote side holds only a Bearer token; scheduled tasks and sub-agents inherit the session's remote bindings, so unattended runs work as well.
 - **Permissions enforced on the server side**: `readonly / workspace / unrestricted`, defaulting to "read-write inside the working directory, read-only outside", with symlink-escape protection before any write.
 - **No special sshd configuration**: with agent ≥ 0.6.0 the client speaks stdio over an SSH exec channel, so port forwarding does not need to be enabled (stock Alpine openssh ships `AllowTcpForwarding no`); older agents fall back to the port-forward transport automatically — no forced upgrade.
 - **Zero footprint on the remote**: the agent exits as soon as the connection closes — no resident daemon; real-world NAS quirks (missing `$HOME`, chrooted SFTP) already have built-in fallbacks (automatic install-dir fallback, byte-verified upload over the exec channel).
 
-> Design docs: [Unified interface for primary and additional working directories](docs/统一工作目录操作接口-合并远程工作目录方案.md) · [Docker container workspace](docs/docker容器工作区方案.md)
+> Design docs: [Unified interface for primary and additional working directories](docs/统一工作目录操作接口-合并远程工作目录方案.md) · [Docker container workspace](docs/docker容器工作区方案.md) · [WSL workspace](docs/wsl工作区方案.md)
 
 ---
 
@@ -185,7 +186,7 @@ pnpm run dev
 |------|------|----------|
 | **Frontend Entry** | User interaction | Vue 3, Electron (embedded Chromium), QQ/WeCom/Feishu/Discord/WeChat Bot |
 | **Entry Layer** | Routing & protocol conversion | REST + SSE API, Bot Gateway, Bridge (named pipe ↔ Electron) |
-| **Core Service Layer** | Agent engine + Sub-Agent + Plugins + RAG + Skills + LLM adapters | Agent Engine (ReAct loop), Sub-Agent Manager, Plugin System, Skills Framework, Context Compression, RAG, MCP, Scheduled Tasks, Shell Sandbox, Remote Workspace (SSH / Docker containers), LLM Adapters |
+| **Core Service Layer** | Agent engine + Sub-Agent + Plugins + RAG + Skills + LLM adapters | Agent Engine (ReAct loop), Sub-Agent Manager, Plugin System, Skills Framework, Context Compression, RAG, MCP, Scheduled Tasks, Shell Sandbox, Remote Workspace (SSH / Docker containers / WSL distros), LLM Adapters |
 | **Data Layer** | Persistent storage | SQLite (Prisma 7, switchable to MySQL/PostgreSQL), sqlite-vec + FTS5, file system |
 
 **Browser automation chain:** Agent decision (backend) → named-pipe Bridge → Electron controls embedded Chromium → accessibility snapshot compressed in 6 layers back → Agent continues reasoning.
@@ -210,7 +211,7 @@ ai_chat/
 │   │       ├── bot-gateway/     # Bot gateway (QQ/WeCom/Feishu/Discord/WeChat)
 │   │       ├── scheduler/       # Scheduled tasks (Cron, session isolation)
 │   │       ├── shell/           # Shell execution + lightweight sandbox
-│   │       ├── remote-workspace/ # ⭐ Remote workspace (SSH / Docker attached dirs, tool routing, deploy & RPC)
+│   │       ├── remote-workspace/ # ⭐ Remote workspace (SSH / Docker / WSL attached dirs, tool routing, deploy & RPC)
 │   │       ├── bridge/          # Named-pipe communication (↔ Electron)
 │   │       ├── tools/           # Tool orchestration
 │   │       ├── mcp-servers/     # MCP server integration

@@ -83,4 +83,10 @@ export class RemoteWorkspaceController {
       return { containers: [], error: err?.message || String(err) };
     }
   }
+
+  /** 已安装的 WSL 发行版列表（连接向导的发行版选择器用；非 Windows 返回 available:false） */
+  @Get("wsl/distros")
+  async listWslDistros() {
+    return this.service.listWslDistros();
+  }
 }

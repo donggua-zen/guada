@@ -22,7 +22,7 @@
             </div>
             <div>
               <div class="text-sm font-medium">{{ conn.name }}</div>
-              <div class="text-xs text-gray-400">{{ connectionKind(conn) === 'docker' ? 'Docker' : 'SSH' }}</div>
+              <div class="text-xs text-gray-400">{{ kindLabel(conn) }}</div>
             </div>
           </div>
           <div class="flex gap-1">
@@ -46,7 +46,10 @@
     <!-- 新建/编辑弹窗：分步向导 -->
     <GdDialog v-model="editing" width="640px"
       :close-on-click-modal="false" append-to-body class="conn-dialog">
-      <div class="flex" style="height: 480px;">
+      <!-- 高度上限与 GdDialog 的 .l-dialog{max-height:85vh} 对齐：480(内容) + 24(body 内边距) + 边框留量。
+           矮窗口下由这里先收缩，body 就不会自己滚动（否则右侧会出现第二条贴边滚动条压住关闭按钮）。
+           注：body 高度由内容撑开时百分比 max-height 解析不到，故用显式 85vh 计算。 -->
+      <div class="flex" style="height: 480px; max-height: calc(85vh - 32px);">
         <!-- 左侧步骤导航 -->
         <div class="shrink-0 pr-5 pt-4 flex flex-col gap-5">
           <div v-for="(step, i) in stepLabels" :key="i"
@@ -72,18 +75,21 @@
         <!-- 右侧内容区 -->
         <div class="flex-1 pl-6 flex flex-col min-w-0">
           <!-- Step 0: 填写配置 -->
-          <div v-if="currentStep === 0" class="flex flex-col gap-4 flex-1 overflow-auto">
-            <div>
-              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ t('settings.connection.fillConfig') }}</h3>
-              <p class="text-xs text-gray-400 mt-0.5">{{ t('settings.connection.fillConfigDesc') }}</p>
-            </div>
+          <!-- 标题固定不滚动：下方表单区是唯一的滚动容器，滚动条因此从右上角
+               悬浮的关闭按钮（GdDialog 无标题时的浮动 X）下方开始，不再与其同列重叠 -->
+          <div v-if="currentStep === 0" class="shrink-0">
+            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ t('settings.connection.fillConfig') }}</h3>
+            <p class="text-xs text-gray-400 mt-0.5">{{ t('settings.connection.fillConfigDesc') }}</p>
+          </div>
 
+          <!-- 表单区：独立滚动；pr-2 给滑块与输入框之间留 8px -->
+          <div v-if="currentStep === 0" class="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto pr-2 mt-3">
             <div>
               <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.connectionName') }} <span class="text-red-500">*</span></label>
               <el-input v-model="editName" placeholder="my-server" />
             </div>
 
-            <!-- 连接类型：SSH 远程主机 / 本机（或远程 daemon）上的 Docker 容器 -->
+            <!-- 连接类型：SSH 远程主机 / 本机（或远程 daemon）上的 Docker 容器 / 本机 WSL 发行版（仅 Windows） -->
             <div>
               <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.typeLabel') }}</label>
               <div class="flex w-fit rounded-lg overflow-hidden border border-(--gd-color-border) dark:border-gray-700">
@@ -100,7 +106,7 @@
                 </button>
               </div>
               <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
-                {{ editConfig.kind === 'docker' ? t('settings.connection.typeDockerDesc') : t('settings.connection.typeSshDesc') }}
+                {{ typeDesc }}
               </div>
             </div>
 
@@ -150,7 +156,7 @@
             </template>
 
             <!-- Docker 字段 -->
-            <template v-else>
+            <template v-else-if="editConfig.kind === 'docker'">
               <div>
                 <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.containerLabel') }} <span class="text-red-500">*</span></label>
                 <div class="flex gap-2">
@@ -178,6 +184,30 @@
                 <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
                   {{ t('settings.connection.dockerHostDesc') }}
                 </div>
+              </div>
+            </template>
+
+            <!-- WSL 字段（仅 Windows 宿主；发行版留空 = 系统默认发行版） -->
+            <template v-else-if="editConfig.kind === 'wsl'">
+              <div>
+                <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.distroLabel') }}</label>
+                <div class="flex gap-2">
+                  <el-select v-model="editConfig.distro" filterable allow-create default-first-option clearable
+                    class="flex-1 min-w-0" :placeholder="t('settings.connection.distroPlaceholder')"
+                    :loading="distrosLoading" @visible-change="onDistroDropdown">
+                    <el-option v-for="d in wslDistros" :key="d.name" :label="d.name" :value="d.name">
+                      <span class="text-sm">{{ d.name }}</span>
+                      <span class="text-xs text-gray-400 ml-2">{{ d.isDefault ? t('settings.connection.distroDefaultTag') + ' · ' : '' }}{{ d.state || '' }}</span>
+                    </el-option>
+                  </el-select>
+                  <el-button :loading="distrosLoading" @click="loadDistros()">
+                    {{ t('settings.connection.refreshDistros') }}
+                  </el-button>
+                </div>
+                <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
+                  {{ t('settings.connection.distroDesc') }}
+                </div>
+                <div v-if="distrosError" class="text-xs text-red-500 mt-1">{{ distrosError }}</div>
               </div>
             </template>
 
@@ -232,10 +262,10 @@
           <div v-if="currentStep === 2" class="flex flex-col flex-1 min-h-0 gap-3">
             <div>
               <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                {{ editConfig.kind === 'docker' ? t('settings.connection.browseTitleDocker') : t('settings.connection.browseTitle') }}
+                {{ browseTitle }}
               </h3>
               <p class="text-xs text-gray-400 mt-0.5">
-                {{ editConfig.kind === 'docker' ? t('settings.connection.browseDescDocker') : t('settings.connection.browseDesc') }}
+                {{ browseDesc }}
               </p>
             </div>
             <!-- 路径栏 -->
@@ -345,6 +375,7 @@ import {
   type RemoteConnection,
   type RemoteConnectionConfig,
   type DockerContainerInfo,
+  type WslDistroInfo,
   type DirEntry,
 } from '@/services/modules/remote-workspace.api'
 
@@ -375,37 +406,86 @@ const editing = ref(false)
 const editConnId = ref<string | null>(null)
 const editName = ref('')
 
-/** 新连接的默认配置（SSH 形状；切到 Docker 时由 switchType 替换字段组） */
-function defaultConfig(kind: 'ssh' | 'docker' = 'ssh'): RemoteConnectionConfig {
-  return kind === 'docker'
-    ? { kind: 'docker', container: '', dockerHost: '', path: '', perm: 'workspace' }
-    : {
-        kind: 'ssh',
-        host: '', port: 22, username: 'root', authMethod: 'password',
-        password: '', privateKeyPath: '', path: '', perm: 'workspace',
-      }
+/** 新连接的默认配置（SSH 形状；切到 Docker/WSL 时由 switchType 替换字段组） */
+function defaultConfig(kind: 'ssh' | 'docker' | 'wsl' = 'ssh'): RemoteConnectionConfig {
+  if (kind === 'docker') {
+    return { kind: 'docker', container: '', dockerHost: '', path: '', perm: 'workspace' }
+  }
+  if (kind === 'wsl') {
+    return { kind: 'wsl', distro: '', path: '', perm: 'workspace' }
+  }
+  return {
+    kind: 'ssh',
+    host: '', port: 22, username: 'root', authMethod: 'password',
+    password: '', privateKeyPath: '', path: '', perm: 'workspace',
+  }
 }
 const editConfig = ref<RemoteConnectionConfig>(defaultConfig())
 
 /** 连接类型切换：替换为对应类型的默认字段组（已填的公共项 perm 保留） */
-function switchType(kind: 'ssh' | 'docker') {
+function switchType(kind: 'ssh' | 'docker' | 'wsl') {
   if (editConfig.value.kind === kind) return
   const perm = editConfig.value.perm
   editConfig.value = { ...defaultConfig(kind), perm }
   // 路径属于目标侧概念：类型切换后原路径不再适用，浏览态一并重置
-  browserPath.value = kind === 'docker' ? '/' : '/'
+  browserPath.value = '/'
   browserEntries.value = []
   browserExists.value = false
   testResult.value = null
   testLog.value = ''
   deployResult.value = null
   deployLog.value = ''
+  // 切到 WSL 时预取发行版列表（失败不阻塞，可手动刷新）
+  if (kind === 'wsl') void loadDistros()
 }
 
-const typeOptions = computed(() => [
-  { value: 'ssh' as const, label: t('settings.connection.typeSsh') },
-  { value: 'docker' as const, label: t('settings.connection.typeDocker') },
-])
+/** 当前宿主是否为 Windows（WSL 连接仅在 Windows 可用；Electron 暴露 platform，Web 端退回 navigator） */
+const isWindowsHost = computed(() => {
+  const platform = (typeof window !== 'undefined' && (window as any).electronAPI?.platform) ||
+    (typeof navigator !== 'undefined' ? navigator.platform : '')
+  return /^win/i.test(String(platform || ''))
+})
+
+const typeOptions = computed(() => {
+  const opts: { value: 'ssh' | 'docker' | 'wsl'; label: string }[] = [
+    { value: 'ssh', label: t('settings.connection.typeSsh') },
+    { value: 'docker', label: t('settings.connection.typeDocker') },
+  ]
+  if (isWindowsHost.value) {
+    opts.push({ value: 'wsl', label: t('settings.connection.typeWsl') })
+  }
+  return opts
+})
+
+/** 类型说明文案（按当前类型分派） */
+const typeDesc = computed(() => {
+  const kind = editConfig.value.kind
+  if (kind === 'docker') return t('settings.connection.typeDockerDesc')
+  if (kind === 'wsl') return t('settings.connection.typeWslDesc')
+  return t('settings.connection.typeSshDesc')
+})
+
+/** 目录浏览步骤的标题/说明（按当前类型分派） */
+const browseTitle = computed(() => {
+  const kind = editConfig.value.kind
+  if (kind === 'docker') return t('settings.connection.browseTitleDocker')
+  if (kind === 'wsl') return t('settings.connection.browseTitleWsl')
+  return t('settings.connection.browseTitle')
+})
+const browseDesc = computed(() => {
+  const kind = editConfig.value.kind
+  if (kind === 'docker') return t('settings.connection.browseDescDocker')
+  if (kind === 'wsl') return t('settings.connection.browseDescWsl')
+  return t('settings.connection.browseDesc')
+})
+
+/** 连接类型徽标（列表卡片用） */
+function kindLabel(conn: RemoteConnection): string {
+  const kind = connectionKind(conn)
+  if (kind === 'docker') return 'Docker'
+  if (kind === 'wsl') return 'WSL'
+  return 'SSH'
+}
 
 // ── 容器选择器（Docker 类型）──
 const runningContainers = ref<DockerContainerInfo[]>([])
@@ -430,6 +510,33 @@ async function loadContainers() {
 /** 下拉展开时按需刷新容器列表（避免进入向导即调用 docker） */
 function onContainerDropdown(visible: boolean) {
   if (visible && runningContainers.value.length === 0) void loadContainers()
+}
+
+// ── 发行版选择器（WSL 类型，仅 Windows）──
+const wslDistros = ref<WslDistroInfo[]>([])
+const distrosLoading = ref(false)
+const distrosError = ref('')
+
+async function loadDistros() {
+  if (editConfig.value.kind !== 'wsl') return
+  distrosLoading.value = true
+  distrosError.value = ''
+  try {
+    const result = await apiService.listWslDistros()
+    wslDistros.value = result?.distros || []
+    if (!result?.available) {
+      distrosError.value = result?.reason || t('settings.connection.distrosUnavailable')
+    }
+  } catch (e) {
+    distrosError.value = getErrorMessage(e)
+  } finally {
+    distrosLoading.value = false
+  }
+}
+
+/** 下拉展开时按需刷新发行版列表（避免进入向导即调用 wsl.exe） */
+function onDistroDropdown(visible: boolean) {
+  if (visible && wslDistros.value.length === 0) void loadDistros()
 }
 
 
@@ -503,6 +610,8 @@ function startNew() {
   browserExists.value = false
   runningContainers.value = []
   containersError.value = ''
+  wslDistros.value = []
+  distrosError.value = ''
   currentStep.value = 0
 }
 
@@ -522,13 +631,19 @@ function editConn(conn: RemoteConnection) {
   browserExists.value = false
   runningContainers.value = []
   containersError.value = ''
+  wslDistros.value = []
+  distrosError.value = ''
   currentStep.value = 0
+  // 编辑 WSL 连接时预取发行版列表（下拉需要展示当前发行版的状态）
+  if (connectionKind(conn) === 'wsl') void loadDistros()
 }
 
 /** Step 0 必填校验（按连接类型） */
 const canProceedFromConfig = computed(() => {
   if (!editName.value.trim()) return false
   if (editConfig.value.kind === 'docker') return !!editConfig.value.container?.trim()
+  // WSL：发行版可留空（走系统默认发行版；不可用时由测试步骤给出明确错误）
+  if (editConfig.value.kind === 'wsl') return true
   return !!editConfig.value.host && !!editConfig.value.username
 })
 
@@ -667,9 +782,10 @@ async function deleteConn(id: string) {
 </script>
 
 <style scoped>
-:deep(.conn-dialog .l-dialog__body) {
-  padding: 0;
-}
+/* 注意：GdDialog 的 body 内边距（12px）是刻意保留的。
+   append-to-body 后 scoped `:deep(.conn-dialog .l-dialog__body)` 选不中 Teleport 出去的
+   DOM（同 AgentModal.vue 的注释），写入会静默失效；如需调整须用非 scoped 全局规则，
+   并同步检查向导内各步骤的间距。 */
 .border-3 {
   border-width: 3px;
 }

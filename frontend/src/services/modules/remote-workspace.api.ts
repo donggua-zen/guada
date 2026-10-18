@@ -3,12 +3,12 @@ import type { ApiContext } from "./api-context";
 /**
  * 连接配置（提交给后端的 DTO）。
  *
- * 后端以判别字段 kind 区分两种连接类型的严格联合类型；前端此处用宽松形状
- * （两组字段均可选）以便向导内单一 editConfig 引用在类型间切换，无需到处窄化。
+ * 后端以判别字段 kind 区分三种连接类型的严格联合类型；前端此处用宽松形状
+ * （各组字段均可选）以便向导内单一 editConfig 引用在类型间切换，无需到处窄化。
  * kind 缺省（旧数据）由后端归一为 'ssh'。
  */
 export interface RemoteConnectionConfig {
-  kind?: "ssh" | "docker";
+  kind?: "ssh" | "docker" | "wsl";
 
   // ── SSH ──
   host?: string;
@@ -25,8 +25,12 @@ export interface RemoteConnectionConfig {
   /** Docker 主机（docker -H，如 tcp://host:2375 / ssh://user@host）；缺省本机 */
   dockerHost?: string;
 
+  // ── WSL ──
+  /** WSL 发行版名（wsl -l -v 之一；空 = 系统默认发行版） */
+  distro?: string;
+
   // ── 公共 ──
-  /** 工作目录（SSH: 远端绝对路径；Docker: 容器内绝对路径；缺省用容器 WorkingDir） */
+  /** 工作目录（SSH: 远端绝对路径；Docker: 容器内绝对路径；WSL: 发行版内绝对路径。缺省：容器 WorkingDir / 发行版 $HOME） */
   path: string;
   /** agent 权限模式:readonly | workspace | unrestricted(默认 workspace) */
   perm?: string;
@@ -39,14 +43,22 @@ export interface RemoteConnection {
 }
 
 /** 连接类型（旧数据无 kind → 视为 ssh） */
-export function connectionKind(conn: Pick<RemoteConnection, "config"> | { config: RemoteConnectionConfig }): "ssh" | "docker" {
-  return conn.config?.kind === "docker" ? "docker" : "ssh";
+export function connectionKind(
+  conn: Pick<RemoteConnection, "config"> | { config: RemoteConnectionConfig },
+): "ssh" | "docker" | "wsl" {
+  const kind = conn.config?.kind;
+  if (kind === "docker") return "docker";
+  if (kind === "wsl") return "wsl";
+  return "ssh";
 }
 
 /** 连接档摘要文案（列表卡片 / 信息卡共用） */
 export function connectionTargetLine(config: RemoteConnectionConfig): string {
   if (config.kind === "docker") {
     return `容器 ${config.container || "?"}${config.dockerHost ? ` @ ${config.dockerHost}` : ""}`;
+  }
+  if (config.kind === "wsl") {
+    return `WSL 发行版 ${config.distro || "（默认）"}`;
   }
   return `${config.username || "root"}@${config.host || "?"}:${config.port || 22}`;
 }
@@ -56,6 +68,23 @@ export interface DockerContainerInfo {
   name: string;
   image: string;
   status: string;
+}
+
+/** 已安装的 WSL 发行版（连接向导的发行版选择器） */
+export interface WslDistroInfo {
+  name: string;
+  /** Running / Stopped / ...（旧版 wsl.exe 无状态列时为空） */
+  state: string;
+  /** WSL 版本：1 | 2（未知为 0） */
+  version: number;
+  isDefault: boolean;
+}
+
+/** WSL 发行版列表结果（非 Windows / 未安装 WSL 时 available=false + reason） */
+export interface WslDistroListResult {
+  available: boolean;
+  reason?: string;
+  distros: WslDistroInfo[];
 }
 
 export interface DirEntry {
@@ -101,6 +130,8 @@ export interface RemoteWorkspaceApi {
   browsePath(config: RemoteConnectionConfig, path: string): Promise<BrowseResult>;
   /** 运行中的 Docker 容器列表（向导容器选择器；dockerHost 为空 = 本机） */
   listDockerContainers(dockerHost?: string): Promise<{ containers: DockerContainerInfo[]; error?: string }>;
+  /** 已安装的 WSL 发行版列表（向导发行版选择器；非 Windows / 未安装 WSL 返回 available:false） */
+  listWslDistros(): Promise<WslDistroListResult>;
 }
 
 export const remoteWorkspaceApi: RemoteWorkspaceApi = {
@@ -162,5 +193,9 @@ export const remoteWorkspaceApi: RemoteWorkspaceApi = {
   async listDockerContainers(this: ApiContext, dockerHost?: string) {
     const query = dockerHost ? `?dockerHost=${encodeURIComponent(dockerHost)}` : "";
     return await this._request(`/remote-workspace/docker/containers${query}`);
+  },
+
+  async listWslDistros(this: ApiContext) {
+    return await this._request("/remote-workspace/wsl/distros");
   },
 };

@@ -45,6 +45,14 @@ function makeDockerConn(id: string, name: string, container: string): RemoteConn
   };
 }
 
+function makeWslConn(id: string, name: string, distro: string): RemoteConnection {
+  return {
+    id,
+    name,
+    config: { kind: "wsl", distro, path: "/home/dev/proj" },
+  };
+}
+
 describe("remoteWorkspace Store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -198,6 +206,15 @@ describe("remoteWorkspace Store", () => {
 
       expect(store.connectionOptions).toEqual([
         { id: "conn_d", name: "my-container", kind: "docker", description: "容器 guada-dev", path: "/workspace" },
+      ]);
+    });
+
+    it("WSL 连接：kind=wsl，描述为发行版名", () => {
+      const store = useRemoteWorkspaceStore();
+      store.connections = [makeWslConn("conn_w", "my-wsl", "Ubuntu-AOSP")];
+
+      expect(store.connectionOptions).toEqual([
+        { id: "conn_w", name: "my-wsl", kind: "wsl", description: "WSL 发行版 Ubuntu-AOSP", path: "/home/dev/proj" },
       ]);
     });
 

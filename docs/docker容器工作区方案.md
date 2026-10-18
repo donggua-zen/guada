@@ -32,17 +32,19 @@ AI 直接用 `workspace="连接名"` 在容器内读写文件、搜索与执行�
 **推二进制 / 起进程 / 端口转发**三件事，Docker 上前两件有原生替代（`docker cp` / `docker exec`），
 第三件由 stdio 管道直接省掉：
 
-| 环节 | SSH | Docker |
-|---|---|---|
-| 传输 | **agent ≥ 0.6.0：`ssh exec '<agent> --stdio'`（NDJSON over exec channel）**；< 0.6.0：端口转发 → `ws://127.0.0.1:<port>/ws`（Bearer token，legacy 回退） | `docker exec -i <c> <agent> --stdio`（NDJSON 管道，免 token） |
-| 推送二进制 | SFTP `fastPut`，失败回退 `cat >` + 字节校验 | `docker cp`，失败回退 `docker exec -i sh -c 'cat >'` |
-| 起进程 | `ssh exec` 长驻通道（stdin EOF = 退出）；legacy 为 `nohup agent --port 0` | 长驻 `docker exec -i`（stdin EOF = 退出） |
-| 版本/架构探测 | `uname -s/-m`（+ 本地二进制 `--version` 校验） | `docker inspect` + `docker image inspect`（不经容器内任何命令） |
-| 权限 | agent `--perm readonly/workspace/unrestricted` | 同左（同一 agent、同一套服务端强制） |
-| 版本门禁 | 远端 < 0.6.0 自动回退端口转发；latest 低于 0.6.0 时忽略（不降级） | 要求 ≥ 0.6.0；latest 低于下限时忽略并退回本地缓存 |
+| 环节 | SSH | Docker | WSL 发行版（第三种类型，见 [WSL 工作区方案](wsl工作区方案.md)） |
+|---|---|---|---|
+| 传输 | **agent ≥ 0.6.0：`ssh exec '<agent> --stdio'`（NDJSON over exec channel）**；< 0.6.0：端口转发 → `ws://127.0.0.1:<port>/ws`（Bearer token，legacy 回退） | `docker exec -i <c> <agent> --stdio`（NDJSON 管道，免 token） | `wsl.exe -d <distro> --exec <agent> --stdio`（NDJSON 管道，免 token） |
+| 推送二进制 | SFTP `fastPut`，失败回退 `cat >` + 字节校验 | `docker cp`，失败回退 `docker exec -i sh -c 'cat >'` | stdin 直传（`cat >`，sha256 实测一致）→ `mv -f` 落位；`/mnt/<盘>` cp 兜底 |
+| 起进程 | `ssh exec` 长驻通道（stdin EOF = 退出）；legacy 为 `nohup agent --port 0` | 长驻 `docker exec -i`（stdin EOF = 退出） | 长驻 `wsl.exe --exec`（stdin EOF = 退出，实测无孤儿） |
+| 版本/架构探测 | `uname -s/-m`（+ 本地二进制 `--version` 校验） | `docker inspect` + `docker image inspect`（不经容器内任何命令） | 发行版内一次探针：`uname -s/-m; id -un; $HOME; command -v sh` |
+| 权限 | agent `--perm readonly/workspace/unrestricted` | 同左（同一 agent、同一套服务端强制） | 同左 |
+| 版本门禁 | 远端 < 0.6.0 自动回退端口转发；latest 低于 0.6.0 时忽略（不降级） | 要求 ≥ 0.6.0；latest 低于下限时忽略并退回本地缓存 | 同左（与 Docker **共用同一实现**：`cli-agent-install.ts`） |
 
 两侧都改走 stdio 后，**容器与 SSH 共用同一个传输实现**（`rpc-stream-transport.ts` 的 NDJSON 分帧 +
-`ssh-stdio-transport.ts` 的通道生命周期），差别只在"谁来提供 stdin/stdout"（子进程 vs SSH exec channel）。
+`ssh-stdio-transport.ts` 的通道生命周期），差别只在"谁来提供 stdin/stdout"（子进程 vs SSH exec channel）；
+WSL 上线时进一步把 Docker/WSL 的"候选目录 + 版本门禁 + 注入复验 + 握手"抽为共享内核
+`cli-agent-install.ts`（Docker 侧导出签名保持不变，回归见 [WSL 工作区方案](wsl工作区方案.md) §3.5）。
 
 **完全复用、零改动**的层：`RemoteAgent` 包装、`AgentWorkspaceProvider`（原 `SshWorkspaceProvider`）、
 `WorkspaceToolRouter` 的 `workspace` 参数路由与会话绑定校验、`r:<连接名>:<pid>` 进程命名空间、
@@ -105,13 +107,15 @@ docker inspect（运行状态 + 镜像 Os/Architecture + WorkingDir）
 
 ### 3.4 连接模型与展示
 
-连接配置以 `kind` 为判别字段（`SshConnectionConfig | DockerConnectionConfig`）：
+连接配置以 `kind` 为判别字段（现有实现为 `SshConnectionConfig | DockerConnectionConfig | WslConnectionConfig`）。
 
 ```jsonc
 // SSH（旧数据无 kind，读时归一为 "ssh"，零迁移）
 { "kind": "ssh", "host": "...", "port": 22, "username": "...", "authMethod": "password|privateKey", "path": "...", "perm": "workspace" }
 // Docker
 { "kind": "docker", "container": "容器名或 ID", "path": "/容器内/工作目录", "perm": "workspace", "dockerHost": "可选，docker -H" }
+// WSL（第三种连接类型，详见 docs/wsl工作区方案.md）
+{ "kind": "wsl", "distro": "Ubuntu-22.04", "path": "/发行版内/工作目录", "perm": "workspace" }
 ```
 
 - 会话绑定键沿用 `attachments["ssh-connection"]`（存的是连接 ID 列表，本就与类型无关，零迁移）；
@@ -126,9 +130,11 @@ docker inspect（运行状态 + 镜像 Os/Architecture + WorkingDir）
 | 层 | 文件 | 说明 |
 |---|---|---|
 | agent（Go，子模块 `guada-agent`） | `stream.go` / `rpc.go` / `main.go` | `--stdio` NDJSON 传输；`HandleConnection` 与 stdio 共用 `handleMessage` |
-| 连接层 | `backend-ts/src/modules/remote-workspace/docker-agent-connect.ts` | inspect / 注入 / 连接 / 浏览 / 容器列表 + 纯函数（解析、平台映射、版本比较） |
+| 连接层 | `backend-ts/src/modules/remote-workspace/docker-agent-connect.ts` | Docker 适配器：inspect / 注入 / 连接 / 浏览 / 容器列表 + 纯函数（解析、平台映射、版本比较）；"候选目录 + 版本门禁 + 注入复验 + 握手"通用流程在 `cli-agent-install.ts` |
+| 共享内核 | `.../cli-agent-install.ts` | Docker / WSL 共用的 `CliAgentEnv` 适配器接口与实现（`ensureAgentInCliEnv` 等；见 [WSL 工作区方案](wsl工作区方案.md) §3.5） |
+| WSL 适配器 | `.../wsl-agent-connect.ts` | 发行版列表/探测、stdin 注入（`/mnt` cp 兜底）、`wsl.exe --exec --stdio` 长连接（第三种连接类型，见 [WSL 工作区方案](wsl工作区方案.md)） |
 | 传输层 | `.../rpc.ts`、`.../rpc-stream-transport.ts` | `RpcTransport` 抽象；WS 与 stdio 两种实现 |
-| 连接管理 | `.../remote-workspace-agent-manager.ts` | `getAgent` 校验/缓存/回收不变；`connectSsh` / `connectDocker` 分派 |
+| 连接管理 | `.../remote-workspace-agent-manager.ts` | `getAgent` 校验/缓存/回收不变；`connectSsh` / `connectDocker` / `connectWsl` 分派 |
 | 路由 | `.../workspace-router.ts`、`.../agent-workspace-provider.ts` | 按连接的 `kind` 决定 `provider.scheme`；工具层无感 |
 | 服务/接口 | `.../remote-workspace.service.ts`、`.../remote-workspace.controller.ts` | test/deploy/browse 按 `kind` 分派；容器列表接口 |
 | 前端 | `frontend/src/components/setting/ConnectionSettings.vue`、`services/modules/remote-workspace.api.ts`、`stores/remoteWorkspace.ts`、`components/chat/workspace/WorkingDirBar.vue` 等 | 类型选择、容器下拉、按类型图标（SSH 云 / 容器方块）与文案 |

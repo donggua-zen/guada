@@ -7,7 +7,7 @@
         class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
         @click="emit('toggle', opt.id)">
         <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-          <component :is="opt.kind === 'docker' ? Cube16Regular : Cloud16Regular" />
+          <component :is="opt.kind === 'docker' ? Cube16Regular : opt.kind === 'wsl' ? Desktop16Regular : Cloud16Regular" />
         </el-icon>
         <div class="flex-1 flex flex-col gap-0.5 min-w-0">
           <div class="flex items-baseline gap-1.5 min-w-0">
@@ -40,7 +40,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElIcon } from 'element-plus'
-import { Checkmark16Filled, Cloud16Regular, Cube16Regular, Folder16Regular } from '@vicons/fluent'
+import { Checkmark16Filled, Cloud16Regular, Cube16Regular, Desktop16Regular, Folder16Regular } from '@vicons/fluent'
 import { useRemoteWorkspaceStore } from '@/stores/remoteWorkspace'
 
 defineProps<{

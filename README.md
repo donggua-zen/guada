@@ -99,7 +99,7 @@ GuaDa 是一个**本地优先**的开源 AI 工作站——它不只是聊天框
 | **🌐 浏览器自动化** | Electron 内嵌 Chromium，Agent 实时可视操控。 | [→ 详情](docs/browser-automation.md) |
 | **🧩 多模型管理** | 5 种协议适配器 × **17 家厂商**（OpenAI / Claude / Gemini / Azure / DeepSeek / 通义 / 文心 / 智谱 / Kimi / 火山 / Minimax 等），角色级/会话级/全局级配置 | [→ 详情](docs/models.md) |
 | **🛡️ 沙箱模式** | Shell 命令经独立沙箱进程隔离执行，Agent 动手更安全 | [→ 详情](docs/windows-sandbox-isolation-design.md) |
-| **🖥️ 远程工作区** | 把**服务器·NAS·虚拟机·开发板（SSH）**与**运行中的 Docker 容器**挂成「附加工作目录」，本地与多台远程同一会话；远端只需一个约 10MB 的静态二进制，容器零侵入 | [→ 详情](#-远程工作区本地大脑远程手脚) |
+| **🖥️ 远程工作区** | 把**服务器·NAS·虚拟机·开发板（SSH）**、**运行中的 Docker 容器**与**本机 WSL 发行版**挂成「附加工作目录」，本地与多台远程同一会话；远端只需一个约 10MB 的静态二进制，容器 / 发行版零侵入 | [→ 详情](#-远程工作区本地大脑远程手脚) |
 | **🔗 MCP 集成** | 原生支持 MCP 协议，接入外部工具生态 | — |
 | **📦 多部署方式** | Electron 桌面 + Web 应用 + Docker 容器化，开箱即用 | [→ 部署指南](#-快速开始5分钟上手) |
 | **🗄️ 企业级数据** | 默认 SQLite，Prisma 7 ORM 可无缝切换 MySQL / PostgreSQL | — |
@@ -111,7 +111,7 @@ GuaDa 是一个**本地优先**的开源 AI 工作站——它不只是聊天框
 
 **不把开发环境搬到服务器上，只把 AI 的手伸进去。** 主工作目录始终在本地，远程目录作为「附加工作目录」挂进同一个会话——本地和多台远程机器**同时可用**，AI 用 `workspace="连接名"` 指定在哪台机器上动手。
 
-两种可挂载的目标：**SSH 远程主机**（服务器 / NAS / 虚拟机 / 开发板）与**运行中的 Docker 容器**（devcontainer、`docker compose` 起的服务等）。
+三种可挂载的目标：**SSH 远程主机**（服务器 / NAS / 虚拟机 / 开发板）、**运行中的 Docker 容器**（devcontainer、`docker compose` 起的服务等）与**本机 WSL 发行版**（Windows Subsystem for Linux，发行版里不用配 sshd）。
 
 嵌入式 Linux 开发是这套设计的典型主场：Windows 上位机管编辑、串口与烧写，每个项目一台 Linux 虚拟机管交叉编译，板端管运行——三层缺一不可，而 AI 只需要一个入口。
 
@@ -123,13 +123,14 @@ GuaDa 是一个**本地优先**的开源 AI 工作站——它不只是聊天框
 
 - **远端零依赖**：执行代理是单个静态二进制（约 10MB，无 cgo，不依赖 Node 与 glibc），现有构建覆盖 linux / macOS × amd64 / arm64，老 glibc 的精简系统同样能跑。
 - **容器零侵入**：接入已有容器（如 VS Code devcontainer）时，代理经 `docker cp` 注入容器内 `/tmp` 并以 stdio 管道通信——不改镜像、不加端口映射、容器重启即自动重连，GuaDa 也绝不停止或删除你的容器。
+- **WSL 免配置**：本机 WSL 发行版同样零侵入——代理经 stdin 直传注入发行版内（`$HOME/.guada-agent`，约 10MB），走 `wsl.exe --exec` 的 stdio 管道；**发行版里不用装/起 sshd**，已停止的发行版连接时自动拉起（与在终端敲 `wsl` 一致），GuaDa 绝不终止或卸载发行版。工作目录既可以是发行版内路径（`/home/you/proj`），也可以是 Windows 盘挂载路径（`/mnt/d/proj`）。
 - **一个会话，多台机器**：本地 + 多台远程同时挂载，跨机器对比、补丁移植、日志与源码对照都在一轮对话里完成。
 - **模型与密钥不出本机**：远端只握有一个 Bearer token；定时任务与子 Agent 会自动继承会话的远程绑定，无人值守也照样跑。
 - **权限在服务器侧强制**：`readonly / workspace / unrestricted` 三档，默认「工作目录内可读写、目录外只读」，写操作前解析符号链接防逃逸。
 - **不挑 sshd 配置**：agent ≥ 0.6.0 时走 SSH exec 通道（stdio 管道），**不再要求 sshd 允许端口转发**——实测 Alpine 的 openssh 默认关闭转发，旧方案在这种环境下直接连不上；旧版 agent 自动回退端口转发链路，不做强制升级。
 - **对远端零侵入**：连接断开即退出、不留常驻进程；NAS 的 `$HOME` 不存在、SFTP 被 chroot 等实际坑位已内置回退（安装目录自动降级、改走 exec 通道上传并校验字节数）。
 
-> 设计文档：[主工作目录与附加工作目录统一操作接口](docs/统一工作目录操作接口-合并远程工作目录方案.md) · [Docker 容器工作区方案](docs/docker容器工作区方案.md)
+> 设计文档：[主工作目录与附加工作目录统一操作接口](docs/统一工作目录操作接口-合并远程工作目录方案.md) · [Docker 容器工作区方案](docs/docker容器工作区方案.md) · [WSL 工作区方案](docs/wsl工作区方案.md)
 
 ---
 
@@ -204,7 +205,7 @@ pnpm run dev
 |------|------|----------|
 | **前端入口** | 用户交互 | Vue 3、Electron（内嵌 Chromium）、QQ/企微/飞书/Discord/微信 Bot |
 | **入口层** | 路由与协议转换 | REST + SSE API、Bot Gateway、Bridge（命名管道 ↔ Electron） |
-| **核心服务层** | Agent 引擎 + 子 Agent + 插件 + RAG + Skills + LLM 适配 | Agent Engine（ReAct 循环）、Sub-Agent Manager、插件系统、Skills 框架、上下文压缩、RAG、MCP、定时任务、Shell 沙箱、远程工作区（SSH / Docker 容器）、LLM 适配器 |
+| **核心服务层** | Agent 引擎 + 子 Agent + 插件 + RAG + Skills + LLM 适配 | Agent Engine（ReAct 循环）、Sub-Agent Manager、插件系统、Skills 框架、上下文压缩、RAG、MCP、定时任务、Shell 沙箱、远程工作区（SSH / Docker 容器 / WSL 发行版）、LLM 适配器 |
 | **数据层** | 持久化存储 | SQLite（Prisma 7，可切换 MySQL/PostgreSQL）、sqlite-vec + FTS5、文件系统 |
 
 **浏览器自动化链路**：Agent 决策（后端）→ 命名管道 Bridge → Electron 操控内嵌 Chromium → 无障碍快照 6 层压缩回传 → Agent 继续推理。
@@ -229,7 +230,7 @@ ai_chat/
 │   │       ├── bot-gateway/     # 机器人网关（QQ/企微/飞书/Discord/微信）
 │   │       ├── scheduler/       # 定时任务（Cron、会话隔离）
 │   │       ├── shell/           # Shell 执行 + 轻沙箱
-│   │       ├── remote-workspace/ # ⭐ 远程工作区（SSH / Docker 容器附加目录、工具路由、部署与 RPC）
+│   │       ├── remote-workspace/ # ⭐ 远程工作区（SSH / Docker 容器 / WSL 发行版附加目录、工具路由、部署与 RPC）
 │   │       ├── bridge/          # 命名管道通信（↔ Electron）
 │   │       ├── tools/           # 工具编排
 │   │       ├── mcp-servers/     # MCP 服务器集成

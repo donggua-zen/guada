@@ -11,6 +11,7 @@ import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import * as iconv from "iconv-lite";
 import { connectDockerAgent } from "./docker-agent-connect";
 import { connectSshAgent } from "./ssh-agent-connect";
+import { connectWslAgent } from "./wsl-agent-connect";
 import { RpcClient, isUnknownMethodError, isTransportError } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 import { StreamingSanitizer } from "../shell/stream-sanitizer";
@@ -234,9 +235,9 @@ export class RemoteAgentManager implements OnModuleDestroy {
     isOpen: () => boolean;
     dispose: () => void;
   }> {
-    return conn.config.kind === "docker"
-      ? this.connectDocker(conn)
-      : this.connectSsh(conn);
+    if (conn.config.kind === "docker") return this.connectDocker(conn);
+    if (conn.config.kind === "wsl") return this.connectWsl(conn);
+    return this.connectSsh(conn);
   }
 
   /**
@@ -254,6 +255,34 @@ export class RemoteAgentManager implements OnModuleDestroy {
     const result = await connectDockerAgent(conn.config, { downloadUrl, latestVersionUrl });
     // RemoteAgent 的 basePath 取 config.path：容器未显式配置时以容器 WorkingDir 生效，
     // 此处回写生效值，保证后端侧相对路径解析与 agent --root 一致
+    if (!conn.config.path) conn.config.path = result.rootPath;
+    return {
+      rpc: result.rpc,
+      isOpen: () => result.transport.isOpen(),
+      dispose: () => {
+        try {
+          result.rpc.close();
+        } catch {}
+      },
+    };
+  }
+
+  /**
+   * WSL 发行版链路：发行版内注入 agent → `wsl.exe -d <distro> --exec <agent> --stdio` 管道连接。
+   * 无 sshd、无端口转发、无 token；已停止的发行版会被自动拉起（wsl.exe 语义），
+   * 发行版本身绝不 terminate/shutdown/unregister。
+   */
+  private async connectWsl(conn: RemoteConnection): Promise<{
+    rpc: RpcClient;
+    isOpen: () => boolean;
+    dispose: () => void;
+  }> {
+    if (conn.config.kind !== "wsl") throw new Error("connectWsl called with non-wsl connection");
+    const downloadUrl = await this.service.getAgentDownloadUrl();
+    const latestVersionUrl = await this.service.getAgentLatestVersionUrl();
+    const result = await connectWslAgent(conn.config, { downloadUrl, latestVersionUrl });
+    // 与 Docker 同构：未显式配置 path 时以发行版默认用户 $HOME 生效，回写保证
+    // 后端侧相对路径解析与 agent --root 一致
     if (!conn.config.path) conn.config.path = result.rootPath;
     return {
       rpc: result.rpc,
@@ -359,9 +388,12 @@ export class RemoteAgent {
     return this.config.path || "/";
   }
 
-  /** 连接类型（ssh / docker）：供 provider.scheme 与展示层区分目标形态 */
-  get connectionKind(): "ssh" | "docker" {
-    return this.config?.kind === "docker" ? "docker" : "ssh";
+  /** 连接类型（ssh / docker / wsl）：供 provider.scheme 与展示层区分目标形态 */
+  get connectionKind(): "ssh" | "docker" | "wsl" {
+    const kind = this.config?.kind;
+    if (kind === "docker") return "docker";
+    if (kind === "wsl") return "wsl";
+    return "ssh";
   }
 
   /** 相对路径 → 远端绝对路径（posix 语义；绝对路径原样返回） */

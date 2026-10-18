@@ -9,7 +9,8 @@
  *
  * 连接类型由连接的 config.kind 决定（对工具层与提示词透明）：
  * - ssh：远程主机（agent 经 SFTP 推送 + SSH 端口转发 + WebSocket，见 agent-deploy.ts）；
- * - docker：运行中的容器（agent 经 docker cp 注入 + docker exec stdio，见 docker-agent-connect.ts）。
+ * - docker：运行中的容器（agent 经 docker cp 注入 + docker exec stdio，见 docker-agent-connect.ts）；
+ * - wsl：本机 WSL 发行版（agent 经 stdin 注入 + wsl.exe --exec stdio，见 wsl-agent-connect.ts）。
  *
  * 历史：本插件曾注册 remote_read/write/edit/grep/bash 五个独立工具，
  * 已合并进标准文件与命令工具（workspace 参数路由），历史会话中的
@@ -84,7 +85,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
       description: "%remoteWorkspace.toolkitDescription%",
       loadMode: "eager",
       activator:
-        "Use these tools when the user asks to operate on remote servers (SSH) or bound Docker containers as additional workspaces.",
+        "Use these tools when the user asks to operate on remote servers (SSH), bound Docker containers, or local WSL distros as additional workspaces.",
     });
     // 提示词按冻结快照渲染（RemoteBindingStateService 两态状态机）：
     // 绑定变更以注入块跟随下一条用户消息，系统提示词仅冷启动/压缩后刷新 → 前缀缓存稳定。
@@ -110,8 +111,8 @@ export class RemoteWorkspacePlugin extends PluginBase {
           "The following connections are bound to this session as additional workspaces:",
           list,
           "",
-          'To operate on a remote or container workspace, pass workspace="<connection name>" (must match exactly) to the standard file tools (read/glob/write/edit/grep) and run_command.',
-          'Paths are then relative to that workspace\'s directory (on the remote host, or inside the container). Omit workspace (or use "main") for the primary local workspace.',
+          'To operate on a remote, container, or WSL workspace, pass workspace="<connection name>" (must match exactly) to the standard file tools (read/glob/write/edit/grep) and run_command.',
+          'Paths are then relative to that workspace\'s directory (on the remote host, inside the container, or inside the WSL distro). Omit workspace (or use "main") for the primary local workspace.',
           "remote_transfer keeps its own 'connection' parameter to move files between local and remote.",
           "If bindings change mid-session, an updated list arrives as a follow-up reminder (it supersedes this list).",
         ].join("\n");

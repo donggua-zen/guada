@@ -11,6 +11,13 @@ import {
   testDockerConnection,
   verifyAndDeployDockerAgent,
 } from "./docker-agent-connect";
+import {
+  WslConnectionConfig,
+  browseWslPath,
+  listWslDistros as listInstalledWslDistros,
+  testWslConnection,
+  verifyAndDeployWslAgent,
+} from "./wsl-agent-connect";
 import { encryptSecret, decryptSecret } from "./secret-crypto.util";
 
 /** SSH 连接配置（kind 判别字段与旧数据兼容：读时缺省归一为 "ssh"） */
@@ -28,8 +35,11 @@ export interface SshConnectionConfig {
   perm?: string;
 }
 
-/** 连接配置联合类型：SSH 远程主机 / Docker 容器（判别字段 kind） */
-export type RemoteConnectionConfig = SshConnectionConfig | DockerConnectionConfig;
+/** 连接配置联合类型：SSH 远程主机 / Docker 容器 / WSL 发行版（判别字段 kind） */
+export type RemoteConnectionConfig =
+  | SshConnectionConfig
+  | DockerConnectionConfig
+  | WslConnectionConfig;
 
 export interface RemoteConnection {
   id: string;
@@ -126,6 +136,12 @@ export class RemoteWorkspaceService {
       const downloadUrl = await this.getAgentDownloadUrl();
       const latestVersionUrl = await this.getAgentLatestVersionUrl();
       return testDockerConnection(config, { downloadUrl, latestVersionUrl });
+    }
+    // WSL 发行版：探测 + 注入校验 + stdio 握手（已停止的发行版会自动拉起）
+    if (config.kind === "wsl") {
+      const downloadUrl = await this.getAgentDownloadUrl();
+      const latestVersionUrl = await this.getAgentLatestVersionUrl();
+      return testWslConnection(config, { downloadUrl, latestVersionUrl });
     }
     try {
       const { Client } = require("ssh2");
@@ -261,30 +277,41 @@ export class RemoteWorkspaceService {
       try {
         const downloadUrl = await this.getAgentDownloadUrl();
         const latestVersionUrl = await this.getAgentLatestVersionUrl();
-        const result =
-          config.kind === "docker"
-            ? await verifyAndDeployDockerAgent(
-                config,
-                downloadUrl,
-                latestVersionUrl,
-                (line) => job.log.push(line),
-                controller.signal,
-              )
-            : await verifyAndDeployAgent(
-                {
-                  scheme: "ssh",
-                  host: config.host,
-                  port: config.port || 22,
-                  username: config.username || "root",
-                  password: config.password,
-                  path: config.path || "/",
-                  query: query ? Object.fromEntries(params) : undefined,
-                },
-                downloadUrl,
-                latestVersionUrl,
-                (line) => job.log.push(line),
-                controller.signal,
-              );
+        const onLog = (line: string) => job.log.push(line);
+        let result: DeployResult;
+        if (config.kind === "docker") {
+          result = await verifyAndDeployDockerAgent(
+            config,
+            downloadUrl,
+            latestVersionUrl,
+            onLog,
+            controller.signal,
+          );
+        } else if (config.kind === "wsl") {
+          result = await verifyAndDeployWslAgent(
+            config,
+            downloadUrl,
+            latestVersionUrl,
+            onLog,
+            controller.signal,
+          );
+        } else {
+          result = await verifyAndDeployAgent(
+            {
+              scheme: "ssh",
+              host: config.host,
+              port: config.port || 22,
+              username: config.username || "root",
+              password: config.password,
+              path: config.path || "/",
+              query: query ? Object.fromEntries(params) : undefined,
+            },
+            downloadUrl,
+            latestVersionUrl,
+            onLog,
+            controller.signal,
+          );
+        }
         job.result = result;
         job.done = true;
       } catch (err: any) {
@@ -333,6 +360,10 @@ export class RemoteWorkspaceService {
     // Docker 容器：复用同一 POSIX browse 命令，经 docker exec 在容器内执行
     if (config.kind === "docker") {
       return browseDockerPath(config, buildBrowseCommand, parseBrowseOutput, dirPath);
+    }
+    // WSL 发行版：同一 POSIX browse 命令，经 wsl.exe --exec sh -c 在发行版内执行
+    if (config.kind === "wsl") {
+      return browseWslPath(config, buildBrowseCommand, parseBrowseOutput, dirPath);
     }
     const { Client } = require("ssh2");
     const client = new Client();
@@ -387,6 +418,18 @@ export class RemoteWorkspaceService {
     dockerHost?: string,
   ): Promise<{ name: string; image: string; status: string }[]> {
     return listRunningDockerContainers(dockerHost ? { dockerHost } : {});
+  }
+
+  /**
+   * 列出已安装的 WSL 发行版（连接向导的发行版选择器用）。
+   * 非 Windows 宿主 / 未安装 WSL 时返回 `available:false` + reason（不抛错，供 UI 隐藏入口并提示）。
+   */
+  async listWslDistros(): Promise<{
+    available: boolean;
+    reason?: string;
+    distros: { name: string; state: string; version: number; isDefault: boolean }[];
+  }> {
+    return listInstalledWslDistros();
   }
 
   private async save(connections: RemoteConnection[]): Promise<void> {

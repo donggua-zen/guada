@@ -1,5 +1,5 @@
 /**
- * Docker 容器工作区 — agent 注入与连接（与 agent-deploy.ts 的 SSH 链路平行）。
+ * Docker 容器工作区 — agent 注入与连接（docker CLI 适配器）。
  *
  * 与 SSH 的差异（为什么不需要端口转发/sshd/token）：
  * - 传输：`docker exec -i <container> <agent> --stdio` 的 stdio 管道直连宿主后端
@@ -8,22 +8,29 @@
  * - 生命周期：agent 随管道关闭自行退出（docker 守护进程在客户端断开时关闭 exec 流）；
  *   本模块绝不 stop/rm 用户容器，只在注入/重连时 pkill 残留 agent 进程。
  *
+ * 注入/版本门禁/握手等通用流程在 cli-agent-install.ts（与 WSL 发行版链路共享）；
+ * 本文件只保留 docker 特有的：CLI 参数组装、inspect 解析、docker cp 注入、容器列表。
+ *
  * 边界（v1）：容器需有 `sh`（agent 的 execute 依赖 sh -c，镜像本身也需可用 shell 才能 mkdir 等）；
  * distroless/scratch 与只读 rootfs 不支持（报错明确）。
  */
 import { spawn } from "child_process";
-import { Logger } from "@nestjs/common";
-import { RpcClient } from "./rpc";
 import { StreamRpcTransport } from "./rpc-stream-transport";
-import { ensureLocalBinary, fetchLatestVersion } from "./agent-deploy";
-import { MIN_STDIO_AGENT_VERSION, versionAtLeast } from "./agent-version";
+import type { RpcClient } from "./rpc";
+import { MIN_STDIO_AGENT_VERSION } from "./agent-version";
+import {
+  AGENT_BINARY,
+  AGENT_SUBDIR,
+  assertDirInCliEnv,
+  browseCliPath,
+  ensureAgentInCliEnv,
+  mapLinuxArch,
+  startCliAgentStdio,
+  type CliAgentEnv,
+} from "./cli-agent-install";
 
-const logger = new Logger("DockerAgent");
-
-/** agent 安装目录候选（按序探测可写/可执行；容器内 /tmp 常被 noexec 挂载时回退） */
+/** agent 安装目录候选基点（按序探测可写/可执行；容器内 /tmp 常被 noexec 挂载时回退） */
 export const DOCKER_AGENT_DIR_CANDIDATES = ["/tmp", "/var/tmp", "/dev/shm"];
-const AGENT_SUBDIR = ".guada-agent";
-const AGENT_BINARY = "guada-agent";
 /** 单次 docker CLI 调用超时（注入/上传可能更大，单独放宽） */
 const DOCKER_CMD_TIMEOUT_MS = 30_000;
 const DOCKER_TRANSFER_TIMEOUT_MS = 120_000;
@@ -34,6 +41,7 @@ const DOCKER_TRANSFER_TIMEOUT_MS = 120_000;
  */
 export const MIN_AGENT_VERSION_FOR_CONTAINER = MIN_STDIO_AGENT_VERSION;
 export { versionAtLeast } from "./agent-version";
+export type { EnsureAgentResult } from "./cli-agent-install";
 
 export interface DockerConnectionConfig {
   /** 连接类型判别字段（与 SSH 配置共同构成 RemoteConnectionConfig 联合类型） */
@@ -186,9 +194,11 @@ export function mapContainerPlatform(
   if (os !== "linux") {
     return { ok: false, reason: `不支持 ${os} 容器（guada-agent 为 Linux 二进制，Windows 容器请改用 SSH 工作区）` };
   }
-  if (arch === "amd64" || arch === "x86_64") return { ok: true, goArch: "amd64" };
-  if (arch === "arm64" || arch === "aarch64") return { ok: true, goArch: "arm64" };
-  return { ok: false, reason: `不支持容器架构 ${arch}（仅 linux/amd64、linux/arm64）` };
+  const mapped = mapLinuxArch(arch);
+  if (mapped.ok === false) {
+    return { ok: false, reason: `不支持容器架构 ${arch}（仅 linux/amd64、linux/arm64）` };
+  }
+  return mapped;
 }
 
 /**
@@ -233,9 +243,9 @@ export async function inspectContainer(
   return { ...base, os: img.os, arch: img.arch };
 }
 
-// ── agent 注入 ──
+// ── 内核适配器（docker 特有的执行/注入/长连接实现） ──
 
-/** docker exec 一次性执行（不经 shell 时的命令同样支持；需 shell 语义时显式传 sh -c） */
+/** docker exec 一次性执行（argv 直传；需 shell 语义时显式传 sh -c） */
 async function dockerExec(
   config: DockerConnectionConfig,
   container: string,
@@ -243,23 +253,6 @@ async function dockerExec(
   opts: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<DockerRunResult> {
   return runDocker(config, ["exec", container, ...args], opts);
-}
-
-/** 读取容器内 agent 版本；不存在/不可执行返回 ""（不抛错） */
-async function getAgentVersion(
-  config: DockerConnectionConfig,
-  container: string,
-  binaryPath: string,
-): Promise<string> {
-  try {
-    const r = await dockerExec(config, container, [binaryPath, "--version"], { timeoutMs: 15_000 });
-    if (r.code !== 0) return "";
-    const v = r.stdout.trim();
-    // 版本号形如 0.6.0；异常输出（如 shell 报错混入）视为不可用
-    return /^\d+\.\d+\.\d+/.test(v) ? v.split("\n")[0].trim() : "";
-  } catch {
-    return "";
-  }
 }
 
 /** 终止容器内残留 agent（best-effort；容器可能无 pkill/coreutils） */
@@ -276,25 +269,51 @@ export async function killAgentInContainer(
   }
 }
 
-export interface EnsureAgentResult {
-  /** 容器内 agent 安装目录 */
-  agentDir: string;
-  /** 容器内 agent 二进制绝对路径 */
-  binaryPath: string;
-  /** 容器内 agent 版本 */
-  version: string;
-  /** 本次是否重新注入（false = 复用容器内已有二进制） */
-  injected: boolean;
-  /** 过程日志（部署向导逐行展示） */
-  log: string[];
+function dockerEnv(config: DockerConnectionConfig, container: string): CliAgentEnv {
+  const ref = `'${container}'`;
+  return {
+    noun: "容器",
+    targetRef: ref,
+    installErrorPrefix: `无法在容器 ${ref} 内安装 agent`,
+    unsupportedHint:
+      "请确认容器可写（rootfs 非只读）且不限制 /tmp 执行；distroless 等无 shell 镜像暂不支持。",
+    dirMissingHint: "请在连接配置中改选一个已存在的目录（容器内路径，如 /app、/workspace）",
+    exec: (args, opts) => dockerExec(config, container, args, opts),
+    agentDirCandidates: () => DOCKER_AGENT_DIR_CANDIDATES.map((base) => `${base}/${AGENT_SUBDIR}`),
+    injectBinary: async (localPath, destPath, opts) => {
+      const cp = await runDocker(config, ["cp", localPath, `${container}:${destPath}`], {
+        signal: opts?.signal,
+        timeoutMs: DOCKER_TRANSFER_TIMEOUT_MS,
+      });
+      if (cp.code !== 0) {
+        throw new Error(`docker cp 失败 — ${(cp.stderr || "").trim().split("\n").slice(-1)[0]}`);
+      }
+    },
+    killStaleAgents: () => killAgentInContainer(config, container),
+    openAgentStdio: (binaryPath, rootPath, perm) =>
+      StreamRpcTransport.spawn(
+        "docker",
+        buildDockerArgs(config, [
+          "exec",
+          "-i",
+          container,
+          binaryPath,
+          "--stdio",
+          "--root",
+          rootPath,
+          "--perm",
+          perm,
+        ]),
+        { label: "stdio pipe" },
+      ),
+  };
 }
 
+// ── agent 注入 ──
+
 /**
- * 确保容器内存在与期望版本一致的 agent 二进制。
- *
- * 逐候选目录（/tmp → /var/tmp → /dev/shm）尝试：mkdir → 版本检查（复用则直接返回）
- * → docker cp 注入 + chmod → 再次版本检查（验证可执行）。全部候选失败时给出聚合错误。
- * 期望版本来自 latest 接口；接口不可达时容忍并回退为"缺失即注入"（不因离线阻塞连接）。
+ * 确保容器内存在与期望版本一致的 agent 二进制（通用流程见 cli-agent-install.ts）。
+ * 平台下限/架构校验在此完成：容器必须是 linux/amd64 或 linux/arm64。
  */
 export async function ensureAgentInContainer(
   config: DockerConnectionConfig,
@@ -305,114 +324,11 @@ export async function ensureAgentInContainer(
     onLog?: (line: string) => void;
     signal?: AbortSignal;
   } = {},
-): Promise<EnsureAgentResult> {
+): Promise<import("./cli-agent-install").EnsureAgentResult> {
   const platform = mapContainerPlatform(container.os, container.arch);
   // 注：项目 tsconfig 为 strictNullChecks:false，布尔判别式需用 === 显式比较才收窄
   if (platform.ok === false) throw new Error(platform.reason);
-
-  const log: string[] = [];
-  const push = (line: string) => {
-    log.push(line);
-    opts.onLog?.(line);
-  };
-
-  // 期望版本：配置了 latest 接口时用于升级判定；接口不可达时容忍（离线/内网也不阻塞连接）。
-  // 特别注意：latest 指向的版本可能低于容器所需下限（0.6.0）——此时忽略该版本，
-  // 否则会按"升级"逻辑把旧版 agent 注入容器，连接必然失败（旧版无 --stdio）。
-  let expectedVersion = "";
-  if (opts.latestVersionUrl) {
-    try {
-      const latest = (await fetchLatestVersion(opts.latestVersionUrl)).version;
-      if (versionAtLeast(latest, MIN_AGENT_VERSION_FOR_CONTAINER)) {
-        expectedVersion = latest;
-        push(`Expected agent version: ${expectedVersion}`);
-      } else {
-        push(
-          `Published agent v${latest} is older than the container minimum v${MIN_AGENT_VERSION_FOR_CONTAINER}; ` +
-            `using the local cached binary instead (publish a newer agent to upgrade).`,
-        );
-      }
-    } catch (err: any) {
-      push(`Latest version check failed (ignored): ${err?.message || err}`);
-    }
-  }
-
-  const errors: string[] = [];
-  for (const base of DOCKER_AGENT_DIR_CANDIDATES) {
-    const agentDir = `${base}/${AGENT_SUBDIR}`;
-    const binaryPath = `${agentDir}/${AGENT_BINARY}`;
-    try {
-      // 目录必须先存在：docker cp 不会创建中间目录；只读 rootfs 在此失败
-      const mk = await dockerExec(config, container.name, ["sh", "-c", `mkdir -p '${agentDir}'`], {
-        signal: opts.signal,
-      });
-      if (mk.code !== 0) {
-        errors.push(`${agentDir}: ${(mk.stderr || mk.stdout).trim().split("\n").slice(-1)[0] || "目录不可写"}`);
-        continue;
-      }
-
-      // 快路径：容器内已有可用（且满足 stdio 版本下限）且版本匹配的二进制 → 直接复用
-      const existing = await getAgentVersion(config, container.name, binaryPath);
-      if (existing && !versionAtLeast(existing, MIN_AGENT_VERSION_FOR_CONTAINER)) {
-        push(
-          `Container has agent v${existing} which predates container support (>= ${MIN_AGENT_VERSION_FOR_CONTAINER}); re-injecting.`,
-        );
-      } else if (existing && (!expectedVersion || existing === expectedVersion)) {
-        push(`Agent v${existing} already present at ${binaryPath}`);
-        return { agentDir, binaryPath, version: existing, injected: false, log };
-      }
-
-      // 注入：本地缓存（或下载）→ docker cp → chmod。
-      // 注意 expectedVersion 已在上面完成下限过滤：低于下限时以空值走"本地缓存优先"分支，
-      // 避免把旧版 agent 从网络拉下来注入。
-      const localBinary = await ensureLocalBinary(
-        "linux",
-        platform.goArch,
-        opts.downloadUrl,
-        expectedVersion ? opts.latestVersionUrl : undefined,
-        (downloaded, total) =>
-          push(`Downloading agent binary... ${total ? Math.round((downloaded / total) * 100) + "%" : downloaded + "B"}`),
-        opts.signal,
-      );
-      push(`Uploading ${AGENT_BINARY} (${platform.goArch}) to container ${container.name}:${binaryPath}`);
-      await killAgentInContainer(config, container.name);
-      const cp = await runDocker(
-        config,
-        ["cp", localBinary, `${container.name}:${binaryPath}`],
-        { signal: opts.signal, timeoutMs: DOCKER_TRANSFER_TIMEOUT_MS },
-      );
-      if (cp.code !== 0) {
-        errors.push(`${agentDir}: docker cp 失败 — ${(cp.stderr || "").trim().split("\n").slice(-1)[0]}`);
-        continue;
-      }
-      // 权限位：docker cp 保留源文件模式，但 Windows 宿主下不可靠 → 显式 chmod（无 chmod 的镜像靠 cp 自身的模式位）
-      await dockerExec(config, container.name, ["chmod", "755", binaryPath], { timeoutMs: 15_000 });
-      push(`Injected agent binary to ${binaryPath}`);
-
-      const injected = await getAgentVersion(config, container.name, binaryPath);
-      if (injected && !versionAtLeast(injected, MIN_AGENT_VERSION_FOR_CONTAINER)) {
-        errors.push(
-          `${agentDir}: 注入的 agent v${injected} 不支持容器工作区（需要 >= ${MIN_AGENT_VERSION_FOR_CONTAINER}）——` +
-            `本地缓存二进制过旧，请更新 ${opts.downloadUrl ? "下载地址配置" : "本地缓存 ~/.guada/agent/guada-agent-linux-" + platform.goArch}`,
-        );
-        continue;
-      }
-      if (injected) {
-        return { agentDir, binaryPath, version: injected, injected: true, log };
-      }
-      errors.push(
-        `${agentDir}: 注入后无法执行（该目录可能以 noexec 挂载，或镜像缺少可执行权限支持）`,
-      );
-    } catch (err: any) {
-      errors.push(`${agentDir}: ${err?.message || err}`);
-    }
-  }
-
-  throw new Error(
-    `无法在容器 '${container.name}' 内安装 agent（已尝试 ${DOCKER_AGENT_DIR_CANDIDATES.join("、")}）：\n` +
-      errors.map((e) => `  - ${e}`).join("\n") +
-      `\n请确认容器可写（rootfs 非只读）且不限制 /tmp 执行；distroless 等无 shell 镜像暂不支持。`,
-  );
+  return ensureAgentInCliEnv(dockerEnv(config, container.name), platform.goArch, opts);
 }
 
 /** 校验容器内目录存在（path 配置的工作目录） */
@@ -421,14 +337,7 @@ export async function assertDirInContainer(
   container: string,
   dir: string,
 ): Promise<void> {
-  const r = await dockerExec(config, container, ["sh", "-c", `test -d '${dir.replace(/'/g, "'\\''")}' && echo OK || echo MISSING`], {
-    timeoutMs: 15_000,
-  });
-  if (!r.stdout.includes("OK")) {
-    throw new Error(
-      `容器内工作目录不存在：${dir} — 请在连接配置中改选一个已存在的目录（容器内路径，如 /app、/workspace）`,
-    );
-  }
+  return assertDirInCliEnv(dockerEnv(config, container), dir);
 }
 
 // ── 连接 ──
@@ -465,52 +374,18 @@ export async function connectDockerAgent(
   const rootPath = (config.path || container.workingDir || "/").trim() || "/";
   await assertDirInContainer(config, container.name, rootPath);
 
-  const perm = config.perm && config.perm !== "workspace" ? config.perm : "workspace";
-  const execArgs = [
-    "exec",
-    "-i",
-    container.name,
-    ensured.binaryPath,
-    "--stdio",
-    "--root",
+  const started = await startCliAgentStdio(dockerEnv(config, container.name), {
+    binaryPath: ensured.binaryPath,
     rootPath,
-    "--perm",
-    perm,
-  ];
-  opts.onLog?.(`Starting agent (stdio): --root ${rootPath} --perm ${perm}`);
-
-  const transport = StreamRpcTransport.spawn("docker", buildDockerArgs(config, execArgs), {
-    label: "stdio pipe",
+    perm: config.perm,
+    expectedVersion: ensured.version,
+    onLog: opts.onLog,
+    signal: opts.signal,
   });
-  const rpc = new RpcClient(transport);
-  rpc.setConnected();
-
-  try {
-    const pong = await rpc.call<{ pong: string; version?: string; root?: string }>(
-      "ping",
-      undefined,
-      opts.signal,
-      20_000,
-    );
-    if (!pong?.pong) throw new Error("agent ping 未返回预期响应");
-    if (pong.root && pong.root.replace(/\/+$/, "") !== rootPath.replace(/\/+$/, "")) {
-      // 符号链接解析等可能导致轻微差异：仅告警，不阻断（与 SSH 链路一致不做强校验）
-      logger.warn(
-        `agent root mismatch: requested '${rootPath}', agent reports '${pong.root}' (container ${container.name})`,
-      );
-    }
-    opts.onLog?.(`Agent connected: v${pong.version || ensured.version}, root ${pong.root || rootPath}`);
-  } catch (err: any) {
-    transport.close();
-    const stderrTail = transport.getStderrTail();
-    throw new Error(
-      `agent 握手失败：${err?.message || err}` + (stderrTail ? ` — ${stderrTail.slice(-300)}` : ""),
-    );
-  }
 
   return {
-    rpc,
-    transport,
+    rpc: started.rpc,
+    transport: started.transport,
     container,
     agentDir: ensured.agentDir,
     binaryPath: ensured.binaryPath,
@@ -558,18 +433,7 @@ export async function browseDockerPath(
   dirPath: string,
   signal?: AbortSignal,
 ): Promise<{ path: string; exists: boolean; entries: { name: string; isDirectory: boolean; size: number }[] }> {
-  const r = await dockerExec(
-    config,
-    config.container,
-    ["sh", "-c", buildBrowseCommand(dirPath)],
-    { timeoutMs: 20_000, signal },
-  );
-  if (r.code !== 0 && !r.stdout.trim()) {
-    throw new Error(
-      `容器内目录浏览失败：${(r.stderr || "").trim().split("\n").slice(-1)[0] || "命令执行失败（镜像可能缺少 ls/awk）"}`,
-    );
-  }
-  return parseBrowseOutput(r.stdout);
+  return browseCliPath(dockerEnv(config, config.container), buildBrowseCommand, parseBrowseOutput, dirPath, signal);
 }
 
 /** 连接测试（向导第 1 步）：inspect + 注入 + 校验工作目录 + 握手，随后关闭 */
