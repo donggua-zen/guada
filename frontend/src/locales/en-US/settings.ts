@@ -587,6 +587,7 @@
     trend: {
       title: 'Daily Model Usage',
       desc: 'Stacked by model',
+      peak: 'Peak {tokens}',
       empty: 'No usage in this range yet',
     },
     models: {

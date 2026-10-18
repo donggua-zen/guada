@@ -95,14 +95,17 @@
             <section class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) p-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.usage.trend.title') }}</h3>
-                    <span class="text-xs text-gray-400 dark:text-[#777982]">{{ t('settings.usage.trend.desc') }}</span>
+                    <span class="text-xs text-gray-400 dark:text-[#777982]">
+                        {{ t('settings.usage.trend.desc') }} · {{ t('settings.usage.trend.peak', { tokens: formatCompactTokens(maxDailyTokens) }) }}
+                    </span>
                 </div>
                 <div v-if="hasDailyUsage" class="mt-4 overflow-x-auto pb-1">
-                    <div class="flex items-end gap-1 h-36 w-full">
+                    <div class="flex items-end justify-around gap-2 h-36 w-full border-b border-gray-100 dark:border-[#2e3035]">
                         <div v-for="day in snapshot.daily" :key="day.date"
-                            class="flex flex-col justify-end h-full min-w-[6px] flex-1"
+                            class="flex flex-col justify-end h-full min-w-[6px] flex-1 max-w-[48px]"
                             :title="dayTitle(day)">
-                            <div class="flex flex-col-reverse w-full h-full rounded-sm overflow-hidden bg-gray-100 dark:bg-[#25262b]">
+                            <div class="flex flex-col-reverse w-full h-full rounded-sm overflow-hidden"
+                                :class="day.totalTokens > 0 ? 'bg-gray-100 dark:bg-[#25262b]' : ''">
                                 <div v-for="segment in day.models"
                                     :key="segment.providerId + ':' + segment.modelId"
                                     :style="{ height: segmentHeight(segment.totalTokens), backgroundColor: colorFor(segment.providerId, segment.modelId) }"

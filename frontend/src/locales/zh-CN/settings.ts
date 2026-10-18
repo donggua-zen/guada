@@ -582,6 +582,7 @@ export default {
     trend: {
       title: '每日模型用量',
       desc: '按模型堆叠',
+      peak: '峰值 {tokens}',
       empty: '当前范围还没有用量数据',
     },
     models: {
