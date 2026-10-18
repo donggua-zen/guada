@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
-import { useSessionStore } from "./session";
+import { useSessionStore, UNGROUPED_ID } from "./session";
 
 /**
  * sessionStore 流状态机测试
@@ -283,5 +283,131 @@ describe("sessionStore 置顶分区聚合", () => {
     store.setSessionPinned("a", false); // 回滚语义
     expect(store.getSessionsByGroup("g1").map((s) => s.id)).toEqual(["a"]);
     expect(store.getPinnedSessions()).toEqual([]);
+  });
+});
+
+/**
+ * 分组分页窗口：
+ * 折叠分组时把可见数量重置回首屏条数，从而丢弃「加载更多」出来的会话；
+ * 底层 sessionsMap 保留数据，重新展开后再次「加载更多」即可取回。
+ */
+describe("sessionStore 分组分页窗口", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  const mkSession = (id: string, over: Record<string, any> = {}) =>
+    ({
+      id,
+      title: id,
+      sessionType: "web",
+      lastActiveAt: "2026-01-01T00:00:00.000Z",
+      ...over,
+    }) as any;
+
+  /** 在 g1 造 count 个会话，lastActiveAt 递增（s0 最旧，s{count-1} 最新） */
+  const seedGroup = (store: ReturnType<typeof useSessionStore>, count: number) => {
+    for (let i = 0; i < count; i++) {
+      store.setSession(
+        mkSession(`s${i}`, {
+          groupId: "g1",
+          lastActiveAt: `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
+        }),
+      );
+    }
+  };
+
+  it("getVisibleSessionsByGroup 按窗口截断，getSessionsByGroup 仍返回全部", () => {
+    const store = useSessionStore();
+    seedGroup(store, 5);
+    store.setLoadedCount("g1", 2);
+
+    expect(store.getVisibleSessionsByGroup("g1").map((s) => s.id)).toEqual(["s4", "s3"]);
+    expect(store.getSessionsByGroup("g1")).toHaveLength(5);
+  });
+
+  it("折叠重置窗口后，加载更多的会话不再可见且仍可继续加载", () => {
+    const store = useSessionStore();
+    seedGroup(store, 5);
+    store.setLoadedCount("g1", 5);
+    store.setHasMore("g1", false);
+
+    store.resetGroupPagination("g1", 2);
+
+    expect(store.getVisibleSessionsByGroup("g1").map((s) => s.id)).toEqual(["s4", "s3"]);
+    // 被截掉的会话还在本地，重新展开后需要「加载更多」才能取回
+    expect(store.groupHasMore("g1")).toBe(true);
+  });
+
+  it("未加载更多时折叠不改变 hasMore", () => {
+    const store = useSessionStore();
+    seedGroup(store, 2);
+    store.setLoadedCount("g1", 2);
+    store.setHasMore("g1", false);
+
+    store.resetGroupPagination("g1", 2);
+
+    expect(store.groupHasMore("g1")).toBe(false);
+    expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(2);
+  });
+
+  it("未分组使用 UNGROUPED_ID 作为分页 key", () => {
+    const store = useSessionStore();
+    for (let i = 0; i < 3; i++) {
+      store.setSession(
+        mkSession(`u${i}`, { lastActiveAt: `2026-02-0${i + 1}T00:00:00.000Z` }),
+      );
+    }
+    store.setLoadedCount(UNGROUPED_ID, 1);
+
+    expect(store.getVisibleSessionsByGroup(null).map((s) => s.id)).toEqual(["u2"]);
+  });
+
+  it("新插入/移入的会话会扩大窗口，避免被分页误藏", () => {
+    const store = useSessionStore();
+    seedGroup(store, 2);
+    store.setLoadedCount("g1", 2);
+
+    // 新会话进入已建窗口的分组 → 窗口 +1
+    store.setSession(
+      mkSession("s-new", { groupId: "g1", lastActiveAt: "2026-03-01T00:00:00.000Z" }),
+    );
+    expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(3);
+
+    // 从其他分组移入 → 目标组窗口 +1
+    store.setSession(
+      mkSession("s-moved", { groupId: "g2", lastActiveAt: "2026-03-02T00:00:00.000Z" }),
+    );
+    store.moveSession("s-moved", "g1");
+
+    expect(store.getVisibleSessionsByGroup("g1").map((s) => s.id)).toContain("s-moved");
+    expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(4);
+  });
+
+  it("初始为空的分组后来新增会话不被截断", () => {
+    const store = useSessionStore();
+    store.setLoadedCount("g-empty", 0);
+    store.setSession(mkSession("s1", { groupId: "g-empty" }));
+
+    expect(store.getVisibleSessionsByGroup("g-empty").map((s) => s.id)).toEqual(["s1"]);
+  });
+
+  it("取消置顶的会话重新进入分组时扩大窗口", () => {
+    const store = useSessionStore();
+    seedGroup(store, 2);
+    store.setSession(
+      mkSession("pinned", {
+        groupId: "g1",
+        pinned: true,
+        lastActiveAt: "2026-04-01T00:00:00.000Z",
+      }),
+    );
+    store.setLoadedCount("g1", 2);
+    expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(2);
+
+    store.setSessionPinned("pinned", false);
+
+    expect(store.getVisibleSessionsByGroup("g1").map((s) => s.id)).toContain("pinned");
+    expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(3);
   });
 });

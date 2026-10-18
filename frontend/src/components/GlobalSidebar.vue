@@ -377,6 +377,12 @@ const moveTargetSession = ref<Session | null>(null)
 // 是否正在初始化加载
 const isInitializing = ref(false)
 
+/** 首屏每组加载条数（折叠分组时把可见数量重置回该值） */
+const initialPageSize = ref(window.innerHeight > 1080 ? 15 : 10)
+
+/** 分组折叠代数：用于丢弃请求期间被折叠的「加载更多」结果 */
+const groupCollapseEpoch = new Map<string, number>()
+
 // 分组右键菜单状态
 const groupContextMenu = ref({
   visible: false,
@@ -539,11 +545,11 @@ const displayGroups = computed(() => {
   return groups
 })
 
-// 获取分组内的会话（从 sessionStore 统一数据源获取）
+// 获取分组内的会话（从 sessionStore 统一数据源获取，受分页可见窗口截断）
 const getGroupSessions = (groupId: string): Session[] => {
   if (groupId === PINNED_GROUP_ID) return sessionStore.getPinnedSessions()
   const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
-  return sessionStore.getSessionsByGroup(groupIdParam)
+  return sessionStore.getVisibleSessionsByGroup(groupIdParam)
 }
 
 // 分组是否展开（置顶分区用独立本地折叠态，不落分组 store）
@@ -561,7 +567,13 @@ const toggleGroupExpand = (groupId: string): void => {
     pinnedExpanded.value = !pinnedExpanded.value
     return
   }
+  const wasExpanded = isGroupExpanded(groupId)
   sessionGroupStore.toggleExpand(groupId)
+  if (wasExpanded) {
+    // 折叠即丢弃「加载更多」出来的会话：可见数量缩回首屏数量
+    groupCollapseEpoch.set(groupId, (groupCollapseEpoch.get(groupId) ?? 0) + 1)
+    sessionStore.resetGroupPagination(groupId, initialPageSize.value)
+  }
 }
 
 // 分组是否还有更多会话（置顶分区不分页）
@@ -581,6 +593,7 @@ const loadSessions = async () => {
   isInitializing.value = true
   try {
     const pageSize = window.innerHeight > 1080 ? 15 : 10
+    initialPageSize.value = pageSize
     // 分组区与置顶区并行拉取（置顶失败不拖垮主列表）
     const [data, pinnedData] = await Promise.all([
       apiService.fetchSidebarSessions(pageSize),
@@ -629,10 +642,17 @@ const loadMoreForGroup = async (groupId: string) => {
 
   const currentSessions = getGroupSessions(groupId)
   const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
+  const collapseEpoch = groupCollapseEpoch.get(groupId) ?? 0
 
   sessionGroupStore.setLoadingMore(groupId)
   try {
     const data = await apiService.fetchSessions(currentSessions.length, 15, groupIdParam)
+
+    // 请求期间分组被折叠：本页按丢弃处理，展开后仍只保留首屏数量
+    if ((groupCollapseEpoch.get(groupId) ?? 0) !== collapseEpoch) {
+      sessionStore.setHasMore(groupId, (data.items?.length || 0) > 0)
+      return
+    }
 
     if (data.items && data.items.length > 0) {
       // 写入统一数据源

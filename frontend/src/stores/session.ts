@@ -145,6 +145,27 @@ export const useSessionStore = defineStore('session', () => {
         return sessions.value.get(sessionId)?.streamStatus
     }
 
+    /** 会话是否出现在侧边栏分组区（置顶项由「已置顶」分区单独聚合） */
+    const isVisibleInGroup = (s: Session): boolean =>
+        !s.archived && !s.pinned && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent'
+
+    /**
+     * 会话新进入某分组的可见列表时，同步扩大该组的分页窗口。
+     *
+     * 窗口数量（loadedCounts）默认等于服务端分页返回的条数，只有「加载更多」和折叠重置
+     * 会改它。新建/移入/取消归档/取消置顶的会话若刚好落在窗口之外，会被分页截断误藏，
+     * 因此这些入口需要 +1。分组尚未建立窗口（count 为 0/undefined）时不处理——
+     * 此时 getVisibleSessionsByGroup 不做截断。
+     */
+    const growVisibleCount = (session: Session): void => {
+        if (!isVisibleInGroup(session)) return
+        const key = session.groupId ?? UNGROUPED_ID
+        const count = loadedCounts.value.get(key)
+        if (count !== undefined && count > 0) {
+            loadedCounts.value.set(key, count + 1)
+        }
+    }
+
     /**
      * 批量设置会话列表（用于初始化加载）
      * @param list - 会话列表
@@ -160,6 +181,13 @@ export const useSessionStore = defineStore('session', () => {
      * @param session - 会话对象
      */
     const setSession = (session: Session): void => {
+        const existing = sessionsMap.value.get(session.id)
+        // 新进入可见状态（新插入 / 恢复归档 / 取消置顶）或跨分组移动时扩大目标组窗口
+        const becameVisible = (!existing || !isVisibleInGroup(existing)) && isVisibleInGroup(session)
+        const movedGroup = !!existing && (existing.groupId || null) !== (session.groupId || null)
+        if (becameVisible || (movedGroup && isVisibleInGroup(session))) {
+            growVisibleCount(session)
+        }
         sessionsMap.value.set(session.id, session)
     }
 
@@ -188,12 +216,28 @@ export const useSessionStore = defineStore('session', () => {
     const getSessionsByGroup = (groupId: string | null): Session[] => {
         const targetGroupId = groupId === UNGROUPED_ID ? null : groupId
         return Array.from(sessionsMap.value.values())
-            .filter(s => (s.groupId || null) === targetGroupId && !s.archived && !s.pinned && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent')
+            .filter(s => (s.groupId || null) === targetGroupId && isVisibleInGroup(s))
             .sort((a, b) => {
                 const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
                 const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
                 return timeB - timeA
             })
+    }
+
+    /**
+     * 按分组获取可见会话（受每组已加载数量截断）。
+     *
+     * 侧边栏渲染使用本方法；getSessionsByGroup 仍返回完整列表，供需要全部会话的逻辑使用。
+     * loadedCounts 由首屏加载写入、加载更多递增、分组折叠时重置回首屏数量——因此折叠再
+     * 展开后，之前「加载更多」出来的会话不再显示，可再次点击加载更多重新拉取。
+     * @param groupId - 分组ID，null 表示未分组
+     */
+    const getVisibleSessionsByGroup = (groupId: string | null): Session[] => {
+        const list = getSessionsByGroup(groupId)
+        const key = groupId ?? UNGROUPED_ID
+        const limit = loadedCounts.value.get(key)
+        // 无窗口（未分页 / 初始为空的分组）时不做截断
+        return limit && limit > 0 ? list.slice(0, limit) : list
     }
 
     /**
@@ -229,9 +273,12 @@ export const useSessionStore = defineStore('session', () => {
      */
     const moveSession = (sessionId: string, targetGroupId: string | null): void => {
         const session = sessionsMap.value.get(sessionId)
-        if (session) {
-            session.groupId = targetGroupId === UNGROUPED_ID ? null : targetGroupId
-        }
+        if (!session) return
+        const target = targetGroupId === UNGROUPED_ID ? null : targetGroupId
+        if ((session.groupId || null) === target) return
+        session.groupId = target
+        // 目标组可能已建立分页窗口：移入的会话不应被窗口截断误藏
+        growVisibleCount(session)
     }
 
     /**
@@ -241,9 +288,11 @@ export const useSessionStore = defineStore('session', () => {
      */
     const setSessionGroupId = (sessionId: string, groupId: string | null): void => {
         const session = sessionsMap.value.get(sessionId)
-        if (session) {
-            session.groupId = groupId
-        }
+        if (!session) return
+        const target = groupId === UNGROUPED_ID ? null : groupId
+        if ((session.groupId || null) === target) return
+        session.groupId = target
+        growVisibleCount(session)
     }
 
     /**
@@ -261,6 +310,25 @@ export const useSessionStore = defineStore('session', () => {
      */
     const getLoadedCount = (groupId: string): number => {
         return loadedCounts.value.get(groupId) ?? 0
+    }
+
+    /**
+     * 重置分组分页窗口（折叠分组时调用）。
+     *
+     * 仅当已经「加载更多」过（count > initialCount）才收缩窗口，避免无谓改动；
+     * 收缩后若本地仍有被截掉的会话，保持 hasMore 以便展开后能重新加载。
+     * @param groupId - 分组ID（未分组传 UNGROUPED_ID）
+     * @param initialCount - 首屏每组加载数量
+     */
+    const resetGroupPagination = (groupId: string, initialCount: number): void => {
+        const current = loadedCounts.value.get(groupId)
+        if (current === undefined || current <= initialCount) return
+        loadedCounts.value.set(groupId, initialCount)
+
+        const targetGroupId = groupId === UNGROUPED_ID ? null : groupId
+        if (getSessionsByGroup(targetGroupId).length > initialCount) {
+            hasMoreMap.value.set(groupId, true)
+        }
     }
 
     /**
@@ -613,6 +681,8 @@ export const useSessionStore = defineStore('session', () => {
         const session = sessionsMap.value.get(sessionId)
         if (session) {
             session.pinned = pinned
+            // 取消置顶后会话重新进入分组视图，可能落在窗口之外
+            if (!pinned) growVisibleCount(session)
         }
     }
 
@@ -766,6 +836,7 @@ export const useSessionStore = defineStore('session', () => {
         getSession,
         removeSession,
         getSessionsByGroup,
+        getVisibleSessionsByGroup,
         getGroupTotal,
         getPinnedSessions,
         moveSession,
@@ -773,6 +844,7 @@ export const useSessionStore = defineStore('session', () => {
         setSessionPinned,
         setLoadedCount,
         getLoadedCount,
+        resetGroupPagination,
         setHasMore,
         groupHasMore,
         getSidebarState,
