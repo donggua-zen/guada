@@ -114,6 +114,7 @@ describe("UsageService", () => {
     });
 
     expect(snapshot.daily).toHaveLength(7);
+    expect(snapshot.monthly).toEqual([]);
     expect(snapshot.daily[snapshot.daily.length - 1]?.date).toBe("2026-10-18");
     expect(snapshot.daily[snapshot.daily.length - 1]?.totalTokens).toBe(300);
     expect(snapshot.daily[snapshot.daily.length - 2]?.totalTokens).toBe(0);
@@ -163,6 +164,26 @@ describe("UsageService", () => {
     ).toBe("subagent");
   });
 
+  it("all 范围固定返回 12 个月，当前月在最右侧", () => {
+    const rows = buildRows();
+    const store = { query: jest.fn(() => rows) } as unknown as UsageStore;
+    const snapshot = new UsageService(store).getSnapshot({
+      range: "all",
+      tzOffsetMinutes: 0,
+      now,
+    });
+
+    expect(snapshot.monthly).toHaveLength(12);
+    expect(snapshot.monthly[0]?.date).toBe("2025-11");
+    expect(
+      snapshot.monthly.slice(0, 11).every((point) => point.totalTokens === 0),
+    ).toBe(true);
+    expect(snapshot.monthly[11]).toMatchObject({
+      date: "2026-10",
+      totalTokens: 400,
+    });
+  });
+
   it("all 范围图表窗口最多 366 天，但汇总仍取全量 rows", () => {
     const oldRows = buildRows();
     const oldDay = Math.floor((todayStart - 500 * DAY) / DAY);
@@ -185,5 +206,24 @@ describe("UsageService", () => {
     expect(snapshot.daily.length).toBeLessThanOrEqual(366);
     // 500 天前的数据只影响汇总/连续天数，不挤进图表窗口
     expect(snapshot.daily[0].date > "2025-10-17").toBe(true);
+
+    // all 趋势按月聚合：最多 12 个月，超窗数据只进汇总
+    expect(snapshot.monthly).toHaveLength(12);
+    expect(snapshot.monthly[0]?.date).toBe("2025-11");
+    expect(snapshot.monthly[snapshot.monthly.length - 1]).toMatchObject({
+      date: "2026-10",
+      totalTokens: 400,
+      inputTokens: 300,
+      outputTokens: 100,
+      requestCount: 2,
+    });
+    expect(
+      snapshot.monthly.reduce((sum, point) => sum + point.totalTokens, 0),
+    ).toBe(400);
+    expect(
+      snapshot.monthly[snapshot.monthly.length - 1]?.models,
+    ).toEqual([
+      { providerId: "p1", modelId: "m1", totalTokens: 400 },
+    ]);
   });
 });

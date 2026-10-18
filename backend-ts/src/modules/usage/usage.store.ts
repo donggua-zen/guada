@@ -140,6 +140,12 @@ export class UsageStore implements OnModuleDestroy {
       .run(sessionId).changes;
   }
 
+  /** 清空全部用量明细（所有会话、全部时间） */
+  clearAll(): number {
+    const db = this.ensureDb();
+    return db.prepare(`DELETE FROM model_usage`).run().changes;
+  }
+
   /** 启动收敛：删除会话已不存在（被绕过本存储手删）的用量行 */
   pruneOrphans(): number {
     const db = this.ensureDb();

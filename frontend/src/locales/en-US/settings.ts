@@ -559,6 +559,12 @@
     refresh: 'Refresh',
     loading: 'Loading usage data…',
     retry: 'Retry',
+    clear: 'Clear',
+    clearConfirmTitle: 'Clear usage statistics',
+    clearConfirmMessage: 'This will delete all local token usage records (including backfilled history). Session messages are not affected. This cannot be undone.',
+    clearConfirm: 'Clear',
+    clearSuccess: 'Usage statistics cleared',
+    clearFailed: 'Failed to clear usage statistics',
     range: {
       '7d': 'Last 7 days',
       '30d': 'Last 30 days',
@@ -586,6 +592,7 @@
     },
     trend: {
       title: 'Daily Model Usage',
+      titleMonthly: 'Monthly Model Usage',
       desc: 'Stacked by model',
       peak: 'Peak {tokens}',
       empty: 'No usage in this range yet',

@@ -554,6 +554,12 @@ export default {
     refresh: '刷新',
     loading: '正在读取用量数据…',
     retry: '重试',
+    clear: '清空',
+    clearConfirmTitle: '清空用量统计',
+    clearConfirmMessage: '将删除所有本地 Token 用量记录（含历史回填数据），不影响会话消息。此操作不可恢复。',
+    clearConfirm: '清空',
+    clearSuccess: '用量统计已清空',
+    clearFailed: '清空失败',
     range: {
       '7d': '近 7 天',
       '30d': '近 30 天',
@@ -581,6 +587,7 @@ export default {
     },
     trend: {
       title: '每日模型用量',
+      titleMonthly: '每月模型用量',
       desc: '按模型堆叠',
       peak: '峰值 {tokens}',
       empty: '当前范围还没有用量数据',

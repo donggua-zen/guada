@@ -21,7 +21,9 @@ import type {
   UsageHeatmapCell,
   UsageHeatmapWeek,
   UsageModelStat,
+  UsageMonthlyPoint,
   UsageQueryInput,
+  UsageQueryRows,
   UsageSnapshot,
   UsageSourceStat,
 } from "./usage.types";
@@ -95,6 +97,16 @@ export class UsageService {
     }
   }
 
+  /** 清空全部用量明细（所有会话、全部时间） */
+  clearAll(): number {
+    try {
+      return this.store.clearAll();
+    } catch (error: any) {
+      this.logger.warn(`清空用量失败：${error?.message ?? error}`);
+      return 0;
+    }
+  }
+
   pruneOrphans(): number {
     return this.store.pruneOrphans();
   }
@@ -153,6 +165,13 @@ export class UsageService {
         models: modelsByDay.get(dayIndex) ?? [],
       });
     }
+
+    // all 范围按“月”展示趋势（最多 12 个月）；7d/30d 仍按天。
+    // 必须基于 rows.daily（全量历史），不能用上面已截断到 366 天的 daily 数组。
+    const monthly =
+      input.range === "all"
+        ? buildMonthlyTrend(rows, endDayIndex)
+        : [];
 
     // 热力图固定近一年：与 range 解耦，并按周日对齐成 53 个整周
     let heatmapStartDayIndex = Math.max(
@@ -270,6 +289,7 @@ export class UsageService {
             : null,
       },
       daily,
+      monthly,
       heatmap: buildHeatmap(heatmapPoints, heatmapStartDayIndex, endDayIndex),
       models,
       sources,
@@ -283,6 +303,109 @@ export class UsageService {
       })),
     };
   }
+}
+
+/**
+ * 把全量日聚合折叠成月度趋势。
+ *
+ * - 月份 key 直接取本地日期前 7 位（dayIndex 已含 tzOffset）
+ * - 固定返回当前月及前 11 个月（共 12 个点），当前月永远在最右侧
+ * - 中间无数据的月份补 0，保证柱子位置与时间轴稳定
+ */
+function buildMonthlyTrend(
+  rows: UsageQueryRows,
+  endDayIndex: number,
+): UsageMonthlyPoint[] {
+  const currentMonthIndex = monthKeyToIndex(
+    dayIndexToDate(endDayIndex).slice(0, 7),
+  );
+
+  interface MonthBucket {
+    totalTokens: number;
+    inputTokens: number;
+    outputTokens: number;
+    requestCount: number;
+    models: Map<
+      string,
+      { providerId: string; modelId: string; totalTokens: number }
+    >;
+  }
+
+  const buckets = new Map<string, MonthBucket>();
+  const bucketFor = (key: string): MonthBucket => {
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = {
+        totalTokens: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        requestCount: 0,
+        models: new Map(),
+      };
+      buckets.set(key, bucket);
+    }
+    return bucket;
+  };
+
+  for (const row of rows.daily) {
+    const key = dayIndexToDate(row.dayIndex).slice(0, 7);
+    const bucket = bucketFor(key);
+    bucket.totalTokens += Number(row.totalTokens);
+    bucket.inputTokens += Number(row.inputTokens);
+    bucket.outputTokens += Number(row.outputTokens);
+    bucket.requestCount += Number(row.requestCount);
+  }
+
+  for (const row of rows.dayModels) {
+    const key = dayIndexToDate(row.dayIndex).slice(0, 7);
+    const bucket = bucketFor(key);
+    const modelKey = `${row.providerId}:${row.modelId}`;
+    const model = bucket.models.get(modelKey) ?? {
+      providerId: row.providerId,
+      modelId: row.modelId,
+      totalTokens: 0,
+    };
+    model.totalTokens += Number(row.totalTokens);
+    bucket.models.set(modelKey, model);
+  }
+
+  // 固定 12 个月：当前月永远在最右侧，避免只有少量数据时柱子被居中
+  const startMonthIndex = currentMonthIndex - 11;
+
+  const points: UsageMonthlyPoint[] = [];
+  for (
+    let monthIndex = startMonthIndex;
+    monthIndex <= currentMonthIndex;
+    monthIndex++
+  ) {
+    const key = monthIndexToKey(monthIndex);
+    const bucket = buckets.get(key);
+    points.push({
+      date: key,
+      totalTokens: bucket?.totalTokens ?? 0,
+      inputTokens: bucket?.inputTokens ?? 0,
+      outputTokens: bucket?.outputTokens ?? 0,
+      requestCount: bucket?.requestCount ?? 0,
+      models: bucket
+        ? Array.from(bucket.models.values()).sort(
+            (a, b) => b.totalTokens - a.totalTokens,
+          )
+        : [],
+    });
+  }
+  return points;
+}
+
+/** YYYY-MM → 连续月序号（用于跨年加减） */
+function monthKeyToIndex(key: string): number {
+  const [year, month] = key.split("-").map(Number);
+  return year * 12 + (month - 1);
+}
+
+function monthIndexToKey(index: number): string {
+  const year = Math.floor(index / 12);
+  const month = (index % 12) + 1;
+  return `${year}-${String(month).padStart(2, "0")}`;
 }
 
 function buildHeatmap(

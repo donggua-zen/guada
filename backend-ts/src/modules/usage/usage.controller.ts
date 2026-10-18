@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import { Controller, Delete, Get, Query, UseGuards } from "@nestjs/common";
 
 import { AuthGuard } from "../auth/auth.guard";
 import { ProviderFileStore } from "../llm-core/provider-file.store";
@@ -49,6 +49,12 @@ export class UsageController {
     }
 
     return snapshot;
+  }
+
+  /** 清空全部本地用量明细（不影响会话消息/元数据） */
+  @Delete("stats")
+  clearAll() {
+    return { success: true, deleted: this.usageService.clearAll() };
   }
 }
 

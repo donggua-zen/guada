@@ -171,6 +171,34 @@ describe("UsageStore", () => {
     expect(rows.sessions.map((row) => row.sessionId)).toEqual(["s2"]);
   });
 
+  it("clearAll 清空全部用量", () => {
+    record(store, {
+      sessionId: "s1",
+      modelId: "m1",
+      startedAt: 1_000,
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+    });
+    record(store, {
+      sessionId: "s2",
+      modelId: "m1",
+      startedAt: 1_000,
+      promptTokens: 20,
+      completionTokens: 10,
+      totalTokens: 30,
+    });
+
+    expect(store.clearAll()).toBe(2);
+    const rows = store.query({ range: "all", tzOffsetMinutes: 0, now: 2_000 });
+    expect(rows.totals.requestCount).toBe(0);
+    expect(rows.totals.totalTokens).toBe(0);
+    expect(rows.daily).toEqual([]);
+    expect(rows.models).toEqual([]);
+    expect(rows.sources).toEqual([]);
+    expect(rows.sessions).toEqual([]);
+  });
+
   it("供应商未返回 usage 时仍记录请求并标记 usage_missing", () => {
     record(store, {
       sessionId: "s1",

@@ -12,12 +12,20 @@
                     {{ t(item.labelKey) }}
                 </button>
             </div>
-            <button type="button"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) text-gray-600 dark:text-[#a8aab2] hover:bg-gray-50 dark:hover:bg-[#2a2b30] disabled:opacity-50"
-                :disabled="loading" @click="refresh">
-                <ArrowClockwise20Regular class="w-4 h-4" :class="{ 'animate-spin': loading }" />
-                {{ t('settings.usage.refresh') }}
-            </button>
+            <div class="flex items-center gap-2">
+                <button type="button"
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) text-gray-600 dark:text-[#a8aab2] hover:bg-gray-50 dark:hover:bg-[#2a2b30] disabled:opacity-50"
+                    :disabled="loading" @click="refresh">
+                    <ArrowClockwise20Regular class="w-4 h-4" :class="{ 'animate-spin': loading }" />
+                    {{ t('settings.usage.refresh') }}
+                </button>
+                <button type="button"
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-red-200 dark:border-red-900/60 bg-(--gd-color-surface) text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
+                    :disabled="loading || clearing" @click="clearUsage">
+                    <Delete20Regular class="w-4 h-4" />
+                    {{ t('settings.usage.clear') }}
+                </button>
+            </div>
         </div>
 
         <!-- 错误 -->
@@ -94,24 +102,33 @@
             <!-- 每日模型堆叠 -->
             <section class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) p-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.usage.trend.title') }}</h3>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed]">
+                        {{ isMonthly ? t('settings.usage.trend.titleMonthly') : t('settings.usage.trend.title') }}
+                    </h3>
                     <span class="text-xs text-gray-400 dark:text-[#777982]">
-                        {{ t('settings.usage.trend.desc') }} · {{ t('settings.usage.trend.peak', { tokens: formatCompactTokens(maxDailyTokens) }) }}
+                        {{ t('settings.usage.trend.desc') }} · {{ t('settings.usage.trend.peak', { tokens: formatCompactTokens(maxTrendTokens) }) }}
                     </span>
                 </div>
-                <div v-if="hasDailyUsage" class="mt-4 overflow-x-auto pb-1">
+                <div v-if="hasTrendUsage" class="mt-4 overflow-x-auto pb-1">
                     <div class="flex items-end justify-around gap-2 h-36 w-full border-b border-gray-100 dark:border-[#2e3035]">
-                        <div v-for="day in snapshot.daily" :key="day.date"
+                        <div v-for="point in trendPoints" :key="point.date"
                             class="flex flex-col justify-end h-full min-w-[6px] flex-1 max-w-[48px]"
-                            :title="dayTitle(day)">
+                            :title="pointTitle(point)">
                             <div class="flex flex-col-reverse w-full h-full rounded-sm overflow-hidden"
-                                :class="day.totalTokens > 0 ? 'bg-gray-100 dark:bg-[#25262b]' : ''">
-                                <div v-for="segment in day.models"
+                                :class="point.totalTokens > 0 ? 'bg-gray-100 dark:bg-[#25262b]' : ''">
+                                <div v-for="segment in point.models"
                                     :key="segment.providerId + ':' + segment.modelId"
                                     :style="{ height: segmentHeight(segment.totalTokens), backgroundColor: colorFor(segment.providerId, segment.modelId) }"
                                     class="w-full shrink-0" />
                             </div>
                         </div>
+                    </div>
+                    <!-- 月度模式：柱子下方标出月份 -->
+                    <div v-if="isMonthly" class="mt-1 flex justify-around gap-2">
+                        <span v-for="point in trendPoints" :key="point.date"
+                            class="flex-1 max-w-[48px] text-center text-[10px] text-gray-400 dark:text-[#777982]">
+                            {{ formatMonthLabel(`${point.date}-01`, locale) }}
+                        </span>
                     </div>
                 </div>
                 <div v-else class="mt-4 text-xs text-gray-500 dark:text-[#8b8d95]">
@@ -194,13 +211,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowClockwise20Regular, ChartMultiple24Regular } from '@vicons/fluent'
+import {
+    ArrowClockwise20Regular,
+    ChartMultiple24Regular,
+    Delete20Regular,
+} from '@vicons/fluent'
 
 import { useUsageStats } from '@/composables/useUsageStats'
+import { usePopup } from '@/composables/usePopup'
+import { apiService } from '@/services/ApiService'
 import type {
     UsageDailyPoint,
+    UsageMonthlyPoint,
     UsageRange,
 } from '@/services/modules/usage.api'
 import {
@@ -211,7 +235,11 @@ import {
     formatPercent,
 } from '@/utils/usageFormat'
 
+type TrendPoint = UsageDailyPoint | UsageMonthlyPoint
+
 const { t, locale } = useI18n()
+const { confirm, toast } = usePopup()
+const clearing = ref(false)
 const {
     range,
     snapshot,
@@ -276,14 +304,21 @@ const modelColorIndex = computed(() => {
 
 const topModels = computed(() => (snapshot.value?.models ?? []).slice(0, 6))
 
-const hasDailyUsage = computed(() =>
-    (snapshot.value?.daily ?? []).some((day) => day.totalTokens > 0),
+/** all 范围按月度展示；7d/30d 按日 */
+const isMonthly = computed(() => snapshot.value?.range === 'all')
+
+const trendPoints = computed<TrendPoint[]>(() => {
+    if (!snapshot.value) return []
+    return isMonthly.value ? snapshot.value.monthly : snapshot.value.daily
+})
+
+const hasTrendUsage = computed(() =>
+    trendPoints.value.some((point) => point.totalTokens > 0),
 )
 
-const maxDailyTokens = computed(() => {
-    const days = snapshot.value?.daily ?? []
-    return Math.max(1, ...days.map((day) => day.totalTokens))
-})
+const maxTrendTokens = computed(() =>
+    Math.max(1, ...trendPoints.value.map((point) => point.totalTokens)),
+)
 
 const summaryItems = computed(() => {
     const summary = snapshot.value?.summary
@@ -362,7 +397,7 @@ function colorFor(providerId: string, modelId: string): string {
 }
 
 function segmentHeight(tokens: number): string {
-    return `${Math.max(0, (tokens / maxDailyTokens.value) * 100)}%`
+    return `${Math.max(0, (tokens / maxTrendTokens.value) * 100)}%`
 }
 
 function percentWidth(share: number): string {
@@ -379,13 +414,39 @@ function heatmapClass(level: number): string {
     }
 }
 
-function dayTitle(day: UsageDailyPoint): string {
-    const models = day.models
+function pointTitle(point: TrendPoint): string {
+    const label = isMonthly.value ? point.date : formatMonthDay(point.date)
+    const models = point.models
         .slice(0, 4)
         .map((item) => `${item.modelId} ${formatCompactTokens(item.totalTokens)}`)
         .join(' · ')
-    return `${formatMonthDay(day.date)} · ${formatCompactTokens(day.totalTokens)} tokens` +
+    return `${label} · ${formatCompactTokens(point.totalTokens)} tokens · ${point.requestCount}` +
         (models ? `\n${models}` : '')
+}
+
+async function clearUsage(): Promise<void> {
+    const ok = await confirm(
+        t('settings.usage.clearConfirmTitle'),
+        t('settings.usage.clearConfirmMessage'),
+        {
+            type: 'error',
+            danger: true,
+            confirmText: t('settings.usage.clearConfirm'),
+            cancelText: t('common.cancel'),
+        },
+    )
+    if (!ok) return
+
+    clearing.value = true
+    try {
+        await apiService.clearUsageStats()
+        toast.success(t('settings.usage.clearSuccess'))
+        await refresh()
+    } catch {
+        toast.error(t('settings.usage.clearFailed'))
+    } finally {
+        clearing.value = false
+    }
 }
 
 function sourceLabel(source: string): string {

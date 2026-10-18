@@ -43,6 +43,20 @@ export interface UsageDailyPoint {
   }>;
 }
 
+/** 月度趋势点（仅 range=all 使用，date 为 YYYY-MM） */
+export interface UsageMonthlyPoint {
+  date: string;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  requestCount: number;
+  models: Array<{
+    providerId: string;
+    modelId: string;
+    totalTokens: number;
+  }>;
+}
+
 export interface UsageHeatmapCell {
   date: string;
   level: 0 | 1 | 2 | 3 | 4;
@@ -93,6 +107,8 @@ export interface UsageSnapshot {
   source: "local-usage-db";
   summary: UsageSummary;
   daily: UsageDailyPoint[];
+  /** 月度趋势：仅 range=all 有值，最多 12 个月 */
+  monthly: UsageMonthlyPoint[];
   heatmap: {
     startDate: string;
     endDate: string;
@@ -113,6 +129,8 @@ export interface FetchUsageStatsOptions {
 
 export interface UsageApi {
   fetchUsageStats(options: FetchUsageStatsOptions): Promise<UsageSnapshot>;
+  /** 清空全部本地用量统计（不影响会话消息） */
+  clearUsageStats(): Promise<{ success: boolean; deleted: number }>;
 }
 
 export const usageApi: UsageApi = {
@@ -130,6 +148,13 @@ export const usageApi: UsageApi = {
     });
     return await this._request<UsageSnapshot>(
       `/usage/stats?${params.toString()}`,
+    );
+  },
+
+  async clearUsageStats(this: ApiContext) {
+    return await this._request<{ success: boolean; deleted: number }>(
+      "/usage/stats",
+      { method: "DELETE" },
     );
   },
 };
