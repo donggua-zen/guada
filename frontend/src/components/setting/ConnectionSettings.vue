@@ -44,7 +44,7 @@
     </div>
 
     <!-- 新建/编辑弹窗：分步向导 -->
-    <GdDialog v-model="editing" width="640px"
+    <GdDialog v-model="editing" size="md"
       :close-on-click-modal="false" append-to-body class="conn-dialog">
       <!-- 高度上限与 GdDialog 的 .l-dialog{max-height:85vh} 对齐：480(内容) + 24(body 内边距) + 边框留量。
            矮窗口下由这里先收缩，body 就不会自己滚动（否则右侧会出现第二条贴边滚动条压住关闭按钮）。

@@ -1,29 +1,87 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, useSlots, onBeforeUnmount, useAttrs } from 'vue'
+import { ref, computed, watch, nextTick, useSlots, onBeforeUnmount, useAttrs, useId } from 'vue'
+import { t } from '@/locales'
 
 defineOptions({ inheritAttrs: false })
+
+type DialogSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full'
+
+const SIZE_WIDTH: Record<DialogSize, string> = {
+  xs: 'var(--gd-dialog-width-xs, 400px)',
+  sm: 'var(--gd-dialog-width-sm, 480px)',
+  md: 'var(--gd-dialog-width-md, 600px)',
+  lg: 'var(--gd-dialog-width-lg, 760px)',
+  xl: 'var(--gd-dialog-width-xl, 900px)',
+  full: 'var(--gd-dialog-width-full, min(1200px, calc(100vw - 32px)))',
+}
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
+// 层级：模块级单调递增，保证后打开的弹窗永远在上层。声明式与命令式弹窗共用。
+const BASE_Z_INDEX = 2000
+let zIndexCounter = 0
+
+// 背景滚动锁：引用计数，支持多弹窗嵌套。
+let scrollLockCount = 0
+let savedBodyOverflow = ''
+// 当前打开的弹窗数：只有全部关闭后才归还焦点，避免关掉上层时抢走下层焦点
+let openDialogCount = 0
+
+function lockBodyScroll() {
+  if (typeof document === 'undefined') return
+  if (scrollLockCount === 0) {
+    savedBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+  }
+  scrollLockCount += 1
+}
+
+function unlockBodyScroll() {
+  if (typeof document === 'undefined') return
+  scrollLockCount = Math.max(0, scrollLockCount - 1)
+  if (scrollLockCount === 0) {
+    document.body.style.overflow = savedBodyOverflow
+  }
+}
 
 const attrs = useAttrs()
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
   title?: string
+  size?: DialogSize
   width?: string | number
+  align?: 'center' | 'top'
   alignCenter?: boolean
   closeOnClickModal?: boolean
   closeOnPressEscape?: boolean
   destroyOnClose?: boolean
   appendToBody?: boolean
+  lockScroll?: boolean
+  trapFocus?: boolean
   showClose?: boolean
+  zIndex?: number
 }>(), {
   title: '',
-  width: '50%',
+  size: 'md',
+  width: undefined,
+  align: undefined,
   alignCenter: true,
   closeOnClickModal: true,
   closeOnPressEscape: true,
-  destroyOnClose: false,
-  appendToBody: false,
+  destroyOnClose: true,
+  appendToBody: true,
+  lockScroll: true,
+  trapFocus: true,
   showClose: true,
+  zIndex: undefined,
 })
 
 const emit = defineEmits<{
@@ -34,8 +92,16 @@ const emit = defineEmits<{
 }>()
 
 const slots = useSlots()
+const uid = useId()
+const titleId = `gd-dialog-title-${uid}`
 const visible = ref(props.modelValue)
-const rendered = ref(true) // when destroyOnClose, controls inner DOM existence
+// 首次打开前不渲染 slot，避免隐藏弹窗里的表单/请求提前执行
+const rendered = ref(props.modelValue)
+const dialogEl = ref<HTMLElement | null>(null)
+const zIndexValue = ref<number | undefined>(props.zIndex)
+let previousActiveElement: HTMLElement | null = null
+let scrollLocked = false
+let countedOpen = false
 
 watch(() => props.modelValue, (val) => {
   if (val === visible.value) return
@@ -46,26 +112,80 @@ watch(() => props.modelValue, (val) => {
   }
 })
 
+watch(visible, (val) => {
+  if (val) {
+    handleOpened()
+  }
+}, { immediate: true })
+
 function open() {
-  visible.value = true
   rendered.value = true
+  visible.value = true
   emit('update:modelValue', true)
   emit('open')
 }
 
 function close() {
+  if (!visible.value) return
   visible.value = false
   emit('update:modelValue', false)
   emit('close')
-  if (props.destroyOnClose) {
-    // wait for transition to finish before destroying inner DOM
-    nextTick(() => {
-      rendered.value = false
-      emit('closed')
-    })
-  } else {
-    nextTick(() => emit('closed'))
+}
+
+function handleOpened() {
+  if (!countedOpen) {
+    openDialogCount += 1
+    countedOpen = true
   }
+  acquireZIndex()
+  if (props.lockScroll && !scrollLocked) {
+    lockBodyScroll()
+    scrollLocked = true
+  }
+  if (typeof document !== 'undefined') {
+    previousActiveElement = document.activeElement as HTMLElement | null
+  }
+  nextTick(() => {
+    if (!visible.value || !dialogEl.value) return
+    const target = dialogEl.value.querySelector<HTMLElement>('[autofocus]')
+      || getFocusableElements()[0]
+      || dialogEl.value
+    target.focus()
+  })
+}
+
+function handleAfterLeave() {
+  if (countedOpen) {
+    openDialogCount = Math.max(0, openDialogCount - 1)
+    countedOpen = false
+  }
+  if (scrollLocked) {
+    unlockBodyScroll()
+    scrollLocked = false
+  }
+  if (openDialogCount === 0 && previousActiveElement && previousActiveElement.isConnected) {
+    previousActiveElement.focus()
+  }
+  previousActiveElement = null
+  if (props.destroyOnClose) {
+    rendered.value = false
+  }
+  emit('closed')
+}
+
+function acquireZIndex() {
+  if (props.zIndex !== undefined) {
+    zIndexValue.value = props.zIndex
+    return
+  }
+  zIndexCounter += 1
+  zIndexValue.value = BASE_Z_INDEX + zIndexCounter * 10
+}
+
+function getFocusableElements(): HTMLElement[] {
+  if (!dialogEl.value) return []
+  return Array.from(dialogEl.value.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter((el) => el.offsetParent !== null || el === document.activeElement)
 }
 
 // 记录遮罩上的按下是否直接发生在遮罩本身（而非弹窗内部拖拽起手）。
@@ -84,8 +204,33 @@ function handleOverlayClick(e: MouseEvent) {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.closeOnPressEscape) {
-    close()
+  if (e.key === 'Escape') {
+    if (props.closeOnPressEscape) {
+      e.stopPropagation()
+      close()
+    }
+    return
+  }
+
+  if (e.key !== 'Tab' || !props.trapFocus || !dialogEl.value) return
+
+  const focusables = getFocusableElements()
+  if (focusables.length === 0) {
+    e.preventDefault()
+    dialogEl.value.focus()
+    return
+  }
+
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  const active = document.activeElement
+
+  if (e.shiftKey && (active === first || active === dialogEl.value)) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
   }
 }
 
@@ -97,9 +242,18 @@ const hasFooter = computed(() => {
   return !!slots.footer
 })
 
+const isTopAligned = computed(() => {
+  return props.align ? props.align === 'top' : !props.alignCenter
+})
+
 const dialogStyle = computed(() => {
-  const w = typeof props.width === 'number' ? `${props.width}px` : props.width
-  return { width: w, maxWidth: 'calc(100vw - 32px)' }
+  let width: string
+  if (props.width !== undefined && props.width !== '') {
+    width = typeof props.width === 'number' ? `${props.width}px` : props.width
+  } else {
+    width = SIZE_WIDTH[props.size]
+  }
+  return { width, maxWidth: 'calc(100vw - 32px)' }
 })
 
 onBeforeUnmount(() => {
@@ -107,37 +261,50 @@ onBeforeUnmount(() => {
     emit('update:modelValue', false)
     emit('close')
   }
+  if (countedOpen) {
+    openDialogCount = Math.max(0, openDialogCount - 1)
+    countedOpen = false
+  }
+  if (scrollLocked) {
+    unlockBodyScroll()
+    scrollLocked = false
+  }
 })
 </script>
 
 <template>
   <Teleport :to="appendToBody ? 'body' : undefined" :disabled="!appendToBody">
-    <Transition name="l-dialog-fade">
+    <Transition name="l-dialog-fade" @after-leave="handleAfterLeave">
       <div
-        v-if="visible"
-        class="l-dialog__overlay"
-        :class="{ 'l-dialog__overlay--top': !alignCenter }"
+        v-show="visible"
+        class="l-dialog__overlay gd-dialog__overlay"
+        :class="{ 'l-dialog__overlay--top': isTopAligned }"
+        :style="{ zIndex: zIndexValue }"
         @mousedown="handleOverlayMouseDown"
         @click="handleOverlayClick"
-        @keydown.esc="handleKeydown"
+        @keydown="handleKeydown"
         tabindex="-1"
       >
         <div
-          class="l-dialog"
+          ref="dialogEl"
+          class="l-dialog gd-dialog"
           v-bind="attrs"
           :style="dialogStyle"
           role="dialog"
           aria-modal="true"
+          :aria-labelledby="hasHeader ? titleId : undefined"
+          tabindex="-1"
         >
           <!-- Header: only rendered when title or header slot exists -->
           <div v-if="hasHeader" class="l-dialog__header">
             <slot name="header">
-              <span class="l-dialog__title">{{ title }}</span>
+              <span :id="titleId" class="l-dialog__title">{{ title }}</span>
             </slot>
             <button
               v-if="showClose"
               class="l-dialog__close-btn"
               type="button"
+              :aria-label="t('common.close')"
               @click="close"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -150,6 +317,7 @@ onBeforeUnmount(() => {
             v-else-if="showClose"
             class="l-dialog__close-btn l-dialog__close-btn--floating"
             type="button"
+            :aria-label="t('common.close')"
             @click="close"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -176,7 +344,7 @@ onBeforeUnmount(() => {
 .l-dialog__overlay {
   position: fixed;
   inset: 0;
-  z-index: 2000;
+  z-index: var(--gd-z-modal, 2000);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -189,12 +357,8 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   background-color: var(--gd-color-overlay-bg, rgba(0, 0, 0, 0.5));
-  opacity: 0.8;
+  opacity: var(--gd-dialog-overlay-opacity, 0.8);
   pointer-events: none;
-}
-
-html.dark .l-dialog__overlay::before {
-  opacity: 0.75;
 }
 
 .l-dialog__overlay > .l-dialog {
@@ -211,29 +375,26 @@ html.dark .l-dialog__overlay::before {
   max-height: 85vh;
   border-radius: var(--gd-size-dialog-rounded-radius, 12px);
   background-color: var(--gd-color-dialog-bg, var(--gd-color-bg));
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1), 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--gd-dialog-shadow, 0 0 10px rgba(0, 0, 0, 0.1), 0 4px 16px rgba(0, 0, 0, 0.08));
   border: 1px solid var(--gd-color-dialog-border, var(--gd-color-border));
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
-}
-
-html.dark .l-dialog {
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1), 0 8px 32px rgba(0, 0, 0, 0.4);
+  outline: none;
 }
 
 .l-dialog__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px 8px;
+  padding: 10px var(--gd-dialog-padding-x, 16px) 8px;
   flex-shrink: 0;
 }
 
 .l-dialog__title {
-  font-size: var(--gd-size-text-sm, 14px);
-  font-weight: 600;
+  font-size: var(--gd-dialog-title-size, 14px);
+  font-weight: var(--gd-dialog-title-weight, 600);
   color: var(--gd-color-text);
   line-height: 1.5;
 }
@@ -259,6 +420,11 @@ html.dark .l-dialog {
   color: var(--gd-color-text);
 }
 
+.l-dialog__close-btn:focus-visible {
+  outline: 2px solid var(--gd-color-primary);
+  outline-offset: 2px;
+}
+
 .l-dialog__close-btn--floating {
   position: absolute;
   top: 8px;
@@ -268,31 +434,33 @@ html.dark .l-dialog {
 
 .l-dialog__body {
   flex: 1;
-  padding: 12px;
+  padding: var(--gd-dialog-padding-y, 12px) var(--gd-dialog-padding-x, 16px);
   overflow-y: auto;
   min-height: 0;
 }
 
 .l-dialog__footer {
-  padding: 8px 12px 10px;
+  padding: 8px var(--gd-dialog-padding-x, 16px) 10px;
   flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--gd-dialog-gap, 8px);
 }
 
 /* Transition */
 .l-dialog-fade-enter-active,
 .l-dialog-fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--gd-motion-duration-dialog, 0.2s) var(--gd-motion-ease-dialog, ease);
 }
 
 .l-dialog-fade-enter-active .l-dialog {
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: transform var(--gd-motion-duration-dialog, 0.2s) var(--gd-motion-ease-dialog, ease),
+    opacity var(--gd-motion-duration-dialog, 0.2s) var(--gd-motion-ease-dialog, ease);
 }
 
 .l-dialog-fade-leave-active .l-dialog {
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: transform var(--gd-motion-duration-dialog, 0.2s) var(--gd-motion-ease-dialog, ease),
+    opacity var(--gd-motion-duration-dialog, 0.2s) var(--gd-motion-ease-dialog, ease);
 }
 
 .l-dialog-fade-enter-from {

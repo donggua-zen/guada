@@ -2,7 +2,7 @@
   <GdDialog
     :model-value="visible"
     @update:model-value="onVisibleChange"
-    width="480px"
+    size="sm"
     :close-on-click-modal="false"
     class="update-dialog"
     append-to-body

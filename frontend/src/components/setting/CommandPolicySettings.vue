@@ -203,9 +203,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { ShieldCheckmark16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
+import { usePopup } from '@/composables/usePopup'
 import type {
   EffectivePolicyView,
   FactoryPolicy,
@@ -215,6 +216,7 @@ import type {
 } from '@/services/modules/policy.api'
 
 const { t } = useI18n()
+const { confirm } = usePopup()
 
 const effective = ref<EffectivePolicyView | null>(null)
 const factory = ref<FactoryPolicy>({ readOnly: [], ask: [], sensitive: [], writeRoots: [] })
@@ -386,13 +388,11 @@ async function save() {
 }
 
 async function resetUser() {
-  try {
-    await ElMessageBox.confirm(t('settings.policy.resetConfirm'), t('settings.policy.reset'), {
-      type: 'warning',
-    })
-  } catch {
-    return
-  }
+  const ok = await confirm(t('settings.policy.reset'), t('settings.policy.resetConfirm'), {
+    type: 'warning',
+  })
+  if (!ok) return
+
   saving.value = true
   try {
     applyEffective(await apiService.resetPolicyRules())

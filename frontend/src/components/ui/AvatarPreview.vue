@@ -7,7 +7,7 @@
         <input ref="avatarInput" type="file" accept="image/*" style="display: none" @change="handleAvatarChanged">
     </div>
     <!-- 头像裁剪模态框 -->
-    <GdDialog v-model="showCropModal" title="裁剪头像" width="600px">
+    <GdDialog v-model="showCropModal" title="裁剪头像" size="md">
         <div class="modal-body">
             <cropper ref="cropperAvatar" :src="cropImageSrc" :stencil-props="{
                 aspectRatio: 1,

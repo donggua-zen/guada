@@ -114,7 +114,7 @@
     </div>
 
     <!-- 编辑/新增模型信息的模态框 -->
-    <GdDialog v-model="showEditModal" :title="isEditMode ? t('settings.providerDetail.editModelInfo') : t('settings.providerDetail.newModel')" width="600px" align-center
+    <GdDialog v-model="showEditModal" :title="isEditMode ? t('settings.providerDetail.editModelInfo') : t('settings.providerDetail.newModel')" size="md" align-center
       class="model-edit-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
         <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
@@ -434,7 +434,7 @@
     </GdDialog>
 
     <!-- 获取模型列表的模态框 -->
-    <GdDialog v-model="showFetchModal" :title="t('settings.providerDetail.fetchModelsTitle')" width="600px" align-center
+    <GdDialog v-model="showFetchModal" :title="t('settings.providerDetail.fetchModelsTitle')" size="md" align-center
       class="model-fetch-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
         <div class="mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">

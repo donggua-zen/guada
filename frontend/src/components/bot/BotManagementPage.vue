@@ -59,9 +59,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessageBox } from 'element-plus'
 import { Plus, Loading, Cpu, Document } from '@element-plus/icons-vue'
 import { useBotStore } from '@/stores/bot'
+import { usePopup } from '@/composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import BotCard from './BotCard.vue'
 import BotModal from './BotModal.vue'
@@ -69,6 +69,7 @@ import type { BotInstance } from '@/types/bot'
 
 const botStore = useBotStore()
 const { t } = useI18n()
+const { confirm } = usePopup()
 const dialogVisible = ref(false)
 const currentBot = ref<BotInstance | null>(null)
 
@@ -106,23 +107,21 @@ const handleEdit = (bot: BotInstance) => {
 
 // 删除机器人
 const handleDelete = async (bot: BotInstance) => {
-  try {
-    await ElMessageBox.confirm(
-      t('bot.management.deleteConfirm', { name: bot.name }),
-      t('bot.management.deleteTitle'),
-      {
-        confirmButtonText: t('common.ok'),
-        cancelButtonText: t('common.cancel'),
-        type: 'warning'
-      }
-    )
+  const ok = await confirm(
+    t('bot.management.deleteTitle'),
+    t('bot.management.deleteConfirm', { name: bot.name }),
+    {
+      confirmText: t('common.ok'),
+      cancelText: t('common.cancel'),
+      type: 'warning'
+    }
+  )
+  if (!ok) return
 
+  try {
     await botStore.deleteBot(bot.id)
   } catch (error) {
-    // 用户取消或删除失败
-    if (error !== 'cancel') {
-      console.error('删除失败:', error)
-    }
+    console.error('删除失败:', error)
   }
 }
 

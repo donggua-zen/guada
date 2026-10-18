@@ -1,5 +1,5 @@
 <template>
-  <GdDialog v-model="dialogVisible" :title="isEdit ? t('bot.modal.editTitle') : t('bot.modal.createTitle')" width="600px" :close-on-click-modal="false"
+  <GdDialog v-model="dialogVisible" :title="isEdit ? t('bot.modal.editTitle') : t('bot.modal.createTitle')" size="md" :close-on-click-modal="false"
     @close="handleClose" append-to-body>
     <el-form ref="formRef" :model="formData" :rules="formRules" label-width="120px" class="bot-form"
       :validate-on-rule-change="false">

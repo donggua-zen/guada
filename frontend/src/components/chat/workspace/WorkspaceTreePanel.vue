@@ -54,9 +54,10 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { writeTextToClipboard } from '@/utils/clipboard'
 import { ref, computed, watch, nextTick } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { apiService } from '@/services/ApiService';
+import { usePopup } from '@/composables/usePopup';
 import { Refresh, CopyDocument, Edit, Delete, Plus } from '@element-plus/icons-vue';
 import { VsCode, WindowsExplorer, Finder } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
@@ -76,6 +77,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const { prompt, confirm } = usePopup();
 const treeStore = useWorkspaceTreeStore();
 const tabStore = useTabStore();
 
@@ -412,28 +414,24 @@ async function handleRename() {
         return;
     }
 
+    const newName = await prompt(t('chat.workspace.rename'), {
+        defaultValue: node.name,
+        placeholder: t('chat.workspace.renameInputPlaceholder'),
+        confirmText: t('common.ok'),
+        cancelText: t('common.cancel'),
+        validation: (val: string) => {
+            if (!val || !val.trim()) return t('chat.workspace.nameRequired');
+            if (val.includes('/') || val.includes('\\')) return t('chat.workspace.nameNoSeparator');
+            return true;
+        },
+    });
+
+    if (newName === null || !newName) {
+        closeContextMenu();
+        return;
+    }
+
     try {
-        const { value: newName } = await ElMessageBox.prompt(
-            t('chat.workspace.renameTitle'),
-            t('chat.workspace.rename'),
-            {
-                inputValue: node.name,
-                inputPlaceholder: t('chat.workspace.renameInputPlaceholder'),
-                confirmButtonText: t('common.ok'),
-                cancelButtonText: t('common.cancel'),
-                inputValidator: (val: string) => {
-                    if (!val || !val.trim()) return t('chat.workspace.nameRequired');
-                    if (val.includes('/') || val.includes('\\')) return t('chat.workspace.nameNoSeparator');
-                    return true;
-                },
-            },
-        );
-
-        if (!newName || !newName.trim()) {
-            closeContextMenu();
-            return;
-        }
-
         const result = await apiService.renameWorkspaceFile(
             props.sessionId,
             node.path,
@@ -469,11 +467,6 @@ async function handleRename() {
             treeStore.clearFileChangeVersion(oldPath);
         }
     } catch (error) {
-        // ElMessageBox.prompt 取消会抛异常，忽略
-        if (error === 'cancel' || error === 'close') {
-            closeContextMenu();
-            return;
-        }
         console.error('[WorkspaceTreePanel] Rename failed:', error);
         ElMessage.error(getErrorMessage(error) || t('chat.workspace.renameFailed'));
     }
@@ -492,20 +485,24 @@ async function handleDelete() {
 
     const displayName = node.name;
 
-    try {
-        await ElMessageBox.confirm(
-            node.isDirectory
-                ? t('chat.workspace.deleteConfirmDir', { name: displayName })
-                : t('chat.workspace.deleteConfirmFile', { name: displayName }),
-            t('chat.workspace.deleteConfirmTitle'),
-            {
-                confirmButtonText: t('chat.workspace.confirmDelete'),
-                cancelButtonText: t('common.cancel'),
-                type: 'warning',
-                distinguishCancelAndClose: true,
-            },
-        );
+    const ok = await confirm(
+        t('chat.workspace.deleteConfirmTitle'),
+        node.isDirectory
+            ? t('chat.workspace.deleteConfirmDir', { name: displayName })
+            : t('chat.workspace.deleteConfirmFile', { name: displayName }),
+        {
+            confirmText: t('chat.workspace.confirmDelete'),
+            cancelText: t('common.cancel'),
+            type: 'warning',
+        },
+    );
 
+    if (!ok) {
+        closeContextMenu();
+        return;
+    }
+
+    try {
         const result = await apiService.deleteWorkspaceFile(
             props.sessionId,
             node.path,
@@ -521,11 +518,6 @@ async function handleDelete() {
             }
         }
     } catch (error) {
-        // ElMessageBox.confirm 取消会抛异常，忽略
-        if (error === 'cancel' || error === 'close') {
-            closeContextMenu();
-            return;
-        }
         console.error('[WorkspaceTreePanel] Delete failed:', error);
         ElMessage.error(getErrorMessage(error) || t('chat.workspace.deleteFailed'));
     }

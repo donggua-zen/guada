@@ -107,8 +107,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { apiService } from '@/services/ApiService'
+import { usePopup } from '@/composables/usePopup'
 import { setLinkOpenMode, setAutoShowSidebar, type LinkOpenMode } from '@/utils/workspacePreview'
 import {
   VIEWPORT_PRESETS, VIEWPORT_MIN, VIEWPORT_MAX,
@@ -118,6 +119,7 @@ import { useBrowserWebviewStore } from '@/stores/browserWebview'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const { t } = useI18n()
+const { confirm } = usePopup()
 const clearing = ref(false)
 const linkOpenMode = ref<LinkOpenMode>('ask')
 const autoShowSidebar = ref(false)
@@ -219,19 +221,16 @@ async function handleClearData(): Promise<void> {
     return
   }
 
-  try {
-    await ElMessageBox.confirm(
-      t('settings.browser.clearConfirmMessage'),
-      t('settings.browser.clearConfirmTitle'),
-      {
-        confirmButtonText: t('settings.browser.clearConfirmBtn'),
-        cancelButtonText: t('common.cancel'),
-        type: 'warning',
-      },
-    )
-  } catch {
-    return
-  }
+  const ok = await confirm(
+    t('settings.browser.clearConfirmTitle'),
+    t('settings.browser.clearConfirmMessage'),
+    {
+      confirmText: t('settings.browser.clearConfirmBtn'),
+      cancelText: t('common.cancel'),
+      type: 'warning',
+    },
+  )
+  if (!ok) return
 
   clearing.value = true
   try {

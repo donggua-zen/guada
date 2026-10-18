@@ -23,6 +23,7 @@ export default {
   popup: {
     inputPlaceholder: '请输入内容',
     contentRequired: '内容不能为空',
+    invalidInput: '输入内容不合法',
     editTitle: '编辑内容',
     processing: '处理中...',
   },

@@ -8,6 +8,7 @@
         <SetupGuide ref="guideRef" />
         <el-config-provider :locale="elLocale">
             <RouterView></RouterView>
+            <GdDialogHost />
         </el-config-provider>
     </div>
 
@@ -31,6 +32,7 @@ import { useTrayStats } from './composables/useTrayStats'
 import { i18n, getLocale } from './locales'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
 import SetupGuide from './components/SetupGuide.vue'
+import GdDialogHost from './components/ui/GdDialogHost.vue'
 import ContextMenuManager from './utils/ContextMenuManager'
 
 const router = useRouter()

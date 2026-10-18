@@ -23,6 +23,7 @@
   popup: {
     inputPlaceholder: 'Enter content',
     contentRequired: 'Content cannot be empty',
+    invalidInput: 'Invalid input',
     editTitle: 'Edit Content',
     processing: 'Processing...',
   },

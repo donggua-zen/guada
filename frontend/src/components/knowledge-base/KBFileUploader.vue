@@ -34,7 +34,7 @@
         </div>
 
         <!-- 新建文件夹对话框 -->
-        <GdDialog v-model="showCreateFolderDialog" :title="t('knowledge.upload.newFolderTitle')" width="400px" :close-on-click-modal="false" append-to-body>
+        <GdDialog v-model="showCreateFolderDialog" :title="t('knowledge.upload.newFolderTitle')" size="xs" :close-on-click-modal="false" append-to-body>
             <el-input
                 v-model="newFolderName"
                 :placeholder="t('knowledge.upload.folderNamePlaceholder')"
@@ -47,7 +47,7 @@
         </GdDialog>
 
         <!-- 冲突处理对话框 -->
-        <GdDialog v-model="showConflictDialog" :title="t('knowledge.upload.conflictTitle')" width="600px" :close-on-click-modal="false">
+        <GdDialog v-model="showConflictDialog" :title="t('knowledge.upload.conflictTitle')" size="md" :close-on-click-modal="false">
             <div class="space-y-4">
                 <p class="text-sm text-gray-600 dark:text-gray-400">
                     {{ t('knowledge.upload.conflictDesc') }}

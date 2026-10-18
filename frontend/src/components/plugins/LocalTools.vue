@@ -16,7 +16,7 @@
     </div>
 
     <!-- 安装进度弹窗（输入 source → 假终端进度） -->
-    <GdDialog v-model="installDialogVisible" width="600px" :close-on-click-modal="false" destroy-on-close @closed="handleInstallClosed">
+    <GdDialog v-model="installDialogVisible" size="md" :close-on-click-modal="false" destroy-on-close @closed="handleInstallClosed">
       <template #header>
         <span>安装插件</span>
       </template>
@@ -91,7 +91,7 @@
     </div>
 
     <!-- Detail Dialog -->
-    <GdDialog v-model="detailVisible" width="560px" align-center destroy-on-close>
+    <GdDialog v-model="detailVisible" size="sm" align-center destroy-on-close>
       <template #header>
         <div class="flex items-center gap-3">
           <CardAvatar :src="currentTool?.icon ? `/api/v1/plugins/${currentTool?.pluginId}/icon` : null" :name="currentTool?.displayName" size="md" />
@@ -134,14 +134,16 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
+import { usePopup } from '@/composables/usePopup'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import type { PluginQueryPlugin } from '@/services/modules/settings.api'
 
 const { t } = useI18n()
+const { confirm } = usePopup()
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -283,21 +285,21 @@ function handleToggleTool(pluginId: string, enabled: boolean) {
 }
 
 async function handleUninstall(pluginId: string) {
+  const ok = await confirm(t('plugins.localTools.uninstallTitle'), t('plugins.localTools.uninstallConfirm'), {
+    confirmText: t('plugins.localTools.uninstallBtn'),
+    cancelText: t('common.cancel'),
+    type: 'warning',
+  })
+  if (!ok) return
+
   try {
-    await ElMessageBox.confirm(t('plugins.localTools.uninstallConfirm'), t('plugins.localTools.uninstallTitle'), {
-      confirmButtonText: t('plugins.localTools.uninstallBtn'),
-      cancelButtonText: t('common.cancel'),
-      type: 'warning',
-    })
     const response = await apiService._request(`/plugins/${pluginId}`, { method: 'DELETE' })
     if (response.success) {
       ElMessage.success(t('plugins.localTools.uninstallSuccess'))
       await loadGlobalTools()
     }
   } catch (err) {
-    if (err !== 'cancel' && getErrorMessage(err) !== 'cancel') {
-      ElMessage.error(getErrorMessage(err) || t('plugins.localTools.uninstallFailed'))
-    }
+    ElMessage.error(getErrorMessage(err) || t('plugins.localTools.uninstallFailed'))
   }
 }
 

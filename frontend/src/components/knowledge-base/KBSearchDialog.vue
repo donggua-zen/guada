@@ -1,6 +1,6 @@
 <!-- KnowledgeBasePage/KBSearchDialog.vue -->
 <template>
-    <GdDialog v-model="dialogVisible" :title="t('knowledge.search.title')" width="700px" :close-on-click-modal="false"
+    <GdDialog v-model="dialogVisible" :title="t('knowledge.search.title')" size="lg" :close-on-click-modal="false"
         class="kb-search-dialog">
         <!-- 搜索输入区域 -->
         <div class="search-input-section mb-4">

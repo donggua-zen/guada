@@ -2,7 +2,7 @@
   <!-- 提交弹窗（自定义 GdDialog，极简卡片风格）：分支行 + 无边框输入 + 包含未暂存
        + 统计 + 堆叠操作行（提交/提交并推送/推送）。无标题栏，点遮罩/Esc 关闭。
        数据与提交/推送逻辑全部走 GitStore，供概览面板与 Git 变更面板双入口共用。 -->
-  <GdDialog :model-value="git.commitDialogVisible" width="440px" append-to-body :show-close="false"
+  <GdDialog :model-value="git.commitDialogVisible" size="sm" append-to-body :show-close="false"
     class="git-commit-dialog" @update:model-value="git.commitDialogVisible = $event">
     <div class="git-commit-form">
       <!-- 分支行：图标 + 等宽分支名 + 右对齐 AI 生成按钮（生成中点击可取消） -->
@@ -78,7 +78,7 @@
   </GdDialog>
 
   <!-- 项目提交约束编辑对话框 -->
-  <GdDialog :model-value="git.constraintDialogVisible" width="480px" append-to-body
+  <GdDialog :model-value="git.constraintDialogVisible" size="sm" append-to-body
     class="git-constraint-dialog" @update:model-value="git.constraintDialogVisible = $event">
     <div class="git-constraint-form">
       <div class="git-constraint-header">

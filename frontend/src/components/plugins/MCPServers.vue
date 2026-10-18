@@ -58,7 +58,7 @@
         </div>
 
         <!-- 添加/编辑服务器对话框 -->
-        <GdDialog v-model="showModal" :title="isEditMode ? t('plugins.mcp.editTitle') : t('plugins.mcp.addTitle')" width="640px" align-center
+        <GdDialog v-model="showModal" :title="isEditMode ? t('plugins.mcp.editTitle') : t('plugins.mcp.addTitle')" size="md" align-center
             destroy-on-close append-to-body>
 
             <!-- Tab 切换 -->
@@ -226,7 +226,7 @@
 
         <!-- 导入配置对话框 -->
         <GdDialog v-model="showImportModal" :title="t('plugins.mcp.importTitle')" align-center destroy-on-close
-            width="720px">
+            size="lg">
 
             <div class="mb-4">
                 <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-2">

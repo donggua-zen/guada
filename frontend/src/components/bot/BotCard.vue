@@ -44,7 +44,7 @@
   </div>
 
   <!-- 二维码弹窗 -->
-  <GdDialog v-model="qrDialogVisible" :title="t('bot.card.qrTitle')" width="360px" align-center>
+  <GdDialog v-model="qrDialogVisible" :title="t('bot.card.qrTitle')" size="xs" align-center>
     <div class="flex flex-col items-center py-4">
       <div v-if="qrLoading" class="py-8">
         <el-icon class="is-loading" :size="32">

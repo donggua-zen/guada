@@ -126,7 +126,7 @@
         </div>
 
         <!-- 模型选择对话框 -->
-        <GdDialog v-model="modelDialogVisible" :title="t('settings.defaultModel.selectModelTitle')" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
+        <GdDialog v-model="modelDialogVisible" :title="t('settings.defaultModel.selectModelTitle')" :size="isMobile ? 'full' : 'md'" :append-to-body="true"
             destroy-on-close>
             <div class="mb-4">
                 <el-input v-model="modelSearchText" :placeholder="t('settings.defaultModel.searchModel')" clearable>
@@ -244,7 +244,6 @@ import GdTooltip from '@/components/ui/GdTooltip.vue'
 // Element Plus 组件导入
 import {
     ElButton,
-    ElDialog,
     ElTag,
     ElIcon
 } from 'element-plus'

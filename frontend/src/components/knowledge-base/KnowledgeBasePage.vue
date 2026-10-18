@@ -142,7 +142,7 @@
   </div>
 
   <!-- 创建/编辑知识库对话框 -->
-  <GdDialog v-model="showKbDialog" :title="dialogMode === 'create' ? t('knowledge.page.createTitle') : t('knowledge.page.editTitle')" width="600px" :close-on-click-modal="false" append-to-body>
+  <GdDialog v-model="showKbDialog" :title="dialogMode === 'create' ? t('knowledge.page.createTitle') : t('knowledge.page.editTitle')" size="md" :close-on-click-modal="false" append-to-body>
     <el-form :model="dialogForm" label-width="140px" size="large">
       <el-form-item :label="t('knowledge.page.kbName')" required>
         <el-input v-model="dialogForm.name" :placeholder="t('knowledge.page.kbNamePlaceholder')" maxlength="255" show-word-limit />

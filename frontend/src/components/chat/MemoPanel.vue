@@ -148,7 +148,7 @@
     </div>
 
     <!-- 压缩历史记录对话框 -->
-    <GdDialog v-model="historyDialogVisible" :title="t('chat.memo.compressHistoryTitle')" width="800px"
+    <GdDialog v-model="historyDialogVisible" :title="t('chat.memo.compressHistoryTitle')" size="lg"
       append-to-body>
       <template v-if="summaries.length > 0">
         <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4 last:mb-0">

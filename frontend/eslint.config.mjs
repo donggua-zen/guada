@@ -79,6 +79,33 @@ export default ts.config(
           selector: "Literal[value='new-session']",
           message: '改用 @/constants 的 NEW_SESSION_ID（路由哨兵不是会话 id，不能拿它去调后端接口）',
         },
+        {
+          selector: "VElement[name.name='el-dialog']",
+          message: '弹窗统一使用 GdDialog；不要在模板里直接写 <el-dialog>。',
+        },
+        {
+          selector: "VElement[name.name='ElDialog']",
+          message: '弹窗统一使用 GdDialog；不要在模板里直接写 <ElDialog>。',
+        },
+      ],
+    },
+  },
+  // 弹窗体系防回归：模态框统一走 GdDialog；命令式确认/输入统一走 usePopup（内部委托
+  // modalService + GdDialogHost）。Element 仅保留表单控件、轻提示与日志抽屉。
+  {
+    files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts', '**/*.vue', '**/*.js'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'element-plus',
+              importNames: ['ElMessageBox', 'ElDialog'],
+              message: '弹窗统一使用 GdDialog / usePopup（modalService），不要直接使用 Element Plus 的 ElMessageBox / ElDialog。',
+            },
+          ],
+        },
       ],
     },
   },

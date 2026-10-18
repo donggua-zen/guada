@@ -1,5 +1,5 @@
 <template>
-  <GdDialog v-model="dialogVisible" :title="t('session.group.title')" width="420px" :close-on-click-modal="false"
+  <GdDialog v-model="dialogVisible" :title="t('session.group.title')" size="xs" :close-on-click-modal="false"
     destroy-on-close>
     <div class="flex flex-col gap-3">
       <!-- 新建分组 -->

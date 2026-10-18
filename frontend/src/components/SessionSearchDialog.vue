@@ -1,5 +1,5 @@
 <template>
-  <GdDialog v-model="dialogVisible" width="520px" :close-on-click-modal="true" :show-close="false"
+  <GdDialog v-model="dialogVisible" size="sm" :close-on-click-modal="true" :show-close="false"
     append-to-body class="session-search-dialog" @open="handleOpen">
     <!-- 搜索输入 -->
     <div class="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700">

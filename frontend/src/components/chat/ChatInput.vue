@@ -146,15 +146,14 @@
         @select="handleModelSelect" @favorite-changed="handleFavoriteChanged"
         @select-thinking-effort="handleThinkingEffortChange" />
 
-      <!-- 粘贴文本预览弹窗（利用 el-dialog 原生滚动） -->
-      <el-dialog v-model="previewDialogVisible" :title="t('chat.input.previewTitle', { name: previewFileName })"
-        width="640px" :close-on-click-modal="false" destroy-on-close class="pasted-preview-dialog"
-        @close="closeFilePreview">
+      <!-- 粘贴文本预览弹窗 -->
+      <GdDialog v-model="previewDialogVisible" :title="t('chat.input.previewTitle', { name: previewFileName })"
+        size="md" :close-on-click-modal="false" destroy-on-close @close="closeFilePreview">
         <pre class="pasted-preview-text">{{ previewContent }}</pre>
         <template #footer>
           <el-button @click="closeFilePreview">{{ t('common.close') }}</el-button>
         </template>
-      </el-dialog>
+      </GdDialog>
     </div>
   </div>
 </template>
@@ -164,7 +163,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon, ElButton, ElDialog, ElTag, ElMessage } from 'element-plus';
+import { ElIcon, ElButton, ElTag, ElMessage } from 'element-plus';
 import type { Model, ModelProvider } from '@/types/api'
 import type { UploadResponse } from '@/types/service'
 import type { ChatFileView } from '@/types/session'
@@ -175,6 +174,7 @@ import { Editor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import FileItem from '../ui/FileItem.vue';
+import GdDialog from '../ui/GdDialog.vue';
 import GdTooltip from '../ui/GdTooltip.vue';
 import AttachmentPopover from './chat-input/AttachmentPopover.vue';
 import MaxTokensPopover from './chat-input/MaxTokensPopover.vue';
@@ -1845,18 +1845,11 @@ defineExpose({ insertText, insertBadge });
 
 /* ========== 粘贴文本预览弹窗样式 ========== */
 
-/* 弹窗 body 利用 el-dialog 原生滚动 */
-.pasted-preview-dialog :deep(.el-dialog__body) {
-  max-height: 65vh;
-  overflow-y: auto;
-  padding: 16px 20px;
-}
-
 .pasted-preview-text {
   margin: 0;
   padding: 16px;
-  background: var(--el-fill-color-light, #f5f7fa);
-  border: 1px solid var(--el-border-color-light, #e4e7ed);
+  background: var(--gd-color-sidebar-bg-hover, #f5f7fa);
+  border: 1px solid var(--gd-color-border, #e4e7ed);
   border-radius: 8px;
   font-size: 13px;
   /* 整数行高：13 × 1.7 = 22.1px 会让每行基线落在设备像素之间 */
@@ -1864,6 +1857,6 @@ defineExpose({ insertText, insertBadge });
   white-space: pre-wrap;
   word-break: break-word;
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Menlo', monospace;
-  color: var(--el-text-color-primary, #303133);
+  color: var(--gd-color-text, #303133);
 }
 </style>

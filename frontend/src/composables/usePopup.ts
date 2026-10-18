@@ -1,13 +1,17 @@
 // src/composables/usePopup.ts
-import { h, type VNode } from 'vue'
+import { type VNode } from 'vue'
 import {
-    ElMessageBox,
     ElMessage,
     ElNotification,
     type MessageHandler,
     type NotificationOptions
 } from 'element-plus'
 import { t } from '@/locales'
+import {
+    closeAllModals,
+    openModal,
+    type DialogSize
+} from '@/components/ui/modalService'
 
 /**
  * 确认对话框配置选项
@@ -16,6 +20,11 @@ export interface ConfirmOptions {
     type?: 'success' | 'info' | 'warning' | 'error'
     confirmText?: string
     cancelText?: string
+    /** 内容是否按 HTML 渲染。默认 false；只有可信内容才应显式开启。 */
+    html?: boolean
+    size?: DialogSize
+    /** 确认按钮使用危险色（删除类操作）。 */
+    danger?: boolean
 }
 
 /**
@@ -27,7 +36,12 @@ export interface PromptOptions {
     confirmText?: string
     cancelText?: string
     required?: boolean
-    validation?: (value: string) => boolean
+    /** 返回 true 表示通过；返回字符串表示失败并展示该文案。 */
+    validation?: (value: string) => boolean | string
+    /** validation 返回 false 时展示的提示。 */
+    validationMessage?: string
+    inputType?: 'text' | 'password'
+    size?: DialogSize
 }
 
 /**
@@ -41,6 +55,17 @@ export interface EditTextOptions {
     cancelText?: string
     required?: boolean
     rows?: number
+    size?: DialogSize
+}
+
+/**
+ * 单按钮提示框配置
+ */
+export interface AlertOptions {
+    type?: 'info' | 'success' | 'warning' | 'error'
+    confirmText?: string
+    html?: boolean
+    size?: DialogSize
 }
 
 /**
@@ -69,8 +94,8 @@ export interface NotifyApi {
  * 加载状态接口
  */
 export interface LoadingApi {
-    /** 返回关闭函数（ElLoading/通知句柄）；实现不可用时可能为 undefined */
-    start: (text?: string) => (() => void) | undefined
+    /** 返回 ElMessage.loading 的句柄（MessageHandler.close） */
+    start: (text?: string) => MessageHandler | undefined
     wrap: <T>(promiseFn: Promise<T>, loadingText?: string) => Promise<T>
 }
 
@@ -84,6 +109,7 @@ export interface UsePopupReturn {
     prompt: (title: string, options?: PromptOptions) => Promise<string | null>
     editText: (options?: EditTextOptions) => Promise<string | null>
     dialog: (options: { title: string; content: VNode | string; confirmText?: string; cancelText?: string }) => Promise<boolean>
+    alert: (title: string, content: string, options?: AlertOptions) => Promise<boolean>
     toast: ToastApi
     notify: NotifyApi
     loading: LoadingApi
@@ -92,37 +118,39 @@ export interface UsePopupReturn {
 
 /**
  * 常用弹窗 Hook
- * 在 Vue 组件上下文中使用，确保主题和配置一致性
+ * 命令式弹窗统一委托给 GdDialogHost（底层 GdDialog），保证与声明式弹窗同源。
  */
 export function usePopup(): UsePopupReturn {
-    // const loadingBar = useLoadingBar()
-
     /**
      * 确认对话框
      */
-    const confirm = (title: string, content: string, options: ConfirmOptions = {}): Promise<boolean> => {
+    const confirm = async (
+        title: string,
+        content: string,
+        options: ConfirmOptions = {}
+    ): Promise<boolean> => {
         const {
             type = 'warning',
             confirmText = t('common.confirm'),
-            cancelText = t('common.cancel')
+            cancelText = t('common.cancel'),
+            html = false,
+            size = 'xs',
+            danger = type === 'error'
         } = options
 
-        return new Promise((resolve) => {
-            ElMessageBox({
-                title,
-                message: content,
-                type,
-                confirmButtonText: confirmText,
-                cancelButtonText: cancelText,
-                showCancelButton: true,
-                distinguishCancelAndClose: true,
-                dangerouslyUseHTMLString: true
-            }).then(() => {
-                resolve(true)
-            }).catch(() => {
-                resolve(false)
-            })
+        const result = await openModal({
+            title,
+            content,
+            icon: type,
+            html,
+            size,
+            showCancel: true,
+            confirmText,
+            cancelText,
+            danger,
+            closeOnClickModal: false
         })
+        return result.action === 'confirm'
     }
 
     /**
@@ -136,53 +164,55 @@ export function usePopup(): UsePopupReturn {
      * 危险操作确认对话框
      */
     const confirmError = (title: string, content: string, options: ConfirmOptions = {}): Promise<boolean> => {
-        return confirm(title, content, { ...options, type: 'error' })
+        return confirm(title, content, { ...options, type: 'error', danger: true })
     }
 
     /**
      * 单行输入弹窗
      */
-    const prompt = (title: string, options: PromptOptions = {}): Promise<string | null> => {
+    const prompt = async (title: string, options: PromptOptions = {}): Promise<string | null> => {
         const {
             defaultValue = '',
             placeholder = t('session.popup.inputPlaceholder'),
             confirmText = t('common.confirm'),
             cancelText = t('common.cancel'),
             required = true,
-            validation
+            validation,
+            validationMessage = t('session.popup.invalidInput'),
+            inputType = 'text',
+            size = 'xs'
         } = options
 
-        return new Promise((resolve) => {
-            ElMessageBox.prompt('', title, {
-                confirmButtonText: confirmText,
-                cancelButtonText: cancelText,
-                inputPlaceholder: placeholder,
-                inputValue: defaultValue,
-                dangerouslyUseHTMLString: true,
-                distinguishCancelAndClose: true
-            }).then(({ value }) => {
-                const inputValue = value.trim()
-
-                if (required && !inputValue) {
-                    ElMessage.error(t('session.popup.contentRequired'))
-                    return resolve(null)
-                }
-
-                if (validation && !validation(inputValue)) {
-                    return resolve(null)
-                }
-
-                resolve(inputValue)
-            }).catch(() => {
-                resolve(null)
-            })
+        const result = await openModal({
+            title,
+            size,
+            showCancel: true,
+            confirmText,
+            cancelText,
+            closeOnClickModal: false,
+            input: {
+                type: inputType,
+                defaultValue,
+                placeholder,
+                required,
+                requiredMessage: t('session.popup.contentRequired'),
+                validator: validation
+                    ? (value: string) => {
+                        const result = validation(value)
+                        if (result === true) return null
+                        return typeof result === 'string' ? result : validationMessage
+                    }
+                    : undefined
+            }
         })
+
+        return result.action === 'confirm' ? (result.value ?? '').trim() : null
     }
 
     /**
      * 多行文本编辑弹窗
      */
-    const editText = (options: EditTextOptions = {}): Promise<string | null> => {
+    const editText = async (options: EditTextOptions = {}): Promise<string | null> => {
         const {
             title = t('session.popup.editTitle'),
             defaultValue = '',
@@ -190,95 +220,76 @@ export function usePopup(): UsePopupReturn {
             confirmText = t('common.save'),
             cancelText = t('common.cancel'),
             required = true,
-            rows = 6
+            rows = 6,
+            size = 'sm'
         } = options
 
-        // 使用 Element Plus 的 VNode 方式创建自定义内容
-        const container: VNode = h('div', {
-            style: {
-                width: '100%',
-                padding: '12px 0'
-            }
-        }, [
-            h('textarea', {
-                value: defaultValue,
+        const result = await openModal({
+            title,
+            size,
+            showCancel: true,
+            confirmText,
+            cancelText,
+            closeOnClickModal: false,
+            textarea: {
+                defaultValue,
                 placeholder,
-                style: {
-                    width: '100%',
-                    minHeight: `${rows * 24}px`,
-                    padding: '12px',
-                    border: '1px solid #dcdfe6',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    resize: 'vertical',
-                    fontFamily: 'inherit',
-                    boxSizing: 'border-box'
-                },
-                onInput: (_e: Event) => {
-                    // 注意：这里我们无法直接访问 textarea 元素
-                    // 在 beforeClose 回调中仍然需要通过 DOM 查询获取值
-                }
-            })
-        ])
-
-        return new Promise((resolve) => {
-            ElMessageBox({
-                title,
-                message: container,
-                confirmButtonText: confirmText,
-                cancelButtonText: cancelText,
-                showCancelButton: true,
-                distinguishCancelAndClose: true,
-                customClass: 'w-full',
-                beforeClose: (action, instance, done) => {
-                    if (action === 'confirm') {
-                        // 通过查询 DOM 获取 textarea 的值
-                        // （beforeClose 的 instance 为 MessageBoxState；message 传入 VNode 时
-                        // 运行时在 state.message 上持有该 VNode，其 el 即消息容器元素）
-                        const msgEl = (instance.message as unknown as VNode | undefined)?.el as
-                            | HTMLElement
-                            | undefined
-                        const textarea = msgEl
-                            ? (msgEl.querySelector('textarea') as HTMLTextAreaElement | null)
-                            : null
-                        const value = textarea ? textarea.value.trim() : ''
-
-                        if (required && !value) {
-                            ElMessage.error(t('session.popup.contentRequired'))
-                            return
-                        }
-
-                        done()
-                        resolve(value)
-                    } else {
-                        done()
-                        resolve(null)
-                    }
-                }
-            }).catch(() => {
-                resolve(null)
-            })
+                rows,
+                required,
+                requiredMessage: t('session.popup.contentRequired')
+            }
         })
+
+        return result.action === 'confirm' ? (result.value ?? '').trim() : null
     }
 
     /**
      * 通用自定义对话框
      */
-    const dialog = (options: { title: string; content: VNode | string; confirmText?: string; cancelText?: string }): Promise<boolean> => {
-        return new Promise((resolve) => {
-            ElMessageBox({
-                title: options.title,
-                message: options.content,
-                confirmButtonText: options.confirmText || t('common.confirm'),
-                cancelButtonText: options.cancelText || t('common.cancel'),
-                showCancelButton: true,
-                distinguishCancelAndClose: true,
-            }).then(() => {
-                resolve(true)
-            }).catch(() => {
-                resolve(false)
-            })
+    const dialog = async (options: {
+        title: string
+        content: VNode | string
+        confirmText?: string
+        cancelText?: string
+    }): Promise<boolean> => {
+        const result = await openModal({
+            title: options.title,
+            content: options.content,
+            size: 'sm',
+            showCancel: true,
+            confirmText: options.confirmText || t('common.confirm'),
+            cancelText: options.cancelText || t('common.cancel'),
+            closeOnClickModal: false
         })
+        return result.action === 'confirm'
+    }
+
+    /**
+     * 单按钮提示框
+     */
+    const alert = async (
+        title: string,
+        content: string,
+        options: AlertOptions = {}
+    ): Promise<boolean> => {
+        const {
+            type = 'info',
+            confirmText = t('common.ok'),
+            html = false,
+            size = 'xs'
+        } = options
+
+        const result = await openModal({
+            title,
+            content,
+            icon: type,
+            html,
+            size,
+            showCancel: false,
+            confirmText,
+            closeOnClickModal: false
+        })
+        return result.action === 'confirm'
     }
 
     /**
@@ -375,32 +386,29 @@ export function usePopup(): UsePopupReturn {
      * 加载状态管理
      */
     const loading: LoadingApi = {
-        start: (text?: string): (() => void) | undefined => {
-            // ElMessage 句柄实为 { close() } 对象而非可调用函数；这里沿用既有契约声明，
-            // wrap 内的 typeof 守卫保持原运行时行为不变
-            return toast.loading(text || t('session.popup.processing')) as unknown as (() => void) | undefined
+        start: (text?: string): MessageHandler | undefined => {
+            return toast.loading(text || t('session.popup.processing'))
         },
 
         wrap: async <T>(promiseFn: Promise<T>, loadingText: string = t('session.popup.processing')): Promise<T> => {
-            const hide = loading.start(loadingText)
+            const handler = loading.start(loadingText)
             try {
                 const result = await promiseFn
-                // loading.finish()
-                if (hide && typeof hide === 'function') hide()
+                handler?.close()
                 return result
             } catch (error) {
-                if (hide && typeof hide === 'function') hide()
+                handler?.close()
                 throw error
             }
         }
     }
 
     /**
-     * 关闭所有消息和弹窗
+     * 关闭所有轻提示与命令式弹窗
      */
     const closeAll = (): void => {
         ElMessage.closeAll()
-        // ElMessageBox 没有 closeAll 方法
+        closeAllModals()
     }
 
     return {
@@ -413,6 +421,7 @@ export function usePopup(): UsePopupReturn {
         prompt,
         editText,
         dialog,
+        alert,
 
         // 消息提示
         toast,

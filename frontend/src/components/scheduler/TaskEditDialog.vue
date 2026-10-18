@@ -1,6 +1,6 @@
 <template>
   <GdDialog v-model="dialogVisible" :title="isEdit ? t('scheduler.edit.editTitle') : t('scheduler.edit.createTitle')"
-    width="920px" align-center destroy-on-close class="task-edit-dialog">
+    size="xl" align-center destroy-on-close class="task-edit-dialog">
     <p class="dialog-subtitle">{{ t('scheduler.edit.subtitle') }}</p>
     <el-form ref="formRef" :model="form" :validate-on-rule-change="false" label-position="top" size="default" class="task-edit-form">
       <div class="task-edit-body">

@@ -908,22 +908,3 @@ onUnmounted(() => {
   contain: layout style;
 }
 </style>
-
-<style>
-/* GdDialog scoped styles handle dialog body/header/footer — no global overrides needed */
-
-/* 工作目录删除警告弹窗样式 */
-.workspace-delete-warning {
-  max-width: 500px !important;
-}
-
-.workspace-delete-warning .el-message-box__message p,
-.workspace-delete-warning .el-message-box__message {
-  white-space: normal !important;
-  word-wrap: break-word !important;
-  overflow-wrap: break-word !important;
-  line-height: 1.6 !important;
-  text-align: left !important;
-  max-width: 100% !important;
-}
-</style>

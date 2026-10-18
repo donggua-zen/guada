@@ -223,7 +223,7 @@
   </div>
 
   <!-- 删除会话确认对话框 -->
-  <GdDialog v-model="deleteDialogVisible" :title="t('ui.sidebar.deleteSessionTitle')" width="500px" :close-on-click-modal="false">
+  <GdDialog v-model="deleteDialogVisible" :title="t('ui.sidebar.deleteSessionTitle')" size="sm" :close-on-click-modal="false">
     <div class="space-y-4">
       <p class="text-gray-700 dark:text-gray-300">
         {{ t('ui.sidebar.deleteSessionConfirm', { title: deleteSessionData?.title }) }}
@@ -251,7 +251,7 @@
   </GdDialog>
 
   <!-- 移动会话到分组弹窗 -->
-  <GdDialog v-model="moveGroupDialogVisible" :title="t('ui.sidebar.selectGroup')" width="360px" :close-on-click-modal="false">
+  <GdDialog v-model="moveGroupDialogVisible" :title="t('ui.sidebar.selectGroup')" size="xs" :close-on-click-modal="false">
     <div class="space-y-1 py-2">
       <div v-for="(g) in moveGroupOptions" :key="g.value"
         class="flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 text-sm"
@@ -300,7 +300,6 @@ import GdTooltip from './ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'
 import type { Session, SessionGroup } from '@/types/session'
-import { ElMessageBox } from 'element-plus'
 
 import {
   PersonOutlined,
@@ -938,16 +937,16 @@ const confirmDeleteSession = async () => {
 
     // 如果勾选了删除工作目录，进行二次确认
     if (deleteWorkspaceChecked.value) {
-      const secondConfirm = await ElMessageBox({
-        title: t('ui.sidebar.importantWarning'),
-        message: t('ui.sidebar.workspaceDeleteWarning'),
-        type: 'error',
-        showCancelButton: true,
-        confirmButtonText: t('ui.sidebar.confirmDelete'),
-        cancelButtonText: t('common.cancel'),
-        distinguishCancelAndClose: true,
-        customClass: 'workspace-delete-warning'
-      }).then(() => true).catch(() => false)
+      const secondConfirm = await confirm(
+        t('ui.sidebar.importantWarning'),
+        t('ui.sidebar.workspaceDeleteWarning'),
+        {
+          type: 'error',
+          confirmText: t('ui.sidebar.confirmDelete'),
+          cancelText: t('common.cancel'),
+          danger: true,
+        }
+      )
 
       if (!secondConfirm) {
         // 用户取消了二次确认，不执行删除

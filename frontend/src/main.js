@@ -304,8 +304,9 @@ app.use(pinia);
 app.use(router);
 app.use(i18n);
 // 全局注册 ElementPlus：主应用自身靠 unplugin 按需导入，但插件产物是运行时加载的 IIFE，
-// resolveComponent('el-xxx') 需要全局注册才能解析（插件模板可直接写 el-button/el-input）
-app.use(ElementPlus);
+// resolveComponent('el-xxx') 需要全局注册才能解析（插件模板可直接写 el-button/el-input）。
+// zIndex 抬到 4000：弹窗基座 GdDialog 使用 2000 层级，Element 的浮层必须稳定高于它。
+app.use(ElementPlus, { zIndex: 4000 });
 // 插件 UI 原语全局注册：让插件产物运行时能 resolveComponent('GdXxx')
 registerUiPrimitives(app);
 

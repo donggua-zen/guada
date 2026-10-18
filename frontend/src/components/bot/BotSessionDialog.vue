@@ -2,9 +2,8 @@
   <GdDialog
     v-model="dialogVisible"
     :title="sessionTitle"
-    width="80%"
-    :style="{ maxWidth: '1200px' }"
-    top="12.5vh"
+    size="full"
+    align="top"
     :close-on-click-modal="false"
     append-to-body
     class="bot-session-dialog"
@@ -48,9 +47,10 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
+import { usePopup } from '@/composables/usePopup'
 import { foldEvents, type ProjectorSessionStore } from '@/services/modules/streamProjector'
 import { isHiddenBlock, toUserMessageView } from '@/utils/messageUtils'
 import TurnItem from '../chat/TurnItem.vue'
@@ -68,6 +68,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const { confirm } = usePopup()
 
 const dialogVisible = computed({
   get: () => props.modelValue,
@@ -133,31 +134,30 @@ const loadMessages = async () => {
 
 // 删除本轮对话（按回合 id）
 const handleDeleteMessage = async (turn: Turn) => {
+  const ok = await confirm(
+    t('bot.sessionDialog.deleteTitle'),
+    t('bot.sessionDialog.deleteTurnDesc'),
+    {
+      confirmText: t('common.ok'),
+      cancelText: t('common.cancel'),
+      type: 'warning'
+    }
+  )
+  if (!ok) return
+
   try {
-    await ElMessageBox.confirm(
-      t('bot.sessionDialog.deleteTurnDesc'),
-      t('bot.sessionDialog.deleteTitle'),
-      {
-        confirmButtonText: t('common.ok'),
-        cancelButtonText: t('common.cancel'),
-        type: 'warning'
-      }
-    )
-    
     if (props.session?.id) {
       // 按回合 id 整轮删除（前端直接消费 Turn 结构）
       await apiService.deleteTurn(props.session.id, turn.id)
     }
-    
+
     // 整轮移除该回合
     turns.value = turns.value.filter((t) => t.id !== turn.id)
-    
+
     ElMessage.success(t('bot.sessionDialog.deleteSuccess'))
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除本轮对话失败:', error)
-      ElMessage.error(t('bot.sessionDialog.deleteFailed'))
-    }
+    console.error('删除本轮对话失败:', error)
+    ElMessage.error(t('bot.sessionDialog.deleteFailed'))
   }
 }
 

@@ -177,7 +177,7 @@
         </div>
 
         <!-- 查看文档对话框 -->
-        <GdDialog v-model="showDocDialog" :title="currentSkillName + ' - SKILL.md'" width="800px"
+        <GdDialog v-model="showDocDialog" :title="currentSkillName + ' - SKILL.md'" size="lg"
             align-center destroy-on-close append-to-body>
 
             <div v-if="loadingDoc" class="flex justify-center items-center py-12">
@@ -209,7 +209,7 @@
         </GdDialog>
 
         <!-- 安装 Skill 对话框 -->
-        <GdDialog v-model="showInstallDialog" :title="t('plugins.skills.installTitle')" width="500px" align-center destroy-on-close>
+        <GdDialog v-model="showInstallDialog" :title="t('plugins.skills.installTitle')" size="sm" align-center destroy-on-close>
             <div class="py-4">
                 <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
                     {{ t('plugins.skills.installDesc') }}
@@ -267,7 +267,7 @@
 
         <!-- 市场技能安装对话框：对象先行（图标+名称+版本状态），次要动作降为文字链接，
              决策信息（安装方式/位置/覆盖影响）在点安装前给全，失败就地反馈 -->
-        <GdDialog v-model="showMarketInstallDialog" :title="t('plugins.skills.marketInstallTitle')" width="500px"
+        <GdDialog v-model="showMarketInstallDialog" :title="t('plugins.skills.marketInstallTitle')" size="sm"
             align-center destroy-on-close>
             <div v-if="selectedMarketSkill" class="market-install">
                 <!-- 主视觉 -->
@@ -362,12 +362,13 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElButton, ElTag, ElIcon, ElUpload, ElMessageBox } from 'element-plus'
+import { ElMessage, ElButton, ElTag, ElIcon, ElUpload } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { RefreshOutlined, InboxOutlined, UploadOutlined } from '@vicons/material'
 import { Loading, UploadFilled, Document, Close, TopRight } from '@element-plus/icons-vue'
 import { ArrowDownload16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
+import { usePopup } from '@/composables/usePopup'
 import { SkillMarketService, type MarketSkillWithStatus } from '@/services/SkillMarketService'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import { openInExternalBrowser } from '@/utils/browserUtils'
@@ -381,6 +382,7 @@ const scanning = ref(false)
 const reloadingSkills = ref<Set<string>>(new Set())
 const skills = ref<Skill[]>([])
 const { t } = useI18n()
+const { confirm } = usePopup()
 
 // 文档查看相关状态
 const showDocDialog = ref(false)
@@ -805,20 +807,18 @@ async function handleInstallSkill() {
  * 卸载 Skill
  */
 async function handleUninstallSkill(skillId: string) {
-    try {
-        // 确认卸载
-        await new Promise<void>((resolve, reject) => {
-            ElMessageBox.confirm(
-                t('plugins.skills.uninstallConfirm', { id: skillId }),
-                t('plugins.skills.uninstallTitle'),
-                {
-                    confirmButtonText: t('common.ok'),
-                    cancelButtonText: t('common.cancel'),
-                    type: 'warning',
-                }
-            ).then(() => resolve()).catch(() => reject())
-        })
+    const ok = await confirm(
+        t('plugins.skills.uninstallTitle'),
+        t('plugins.skills.uninstallConfirm', { id: skillId }),
+        {
+            confirmText: t('common.ok'),
+            cancelText: t('common.cancel'),
+            type: 'warning',
+        }
+    )
+    if (!ok) return
 
+    try {
         uninstallingSkills.value.add(skillId)
 
         const response = await apiService.uninstallSkill(skillId)
@@ -831,10 +831,8 @@ async function handleUninstallSkill(skillId: string) {
             ElMessage.error(response.message || t('plugins.skills.uninstallFailed'))
         }
     } catch (err) {
-        if (err !== 'cancel' && err !== 'close') {
-            console.error('卸载 Skill 失败:', err)
-            ElMessage.error(getErrorMessage(err) || t('plugins.skills.uninstallFailed'))
-        }
+        console.error('卸载 Skill 失败:', err)
+        ElMessage.error(getErrorMessage(err) || t('plugins.skills.uninstallFailed'))
     } finally {
         uninstallingSkills.value.delete(skillId)
     }

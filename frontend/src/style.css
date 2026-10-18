@@ -132,6 +132,31 @@
   --gd-color-dialog-border: var(--gd-color-border);
   --gd-size-dialog-rounded-radius: 12px;
 
+  /* 弹窗尺寸档位：新代码统一用 size，不再散落 px */
+  --gd-dialog-width-xs: 400px;
+  --gd-dialog-width-sm: 480px;
+  --gd-dialog-width-md: 600px;
+  --gd-dialog-width-lg: 760px;
+  --gd-dialog-width-xl: 900px;
+  --gd-dialog-width-full: min(1200px, calc(100vw - 32px));
+  --gd-dialog-shadow: 0 0 10px rgba(0, 0, 0, 0.1), 0 4px 16px rgba(0, 0, 0, 0.08);
+  --gd-dialog-overlay-opacity: 0.8;
+  --gd-dialog-padding-x: 16px;
+  --gd-dialog-padding-y: 12px;
+  --gd-dialog-title-size: var(--gd-size-text-sm, 14px);
+  --gd-dialog-title-weight: 600;
+  --gd-dialog-gap: 8px;
+
+  /* 浮层层级：统一管理，避免各处裸写 z-index */
+  --gd-z-modal: 2000;
+  --gd-z-popover: 3000;
+  --gd-z-element: 4000;
+  --gd-z-context-menu: 4500;
+  --gd-z-drag-mask: 9000;
+
+  --gd-motion-duration-dialog: 0.2s;
+  --gd-motion-ease-dialog: cubic-bezier(0.2, 0.8, 0.2, 1);
+
   --gd-color-warning: #e6a23c;
   --gd-color-success: #67c23a;
   --gd-color-danger: #f56c6c;
@@ -340,6 +365,8 @@ html.dark {
   --gd-color-overlay-bg: var(--gd-color-surface);
   --gd-color-dialog-bg: var(--gd-color-surface);
   --gd-color-dialog-border: var(--gd-color-border);
+  --gd-dialog-shadow: 0 0 10px rgba(0, 0, 0, 0.1), 0 8px 32px rgba(0, 0, 0, 0.4);
+  --gd-dialog-overlay-opacity: 0.75;
 
   /* ====================
        消息气泡配色
@@ -414,6 +441,10 @@ html.dark {
   --el-border-color-light: var(--gd-color-surface-border) !important;
   --el-fill-color-light: var(--gd-color-sidebar-bg-hover) !important;
 
+  /* 日志抽屉是唯一保留的 Element 模态例外，至少让底色/内边距跟随主题 */
+  --el-drawer-bg-color: var(--gd-color-surface) !important;
+  --el-drawer-padding-primary: 16px !important;
+
   /* 标题栏样式变量 */
   --gd-titlebar-text-color: #222;
   --gd-titlebar-hover-bg: rgba(0, 0, 0, 0.06);
@@ -442,6 +473,10 @@ html.dark {
   --el-bg-color-overlay: var(--gd-color-surface) !important;
   --el-border-color-light: var(--gd-color-surface-border) !important;
   --el-fill-color-light: var(--gd-color-sidebar-bg-hover) !important;
+
+  /* 日志抽屉是唯一保留的 Element 模态例外，至少让底色/内边距跟随主题 */
+  --el-drawer-bg-color: var(--gd-color-surface) !important;
+  --el-drawer-padding-primary: 16px !important;
 
   /* 标题栏暗色模式样式变量 */
   --gd-titlebar-text-color: var(--gd-color-text);

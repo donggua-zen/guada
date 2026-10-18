@@ -20,22 +20,6 @@
         </div>
       </div>
 
-      <!-- 访问密码分组：密码存在与否即免登录开关 -->
-      <div>
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.login') }}</h3>
-        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
-          <div
-            class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0">
-            <div class="flex flex-col gap-1 min-w-0">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.accessPassword') }}</span>
-              <span
-                class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.accessPasswordDesc') }}</span>
-            </div>
-            <el-switch :model-value="authStore.passwordSet" size="large" @change="handlePasswordToggle" />
-          </div>
-        </div>
-      </div>
-
       <!-- 工作目录分组 -->
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.workspace') }}</h3>
@@ -149,15 +133,13 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useDebounceFn } from '@vueuse/core'
 import type { SystemGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
-import { useAuthStore } from '@/stores/auth'
 import { useLanguage } from '@/composables/useLanguage'
 
-const authStore = useAuthStore()
 const { notify } = usePopup()
 const { t } = useI18n()
 const { locale: currentLocale, setLanguage } = useLanguage()
@@ -245,47 +227,6 @@ const selectFolder = async (target: 'workspaceBaseDir' | 'kbStorageRoot' = 'work
     }
   } else {
     ElMessage.warning(t('settings.general.folderSelectNotSupported'))
-  }
-}
-
-/**
- * 访问密码开关：
- * - 打开 → 提示输入新密码（调 /user/password/change，未设密码时无需旧密码）
- * - 关闭 → 清除密码（DELETE /user/password），回到免登录模式
- */
-const handlePasswordToggle = async (enabled: boolean | string | number) => {
-  const wantSet = enabled === true
-  try {
-    if (wantSet) {
-      const { value } = await ElMessageBox.prompt(
-        t('settings.general.setPasswordPrompt'),
-        t('settings.general.setPasswordTitle'),
-        {
-          inputType: 'password',
-          inputPattern: /.{6,}/,
-          inputErrorMessage: t('settings.general.passwordTooShort'),
-          confirmButtonText: t('common.ok'),
-          cancelButtonText: t('common.cancel'),
-        },
-      )
-      await apiService.changePassword(undefined, value)
-      authStore.passwordSet = true
-      notify.success(t('common.updateSuccess'), t('settings.general.passwordSetSuccess'))
-    } else {
-      await ElMessageBox.confirm(
-        t('settings.general.clearPasswordConfirm'),
-        t('settings.general.clearPasswordTitle'),
-        { type: 'warning' },
-      )
-      await apiService.clearPassword()
-      authStore.passwordSet = false
-      notify.success(t('common.updateSuccess'), t('settings.general.passwordClearedSuccess'))
-    }
-  } catch (e) {
-    // 用户取消：开关状态由 authStore.passwordSet 决定，无需回滚
-    if (e !== 'cancel' && e !== 'close') {
-      notify.error(t('common.saveFailed'), getErrorMessage(e) || t('settings.general.passwordOpFailed'))
-    }
   }
 }
 

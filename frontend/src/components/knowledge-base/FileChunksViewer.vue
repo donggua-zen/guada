@@ -1,6 +1,6 @@
 ﻿<!-- KnowledgeBasePage/FileChunksViewer.vue -->
 <template>
-    <GdDialog v-model="showModal" :title="t('knowledge.chunks.title', { name: selectedFile?.displayName })" width="800px"
+    <GdDialog v-model="showModal" :title="t('knowledge.chunks.title', { name: selectedFile?.displayName })" size="lg"
         :close-on-click-modal="true" @close="handleClose">
         <div v-if="loading" class="loading-container text-center py-8">
             <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">

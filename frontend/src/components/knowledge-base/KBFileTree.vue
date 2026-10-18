@@ -139,7 +139,7 @@
     />
 
     <!-- 重命名对话框 -->
-    <GdDialog v-model="showRenameDialog" :title="t('knowledge.tree.renameTitle')" width="400px" :close-on-click-modal="false" append-to-body>
+    <GdDialog v-model="showRenameDialog" :title="t('knowledge.tree.renameTitle')" size="xs" :close-on-click-modal="false" append-to-body>
       <el-input v-model="renameForm.newName" :placeholder="t('knowledge.tree.newNamePlaceholder')" @keyup.enter="confirmRename" />
       <template #footer>
         <el-button @click="showRenameDialog = false">{{ t('common.cancel') }}</el-button>
@@ -148,7 +148,7 @@
     </GdDialog>
 
     <!-- 移动对话框 -->
-    <GdDialog v-model="showMoveDialog" :title="t('knowledge.tree.moveTitle')" width="500px" :close-on-click-modal="false" append-to-body>
+    <GdDialog v-model="showMoveDialog" :title="t('knowledge.tree.moveTitle')" size="sm" :close-on-click-modal="false" append-to-body>
       <div class="max-h-80 overflow-y-auto">
         <!-- 根目录选项 -->
         <div class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded"

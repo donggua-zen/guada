@@ -1,5 +1,5 @@
 <template>
-    <GdDialog v-model="visible" :close-on-click-modal="false" width="900px"
+    <GdDialog v-model="visible" :close-on-click-modal="false" size="xl"
         :style="{ height: '70vh', maxWidth: '90vw' }" class="agent-setting-dialog" destroy-on-close append-to-body>
         <template #header>
             <div class="dialog-header">

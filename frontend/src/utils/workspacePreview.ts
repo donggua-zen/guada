@@ -9,12 +9,12 @@
  * 所有预览操作都会自动确保工作区侧边栏可见 + 进入预览模式。
  */
 
-import { ElMessageBox } from 'element-plus'
 import { nextTick } from 'vue'
 import { useSessionStore } from '@/stores/session'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import { openModal } from '@/components/ui/modalService'
 import { t } from '@/locales'
 
 // ── 链接打开方式偏好管理 ──
@@ -89,23 +89,21 @@ function isSafeUrl(url: string): boolean {
 
 /** 弹窗询问用户选择打开方式 */
 async function showLinkChoiceDialog(url: string): Promise<void> {
-    try {
-        await ElMessageBox.confirm(
-            url,
-            t('session.workspace.selectLinkMode'),
-            {
-                confirmButtonText: t('session.workspace.internalBrowser'),
-                cancelButtonText: t('session.workspace.externalBrowser'),
-                distinguishCancelAndClose: true,
-                type: 'info',
-                customClass: 'link-choice-dialog',
-            },
-        )
+    const result = await openModal({
+        title: t('session.workspace.selectLinkMode'),
+        content: url,
+        icon: 'info',
+        size: 'xs',
+        showCancel: true,
+        confirmText: t('session.workspace.internalBrowser'),
+        cancelText: t('session.workspace.externalBrowser'),
+        closeOnClickModal: false,
+    })
+
+    if (result.action === 'confirm') {
         await previewUrl(url)
-    } catch (action) {
-        if (action === 'cancel') {
-            openInExternalBrowser(url)
-        }
+    } else if (result.action === 'cancel') {
+        openInExternalBrowser(url)
     }
 }
 

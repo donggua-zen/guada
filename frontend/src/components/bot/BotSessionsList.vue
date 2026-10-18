@@ -118,10 +118,11 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
 import { useBotStore } from '@/stores/bot'
+import { usePopup } from '@/composables/usePopup'
 import BotSessionDialog from './BotSessionDialog.vue'
 import type { Session } from '@/types/session'
 import { useRoute, useRouter } from 'vue-router'
@@ -130,6 +131,7 @@ const botStore = useBotStore()
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const { confirm } = usePopup()
 
 const loading = ref(false)
 const sessions = ref<Session[]>([])
@@ -288,17 +290,18 @@ const handleViewChat = (session: Session) => {
 
 // 清空聊天记录
 const handleClearMessages = async (session: Session) => {
-  try {
-    await ElMessageBox.confirm(
-      t('bot.sessions.clearConfirm', { title: session.title || t('bot.sessions.unnamedSession') }),
-      t('bot.sessions.clearTitle'),
-      {
-        confirmButtonText: t('common.ok'),
-        cancelButtonText: t('common.cancel'),
-        type: 'warning'
-      }
-    )
+  const ok = await confirm(
+    t('bot.sessions.clearTitle'),
+    t('bot.sessions.clearConfirm', { title: session.title || t('bot.sessions.unnamedSession') }),
+    {
+      confirmText: t('common.ok'),
+      cancelText: t('common.cancel'),
+      type: 'warning'
+    }
+  )
+  if (!ok) return
 
+  try {
     await apiService.clearSessionMessages(session.id)
     ElMessage.success(t('bot.sessions.clearSuccess'))
 
@@ -308,36 +311,33 @@ const handleClearMessages = async (session: Session) => {
       selectedSession.value = null
     }
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('清空聊天记录失败:', error)
-      ElMessage.error(t('bot.sessions.clearFailed'))
-    }
+    console.error('清空聊天记录失败:', error)
+    ElMessage.error(t('bot.sessions.clearFailed'))
   }
 }
 
 // 删除会话
 const handleDeleteSession = async (session: Session) => {
-  try {
-    await ElMessageBox.confirm(
-      t('bot.sessions.deleteConfirm', { title: session.title || t('bot.sessions.unnamedSession') }),
-      t('bot.sessions.deleteTitle'),
-      {
-        confirmButtonText: t('common.ok'),
-        cancelButtonText: t('common.cancel'),
-        type: 'warning'
-      }
-    )
+  const ok = await confirm(
+    t('bot.sessions.deleteTitle'),
+    t('bot.sessions.deleteConfirm', { title: session.title || t('bot.sessions.unnamedSession') }),
+    {
+      confirmText: t('common.ok'),
+      cancelText: t('common.cancel'),
+      type: 'warning'
+    }
+  )
+  if (!ok) return
 
+  try {
     await apiService.deleteSession(session.id)
     ElMessage.success(t('bot.sessions.deleteSuccess'))
 
     // 重新加载列表
     await loadSessions()
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除会话失败:', error)
-      ElMessage.error(t('bot.sessions.deleteFailed'))
-    }
+    console.error('删除会话失败:', error)
+    ElMessage.error(t('bot.sessions.deleteFailed'))
   }
 }
 

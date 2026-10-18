@@ -37,7 +37,7 @@
     </template>
 
     <!-- 供应商编辑弹窗 -->
-    <GdDialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body
+    <GdDialog v-model="showProviderModal" :title="getProviderModalTitle" size="sm" align-center append-to-body
       class="provider-modal dialog-with-scroll">
       <div class="dialog-content">
         <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
