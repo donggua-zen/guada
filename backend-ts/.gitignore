@@ -11,6 +11,8 @@ dist/
 .env.local
 .env.*.local
 # 注意：.env.example 应该提交到版本控制
+# WSL 本地测试凭据（scripts/wsl-*.js 读取，仅保留本地；曾误入库已移除）
+.wsl-test-config.json
 
 # Database
 data/qdrant_db/
