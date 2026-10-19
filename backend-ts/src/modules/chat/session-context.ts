@@ -147,7 +147,7 @@ export interface ISessionContext {
   /**
    * 计划模式开关。与安全模式正交：不改写 sandboxMode，也不与其共用词表。
    * 开启后由 ToolExecutor 的计划门强制只读（写类工具硬拒、run_command 走只读沙盒），
-   * 由引擎每轮临时注入引导提示；模型只能经 ExitPlanMode 审批后退出。
+   * 由注册的 turn reminder provider 每轮提供引导；模型只能经 ExitPlanMode 审批后退出。
    */
   getPlanEnabled(): boolean;
   /**
@@ -156,10 +156,10 @@ export interface ISessionContext {
    */
   setPlanEnabled(enabled: boolean): Promise<void>;
   /**
-   * 取出并清除"刚退出计划模式"标记（一次性）。
-   * 退出后的下一个迭代据此临时注入一条退出提醒，让模型知道可以动手了。
+   * 当前计划周期标识（随 settings.planModeEpoch 持久化）。
+   * 完整提醒按周期只落一份；压缩遮蔽后由 provider 自动补一份。
    */
-  consumePlanModeExitReminder(): boolean;
+  getPlanModeEpoch(): string | null;
 
   // === 模型配置 ===
   /** 获取完整模型配置（含运行时调用参数） */

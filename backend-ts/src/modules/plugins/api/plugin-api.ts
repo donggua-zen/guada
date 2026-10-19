@@ -19,6 +19,8 @@ import type { WorkspaceProviderFactory } from "../../../common/workspace/workspa
 import type { ToolDisplay } from "../types/plugin.types";
 import { NlsService } from "../i18n/nls.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
+import type { TurnReminderProvider } from "../turn-reminders/turn-reminder.types";
+import type { TurnReminderRegistry } from "../turn-reminders/turn-reminder.registry";
 
 // ── PluginApi ──
 
@@ -146,6 +148,14 @@ export interface PluginApi {
   registerCommandProvider(def: ICommandProvider): void;
 
   /**
+   * 注册每轮提醒 provider。
+   *
+   * 引擎在每次 LLM 迭代前向 registry 收集提醒；provider 返回的 `persist` 会写入
+   * 会话历史（可审计），`transient` 只追加到本次请求。插件启用态由引擎过滤。
+   */
+  registerTurnReminderProvider(provider: TurnReminderProvider): void;
+
+  /**
    * 注册 WorkspaceProvider 工厂（旧接口，保留兼容）
    */
   registerWorkspaceProvider(factory: WorkspaceProviderFactory): void;
@@ -252,6 +262,8 @@ export class PluginApiImpl implements PluginApi {
     private settingsStorage?: SettingsStorage,
     /** 插件来源；非 builtin 的外部插件不得自封 governance（见 registerToolKit） */
     private pluginSource?: "builtin" | "dev" | "user",
+    /** 每轮提醒注册表；插件在 onLoad 中注册 provider 后立即生效 */
+    private turnReminderRegistry?: TurnReminderRegistry,
   ) {}
 
   registerTool(def: any): void {
@@ -407,6 +419,10 @@ export class PluginApiImpl implements PluginApi {
     if (!this._commandProviders.find((x) => x.id === def.id)) {
       this._commandProviders.push(def);
     }
+  }
+
+  registerTurnReminderProvider(provider: TurnReminderProvider): void {
+    this.turnReminderRegistry?.register(this.pluginId, provider);
   }
 
   registerWorkspaceProvider(factory: WorkspaceProviderFactory): void {

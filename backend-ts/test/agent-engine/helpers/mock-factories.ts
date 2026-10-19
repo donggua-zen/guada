@@ -118,7 +118,7 @@ export function createMockSessionContext(options?: {
     getToolScope: jest.fn(() => null),
     getPlanEnabled: jest.fn(() => false),
     setPlanEnabled: jest.fn().mockResolvedValue(undefined),
-    consumePlanModeExitReminder: jest.fn(() => false),
+    getPlanModeEpoch: jest.fn(() => null),
     appendSessionModeChanged: jest.fn().mockResolvedValue(undefined),
     setPathJail: jest.fn(),
     getPathJail: jest.fn(() => null),

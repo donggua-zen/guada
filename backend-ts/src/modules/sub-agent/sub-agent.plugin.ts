@@ -188,7 +188,7 @@ The sub-agent has its own independent conversation context and tool capabilities
       // 注意：子代理**不继承** planEnabled——spawn() 只继承 thinkingEffort / sandboxMode /
       // attachments / lifecycle，所以子代理并不受计划门的只读约束。这是**已知且已接受的风险**（
       // 见 docs/计划模式实施方案.md §8）。计划模式对子代理的不可见性由另两处保证：
-      // plan-mode 工具包对 sub_agent 返回 loadMode:none，以及 buildPlanModeTurnEntries 的会话类型前置条件。
+      // plan-mode 工具包对 sub_agent 返回 loadMode:none，以及 plan-mode-reminder.util 的会话类型前置条件。
       allowedInPlanMode: true,
     });
 

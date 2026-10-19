@@ -35,7 +35,7 @@ function createMockSessionContext(): ISessionContext {
     setSandboxMode: jest.fn(),
     getPlanEnabled: jest.fn(() => false),
     setPlanEnabled: jest.fn(),
-    consumePlanModeExitReminder: jest.fn(() => false),
+    getPlanModeEpoch: jest.fn(() => null),
     appendSessionModeChanged: jest.fn(),
     setToolScope: jest.fn(),
     getToolScope: () => null,

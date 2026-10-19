@@ -19,6 +19,7 @@ import { TavilyProvider } from "./builtins/search-providers/tavily.provider";
 import { BochaProvider } from "./builtins/search-providers/bocha.provider";
 import { PromptCollector } from "./prompt-collector.service";
 import { NlsService } from "./i18n/nls.service";
+import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
 
 @Global()
 @Module({
@@ -28,6 +29,7 @@ import { NlsService } from "./i18n/nls.service";
     PluginManager,
     PromptCollector,
     NlsService,
+    TurnReminderRegistry,
     // ExternalPluginLoader 放在内建插件之后，确保 onModuleInit 顺序
     ExternalPluginLoader,
     FilePlugin,
@@ -43,7 +45,7 @@ import { NlsService } from "./i18n/nls.service";
     TavilyProvider,
     BochaProvider,
   ],
-  exports: [PluginManager, PromptCollector, ExternalPluginLoader, NlsService],
+  exports: [PluginManager, PromptCollector, ExternalPluginLoader, NlsService, TurnReminderRegistry],
 })
 export class PluginsModule implements OnModuleInit {
   constructor(

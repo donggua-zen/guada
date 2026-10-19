@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import * as path from "path";
 import * as fs from "fs";
 import { ToolExecutor } from "../tools/tool-executor.service";
@@ -35,7 +35,8 @@ import {
 } from "../../common/utils/tool-pairing.util";
 import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
 import { EventBusService } from "../../common/events/event-bus.service";
-import { buildPlanModeTurnEntries } from "./plan-mode-reminder.util";
+import { TurnReminderRegistry } from "../plugins/turn-reminders/turn-reminder.registry";
+import { PluginManager } from "../plugins/plugin.manager";
 import {
   HOOKS,
   type RequestErrorAction,
@@ -107,6 +108,15 @@ export class AgentEngine {
     private toolExecutor: ToolExecutor,
     private llmService: LLMService,
     private eventBus: EventBusService,
+    /**
+     * 每轮提醒 provider 注册表（插件自行注册；引擎只收集/落库/临时追加）。
+     * Optional：大量测试手工 new AgentEngine(...)，无 registry 时行为等价于空集合。
+     */
+    @Optional()
+    private readonly turnReminders?: TurnReminderRegistry,
+    /** 插件启用态过滤（运行时开关；缺省时由 provider 自行门控） */
+    @Optional()
+    private readonly pluginManager?: PluginManager,
   ) {}
 
   /**
@@ -501,16 +511,39 @@ export class AgentEngine {
       // 副作用后重读完整请求消息列表（含 system prompt、摘要和历史）——压缩等已生效
       let historyMessages = await sessionContext.getHistory();
 
-      // 计划模式引导（每轮临时注入，不落库）：不改 system、不写 JSONL、不进压缩输入，
-      // 追加在消息尾部（novel 区）→ KV 前缀（getSystemText + getTools）逐字节不变。
-      // 历史里查不到这些条目，所以每个迭代都要重新追加，否则模型在第二次工具往返后就看不见约束了。
-      const planModeEntries = buildPlanModeTurnEntries(
-        sessionContext,
-        iterationCount,
-      );
+      // 每轮提醒 provider（计划模式等）：插件自己决定 persist / transient，
+      // 引擎只负责把 persist 写入历史后重读、把 transient 追加到请求尾部。
+      // 保持尾部注入 → system + tools 的 KV 前缀逐字节稳定。
+      const reminderInjection = this.turnReminders
+        ? await this.turnReminders.collect(
+            { sessionContext, iterationCount, history: historyMessages },
+            this.pluginManager
+              ? (pluginId) => this.pluginManager!.isPluginEnabled(pluginId)
+              : undefined,
+          )
+        : { persist: [], transient: [] };
+
+      if (reminderInjection.persist.length > 0) {
+        try {
+          await sessionContext.appendMessages(reminderInjection.persist);
+          historyMessages = await sessionContext.getHistory();
+        } catch (error: any) {
+          // 落库失败不能让模型失去约束：回退为本次请求的临时注入
+          this.logger.warn(
+            `Failed to persist turn reminders: ${error?.message ?? error}`,
+          );
+          reminderInjection.transient.unshift(
+            ...reminderInjection.persist.map((message) => ({
+              ...message,
+              metadata: { ...(message.metadata || {}), transient: true },
+            })),
+          );
+        }
+      }
+
       const requestMessages =
-        planModeEntries.length > 0
-          ? [...historyMessages, ...planModeEntries]
+        reminderInjection.transient.length > 0
+          ? [...historyMessages, ...reminderInjection.transient]
           : historyMessages;
 
       // 生成本轮助手回复的内容 ID（= 落库消息 id，与 SSE 消息级事件一致）

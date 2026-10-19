@@ -58,6 +58,8 @@ import { ResolvedPluginInfo } from '../plugins/types/plugin.types';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { RemoteBindingStateService } from '../remote-workspace/remote-binding-state.service';
 import { SessionMetaStore } from './session-meta.store';
+import { mintPlanModeEpoch } from '../../common/utils/plan-mode-epoch.util';
+import { wrapSystemReminder } from '../../common/utils/system-reminder.util';
 import {
   pickBaselineUserMessage,
   resolveBindingBaseline,
@@ -87,6 +89,8 @@ interface EffectiveSettings {
   sandboxMode?: string;
   /** 计划模式（协作状态，正交于 sandboxMode；布尔而非档位） */
   planEnabled?: boolean;
+  /** 计划周期标识：完整提醒按周期只落一份 */
+  planModeEpoch?: string | null;
   referencedKbs?: string[];
   modelName?: string | null;
 }
@@ -170,12 +174,15 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   /**
    * 计划模式（协作状态，正交于 sandboxMode）。
-   * 开启后由 ToolExecutor 的计划门强制只读，并由引擎每轮临时注入引导提示。
+   * 开启后由 ToolExecutor 的计划门强制只读；提醒由注册的 provider 每轮提供。
    */
   private planEnabled = false;
 
-  /** 刚退出计划模式（瞬态、不入库）：下一个迭代注入一次退出提醒后清除 */
-  private planModeExitReminderPending = false;
+  /**
+   * 计划周期标识（随 settings.planModeEpoch 持久化）。
+   * 完整提醒按周期只落一份；退出/重进生成新值，旧提醒自然失效。
+   */
+  private planModeEpoch: string | null = null;
 
   /** 工具范围锁定（瞬态、不入库）：影子轮次等场景仅允许指定插件的工具 */
   private toolScope: string | null = null;
@@ -256,6 +263,12 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
     // 4b. 恢复持久化的计划模式（布尔，缺省关；与 sandboxMode 各读各的，互不影响）
     this.planEnabled = this.session.settings?.planEnabled === true;
+    // 计划周期：老会话/新会话首次进入时补一个并落库，保证完整提醒只落一份
+    this.planModeEpoch = this.session.settings?.planModeEpoch ?? null;
+    if (this.planEnabled && !this.planModeEpoch) {
+      this.planModeEpoch = mintPlanModeEpoch();
+      await this.persistPlanModeSettings();
+    }
 
     // 5. 插件决议放在最后：所有字段已赋值，handler 可通过 getSettings() 正常读取
     if (features.includes('tools')) {
@@ -579,17 +592,27 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       await this.loadVisibleMessages(),
       replaceTurnId,
     );
-    // 检测 sandbox 模式切换 → system 注入块（origin='system'，前端不渲染；LLM 按 <system_reminder> 文本处理）
-    const modeNarration = this.detectModeTransition(prevUserMsg);
+    // 检测 sandbox / 计划模式切换 → system 注入块（origin='system'，前端不渲染；LLM 按 <system_reminder> 文本处理）
+    const modeTransition = this.detectModeTransition(prevUserMsg);
+    const modeNarration = modeTransition.narration;
     // 检测远程连接绑定变更 → system 注入块（基准随消息落库/删除，重答后自动重新注入）
     const bindingReminder = await this.detectBindingTransition(prevUserMsg);
     // 保留写入：下一条消息的模式切换 / 绑定变更检测基准（+审计）。
-    // sshBindings 空数组也要写——缺字段会回退系统提示词快照，无法区分「当时确实没绑定」
+    // sshBindings 空数组也要写——缺字段会回退系统提示词快照，无法区分「当时确实没绑定」。
+    // 计划模式退出额外写标记：provider 据此知道最近一次状态已是 exit，不再重复落退出说明。
     const enrichedMetadata: Record<string, any> = {
       ...options?.metadata,
       sandboxMode: this.sandboxMode,
       planEnabled: this.planEnabled,
       sshBindings: this.liveBindingIds(),
+      ...(modeTransition.planExited
+        ? {
+            planModeReminder: 'exit',
+            ...(this.planModeEpoch
+              ? { planModeEpoch: this.planModeEpoch }
+              : {}),
+          }
+        : {}),
     };
 
     // 注入块（消息伴随信息）：追加在用户 blocks 尾部（novel 区 → KV 前缀零损失）。
@@ -599,7 +622,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     if (modeNarration) {
       injectedBlocks.push({
         type: 'text',
-        text: `<system_reminder>\n${modeNarration}\n</system_reminder>`,
+        text: wrapSystemReminder(modeNarration),
         origin: 'system',
       });
     }
@@ -657,6 +680,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /**
    * 插件注入一条隐藏 user 消息（落库，成为历史的一部分；模型可见，前端可据 source/metadata 隐藏）。
    * 折叠形态：role='user' + kind='model' + source={kind:'plugin', plugin} + metadata.hidden（replayer 支持）。
+   *
+   * 系统级要求请用 wrapSystemReminder() 包裹文本：模型 wire 只带 role+content，
+   * kind/metadata 不会发给模型，文本标签才是“这是系统提示”的唯一信号。
    */
   async injectUserPrompt(content: string, plugin: string): Promise<void> {
     if (!content) return;
@@ -721,40 +747,48 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     return this.planEnabled;
   }
 
-  consumePlanModeExitReminder(): boolean {
-    const pending = this.planModeExitReminderPending;
-    this.planModeExitReminderPending = false;
-    return pending;
+  getPlanModeEpoch(): string | null {
+    return this.planModeEpoch;
   }
 
   /**
    * 设置计划模式并**持久化**（重启后据此恢复；与 sandboxMode 不同——后者只由界面写设置，
    * 而计划模式还会被模型经 ExitPlanMode 审批通过后关闭，那条路径必须自己落库）。
    *
-   * SessionMetaStore.update 是顶层浅合并（settings 整体替换），因此必须读改写——
-   * 只传 { planEnabled } 会抹掉同一会话的其它设置。
+   * 进入计划模式时生成新的 epoch：完整提醒按周期只落一份，重进不会复用旧周期。
+   * 退出时保留 epoch，供 provider 判定是否需要落一条退出说明。
    */
   async setPlanEnabled(enabled: boolean): Promise<void> {
     if (this.planEnabled === enabled) return;
     this.logger.debug(`Switching plan mode: ${this.planEnabled} -> ${enabled}`);
     this.planEnabled = enabled;
-    // 退出后给模型一次明确的"可以动手了"信号（用户开关那条路径由模式叙事承担，
-    // 这里覆盖模型经 ExitPlanMode 退出的场景）
-    if (!enabled) this.planModeExitReminderPending = true;
+    if (enabled) this.planModeEpoch = mintPlanModeEpoch();
+    await this.persistPlanModeSettings();
+  }
 
+  /**
+   * 持久化 planEnabled + planModeEpoch。
+   *
+   * SessionMetaStore.update 是顶层浅合并（settings 整体替换），因此必须读改写——
+   * 只传 { planEnabled } 会抹掉同一会话的其它设置。
+   */
+  private async persistPlanModeSettings(): Promise<void> {
     if (!this.sessionMetaStore) return;
     try {
       const current = this.sessionMetaStore.getMeta(this.sessionId);
       const settings: Record<string, any> = {
         ...((current?.settings as Record<string, any>) ?? this.session?.settings ?? {}),
       };
-      settings.planEnabled = enabled;
+      settings.planEnabled = this.planEnabled;
+      settings.planModeEpoch = this.planModeEpoch;
       await this.sessionMetaStore.update(this.sessionId, { settings });
       // 同步内存里的会话记录，避免同一上下文后续读取拿到旧值
       if (this.session) this.session.settings = settings;
     } catch (error: any) {
       // 落库失败不阻断本次切换（内存态已生效，用户可再次切换纠正）
-      this.logger.warn(`Failed to persist plan mode (${enabled}): ${error?.message}`);
+      this.logger.warn(
+        `Failed to persist plan mode (${this.planEnabled}): ${error?.message}`,
+      );
     }
   }
 
@@ -1254,7 +1288,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
    * 检测安全模式是否发生切换（基准 = 上一条真实 user 消息 metadata.sandboxMode）。
    * 叙事按方向组合：进入/退出 read-only 与进入/退出 danger-full-access 可叠加。
    */
-  private detectModeTransition(prevUserMsg?: Message): string | null {
+  private detectModeTransition(prevUserMsg?: Message): {
+    narration: string | null;
+    /** 本次用户消息接纳时是否刚从 plan 模式退出（用于写持久化标记） */
+    planExited: boolean;
+  } {
     const narrations: string[] = [];
 
     // ── 安全档位（三档词表）──
@@ -1295,17 +1333,21 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       prevUserMsg?.metadata?.planEnabled === undefined
         ? this.planEnabled
         : prevUserMsg.metadata.planEnabled === true;
+    const planExited = prevPlan === true && this.planEnabled === false;
     if (prevPlan !== this.planEnabled) {
       narrations.push(
         this.planEnabled
           ? process.platform === 'win32'
             ? 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command only allows verified read-only commands. Investigate the codebase, then present your plan with ExitPlanMode for approval. Do not ask for plan approval in plain text.'
             : 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command executes in a read-only sandbox. Investigate the codebase, then present your plan with ExitPlanMode for approval. Do not ask for plan approval in plain text.'
-          : 'The user has disabled plan mode. You can make edits and run commands again.',
+          : 'The user has disabled plan mode. The earlier plan-mode instructions no longer apply. You can make edits and run commands again.',
       );
     }
 
-    return narrations.length > 0 ? narrations.join('\n\n') : null;
+    return {
+      narration: narrations.length > 0 ? narrations.join('\n\n') : null,
+      planExited,
+    };
   }
 
   private buildModelConfig(
@@ -1385,6 +1427,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     merged.referencedKbs = sessionSettings.referencedKbs ?? [];
     merged.sandboxMode = sessionSettings.sandboxMode ?? 'workspace-write';
     merged.planEnabled = sessionSettings.planEnabled === true;
+    merged.planModeEpoch = sessionSettings.planModeEpoch ?? null;
     merged.modelName = sessionSettings.modelName ?? null;
 
     return merged;

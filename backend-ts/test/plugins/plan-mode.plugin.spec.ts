@@ -23,6 +23,8 @@ describe("PlanModePlugin", () => {
   let planFile: PlanFileService;
   /** beforeEach 实例的 ask 替身（断言卡片契约用） */
   let askMock: jest.Mock;
+  /** onLoad 注册的每轮提醒 provider */
+  let reminderProvider: any;
 
   function createSession(overrides: Record<string, any> = {}) {
     let planEnabled = overrides.planEnabled !== false;
@@ -67,6 +69,9 @@ describe("PlanModePlugin", () => {
           },
         };
       },
+      registerTurnReminderProvider: jest.fn((provider: any) => {
+        reminderProvider = provider;
+      }),
     } as unknown as PluginApi;
 
     const askService = {
@@ -90,9 +95,18 @@ describe("PlanModePlugin", () => {
     workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "plan-mode-spec-"));
     planFile = new PlanFileService();
     kitDef = undefined;
+    reminderProvider = undefined;
     const built = await createPlugin();
     plugin = built.plugin;
     askMock = built.askService.ask as jest.Mock;
+  });
+
+  it("onLoad 注册每轮提醒 provider（引擎不感知计划模式）", () => {
+    expect(reminderProvider).toMatchObject({
+      id: "plan-mode-reminders",
+      order: 100,
+    });
+    expect(typeof reminderProvider.build).toBe("function");
   });
 
   afterEach(async () => {
@@ -321,7 +335,7 @@ describe("PlanModePlugin", () => {
 
   describe("工具包可见性：计划模式对子代理不可见", () => {
     // 整个工具包（连同 ExitPlanMode）都不该进子代理的 enabledTools。与 subagent / workflow
-    // 工具包同一手法（handler 返回 loadMode:none）。提示词面由 buildPlanModeTurnEntries 的
+    // 工具包同一手法（handler 返回 loadMode:none）。提示词面由 plan-mode-reminder.util 的
     // 会话类型前置条件对应收口——两处必须同时成立，只做一处就会出现"引导模型调一个它看不见的工具"。
     const kitHandler = () => {
       if (!kitDef?.handler) throw new Error("工具包未注册 handler");
@@ -366,6 +380,8 @@ describe("PlanModePlugin", () => {
       expect(injectUserPrompt).toHaveBeenCalledTimes(1);
       const [text, source] = injectUserPrompt.mock.calls[0];
       expect(source).toBe("plan-mode");
+      expect(text).toContain("<system_reminder>");
+      expect(text).toContain("</system_reminder>");
       expect(text).toContain("A plan file exists from plan mode at:");
       expect(text).toContain("已批准计划");
     });

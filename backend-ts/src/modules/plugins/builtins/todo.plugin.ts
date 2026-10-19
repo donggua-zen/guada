@@ -15,6 +15,7 @@ import {
   type TodoItem,
   type TodoStore,
 } from "../../../common/utils/todo-store.util";
+import { wrapSystemReminder } from "../../../common/utils/system-reminder.util";
 import langZh from "./todo.lang.zh.json";
 import langEn from "./todo.lang.en.json";
 
@@ -94,7 +95,7 @@ export class TodoPlugin extends PluginBase {
       if (hasTodoCall) return;
 
       const text = `[Current todo]\n${this.formatTodoList(store)}\n[Current todo — end]`;
-      await sessionContext.injectUserPrompt(text, "todo");
+      await sessionContext.injectUserPrompt(wrapSystemReminder(text), "todo");
       this.logger.debug(
         `[todo] injected todo reminder for session ${sessionContext.sessionId}`,
       );

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { PluginBase } from "./base-plugin";
 import { PluginRegistry } from "./registry/plugin-registry";
 import {
@@ -20,6 +20,7 @@ import { PromptCollector } from "./prompt-collector.service";
 import { ISessionContext } from "../chat/session-context";
 import { CommandProviderRegistry } from "../commands/command-provider-registry.service";
 import { NlsService } from "./i18n/nls.service";
+import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
 
 // ──
 
@@ -64,6 +65,9 @@ export class PluginManager {
     private readonly commandRegistry: CommandProviderRegistry,
     private readonly nlsService: NlsService,
     private readonly eventBus: EventBusService,
+    /** 每轮提醒注册表；由 PluginApi 转发给插件（测试可省略） */
+    @Optional()
+    private readonly turnReminderRegistry?: TurnReminderRegistry,
   ) {}
 
   // ── 生命周期 ──
@@ -99,6 +103,7 @@ export class PluginManager {
       this.nlsService,
       this.settingsStorage,
       plugin.manifest.source,
+      this.turnReminderRegistry,
     );
     if (plugin.onLoad) {
       await plugin.onLoad(api).catch((err) => {

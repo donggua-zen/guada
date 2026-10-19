@@ -43,6 +43,8 @@ import { SessionStreamManager } from "./session-stream.manager";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { StreamStatusChangedEvent } from "../../common/events/stream.events";
 import { SessionReplayService } from "./session-replay.service";
+import { mergePlanModeSettings } from "./plan-mode-settings.util";
+import { pickTitleMessages } from "./session-title.util";
 import { resolveThinkingEffort } from "../llm-core";
 
 @Injectable()
@@ -707,7 +709,33 @@ export class SessionService {
       assertResolvableModelRef(this.modelStore, updateData.modelId, 'modelId');
     }
 
+    // 计划模式：合并 settings 并维护 epoch（false -> true 生成新周期）
+    let planTransition: { from: boolean; to: boolean } | null = null;
+    if (updateData.settings !== undefined) {
+      const merged = mergePlanModeSettings(session.settings, updateData.settings);
+      updateData.settings = merged.settings;
+      planTransition = merged.transition;
+    }
+
     const updatedSession = await this.sessionStore.update(sessionId, updateData);
+
+    // 用户开关的审计事件：模型退出由 ExitPlanMode 自己写（source='tool'）
+    if (planTransition) {
+      try {
+        await this.contextManager.appendSessionModeChanged(sessionId, {
+          planEnabled: planTransition.to,
+          previousPlanEnabled: planTransition.from,
+          sandboxMode: (updateData.settings?.sandboxMode ??
+            (session.settings as Record<string, any>)?.sandboxMode ??
+            'workspace-write') as any,
+          source: 'user',
+        });
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to append session mode change for ${sessionId}: ${error?.message}`,
+        );
+      }
+    }
 
     return updatedSession;
   }
@@ -820,11 +848,16 @@ export class SessionService {
         };
       }
 
-      // 使用 MessageStoreService 获取最近的 3 条消息（已过滤系统消息，正序排列）
-      const recentMessages = await this.contextManager.loadContext({
-        sessionId,
-        maxMessages: 2,
-      });
+      // 取最近 6 条后过滤 hidden / 注入的 user 消息（计划模式完整提醒落库为
+      // role='user' + kind='model'），再取最后 2 条。助手消息同样是 kind='model'，
+      // 因此不能只按 kind 过滤，必须同时看 role。
+      const recentMessages = pickTitleMessages(
+        await this.contextManager.loadContext({
+          sessionId,
+          maxMessages: 6,
+        }),
+        2,
+      );
 
       // 获取全局设置中的标题总结提示词（已暂时移除用户配置，使用固定提示词）
       const titlePrompt =

@@ -779,3 +779,64 @@ describe('JsonlSessionContext 写侧注入块（消息伴随信息）', () => {
     });
   });
 });
+
+describe('计划模式周期与退出标记', () => {
+  function makeStoreReturnValidUserMessage(messageStore: any) {
+    messageStore.addUserMessage.mockImplementation(async () => ({
+      messageId: 'u_new',
+      userMessage: makeMsg('u_new', 'user'),
+      revision: 1,
+    }));
+  }
+
+  it('initialize：planEnabled 且缺 epoch 时生成周期标识', async () => {
+    const { ctx } = createContext({
+      session: { settings: { systemPrompt: 'sys', planEnabled: true } },
+    });
+    await ctx.initialize();
+    expect(ctx.getPlanEnabled()).toBe(true);
+    expect(ctx.getPlanModeEpoch()).toMatch(/^plan-/);
+  });
+
+  it('setPlanEnabled(true) 生成新 epoch；false 保留该 epoch 供退出说明使用', async () => {
+    const { ctx } = createContext({
+      session: { settings: { systemPrompt: 'sys', planEnabled: false } },
+    });
+    await ctx.initialize();
+    expect(ctx.getPlanModeEpoch()).toBeNull();
+
+    await ctx.setPlanEnabled(true);
+    const epoch = ctx.getPlanModeEpoch();
+    expect(epoch).toMatch(/^plan-/);
+
+    await ctx.setPlanEnabled(false);
+    expect(ctx.getPlanModeEpoch()).toBe(epoch);
+  });
+
+  it('退出后的下一条用户消息：持久化 exit 标记 + 覆盖旧指令的叙事', async () => {
+    const prevUser = makeMsg('u-prev', 'user', {
+      metadata: {
+        planEnabled: true,
+        sandboxMode: 'workspace-write',
+        sshBindings: [],
+      },
+    });
+    const { ctx, messageStore } = createContext({
+      session: { settings: { systemPrompt: 'sys', planEnabled: true } },
+      messageStore: { loadContext: jest.fn(async () => [prevUser]) },
+    });
+    makeStoreReturnValidUserMessage(messageStore);
+    await ctx.initialize();
+    const epoch = ctx.getPlanModeEpoch();
+
+    await ctx.setPlanEnabled(false);
+    await ctx.addUserMessage('继续');
+
+    const opts = (messageStore.addUserMessage as jest.Mock).mock.calls[0][3];
+    expect(opts.metadata.planEnabled).toBe(false);
+    expect(opts.metadata.planModeReminder).toBe('exit');
+    expect(opts.metadata.planModeEpoch).toBe(epoch);
+    expect(opts.injectedBlocks?.[0]?.text).toContain('disabled plan mode');
+    expect(opts.injectedBlocks?.[0]?.text).toContain('no longer apply');
+  });
+});

@@ -10,6 +10,8 @@ import {
   PlanFileService,
   PLAN_MAX_CHARS,
 } from "../../../common/services/plan-file.service";
+import { createPlanModeReminderProvider } from "./plan-mode-reminder.provider";
+import { wrapSystemReminder } from "../../../common/utils/system-reminder.util";
 
 /** 审批问题的稳定 id（前端按 id 回显答案） */
 const PLAN_QUESTION_ID = "plan";
@@ -100,7 +102,7 @@ export class PlanModePlugin extends PluginBase {
         "If this plan is relevant to the current work and not already complete, continue working on it.",
       ].join("\n");
 
-      await ctx.injectUserPrompt(text, "plan-mode");
+      await ctx.injectUserPrompt(wrapSystemReminder(text), "plan-mode");
     } catch (error: any) {
       // 重注入是增强项，不是正确性依赖：失败只告警，不打断压缩后的回合
       this.logger.warn(`Failed to re-inject approved plan: ${error?.message}`);
@@ -108,6 +110,9 @@ export class PlanModePlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi): Promise<void> {
+    // 每轮提醒由插件自己提供：引擎只认识 TurnReminderRegistry，不感知计划模式
+    api.registerTurnReminderProvider(createPlanModeReminderProvider());
+
     const kit = api.registerToolKit({
       id: "plan-mode",
       name: "计划模式",
@@ -115,7 +120,7 @@ export class PlanModePlugin extends PluginBase {
       activator: "Present an implementation plan for approval while in plan mode.",
       // 计划模式对子代理不可见：整个工具包连同 ExitPlanMode 都不进子代理的 enabledTools
       // （与 subagent / workflow 工具包同一手法）。子代理既不该产出计划，也不该看到这个工具；
-      // 提示词面由 buildPlanModeTurnEntries 的 sessionType 前置条件对应收口。
+      // 提示词面由 plan-mode-reminder.util 的 sessionType 前置条件对应收口。
       handler: async (ctx) =>
         ctx.session.sessionType === "sub_agent"
           ? { loadMode: "none" as const }
