@@ -1,5 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { OpenAI } from "openai";
+import {
+  OpenAI,
+  APIConnectionError,
+  APIConnectionTimeoutError,
+} from "openai";
 import { IProtocolAdapter } from "./base.adapter";
 import { ModelCapabilityService } from '../model-capability.service';
 import {
@@ -21,6 +25,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
 import {
@@ -527,6 +532,14 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
 
     const status = error.status;
     const msg = `LLM Responses API Error: ${status} - ${error.message}`;
+
+    // 连接阶段失败没有 HTTP status，需单独归一化才能被 AgentEngine 重试
+    if (error instanceof APIConnectionTimeoutError) {
+      throw new UpstreamTimeoutError(`LLM Responses API 连接超时: ${error.message}`, error);
+    }
+    if (error instanceof APIConnectionError) {
+      throw new UpstreamNetworkError(`LLM Responses API 连接失败: ${error.message}`, error);
+    }
 
     // 429 → UpstreamRateLimitError（可重试）
     if (status === 429) {

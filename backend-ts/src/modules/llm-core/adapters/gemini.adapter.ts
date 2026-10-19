@@ -36,6 +36,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
 
@@ -172,6 +173,26 @@ export class GeminiAdapter implements IProtocolAdapter {
       if (status >= 400 && status < 500) {
         throw new UpstreamRequestError(msg, err, status);
       }
+
+      // 无 status 的连接类错误：legacy SDK 没有 typed connection error，
+      // 按错误码/消息归一化，否则 classifyError 会判成不可重试。
+      const causeCode = err?.code ?? err?.cause?.code;
+      const errText = `${err?.message ?? ""} ${err?.cause?.message ?? ""}`;
+      if (causeCode === "UND_ERR_CONNECT_TIMEOUT" || /timed?\s*out|timeout/i.test(errText)) {
+        throw new UpstreamTimeoutError(msg, err);
+      }
+      if (
+        causeCode === "ECONNRESET" ||
+        causeCode === "ECONNREFUSED" ||
+        causeCode === "ETIMEDOUT" ||
+        causeCode === "ENOTFOUND" ||
+        causeCode === "EAI_AGAIN" ||
+        causeCode === "EPIPE" ||
+        /ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|fetch failed/i.test(errText)
+      ) {
+        throw new UpstreamNetworkError(msg, err);
+      }
+
       this.logger.error("Gemini API error:", err);
       throw err;
     }

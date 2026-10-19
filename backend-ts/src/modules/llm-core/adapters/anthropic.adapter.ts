@@ -17,7 +17,10 @@
  * wire 映射 + fail-loud 断言（见 docs/message-pipeline-normalization-plan.md）。
  */
 import { Injectable, Logger } from "@nestjs/common";
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic, {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+} from "@anthropic-ai/sdk";
 import { IProtocolAdapter } from "./base.adapter";
 import {
   LLMCompletionParams,
@@ -36,6 +39,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
 
@@ -704,6 +708,14 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
     const status = error.status;
     const msg = `Anthropic API Error: ${status} - ${error.message}`;
+
+    // 连接阶段失败没有 HTTP status，需单独归一化才能被 AgentEngine 重试
+    if (error instanceof APIConnectionTimeoutError) {
+      throw new UpstreamTimeoutError(`Anthropic API 连接超时: ${error.message}`, error);
+    }
+    if (error instanceof APIConnectionError) {
+      throw new UpstreamNetworkError(`Anthropic API 连接失败: ${error.message}`, error);
+    }
 
     // 429 → UpstreamRateLimitError（可重试）
     if (status === 429) {

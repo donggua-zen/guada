@@ -14,7 +14,12 @@
  * wire 映射 + fail-loud 断言（见 docs/message-pipeline-normalization-plan.md）。
  */
 import { Injectable, Logger } from "@nestjs/common";
-import { OpenAI, APIError } from "openai";
+import {
+  OpenAI,
+  APIError,
+  APIConnectionError,
+  APIConnectionTimeoutError,
+} from "openai";
 import * as path from "path";
 import * as fs from "fs";
 import { IProtocolAdapter } from "./base.adapter";
@@ -41,6 +46,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
 import {
@@ -611,6 +617,22 @@ export class OpenAIAdapter implements IProtocolAdapter {
       /* ignore serialization errors */
     }
 
+    // 连接阶段失败：SDK 的 APIConnectionTimeoutError / APIConnectionError 没有
+    // HTTP status，若不在此归一化，classifyError 会把它判成不可重试，
+    // 导致一次 10s 连接超时就让整轮对话失败。
+    if (error instanceof APIConnectionTimeoutError) {
+      throw new UpstreamTimeoutError(
+        `LLM API 连接超时: ${error.message}`,
+        error,
+      );
+    }
+    if (error instanceof APIConnectionError) {
+      throw new UpstreamNetworkError(
+        `LLM API 连接失败: ${error.message}`,
+        error,
+      );
+    }
+
     if (error instanceof APIError) {
       const rawBody = (error as any).__rawBody;
       const msg = rawBody && error.message?.includes("(no body)")
@@ -649,6 +671,20 @@ export class OpenAIAdapter implements IProtocolAdapter {
     if (error.message) parts.push(`message=${error.message}`);
     if (error.name && error.name !== "Error") parts.push(`name=${error.name}`);
 
+    // SDK 的连接类错误继承自 APIError，但 name 仍是 "Error"；用构造器名
+    // 区分 APIConnectionTimeoutError / APIConnectionError。
+    const kind = error.constructor?.name;
+    if (kind && kind !== "Error" && kind !== error.name) {
+      parts.push(`kind=${kind}`);
+    }
+
+    // 底层 fetch 的原始原因（如 undici ConnectTimeoutError 的 code）
+    const cause = error.cause;
+    if (cause && typeof cause === "object") {
+      if (cause.code) parts.push(`cause.code=${cause.code}`);
+      if (cause.message) parts.push(`cause.message=${cause.message}`);
+    }
+
     // 提取原始 HTTP 响应体（通过 BodyPreservingOpenAI.makeStatusError 注入）
     if ((error as any).__rawBody) {
       parts.push(`body=${(error as any).__rawBody}`);
@@ -679,6 +715,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
         delete extra.status;
         delete extra.code;
         delete extra.type;
+        delete extra.cause;
         if (Object.keys(extra).length > 0) {
           parts.push(`extra=${JSON.stringify(extra).substring(0, 500)}`);
         }

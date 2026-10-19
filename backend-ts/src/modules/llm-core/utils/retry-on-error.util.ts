@@ -46,6 +46,30 @@ const MAX_RETRY_AFTER_MS = 60_000;
 // HTTP status codes that should NOT be retried (request is fundamentally broken)
 const NON_RETRYABLE_STATUS = new Set([400, 401, 403, 404, 422]);
 
+// 无 HTTP status 的超时错误码（undici）
+const TIMEOUT_ERROR_CODES = new Set([
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+]);
+
+// 无 HTTP status 的网络错误码（undici / Node / SDK 都可能使用）
+const NETWORK_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EPIPE",
+  "UND_ERR_SOCKET",
+]);
+
+// 消息兜底：部分 SDK（如 OpenAI 的 APIConnectionTimeoutError）没有
+// code/status，只能从 message 判断；adapter 未包装时也要能重试。
+const TIMEOUT_MESSAGE_RE = /timed?\s*out|timeout/i;
+const NETWORK_MESSAGE_RE =
+  /ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|fetch failed|connection (?:error|failed|refused|reset)/i;
+
 // ==================== Shared utilities ====================
 
 /**
@@ -91,8 +115,8 @@ export function retrySleep(ms: number, abortSignal?: AbortSignal): Promise<void>
  *
  * - `timeout`: stream idle timeout, SDK timeout, or message contains "timeout"/"timed out"
  * - `rate_limited`: RateLimitError instance or HTTP 429
- * - `network_error`: fetch/connection failures, ECONNRESET, ECONNREFUSED, ETIMEDOUT, etc.
- * - null: not retryable (user abort, 4xx client errors, 5xx server errors)
+ * - `network_error`: fetch/connection failures, ECONNRESET, ECONNREFUSED, ETIMEDOUT, 5xx, etc.
+ * - null: not retryable (user abort, 4xx client errors)
  *
  * @param error The error from adapter/SDK
  * @param streamTc Optional stream timeout controller to check for idle timeout
@@ -127,16 +151,12 @@ export function classifyError(
     return null;
   }
 
-  // 4. Network errors — by error.code
-  const code = error.code;
-  if (
-    code === "ECONNRESET" ||
-    code === "ECONNREFUSED" ||
-    code === "ETIMEDOUT" ||
-    code === "ENOTFOUND" ||
-    code === "EAI_AGAIN" ||
-    code === "EPIPE"
-  ) {
+  // 4. Connection errors — by error.code (including the underlying cause)
+  const code = error.code ?? error.cause?.code;
+  if (typeof code === "string" && TIMEOUT_ERROR_CODES.has(code)) {
+    return "timeout";
+  }
+  if (typeof code === "string" && NETWORK_ERROR_CODES.has(code)) {
     return "network_error";
   }
 
@@ -147,6 +167,17 @@ export function classifyError(
   }
   if (status && status >= 500 && status < 600) {
     return "network_error"; // 5xx server errors — retryable
+  }
+
+  // 6. Message fallback — SDKs without typed connection errors, or adapters
+  //    that rethrow the raw fetch error (e.g. "Request timed out.",
+  //    "Connect Timeout Error", "fetch failed").
+  const message = `${error.message ?? ""} ${error.cause?.message ?? ""}`;
+  if (TIMEOUT_MESSAGE_RE.test(message)) {
+    return "timeout";
+  }
+  if (NETWORK_MESSAGE_RE.test(message)) {
+    return "network_error";
   }
 
   return null;
