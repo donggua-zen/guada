@@ -21,7 +21,7 @@
           <span class="shrink-0"
             :class="tool.outcome === 'aborted' ? 'text-gray-400 dark:text-gray-500 font-medium' : 'text-gray-700 dark:text-gray-300 font-medium'">{{
               getActionText(tool, toolIndex) }}</span>
-          <span v-if="getArgsText(tool)" class="text-sm ml-2 truncate">{{ getArgsText(tool) }}</span>
+          <span v-if="rowDisplays[toolIndex].argsText" class="text-sm ml-2 truncate">{{ rowDisplays[toolIndex].argsText }}</span>
           <!-- diff 类工具的增删行数徽章 -->
           <span v-if="rendererStat(toolIndex)" class="ml-2 shrink-0 font-mono text-xs flex items-center gap-1.5">
             <span v-if="rendererStat(toolIndex)!.added" style="color: var(--el-color-success)">+{{ rendererStat(toolIndex)!.added }}</span>
@@ -52,6 +52,10 @@
            同时整行只有卡片（见 .is-plain 清掉的 22px 左缩进）。 -->
       <div v-if="isExpanded(toolIndex)" class="tool-result-inline"
         :class="{ 'is-plain': standaloneRows[toolIndex] }">
+        <!-- 远程工作区：单行只显示「远程」标识，展开后在此显示具体连接名（来自 workspace 参数） -->
+        <div v-if="rowDisplays[toolIndex].remoteName" class="tool-workspace-line">
+          {{ t('chat.toolCalls.remoteWorkspace', { name: rowDisplays[toolIndex].remoteName }) }}
+        </div>
         <!-- 仅失败时显示状态提示（成功/无响应不显示状态文案，直接展示结果或留空）；
              独立渲染行不显示——其失败/拒绝状态由卡片头部徽标承担 -->
         <div v-if="!standaloneRows[toolIndex] && (tool.outcome === 'error' || tool.outcome === 'rejected')"
@@ -123,6 +127,7 @@ import { SUB_AGENT_SPAWN_TOOL } from '@/utils/subAgentTools';
 import { WORKFLOW_RUN_TOOL } from '@/utils/workflowTools';
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
+import { formatArgsTextWithRemote, getRemoteWorkspaceName } from '@/utils/toolWorkspace';
 import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
 import type { ToolCallResponseEntry } from '@/types/message';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
@@ -275,6 +280,22 @@ const getToolResponses = (index: number): ToolCallResponseEntry | undefined => {
   return findToolResponse(tool, index, props.toolResponses) as ToolCallResponseEntry | undefined;
 };
 
+// ── 远程工作区标识（通用 workspace 参数约定，无工具名白名单）──
+// 单行摘要加「远程·」前缀；展开区显示连接名。本地调用两项均为空。
+const rowDisplays = computed(() =>
+  props.toolCalls.map((tool) => {
+    const remoteName = getRemoteWorkspaceName(tool);
+    return {
+      remoteName,
+      argsText: formatArgsTextWithRemote(
+        getArgsText(tool),
+        remoteName,
+        t('chat.toolCalls.remote'),
+      ),
+    };
+  }),
+);
+
 // ── 定制渲染（renderer 声明：后端 display.renderer 优先，内置映射兜底） ──
 
 const rendererInfos = computed<(ToolRendererInfo | null)[]>(() =>
@@ -387,6 +408,15 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   border: none;
   border-radius: 0;
   background: none;
+}
+
+/* 展开区的远程工作区信息行：单行只标「远程」，具体连接名在这里可见 */
+.tool-workspace-line {
+  margin-bottom: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+  word-break: break-all;
 }
 
 /* 通用展示：输入 / 输出 两段式 */

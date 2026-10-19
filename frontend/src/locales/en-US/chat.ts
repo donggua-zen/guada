@@ -324,6 +324,8 @@
     outputLabel: 'Output',
     openSubAgentPanel: 'Open sub-agent panel',
     subAgentLabel: 'Sub-agent',
+    remote: 'Remote',
+    remoteWorkspace: 'Remote workspace: {name}',
   },
 
   // ── 文件变更 ──
