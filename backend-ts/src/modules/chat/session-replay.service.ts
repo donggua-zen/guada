@@ -125,7 +125,7 @@ export class SessionReplayService {
    * - 摘要括号（compaction/start → summary → end）→ summarized（有摘要文本）/ discarded（空摘要）
    * - 孤立 compaction/end（无 start，纯裁剪路径锚点）→ pruned_only 条目
    * - before/after：end.beforeTokens 实测优先；旧事件无此字段时回退"上一占用锚点"
-   *   （turn/finish.usedTokens 或上一 compaction/end.usedTokens）近似
+   *   （context/stats.usedTokens、turn/finish.usedTokens 或上一 compaction/end.usedTokens）近似
    * - 未闭合括号（进行中的压缩）不产出条目
    *
    * @param limit 返回最近 N 条（缺省全量）；total 恒为全部条目数
@@ -146,7 +146,8 @@ export class SessionReplayService {
     } | null = null;
 
     for (const e of events) {
-      if (e.type === "turn/finish") {
+      // 占用锚点：小轮次 context/stats（异常终止也有）与回合收尾 turn/finish 同口径
+      if (e.type === "turn/finish" || e.type === "context/stats") {
         const used = (e.data as { usedTokens?: number })?.usedTokens;
         if (typeof used === "number") lastAnchorTokens = used;
         continue;

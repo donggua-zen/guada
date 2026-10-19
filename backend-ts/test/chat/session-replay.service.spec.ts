@@ -224,4 +224,39 @@ describe('SessionReplayService 压缩历史聚合（getCompactionHistory）', ()
     expect(page.items[0].id).toBe('sum_2');
     expect(page.total).toBe(2);
   });
+
+  it('异常终止回合无 turn/finish：before 回退使用 context/stats 小轮锚点', async () => {
+    const events: BaseEvent[] = [
+      { type: 'turn/start', seq: 1, time: 1000, data: { turnId: 'T1', kind: 'turn', metadata: {} } },
+      { type: 'user/message', seq: 2, time: 2000, data: { messageId: 'u1', kind: 'user', blocks: [], metadata: {} } },
+      {
+        type: 'assistant/message',
+        seq: 3,
+        time: 3000,
+        data: { messageId: 'a1', content: [], metadata: { usage: { promptTokens: 700 } } },
+      },
+      // 每次小轮次落盘的占用锚点（流式中意外退出，没有 turn/finish）
+      {
+        type: 'context/stats',
+        seq: 4,
+        time: 4000,
+        data: { turnId: 'T1', usedTokens: 700, effectiveContextWindow: 128000 },
+      },
+      { type: 'compaction/start', seq: 5, time: 5000, data: {} },
+      {
+        type: 'compaction/summary',
+        seq: 6,
+        time: 6000,
+        data: { shadowedEndId: 'm1', shadowedCount: 2, summary: 'sum1', summaryMessageId: 'sum_1' },
+      },
+      // 旧事件无 beforeTokens → 回退到 context/stats 的 700
+      { type: 'compaction/end', seq: 7, time: 7000, data: { usedTokens: 300 } },
+    ];
+    const { items } = await service(events).getCompactionHistory('s1');
+    expect(items).toHaveLength(1);
+    expect(items[0].compressionStats).toEqual({
+      beforeTokenCount: 700,
+      afterTokenCount: 300,
+    });
+  });
 });
