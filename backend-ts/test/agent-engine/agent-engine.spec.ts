@@ -102,6 +102,36 @@ describe('AgentEngine - completions', () => {
       expect(finishEvent?.finishReason).toBe('stop');
     });
 
+    it('每次 LLM 请求后持久化并广播 context_stats（小轮次占用）', async () => {
+      const chunks = loadChunksFromJsonl(
+        path.join(__dirname, 'fixtures/chunks-text-only.jsonl'),
+      );
+
+      const mocks = createAllMocks({ llmChunks: chunks });
+
+      const agentEngine = new AgentEngine(
+        mocks.toolExecutor as any,
+        mocks.llmService as any,
+        {
+          serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
+          parallel: jest.fn(async () => []),
+        } as any,      );
+
+      await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
+
+      // 纯文本回合 = 1 次 LLM 请求 → 1 条持久化锚点 + 1 条实时事件
+      expect(mocks.sessionContext.appendContextStats).toHaveBeenCalledTimes(1);
+      const statsEvents = mocks.publishedEvents.filter((e) => e.type === 'context_stats');
+      expect(statsEvents).toHaveLength(1);
+      expect(statsEvents[0]).toMatchObject({
+        turnId: expect.any(String),
+        contextStats: expect.objectContaining({
+          usedTokens: expect.any(Number),
+          effectiveContextWindow: expect.any(Number),
+        }),
+      });
+    });
+
     it('应该为内容块记录生命周期计时（timing）', async () => {
       const chunks = loadChunksFromJsonl(
         path.join(__dirname, 'fixtures/chunks-text-only.jsonl'),

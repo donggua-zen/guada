@@ -106,6 +106,63 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
     expect(tokenStats.value?.messageCount).toBe(3);
   });
 
+  it("context/stats（小轮次持久化锚点）可恢复中断回合的占用", () => {
+    // 模拟流式中意外退出：没有正常 turn/finish 的占用字段，
+    // 但最后一个小轮次已写入 context/stats。
+    const events = [
+      { type: "turn/start", seq: 1, data: { turnId: "t1" } },
+      {
+        type: "assistant/message",
+        seq: 2,
+        data: { messageId: "a1", metadata: { usage: { promptTokens: 500 } } },
+      },
+      {
+        type: "context/stats",
+        seq: 3,
+        data: {
+          turnId: "t1",
+          usedTokens: 512,
+          effectiveContextWindow: 2000,
+          messageCount: 6,
+          breakdown: { systemPrompt: 100, history: 400, tools: 12 },
+        },
+      },
+      // 冷加载收口合成的中断回合收尾：没有 usedTokens/effectiveContextWindow
+      { type: "turn/finish", seq: 4, data: { turnId: "t1", finishReason: "interrupted" } },
+    ];
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
+    expect(tokenStats.value?.usedTokens).toBe(512);
+    expect(tokenStats.value?.totalTokens).toBe(2000);
+    expect(tokenStats.value?.percentage).toBe(25.6);
+    expect(tokenStats.value?.messageCount).toBe(6);
+    expect(tokenStats.value?.breakdown).toEqual({
+      systemPrompt: 100, history: 400, tools: 12,
+    });
+  });
+
+  it("已删除回合的锚点被跳过（领域与 live 两种形状）", () => {
+    const events = [
+      // 有效锚点（更早）
+      {
+        type: "context/stats",
+        data: { turnId: "t_valid", usedTokens: 200, effectiveContextWindow: 1000 },
+      },
+      // 该回合已被重答/删除：其后的锚点都不能用于恢复
+      { type: "turn/delete", data: { turnId: "t_deleted" } },
+      {
+        type: "context/stats",
+        data: { turnId: "t_deleted", usedTokens: 900, effectiveContextWindow: 1000 },
+      },
+      {
+        type: "context_stats",
+        turnId: "t_deleted",
+        contextStats: { usedTokens: 950, effectiveContextWindow: 1000 },
+      },
+    ];
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
+    expect(tokenStats.value?.usedTokens).toBe(200);
+  });
+
   it("无锚点返回 false", () => {
     const events = [
       { type: "user/message", data: { messageId: "u1" } },

@@ -852,11 +852,12 @@ export class AgentEngine {
   }
 
   /**
-   * 发布单次 LLM 请求后的上下文占用快照（小轮次）。
+   * 记录单次 LLM 请求后的上下文占用快照（小轮次）。
    *
    * 调用时机必须在 assistant 消息 appendMessages 之后：最新 usage 锚点即本次请求，
-   * 结果与回合结束的 turn_end.contextStats 同口径。统计/推送失败只影响环形指示器，
-   * 不能中断 agent loop（否则会跳过 finalizeTurn，回合永不闭合）。
+   * 结果与回合结束的 turn_end.contextStats 同口径。
+   * 先落盘 context/stats（意外退出后冷启动可恢复），再实时广播；
+   * 任一步失败只影响环形指示器，不能中断 agent loop（否则会跳过 finalizeTurn）。
    */
   private async publishContextStats(
     sessionContext: ISessionContext,
@@ -864,6 +865,9 @@ export class AgentEngine {
   ): Promise<void> {
     try {
       const contextStats = await sessionContext.getContextStats();
+      // 持久化锚点：流式中意外退出后，冷启动扫描事件页仍能恢复到本小轮次
+      await sessionContext.appendContextStats(turnId, contextStats);
+      // 实时广播：前端环形指示器立即更新
       await sessionContext.publishStream({
         type: "context_stats",
         turnId,
@@ -871,7 +875,7 @@ export class AgentEngine {
       });
     } catch (error) {
       this.logger.warn(
-        `Failed to publish per-request context stats: ${
+        `Failed to persist/publish per-request context stats: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

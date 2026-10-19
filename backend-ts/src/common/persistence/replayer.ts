@@ -332,6 +332,10 @@ export function foldEvent(
     case 'command/done':
       break;
 
+    // ─── 小轮次上下文占用锚点：只供前端冷启动扫描，不参与消息 surface / 回合游标折叠 ───
+    case 'context/stats':
+      break;
+
     default:
       break;
   }

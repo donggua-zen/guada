@@ -82,6 +82,25 @@ describe('replayer 折叠 - 扁平消息 surface（零 turn 结构，P0-1 回归
     expect(state.currentTurnId).toBeNull();
   });
 
+  it('context/stats：只推进 seq，不改变消息 surface / 回合游标', () => {
+    const events = [
+      turnStart('t1', 1),
+      userMessage('u1', 2),
+      assistantMessage('a1', 3),
+      ev({
+        type: 'context/stats',
+        seq: 4,
+        data: { turnId: 't1', usedTokens: 500, effectiveContextWindow: 1000 },
+      }),
+      turnFinish('t1', 5),
+    ];
+
+    const state = foldEvents(events);
+    expect(state.messages.map((n) => n.id)).toEqual(['u1', 'a1']);
+    expect(state.currentTurnId).toBeNull();
+    expect(state.lastProcessedSeq).toBe(5);
+  });
+
   it('连续两个回合：finish 后游标复位，第二个回合消息正确归位', () => {
     const events = [
       turnStart('t1', 1),

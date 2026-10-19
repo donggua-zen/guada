@@ -106,6 +106,35 @@ describe('SessionReplayService 事件页', () => {
     expect((compact.data as any).summary).toBe('sum');
   });
 
+  it('context/stats：小轮次占用锚点原样返回（中断回合冷启动恢复）', async () => {
+    const events: BaseEvent[] = [
+      { type: 'turn/start', seq: 1, time: 1, data: { turnId: 'T1', kind: 'turn', metadata: {} } },
+      { type: 'user/message', seq: 2, time: 2, data: { messageId: 'u1', kind: 'user', blocks: [], metadata: {} } },
+      {
+        type: 'assistant/message',
+        seq: 3,
+        time: 3,
+        data: { messageId: 'a1', content: [], metadata: { usage: { promptTokens: 100 } } },
+      },
+      {
+        type: 'context/stats',
+        seq: 4,
+        time: 4,
+        data: { turnId: 'T1', usedTokens: 120, effectiveContextWindow: 1000 },
+      },
+      // 流式中意外退出：没有 turn/finish
+    ];
+    const page = await createService(events).getEventPage('s1', { turns: 1 });
+    expect(page.events.map((e) => e.type)).toEqual([
+      'turn/start',
+      'user/message',
+      'assistant/message',
+      'context/stats',
+    ]);
+    expect(page.endSeq).toBe(4);
+    expect(page.hasMore).toBe(false);
+  });
+
   it('N=1：页 = 最近 1 个有效回合起（T3），被删 TD 事件在区间内原样返回；nextBeforeSeq = 页首-1', async () => {
     const service = createService(makeEvents());
     const page = await service.getEventPage('s1', { turns: 1 });

@@ -870,6 +870,24 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     } as import('./types/event-chunk.types').WireStreamEvent);
   }
 
+  /** 持久化小轮次上下文占用：写 context/stats（冷启动扫描锚点；不触发快照） */
+  async appendContextStats(
+    turnId: string,
+    stats: import('./types/event-chunk.types').ContextStatsPayload,
+  ): Promise<void> {
+    await this.messageStore.appendContextStats(this.sessionId, {
+      turnId,
+      usedTokens: stats.usedTokens,
+      effectiveContextWindow: stats.effectiveContextWindow,
+      ...(stats.messageCount === undefined
+        ? {}
+        : { messageCount: stats.messageCount }),
+      ...(stats.breakdown === undefined
+        ? {}
+        : { breakdown: stats.breakdown }),
+    });
+  }
+
   getEffectiveContextWindow(): number {
     return this.effectiveContextWindow;
   }

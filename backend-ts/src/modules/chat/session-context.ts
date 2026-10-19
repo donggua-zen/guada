@@ -201,6 +201,17 @@ export interface ISessionContext {
    */
   publishStream(chunk: import("./types/event-chunk.types").SessionStreamEvent): Promise<void>;
 
+  /**
+   * 持久化一次小轮次上下文占用（冷启动/意外退出恢复用）。
+   *
+   * 与 publishStream 的实时 context_stats 分离：本方法只落盘，
+   * 实时广播仍由调用方 publishStream。写入失败由调用方按 fail-soft 处理。
+   */
+  appendContextStats(
+    turnId: string,
+    stats: import("./types/event-chunk.types").ContextStatsPayload,
+  ): Promise<void>;
+
   // === 压缩数据源 ===
   /** 获取实际生效的上下文窗口大小（压缩决策等场景使用） */
   getEffectiveContextWindow(): number;

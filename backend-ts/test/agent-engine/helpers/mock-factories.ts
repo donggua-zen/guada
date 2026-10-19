@@ -178,6 +178,7 @@ export function createMockSessionContext(options?: {
       messageCount: 0,
       breakdown: { systemPrompt: 0, history: 0, tools: 0 },
     })),
+    appendContextStats: jest.fn().mockResolvedValue(undefined),
     shouldCompress: jest.fn().mockResolvedValue(false),
     compress: jest.fn().mockResolvedValue([]),
   };

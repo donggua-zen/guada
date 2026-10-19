@@ -547,6 +547,24 @@ describe("StreamProjector 折叠器", () => {
     expect(c2.metadata.toolCalls.find((tc: any) => tc.id === "call_2").outcome).toBe("error");
   });
 
+  it("领域事件 context/stats：不改变回合树（只供冷启动扫描）", () => {
+    foldEvents(store as any, "s1", [
+      ...turnPage("T1", "你好", "回答"),
+      {
+        type: "context/stats",
+        seq: 99,
+        data: {
+          turnId: "T1",
+          usedTokens: 500,
+          effectiveContextWindow: 1000,
+          messageCount: 2,
+        },
+      } as any,
+    ]);
+    expect(store.state.turns).toHaveLength(1);
+    expect(store.state.turns[0].messages).toHaveLength(2);
+  });
+
   it("context_stats：每次小轮次请求后即时更新环形指示器", () => {
     foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
     applyLiveChunk(store as any, "s1", {

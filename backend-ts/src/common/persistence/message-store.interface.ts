@@ -16,7 +16,7 @@ import type {
   FileRef,
   TokenUsage,
 } from '../types/conversation.types';
-import type { BaseEvent, OccupancyAnchor, SessionMeta } from './types';
+import type { BaseEvent, ContextStatsData, OccupancyAnchor, SessionMeta } from './types';
 
 // ============================================================================
 // 参数类型定义
@@ -233,6 +233,16 @@ export interface IMessageStore {
       breakdown?: TokenBreakdown;
       beforeTokens?: number;
     },
+  ): Promise<number>;
+
+  /**
+   * 小轮次上下文占用锚点：写一条 context/stats（不改消息视图）。
+   * 每次 LLM 请求落库后写入，供冷启动/流式中意外退出后恢复环形指示器。
+   * @returns 写入后版本号
+   */
+  appendContextStats(
+    sessionId: string,
+    data: ContextStatsData,
   ): Promise<number>;
 
   // ─── 统一交互（审批/询问共用 ask/* 事件溯源；无超时）───

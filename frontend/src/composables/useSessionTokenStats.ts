@@ -88,11 +88,13 @@ export function updateTokenStatsFromSSE(sessionId: string, stats: ContextStatsIn
  * 从会话事件日志逆向扫描最后一个「上下文占用锚点」并填充该会话的环形指示器切片。
  *
  * 兼容两种形状（eventLog 是领域事件与 live chunk 的混合数组）：
- * - live chunk（turn_end / compaction_summary / compression_end）：`e.contextStats`
- * - 领域事件（turn/finish / compaction/end）：`e.data.usedTokens + e.data.effectiveContextWindow`
+ * - live chunk（turn_end / context_stats / compaction_summary / compression_end）：`e.contextStats`
+ * - 领域事件（context/stats / turn/finish / compaction/end）：`e.data.usedTokens + e.data.effectiveContextWindow`
  *
- * 后端在「占用稳定点」（每轮结束、每次压缩后）把权威 usedTokens/effectiveContextWindow
- * （含 messageCount/breakdown）落进持久化事件 → 打开/切换会话时直接取最后一个锚点。
+ * 后端在「占用稳定点」（每次小轮次请求、每轮结束、每次压缩后）把权威 usedTokens/
+ * effectiveContextWindow（含 messageCount/breakdown）落进事件 → 打开/切换会话时直接取最后一个锚点。
+ *
+ * 被 turn/delete 删除的回合（重答/删除）不参与恢复：否则会显示旧回合的占用。
  * @returns 是否找到锚点（false → 显示空状态）
  */
 export function applyContextStatsFromEvents(
@@ -100,11 +102,28 @@ export function applyContextStatsFromEvents(
   events: unknown[],
 ): boolean {
   if (!sessionId || !Array.isArray(events)) return false
+
+  // 先收集被删除的回合（事件页/内存事件数组里都有 turn/delete）
+  const deletedTurnIds = new Set<string>()
+  for (const event of events) {
+    const e = event as
+      | { type?: unknown; data?: { turnId?: unknown } }
+      | null
+      | undefined
+    if (e?.type === 'turn/delete' && typeof e.data?.turnId === 'string') {
+      deletedTurnIds.add(e.data.turnId)
+    }
+  }
+
   for (let i = events.length - 1; i >= 0; i--) {
     // eventLog 混合两类载体：live chunk（contextStats）与领域事件（data.usedTokens），
     // 其余字段全部走运行时 typeof 收窄
     const e = events[i] as
-      | { contextStats?: Record<string, unknown>; data?: Record<string, unknown> }
+      | {
+          turnId?: unknown
+          contextStats?: Record<string, unknown>
+          data?: Record<string, unknown>
+        }
       | null
       | undefined
     if (!e) continue
@@ -115,6 +134,8 @@ export function applyContextStatsFromEvents(
       typeof live.effectiveContextWindow === 'number' &&
       live.effectiveContextWindow > 0
     ) {
+      // live chunk 的回合归属在顶层
+      if (typeof e.turnId === 'string' && deletedTurnIds.has(e.turnId)) continue
       applyContextStats(sessionId, {
         usedTokens: live.usedTokens,
         effectiveContextWindow: live.effectiveContextWindow,
@@ -130,6 +151,8 @@ export function applyContextStatsFromEvents(
       typeof domain.effectiveContextWindow === 'number' &&
       domain.effectiveContextWindow > 0
     ) {
+      // 领域事件的回合归属在 data.turnId
+      if (typeof domain.turnId === 'string' && deletedTurnIds.has(domain.turnId)) continue
       applyContextStats(sessionId, {
         usedTokens: domain.usedTokens,
         effectiveContextWindow: domain.effectiveContextWindow,

@@ -60,6 +60,7 @@ function createContext(overrides: any = {}) {
     addUserMessage: jest.fn(async () => ({ messageId: 'u1', userMessage: {}, revision: 1 })),
     deleteTurn: jest.fn(async () => {}),
     appendCompact: jest.fn(async () => {}),
+    appendContextStats: jest.fn(async () => 1),
     getLastProcessedSeq: jest.fn(async () => 0),
     ...(overrides.messageStore || {}),
   };
@@ -185,6 +186,35 @@ describe('JsonlSessionContext 读取层直通', () => {
     expect(sessionId).toBe('s1');
     // prevSeq 由发布点组装（"先入库后发事件"契约），引擎/深层模块无需感知游标
     expect(event).toMatchObject({ type: 'text_delta', messageId: 'm1', prevSeq: 42 });
+  });
+
+  it('appendContextStats：写 context/stats 锚点（可选字段缺省时不落空字段）', async () => {
+    const { ctx, messageStore } = createContext();
+    await ctx.initialize();
+
+    await ctx.appendContextStats('t1', {
+      usedTokens: 512,
+      effectiveContextWindow: 2000,
+      messageCount: 6,
+      breakdown: { systemPrompt: 100, history: 400, tools: 12 },
+    });
+    expect(messageStore.appendContextStats).toHaveBeenLastCalledWith('s1', {
+      turnId: 't1',
+      usedTokens: 512,
+      effectiveContextWindow: 2000,
+      messageCount: 6,
+      breakdown: { systemPrompt: 100, history: 400, tools: 12 },
+    });
+
+    await ctx.appendContextStats('t2', {
+      usedTokens: 10,
+      effectiveContextWindow: 1000,
+    });
+    expect(messageStore.appendContextStats).toHaveBeenLastCalledWith('s1', {
+      turnId: 't2',
+      usedTokens: 10,
+      effectiveContextWindow: 1000,
+    });
   });
 
   it('快照缓存：revision 未变时复用视图（loadContext 只调一次）；写入后重建', async () => {

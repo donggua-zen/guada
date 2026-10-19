@@ -37,7 +37,8 @@ export type EventType =
   | 'message/meta'
   | 'ask/asked'
   | 'ask/answered'
-  | 'session/mode_changed';
+  | 'session/mode_changed'
+  | 'context/stats';
 
 // ─── 基础事件 ───
 
@@ -95,6 +96,30 @@ export interface TurnFinishData {
   usedTokens?: number;
   /** 有效上下文窗口（与 usedTokens 配套） */
   effectiveContextWindow?: number;
+}
+
+/**
+ * 小轮次上下文占用锚点（每次 LLM 请求落库后写入）。
+ *
+ * 与 turn/finish 的占用字段同口径，但不受回合是否正常结束影响：
+ * 流式中意外退出时，冷启动扫描事件页仍能恢复到最后一个完成的小轮次，
+ * 不会因为缺少 turn/finish 而显示 0。
+ */
+export interface ContextStatsData {
+  /** 所属回合（前端重答/删除回合过滤用） */
+  turnId: string;
+  /** 当前完整请求 token（envelope + 可见视图） */
+  usedTokens: number;
+  /** 有效上下文窗口 */
+  effectiveContextWindow: number;
+  /** 可见视图消息数 */
+  messageCount?: number;
+  /** 细分 token */
+  breakdown?: {
+    systemPrompt: number;
+    history: number;
+    tools: number;
+  };
 }
 
 // ─── 消息级三事件（对齐 DSH：user/message、assistant/message、tool/result）───

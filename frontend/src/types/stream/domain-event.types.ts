@@ -144,6 +144,26 @@ export type DomainEvent =
     }
   | { type: "ask/asked"; seq: number; data: Record<string, unknown> }
   | { type: "ask/answered"; seq: number; data: Record<string, unknown> }
+  | {
+      type: "context/stats";
+      seq: number;
+      data: {
+        /** 所属回合（重答/删除回合过滤用） */
+        turnId: string;
+        /** 当前完整请求 token（与 turn/finish 同口径） */
+        usedTokens: number;
+        /** 有效上下文窗口 */
+        effectiveContextWindow: number;
+        /** 可见视图消息数 */
+        messageCount?: number;
+        /** 细分 token */
+        breakdown?: {
+          systemPrompt: number;
+          history: number;
+          tools: number;
+        };
+      };
+    }
   | { type: "workflow/event"; seq: number; data: import("./workflow.types").WorkflowEventData }
   | { type: "session/init"; seq: number; data: Record<string, unknown> }
   | { type: "session/rotate"; seq: number; data: Record<string, unknown> }

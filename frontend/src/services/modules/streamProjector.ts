@@ -483,6 +483,9 @@ function applyDomainEvent(
       // Workflow 编排进度不落 JSONL（方案 B）——回放流中忽略历史事件；
       // 现行渲染位置：workflow_run 工具行原地（数据源 stores/workflowRuns.ts）
       return;
+    case "context/stats":
+      // 小轮次占用锚点：只供冷启动扫描（useSessionTokenStats），不影响回合树
+      return;
     default:
       // command/*、message/prune、message/meta、approval/*、compaction/start|end、session/*、envelope → 暂不处理
       return;

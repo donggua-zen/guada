@@ -24,6 +24,7 @@ import {
   AskAskedData,
   AskAnsweredData,
   SessionModeChangedData,
+  ContextStatsData,
 } from './types';
 import { generateOrderedMessageId } from '../utils/ordered-id.util';
 import { isVisionImageMediaType } from '../utils/media-type.util';
@@ -1380,6 +1381,39 @@ export class JsonlMessageService implements IMessageStore {
       },
     });
     return seq;
+  }
+
+  /**
+   * 小轮次上下文占用锚点：写一条 context/stats。
+   *
+   * 每次 LLM 请求（及工具结果批）落库后写入；不触发快照，避免每请求一次快照写。
+   * 与 turn/finish 不同，它不依赖回合正常结束——流式中意外退出后，
+   * 冷启动扫描事件页仍能恢复到最后一个完成的小轮次。
+   */
+  async appendContextStats(
+    sessionId: string,
+    data: ContextStatsData,
+  ): Promise<number> {
+    return this.runExclusive(sessionId, async () => {
+      const seq = await this.getNextSeq(sessionId);
+      await this.append(sessionId, {
+        type: 'context/stats',
+        seq,
+        time: Date.now(),
+        data: {
+          turnId: data.turnId,
+          usedTokens: data.usedTokens,
+          effectiveContextWindow: data.effectiveContextWindow,
+          ...(data.messageCount === undefined
+            ? {}
+            : { messageCount: data.messageCount }),
+          ...(data.breakdown === undefined
+            ? {}
+            : { breakdown: data.breakdown }),
+        },
+      });
+      return seq;
+    });
   }
 }
 
