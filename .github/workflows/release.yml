@@ -127,6 +127,12 @@ jobs:
       - name: 构建前端
         run: pnpm run build:electron:frontend
 
+      # Windows 首期：校验随包的 Computer Use sidecar；macOS 上脚本自动跳过
+      - name: 校验 Computer sidecar
+        run: |
+          pnpm run verify:sidecar
+          pnpm run test:computer-sidecar
+
       # 架构由 runner 架构决定（mac.target 不写死 arch 列表）：每个 matrix 腿跑在**自己架构**的
       # 机器上（arm64→macos-latest、x64→macos-15-intel），原生模块也只按构建机架构准备，
       # app 与模块架构天然一致。反例见 docs/ELECTRON_DEPLOYMENT.md 2.1（1.0.1 首发在 arm64
@@ -300,6 +306,11 @@ jobs:
 
       - name: 构建前端
         run: pnpm run build:electron:frontend
+
+      - name: 校验 Computer sidecar
+        run: |
+          pnpm run verify:sidecar
+          pnpm run test:computer-sidecar
 
       # Windows 的包在 Windows 上构建，原生模块（better-sqlite3 / sharp / @parcel/watcher 等）
       # 天然是 win32-x64，不存在跨架构问题。--publish never 的理由同 mac。

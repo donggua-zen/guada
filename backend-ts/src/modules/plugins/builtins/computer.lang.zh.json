@@ -1,0 +1,18 @@
+{
+  "computer.name": "桌面操作",
+  "computer.description": "观察并操作本机桌面窗口",
+  "computer.toolkitName": "Computer Use",
+  "computer.toolkitDescription": "截屏、读取 Windows 无障碍树、点击、输入、按键、滚动与窗口聚焦",
+  "computer_observe.executing": "观察桌面",
+  "computer_observe.completed": "桌面观察完成",
+  "computer_observe.aggregate.executing": "观察桌面",
+  "computer_observe.aggregate.completed": "已完成 {n} 次桌面观察",
+  "computer_a11y_observe.executing": "读取无障碍树",
+  "computer_a11y_observe.completed": "无障碍树读取完成",
+  "computer_a11y_observe.aggregate.executing": "读取无障碍树",
+  "computer_a11y_observe.aggregate.completed": "已读取 {n} 次无障碍树",
+  "computer_input.executing": "操作桌面",
+  "computer_input.completed": "桌面操作完成",
+  "computer_input.aggregate.executing": "操作桌面",
+  "computer_input.aggregate.completed": "已执行 {n} 次桌面操作"
+}

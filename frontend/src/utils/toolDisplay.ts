@@ -11,6 +11,7 @@ import {
   EyeTracking16Filled,
   Window16Regular,
   WindowConsole20Filled,
+  Desktop16Regular,
 } from "@vicons/fluent";
 import { t } from "@/locales";
 import { parse as partialParse } from "partial-json";
@@ -81,6 +82,7 @@ export const TOOL_ICON_MAP: Record<string, Component> = {
   search: Search16Filled,
   edit: Edit32Filled,
   browser: WindowWrench16Regular,
+  computer: Desktop16Regular,
   code: Code24Regular,
   window: Window16Regular,
   eye: EyeTracking16Filled,

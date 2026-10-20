@@ -74,6 +74,9 @@
                             <template v-else-if="currentTabValue === 'browser'">
                                 <BrowserSettings />
                             </template>
+                            <template v-else-if="currentTabValue === 'computer-use'">
+                                <ComputerUseSettings />
+                            </template>
                             <template v-else-if="currentTabValue === 'policy'">
                                 <CommandPolicySettings />
                             </template>
@@ -126,6 +129,7 @@ import OcrSettings from './OcrSettings.vue'
 import AppearanceSettings from './AppearanceSettings.vue'
 import SearchSettings from './SearchSettings.vue'
 import BrowserSettings from './BrowserSettings.vue'
+import ComputerUseSettings from './ComputerUseSettings.vue'
 import AboutPanel from '../plugins/AboutPanel.vue'
 import SessionGroupManage from './SessionGroupManage.vue'
 import ArchivedSessions from './ArchivedSessions.vue'
@@ -152,6 +156,7 @@ import {
     Database24Regular,
     ShieldCheckmark16Regular,
     ChartMultiple24Regular,
+    Desktop24Regular,
 } from '@vicons/fluent'
 
 import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } from '@vicons/material'
@@ -173,6 +178,7 @@ const groupMap = computed<Record<string, string>>(() => ({
     providers: t('settings.system.groups.general'),
     ocr: t('settings.system.groups.general'),
     browser: t('settings.system.groups.general'),
+    'computer-use': t('settings.system.groups.system'),
     policy: t('settings.system.groups.system'),
     connections: t('settings.system.groups.general'),
     appearance: t('settings.system.groups.personalization'),
@@ -239,6 +245,11 @@ const sidebarItems = computed(() => [
         label: t('settings.system.tabs.browser'),
         path: 'browser',
         icon: Globe24Regular,
+    },
+    {
+        label: t('settings.system.tabs.computerUse'),
+        path: 'computer-use',
+        icon: Desktop24Regular,
     },
     {
         label: t('settings.system.tabs.policy'),

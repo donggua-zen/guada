@@ -256,6 +256,7 @@ export type AskCardKind =
   | "write-approval"
   | "plan-approval"
   | "generic-approval"
+  | "computer-use-approval"
   | "question";
 
 export interface AskRequestedEvent {

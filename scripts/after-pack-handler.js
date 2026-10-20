@@ -217,6 +217,31 @@ function signMacApp(context) {
 }
 
 /**
+ * 补 Computer Use sidecar 的可执行权限。extraResources 拷贝不保留 Unix
+ * 可执行位，且必须在签名之前完成。
+ */
+function fixSidecarPermissions(context) {
+  const resourcesDir =
+    context.electronPlatformName === 'darwin'
+      ? path.join(
+          context.appOutDir,
+          `${context.packager.appInfo.productFilename}.app`,
+          'Contents',
+          'Resources'
+        )
+      : path.join(context.appOutDir, 'resources');
+  const sidecarDir = path.join(resourcesDir, 'computer-sidecar');
+  if (!fs.existsSync(sidecarDir)) return;
+  for (const name of fs.readdirSync(sidecarDir)) {
+    const file = path.join(sidecarDir, name);
+    if (!fs.statSync(file).isFile()) continue;
+    if (process.platform !== 'win32') {
+      fs.chmodSync(file, 0o755);
+    }
+  }
+}
+
+/**
  * 主处理函数
  */
 module.exports = async function (context) {
@@ -224,6 +249,7 @@ module.exports = async function (context) {
     cleanupLocales(context);
     embedIcon(context);
     fixPtySpawnHelper(context);
+    fixSidecarPermissions(context);
   } catch (error) {
     console.error('After pack handler error:', error);
   }

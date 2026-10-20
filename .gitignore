@@ -77,6 +77,9 @@ TOOLS.md
 # guada-agent 是独立的 Go 项目，仅为开发方便放在同一目录（不是子模块，不跟踪其指针）
 /guada-agent/
 
+# guada-computer 是独立的 Rust 项目，根仓库只消费其预编译二进制
+/guada-computer/
+
 # 评测（eval/）：本地配置与运行产物不入库
 eval/.env.local
 eval/**/__pycache__/

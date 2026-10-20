@@ -26,6 +26,7 @@ import {
   generateBridgeToken,
 } from "./bridge-server";
 import { BrowserAutomationService } from "./browser-automation-service";
+import { ComputerSidecarClient } from "./computer-sidecar-client";
 import {
   UpdateManager,
   launchInstaller,
@@ -41,6 +42,7 @@ let backendPort: number | null = null; // 记录后端端口
 let browserBridgeInitialized = false; // Browser Bridge 是否已初始化
 let bridgeServer: BridgeServer | null = null;
 let automationService: BrowserAutomationService | null = null;
+let computerSidecar: ComputerSidecarClient | null = null;
 let stderrBuffer: string[] = []; // 后端 stderr 缓冲，用于崩溃诊断
 const MAX_STDERR_LINES = 200;
 /** 标题栏高度(px)：原生窗口按钮 overlay 用；修改需同步前端 CustomTitlebar.vue 根节点的 h-9 */
@@ -1981,6 +1983,21 @@ function setupIpcHandlers() {
     return { port: backendPort, error: null };
   });
 
+  // 桌面 Computer Use：状态查询与设置页测试按钮
+  ipcMain.handle("computer-use:status", async () => {
+    if (!computerSidecar) {
+      return { available: false, error: "computer sidecar is not initialized" };
+    }
+    return computerSidecar.start();
+  });
+
+  ipcMain.handle("computer-use:test", async () => {
+    if (!computerSidecar) {
+      return { ok: false, error: "computer sidecar is not initialized" };
+    }
+    return computerSidecar.test();
+  });
+
   // 同步查询后端就绪状态（用于刷新场景，在 Vue 挂载前阻塞式确定初始值）
   // 附带端口：刷新场景下前端无需再走异步 IPC 获取端口，避免竞态
   ipcMain.on("get-backend-status-sync", (event) => {
@@ -2895,6 +2912,27 @@ app.whenReady().then(async () => {
     bridgeServer = new BridgeServer(bridgePipePath, bridgeToken);
     await bridgeServer.start();
 
+    // Computer Use sidecar：由主进程持有生命周期，后端通过 Bridge 精确方法调用。
+    const sidecar = new ComputerSidecarClient();
+    computerSidecar = sidecar;
+    bridgeServer.registerHandler("computer_observe", (params: any) =>
+      sidecar.dispatch("computer_observe", params)
+    );
+    bridgeServer.registerHandler("computer_a11y_observe", (params: any) =>
+      sidecar.dispatch("computer_a11y_observe", params)
+    );
+    bridgeServer.registerHandler("computer_input", (params: any) =>
+      sidecar.dispatch("computer_input", params)
+    );
+    bridgeServer.registerHandler("computer_status", () =>
+      sidecar.dispatch("computer_status", {})
+    );
+    bridgeServer.registerHandler("computer_test", () =>
+      sidecar.dispatch("computer_test", {})
+    );
+    // The sidecar starts lazily on the first status/test/tool request, so a
+    // disabled Computer Use capability does not spawn a desktop control process.
+
     // 防休眠：后端每 5s 幂等上报忙碌状态（有对话/定时任务在跑 = true）。
     // 后端断开/热重载时复位为 false —— 没有后端在干活，就不该继续占着 blocker。
     bridgeServer.onEvent("keep_awake_state", (data: any) => {
@@ -3041,7 +3079,13 @@ async function performShutdown(): Promise<void> {
     bridgeServer = null;
   }
 
-  // 3. 清理浏览器自动化服务
+  // 3. 停止 Computer Use sidecar
+  if (computerSidecar) {
+    await computerSidecar.stop();
+    computerSidecar = null;
+  }
+
+  // 4. 清理浏览器自动化服务
   if (automationService) {
     await automationService.destroy();
     automationService = null;

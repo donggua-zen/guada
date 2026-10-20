@@ -58,6 +58,7 @@ export type AskCardKind =
   | "write-approval" // 工作区外文件写入
   | "plan-approval" // ExitPlanMode 计划审批
   | "generic-approval" // requestApproval（通用两选一）
+  | "computer-use-approval" // 桌面 Computer Use 输入动作审批
   | "question"; // ask_user 提问
 
 /**
@@ -70,6 +71,7 @@ export const AUTO_APPROVABLE_CARD_KINDS: ReadonlySet<AskCardKind> = new Set([
   "command-approval",
   "sensitive-path",
   "write-approval",
+  "computer-use-approval",
 ]);
 
 /** 一次 ask 请求 */

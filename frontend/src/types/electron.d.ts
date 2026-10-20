@@ -172,6 +172,25 @@ export interface ElectronAPI {
   // 清空所有浏览器自动化 session 数据
   clearBrowserData: () => Promise<{ success: boolean; error?: string }>
 
+  // 桌面 Computer Use 状态与测试
+  getComputerUseStatus: () => Promise<{
+    available: boolean
+    binaryPath?: string
+    version?: string
+    protocol?: string
+    capabilities?: Record<string, unknown>
+    error?: string
+  }>
+  testComputerUse: () => Promise<{
+    ok: boolean
+    screenshotPath?: string
+    width?: number
+    height?: number
+    treeCount?: number
+    version?: string
+    error?: string
+  }>
+
   // 托盘悬浮窗统计推送
   updateTrayStats: (stats: { running: number; unread: number }) => void
 

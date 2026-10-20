@@ -38,7 +38,11 @@ export const WRITE_DENY = "拒绝";
  */
 function turnAllowLabel(cardKind: AskCardKind | undefined): string | undefined {
   if (cardKind === "write-approval") return WRITE_ALLOW_TURN;
-  if (cardKind === "command-approval" || cardKind === "sensitive-path") {
+  if (
+    cardKind === "command-approval" ||
+    cardKind === "sensitive-path" ||
+    cardKind === "computer-use-approval"
+  ) {
     return COMMAND_ALLOW_TURN;
   }
   return undefined;
@@ -223,6 +227,62 @@ export class AskService {
     }
     if (answer.selected.includes("同意")) return;
     throw new AskDeniedError("用户拒绝了该请求", "rejected");
+  }
+
+  /**
+   * 桌面 Computer Use 输入动作审批：本次允许 / 本轮内自动放行 / 拒绝。
+   *
+   * 仅输入类动作（点击、输入、按键等）使用；只读观察不经过审批。
+   */
+  async requestComputerUseApproval(
+    session: AskSession,
+    params: {
+      toolCallId?: string;
+      toolName?: string;
+      detail?: string;
+      abortSignal?: AbortSignal;
+    },
+  ): Promise<void> {
+    if (turnApprovalMemory.isAllowed(session.sessionId)) return;
+
+    const answers = await this.ask(
+      session,
+      {
+        kind: "approval",
+        cardKind: "computer-use-approval",
+        title: "Computer Use 操作确认",
+        toolCallId: params.toolCallId,
+        toolName: params.toolName,
+        autoApprove: "turn",
+        questions: [
+          {
+            id: "computer-use-approval",
+            question: "是否允许这次桌面操作？",
+            detail: params.detail,
+            options: [
+              { label: COMMAND_ALLOW_ONCE, description: "仅本次执行" },
+              {
+                label: COMMAND_ALLOW_TURN,
+                description: "本轮后续桌面操作直接通过（下一轮恢复询问）",
+              },
+              { label: COMMAND_DENY, description: "不执行，并把拒绝反馈给模型" },
+            ],
+          },
+        ],
+      },
+      params.abortSignal,
+    );
+
+    const answer = answers[0];
+    if (answer.custom && answer.custom.trim()) {
+      throw new AskDeniedError(answer.custom.trim(), "rejected", answer.custom.trim());
+    }
+    if (answer.selected.includes(COMMAND_ALLOW_ONCE)) return;
+    if (answer.selected.includes(COMMAND_ALLOW_TURN)) {
+      this.allowForTurn(session);
+      return;
+    }
+    throw new AskDeniedError("用户拒绝了该桌面操作", "rejected");
   }
 
   /**

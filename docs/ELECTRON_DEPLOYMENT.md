@@ -862,6 +862,25 @@ cd ../ai_web
 5. **Electron 打包**：electron-builder 生成 .app/dmg 或 nsis 安装包
 6. **签名**：Windows 未签名；macOS 未签名，安装放行步骤见第 4 章
 
+### Computer Use sidecar
+
+Windows 首期的桌面自动化由独立 sidecar 提供，随包分发，不在运行时下载：
+
+- 源目录：`build-resources/computer-sidecar/guada-computer.exe`
+- 打包后：`resources/computer-sidecar/guada-computer.exe`（`extraResources`）
+- 版本锁定：`sidecar.lock.json` 记录 tag、协议版本与 sha256
+- 构建校验：`pnpm run verify:sidecar` 校验存在性、哈希与 `--version`
+- 打包校验：`verify:asar` 会检查 Windows 包内 sidecar 并运行 `--version`
+- 权限修复：`scripts/after-pack-handler.js` 在签名前补可执行位
+- 开发模式：`resolveComputerSidecarBinary()` 依次查找
+  `build-resources/computer-sidecar/`、`guada-computer/dist/` 和
+  `guada-computer/target/release/`
+
+重新构建二进制：`pnpm run build:sidecar`（要求同目录存在
+`guada-computer/` 且已安装 Visual Studio C++ 工具链）。该命令会更新
+`sidecar.lock.json` 中当前平台的哈希。详细设计与协议见
+[`docs/COMPUTER_USE.md`](COMPUTER_USE.md)。
+
 ---
 
 **最后更新**: 2026-10-13

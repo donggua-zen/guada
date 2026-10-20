@@ -1,0 +1,12 @@
+{
+  "repo": "",
+  "tag": "v0.1.0",
+  "commit": "",
+  "protocol": "1",
+  "binaries": {
+    "win32-x64": {
+      "path": "build-resources/computer-sidecar/guada-computer.exe",
+      "sha256": "e6fc74bcb468be36ff2bb7009746106759e0e98bde874f033d74f651ca00f84a"
+    }
+  }
+}

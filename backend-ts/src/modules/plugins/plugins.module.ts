@@ -9,6 +9,7 @@ import { ImageRecognitionPlugin } from "./builtins/image-recognition.plugin";
 import { MemoryPlugin } from "./builtins/memory.plugin";
 import { TimePlugin } from "./builtins/time.plugin";
 import { BrowserPlugin } from "./builtins/browser.plugin";
+import { ComputerPlugin } from "./builtins/computer.plugin";
 import { TodoPlugin } from "./builtins/todo.plugin";
 import { WebSearchPlugin } from "./builtins/web-search.plugin";
 import { PlanModePlugin } from "./builtins/plan-mode.plugin";
@@ -37,6 +38,7 @@ import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
     MemoryPlugin,
     TimePlugin,
     BrowserPlugin,
+    ComputerPlugin,
     TodoPlugin,
     WebSearchPlugin,
     PlanModePlugin,
@@ -67,6 +69,9 @@ export class PluginsModule implements OnModuleInit {
 
     if (process.env.ELECTRON_APP === "true") {
       await this.pluginManager.registerPlugin(this.moduleRef.get(BrowserPlugin));
+      if (process.platform === "win32") {
+        await this.pluginManager.registerPlugin(this.moduleRef.get(ComputerPlugin));
+      }
     }
 
     // ExternalPluginLoader.onModuleInit 会自动扫描并加载外部插件

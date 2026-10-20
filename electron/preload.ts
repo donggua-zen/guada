@@ -136,6 +136,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearBrowserData: () =>
     ipcRenderer.invoke('browser:clear-all-data'),
 
+  // 桌面 Computer Use：状态查询与设置页测试
+  getComputerUseStatus: () => ipcRenderer.invoke('computer-use:status'),
+  testComputerUse: () => ipcRenderer.invoke('computer-use:test'),
+
   // 托盘悬浮窗：推送聚合统计数据（fire-and-forget）
   updateTrayStats: (stats: { running: number; unread: number }) =>
     ipcRenderer.send('tray:update-stats', stats),

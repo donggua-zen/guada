@@ -1,0 +1,18 @@
+{
+  "computer.name": "Computer Use",
+  "computer.description": "Observe and operate local desktop windows",
+  "computer.toolkitName": "Computer Use",
+  "computer.toolkitDescription": "Screenshots, Windows UI Automation trees, clicks, typing, key presses, scrolling and window focus",
+  "computer_observe.executing": "Observing the desktop",
+  "computer_observe.completed": "Desktop observation completed",
+  "computer_observe.aggregate.executing": "Observing the desktop",
+  "computer_observe.aggregate.completed": "Completed {n} desktop observation(s)",
+  "computer_a11y_observe.executing": "Reading the accessibility tree",
+  "computer_a11y_observe.completed": "Accessibility tree read",
+  "computer_a11y_observe.aggregate.executing": "Reading accessibility trees",
+  "computer_a11y_observe.aggregate.completed": "Read {n} accessibility tree(s)",
+  "computer_input.executing": "Operating the desktop",
+  "computer_input.completed": "Desktop operation completed",
+  "computer_input.aggregate.executing": "Operating the desktop",
+  "computer_input.aggregate.completed": "Completed {n} desktop operation(s)"
+}

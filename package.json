@@ -30,10 +30,14 @@
     "verify:electron-setup": "node scripts/verify-electron-setup.js",
     "verify:asar": "node scripts/verify-asar-layout.js",
     "verify:packaged": "node scripts/verify-packaged-backend.js",
+    "build:sidecar": "node scripts/build-sidecar.js",
+    "verify:sidecar": "node scripts/verify-sidecar.js",
     "test:browser-snapshot:unit": "cd electron && tsc && cd .. && node scripts/test-accessibility-snapshot.js",
     "test:browser-snapshot:fixture": "cd electron && tsc && cd .. && electron scripts/test-browser-snapshot-electron.js",
     "test:browser-snapshot:bilibili": "cd electron && tsc && cd .. && electron scripts/test-browser-snapshot-electron.js https://www.bilibili.com/",
     "test:webview-navigation-crash": "node --test --test-concurrency=1 scripts/test-webview-navigation-crash.js",
+    "test:computer-sidecar": "node --test scripts/test-computer-sidecar.js",
+    "test:computer-sidecar:electron": "pnpm run build:electron-ts && electron scripts/test-computer-sidecar-electron.js",
     "build:electron:clean": "node scripts/clean-release.js",
     "build:electron:pre": "pnpm run build:electron:clean && pnpm run build:electron-ts",
     "build:electron:backend": "node scripts/build-electron-backend.js",
@@ -164,6 +168,14 @@
       {
         "from": "build-resources",
         "to": "build-resources",
+        "filter": [
+          "**/*",
+          "!computer-sidecar/**"
+        ]
+      },
+      {
+        "from": "build-resources/computer-sidecar",
+        "to": "computer-sidecar",
         "filter": [
           "**/*"
         ]
