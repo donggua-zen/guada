@@ -1691,6 +1691,10 @@ function scrollToMessage(messageId: string) {
      按钮显隐时行宽 0↔8 的变化还会让胶囊跟着横移同样距离。
      与按钮的 8px 间距改由按钮自身的 margin-left 提供（插槽 0 宽、按钮绝对定位，
      两者都不参与行的居中计算）→ 胶囊恒居中且位置恒定。 */
+  /* 两侧各预留 36px（8px 间距 + 28px 回到底部按钮）：胶囊被限制在内容盒内，
+     按钮绝对定位后的右缘正好落在行边界，不再撑出 .scroll-container（overflow:auto）
+     的横向可滚动区。全局 border-box 下 width:100% 的内容宽 = 行宽 − 72px。 */
+  padding-inline: 36px;
   width: 100%;
   pointer-events: none;
 }
