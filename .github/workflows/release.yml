@@ -370,7 +370,16 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --generate-notes || true
+          # 更新说明取仓库里的 docs/releases/<tag>.md（与官网 changelog 同一份内容，发版时一起写），
+          # 没有该文件就退回按提交自动生成。
+          # ⚠️ 这里必须与 mac 任务的写法保持一致：两条腿谁先完成谁建 Release，写法不同就会
+          # 出现「这次正文对、下次变成 Full Changelog」的随机结果（1.0.7 踩过）。
+          if [ -f "docs/releases/$tag.md" ]; then
+            notes=(--notes-file "docs/releases/$tag.md")
+          else
+            notes=(--generate-notes)
+          fi
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" "${notes[@]}" || true
           gh release edit "$tag" --draft=false --latest 2>/dev/null || true
           gh release upload "$tag" release/*.exe --clobber
           for f in release/*.exe.blockmap release/latest.yml; do
