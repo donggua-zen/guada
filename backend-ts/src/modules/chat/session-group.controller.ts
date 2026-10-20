@@ -22,6 +22,12 @@ export class SessionGroupController {
     return this.sessionGroupService.getGroups();
   }
 
+  /** 分组统计（归档确认弹窗用） */
+  @Get(":id/stats")
+  async getStats(@Param("id") id: string) {
+    return this.sessionGroupService.getStats(id);
+  }
+
   /**
    * 创建新分组
    */
@@ -55,5 +61,11 @@ export class SessionGroupController {
   async reorderGroups(@Body() data: { groupIds: string[] }) {
     await this.sessionGroupService.reorderGroups(data.groupIds);
     return { success: true };
+  }
+
+  /** 归档本分组：归档组内全部对话（流式输出中的跳过，分组保留） */
+  @Post(":id/archive")
+  async archiveGroup(@Param("id") id: string) {
+    return this.sessionGroupService.archiveGroup(id);
   }
 }

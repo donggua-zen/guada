@@ -1,5 +1,5 @@
 import type { ApiContext } from "./api-context";
-import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, CreateSessionRequest, UpdateSessionRequest, SessionPlanItem } from "@/types/session";
+import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, SidebarProjectSessionsResponse, ProjectGroup, GroupStats, ArchiveSessionGroupResult, ArchiveProjectGroupResult, DeleteProjectGroupResult, CreateSessionRequest, UpdateSessionRequest, SessionPlanItem } from "@/types/session";
 
 export interface SessionApi {
   createSession(data: CreateSessionRequest): Promise<Session>;
@@ -9,8 +9,13 @@ export interface SessionApi {
   fetchSession(sessionId: string): Promise<Session>;
   /** 计划历史（转录构建：身份 = ExitPlanMode toolCallId，含状态与正文；「计划」面板用） */
   fetchSessionPlans(sessionId: string): Promise<{ plans: SessionPlanItem[] }>;
-  fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean): Promise<SessionListResponse>;
-  fetchSidebarSessions(limit?: number): Promise<SidebarSessionsResponse>;
+  fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean, projectGroupId?: string): Promise<SessionListResponse>;
+  /** 侧边栏批量加载；groupBy='workspace' 时返回目录分组（含虚拟「通用」桶） */
+  fetchSidebarSessions(limit?: number, groupBy?: 'group' | 'workspace'): Promise<SidebarSessionsResponse | SidebarProjectSessionsResponse>;
+  /** 目录分组清单（按 position 升序） */
+  fetchProjectGroups(): Promise<ProjectGroup[]>;
+  /** 手动注册项目目录 */
+  createProjectGroup(path: string): Promise<ProjectGroup>;
   /** 置顶会话清单（侧边栏顶部「已置顶」分区；与分组区互斥） */
   fetchPinnedSessions(): Promise<{ items: Session[] }>;
   fetchArchivedSessions(skip?: number, limit?: number, keyword?: string, groupId?: string | null): Promise<SessionListResponse>;
@@ -23,6 +28,20 @@ export interface SessionApi {
   updateSessionGroup(groupId: string, data: { name: string }): Promise<SessionGroup>;
   deleteSessionGroup(groupId: string): Promise<{ success: boolean }>;
   reorderSessionGroups(groupIds: string[]): Promise<{ success: boolean }>;
+  /** 手工分组统计（归档确认弹窗用） */
+  fetchSessionGroupStats(groupId: string): Promise<GroupStats>;
+  /** 归档本分组：归档组内全部对话（流式输出中的跳过，分组保留） */
+  archiveSessionGroup(groupId: string): Promise<ArchiveSessionGroupResult>;
+  /** 重命名目录分组（仅显示名，不改磁盘目录） */
+  renameProjectGroup(groupId: string, name: string): Promise<ProjectGroup>;
+  /** 目录分组排序（需完整 id 集合） */
+  reorderProjectGroups(groupIds: string[]): Promise<{ success: boolean }>;
+  /** 项目统计（删除/归档确认弹窗用） */
+  fetchProjectGroupStats(groupId: string): Promise<GroupStats>;
+  /** 归档项目：归档其下全部对话（流式输出中的跳过） */
+  archiveProjectGroup(groupId: string): Promise<ArchiveProjectGroupResult>;
+  /** 删除项目：删除其下全部对话（工作目录与文件保留） */
+  deleteProjectGroup(groupId: string): Promise<DeleteProjectGroupResult>;
   generateSessionTitle(sessionId: string): Promise<{ title: string; skipped?: boolean }>;
   
 
@@ -351,13 +370,14 @@ export const sessionApi: SessionApi = {
     );
   },
 
-  async fetchSessions(this: ApiContext, skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean) {
+  async fetchSessions(this: ApiContext, skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean, projectGroupId?: string) {
     const params = new URLSearchParams();
     if (skip !== undefined) params.append("skip", skip.toString());
     if (limit !== undefined) params.append("limit", limit.toString());
     if (groupId !== undefined) params.append("groupId", groupId === null ? "null" : groupId);
     if (keyword) params.append("keyword", keyword);
     if (includeArchived) params.append("includeArchived", "true");
+    if (projectGroupId) params.append("projectGroupId", projectGroupId);
 
     const queryString = params.toString();
     const url = queryString ? `/sessions?${queryString}` : "/sessions";
@@ -365,9 +385,24 @@ export const sessionApi: SessionApi = {
     return await this._request(url);
   },
 
-  async fetchSidebarSessions(this: ApiContext, limit?: number) {
-    const url = limit ? `/sessions/sidebar?limit=${limit}` : "/sessions/sidebar";
+  async fetchSidebarSessions(this: ApiContext, limit?: number, groupBy?: 'group' | 'workspace') {
+    const params = new URLSearchParams();
+    if (limit) params.append("limit", limit.toString());
+    if (groupBy && groupBy !== 'group') params.append("groupBy", groupBy);
+    const queryString = params.toString();
+    const url = queryString ? `/sessions/sidebar?${queryString}` : "/sessions/sidebar";
     return await this._request(url);
+  },
+
+  async fetchProjectGroups(this: ApiContext) {
+    return await this._request<ProjectGroup[]>("/project-groups");
+  },
+
+  async createProjectGroup(this: ApiContext, projectPath: string) {
+    return await this._request<ProjectGroup>("/project-groups", {
+      method: "POST",
+      data: { path: projectPath },
+    });
   },
 
   async fetchPinnedSessions(this: ApiContext) {
@@ -446,6 +481,51 @@ export const sessionApi: SessionApi = {
       method: "POST",
       data: { groupIds },
     });
+  },
+
+  async fetchSessionGroupStats(this: ApiContext, groupId: string) {
+    return await this._request<GroupStats>(`/session-groups/${groupId}/stats`);
+  },
+
+  async archiveSessionGroup(this: ApiContext, groupId: string) {
+    return await this._request<ArchiveSessionGroupResult>(
+      `/session-groups/${groupId}/archive`,
+      { method: "POST" },
+    );
+  },
+
+  async renameProjectGroup(this: ApiContext, groupId: string, name: string) {
+    return await this._request<ProjectGroup>(`/project-groups/${groupId}`, {
+      method: "PUT",
+      data: { name },
+    });
+  },
+
+  async reorderProjectGroups(this: ApiContext, groupIds: string[]) {
+    return await this._request("/project-groups/reorder", {
+      method: "POST",
+      data: { groupIds },
+    });
+  },
+
+  async fetchProjectGroupStats(this: ApiContext, groupId: string) {
+    return await this._request<GroupStats>(
+      `/project-groups/${groupId}/stats`,
+    );
+  },
+
+  async archiveProjectGroup(this: ApiContext, groupId: string) {
+    return await this._request<ArchiveProjectGroupResult>(
+      `/project-groups/${groupId}/archive`,
+      { method: "POST" },
+    );
+  },
+
+  async deleteProjectGroup(this: ApiContext, groupId: string) {
+    return await this._request<DeleteProjectGroupResult>(
+      `/project-groups/${groupId}`,
+      { method: "DELETE" },
+    );
   },
 
   async generateSessionTitle(this: ApiContext, sessionId: string) {

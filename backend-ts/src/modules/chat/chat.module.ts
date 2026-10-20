@@ -7,6 +7,8 @@ import { ChatController } from "./chat.controller";
 import { MessagesController } from "./messages.controller";
 import { SessionGroupController } from "./session-group.controller";
 import { SessionGroupService } from "./session-group.service";
+import { ProjectGroupController } from "./project-group.controller";
+import { ProjectGroupService } from "./project-group.service";
 import { SessionsController } from "./sessions.controller";
 import { WorkspaceEventsController } from "./workspace-events.controller";
 import { SessionService } from "./session.service";
@@ -41,7 +43,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Module({
   imports: [AuthModule, ToolsModule, AgentsModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule],
-  controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, WorkspaceEventsController, SessionEventsController],
+  controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, ProjectGroupController, WorkspaceEventsController, SessionEventsController],
   providers: [
     // 会话元数据存储：`sessions/_meta.db`（SQLite），会话域公开仓储，跨域消费者
     // （files/bot-gateway/sub-agent）经 import ChatModule 获取。
@@ -52,7 +54,8 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     SessionContextFactory,
     SessionService,
     SessionGroupService,
-
+    // 目录分组（按工作目录分组）：实体在启动期注册，成员关系派生
+    ProjectGroupService,
     // 会话上下文工厂与压缩引擎（依赖经全局 PersistenceModule 注入的 MESSAGE_STORE_TOKEN）
     JsonlSessionContextFactory,
     CompressionEngine,

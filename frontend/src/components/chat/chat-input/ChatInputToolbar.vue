@@ -17,8 +17,9 @@
     <RemoteDirButton :attachments="config?.attachments"
       @update:attachments="emit('config-change', { attachments: $event })" />
 
-    <!-- 分组选择按钮 -->
-    <el-button ref="groupButtonRef" class="workspace-btn mr-0.5" @click.stop="openGroupSelector" text>
+    <!-- 分组选择按钮（目录模式下隐藏：分组由工作目录决定，手工分组不生效） -->
+    <el-button v-if="sessionGroupStore.groupingMode === 'group'" ref="groupButtonRef" class="workspace-btn mr-0.5"
+      @click.stop="openGroupSelector" text>
       <span class="text-xs font-medium">
         {{ t('chat.toolbar.group', { name: selectedGroupName }) }}
       </span>
@@ -37,8 +38,8 @@
   <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el ?? null"
     :current-workspace-path="config?.workspacePath || null" :public-path="publicPath" @select="handleWorkspaceSelect" />
 
-  <!-- 分组选择弹窗 -->
-  <GdPopover :show="groupSelectorVisible" @update:show="groupSelectorVisible = $event" :width="280"
+  <!-- 分组选择弹窗（目录模式下不渲染） -->
+  <GdPopover v-if="sessionGroupStore.groupingMode === 'group'" :show="groupSelectorVisible" @update:show="groupSelectorVisible = $event" :width="280"
     :anchor-el="groupButtonRef?.$el" :max-height="400">
     <div class="flex flex-col gap-0.5">
       <div v-for="g in groupSelectorOptions" :key="g.value"

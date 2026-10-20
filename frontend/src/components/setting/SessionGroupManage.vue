@@ -1,5 +1,10 @@
 <template>
     <div class="flex flex-col gap-3">
+        <!-- 目录模式提示：手工分组在该模式下不生效 -->
+        <div v-if="sessionGroupStore.groupingMode === 'workspace'"
+            class="text-xs text-amber-600 dark:text-amber-400 px-1 leading-relaxed">
+            当前侧栏为「按目录」分组，手工分组不生效；切换到「分组」模式后可继续使用。
+        </div>
         <!-- 新建分组 -->
         <div class="flex gap-2">
             <el-input v-model="newGroupName" placeholder="输入新分组名称" maxlength="20" show-word-limit

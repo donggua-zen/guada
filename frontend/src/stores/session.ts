@@ -1,8 +1,9 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
-import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings, SessionPlanItem, PendingAsk } from '@/types/session'
+import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings, SessionPlanItem, PendingAsk, ProjectGroup } from '@/types/session'
 import type { Turn } from '@/types/message'
+import { resolveProjectBucketId } from '@/utils/projectGroupBucket'
 
 /**
  * 未分组的默认分组ID（虚拟ID，不对应后端实体）
@@ -237,6 +238,37 @@ export const useSessionStore = defineStore('session', () => {
         const key = groupId ?? UNGROUPED_ID
         const limit = loadedCounts.value.get(key)
         // 无窗口（未分页 / 初始为空的分组）时不做截断
+        return limit && limit > 0 ? list.slice(0, limit) : list
+    }
+
+    /**
+     * 按目录桶获取会话（侧栏「目录」模式；已按 lastActiveAt 降序）。
+     *
+     * 桶 id = 目录分组 id 或 `__general__`。归属键由后端下发
+     * （`session.workspaceKey` / `group.pathKey`），前端不做路径归一化。
+     * 分组清单由调用方传入，避免本 store 依赖分组 store（保持可单测）。
+     */
+    const getSessionsByProjectGroup = (
+        bucketId: string,
+        groups: readonly ProjectGroup[],
+    ): Session[] => {
+        return Array.from(sessionsMap.value.values())
+            .filter(s => isVisibleInGroup(s)
+                && resolveProjectBucketId(s, groups) === bucketId)
+            .sort((a, b) => {
+                const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
+                const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
+                return timeB - timeA
+            })
+    }
+
+    /** 按目录桶获取可见会话（受该桶已加载数量截断） */
+    const getVisibleSessionsByProjectGroup = (
+        bucketId: string,
+        groups: readonly ProjectGroup[],
+    ): Session[] => {
+        const list = getSessionsByProjectGroup(bucketId, groups)
+        const limit = loadedCounts.value.get(bucketId)
         return limit && limit > 0 ? list.slice(0, limit) : list
     }
 
@@ -837,6 +869,8 @@ export const useSessionStore = defineStore('session', () => {
         removeSession,
         getSessionsByGroup,
         getVisibleSessionsByGroup,
+        getSessionsByProjectGroup,
+        getVisibleSessionsByProjectGroup,
         getGroupTotal,
         getPinnedSessions,
         moveSession,

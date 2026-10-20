@@ -7,6 +7,7 @@ import { AccountBootstrapService } from "./account-bootstrap.service";
 import { MetadataFileBootstrapService } from "./metadata-file-bootstrap.service";
 import { KbMigrationBootstrapService } from "./kb-migration-bootstrap.service";
 import { SessionMessageMigrationBootstrapService } from "./session-message-migration-bootstrap.service";
+import { ProjectGroupBootstrapService } from "./project-group-bootstrap.service";
 
 /**
  * ⚠️ 迁移脚手架编排器（临时代码）：预计两个版本后随 Prisma/主库整体移除，
@@ -35,6 +36,7 @@ export class MigrationBootstrapService implements OnModuleInit {
     private readonly metadataBootstrap: MetadataFileBootstrapService,
     private readonly kbBootstrap: KbMigrationBootstrapService,
     private readonly sessionMessageBootstrap: SessionMessageMigrationBootstrapService,
+    private readonly projectGroupBootstrap: ProjectGroupBootstrapService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -62,6 +64,10 @@ export class MigrationBootstrapService implements OnModuleInit {
     //     （占用锚点 + 压缩括号 + meta 骨架修复）。必须先于 sessionStore.initialize()——
     //     索引预热/heal 抢先跑会给无 meta 的目录补 title=null 骨架（侧栏空行 + 丢绑定）。
     await this.step("session-messages", () => this.sessionMessageBootstrap.run());
+
+    // 4.3 目录分组一次性注册：会话行与消息骨架均已就绪后再扫 workspace_key，
+    //     只扫一次并落 marker——之后的分组仅由「新建会话时写时注册」产生。
+    await this.step("project-groups", () => this.projectGroupBootstrap.run());
 
     // 5. 门控已放行。各域 FileStore 的索引预热由其所属域模块的 onModuleInit 负责
     //    （ChatModule/BotGatewayModule/McpServersModule——它们在本模块之后初始化，

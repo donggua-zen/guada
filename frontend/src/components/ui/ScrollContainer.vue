@@ -20,12 +20,17 @@ import { useDebounceFn } from "@vueuse/core";
 import { useScrollAnchor } from "@/composables/useScrollAnchor";
 
 // Props 类型化
-const props = defineProps<{
+// autoScroll 显式默认为 undefined，而不是 Boolean prop 的隐式 false：
+// 下方用 `=== undefined` 区分「未接入跟随状态机的静态列表」与「显式传 false（用户已上滚）」。
+// 缺省时不写 default，Vue 会把未传入的 Boolean prop 转成 false，静态列表也会被贴底逻辑接管。
+const props = withDefaults(defineProps<{
     autoScroll?: boolean;
     scrollThreshold?: number;
     smoothScroll?: boolean;
     enableScrollButton?: boolean;
-}>();
+}>(), {
+    autoScroll: undefined,
+});
 
 // Emits 类型化
 const emit = defineEmits<{

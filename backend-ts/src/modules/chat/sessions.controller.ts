@@ -60,7 +60,16 @@ export class SessionsController {
     @Query("groupId") groupId: string | undefined,
     @Query("keyword") keyword: string | undefined,
     @Query("includeArchived") includeArchived: string | undefined,
+    @Query("projectGroupId") projectGroupId: string | undefined,
   ) {
+    // 目录模式分页：按桶（分组 id 或 __general__）查询，与手工分组参数互斥
+    if (projectGroupId !== undefined && projectGroupId !== "") {
+      return this.sessionService.getSessionsByProjectGroup(
+        projectGroupId,
+        Number(skip),
+        Number(limit),
+      );
+    }
     // groupId 特殊值处理："null"字符串表示查询未分组会话
     const parsedGroupId = groupId === "null" ? null : groupId;
     return this.sessionService.getSessions(
@@ -109,7 +118,12 @@ export class SessionsController {
   @Get("sessions/sidebar")
   async getSidebarSessions(
     @Query("limit") limit: string = "10",
+    @Query("groupBy") groupBy: string | undefined,
   ) {
+    // 目录模式：按 project_groups + 虚拟「通用」桶返回；缺省保持手工分组行为
+    if (groupBy === "workspace") {
+      return this.sessionService.getSidebarSessionsByProject(Number(limit));
+    }
     return this.sessionService.getSidebarSessions(Number(limit));
   }
 

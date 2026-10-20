@@ -7,6 +7,7 @@ import {
   MetadataBootstrapGate,
 } from "../../common/database/metadata-bootstrap.gate";
 import { sessionRowToMeta } from "../../common/database/bootstrap/session-meta-mapping";
+import { normalizeWorkspaceKey } from "../../common/utils/workspace-key.util";
 import {
   META_DB_FILE,
   SESSION_ID_PREFIX,
@@ -322,9 +323,73 @@ describe("SessionMetaStore", () => {
       probe.close();
       expect(cols).toContain("data");
       expect(cols).not.toContain("settings");
-      // v4：pinned 列（置顶）由迁移补齐；v5：model_usage 用量表
+      // v4：pinned 列（置顶）由迁移补齐；v5：model_usage 用量表；v6：workspace_key 派生列
       expect(cols).toContain("pinned");
-      expect(version).toBe(5);
+      expect(cols).toContain("workspace_key");
+      expect(version).toBe(6);
+    });
+  });
+
+  describe("workspace_key 派生列（v6 迁移）", () => {
+    // win32 用 `/` 与 `\` 两种写法（真实库场景）；POSIX 用末尾分隔符
+    const isWin = process.platform === "win32";
+    const pathA = isWin ? "D:/AI/work/public" : "/ai/work/public";
+    const pathB = isWin ? "D:\\AI\\work\\public" : "/ai/work/public/";
+
+    /** 手建 v1 物理库（与上方 buildLegacyDb 同构，此处只需带 workspace_path 的行） */
+    const buildLegacyDbWithWorkspaces = (
+      rows: { id: string; workspacePath: string }[],
+    ) => {
+      for (const suffix of ["", "-wal", "-shm"]) {
+        fs.rmSync(`${dbPath()}${suffix}`, { force: true });
+      }
+      const db = new Database(dbPath());
+      try {
+        db.exec(`
+        CREATE TABLE sessions (id TEXT PRIMARY KEY, parent_id TEXT, root_id TEXT, session_type TEXT NOT NULL DEFAULT 'web', title TEXT, avatar_url TEXT, description TEXT, model_id TEXT, agent_id TEXT, group_id TEXT, settings TEXT, workspace_path TEXT, bot_id TEXT, platform TEXT, external_id TEXT, archived INTEGER NOT NULL DEFAULT 0, closed_at TEXT, close_reason TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_active_at TEXT);
+        CREATE TABLE session_groups (id TEXT PRIMARY KEY, name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE _bootstrap (key TEXT PRIMARY KEY, value TEXT);
+      `);
+        const insert = db.prepare(
+          `INSERT INTO sessions (id, session_type, title, workspace_path, created_at, updated_at) VALUES (?, 'web', ?, ?, ?, ?)`,
+        );
+        for (const row of rows) {
+          insert.run(
+            row.id,
+            row.id,
+            row.workspacePath,
+            "2026-01-01T00:00:00.000Z",
+            "2026-01-01T00:00:00.000Z",
+          );
+        }
+        db.pragma(`user_version = 1`);
+      } finally {
+        db.close();
+      }
+      for (const row of rows) {
+        fs.mkdirSync(sessionDir(row.id), { recursive: true });
+      }
+    };
+
+    it("旧库补列并回填，同目录不同写法归一为同键", async () => {
+      store.onModuleDestroy();
+      buildLegacyDbWithWorkspaces([
+        { id: "w1", workspacePath: pathA },
+        { id: "w2", workspacePath: pathB },
+      ]);
+
+      store = newStore();
+      await store.initialize();
+
+      const probe = rawDb();
+      const rows = probe
+        .prepare(`SELECT id, workspace_key FROM sessions WHERE workspace_path IS NOT NULL ORDER BY id`)
+        .all() as { id: string; workspace_key: string | null }[];
+      probe.close();
+
+      expect(rows).toHaveLength(2);
+      expect(rows[0]!.workspace_key).toBeTruthy();
+      expect(rows[0]!.workspace_key).toBe(rows[1]!.workspace_key);
     });
   });
 
@@ -540,6 +605,108 @@ describe("SessionMetaStore", () => {
       } finally {
         db.close();
       }
+    });
+  });
+
+  describe("目录分组（project_groups）", () => {
+    const projectPath = path.resolve("/proj/alpha");
+    const projectPathKey = normalizeWorkspaceKey(projectPath);
+
+    it("注册幂等：归一化后同键原样返回，且不改名", async () => {
+      await store.initialize();
+      const first = await store.ensureProjectGroup({
+        path: projectPath,
+        prepend: false,
+      });
+      expect(first.pathKey).toBe(projectPathKey);
+      expect(first.name).toBe("alpha");
+      expect(first.nameOverridden).toBe(false);
+
+      // 末尾分隔符写法应命中同一分组
+      const second = await store.ensureProjectGroup({
+        path: `${projectPath}${path.sep}`,
+        prepend: false,
+      });
+      expect(second.id).toBe(first.id);
+      expect(await store.listProjectGroups()).toHaveLength(1);
+
+      // 改名后再次注册不得覆盖（bootstrap 语义）
+      await store.renameProjectGroup(first.id, "自定义名字");
+      const third = await store.ensureProjectGroup({ path: projectPath, prepend: false });
+      expect(third.id).toBe(first.id);
+      expect(third.name).toBe("自定义名字");
+      expect(third.nameOverridden).toBe(true);
+    });
+
+    it("新建分组前置：position 递增向前，列表顺序稳定", async () => {
+      await store.initialize();
+      const a = await store.ensureProjectGroup({ path: path.resolve("/proj/a") });
+      const b = await store.ensureProjectGroup({ path: path.resolve("/proj/b") });
+      const c = await store.ensureProjectGroup({ path: path.resolve("/proj/c") });
+      expect((await store.listProjectGroups()).map((g) => g.id)).toEqual([c.id, b.id, a.id]);
+    });
+
+    it("拖拽排序写 dense position，非法 id 集合拒绝", async () => {
+      await store.initialize();
+      const a = await store.ensureProjectGroup({ path: path.resolve("/proj/a") });
+      const b = await store.ensureProjectGroup({ path: path.resolve("/proj/b") });
+
+      const reordered = await store.reorderProjectGroups([a.id, b.id]);
+      expect(reordered.map((g) => g.id)).toEqual([a.id, b.id]);
+      expect(reordered.map((g) => g.position)).toEqual([0, 1]);
+
+      await expect(store.reorderProjectGroups([a.id])).rejects.toThrow(/id 集合/);
+      await expect(store.reorderProjectGroups([a.id, "pg-missing"])).rejects.toThrow(/id 集合/);
+      await expect(store.reorderProjectGroups([a.id, a.id])).rejects.toThrow(/id 集合/);
+    });
+
+    it("取消注册只删分组行，会话不受影响并回落到通用桶", async () => {
+      await store.initialize();
+      const created = await store.create({
+        id: "p1",
+        title: "项目会话",
+        workspacePath: projectPath,
+      });
+      expect(created.workspaceKey).toBe(projectPathKey);
+
+      const group = await store.ensureProjectGroup({ path: projectPath, prepend: false });
+      expect(store.query({ workspaceKey: projectPathKey }).map((m) => m.id)).toEqual(["p1"]);
+      expect(store.query({ workspaceKey: null }).map((m) => m.id)).toEqual([]);
+
+      await store.deleteProjectGroup(group.id);
+
+      expect(store.getMeta("p1")).toBeTruthy(); // 会话行仍在，未被回写
+      expect(await store.listProjectGroups()).toEqual([]);
+      // 未注册后，该目录的会话落入通用桶
+      expect(store.query({ workspaceKey: null }).map((m) => m.id)).toEqual(["p1"]);
+    });
+
+    it("workspaceKey tri-state：null = 空路径 + 未注册目录，undefined = 不过滤", async () => {
+      await store.initialize();
+      await store.create({ id: "registered", workspacePath: projectPath });
+      await store.create({ id: "unregistered", workspacePath: path.resolve("/proj/beta") });
+      await store.create({ id: "auto", workspacePath: path.resolve("/work/WORK-2026-07-28-XvZL") });
+      await store.create({ id: "nopath" });
+
+      await store.ensureProjectGroup({ path: projectPath, prepend: false });
+
+      expect(store.query({ workspaceKey: projectPathKey }).map((m) => m.id)).toEqual(["registered"]);
+      expect(
+        store.query({ workspaceKey: null }).map((m) => m.id).sort(),
+      ).toEqual(["auto", "nopath", "unregistered"]);
+      expect(store.query({}).length).toBe(4);
+    });
+
+    it("excludeSessionTypes 生效（目录侧栏排除 bot/sub_agent）", async () => {
+      await store.initialize();
+      await store.create({ id: "w", sessionType: "web", workspacePath: projectPath });
+      await store.create({ id: "b", sessionType: "bot", workspacePath: projectPath });
+      await store.create({ id: "s", sessionType: "sub_agent", workspacePath: projectPath });
+
+      const ids = store
+        .query({ workspaceKey: projectPathKey, excludeSessionTypes: ["bot", "sub_agent"] })
+        .map((m) => m.id);
+      expect(ids).toEqual(["w"]);
     });
   });
 });

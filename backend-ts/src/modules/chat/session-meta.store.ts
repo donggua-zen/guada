@@ -14,6 +14,10 @@ import {
 } from "../../common/database/metadata-bootstrap.gate";
 import { mintId } from "../../common/persistence/file-store-kit";
 import { ID_PREFIXES } from "../../common/utils/id.util";
+import {
+  normalizeWorkspaceKey,
+  workspaceBasename,
+} from "../../common/utils/workspace-key.util";
 
 /**
  * 会话元数据存储（`<sessions根>/_meta.db`）
@@ -45,9 +49,16 @@ import { ID_PREFIXES } from "../../common/utils/id.util";
 
 export const META_DB_FILE = "_meta.db";
 /** 当前 schema 版本；结构调整 +1 并在 migrate() 追加一步 */
-export const SESSION_META_DB_VERSION = 5;
+export const SESSION_META_DB_VERSION = 6;
 /** _bootstrap 表内的一次性转换完成标记键（真值在库内：库删则自动从主库重转） */
 export const META_DB_MIGRATED_KEY = "migrated_from_db_at";
+/**
+ * 目录分组一次性注册标记（库内键）。删库即视为未注册，下次启动自动重扫历史
+ * `workspace_key`；已改名的分组不会被覆盖（INSERT OR IGNORE）。
+ */
+export const PROJECT_GROUPS_BOOTSTRAPPED_KEY = "project_groups_bootstrapped_at";
+/** 侧栏目录模式下的虚拟「通用」桶 id（无实体行；跨前后端协议常量） */
+export const GENERAL_PROJECT_GROUP_ID = "__general__";
 
 /**
  * 会话元信息（= 原 session 表行，字段名保持一致便于调用方零改动）
@@ -77,6 +88,11 @@ export interface SessionMeta {
   platform: string | null;
   externalId: string | null;
   workspacePath: string | null;
+  /**
+   * 工作目录比较键（`normalizeWorkspaceKey` 派生列，落库供 GROUP BY / 等值查询）。
+   * 随接口原样下发，前端按它匹配目录分组，避免两端各自归一化产生漂移。
+   */
+  workspaceKey: string | null;
   parentId: string | null;
   /** 顶层祖先会话 id（主会话自身为 null；子会话 = 顶层主会话 id） */
   rootId: string | null;
@@ -99,6 +115,26 @@ export interface SessionGroupMeta {
 }
 
 /**
+ * 目录分组（`project_groups` 表行）。
+ *
+ * 身份用 `id`（与路径解耦）而非路径：用户重命名/移动目录后，分组名与排序
+ * 不会变成孤儿；成员关系仍是派生——`sessions.workspace_key = path_key`。
+ */
+export interface ProjectGroupMeta {
+  id: string;
+  /** 展示用原始路径（首次注册时的写法） */
+  path: string;
+  /** 归一化比较键（`normalizeWorkspaceKey`），UNIQUE */
+  pathKey: string;
+  name: string;
+  /** 用户改过名（bootstrap 永不覆盖） */
+  nameOverridden: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * 结构化查询过滤（tri-state 语义）：
  * - `groupId`：null = 仅未分组，undefined = 不过滤
  * - `archived`：undefined = 不过滤
@@ -106,9 +142,18 @@ export interface SessionGroupMeta {
  */
 export interface SessionQueryFilter {
   sessionType?: string;
+  /** 排除的会话类型（目录分组侧栏排除 bot / sub_agent） */
+  excludeSessionTypes?: string[];
   archived?: boolean;
   pinned?: boolean;
   groupId?: string | null;
+  /**
+   * 工作目录比较键（tri-state）：
+   * - string = 仅该目录
+   * - null   = 「通用」桶（空路径 + 未注册目录 + 自动生成目录 + public）
+   * - undefined = 不过滤
+   */
+  workspaceKey?: string | null;
   /** 标题子串（大小写不敏感） */
   keyword?: string;
   parentId?: string;
@@ -141,7 +186,7 @@ const SORT_SQL: Record<SessionSortKey, string> = {
 
 export const META_COLUMNS =
   "id, parent_id, root_id, session_type, title, avatar_url, description, " +
-  "model_id, agent_id, group_id, data, workspace_path, bot_id, platform, " +
+  "model_id, agent_id, group_id, data, workspace_path, workspace_key, bot_id, platform, " +
   "external_id, archived, pinned, closed_at, close_reason, created_at, updated_at, last_active_at";
 
 const V1_DDL = `
@@ -243,9 +288,26 @@ CREATE INDEX IF NOT EXISTS idx_model_usage_source
   ON model_usage(source);
 `;
 
-// ============ 行 ↔ 领域对象 ============
+/**
+ * v6：目录分组。成员关系是派生的（`sessions.workspace_key = path_key`），
+ * 因此这里没有成员表，删分组也不需要回写会话——会话自动回落到「通用」桶。
+ * 全部 IF NOT EXISTS，无条件执行（对齐 USAGE_DDL 的热重载自愈策略）。
+ */
+const PROJECT_GROUP_DDL = `
+CREATE TABLE IF NOT EXISTS project_groups (
+  id TEXT PRIMARY KEY,
+  path TEXT NOT NULL,
+  path_key TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  name_overridden INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_project_groups_position ON project_groups(position);
+`;
 
-/** 外层用 Date 形状（对齐旧 Prisma 返回，避免调用方处理字符串） */
+// ============ 行 ↔ 领域对象 ============/** 外层用 Date 形状（对齐旧 Prisma 返回，避免调用方处理字符串） */
 export function toRow(meta: SessionMeta): Record<string, any> {
   return {
     ...meta,
@@ -313,6 +375,12 @@ export function rowToMeta(r: any): SessionMeta {
     settings: dataObj?.settings ?? null,
     data: dataObj,
     workspacePath: r.workspace_path ?? null,
+    // 派生列缺失时（迁移中断/旧行）就地兜底计算，保证读取永远有可用比较键
+    workspaceKey:
+      r.workspace_key ??
+      (typeof r.workspace_path === "string" && r.workspace_path
+        ? normalizeWorkspaceKey(r.workspace_path)
+        : null),
     botId: r.bot_id ?? null,
     platform: r.platform ?? null,
     externalId: r.external_id ?? null,
@@ -328,6 +396,19 @@ export function rowToMeta(r: any): SessionMeta {
 
 function escapeLike(needle: string): string {
   return needle.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+function projectGroupFromRow(r: any): ProjectGroupMeta {
+  return {
+    id: r.id,
+    path: r.path,
+    pathKey: r.path_key,
+    name: r.name,
+    nameOverridden: r.name_overridden === 1,
+    position: r.position,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
 }
 
 /**
@@ -395,7 +476,43 @@ export function migrateMetaDbSchema(db: Database.Database): void {
   if (version < 4) migrateToPinnedColumn(db);
   // v5 用量表：全部 IF NOT EXISTS，无条件执行，顺带修复热重载误标记。
   db.exec(USAGE_DDL);
+  // v6 目录分组：建表、派生列与索引全部按存在性/IF NOT EXISTS 幂等执行。
+  db.exec(PROJECT_GROUP_DDL);
+  migrateToWorkspaceKeyColumn(db);
   db.pragma(`user_version = ${SESSION_META_DB_VERSION}`);
+}
+
+/**
+ * v6：sessions 增 `workspace_key` 派生列（工作目录比较键）+ 索引。
+ *
+ * 只在列缺失时回填一次（历史数据里同一目录存在 `/` 与 `\` 两种写法，
+ * 必须逐行归一）；索引每次 `IF NOT EXISTS` 补齐。按列存在性判断而非版本号
+ * 门控，原因见上方 v2/v3 教训。
+ */
+function migrateToWorkspaceKeyColumn(db: Database.Database): void {
+  const tx = db.transaction(() => {
+    const cols = new Set(
+      (db.pragma("table_info(sessions)") as { name: string }[]).map((c) => c.name),
+    );
+    if (!cols.has("workspace_key")) {
+      db.exec(`ALTER TABLE sessions ADD COLUMN workspace_key TEXT`);
+      const rows = db
+        .prepare(
+          `SELECT id, workspace_path FROM sessions WHERE workspace_path IS NOT NULL`,
+        )
+        .all() as { id: string; workspace_path: string }[];
+      const update = db.prepare(
+        `UPDATE sessions SET workspace_key = ? WHERE id = ?`,
+      );
+      for (const row of rows) {
+        update.run(normalizeWorkspaceKey(row.workspace_path), row.id);
+      }
+    }
+    db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_sessions_workspace_key ON sessions(workspace_key)`,
+    );
+  });
+  tx();
 }
 
 /**
@@ -449,7 +566,7 @@ function migrateToDataColumn(db: Database.Database): void {
 export function upsertMetaRow(db: Database.Database, meta: SessionMeta): void {
   db.prepare(
     `INSERT OR REPLACE INTO sessions (${META_COLUMNS}) VALUES ` +
-      `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     meta.id,
     meta.parentId,
@@ -463,6 +580,8 @@ export function upsertMetaRow(db: Database.Database, meta: SessionMeta): void {
     meta.groupId,
     buildDataJson(meta),
     meta.workspacePath,
+    meta.workspaceKey ??
+      (meta.workspacePath ? normalizeWorkspaceKey(meta.workspacePath) : null),
     meta.botId,
     meta.platform,
     meta.externalId,
@@ -590,6 +709,7 @@ export class SessionMetaStore implements OnModuleDestroy {
     this.open();
     await this.healOrphanRows();
     this.removeGhostRows();
+    this.backfillWorkspaceKeys();
   }
 
   onModuleDestroy(): void {
@@ -602,7 +722,7 @@ export class SessionMetaStore implements OnModuleDestroy {
     this.db = db;
     this.upsertStmt = db.prepare(
       `INSERT OR REPLACE INTO sessions (${META_COLUMNS}) VALUES ` +
-        `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     this.deleteRowStmt = db.prepare(`DELETE FROM sessions WHERE id = ?`);
     this.touchStmt = db.prepare(
@@ -613,6 +733,30 @@ export class SessionMetaStore implements OnModuleDestroy {
   private sessionDir(id: string): string {
     assertValidId(id);
     return path.join(this.sessionsRoot, id);
+  }
+
+  /**
+   * 派生键自愈：补齐任何漏回填的 `workspace_key`（转换中断 / 迁移中途退出 /
+   * 旧行手改）。正常情况下零行命中，代价仅一次索引扫描。
+   */
+  private backfillWorkspaceKeys(): void {
+    if (!this.db) return;
+    const rows = this.db
+      .prepare(
+        `SELECT id, workspace_path FROM sessions
+         WHERE workspace_path IS NOT NULL AND workspace_key IS NULL`,
+      )
+      .all() as { id: string; workspace_path: string }[];
+    if (rows.length === 0) return;
+    const update = this.db.prepare(
+      `UPDATE sessions SET workspace_key = ? WHERE id = ?`,
+    );
+    const tx = this.db.transaction(() => {
+      for (const row of rows) {
+        update.run(normalizeWorkspaceKey(row.workspace_path), row.id);
+      }
+    });
+    tx();
   }
 
   // ============ 启动收敛（孤儿/幽灵） ============
@@ -665,6 +809,7 @@ export class SessionMetaStore implements OnModuleDestroy {
         platform: null,
         externalId: null,
         workspacePath: null,
+        workspaceKey: null,
         parentId: null,
         rootId: null,
         closedAt: null,
@@ -779,6 +924,12 @@ export class SessionMetaStore implements OnModuleDestroy {
       where.push("session_type = ?");
       params.push(filter.sessionType);
     }
+    if (filter.excludeSessionTypes?.length) {
+      where.push(
+        `session_type NOT IN (${filter.excludeSessionTypes.map(() => "?").join(", ")})`,
+      );
+      params.push(...filter.excludeSessionTypes);
+    }
     if (filter.archived !== undefined) {
       where.push("archived = ?");
       params.push(filter.archived ? 1 : 0);
@@ -793,6 +944,17 @@ export class SessionMetaStore implements OnModuleDestroy {
       } else {
         where.push("group_id = ?");
         params.push(filter.groupId);
+      }
+    }
+    if (filter.workspaceKey !== undefined) {
+      if (filter.workspaceKey === null) {
+        // 「通用」桶：空路径 + 未注册目录（自动生成目录与 public 从不注册，天然落这里）
+        where.push(
+          "(workspace_key IS NULL OR workspace_key NOT IN (SELECT path_key FROM project_groups))",
+        );
+      } else {
+        where.push("workspace_key = ?");
+        params.push(filter.workspaceKey);
       }
     }
     if (filter.parentId !== undefined) {
@@ -921,6 +1083,9 @@ export class SessionMetaStore implements OnModuleDestroy {
       platform: data.platform ?? null,
       externalId: data.externalId ?? null,
       workspacePath: data.workspacePath ?? null,
+      workspaceKey: data.workspacePath
+        ? normalizeWorkspaceKey(String(data.workspacePath))
+        : null,
       parentId,
       rootId,
       closedAt: toISO(data.closedAt),
@@ -963,6 +1128,10 @@ export class SessionMetaStore implements OnModuleDestroy {
       }
     }
     merged.updatedAt = new Date().toISOString();
+    // workspacePath 一旦变更，派生键必须同步重算（当前接口不允许改路径，属防御分支）
+    merged.workspaceKey = merged.workspacePath
+      ? normalizeWorkspaceKey(merged.workspacePath)
+      : null;
     this.upsertMeta(merged);
     return toRow(merged);
   }
@@ -1135,6 +1304,172 @@ export class SessionMetaStore implements OnModuleDestroy {
     return all.filter((g) => map.has(g.id));
   }
 
+  // ============ 目录分组（project_groups 表） ============
+  //
+  // 成员关系是派生的：`sessions.workspace_key = project_groups.path_key`。
+  // 因此这里没有成员表，删分组也不需要回写会话——会话自动回落到「通用」桶。
+
+  /** 目录分组列表（按 position 升序；tiebreak 用 id 保证翻页/渲染稳定） */
+  async listProjectGroups(): Promise<ProjectGroupMeta[]> {
+    await this.initialize();
+    if (!this.db) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT id, path, path_key, name, name_overridden, position, created_at, updated_at
+         FROM project_groups ORDER BY position ASC, id ASC`,
+      )
+      .all() as any[];
+    return rows.map(projectGroupFromRow);
+  }
+
+  async findProjectGroup(id: string): Promise<ProjectGroupMeta | undefined> {
+    await this.initialize();
+    if (!this.db) return undefined;
+    const row = this.db
+      .prepare(
+        `SELECT id, path, path_key, name, name_overridden, position, created_at, updated_at
+         FROM project_groups WHERE id = ?`,
+      )
+      .get(id) as any;
+    return row ? projectGroupFromRow(row) : undefined;
+  }
+
+  async findProjectGroupByKey(
+    pathKey: string,
+  ): Promise<ProjectGroupMeta | undefined> {
+    await this.initialize();
+    if (!this.db) return undefined;
+    const row = this.db
+      .prepare(
+        `SELECT id, path, path_key, name, name_overridden, position, created_at, updated_at
+         FROM project_groups WHERE path_key = ?`,
+      )
+      .get(pathKey) as any;
+    return row ? projectGroupFromRow(row) : undefined;
+  }
+
+  /**
+   * 注册目录（幂等）：同 `path_key` 已存在时原样返回，**不覆盖**用户改过的名字。
+   *
+   * position 缺省：`prepend !== false` 时插到最前（新建会话/手动注册），
+   * 否则排到末尾（bootstrap 会显式传 position）。
+   */
+  async ensureProjectGroup(data: {
+    path: string;
+    pathKey?: string;
+    name?: string;
+    position?: number;
+    prepend?: boolean;
+  }): Promise<ProjectGroupMeta> {
+    await this.initialize();
+    if (!this.db) {
+      throw new Error("SessionMetaStore 未初始化，无法注册目录分组");
+    }
+    const pathKey = data.pathKey ?? normalizeWorkspaceKey(data.path);
+    const existing = await this.findProjectGroupByKey(pathKey);
+    if (existing) return existing;
+
+    let position = data.position;
+    if (position === undefined) {
+      if (data.prepend === false) {
+        const row = this.db
+          .prepare(`SELECT MAX(position) AS max FROM project_groups`)
+          .get() as { max: number | null };
+        position = (row.max ?? 0) + 1;
+      } else {
+        const row = this.db
+          .prepare(`SELECT MIN(position) AS min FROM project_groups`)
+          .get() as { min: number | null };
+        position = (row.min ?? 1) - 1;
+      }
+    }
+
+    const now = new Date().toISOString();
+    const group: ProjectGroupMeta = {
+      id: mintId(ID_PREFIXES.projectGroup),
+      path: data.path,
+      pathKey,
+      name: data.name?.trim() || workspaceBasename(data.path) || data.path,
+      nameOverridden: false,
+      position,
+      createdAt: now,
+      updatedAt: now,
+    };
+    // OR IGNORE 兜住并发注册；零行变更说明已被抢先写入，读回既有行
+    const result = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO project_groups
+         (id, path, path_key, name, name_overridden, position, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+      )
+      .run(
+        group.id,
+        group.path,
+        group.pathKey,
+        group.name,
+        group.position,
+        group.createdAt,
+        group.updatedAt,
+      );
+    if (result.changes === 0) {
+      const raced = await this.findProjectGroupByKey(pathKey);
+      if (raced) return raced;
+    }
+    return group;
+  }
+
+  /** 重命名（写 name 并置 name_overridden=1；bootstrap 永不覆盖已改名分组） */
+  async renameProjectGroup(
+    id: string,
+    name: string,
+  ): Promise<ProjectGroupMeta | undefined> {
+    await this.initialize();
+    if (!this.db) return undefined;
+    const trimmed = name.trim();
+    if (!trimmed) return undefined;
+    const result = this.db
+      .prepare(
+        `UPDATE project_groups SET name = ?, name_overridden = 1, updated_at = ? WHERE id = ?`,
+      )
+      .run(trimmed, new Date().toISOString(), id);
+    if (result.changes === 0) return undefined;
+    return this.findProjectGroup(id);
+  }
+
+  /** 拖拽排序：要求传入完整 id 集合（缺项/未知项直接拒绝，避免部分写入） */
+  async reorderProjectGroups(ids: string[]): Promise<ProjectGroupMeta[]> {
+    await this.initialize();
+    if (!this.db) return [];
+    const all = await this.listProjectGroups();
+    const known = new Set(all.map((g) => g.id));
+    if (
+      ids.length !== known.size ||
+      new Set(ids).size !== ids.length ||
+      ids.some((id) => !known.has(id))
+    ) {
+      throw new Error("目录分组排序：id 集合不完整或包含未知 id");
+    }
+    const now = new Date().toISOString();
+    const tx = this.db.transaction(() => {
+      const update = this.db!.prepare(
+        `UPDATE project_groups SET position = ?, updated_at = ? WHERE id = ?`,
+      );
+      ids.forEach((id, index) => update.run(index, now, id));
+    });
+    tx();
+    return this.listProjectGroups();
+  }
+
+  /**
+   * 取消注册：只删分组行，**不修改任何会话**。
+   * 成员关系派生自 path_key，删行后该目录的会话自动回落到「通用」桶。
+   */
+  async deleteProjectGroup(id: string): Promise<{ id: string }> {
+    await this.initialize();
+    this.db?.prepare(`DELETE FROM project_groups WHERE id = ?`).run(id);
+    return { id };
+  }
+
   // ============ 内部 ============
 
   private upsertMeta(meta: SessionMeta): void {
@@ -1151,6 +1486,8 @@ export class SessionMetaStore implements OnModuleDestroy {
       meta.groupId,
       buildDataJson(meta),
       meta.workspacePath,
+      meta.workspaceKey ??
+        (meta.workspacePath ? normalizeWorkspaceKey(meta.workspacePath) : null),
       meta.botId,
       meta.platform,
       meta.externalId,

@@ -411,3 +411,81 @@ describe("sessionStore 分组分页窗口", () => {
     expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(3);
   });
 });
+
+/**
+ * 目录分组视图（侧栏「目录」模式）：
+ * 归属键完全来自后端下发的 workspaceKey / pathKey，前端不做路径归一化；
+ * 未匹配（空键、未注册目录）统一落虚拟「通用」桶。
+ */
+describe("sessionStore 目录分组视图", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  const mk = (id: string, over: Record<string, any> = {}) =>
+    ({
+      id,
+      title: id,
+      sessionType: "web",
+      lastActiveAt: "2026-01-01T00:00:00.000Z",
+      ...over,
+    }) as any;
+
+  const groups = [
+    {
+      id: "pg-a",
+      name: "alpha",
+      path: "D:\AI\alpha",
+      pathKey: "d:/ai/alpha",
+      sortOrder: 0,
+      isOverridden: false,
+      kind: "workspace",
+    },
+    {
+      id: "__general__",
+      name: "",
+      path: null,
+      pathKey: null,
+      sortOrder: Number.MAX_SAFE_INTEGER,
+      isOverridden: false,
+      kind: "general",
+    },
+  ] as any;
+
+  it("按 pathKey 精确分桶，按 lastActiveAt 降序，排除置顶/归档/子代理", () => {
+    const store = useSessionStore();
+    store.setSession(mk("a-old", { workspaceKey: "d:/ai/alpha", lastActiveAt: "2026-01-01T00:00:00.000Z" }));
+    store.setSession(mk("a-new", { workspaceKey: "d:/ai/alpha", lastActiveAt: "2026-01-05T00:00:00.000Z" }));
+    store.setSession(mk("a-pinned", { workspaceKey: "d:/ai/alpha", pinned: true }));
+    store.setSession(mk("a-archived", { workspaceKey: "d:/ai/alpha", archived: true }));
+    store.setSession(mk("a-sub", { workspaceKey: "d:/ai/alpha", sessionType: "sub_agent" }));
+
+    expect(store.getSessionsByProjectGroup("pg-a", groups).map((s) => s.id)).toEqual([
+      "a-new",
+      "a-old",
+    ]);
+  });
+
+  it("空键 / 未注册目录 / 大小写不符一律落「通用」", () => {
+    const store = useSessionStore();
+    store.setSession(mk("no-key"));
+    store.setSession(mk("unregistered", { workspaceKey: "d:/ai/other" }));
+    store.setSession(mk("wrong-case", { workspaceKey: "D:/AI/alpha" }));
+
+    expect(
+      store.getSessionsByProjectGroup("__general__", groups).map((s) => s.id).sort(),
+    ).toEqual(["no-key", "unregistered", "wrong-case"]);
+  });
+
+  it("可见窗口按目录桶 id 截断", () => {
+    const store = useSessionStore();
+    store.setSession(mk("a1", { workspaceKey: "d:/ai/alpha", lastActiveAt: "2026-01-02T00:00:00.000Z" }));
+    store.setSession(mk("a2", { workspaceKey: "d:/ai/alpha", lastActiveAt: "2026-01-01T00:00:00.000Z" }));
+
+    expect(store.getVisibleSessionsByProjectGroup("pg-a", groups)).toHaveLength(2);
+    store.setLoadedCount("pg-a", 1);
+    expect(store.getVisibleSessionsByProjectGroup("pg-a", groups).map((s) => s.id)).toEqual([
+      "a1",
+    ]);
+  });
+});

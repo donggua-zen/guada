@@ -23,6 +23,33 @@
     </div>
 
 
+    <!-- 分组模式切换：普通分组 / 按工作目录；右侧快捷操作默认隐藏，hover 本行时显示 -->
+    <div class="px-2 pb-1 flex items-center gap-1 group/mode-row">
+      <SegmentedToggle :model-value="sessionGroupStore.groupingMode" :options="groupingModeOptions"
+        variant="ghost" class="flex-1" @update:model-value="handleGroupingModeChange" />
+      <div
+        class="flex items-center gap-1 shrink-0 opacity-0 pointer-events-none transition-opacity duration-200 group-hover/mode-row:opacity-100 group-hover/mode-row:pointer-events-auto">
+        <!-- 全部展开 / 全部收起 -->
+        <GdTooltip :content="toggleAllGroupsTooltip" placement="bottom">
+          <div class="session-action-trigger hover:bg-(--gd-color-sidebar-bg-hover)" @click="toggleAllGroups">
+            <el-icon class="w-4 h-4">
+              <ArrowMinimize16Regular v-if="allGroupsExpanded" />
+              <ArrowMaximize16Regular v-else />
+            </el-icon>
+          </div>
+        </GdTooltip>
+        <!-- 新建分组 / 项目 -->
+        <GdTooltip :content="createGroupTooltip" placement="bottom">
+          <div class="session-action-trigger hover:bg-(--gd-color-sidebar-bg-hover)"
+            @click="handleCreateGroupShortcut">
+            <el-icon class="w-4 h-4">
+              <FolderAdd16Regular />
+            </el-icon>
+          </div>
+        </GdTooltip>
+      </div>
+    </div>
+
     <!-- 会话列表区域 -->
     <div class="flex-1 overflow-hidden py-1">
       <ScrollContainer ref="scrollContainer" class="h-full max-h-full">
@@ -30,8 +57,11 @@
         <div v-for="group in displayGroups" :key="group.id" class="mb-1">
           <!-- 分组标题栏 -->
           <div
-            class="group-header flex items-center justify-between pl-0.5 pr-1 py-1 ml-1 mr-0.5 rounded-md cursor-pointer transition-colors duration-200 select-none group text-neutral-600 dark:text-neutral-200"
-            @click="toggleGroupExpand(group.id)" @contextmenu.prevent="handleGroupContextMenu($event, group)">
+            class="group-header flex items-center justify-between pl-1.5 pr-1 py-1 ml-0 mr-0.5 rounded-md cursor-pointer transition-colors duration-200 select-none group"
+            :draggable="isGroupDraggable(group)"
+            @dragstart="onGroupDragStart($event, group)" @dragover.prevent="onGroupDragOver($event, group)"
+            @drop.prevent="onGroupDrop($event, group)" @dragend="onGroupDragEnd"
+            @click="toggleGroupExpand(group.id)">
             <div class="flex items-center gap-1">
               <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
                 <!-- 置顶分区与普通分组同一套"图标 ↔ 箭头"hover 互换约定：
@@ -46,17 +76,62 @@
                 <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200 opacity-0 group-hover:opacity-100"
                   :class="isGroupExpanded(group.id) ? '' : '-rotate-90'" />
               </span>
-              <span class="text-sm font-medium">{{ group.name }}</span>
+              <GdTooltip v-if="group.kind === 'workspace' && group.path" :content="group.path" placement="bottom">
+                <span class="text-sm font-medium">{{ group.name }}</span>
+              </GdTooltip>
+              <span v-else class="text-sm font-medium">{{ getGroupDisplayName(group) }}</span>
             </div>
-            <div class="flex items-center gap-1">
-              <!-- 新建会话按钮（始终显示；置顶分区无此操作） -->
+            <div
+              class="flex items-center gap-1 opacity-0 pointer-events-none transition-opacity duration-200 group-hover:opacity-100 group-hover:pointer-events-auto">
+              <!-- 分组操作（hover 显示省略号；置顶 / 未分组 / 虚拟「通用」桶无分组级操作） -->
+              <DropdownMenu v-if="hasGroupActions(group)"
+                @command="(cmd: string) => handleGroupMenuSelect(cmd, group)">
+                <div class="session-action-trigger">
+                  <el-icon class="w-4 h-4">
+                    <MoreHorizontal20Filled />
+                  </el-icon>
+                </div>
+                <template #dropdown>
+                  <!-- 目录模式：项目的编辑 / 归档 / 删除 -->
+                  <template v-if="sessionGroupStore.groupingMode === 'workspace'">
+                    <DropdownMenuItem command="edit-project">
+                      <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
+                      {{ t('ui.sidebar.editProject') }}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem command="archive-project">
+                      <Archive20Regular class="w-4 h-4 mr-2 inline-block" />
+                      {{ t('ui.sidebar.archiveProject') }}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem command="delete-project">
+                      <Delete20Regular class="w-4 h-4 mr-2 inline-block" />
+                      {{ t('ui.sidebar.deleteProject') }}
+                    </DropdownMenuItem>
+                  </template>
+                  <!-- 手工分组：重命名 / 归档本分组 / 删除 -->
+                  <template v-else>
+                    <DropdownMenuItem command="rename">
+                      <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
+                      {{ t('ui.sidebar.rename') }}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem command="archive-group">
+                      <Archive20Regular class="w-4 h-4 mr-2 inline-block" />
+                      {{ t('ui.sidebar.archiveGroup') }}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem command="delete">
+                      <Delete20Regular class="w-4 h-4 mr-2 inline-block" />
+                      {{ t('ui.sidebar.delete') }}
+                    </DropdownMenuItem>
+                  </template>
+                </template>
+              </DropdownMenu>
+
+              <!-- 新建会话按钮（hover 显示，与省略号同一套无边框/无底色样式；置顶分区无此操作） -->
               <GdTooltip v-if="group.id !== PINNED_GROUP_ID"
-                :content="t('ui.sidebar.newSessionInGroup', { name: group.name })" placement="bottom">
-                <div @click.stop="openNewSession(group.id)">
-                  <div
-                    class="session-action-trigger p-0.5 bg-(--gd-color-surface) dark:bg-gray-700 border border-(--gd-color-surface-border) dark:border-gray-700">
-                    <Add12Regular class="w-2.5 h-2.5 text-gray-500 dark:text-gray-300" />
-                  </div>
+                :content="t('ui.sidebar.newSessionInGroup', { name: getGroupDisplayName(group) })" placement="bottom">
+                <div class="session-action-trigger" @click.stop="openNewSession(group)">
+                  <el-icon class="w-4 h-4">
+                    <CommentAdd16Regular />
+                  </el-icon>
                 </div>
               </GdTooltip>
             </div>
@@ -127,7 +202,7 @@
                           <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
                           {{ t('ui.sidebar.rename') }}
                         </DropdownMenuItem>
-                        <DropdownMenuItem command="move">
+                        <DropdownMenuItem v-if="sessionGroupStore.groupingMode === 'group'" command="move">
                           <Folder20Regular class="w-4 h-4 mr-2 inline-block" />
                           {{ t('ui.sidebar.moveToGroup') }}
                         </DropdownMenuItem>
@@ -271,13 +346,12 @@
     </template>
   </GdDialog>
 
-  <!-- 分组右键菜单 -->
-  <ContextMenu :visible="groupContextMenu.visible" :x="groupContextMenu.x" :y="groupContextMenu.y"
-    :items="groupContextMenuItems" @close="closeGroupContextMenu" />
+  <!-- 项目编辑弹窗（目录模式） -->
+  <ProjectGroupEditDialog v-model="editProjectDialogVisible" :group="editProjectGroup" @saved="handleProjectSaved" />
 </template>
 
 <script setup lang="ts">
-import { getErrorMessage } from '@/utils/errorMessage'
+import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { NEW_SESSION_ID } from '@/constants'
 import { ref, computed, watch, onMounted, markRaw } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -285,21 +359,21 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSessionStore } from '../stores/session'
 import { useWorkflowRunsStore } from '../stores/workflowRuns'
-import { useSessionGroupStore } from '../stores/sessionGroup'
+import { useSessionGroupStore, GENERAL_PROJECT_GROUP_ID } from '../stores/sessionGroup'
 import { UNGROUPED_ID } from '../stores/session'
 import { useTheme, type ThemeMode } from '../composables/useTheme'
 import { usePopup } from '../composables/usePopup'
 import { useFullscreen } from '../composables/useFullscreen'
-import { Avatar, ScrollContainer } from './ui'
+import { Avatar, ScrollContainer, SegmentedToggle } from './ui'
 import SessionTitle from './SessionTitle.vue'
 import ThinkingStatus from './chat/ThinkingStatus.vue'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
-import ContextMenu, { type ContextMenuItem } from './ui/ContextMenu.vue'
 import GdTooltip from './ui/GdTooltip.vue'
+import ProjectGroupEditDialog from './session/ProjectGroupEditDialog.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'
-import type { Session, SessionGroup } from '@/types/session'
+import type { Session, ProjectGroup, SidebarSessionsResponse, SidebarProjectSessionsResponse } from '@/types/session'
 
 import {
   PersonOutlined,
@@ -311,7 +385,10 @@ import {
   BookSearch20Regular,
   ContactCard20Regular,
   AddSquare20Regular,
-  Add12Regular,
+  CommentAdd16Regular,
+  FolderAdd16Regular,
+  ArrowMaximize16Regular,
+  ArrowMinimize16Regular,
   ClockAlarm20Regular,
   Apps20Regular,
   Edit16Regular,
@@ -356,6 +433,129 @@ const PINNED_GROUP_ID = '__pinned__'
 /** 置顶分区折叠态（本地，不落分组 store） */
 const pinnedExpanded = ref(true)
 
+/**
+ * 侧栏分组渲染项：手工分组、目录分组与虚拟分区共用同一套模板。
+ * `kind` 只在目录模式出现（'general' = 虚拟「通用」桶）。
+ */
+interface SidebarGroupItem {
+  id: string
+  name: string
+  sortOrder: number
+  kind?: 'workspace' | 'general'
+  path?: string | null
+  pathKey?: string | null
+  isOverridden?: boolean
+}
+
+/** 分组模式切换选项（默认保持「普通分组」） */
+const groupingModeOptions = computed(() => [
+  { label: t('ui.sidebar.groupingByGroup'), value: 'group' },
+  { label: t('ui.sidebar.groupingByProject'), value: 'workspace' },
+])
+
+/** 新建快捷入口的提示文案随模式变化 */
+const createGroupTooltip = computed(() =>
+  sessionGroupStore.groupingMode === 'workspace'
+    ? t('ui.sidebar.newProject')
+    : t('ui.sidebar.newGroup'),
+)
+
+/** 是否所有分组都已展开（决定快捷按钮图标：全展开时提供「收起全部」） */
+const allGroupsExpanded = computed(() =>
+  displayGroups.value.every((group) => isGroupExpanded(group.id)),
+)
+
+/** 全部展开 / 全部收起快捷入口的提示文案 */
+const toggleAllGroupsTooltip = computed(() =>
+  allGroupsExpanded.value
+    ? t('ui.sidebar.collapseAllGroups')
+    : t('ui.sidebar.expandAllGroups'),
+)
+
+/**
+ * 全部展开 / 全部收起：与单组折叠保持一致，
+ * 收起时丢弃「加载更多」结果并把可见数量缩回首屏数量。
+ */
+const toggleAllGroups = (): void => {
+  const expand = !allGroupsExpanded.value
+  for (const group of displayGroups.value) {
+    if (group.id === PINNED_GROUP_ID) {
+      pinnedExpanded.value = expand
+      continue
+    }
+    if (isGroupExpanded(group.id) === expand) continue
+    sessionGroupStore.setExpand(group.id, expand)
+    if (!expand) {
+      groupCollapseEpoch.set(group.id, (groupCollapseEpoch.get(group.id) ?? 0) + 1)
+      sessionStore.resetGroupPagination(group.id, initialPageSize.value)
+    }
+  }
+}
+
+/**
+ * 新建分组/项目快捷入口：
+ * - 普通分组模式 → 输入名称后创建手工分组
+ * - 目录模式 → 选择目录并注册为项目（非 Electron 回退为输入绝对路径）
+ */
+const handleCreateGroupShortcut = async () => {
+  if (sessionGroupStore.groupingMode === 'workspace') {
+    await handleCreateProject()
+  } else {
+    await handleCreateManualGroup()
+  }
+}
+
+const handleCreateManualGroup = async () => {
+  const name = await prompt(t('ui.sidebar.createGroupTitle'), {
+    placeholder: t('ui.sidebar.inputGroupName'),
+  })
+  if (!name) return
+
+  const group = await sessionGroupStore.createGroup(name)
+  if (group) {
+    toast.success(t('ui.sidebar.groupCreated'))
+  } else {
+    toast.error(t('ui.sidebar.createGroupFailed'))
+  }
+}
+
+const handleCreateProject = async () => {
+  let selectedPath: string | null = null
+  try {
+    if (window.electronAPI?.selectFolder) {
+      selectedPath = await window.electronAPI.selectFolder()
+    } else {
+      selectedPath = await prompt(t('ui.sidebar.createProjectTitle'), {
+        placeholder: t('ui.sidebar.projectPathPlaceholder'),
+      })
+    }
+  } catch (error) {
+    console.error('选择目录失败:', error)
+    toast.error(t('ui.sidebar.createProjectFailed'))
+    return
+  }
+  if (!selectedPath) return
+
+  const result = await sessionGroupStore.createProjectGroup(selectedPath)
+  if (!result.success) {
+    toast.error(getErrorMessage(result.error) || t('ui.sidebar.createProjectFailed'))
+    return
+  }
+  toast.success(t('ui.sidebar.projectCreated'))
+  await loadSessions()
+}
+
+/** 切换模式后重新拉取（两种模式的桶 id 不重叠，共享数据源无需清空） */
+const handleGroupingModeChange = async (value: string | number | boolean) => {
+  const mode = value === 'workspace' ? 'workspace' : 'group'
+  if (mode === sessionGroupStore.groupingMode) return
+  sessionGroupStore.groupingMode = mode
+  await loadSessions()
+}
+
+/** 目录模式拖拽状态（原生 HTML5 DnD，与工作区 tab 一致） */
+let dragSourceGroupId: string | null = null
+
 const themeOptions = computed(() => [
   { label: t('ui.sidebar.themeLight'), value: 'light' as ThemeMode, icon: markRaw(WeatherSunny20Regular) },
   { label: t('ui.sidebar.themeDark'), value: 'dark' as ThemeMode, icon: markRaw(WeatherMoon20Filled) },
@@ -383,66 +583,38 @@ const initialPageSize = ref(window.innerHeight > 1080 ? 15 : 10)
 /** 分组折叠代数：用于丢弃请求期间被折叠的「加载更多」结果 */
 const groupCollapseEpoch = new Map<string, number>()
 
-// 分组右键菜单状态
-const groupContextMenu = ref({
-  visible: false,
-  x: 0,
-  y: 0,
-  group: null as SessionGroup | null,
-})
+/** 分组是否有分组级操作（置顶 / 未分组 / 虚拟「通用」桶没有） */
+const hasGroupActions = (group: SidebarGroupItem): boolean =>
+  group.id !== PINNED_GROUP_ID &&
+  group.id !== UNGROUPED_ID &&
+  group.kind !== 'general'
 
-// 分组右键菜单项
-const groupContextMenuItems = computed<ContextMenuItem[]>(() => {
-  const group = groupContextMenu.value.group
-  if (!group || group.id === UNGROUPED_ID) return []
-  return [
-    {
-      label: t('ui.sidebar.rename'),
-      icon: markRaw(Edit16Regular),
-      onClick: () => handleRenameGroup(group),
-    },
-    {
-      label: t('ui.sidebar.delete'),
-      icon: markRaw(Delete20Regular),
-      onClick: () => handleDeleteGroup(group),
-    },
-  ]
-})
-
-// 打开分组右键菜单
-const openGroupContextMenu = (event: MouseEvent, group: SessionGroup) => {
-  // 未分组只做右键菜单不做实际处理（不可重命名/删除）
-  if (group.id === UNGROUPED_ID) return
-  groupContextMenu.value = {
-    visible: true,
-    x: event.clientX,
-    y: event.clientY,
-    group,
+/** 分组省略号菜单（手工分组：重命名/删除；目录分组：编辑/归档/删除） */
+const handleGroupMenuSelect = (command: string, group: SidebarGroupItem): void => {
+  if (sessionGroupStore.groupingMode === 'workspace') {
+    if (command === 'edit-project') void handleEditProjectGroup(group)
+    else if (command === 'archive-project') void handleArchiveProjectGroup(group)
+    else if (command === 'delete-project') void handleDeleteProjectGroup(group)
+    return
   }
-}
-
-// 关闭分组右键菜单
-const closeGroupContextMenu = () => {
-  groupContextMenu.value.visible = false
-  groupContextMenu.value.group = null
+  if (command === 'rename') void handleRenameGroup(group)
+  else if (command === 'archive-group') void handleArchiveGroup(group)
+  else if (command === 'delete') void handleDeleteGroup(group)
 }
 
 // 打开新建会话面板，指定分组
-const openNewSession = (groupId: string) => {
-  // 已在新会话页面时只更新 query 参数，不重新导航
-  if (currentActiveTab.value === 'chat') {
-    if (groupId === UNGROUPED_ID) {
-      router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
-    } else {
-      router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID }, query: { groupId } })
+const openNewSession = (group: SidebarGroupItem) => {
+  const query: Record<string, string> = {}
+  if (sessionGroupStore.groupingMode === 'workspace') {
+    // 目录模式：在该目录下建会话；「通用」桶不指定目录（走后端自动生成）
+    if (group.kind === 'workspace' && group.path) {
+      query.workspacePath = group.path
     }
-    return
+  } else if (group.id !== UNGROUPED_ID) {
+    query.groupId = group.id
   }
-  if (groupId === UNGROUPED_ID) {
-    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
-  } else {
-    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID }, query: { groupId } })
-  }
+  // 已在新会话页面时只更新 query 参数，不重新导航
+  router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID }, query })
 }
 
 // 导航项配置
@@ -521,26 +693,38 @@ const isLoadingGroup = (groupId: string) => {
   return sessionGroupStore.loadingMoreGroupId === groupId || isInitializing.value
 }
 
-// 展示的分组列表（包含虚拟的未分组）
-const displayGroups = computed(() => {
-  const groups = [...sessionGroupStore.sortedGroups]
+/** 分组显示名：虚拟「通用」桶走 i18n，其余用实体名 */
+const getGroupDisplayName = (group: SidebarGroupItem): string => {
+  if (group.kind === 'general') return t('ui.sidebar.projectGeneral')
+  return group.name
+}
+
+// 展示的分组列表（手工分组 / 目录分组 + 虚拟置顶与通用桶）
+const displayGroups = computed((): SidebarGroupItem[] => {
+  const workspaceMode = sessionGroupStore.groupingMode === 'workspace'
+  const groups: SidebarGroupItem[] = workspaceMode
+    ? [...sessionGroupStore.sortedProjectGroups]
+    : [...sessionGroupStore.sortedGroups]
+
   // 置顶分区：跨分组聚合，固定在最顶部；无置顶会话时整段不渲染
   if (sessionStore.getPinnedSessions().length > 0) {
     groups.unshift({
       id: PINNED_GROUP_ID,
       name: t('ui.sidebar.pinnedSection'),
-      sortOrder: -1,
-      createdAt: '',
-      updatedAt: ''
+      sortOrder: -1
     })
   }
-  // 始终在最后添加未分组
+
+  if (workspaceMode) {
+    // 「通用」桶已由 store 追加在末尾（sortOrder 为最大值）
+    return groups
+  }
+
+  // 手工分组模式：始终在最后添加未分组
   groups.push({
     id: UNGROUPED_ID,
     name: t('ui.sidebar.taskList'),
-    sortOrder: groups.length,
-    createdAt: '',
-    updatedAt: ''
+    sortOrder: groups.length
   })
   return groups
 })
@@ -548,8 +732,52 @@ const displayGroups = computed(() => {
 // 获取分组内的会话（从 sessionStore 统一数据源获取，受分页可见窗口截断）
 const getGroupSessions = (groupId: string): Session[] => {
   if (groupId === PINNED_GROUP_ID) return sessionStore.getPinnedSessions()
+  if (sessionGroupStore.groupingMode === 'workspace') {
+    return sessionStore.getVisibleSessionsByProjectGroup(
+      groupId,
+      sessionGroupStore.projectGroups,
+    )
+  }
   const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
   return sessionStore.getVisibleSessionsByGroup(groupIdParam)
+}
+
+// ===== 目录分组拖拽排序（原生 HTML5 DnD；只有真实目录分组可拖） =====
+const isGroupDraggable = (group: SidebarGroupItem): boolean =>
+  sessionGroupStore.groupingMode === 'workspace' && group.kind === 'workspace'
+
+const onGroupDragStart = (event: DragEvent, group: SidebarGroupItem): void => {
+  if (!isGroupDraggable(group)) return
+  dragSourceGroupId = group.id
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', group.id)
+  }
+}
+
+const onGroupDragOver = (event: DragEvent, group: SidebarGroupItem): void => {
+  if (!dragSourceGroupId || !isGroupDraggable(group) || group.id === dragSourceGroupId) return
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+}
+
+const onGroupDrop = async (event: DragEvent, target: SidebarGroupItem): Promise<void> => {
+  const sourceId = dragSourceGroupId
+  dragSourceGroupId = null
+  if (!sourceId || !isGroupDraggable(target) || sourceId === target.id) return
+  event.preventDefault()
+
+  const orderedIds = sessionGroupStore.sortedProjectGroups
+    .filter((g) => g.kind === 'workspace')
+    .map((g) => g.id)
+  const from = orderedIds.indexOf(sourceId)
+  const to = orderedIds.indexOf(target.id)
+  if (from === -1 || to === -1) return
+  orderedIds.splice(to, 0, orderedIds.splice(from, 1)[0])
+  await sessionGroupStore.reorderProjectGroups(orderedIds)
+}
+
+const onGroupDragEnd = (): void => {
+  dragSourceGroupId = null
 }
 
 // 分组是否展开（置顶分区用独立本地折叠态，不落分组 store）
@@ -582,28 +810,31 @@ const groupHasMoreSessions = (groupId: string): boolean => {
   return sessionStore.groupHasMore(groupId)
 }
 
-// 分组右键菜单：置顶分区无分组级操作（不支持重命名/删除）
-const handleGroupContextMenu = (event: MouseEvent, group: SessionGroup) => {
-  if (group.id === PINNED_GROUP_ID) return
-  openGroupContextMenu(event, group)
-}
-
 // 初始化加载所有分组的前N个会话（单次请求获取分组+各分组会话）
 const loadSessions = async () => {
   isInitializing.value = true
   try {
     const pageSize = window.innerHeight > 1080 ? 15 : 10
     initialPageSize.value = pageSize
+    const workspaceMode = sessionGroupStore.groupingMode === 'workspace'
     // 分组区与置顶区并行拉取（置顶失败不拖垮主列表）
     const [data, pinnedData] = await Promise.all([
-      apiService.fetchSidebarSessions(pageSize),
+      workspaceMode
+        ? apiService.fetchSidebarSessions(pageSize, 'workspace')
+        : apiService.fetchSidebarSessions(pageSize),
       apiService
         .fetchPinnedSessions()
         .catch(() => ({ items: [] as Session[] })),
     ])
 
-    // 设置分组列表
-    sessionGroupStore.setGroups(data.groups || [])
+    // 设置分组列表（两种模式的实体互不干扰）
+    if (workspaceMode) {
+      sessionGroupStore.setProjectGroups(
+        (data as SidebarProjectSessionsResponse).groups || [],
+      )
+    } else {
+      sessionGroupStore.setGroups((data as SidebarSessionsResponse).groups || [])
+    }
 
     // 置顶会话写入统一数据源（「已置顶」分区由 sessionsMap 派生）
     for (const session of pinnedData?.items || []) {
@@ -615,7 +846,9 @@ const loadSessions = async () => {
 
     // 处理各分组的会话
     for (const gs of data.groupSessions || []) {
-      const storeGroupId = gs.groupId === null ? UNGROUPED_ID : gs.groupId
+      const storeGroupId = workspaceMode
+        ? (gs.groupId ?? GENERAL_PROJECT_GROUP_ID)
+        : (gs.groupId === null ? UNGROUPED_ID : gs.groupId)
       for (const session of gs.items || []) {
         sessionStore.setSession(session)
       }
@@ -640,13 +873,26 @@ const loadSessions = async () => {
 const loadMoreForGroup = async (groupId: string) => {
   if (sessionGroupStore.loadingMoreGroupId) return
 
+  const workspaceMode = sessionGroupStore.groupingMode === 'workspace'
   const currentSessions = getGroupSessions(groupId)
-  const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
   const collapseEpoch = groupCollapseEpoch.get(groupId) ?? 0
 
   sessionGroupStore.setLoadingMore(groupId)
   try {
-    const data = await apiService.fetchSessions(currentSessions.length, 15, groupIdParam)
+    const data = workspaceMode
+      ? await apiService.fetchSessions(
+          currentSessions.length,
+          15,
+          undefined,
+          undefined,
+          false,
+          groupId,
+        )
+      : await apiService.fetchSessions(
+          currentSessions.length,
+          15,
+          groupId === UNGROUPED_ID ? null : groupId,
+        )
 
     // 请求期间分组被折叠：本页按丢弃处理，展开后仍只保留首屏数量
     if ((groupCollapseEpoch.get(groupId) ?? 0) !== collapseEpoch) {
@@ -853,7 +1099,7 @@ const confirmMoveSession = async () => {
 /**
  * 重命名分组
  */
-const handleRenameGroup = async (group: SessionGroup) => {
+const handleRenameGroup = async (group: SidebarGroupItem) => {
   try {
     const result = await prompt(t('ui.sidebar.renameGroupTitle'), {
       placeholder: t('ui.sidebar.inputGroupName'),
@@ -875,7 +1121,7 @@ const handleRenameGroup = async (group: SessionGroup) => {
 /**
  * 删除分组
  */
-const handleDeleteGroup = async (group: SessionGroup) => {
+const handleDeleteGroup = async (group: SidebarGroupItem) => {
   try {
     const confirmed = await confirm(t('ui.sidebar.deleteGroupTitle'), t('ui.sidebar.deleteGroupConfirm', { name: group.name }), {
       type: 'warning',
@@ -901,6 +1147,173 @@ const handleDeleteGroup = async (group: SessionGroup) => {
     console.error('删除分组失败:', error)
     toast.error(t('ui.sidebar.deleteGroupFailed'))
   }
+}
+
+/**
+ * 归档本分组：归档组内全部对话（流式输出中的跳过），分组行保留。
+ * 归档后分组仍显示在侧栏（暂无任务），与目录分组的「归档项目」不同。
+ */
+const handleArchiveGroup = async (group: SidebarGroupItem) => {
+  let total = 0
+  try {
+    total = (await apiService.fetchSessionGroupStats(group.id)).total
+  } catch (error) {
+    console.warn('获取分组统计失败:', error)
+  }
+
+  const confirmed = await confirm(
+    t('ui.sidebar.archiveGroupTitle'),
+    t('ui.sidebar.archiveGroupConfirm', { name: group.name, count: total }),
+    {
+      type: 'warning',
+      confirmText: t('ui.sidebar.archiveGroup'),
+      cancelText: t('common.cancel')
+    }
+  )
+  if (!confirmed) return
+
+  const result = await sessionGroupStore.archiveGroup(group.id)
+  if (!result.success) {
+    toast.error(t('ui.sidebar.archiveGroupFailed'))
+    return
+  }
+
+  // 归档是服务端状态变更：按返回的 id 清理本地缓存，避免它们继续以活跃态展示
+  const archivedIds = new Set(result.sessionIds)
+  for (const id of archivedIds) {
+    sessionStore.removeSession(id)
+    sessionStore.clearSidebarState(id)
+  }
+  if (currentSessionId.value && archivedIds.has(currentSessionId.value)) {
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
+  }
+
+  await loadSessions()
+  toast.success(t('ui.sidebar.groupArchived', { count: result.archived }))
+  if (result.skipped > 0) {
+    toast.warning(t('ui.sidebar.groupArchiveSkipped', { count: result.skipped }))
+  }
+}
+
+/** 项目编辑弹窗状态 */
+const editProjectDialogVisible = ref(false)
+const editProjectGroup = ref<ProjectGroup | null>(null)
+
+/**
+ * 编辑项目：打开弹窗（名称可改、工作目录只读展示）
+ */
+const handleEditProjectGroup = (group: SidebarGroupItem) => {
+  const target = sessionGroupStore.projectGroups.find((g) => g.id === group.id)
+  if (!target) return
+  editProjectGroup.value = target
+  editProjectDialogVisible.value = true
+}
+
+const handleProjectSaved = async () => {
+  await loadSessions()
+}
+
+/**
+ * 归档项目：确认后归档其下全部对话（流式输出中的跳过，分组随后从侧栏消失）
+ */
+const handleArchiveProjectGroup = async (group: SidebarGroupItem) => {
+  let total = 0
+  try {
+    total = (await apiService.fetchProjectGroupStats(group.id)).total
+  } catch (error) {
+    // 统计失败不阻断操作，确认文案退化为「其下全部对话」
+    console.warn('获取项目统计失败:', error)
+  }
+
+  const confirmed = await confirm(
+    t('ui.sidebar.archiveProjectTitle'),
+    t('ui.sidebar.archiveProjectConfirm', { name: getGroupDisplayName(group), count: total }),
+    {
+      type: 'warning',
+      confirmText: t('ui.sidebar.archiveProject'),
+      cancelText: t('common.cancel')
+    }
+  )
+  if (!confirmed) return
+
+  const result = await sessionGroupStore.archiveProjectGroup(group.id)
+  if (!result.success) {
+    toast.error(t('ui.sidebar.archiveProjectFailed'))
+    return
+  }
+
+  // 归档是服务端状态变更：本地缓存不会自动变成 archived，必须按返回的 id
+  // 移除，否则在取消归档前它们仍会以「活跃」状态留在分组里。
+  const archivedIds = new Set(result.sessionIds)
+  for (const id of archivedIds) {
+    sessionStore.removeSession(id)
+    sessionStore.clearSidebarState(id)
+  }
+  if (currentSessionId.value && archivedIds.has(currentSessionId.value)) {
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
+  }
+
+  sessionStore.resetGroupPagination(group.id, initialPageSize.value)
+  await loadSessions()
+  toast.success(t('ui.sidebar.projectArchived', { count: result.archived }))
+  if (result.skipped > 0) {
+    toast.warning(t('ui.sidebar.projectArchiveSkipped', { count: result.skipped }))
+  }
+}
+
+/**
+ * 删除项目：永久删除其下全部对话，再移除分组行。
+ * 工作目录与文件保留；任一会话流式输出时整体拒绝（409），不做部分删除。
+ */
+const handleDeleteProjectGroup = async (group: SidebarGroupItem) => {
+  let total = 0
+  try {
+    total = (await apiService.fetchProjectGroupStats(group.id)).total
+  } catch (error) {
+    console.warn('获取项目统计失败:', error)
+  }
+
+  const confirmed = await confirm(
+    t('ui.sidebar.deleteProjectTitle'),
+    t('ui.sidebar.deleteProjectConfirm', { name: getGroupDisplayName(group), count: total }),
+    {
+      type: 'error',
+      danger: true,
+      confirmText: t('ui.sidebar.deleteProject'),
+      cancelText: t('common.cancel')
+    }
+  )
+  if (!confirmed) return
+
+  const result = await sessionGroupStore.deleteProjectGroup(group.id)
+  if (!result.success) {
+    toast.error(
+      getApiErrorStatus(result.error) === 409
+        ? t('ui.sidebar.projectDeleteStreaming')
+        : t('ui.sidebar.deleteProjectFailed')
+    )
+    return
+  }
+
+  // 精确清理本地缓存：后端返回的顶层会话 + 同目录下的其它已加载会话（置顶/子会话）
+  const affectedIds = new Set(result.sessionIds)
+  if (group.pathKey) {
+    for (const [id, session] of sessionStore.sessionsMap) {
+      if (session.workspaceKey === group.pathKey) affectedIds.add(id)
+    }
+  }
+  for (const id of affectedIds) {
+    sessionStore.removeSession(id)
+    sessionStore.clearSidebarState(id)
+    workflowRunsStore.clearSession(id)
+  }
+  if (currentSessionId.value && affectedIds.has(currentSessionId.value)) {
+    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
+  }
+
+  sessionStore.resetGroupPagination(group.id, initialPageSize.value)
+  await loadSessions()
+  toast.success(t('ui.sidebar.projectDeleted', { count: result.deleted }))
 }
 
 /**
@@ -1034,6 +1447,16 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
 </script>
 
 <style scoped>
+/* 分组头与子项共用同一套 hover 语义（色值与 .session-item-inactive:hover 一致） */
+.group-header {
+  color: var(--gd-color-text);
+}
+
+.group-header:hover {
+  background-color: var(--gd-color-sidebar-bg-hover);
+  color: var(--gd-color-sidebar-text-hover);
+}
+
 /* 会话项样式 */
 .session-item-inactive {
   color: var(--gd-color-text);

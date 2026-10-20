@@ -31,6 +31,8 @@ export const ID_PREFIXES = {
   kb: "kb-",
   kbFile: "kbf-",
   group: "grp-",
+  /** 目录分组（按工作目录分组，workspace/project group） */
+  projectGroup: "pg-",
   task: "task-",
   taskLog: "tasklog-",
   conn: "conn-",

@@ -215,6 +215,11 @@ export interface Session {
     platform?: string         // 来源平台: 'qq', 'wechat'
     externalId?: string       // 外部会话标识,格式: "platform:type:nativeId"
     workspacePath?: string | null  // 自定义工作目录路径
+    /**
+     * 工作目录比较键（后端归一化派生列）。
+     * 侧栏「目录」模式用它匹配 ProjectGroup.pathKey —— 前端不再自行归一化。
+     */
+    workspaceKey?: string | null
     groupId?: string | null         // 会话分组ID
     archived?: boolean               // 是否已归档
     pinned?: boolean                 // 是否置顶（侧边栏顶部「已置顶」分区）
@@ -299,6 +304,65 @@ export interface SidebarGroupSessions {
 export interface SidebarSessionsResponse {
     groups: SessionGroup[]
     groupSessions: SidebarGroupSessions[]
+}
+
+/**
+ * 目录分组（侧栏「目录」模式）。
+ *
+ * 实体由后端物化（可重命名/排序/取消注册），成员关系派生：
+ * `session.workspaceKey === group.pathKey`。`kind = 'general'` 是前端合成的
+ * 虚拟「通用」桶（空路径 + 未注册目录 + 自动生成目录 + public），无后端实体。
+ */
+export interface ProjectGroup {
+    id: string
+    name: string
+    /** 目录绝对路径；虚拟通用桶为 null */
+    path: string | null
+    /** 归一化比较键；虚拟通用桶为 null */
+    pathKey: string | null
+    sortOrder: number
+    /** 用户改过显示名（bootstrap 不会覆盖） */
+    isOverridden: boolean
+    kind: 'workspace' | 'general'
+}
+
+/** 侧栏目录模式响应：groups + 各桶前 N 条会话 */
+export interface SidebarProjectSessionsResponse {
+    groupBy: 'workspace'
+    groups: Array<Omit<ProjectGroup, 'kind'> & { kind: 'workspace' }>
+    generalGroup: { id: string; kind: 'general' }
+    groupSessions: SidebarGroupSessions[]
+}
+
+/** 分组统计（手工分组与目录分组共用形状；仅 web 会话） */
+export interface GroupStats {
+    total: number
+    active: number
+    archived: number
+    pinned: number
+}
+
+/** 归档手工分组结果（skipped = 流式输出中被跳过的会话数） */
+export interface ArchiveSessionGroupResult {
+    success: boolean
+    archived: number
+    skipped: number
+    sessionIds: string[]
+}
+
+/** 归档项目结果（skipped = 流式输出中被跳过的会话数；sessionIds = 成功归档的 id） */
+export interface ArchiveProjectGroupResult {
+    success: boolean
+    archived: number
+    skipped: number
+    sessionIds: string[]
+}
+
+/** 删除项目结果（sessionIds 供前端精确清理本地会话缓存） */
+export interface DeleteProjectGroupResult {
+    success: boolean
+    deleted: number
+    sessionIds: string[]
 }
 
 /**

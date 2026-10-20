@@ -2,8 +2,13 @@ import { HttpException, HttpStatus, Inject, Injectable, Logger } from "@nestjs/c
 import * as fs from "fs";
 import * as path from "path";
 import { getSessionDir } from "../../common/utils/session-path.util";
+import { qualifiesForProjectGroup } from "../../common/utils/workspace-key.util";
 import type { BaseEvent } from "../../common/persistence/types";
-import { SessionMetaStore, toRow } from "./session-meta.store";
+import {
+  GENERAL_PROJECT_GROUP_ID,
+  SessionMetaStore,
+  toRow,
+} from "./session-meta.store";
 import {
   extractTodoStateFromEvents,
   writeTodoStore,
@@ -79,6 +84,8 @@ export class SessionService {
     skip?: number;
     limit?: number;
     groupId?: string | null;
+    /** 工作目录比较键：null = 通用桶（空路径 + 未注册目录），undefined = 不过滤 */
+    workspaceKey?: string | null;
     keyword?: string;
     includeArchived?: boolean;
     /** undefined = 不按置顶过滤；false = 排除置顶（分组区）；true = 仅置顶 */
@@ -88,6 +95,7 @@ export class SessionService {
       skip = 0,
       limit = 20,
     groupId,
+    workspaceKey,
     keyword,
     includeArchived = false,
     pinned,
@@ -98,6 +106,7 @@ export class SessionService {
         archived: includeArchived ? undefined : false,
         pinned,
         groupId,
+        workspaceKey,
         keyword,
       },
       "lastActiveDesc",
@@ -252,6 +261,196 @@ export class SessionService {
   }
 
   /**
+   * 侧边栏按工作目录批量获取（目录模式）。
+   *
+   * 返回 = 已注册的 `project_groups`（按用户 position 排序）+ 虚拟「通用」桶。
+   * 「通用」= 空 workspacePath + 未注册目录（含自动生成目录与 public），
+   * 由 `workspaceKey: null` 谓词统一表达，无需在 SQL 里做命名匹配。
+   */
+  async getSidebarSessionsByProject(limit: number = 10) {
+    const groups = await this.sessionStore.listProjectGroups();
+    const results = await Promise.all([
+      ...groups.map((group) =>
+        this.querySessions({
+          skip: 0,
+          limit,
+          workspaceKey: group.pathKey,
+          includeArchived: false,
+          pinned: false,
+        }),
+      ),
+      // 末位是通用桶（未注册目录 + 空路径）
+      this.querySessions({
+        skip: 0,
+        limit,
+        workspaceKey: null,
+        includeArchived: false,
+        pinned: false,
+      }),
+    ]);
+    const general = results[groups.length];
+
+    // 目录分组从会话派生：没有可见会话的目录不渲染，避免侧栏出现一片
+    // 「暂无任务」的空分组。分组行与用户改名/排序保留——取消归档或取消
+    // 置顶后，该目录自动重新出现在侧栏。
+    const visible = groups
+      .map((group, index) => ({ group, result: results[index] }))
+      .filter(({ result }) => result.total > 0);
+
+    const toBucket = (groupId: string, result: { items: any[]; total: number }) => ({
+      groupId,
+      items: result.items.map((item) => ({
+        ...item,
+        isStreaming: this.streamManager.hasActiveStream(item.id),
+      })),
+      total: result.total,
+      hasMore: result.items.length < result.total,
+    });
+
+    return {
+      groupBy: "workspace",
+      groups: visible.map(({ group }) => ({
+        id: group.id,
+        name: group.name,
+        path: group.path,
+        pathKey: group.pathKey,
+        sortOrder: group.position,
+        isOverridden: group.nameOverridden,
+        kind: "workspace",
+      })),
+      // 名称由前端 i18n 提供（后端不做文案）
+      generalGroup: { id: GENERAL_PROJECT_GROUP_ID, kind: "general" },
+      groupSessions: [
+        ...visible.map(({ group, result }) => toBucket(group.id, result)),
+        toBucket(GENERAL_PROJECT_GROUP_ID, general),
+      ],
+    };
+  }
+
+  /**
+   * 目录模式下按桶分页（侧栏「加载更多」）。
+   * - `bucketId = __general__` → 通用桶
+   * - 其他 → 分组 id（未知 id 返回空页，不报错）
+   */
+  async getSessionsByProjectGroup(
+    bucketId: string,
+    skip: number = 0,
+    limit: number = 20,
+  ) {
+    let workspaceKey: string | null | undefined;
+    if (bucketId === GENERAL_PROJECT_GROUP_ID) {
+      workspaceKey = null;
+    } else {
+      const group = await this.sessionStore.findProjectGroup(bucketId);
+      workspaceKey = group?.pathKey;
+    }
+    if (workspaceKey === undefined) {
+      return createPaginatedResponse([], 0, { skip, limit });
+    }
+    const { items, total } = await this.querySessions({
+      skip,
+      limit,
+      workspaceKey,
+      includeArchived: false,
+      pinned: false,
+    });
+    return createPaginatedResponse(
+      items.map((item) => ({
+        ...item,
+        isStreaming: this.streamManager.hasActiveStream(item.id),
+      })),
+      total,
+      { skip, limit },
+    );
+  }
+
+  /**
+   * 项目分组统计（仅 web 会话，与侧栏口径一致）。
+   * 供删除/归档确认弹窗展示影响范围。
+   */
+  async getProjectGroupStats(pathKey: string) {
+    const count = (extra: { archived?: boolean; pinned?: boolean }) =>
+      this.sessionStore.queryPaged(
+        { workspaceKey: pathKey, sessionType: "web", ...extra },
+        "lastActiveDesc",
+        { skip: 0, limit: 0 },
+      ).total;
+
+    const total = count({});
+    const active = count({ archived: false });
+    const pinned = count({ archived: false, pinned: true });
+    return { total, active, archived: total - active, pinned };
+  }
+
+  /**
+   * 归档项目下的全部对话：置顶也归档，已归档跳过，流式输出中的跳过。
+   * 返回成功归档的 id，供前端精确清理本地会话缓存。
+   */
+  async archiveProjectGroupSessions(
+    pathKey: string,
+  ): Promise<{ archived: number; skipped: number; sessionIds: string[] }> {
+    const ids = this.sessionStore
+      .query(
+        { workspaceKey: pathKey, sessionType: "web", archived: false },
+        "createdAsc",
+      )
+      .map((meta) => meta.id);
+    if (ids.length === 0) {
+      return { archived: 0, skipped: 0, sessionIds: [] };
+    }
+
+    const result = await this.batchArchiveSessions(ids, true);
+    const skipped = new Set(result.skipped);
+    const sessionIds = ids.filter((id) => !skipped.has(id));
+    return {
+      archived: sessionIds.length,
+      skipped: skipped.size,
+      sessionIds,
+    };
+  }
+
+  /**
+   * 删除项目下的全部对话（含已归档/置顶；子会话级联删除）。
+   *
+   * 先整体预检流式输出：任一会话或其子会话在跑就直接拒绝，避免"删了一半"。
+   * 工作目录与其中的文件不删除（deleteWorkspace=false）。
+   */
+  async deleteProjectGroupSessions(
+    pathKey: string,
+  ): Promise<{ deleted: number; sessionIds: string[] }> {
+    const metas = this.sessionStore.query(
+      { workspaceKey: pathKey, sessionType: "web" },
+      "createdAsc",
+    );
+
+    // 预检：主会话或任一子会话有活跃流 → 整体中止（不做部分删除）
+    for (const meta of metas) {
+      const activeChild = this.sessionStore
+        .childrenOf(meta.id)
+        .find((child) => this.streamManager.hasActiveStream(child.id));
+      if (this.streamManager.hasActiveStream(meta.id) || activeChild) {
+        throw new HttpException(
+          {
+            error: activeChild
+              ? "子代理正在运行中，请先停止后再删除项目"
+              : "项目下有会话正在流式输出中，请先停止后再删除项目",
+            code: "PROJECT_GROUP_STREAMING",
+            activeSessionId: activeChild ? activeChild.id : meta.id,
+          },
+          HttpStatus.CONFLICT,
+        );
+      }
+    }
+
+    const sessionIds: string[] = [];
+    for (const meta of metas) {
+      await this.deleteSession(meta.id, false);
+      sessionIds.push(meta.id);
+    }
+    return { deleted: sessionIds.length, sessionIds };
+  }
+
+  /**
    * 置顶会话清单（侧边栏顶部「已置顶」分区）。
    *
    * 归集所有「已置顶且未归档」的 web 会话，lastActiveAt desc。
@@ -391,6 +590,30 @@ export class SessionService {
   }
 
   /**
+   * 目录分组写时注册（幂等、失败不阻断建会话）。
+   *
+   * 只有用户显式指定的真实目录才注册；自动生成目录与 `<baseDir>/public` 不注册
+   * —— 它们在侧栏目录模式下统一归入「通用」桶（避免自动目录撑爆分组列表）。
+   */
+  private async registerProjectGroupForWorkspace(
+    workspacePath: string | null | undefined,
+  ): Promise<void> {
+    if (!workspacePath) return;
+    try {
+      const baseDir = await this.workspaceService.getEffectiveBaseDir();
+      if (!qualifiesForProjectGroup(workspacePath, baseDir)) return;
+      await this.sessionStore.ensureProjectGroup({
+        path: workspacePath,
+        prepend: true,
+      });
+    } catch (err: any) {
+      this.logger.warn(
+        `Directory group registration failed for ${workspacePath}: ${err?.message ?? err}`,
+      );
+    }
+  }
+
+  /**
    * 创建新会话，支持从智能体继承配置
    */
   async createSession(data: any) {
@@ -456,6 +679,9 @@ export class SessionService {
     };
 
     const session: any = await this.sessionStore.create(sessionData);
+
+    // 目录分组：显式目录写时注册（幂等）。失败不影响建会话。
+    await this.registerProjectGroupForWorkspace(finalWorkspacePath);
 
     // 创建即初始化 JSONL 事件存储（eager 创建）：此后所有并发请求 hasSession 恒为 true，
     // 消除懒创建在首屏并行请求下的 TOCTOU 竞态（ensureSession 内部另有串行化兜底）。
@@ -542,6 +768,9 @@ export class SessionService {
       sessionType: "web",
     });
     const newSessionId = created.id as string;
+
+    // 分支继承同一工作目录 → 确保对应目录分组已注册（幂等）
+    await this.registerProjectGroupForWorkspace(source.workspacePath);
 
     // 事件前缀：锚点回合（含）之前的全部事件
     const prefix = events.filter(

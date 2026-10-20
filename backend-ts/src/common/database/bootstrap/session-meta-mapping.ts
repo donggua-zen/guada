@@ -39,6 +39,8 @@ export function sessionRowToMeta(row: Record<string, any>): SessionMeta {
     platform: row.platform ?? null,
     externalId: row.externalId ?? null,
     workspacePath: row.workspacePath ?? null,
+    // 派生键（v6）由写入层的 upsertMetaRow/迁移按 workspacePath 计算
+    workspaceKey: null,
     parentId: row.parentId ?? null,
     // 冻结库无 root_id 列；由 SQLite 元库导入时按父链回填
     rootId: null,

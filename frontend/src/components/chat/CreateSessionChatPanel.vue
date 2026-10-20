@@ -627,8 +627,14 @@ onMounted(() => {
   if (groupId && typeof groupId === 'string') {
     currentSession.value.groupId = groupId;
   }
-  // 根据上次选择初始化工作目录
-  initWorkspacePath()
+  // 目录模式：从 query 恢复目标工作目录（在该目录下建会话）
+  const queryWorkspacePath = route.query.workspacePath;
+  if (typeof queryWorkspacePath === 'string' && queryWorkspacePath) {
+    currentSession.value.workspacePath = queryWorkspacePath;
+  } else {
+    // 根据上次选择初始化工作目录
+    initWorkspacePath()
+  }
   // 消费跨页面预填文本（如定时任务页"在对话中创建"）——显式带文本进入，覆盖暂存草稿正文
   const prefill = consumePrefill()
   if (prefill) {
@@ -690,6 +696,16 @@ watch(() => route.query.groupId, (newGroupId) => {
     currentSession.value.groupId = newGroupId;
   } else {
     currentSession.value.groupId = null;
+  }
+});
+
+// 监听 workspacePath 查询参数变化（目录模式下点击其他目录分组的新建按钮）
+watch(() => route.query.workspacePath, (newPath) => {
+  if (typeof newPath === 'string' && newPath) {
+    currentSession.value.workspacePath = newPath;
+  } else {
+    // 查询参数被清空 → 回到按上次选择推断的默认目录
+    void initWorkspacePath();
   }
 });
 

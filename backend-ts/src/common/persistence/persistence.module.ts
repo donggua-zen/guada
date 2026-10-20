@@ -17,6 +17,7 @@ import { MigrationBootstrapService } from '../database/bootstrap/migration-boots
 import { KbMigrationBootstrapService } from '../database/bootstrap/kb-migration-bootstrap.service';
 import { SessionMessageDbMigratorService } from '../database/bootstrap/session-message-db-migrator.service';
 import { SessionMessageMigrationBootstrapService } from '../database/bootstrap/session-message-migration-bootstrap.service';
+import { ProjectGroupBootstrapService } from '../database/bootstrap/project-group-bootstrap.service';
 
 /**
  * 持久化机制层（全局）
@@ -52,6 +53,8 @@ const SCAFFOLD_PROVIDERS = [
   // 会话消息 DB → JSONL（含 meta 骨架修复；编排顺序见 MigrationBootstrapService）
   SessionMessageDbMigratorService,
   SessionMessageMigrationBootstrapService,
+  // 目录分组一次性注册（晚于会话元信息转换，早于各域 store 预热）
+  ProjectGroupBootstrapService,
   // 编排器必须最后注册：唯一 OnModuleInit，按序调用上面各 bootstrap 的 run()
   MigrationBootstrapService,
 ];

@@ -76,8 +76,9 @@ import { Search16Regular } from '@vicons/fluent'
 import { Loading } from '@element-plus/icons-vue'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
-import { useSessionGroupStore } from '@/stores/sessionGroup'
+import { GENERAL_PROJECT_GROUP_ID, useSessionGroupStore } from '@/stores/sessionGroup'
 import { UNGROUPED_ID } from '@/stores/session'
+import { resolveProjectBucketId } from '@/utils/projectGroupBucket'
 import type { SearchSessionResult } from '@/types/session'
 import GdDialog from '@/components/ui/GdDialog.vue'
 
@@ -110,8 +111,29 @@ const progress = ref<{ scanned: number; total: number } | null>(null)
  */
 let searchGen = 0
 
-/** 搜索结果按分组归类，仅展示有结果的分组 */
+/** 搜索结果按当前分组模式归类，仅展示有结果的分组 */
 const groupedResults = computed(() => {
+  const result: { id: string; name: string; sessions: SearchSessionResult[] }[] = []
+
+  // 目录模式：按工作目录桶归类（键由后端下发，未注册目录归「通用」）
+  if (sessionGroupStore.groupingMode === 'workspace') {
+    const buckets = [
+      ...sessionGroupStore.sortedProjectGroups
+        .filter((g) => g.kind === 'workspace')
+        .map((g) => ({ id: g.id, name: g.name })),
+      { id: GENERAL_PROJECT_GROUP_ID, name: t('ui.sidebar.projectGeneral') },
+    ]
+    for (const bucket of buckets) {
+      const sessions = searchResults.value.filter(
+        (s) => resolveProjectBucketId(s, sessionGroupStore.projectGroups) === bucket.id,
+      )
+      if (sessions.length > 0) {
+        result.push({ ...bucket, sessions })
+      }
+    }
+    return result
+  }
+
   const groups = [...sessionGroupStore.sortedGroups]
   groups.push({
     id: UNGROUPED_ID,
@@ -121,7 +143,6 @@ const groupedResults = computed(() => {
     updatedAt: '',
   })
 
-  const result: { id: string; name: string; sessions: SearchSessionResult[] }[] = []
   for (const group of groups) {
     const targetGroupId = group.id === UNGROUPED_ID ? null : group.id
     const sessions = searchResults.value.filter(s => (s.groupId || null) === targetGroupId)
