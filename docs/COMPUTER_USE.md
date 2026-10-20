@@ -250,7 +250,12 @@ Manual acceptance:
 ## Packaging
 
 - `build-resources/computer-sidecar/guada-computer.exe` is copied by
-  electron-builder to `resources/computer-sidecar/`.
+  electron-builder to `resources/computer-sidecar/` **only for the Windows
+  target** (`build.win.extraResources`). macOS builds must not carry the
+  Windows PE binary, otherwise `codesign --deep` can fail.
+- The sidecar is spawned with the bundled `resources/vc-runtime` on `PATH`, the
+  same as the backend, so a clean Windows machine does not need a system-wide
+  VC++ runtime.
 - `scripts/after-pack-handler.js` fixes executable permissions before macOS
   signing (Windows does not need chmod).
 - `scripts/verify-asar-layout.js` checks the packaged Windows binary and runs

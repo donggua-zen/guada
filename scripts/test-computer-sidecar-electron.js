@@ -14,21 +14,23 @@ const {
 
 app.whenReady().then(async () => {
   const client = new ComputerSidecarClient();
+  let exitCode = 1;
   try {
     const status = await client.start();
     console.log("[test] status:", JSON.stringify(status));
     if (!status.available) {
-      app.exit(1);
       return;
     }
 
     const result = await client.test();
     console.log("[test] result:", JSON.stringify(result));
-    app.exit(result.ok ? 0 : 1);
+    exitCode = result.ok ? 0 : 1;
   } catch (error) {
     console.error("[test] failed:", error);
-    app.exit(1);
   } finally {
+    // Stop the child before exiting the Electron process; otherwise the child
+    // can outlive the test and keep the binary locked on Windows.
     await client.stop();
+    app.exit(exitCode);
   }
 });

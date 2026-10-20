@@ -122,6 +122,7 @@ export class ComputerSidecarClient {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
       cwd: app.getPath("userData"),
+      env: sidecarEnv(),
     });
     this.child = child;
     this.status = { available: false, binaryPath };
@@ -401,6 +402,24 @@ export class ComputerSidecarClient {
     }
     this.pending.clear();
   }
+}
+
+/**
+ * The sidecar is an MSVC Rust binary like the other native modules; on a clean
+ * Windows machine it may need the bundled VC++ runtime. Mirror the backend's
+ * PATH injection so packaged builds do not fail to load the CRT.
+ */
+function sidecarEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (process.platform === "win32") {
+    const crtDir = path.join(process.resourcesPath, "vc-runtime");
+    if (fs.existsSync(crtDir)) {
+      const pathKey =
+        Object.keys(env).find((key) => key.toUpperCase() === "PATH") || "PATH";
+      env[pathKey] = `${crtDir}${path.delimiter}${env[pathKey] ?? ""}`;
+    }
+  }
+  return env;
 }
 
 function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {

@@ -174,13 +174,6 @@
         ]
       },
       {
-        "from": "build-resources/computer-sidecar",
-        "to": "computer-sidecar",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
         "from": "plugins/guada-themes",
         "to": "plugins/guada-themes",
         "filter": [
@@ -208,6 +201,13 @@
           "to": "vc-runtime",
           "filter": [
             "**/*.dll"
+          ]
+        },
+        {
+          "from": "build-resources/computer-sidecar",
+          "to": "computer-sidecar",
+          "filter": [
+            "**/*"
           ]
         }
       ]

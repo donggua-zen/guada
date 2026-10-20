@@ -867,7 +867,10 @@ cd ../ai_web
 Windows 首期的桌面自动化由独立 sidecar 提供，随包分发，不在运行时下载：
 
 - 源目录：`build-resources/computer-sidecar/guada-computer.exe`
-- 打包后：`resources/computer-sidecar/guada-computer.exe`（`extraResources`）
+- 打包后：`resources/computer-sidecar/guada-computer.exe`（仅 Windows 的
+  `win.extraResources`；macOS 包不会带上 Windows PE 二进制，避免 `codesign --deep` 失败）
+- 运行时 PATH：sidecar 与后端一样注入 `resources/vc-runtime`，干净 Windows
+  机器无需预装 VC++ 运行时
 - 版本锁定：`sidecar.lock.json` 记录 tag、协议版本与 sha256
 - 构建校验：`pnpm run verify:sidecar` 校验存在性、哈希与 `--version`
 - 打包校验：`verify:asar` 会检查 Windows 包内 sidecar 并运行 `--version`
