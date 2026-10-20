@@ -432,6 +432,7 @@ export default {
     saving: '保存中...',
     unsaved: '未保存',
     terminal: '终端',
+    sectionAgent: '当前智能体',
     sectionGit: 'Git 工具',
     subagents: '子代理',
     subagentsEnded: '已结束 ({count})',

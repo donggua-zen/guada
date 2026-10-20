@@ -432,6 +432,7 @@
     saving: 'Saving...',
     unsaved: 'Unsaved',
     terminal: 'Terminal',
+    sectionAgent: 'Agent',
     sectionGit: 'Git Tools',
     subagents: 'Subagents',
     subagentsEnded: 'Ended ({count})',

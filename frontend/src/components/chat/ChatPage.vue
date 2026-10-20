@@ -98,7 +98,8 @@
                        overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
                   <template #aside>
                     <div ref="asideSlotRef" class="h-full w-full">
-                      <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null" />
+                      <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
+                        :agent="mainSession?.agent ?? null" />
                     </div>
                   </template>
                 </ChatPanel>

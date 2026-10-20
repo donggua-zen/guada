@@ -1,12 +1,27 @@
 <template>
   <!-- 工作区概览：常驻于聊天内容右侧（占位挤宽），与 WorkspaceSidebar 解耦。
-       数据源：GitStore（git 状态/统计/分支/提交弹窗）、browserWebview store。
-       布局：分组标题 + 下属行（Git 工具 / 浏览器），默认平铺展开。
+       数据源：当前会话 agent（由 ChatPage 传入）、GitStore（git 状态/统计/分支/提交弹窗）、
+       browserWebview store。
+       布局：分组标题 + 下属行（当前智能体 / Git 工具 / 浏览器），默认平铺展开。
        运行时状态区已全部迁出：待办/进程/子代理 → 输入区运行时胶囊（ComposerStatusBar），
        工作流进度 → 对话流 workflow_run 工具行原地渲染（WorkflowRunInlineCard）；
        工作目录 → WorkingDirBar。本面板不再表达任何会话运行状态。 -->
   <aside class="overview-panel">
     <div class="overview-rows">
+      <!-- ── 当前智能体：会话绑定即常驻，作为概览区的静态身份信息（不参与运行状态表达） ── -->
+      <section v-if="agent" class="overview-section">
+        <div class="overview-section-title">{{ t('chat.workspace.sectionAgent') }}</div>
+        <div class="overview-agent">
+          <Avatar class="overview-agent-avatar" :src="agent.avatarUrl" :name="agent.name" type="assistant" round />
+          <div class="overview-agent-meta">
+            <div class="overview-agent-name" :title="agent.name">{{ agent.name }}</div>
+            <div v-if="agent.description" class="overview-agent-desc" :title="agent.description">
+              {{ agent.description }}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Git 工具：默认隐藏，后端确认是 git 仓库才出现（非仓库/未装 git 不占位） ── -->
       <section v-if="git.isGitRepo" class="overview-section">
         <div class="overview-section-title">
@@ -98,14 +113,18 @@ import {
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
 import GdTooltip from "../../ui/GdTooltip.vue";
+import Avatar from "../../ui/Avatar.vue";
 import { useGitStore } from "@/stores/git";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
 import { useBrowserWebviewStore } from "@/stores/browserWebview";
+import type { Agent } from "@/types/agent";
 
 const { t } = useI18n();
 const props = defineProps<{
   sessionId: string | null;
+  /** 当前会话绑定的智能体；加载中/已被删除时为 null（面板隐藏该分区） */
+  agent: Agent | null;
 }>();
 
 const git = useGitStore();
@@ -119,15 +138,17 @@ const browserWindows = computed(() => browserStore.sessionWebviews);
 
 // ── 空态 / 加载态判定 ──
 // 分区可见性全在模板里以数据存在性 v-if 表达，此处镜像同一组条件（新增/删除分区需同步）。
-const hasContent = computed<boolean>(
+// 空态只描述“工作区内容”（Git / 浏览器），不把常驻的智能体卡片算进去：
+// 否则无 Git/浏览器时整块空态消失，用户会误以为概览区只展示角色信息。
+const hasWorkspaceContent = computed<boolean>(
   () => git.isGitRepo || browserWindows.value.length > 0,
 );
 
-/** git 首帧在途：status 未落地时无分区可显示，但请求在跑（失败后 refreshing 归 false → 不会永久停在加载态） */
+/** git 首帧在途：status 未落地时无工作区分区可显示，但请求在跑（失败后 refreshing 归 false → 不会永久停在加载态） */
 const gitPending = computed<boolean>(() => git.refreshing && !git.status);
 
-const showEmptyState = computed<boolean>(() => !hasContent.value && !gitPending.value);
-const showLoadingState = computed<boolean>(() => !hasContent.value && gitPending.value);
+const showEmptyState = computed<boolean>(() => !hasWorkspaceContent.value && !gitPending.value);
+const showLoadingState = computed<boolean>(() => !hasWorkspaceContent.value && gitPending.value);
 
 /** 空态文案：会话尚未建立 vs 会话已有但确实没有可概览项，两种语境分别措辞 */
 const emptyText = computed<{ title: string; hint: string }>(() =>
@@ -278,6 +299,42 @@ async function createBrowser(): Promise<void> {
   /* 整数行高：区标题 17 + 3 = 20 整数，面板内所有行的 top 保持整数
      （历史坑：曾用 1.2 倍行高，14px × 1.2 = 16.8 小数行盒，实测 23 处小数 top）。 */
   line-height: 17px;
+}
+
+/* ── 当前智能体：静态身份信息（头像 + 名称 + 单行描述），无边框/背景以融入面板 ── */
+.overview-agent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 1px 4px 2px;
+}
+.overview-agent-avatar {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+.overview-agent-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.overview-agent-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--gd-size-text-sm);
+  line-height: 20px;
+  color: var(--gd-color-text);
+}
+.overview-agent-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--gd-size-text-xs);
+  line-height: 17px;
+  color: var(--gd-color-text-disabled);
 }
 
 /* 单行（简约风格：icon + 标签 + 右侧值/chevron） */
