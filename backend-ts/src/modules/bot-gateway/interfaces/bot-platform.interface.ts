@@ -167,6 +167,11 @@ export interface PlatformCapabilities {
   handlesReconnectInternally?: boolean;
   /** 两次发送之间的最小间隔(ms)，0 或不填表示不限流 */
   sendIntervalMs?: number;
+  /**
+   * 流式回复中间帧的最小发送间隔(ms)
+   * 缺省 150；0 表示不限制（仍保证同一时刻最多一帧在途）
+   */
+  streamUpdateIntervalMs?: number;
 }
 
 /**

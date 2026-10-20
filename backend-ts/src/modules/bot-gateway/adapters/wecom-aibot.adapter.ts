@@ -42,6 +42,7 @@ export class WeComAiBotAdapter extends BaseBotAdapter {
       supportsTemplateCard: true,     // 支持模板卡片
       supportsMultimedia: true,       // 支持多媒体消息
       handlesReconnectInternally: true, // SDK 内部有完善的重连机制
+      streamUpdateIntervalMs: 150,    // 流式帧逐帧等 ack，需合并高频增量
     };
   }
 

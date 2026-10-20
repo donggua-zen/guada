@@ -14,6 +14,7 @@ import { ChatRunnerService } from "../../chat/chat-runner.service";
 import { SessionMapperService } from "./session-mapper.service";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { buildExternalId } from "../utils/external-id";
+import { StreamReplyCoalescer } from "../utils/stream-reply-coalescer";
 
 /**
  * 机器人消息编排器
@@ -31,13 +32,20 @@ export class BotOrchestrator {
   private readonly logger = new Logger(BotOrchestrator.name);
   private messageQueues: Map<
     string,
-    { messages: BotMessage[]; timer?: NodeJS.Timeout; session?: any }
+    {
+      messages: BotMessage[];
+      timer?: NodeJS.Timeout;
+      session?: any;
+      /** 最近一次会话准备失败的原因，用于向用户反馈 */
+      sessionError?: string;
+    }
   > = new Map();
   private processingSessions: Set<string> = new Set();
   private pendingReplies: Map<string, BotResponse[]> = new Map();
   private readonly MERGE_WINDOW_MS = 3000; // 3秒合并窗口
   private readonly MAX_QUEUE_LENGTH = 10; // 最大缓冲消息数
   private readonly MAX_PENDING_REPLIES = 50; // 每个机器人最大待发送回复数
+  private readonly FALLBACK_REPLY = "抱歉,我暂时无法回复。";
   private lastSendAt = new Map<string, number>();
 
   constructor(
@@ -109,9 +117,11 @@ export class BotOrchestrator {
     if (!queue.session) {
       try {
         queue.session = await this.ensureSession(botId, message, config);
+        queue.sessionError = undefined;
       } catch (error: any) {
+        queue.sessionError = this.extractErrorMessage(error);
         this.logger.error(
-          `Failed to ensure session for ${queueKey}: ${error.message}`,
+          `Failed to ensure session for ${queueKey}: ${queue.sessionError}`,
         );
       }
     }
@@ -247,6 +257,7 @@ export class BotOrchestrator {
   ): Promise<void> {
     const { config, adapter } = instance;
     const firstMessage = messages[0];
+    let coalescer: StreamReplyCoalescer | null = null;
 
     const baseReply = {
       conversationId: firstMessage.conversationId,
@@ -319,7 +330,25 @@ export class BotOrchestrator {
       const session = queue?.session;
 
       if (!session) {
-        this.logger.error(`Session not prepared for ${queueKey}`);
+        const reason = queue?.sessionError;
+
+        // 队列已被清理时没有可反馈的原因，保持静默
+        if (!reason) {
+          this.logger.error(`Session not prepared for ${queueKey}`);
+          return;
+        }
+
+        this.logger.error(`Session not prepared for ${queueKey}: ${reason}`);
+        try {
+          await sendReply(reason, { finish: true });
+          this.logger.log(
+            `Sent session error message to ${firstMessage.senderName || firstMessage.senderId}`,
+          );
+        } catch (sendError: any) {
+          this.logger.error(
+            `Failed to send error message: ${sendError.message}`,
+          );
+        }
         return;
       }
 
@@ -346,6 +375,16 @@ export class BotOrchestrator {
       let accumulatedContent = "";
       let hasSentAnyMessage = false;
 
+      // 流式平台：高频 token 增量合并为固定节奏的最新全文，避免逐帧等 ack 积压
+      if (capabilities.supportsStreaming) {
+        coalescer = new StreamReplyCoalescer(
+          (content) => sendReply(content, { streamId, finish: false }),
+          capabilities.streamUpdateIntervalMs ?? 150,
+          (error) =>
+            this.logger.error(`Failed to send stream reply: ${error.message}`),
+        );
+      }
+
       // startStream 本身不阻塞到流结束，用 Promise 包装 onComplete/onError
       // 使 flushQueue 的 await 真正等到流结束，期间 processingSessions 保持锁定
       await new Promise<void>((resolve) => {
@@ -359,7 +398,21 @@ export class BotOrchestrator {
 
         let unsubscribe: (() => void) | undefined;
 
-        let startStreamError: any = null;
+        // 流启动/运行失败时把原因反馈给用户；发送失败只记日志，避免错误回环
+        const replyError = (error: any, logLabel: string) => {
+          const reason = this.extractErrorMessage(error);
+          this.logger.error(`${logLabel}: ${reason}`);
+          void sendReply(reason, { finish: true })
+            .catch((sendError: Error) => {
+              this.logger.error(
+                `Failed to send error reply: ${sendError.message}`,
+              );
+            })
+            .finally(() => {
+              unsubscribe?.();
+              done();
+            });
+        };
 
         this.chatRunner
           .startStream(
@@ -376,16 +429,7 @@ export class BotOrchestrator {
               onEvent: (chunk) => {
                 if (chunk.type === "text_delta") {
                   accumulatedContent += chunk.text;
-                  if (capabilities.supportsStreaming) {
-                    void sendReply(accumulatedContent, {
-                      streamId,
-                      finish: false,
-                    }).catch((error: Error) => {
-                      this.logger.error(
-                        `Failed to send stream reply: ${error.message}`,
-                      );
-                    });
-                  }
+                  coalescer?.update(accumulatedContent);
                 } else if (
                   (chunk.type === "finish" || chunk.type === "turn_end") &&
                   !capabilities.supportsStreaming
@@ -404,6 +448,9 @@ export class BotOrchestrator {
                 }
               },
               onComplete: () => {
+                // 丢弃尚未发出的中间帧，最终帧包含完整内容
+                coalescer?.dispose();
+
                 const finishSend = (content: string) =>
                   sendReply(content, { streamId, finish: true })
                     .then(() => {
@@ -422,32 +469,19 @@ export class BotOrchestrator {
                     });
 
                 if (capabilities.supportsStreaming) {
-                  void finishSend(
-                    accumulatedContent || "抱歉,我暂时无法回复。",
-                  );
+                  void finishSend(accumulatedContent || this.FALLBACK_REPLY);
                 } else if (accumulatedContent.trim()) {
                   void finishSend(accumulatedContent);
                 } else if (!hasSentAnyMessage) {
-                  void finishSend("抱歉,我暂时无法回复。");
+                  void finishSend(this.FALLBACK_REPLY);
                 } else {
                   unsubscribe?.();
                   done();
                 }
               },
               onError: (err) => {
-                this.logger.error(`Stream error: ${err.message}`);
-                void sendReply(err.message || "抱歉,我暂时无法回复。", {
-                  finish: true,
-                })
-                  .catch((error: Error) => {
-                    this.logger.error(
-                      `Failed to send error reply: ${error.message}`,
-                    );
-                  })
-                  .finally(() => {
-                    unsubscribe?.();
-                    done();
-                  });
+                coalescer?.dispose();
+                replyError(err, "Stream error");
               },
             },
           )
@@ -455,33 +489,53 @@ export class BotOrchestrator {
             unsubscribe = unsub;
           })
           .catch((error: any) => {
-            startStreamError = error;
-            done();
+            // startStream 是 async，SESSION_BUSY 等启动失败只会走这里
+            replyError(error, "Failed to start stream");
           });
-
-        // 如果 startStream 同步抛出（如 SESSION_BUSY），done() 已在 catch 中调用
-        if (startStreamError) {
-          throw startStreamError;
-        }
       });
     } catch (error: any) {
-      this.logger.error(
-        `Failed to process message: ${error.message}`,
-        error.stack,
-      );
+      const reason = this.extractErrorMessage(error);
+      this.logger.error(`Failed to process message: ${reason}`, error?.stack);
 
       // 向用户发送错误消息
       try {
-        await sendReply(error.message || "抱歉,我暂时无法回复。", {
-          finish: true,
-        });
+        await sendReply(reason, { finish: true });
         this.logger.log(
           `Sent error message to ${firstMessage.senderName || firstMessage.senderId}`,
         );
       } catch (sendError: any) {
         this.logger.error(`Failed to send error message: ${sendError.message}`);
       }
+    } finally {
+      coalescer?.dispose();
     }
+  }
+
+  /**
+   * 提取适合反馈给用户/日志的错误文案
+   *
+   * NestJS HttpException 的 message 可能是 JSON 字符串，这里优先取
+   * response.error / response.message，避免把内部结构直接发给用户。
+   */
+  private extractErrorMessage(error: any): string {
+    const response = error?.getResponse?.();
+
+    if (typeof response === "string" && response.trim()) {
+      return response;
+    }
+
+    if (response && typeof response === "object") {
+      const message = response.error || response.message;
+      if (typeof message === "string" && message.trim()) {
+        return message;
+      }
+    }
+
+    if (typeof error?.message === "string" && error.message.trim()) {
+      return error.message;
+    }
+
+    return this.FALLBACK_REPLY;
   }
 
   /**

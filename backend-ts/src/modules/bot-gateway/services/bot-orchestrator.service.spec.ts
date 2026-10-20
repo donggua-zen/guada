@@ -200,6 +200,10 @@ describe('BotOrchestrator - 分轮次消息发送', () => {
     );
   });
 
+  afterEach(() => {
+    orchestrator.cleanup();
+  });
+
   it('非流式·多轮：每个 finish 事件发送独立消息', async () => {
     const cb = await setupAndProcess(orchestrator, deps, adapter, config, message);
 
@@ -309,6 +313,10 @@ describe('BotOrchestrator - 流式平台不受影响', () => {
     );
   });
 
+  afterEach(() => {
+    orchestrator.cleanup();
+  });
+
   it('流式·多轮：finish 事件不影响流式行为，onComplete 发送最终完整内容', async () => {
     const cb = await setupAndProcess(orchestrator, deps, adapter, config, message);
 
@@ -354,5 +362,147 @@ describe('BotOrchestrator - 流式平台不受影响', () => {
     expect(streamUpdates.length).toBeGreaterThanOrEqual(1);
     expect(finalReplies).toHaveLength(1);
     expect(finalReplies[0].content).toBe('Hello');
+  });
+
+  it('流式·快速连续增量：中间帧合并，最终帧包含完整内容', async () => {
+    const cb = await setupAndProcess(orchestrator, deps, adapter, config, message);
+
+    cb.onEvent({ type: 'text_delta', text: 'A' });
+    cb.onEvent({ type: 'text_delta', text: 'B' });
+    cb.onEvent({ type: 'text_delta', text: 'C' });
+    cb.onComplete('completed');
+    await cb.completion;
+    await flushPromises();
+
+    const updates = adapter.streamReplies.filter(
+      (r) => r.options?.finish === false,
+    );
+    const finals = adapter.streamReplies.filter(
+      (r) => r.options?.finish === true,
+    );
+
+    // 首帧立即发送，间隔内的后续增量被合并
+    expect(updates).toHaveLength(1);
+    expect(updates[0].content).toBe('A');
+
+    // 最终帧不被合并影响，仍包含完整内容
+    expect(finals).toHaveLength(1);
+    expect(finals[0].content).toBe('ABC');
+  });
+});
+
+describe('BotOrchestrator - 错误反馈', () => {
+  let orchestrator: BotOrchestrator;
+  let deps: ReturnType<typeof createMockDeps>;
+  let config: BotConfig;
+  let message: BotMessage;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+    config = createBotConfig();
+    message = createBotMessage();
+    orchestrator = new BotOrchestrator(
+      deps.chatRunner as any,
+      deps.sessionMapper as any,
+      deps.workspaceService as any,
+    );
+  });
+
+  afterEach(() => {
+    orchestrator.cleanup();
+  });
+
+  function queueKeyFor(platform: string, msg: BotMessage): string {
+    return `bot-1:${buildExternalId(platform, 'private', msg.senderId)}`;
+  }
+
+  it('会话准备失败：向用户发送错误原因', async () => {
+    const adapter = new MockNonStreamingAdapter();
+    await adapter.connect(config);
+    const instance = {
+      adapter,
+      config,
+      status: BotRuntimeStatus.CONNECTED,
+    };
+    deps.sessionMapper.getOrCreateBotSession.mockRejectedValueOnce(
+      new Error('智能体不存在：char-404，请检查 Bot 实例的智能体配置'),
+    );
+
+    await orchestrator.enqueueMessage('bot-1', message, instance);
+
+    const queueKey = queueKeyFor(config.platform, message);
+    expect(
+      (orchestrator as any).messageQueues.get(queueKey)?.sessionError,
+    ).toBe('智能体不存在：char-404，请检查 Bot 实例的智能体配置');
+
+    await (orchestrator as any).handleIncomingMessage(
+      queueKey,
+      'bot-1',
+      [message],
+      instance,
+    );
+
+    expect(adapter.sentMessages).toHaveLength(1);
+    expect(adapter.sentMessages[0].content).toBe(
+      '智能体不存在：char-404，请检查 Bot 实例的智能体配置',
+    );
+  });
+
+  it('会话准备失败：流式平台通过 sendStreamReply 发送错误', async () => {
+    const adapter = new MockStreamingAdapter();
+    const wecomConfig = { ...config, platform: 'wecom' as const };
+    await adapter.connect(wecomConfig);
+    const instance = {
+      adapter,
+      config: wecomConfig,
+      status: BotRuntimeStatus.CONNECTED,
+    };
+    deps.sessionMapper.getOrCreateBotSession.mockRejectedValueOnce(
+      new Error('Bot 实例未配置默认智能体'),
+    );
+
+    await orchestrator.enqueueMessage('bot-1', message, instance);
+
+    const queueKey = queueKeyFor('wecom', message);
+    await (orchestrator as any).handleIncomingMessage(
+      queueKey,
+      'bot-1',
+      [message],
+      instance,
+    );
+
+    const finalReplies = adapter.streamReplies.filter(
+      (r) => r.options?.finish === true,
+    );
+    expect(finalReplies).toHaveLength(1);
+    expect(finalReplies[0].content).toBe('Bot 实例未配置默认智能体');
+  });
+
+  it('startStream 启动失败：向用户发送错误原因', async () => {
+    const adapter = new MockNonStreamingAdapter();
+    await adapter.connect(config);
+    const instance = {
+      adapter,
+      config,
+      status: BotRuntimeStatus.CONNECTED,
+    };
+    deps.chatRunner.startStream.mockRejectedValueOnce(
+      new Error('当前已有任务正在进行，请等待结束'),
+    );
+
+    await orchestrator.enqueueMessage('bot-1', message, instance);
+
+    const queueKey = queueKeyFor(config.platform, message);
+    await (orchestrator as any).handleIncomingMessage(
+      queueKey,
+      'bot-1',
+      [message],
+      instance,
+    );
+
+    expect(adapter.sentMessages).toHaveLength(1);
+    expect(adapter.sentMessages[0].content).toBe(
+      '当前已有任务正在进行，请等待结束',
+    );
   });
 });
