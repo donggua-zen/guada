@@ -137,6 +137,7 @@ describe("SessionService 侧栏目录分组", () => {
       name: "alpha",
       path: projectA,
       pathKey: normalizeWorkspaceKey(projectA),
+      icon: null,
       kind: "workspace",
       isOverridden: false,
     });
@@ -156,6 +157,14 @@ describe("SessionService 侧栏目录分组", () => {
       "none1",
     ]);
     expect(general.total).toBe(3);
+  });
+
+  it("侧栏分组返回自定义图标", async () => {
+    const group = (await store.listProjectGroups())[0];
+    await store.updateProjectGroup(group.id, { icon: "rocket" });
+
+    const data = await service.getSidebarSessionsByProject(10);
+    expect(data.groups[0].icon).toBe("rocket");
   });
 
   it("按桶分页：分组 / 通用 / 未知 id", async () => {
@@ -178,7 +187,7 @@ describe("SessionService 侧栏目录分组", () => {
   });
 
   it("重命名只改显示名，不影响成员归属", async () => {    const group = (await store.listProjectGroups())[0];
-    await store.renameProjectGroup(group.id, "我的项目");
+    await store.updateProjectGroup(group.id, { name: "我的项目" });
 
     const data = await service.getSidebarSessionsByProject(10);
     expect(data.groups[0].name).toBe("我的项目");

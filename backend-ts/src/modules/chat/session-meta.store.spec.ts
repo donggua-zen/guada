@@ -108,7 +108,7 @@ describe("SessionMetaStore", () => {
               }),
             ),
           ],
-          [{ id: "grp-1", name: "工作", sortOrder: 1, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }],
+          [{ id: "grp-1", name: "工作", sortOrder: 1, icon: null, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }],
         );
         expect(isMetaDbMigrated(db)).toBe(false);
         markMetaDbMigrated(db);
@@ -320,13 +320,21 @@ describe("SessionMetaStore", () => {
       const probe = rawDb();
       const cols = (probe.pragma("table_info(sessions)") as any[]).map((c) => c.name);
       const version = probe.pragma("user_version", { simple: true });
+      const groupCols = (
+        probe.pragma("table_info(session_groups)") as any[]
+      ).map((c) => c.name);
+      const projectCols = (
+        probe.pragma("table_info(project_groups)") as any[]
+      ).map((c) => c.name);
       probe.close();
       expect(cols).toContain("data");
       expect(cols).not.toContain("settings");
       // v4：pinned 列（置顶）由迁移补齐；v5：model_usage 用量表；v6：workspace_key 派生列
       expect(cols).toContain("pinned");
       expect(cols).toContain("workspace_key");
-      expect(version).toBe(6);
+      expect(groupCols).toContain("icon");
+      expect(projectCols).toContain("icon");
+      expect(version).toBe(7);
     });
   });
 
@@ -584,8 +592,8 @@ describe("SessionMetaStore", () => {
       const db = openMetaDb(sessionsBase);
       try {
         replaceAllGroups(db, [
-          { id: "g-a", name: "A", sortOrder: 0, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", data: { icon: "i" } },
-          { id: "g-b", name: "B", sortOrder: 1, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+          { id: "g-a", name: "A", sortOrder: 0, icon: null, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", data: { icon: "i" } },
+          { id: "g-b", name: "B", sortOrder: 1, icon: null, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
         ]);
       } finally {
         db.close();
@@ -594,6 +602,20 @@ describe("SessionMetaStore", () => {
       expect(groups.map((g) => g.id)).toEqual(["g-a", "g-b"]);
       expect(groups[0].data).toEqual({ icon: "i" });
       expect(groups[1].data).toBeNull();
+    });
+
+    it("分组图标往返：创建可带 icon，updateGroup 可只改/清空 icon", async () => {
+      const group = await store.createGroup({ name: "图标分组", icon: "code" });
+      expect(group.icon).toBe("code");
+      expect((await store.findGroupById(group.id))!.icon).toBe("code");
+
+      await store.updateGroup(group.id, { icon: "rocket" });
+      const updated = (await store.findGroupById(group.id))!;
+      expect(updated.icon).toBe("rocket");
+      expect(updated.name).toBe("图标分组");
+
+      await store.updateGroup(group.id, { icon: null });
+      expect((await store.findGroupById(group.id))!.icon).toBeNull();
     });
 
     it("转换助手：readMetaRow 读回转换后的行（骨架判定依据）", () => {
@@ -631,11 +653,38 @@ describe("SessionMetaStore", () => {
       expect(await store.listProjectGroups()).toHaveLength(1);
 
       // 改名后再次注册不得覆盖（bootstrap 语义）
-      await store.renameProjectGroup(first.id, "自定义名字");
+      await store.updateProjectGroup(first.id, { name: "自定义名字" });
       const third = await store.ensureProjectGroup({ path: projectPath, prepend: false });
       expect(third.id).toBe(first.id);
       expect(third.name).toBe("自定义名字");
       expect(third.nameOverridden).toBe(true);
+    });
+
+    it("项目图标：注册默认 null；只改 icon 不置 nameOverridden，改名仍置位", async () => {
+      await store.initialize();
+      const group = await store.ensureProjectGroup({
+        path: projectPath,
+        prepend: false,
+      });
+      expect(group.icon).toBeNull();
+
+      const iconOnly = (await store.updateProjectGroup(group.id, {
+        icon: "rocket",
+      }))!;
+      expect(iconOnly.icon).toBe("rocket");
+      expect(iconOnly.name).toBe("alpha");
+      expect(iconOnly.nameOverridden).toBe(false);
+
+      const renamed = (await store.updateProjectGroup(group.id, {
+        name: "新名字",
+        icon: "star",
+      }))!;
+      expect(renamed.name).toBe("新名字");
+      expect(renamed.nameOverridden).toBe(true);
+      expect(renamed.icon).toBe("star");
+
+      await store.updateProjectGroup(group.id, { icon: null });
+      expect((await store.findProjectGroup(group.id))!.icon).toBeNull();
     });
 
     it("新建分组前置：position 递增向前，列表顺序稳定", async () => {

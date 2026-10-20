@@ -49,7 +49,7 @@ import {
 
 export const META_DB_FILE = "_meta.db";
 /** 当前 schema 版本；结构调整 +1 并在 migrate() 追加一步 */
-export const SESSION_META_DB_VERSION = 6;
+export const SESSION_META_DB_VERSION = 7;
 /** _bootstrap 表内的一次性转换完成标记键（真值在库内：库删则自动从主库重转） */
 export const META_DB_MIGRATED_KEY = "migrated_from_db_at";
 /**
@@ -108,6 +108,8 @@ export interface SessionGroupMeta {
   id: string;
   name: string;
   sortOrder: number;
+  /** 自定义图标 key（Fluent 白名单的字符串标识；null = 默认文件夹） */
+  icon: string | null;
   createdAt: string;
   updatedAt: string;
   /** 通用扩展字段（不索引），落 `session_groups.data` 列 */
@@ -129,6 +131,8 @@ export interface ProjectGroupMeta {
   name: string;
   /** 用户改过名（bootstrap 永不覆盖） */
   nameOverridden: boolean;
+  /** 自定义图标 key（Fluent 白名单的字符串标识；null = 默认文件夹） */
+  icon: string | null;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -225,6 +229,7 @@ CREATE TABLE IF NOT EXISTS session_groups (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
+  icon TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -300,6 +305,7 @@ CREATE TABLE IF NOT EXISTS project_groups (
   path_key TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   name_overridden INTEGER NOT NULL DEFAULT 0,
+  icon TEXT,
   position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -405,6 +411,7 @@ function projectGroupFromRow(r: any): ProjectGroupMeta {
     pathKey: r.path_key,
     name: r.name,
     nameOverridden: r.name_overridden === 1,
+    icon: r.icon ?? null,
     position: r.position,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -479,6 +486,8 @@ export function migrateMetaDbSchema(db: Database.Database): void {
   // v6 目录分组：建表、派生列与索引全部按存在性/IF NOT EXISTS 幂等执行。
   db.exec(PROJECT_GROUP_DDL);
   migrateToWorkspaceKeyColumn(db);
+  // v7 分组图标：两张分组表各增可空 icon 列（按列存在性自愈）。
+  migrateToGroupIconColumn(db);
   db.pragma(`user_version = ${SESSION_META_DB_VERSION}`);
 }
 
@@ -511,6 +520,27 @@ function migrateToWorkspaceKeyColumn(db: Database.Database): void {
     db.exec(
       `CREATE INDEX IF NOT EXISTS idx_sessions_workspace_key ON sessions(workspace_key)`,
     );
+  });
+  tx();
+}
+
+/**
+ * v7：两张分组表各增可空 `icon` 列（Fluent 图标 key；NULL = 默认文件夹）。
+ *
+ * 新库的 DDL 已带该列，这里主要服务旧库升级。仍按 table_info 列存在性
+ * 判断而非版本号门控，保证热重载误标版本号后可以自愈（见 v2/v3 教训）。
+ */
+function migrateToGroupIconColumn(db: Database.Database): void {
+  const tx = db.transaction(() => {
+    for (const table of ["session_groups", "project_groups"]) {
+      const cols = new Set(
+        (db.pragma(`table_info(${table})`) as { name: string }[])
+          .map((c) => c.name),
+      );
+      if (!cols.has("icon")) {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN icon TEXT`);
+      }
+    }
   });
   tx();
 }
@@ -609,10 +639,18 @@ export function replaceAllGroups(
   const tx = db.transaction((list: SessionGroupMeta[]) => {
     db.prepare(`DELETE FROM session_groups`).run();
     const insert = db.prepare(
-      `INSERT INTO session_groups (id, name, sort_order, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO session_groups (id, name, sort_order, icon, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const g of list) {
-      insert.run(g.id, g.name, g.sortOrder ?? 0, g.createdAt, g.updatedAt, groupDataJson(g));
+      insert.run(
+        g.id,
+        g.name,
+        g.sortOrder ?? 0,
+        g.icon ?? null,
+        g.createdAt,
+        g.updatedAt,
+        groupDataJson(g),
+      );
     }
   });
   tx(groups);
@@ -1191,13 +1229,14 @@ export class SessionMetaStore implements OnModuleDestroy {
     if (!this.db) return [];
     const rows = this.db
       .prepare(
-        `SELECT id, name, sort_order, created_at, updated_at, data FROM session_groups ORDER BY sort_order ASC, id ASC`,
+        `SELECT id, name, sort_order, icon, created_at, updated_at, data FROM session_groups ORDER BY sort_order ASC, id ASC`,
       )
       .all() as any[];
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
       sortOrder: r.sort_order,
+      icon: r.icon ?? null,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
       data: parseJsonObject(r.data),
@@ -1213,6 +1252,7 @@ export class SessionMetaStore implements OnModuleDestroy {
   async createGroup(data: {
     name: string;
     sortOrder?: number;
+    icon?: string | null;
   }): Promise<SessionGroupMeta> {
     await this.initialize();
     const now = new Date().toISOString();
@@ -1220,20 +1260,34 @@ export class SessionMetaStore implements OnModuleDestroy {
       id: mintId(ID_PREFIXES.group),
       name: data.name,
       sortOrder: data.sortOrder ?? 0,
+      icon: data.icon ?? null,
       createdAt: now,
       updatedAt: now,
     };
     this.db
       ?.prepare(
-        `INSERT INTO session_groups (id, name, sort_order, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO session_groups (id, name, sort_order, icon, created_at, updated_at, data) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(group.id, group.name, group.sortOrder, group.createdAt, group.updatedAt, null);
+      .run(
+        group.id,
+        group.name,
+        group.sortOrder,
+        group.icon,
+        group.createdAt,
+        group.updatedAt,
+        null,
+      );
     return group;
   }
 
   async updateGroup(
     id: string,
-    data: { name?: string; sortOrder?: number; data?: Record<string, any> | null },
+    data: {
+      name?: string;
+      sortOrder?: number;
+      icon?: string | null;
+      data?: Record<string, any> | null;
+    },
   ): Promise<SessionGroupMeta | undefined> {
     await this.initialize();
     const target = await this.findGroupById(id);
@@ -1241,6 +1295,7 @@ export class SessionMetaStore implements OnModuleDestroy {
     const name = data.name !== undefined ? data.name : target.name;
     const sortOrder =
       data.sortOrder !== undefined ? data.sortOrder : target.sortOrder;
+    const icon = data.icon !== undefined ? data.icon : target.icon;
     const groupData =
       data.data !== undefined
         ? isPlainObject(data.data)
@@ -1250,10 +1305,17 @@ export class SessionMetaStore implements OnModuleDestroy {
     const updatedAt = new Date().toISOString();
     this.db
       .prepare(
-        `UPDATE session_groups SET name = ?, sort_order = ?, updated_at = ?, data = ? WHERE id = ?`,
+        `UPDATE session_groups SET name = ?, sort_order = ?, icon = ?, updated_at = ?, data = ? WHERE id = ?`,
       )
-      .run(name, sortOrder, updatedAt, groupData ? JSON.stringify(groupData) : null, id);
-    return { ...target, name, sortOrder, updatedAt, data: groupData };
+      .run(
+        name,
+        sortOrder,
+        icon,
+        updatedAt,
+        groupData ? JSON.stringify(groupData) : null,
+        id,
+      );
+    return { ...target, name, sortOrder, icon, updatedAt, data: groupData };
   }
 
   /** 删除分组：连同该组会话解绑（单事务，替代 FK onDelete SetNull） */
@@ -1315,7 +1377,7 @@ export class SessionMetaStore implements OnModuleDestroy {
     if (!this.db) return [];
     const rows = this.db
       .prepare(
-        `SELECT id, path, path_key, name, name_overridden, position, created_at, updated_at
+        `SELECT id, path, path_key, name, name_overridden, icon, position, created_at, updated_at
          FROM project_groups ORDER BY position ASC, id ASC`,
       )
       .all() as any[];
@@ -1327,7 +1389,7 @@ export class SessionMetaStore implements OnModuleDestroy {
     if (!this.db) return undefined;
     const row = this.db
       .prepare(
-        `SELECT id, path, path_key, name, name_overridden, position, created_at, updated_at
+        `SELECT id, path, path_key, name, name_overridden, icon, position, created_at, updated_at
          FROM project_groups WHERE id = ?`,
       )
       .get(id) as any;
@@ -1341,7 +1403,7 @@ export class SessionMetaStore implements OnModuleDestroy {
     if (!this.db) return undefined;
     const row = this.db
       .prepare(
-        `SELECT id, path, path_key, name, name_overridden, position, created_at, updated_at
+        `SELECT id, path, path_key, name, name_overridden, icon, position, created_at, updated_at
          FROM project_groups WHERE path_key = ?`,
       )
       .get(pathKey) as any;
@@ -1391,6 +1453,7 @@ export class SessionMetaStore implements OnModuleDestroy {
       pathKey,
       name: data.name?.trim() || workspaceBasename(data.path) || data.path,
       nameOverridden: false,
+      icon: null,
       position,
       createdAt: now,
       updatedAt: now,
@@ -1399,8 +1462,8 @@ export class SessionMetaStore implements OnModuleDestroy {
     const result = this.db
       .prepare(
         `INSERT OR IGNORE INTO project_groups
-         (id, path, path_key, name, name_overridden, position, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+         (id, path, path_key, name, name_overridden, icon, position, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
       )
       .run(
         group.id,
@@ -1418,21 +1481,41 @@ export class SessionMetaStore implements OnModuleDestroy {
     return group;
   }
 
-  /** 重命名（写 name 并置 name_overridden=1；bootstrap 永不覆盖已改名分组） */
-  async renameProjectGroup(
+  /**
+   * 更新显示名和/或图标。
+   *
+   * - 传 `name` 时写 `name_overridden = 1`（bootstrap 永不覆盖已改名分组）；
+   * - 只传 `icon` 时不动 `name_overridden`，避免「换图标」被误判为用户改名；
+   * - 两个字段都未传时返回 undefined。
+   */
+  async updateProjectGroup(
     id: string,
-    name: string,
+    data: { name?: string; icon?: string | null },
   ): Promise<ProjectGroupMeta | undefined> {
     await this.initialize();
     if (!this.db) return undefined;
-    const trimmed = name.trim();
-    if (!trimmed) return undefined;
-    const result = this.db
+    const target = await this.findProjectGroup(id);
+    if (!target) return undefined;
+    if (data.name === undefined && data.icon === undefined) return undefined;
+
+    const trimmedName =
+      data.name !== undefined ? data.name.trim() : target.name;
+    if (!trimmedName) return undefined;
+    const nameOverridden =
+      data.name !== undefined ? true : target.nameOverridden;
+    const icon = data.icon !== undefined ? data.icon : target.icon;
+
+    this.db
       .prepare(
-        `UPDATE project_groups SET name = ?, name_overridden = 1, updated_at = ? WHERE id = ?`,
+        `UPDATE project_groups SET name = ?, name_overridden = ?, icon = ?, updated_at = ? WHERE id = ?`,
       )
-      .run(trimmed, new Date().toISOString(), id);
-    if (result.changes === 0) return undefined;
+      .run(
+        trimmedName,
+        nameOverridden ? 1 : 0,
+        icon,
+        new Date().toISOString(),
+        id,
+      );
     return this.findProjectGroup(id);
   }
 

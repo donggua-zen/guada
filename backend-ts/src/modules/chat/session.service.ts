@@ -314,6 +314,7 @@ export class SessionService {
         name: group.name,
         path: group.path,
         pathKey: group.pathKey,
+        icon: group.icon,
         sortOrder: group.position,
         isOverridden: group.nameOverridden,
         kind: "workspace",

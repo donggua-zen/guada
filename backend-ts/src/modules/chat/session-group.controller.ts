@@ -32,15 +32,18 @@ export class SessionGroupController {
    * 创建新分组
    */
   @Post()
-  async createGroup(@Body() data: { name: string }) {
+  async createGroup(@Body() data: { name: string; icon?: string | null }) {
     return this.sessionGroupService.createGroup(data);
   }
 
   /**
-   * 更新分组名称
+   * 更新分组名称和/或图标
    */
   @Put(":id")
-  async updateGroup(@Param("id") id: string, @Body() data: { name: string }) {
+  async updateGroup(
+    @Param("id") id: string,
+    @Body() data: { name?: string; icon?: string | null },
+  ) {
     return this.sessionGroupService.updateGroup(id, data);
   }
 

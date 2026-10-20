@@ -147,9 +147,12 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   /**
    * 创建分组
    */
-  const createGroup = async (name: string): Promise<SessionGroup | null> => {
+  const createGroup = async (
+    name: string,
+    icon?: string | null,
+  ): Promise<SessionGroup | null> => {
     try {
-      const group = await apiService.createSessionGroup({ name })
+      const group = await apiService.createSessionGroup({ name, icon })
       groups.value.push(group)
       // 新分组默认展开
       expandedState.value.set(group.id, true)
@@ -162,11 +165,14 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   }
 
   /**
-   * 更新分组名称
+   * 更新分组名称和/或图标
    */
-  const updateGroup = async (groupId: string, name: string): Promise<boolean> => {
+  const updateGroup = async (
+    groupId: string,
+    updates: { name?: string; icon?: string | null },
+  ): Promise<boolean> => {
     try {
-      const updated = await apiService.updateSessionGroup(groupId, { name })
+      const updated = await apiService.updateSessionGroup(groupId, updates)
       const index = groups.value.findIndex(g => g.id === groupId)
       if (index !== -1) {
         groups.value[index] = updated
@@ -269,6 +275,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
       pathKey: null,
       sortOrder: Number.MAX_SAFE_INTEGER,
       isOverridden: false,
+      icon: null,
       kind: 'general',
     })
     projectGroups.value = list
@@ -278,13 +285,13 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
     }
   }
 
-  /** 重命名目录分组（只改显示名，不改磁盘目录） */
-  const renameProjectGroup = async (
+  /** 更新目录分组显示名和/或图标（只改显示名，不改磁盘目录） */
+  const updateProjectGroup = async (
     groupId: string,
-    name: string,
+    updates: { name?: string; icon?: string | null },
   ): Promise<boolean> => {
     try {
-      const updated = await apiService.renameProjectGroup(groupId, name)
+      const updated = await apiService.updateProjectGroup(groupId, updates)
       const index = projectGroups.value.findIndex((g) => g.id === groupId)
       if (index !== -1) {
         projectGroups.value[index] = {
@@ -295,7 +302,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
       }
       return true
     } catch (error) {
-      console.error('重命名目录分组失败:', error)
+      console.error('更新目录分组失败:', error)
       return false
     }
   }
@@ -417,7 +424,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
     archiveGroup,
     setLoadingMore,
     setProjectGroups,
-    renameProjectGroup,
+    updateProjectGroup,
     reorderProjectGroups,
     deleteProjectGroup,
     createProjectGroup,

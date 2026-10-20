@@ -66,7 +66,7 @@ describe("ProjectGroupService 手动注册项目", () => {
   it("同路径重复注册幂等，且不覆盖用户改名", async () => {
     const dir = fs.mkdtempSync(path.join(tmpRoot, "proj-"));
     const first = await service.createGroup({ path: dir });
-    await store.renameProjectGroup(first.id, "我的项目");
+    await store.updateProjectGroup(first.id, { name: "我的项目" });
 
     const second = await service.createGroup({ path: dir });
 
@@ -98,5 +98,33 @@ describe("ProjectGroupService 手动注册项目", () => {
     await expect(service.createGroup({ path: file })).rejects.toMatchObject({
       status: 400,
     });
+  });
+
+  it("更新图标：可只改图标，名称与改名标记不受影响；非法 key 拒绝", async () => {
+    const dir = fs.mkdtempSync(path.join(tmpRoot, "proj-icon-"));
+    const created = await service.createGroup({ path: dir });
+    expect(created.icon).toBeNull();
+
+    const updated = (await service.updateGroup(created.id, {
+      icon: "rocket",
+    }))!;
+    expect(updated.icon).toBe("rocket");
+    expect(updated.name).toBe(created.name);
+    expect(updated.nameOverridden).toBe(false);
+
+    const renamed = (await service.updateGroup(created.id, {
+      name: "新项目名",
+      icon: null,
+    }))!;
+    expect(renamed.name).toBe("新项目名");
+    expect(renamed.nameOverridden).toBe(true);
+    expect(renamed.icon).toBeNull();
+
+    await expect(
+      service.updateGroup(created.id, { icon: "Not Valid!" }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      service.updateGroup(created.id, {}),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

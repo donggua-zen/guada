@@ -24,8 +24,9 @@
       <template v-else-if="searchResults.length > 0">
         <div v-for="group in groupedResults" :key="group.id" class="mb-1">
           <!-- 分组标题 -->
-          <div class="px-4 py-1 text-xs font-medium text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50">
-            {{ group.name }}
+          <div class="px-4 py-1 flex items-center gap-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50">
+            <GroupIcon :icon="group.icon" class="w-3.5 h-3.5 shrink-0 text-(--gd-color-primary)" />
+            <span>{{ group.name }}</span>
           </div>
           <!-- 分组内会话 -->
           <div v-for="session in group.sessions" :key="session.id"
@@ -81,6 +82,7 @@ import { UNGROUPED_ID } from '@/stores/session'
 import { resolveProjectBucketId } from '@/utils/projectGroupBucket'
 import type { SearchSessionResult } from '@/types/session'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import GroupIcon from '@/components/session/GroupIcon.vue'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -113,15 +115,15 @@ let searchGen = 0
 
 /** 搜索结果按当前分组模式归类，仅展示有结果的分组 */
 const groupedResults = computed(() => {
-  const result: { id: string; name: string; sessions: SearchSessionResult[] }[] = []
+  const result: { id: string; name: string; icon?: string | null; sessions: SearchSessionResult[] }[] = []
 
   // 目录模式：按工作目录桶归类（键由后端下发，未注册目录归「通用」）
   if (sessionGroupStore.groupingMode === 'workspace') {
     const buckets = [
       ...sessionGroupStore.sortedProjectGroups
         .filter((g) => g.kind === 'workspace')
-        .map((g) => ({ id: g.id, name: g.name })),
-      { id: GENERAL_PROJECT_GROUP_ID, name: t('ui.sidebar.projectGeneral') },
+        .map((g) => ({ id: g.id, name: g.name, icon: g.icon })),
+      { id: GENERAL_PROJECT_GROUP_ID, name: t('ui.sidebar.projectGeneral'), icon: null },
     ]
     for (const bucket of buckets) {
       const sessions = searchResults.value.filter(
@@ -147,7 +149,7 @@ const groupedResults = computed(() => {
     const targetGroupId = group.id === UNGROUPED_ID ? null : group.id
     const sessions = searchResults.value.filter(s => (s.groupId || null) === targetGroupId)
     if (sessions.length > 0) {
-      result.push({ id: group.id, name: group.name, sessions })
+      result.push({ id: group.id, name: group.name, icon: group.icon, sessions })
     }
   }
   return result

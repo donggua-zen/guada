@@ -101,4 +101,22 @@ describe("SessionGroupService 归档本分组", () => {
       status: 404,
     });
   });
+
+  it("创建可带图标；更新支持只改图标；非法 key 400", async () => {
+    const created = await service.createGroup({ name: "图标组", icon: "code" });
+    expect(created.icon).toBe("code");
+
+    const updated = (await service.updateGroup(created.id, {
+      icon: "rocket",
+    }))!;
+    expect(updated.icon).toBe("rocket");
+    expect(updated.name).toBe("图标组");
+
+    await expect(
+      service.updateGroup(created.id, { icon: "Bad Key" }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      service.updateGroup(created.id, {}),
+    ).rejects.toMatchObject({ status: 400 });
+  });
 });

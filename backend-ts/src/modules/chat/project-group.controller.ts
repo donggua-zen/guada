@@ -40,10 +40,13 @@ export class ProjectGroupController {
     return this.projectGroupService.getStats(id);
   }
 
-  /** 重命名（仅显示名，不改磁盘目录） */
+  /** 更新显示名和/或图标（仅显示名，不改磁盘目录） */
   @Put(":id")
-  async renameGroup(@Param("id") id: string, @Body() data: { name?: string }) {
-    return this.projectGroupService.renameGroup(id, data);
+  async updateGroup(
+    @Param("id") id: string,
+    @Body() data: { name?: string; icon?: string | null },
+  ) {
+    return this.projectGroupService.updateGroup(id, data);
   }
 
   /** 批量更新排序（按新顺序排列的完整分组 id 数组） */

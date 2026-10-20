@@ -5,6 +5,7 @@ import { SessionMetaStore } from "./session-meta.store";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { qualifiesForProjectGroup } from "../../common/utils/workspace-key.util";
+import { parseGroupIcon } from "../../common/utils/group-icon.util";
 
 /**
  * 目录分组服务（按工作目录分组，单账户）。
@@ -68,14 +69,29 @@ export class ProjectGroupService {
     });
   }
 
-  /** 重命名（只改显示名，不动磁盘目录） */
-  async renameGroup(id: string, data: { name?: string }) {
-    const name = data.name?.trim();
-    if (!name) {
-      throw new HttpException("分组名称不能为空", HttpStatus.BAD_REQUEST);
-    }
+  /** 更新显示名和/或图标（只改显示名，不动磁盘目录） */
+  async updateGroup(
+    id: string,
+    data: { name?: string; icon?: string | null },
+  ) {
     const group = await this.requireGroup(id);
-    return this.sessionStore.renameProjectGroup(group.id, name);
+    const updateData: { name?: string; icon?: string | null } = {};
+    if (data.name !== undefined) {
+      const name = data.name.trim();
+      if (!name) {
+        throw new HttpException("分组名称不能为空", HttpStatus.BAD_REQUEST);
+      }
+      updateData.name = name;
+    }
+    const icon = parseGroupIcon(data.icon);
+    if (icon.invalid) {
+      throw new HttpException("无效的分组图标", HttpStatus.BAD_REQUEST);
+    }
+    if (icon.value !== undefined) updateData.icon = icon.value;
+    if (Object.keys(updateData).length === 0) {
+      throw new HttpException("没有可更新的字段", HttpStatus.BAD_REQUEST);
+    }
+    return this.sessionStore.updateProjectGroup(group.id, updateData);
   }
 
   /** 批量更新排序（要求完整 id 集合） */

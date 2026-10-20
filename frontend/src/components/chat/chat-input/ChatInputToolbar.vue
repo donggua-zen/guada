@@ -20,6 +20,7 @@
     <!-- 分组选择按钮（目录模式下隐藏：分组由工作目录决定，手工分组不生效） -->
     <el-button v-if="sessionGroupStore.groupingMode === 'group'" ref="groupButtonRef" class="workspace-btn mr-0.5"
       @click.stop="openGroupSelector" text>
+      <GroupIcon :icon="selectedGroupIcon" class="w-4 h-4 shrink-0" />
       <span class="text-xs font-medium">
         {{ t('chat.toolbar.group', { name: selectedGroupName }) }}
       </span>
@@ -48,9 +49,7 @@
           ? 'bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
           : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="selectGroup(g.value)">
-        <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-          <Folder20Regular />
-        </el-icon>
+        <GroupIcon :icon="g.icon" class="w-4 h-4 shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)" />
         <span class="flex-1 text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb]">{{ g.label }}</span>
         <el-icon v-if="selectedGroupId === g.value" size="14" class="shrink-0 text-(--el-color-primary)">
           <Checkmark16Filled />
@@ -64,10 +63,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { FolderOpen24Regular, ChevronUpDown16Regular, Folder20Regular, Checkmark16Filled } from '@vicons/fluent'
+import { FolderOpen24Regular, ChevronUpDown16Regular, Checkmark16Filled } from '@vicons/fluent'
 import WorkspaceSelectorPopover from './WorkspaceSelectorPopover.vue'
 import RemoteDirButton from './RemoteDirButton.vue'
 import GdPopover from '../../ui/GdPopover.vue'
+import GroupIcon from '@/components/session/GroupIcon.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
 import { useWorkspaceStore } from '@/stores/workspace'
 
@@ -120,13 +120,21 @@ const displayWorkspacePath = computed(() => {
 const groupSelectorOptions = computed(() => {
   const options = sessionGroupStore.sortedGroups.map(g => ({
     label: g.name,
-    value: g.id
+    value: g.id,
+    icon: g.icon ?? null,
   }))
   options.unshift({
     label: t('chat.toolbar.taskList'),
-    value: UNGROUPED_ID
+    value: UNGROUPED_ID,
+    icon: null,
   })
   return options
+})
+
+const selectedGroupIcon = computed(() => {
+  const groupId = props.config?.groupId
+  if (!groupId || groupId === UNGROUPED_ID) return null
+  return sessionGroupStore.sortedGroups.find(g => g.id === groupId)?.icon ?? null
 })
 
 const selectedGroupName = computed(() => {

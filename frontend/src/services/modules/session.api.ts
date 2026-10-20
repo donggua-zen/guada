@@ -24,16 +24,19 @@ export interface SessionApi {
   batchArchiveSessions(sessionIds: string[], archived: boolean): Promise<{ success: boolean; skipped: string[] }>;
   updateSession(sessionId: string, data: UpdateSessionRequest): Promise<Session>;
   fetchSessionGroups(): Promise<SessionGroup[]>;
-  createSessionGroup(data: { name: string }): Promise<SessionGroup>;
-  updateSessionGroup(groupId: string, data: { name: string }): Promise<SessionGroup>;
+  createSessionGroup(data: { name: string; icon?: string | null }): Promise<SessionGroup>;
+  updateSessionGroup(groupId: string, data: { name?: string; icon?: string | null }): Promise<SessionGroup>;
   deleteSessionGroup(groupId: string): Promise<{ success: boolean }>;
   reorderSessionGroups(groupIds: string[]): Promise<{ success: boolean }>;
   /** 手工分组统计（归档确认弹窗用） */
   fetchSessionGroupStats(groupId: string): Promise<GroupStats>;
   /** 归档本分组：归档组内全部对话（流式输出中的跳过，分组保留） */
   archiveSessionGroup(groupId: string): Promise<ArchiveSessionGroupResult>;
-  /** 重命名目录分组（仅显示名，不改磁盘目录） */
-  renameProjectGroup(groupId: string, name: string): Promise<ProjectGroup>;
+  /** 更新目录分组显示名和/或图标（不改磁盘目录） */
+  updateProjectGroup(
+    groupId: string,
+    data: { name?: string; icon?: string | null },
+  ): Promise<ProjectGroup>;
   /** 目录分组排序（需完整 id 集合） */
   reorderProjectGroups(groupIds: string[]): Promise<{ success: boolean }>;
   /** 项目统计（删除/归档确认弹窗用） */
@@ -456,14 +459,18 @@ export const sessionApi: SessionApi = {
     return await this._request("/session-groups");
   },
 
-  async createSessionGroup(this: ApiContext, data: { name: string }) {
+  async createSessionGroup(this: ApiContext, data: { name: string; icon?: string | null }) {
     return await this._request("/session-groups", {
       method: "POST",
       data,
     });
   },
 
-  async updateSessionGroup(this: ApiContext, groupId: string, data: { name: string }) {
+  async updateSessionGroup(
+    this: ApiContext,
+    groupId: string,
+    data: { name?: string; icon?: string | null },
+  ) {
     return await this._request(`/session-groups/${groupId}`, {
       method: "PUT",
       data,
@@ -494,10 +501,14 @@ export const sessionApi: SessionApi = {
     );
   },
 
-  async renameProjectGroup(this: ApiContext, groupId: string, name: string) {
+  async updateProjectGroup(
+    this: ApiContext,
+    groupId: string,
+    data: { name?: string; icon?: string | null },
+  ) {
     return await this._request<ProjectGroup>(`/project-groups/${groupId}`, {
       method: "PUT",
-      data: { name },
+      data,
     });
   },
 

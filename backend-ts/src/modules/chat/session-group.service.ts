@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
+import { parseGroupIcon } from "../../common/utils/group-icon.util";
 import { SessionMetaStore } from "./session-meta.store";
 import { SessionStreamManager } from "./session-stream.manager";
 
@@ -26,22 +27,44 @@ export class SessionGroupService {
    * 创建新分组
    * 自动将 sortOrder 设为当前最大值+1，确保新分组排在最后
    */
-  async createGroup(data: { name: string }) {
+  async createGroup(data: { name: string; icon?: string | null }) {
+    const icon = parseGroupIcon(data.icon);
+    if (icon.invalid) {
+      throw new HttpException("无效的分组图标", HttpStatus.BAD_REQUEST);
+    }
     const maxOrder = await this.sessionStore.getMaxGroupSortOrder();
     return this.sessionStore.createGroup({
       name: data.name,
       sortOrder: maxOrder + 1,
+      ...(icon.value !== undefined ? { icon: icon.value } : {}),
     });
   }
 
-  /** 更新分组名称 */
-  async updateGroup(groupId: string, data: { name?: string }) {
+  /** 更新分组名称和/或图标 */
+  async updateGroup(
+    groupId: string,
+    data: { name?: string; icon?: string | null },
+  ) {
     const group = await this.sessionStore.findGroupById(groupId);
     if (!group) {
       throw new HttpException("分组不存在", HttpStatus.NOT_FOUND);
     }
-    const updateData: { name?: string } = {};
-    if (data.name !== undefined) updateData.name = data.name;
+    const updateData: { name?: string; icon?: string | null } = {};
+    if (data.name !== undefined) {
+      const name = data.name.trim();
+      if (!name) {
+        throw new HttpException("分组名称不能为空", HttpStatus.BAD_REQUEST);
+      }
+      updateData.name = name;
+    }
+    const icon = parseGroupIcon(data.icon);
+    if (icon.invalid) {
+      throw new HttpException("无效的分组图标", HttpStatus.BAD_REQUEST);
+    }
+    if (icon.value !== undefined) updateData.icon = icon.value;
+    if (Object.keys(updateData).length === 0) {
+      throw new HttpException("没有可更新的字段", HttpStatus.BAD_REQUEST);
+    }
     return this.sessionStore.updateGroup(groupId, updateData);
   }
 

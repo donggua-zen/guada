@@ -117,7 +117,7 @@ describe("ProjectGroupBootstrapService", () => {
     const before = (await store.listProjectGroups()).find(
       (g) => g.pathKey === normalizeWorkspaceKey(projectA),
     )!;
-    await store.renameProjectGroup(before.id, "我的 alpha");
+    await store.updateProjectGroup(before.id, { name: "我的 alpha" });
     store.onModuleDestroy();
 
     // 模拟 marker 丢失（库手改/回滚场景）
@@ -159,7 +159,7 @@ describe("ProjectGroupBootstrapService", () => {
       path: path.resolve("/legacy/renamed/public"),
       prepend: false,
     });
-    await store.renameProjectGroup(renamedPublic.id, "保留的公共目录");
+    await store.updateProjectGroup(renamedPublic.id, { name: "保留的公共目录" });
     store.onModuleDestroy();
 
     await bootstrap.run();

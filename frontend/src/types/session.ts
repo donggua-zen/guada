@@ -276,6 +276,8 @@ export interface SessionGroup {
     id: string
     name: string
     sortOrder: number
+    /** 自定义图标 key；null/缺省 = 默认文件夹 */
+    icon?: string | null
     createdAt: ISODateString
     updatedAt: ISODateString
 }
@@ -323,6 +325,8 @@ export interface ProjectGroup {
     sortOrder: number
     /** 用户改过显示名（bootstrap 不会覆盖） */
     isOverridden: boolean
+    /** 自定义图标 key；null/缺省 = 默认文件夹 */
+    icon?: string | null
     kind: 'workspace' | 'general'
 }
 

@@ -163,7 +163,7 @@ const saveEdit = async () => {
     return
   }
 
-  const success = await sessionGroupStore.updateGroup(editingId.value, name)
+  const success = await sessionGroupStore.updateGroup(editingId.value, { name })
   if (success) {
     toast.success(t('session.group.updateSuccess'))
     editingId.value = null

@@ -147,6 +147,7 @@ export class MetadataFileBootstrapService {
         id: String(g.id),
         name: String(g.name ?? ""),
         sortOrder: Number(g.sortOrder ?? 0),
+        icon: null,
         createdAt: toISO(g.createdAt) ?? new Date().toISOString(),
         updatedAt: toISO(g.updatedAt) ?? new Date().toISOString(),
       }));

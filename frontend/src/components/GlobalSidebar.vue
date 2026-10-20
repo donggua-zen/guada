@@ -69,7 +69,8 @@
                      同时可见就会重叠） -->
                 <Pin20Regular v-if="group.id === PINNED_GROUP_ID"
                   class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-(--gd-color-primary)" />
-                <FolderOpen16Regular v-else class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-(--gd-color-primary)" />
+                <GroupIcon v-else :icon="group.icon"
+                  class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-(--gd-color-primary)" />
                 <!-- <svg class="w-3.5 h-3.5 absolute inset-0 transition-opacity duration-200 group-hover:opacity-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
                 </svg> -->
@@ -109,9 +110,9 @@
                   </template>
                   <!-- 手工分组：重命名 / 归档本分组 / 删除 -->
                   <template v-else>
-                    <DropdownMenuItem command="rename">
+                    <DropdownMenuItem command="edit-group">
                       <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
-                      {{ t('ui.sidebar.rename') }}
+                      {{ t('ui.sidebar.editGroup') }}
                     </DropdownMenuItem>
                     <DropdownMenuItem command="archive-group">
                       <Archive20Regular class="w-4 h-4 mr-2 inline-block" />
@@ -332,9 +333,7 @@
         class="flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 text-sm"
         :class="moveSelectedGroupId === g.value ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)' : 'text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)'"
         @click="moveSelectedGroupId = g.value">
-        <el-icon class="w-4 h-4">
-          <Folder20Regular />
-        </el-icon>
+        <GroupIcon :icon="g.icon" class="w-4 h-4 shrink-0" />
         <span>{{ g.label }}</span>
       </div>
     </div>
@@ -346,8 +345,9 @@
     </template>
   </GdDialog>
 
-  <!-- 项目编辑弹窗（目录模式） -->
-  <ProjectGroupEditDialog v-model="editProjectDialogVisible" :group="editProjectGroup" @saved="handleProjectSaved" />
+  <!-- 分组 / 项目编辑弹窗（名称 + 图标；项目额外展示只读工作目录） -->
+  <GroupEditDialog v-model="groupEditDialogVisible" :kind="groupEditKind" :group="groupEditGroup"
+    @saved="handleGroupSaved" />
 </template>
 
 <script setup lang="ts">
@@ -370,10 +370,11 @@ import ThinkingStatus from './chat/ThinkingStatus.vue'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
 import GdTooltip from './ui/GdTooltip.vue'
-import ProjectGroupEditDialog from './session/ProjectGroupEditDialog.vue'
+import GroupEditDialog from './session/GroupEditDialog.vue'
+import GroupIcon from './session/GroupIcon.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'
-import type { Session, ProjectGroup, SidebarSessionsResponse, SidebarProjectSessionsResponse } from '@/types/session'
+import type { Session, SessionGroup, ProjectGroup, SidebarSessionsResponse, SidebarProjectSessionsResponse } from '@/types/session'
 
 import {
   PersonOutlined,
@@ -394,7 +395,6 @@ import {
   Edit16Regular,
   Delete20Regular,
   Folder20Regular,
-  FolderOpen16Regular,
   Archive20Regular,
   Pin20Regular,
   PinOff20Regular,
@@ -445,6 +445,8 @@ interface SidebarGroupItem {
   path?: string | null
   pathKey?: string | null
   isOverridden?: boolean
+  /** 自定义图标 key；虚拟分区为空 */
+  icon?: string | null
 }
 
 /** 分组模式切换选项（默认保持「普通分组」） */
@@ -506,17 +508,7 @@ const handleCreateGroupShortcut = async () => {
 }
 
 const handleCreateManualGroup = async () => {
-  const name = await prompt(t('ui.sidebar.createGroupTitle'), {
-    placeholder: t('ui.sidebar.inputGroupName'),
-  })
-  if (!name) return
-
-  const group = await sessionGroupStore.createGroup(name)
-  if (group) {
-    toast.success(t('ui.sidebar.groupCreated'))
-  } else {
-    toast.error(t('ui.sidebar.createGroupFailed'))
-  }
+  openGroupEditDialog('group', null)
 }
 
 const handleCreateProject = async () => {
@@ -570,7 +562,7 @@ const deleteWorkspaceChecked = ref(false)
 
 // 移动会话到分组弹窗状态
 const moveGroupDialogVisible = ref(false)
-const moveGroupOptions = ref<{ label: string; value: string }[]>([])
+const moveGroupOptions = ref<{ label: string; value: string; icon: string | null }[]>([])
 const moveSelectedGroupId = ref('')
 const moveTargetSession = ref<Session | null>(null)
 
@@ -597,7 +589,7 @@ const handleGroupMenuSelect = (command: string, group: SidebarGroupItem): void =
     else if (command === 'delete-project') void handleDeleteProjectGroup(group)
     return
   }
-  if (command === 'rename') void handleRenameGroup(group)
+  if (command === 'edit-group') void handleEditManualGroup(group)
   else if (command === 'archive-group') void handleArchiveGroup(group)
   else if (command === 'delete') void handleDeleteGroup(group)
 }
@@ -1060,9 +1052,10 @@ const handleMoveSession = (session: Session) => {
   // 构建分组选项，顺序与侧边栏一致
   const groupOptions = sessionGroupStore.groups.map(g => ({
     label: g.name,
-    value: g.id
+    value: g.id,
+    icon: g.icon ?? null,
   }))
-  groupOptions.push({ label: t('ui.sidebar.ungrouped'), value: UNGROUPED_ID })
+  groupOptions.push({ label: t('ui.sidebar.ungrouped'), value: UNGROUPED_ID, icon: null })
 
   moveGroupOptions.value = groupOptions
   moveTargetSession.value = session
@@ -1097,25 +1090,12 @@ const confirmMoveSession = async () => {
 }
 
 /**
- * 重命名分组
+ * 编辑手工分组：打开弹窗（名称 + 图标）
  */
-const handleRenameGroup = async (group: SidebarGroupItem) => {
-  try {
-    const result = await prompt(t('ui.sidebar.renameGroupTitle'), {
-      placeholder: t('ui.sidebar.inputGroupName'),
-      defaultValue: group.name
-    })
-
-    if (result && result !== group.name) {
-      const success = await sessionGroupStore.updateGroup(group.id, result)
-      if (success) {
-        toast.success(t('ui.sidebar.groupRenamed'))
-      }
-    }
-  } catch (error) {
-    console.error('重命名分组失败:', error)
-    toast.error(t('ui.sidebar.renameGroupFailed'))
-  }
+const handleEditManualGroup = (group: SidebarGroupItem) => {
+  const target = sessionGroupStore.groups.find((g) => g.id === group.id)
+  if (!target) return
+  openGroupEditDialog('group', target)
 }
 
 /**
@@ -1195,21 +1175,30 @@ const handleArchiveGroup = async (group: SidebarGroupItem) => {
   }
 }
 
-/** 项目编辑弹窗状态 */
-const editProjectDialogVisible = ref(false)
-const editProjectGroup = ref<ProjectGroup | null>(null)
+/** 分组 / 项目编辑弹窗状态（group = null 表示新建手工分组） */
+const groupEditDialogVisible = ref(false)
+const groupEditKind = ref<'group' | 'project'>('group')
+const groupEditGroup = ref<SessionGroup | ProjectGroup | null>(null)
+
+const openGroupEditDialog = (
+  kind: 'group' | 'project',
+  group: SessionGroup | ProjectGroup | null,
+) => {
+  groupEditKind.value = kind
+  groupEditGroup.value = group
+  groupEditDialogVisible.value = true
+}
 
 /**
- * 编辑项目：打开弹窗（名称可改、工作目录只读展示）
+ * 编辑项目：打开弹窗（名称 + 图标，工作目录只读展示）
  */
 const handleEditProjectGroup = (group: SidebarGroupItem) => {
   const target = sessionGroupStore.projectGroups.find((g) => g.id === group.id)
   if (!target) return
-  editProjectGroup.value = target
-  editProjectDialogVisible.value = true
+  openGroupEditDialog('project', target)
 }
 
-const handleProjectSaved = async () => {
+const handleGroupSaved = async () => {
   await loadSessions()
 }
 

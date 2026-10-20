@@ -24,8 +24,7 @@
                     @end="onDragEnd" class="divide-y divide-(--gd-color-border)">
                     <template #item="{ element }">
                         <div
-                            class="group-item flex items-center gap-2 px-3 py-2.5 transition-colors duration-200"
-                            :class="{ 'bg-(--gd-color-surface)': editingId === element.id }">
+                            class="group-item flex items-center gap-2 px-3 py-2.5 transition-colors duration-200">
                             <!-- 拖拽手柄 -->
                             <div
                                 class="drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600">
@@ -34,35 +33,26 @@
                                 </el-icon>
                             </div>
 
-                            <!-- 分组名称（编辑模式） -->
-                            <template v-if="editingId === element.id">
-                                <el-input v-model="editingName" size="small" maxlength="20" class="flex-1"
-                                    @keyup.enter="saveEdit" @keyup.esc="cancelEdit" />
-                                <el-button type="primary" size="small" @click="saveEdit">保存</el-button>
-                                <el-button size="small" @click="cancelEdit">取消</el-button>
-                            </template>
-
-                            <!-- 分组名称（展示模式） -->
-                            <template v-else>
-                                <span class="flex-1 text-sm truncate">{{ element.name }}</span>
-                                <span class="text-xs text-gray-400">{{ element.sortOrder + 1 }}</span>
-                                <div class="flex items-center gap-1">
-                                    <div
-                                        class="action-btn p-1 rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
-                                        @click="startEdit(element)">
-                                        <el-icon class="w-3.5 h-3.5 text-gray-500">
-                                            <Edit16Regular />
-                                        </el-icon>
-                                    </div>
-                                    <div
-                                        class="action-btn p-1 rounded cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20"
-                                        @click="handleDeleteGroup(element)">
-                                        <el-icon class="w-3.5 h-3.5 text-red-400">
-                                            <Delete20Regular />
-                                        </el-icon>
-                                    </div>
+                            <!-- 图标 + 名称 -->
+                            <GroupIcon :icon="element.icon" class="w-4 h-4 shrink-0 text-(--gd-color-primary)" />
+                            <span class="flex-1 text-sm truncate">{{ element.name }}</span>
+                            <span class="text-xs text-gray-400">{{ element.sortOrder + 1 }}</span>
+                            <div class="flex items-center gap-1">
+                                <div
+                                    class="action-btn p-1 rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
+                                    @click="startEdit(element)">
+                                    <el-icon class="w-3.5 h-3.5 text-gray-500">
+                                        <Edit16Regular />
+                                    </el-icon>
                                 </div>
-                            </template>
+                                <div
+                                    class="action-btn p-1 rounded cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    @click="handleDeleteGroup(element)">
+                                    <el-icon class="w-3.5 h-3.5 text-red-400">
+                                        <Delete20Regular />
+                                    </el-icon>
+                                </div>
+                            </div>
                         </div>
                     </template>
                 </draggable>
@@ -78,6 +68,9 @@
                 <li>"任务列表"为默认分组，不可删除或重命名</li>
             </ul>
         </div>
+
+        <!-- 分组编辑弹窗（名称 + 图标） -->
+        <GroupEditDialog v-model="editVisible" kind="group" :group="editGroup" />
     </div>
 </template>
 
@@ -87,6 +80,8 @@ import draggable from 'vuedraggable'
 import { useSessionGroupStore } from '@/stores/sessionGroup'
 import { usePopup } from '@/composables/usePopup'
 import { ReOrderDotsHorizontal20Regular, Edit16Regular, Delete20Regular } from '@vicons/fluent'
+import GroupEditDialog from '@/components/session/GroupEditDialog.vue'
+import GroupIcon from '@/components/session/GroupIcon.vue'
 import type { SessionGroup } from '@/types/session'
 
 const sessionGroupStore = useSessionGroupStore()
@@ -94,8 +89,8 @@ const { toast, confirm } = usePopup()
 
 const newGroupName = ref('')
 const localGroups = ref<SessionGroup[]>([])
-const editingId = ref<string | null>(null)
-const editingName = ref('')
+const editVisible = ref(false)
+const editGroup = ref<SessionGroup | null>(null)
 
 const groups = computed(() => sessionGroupStore.sortedGroups)
 
@@ -116,29 +111,8 @@ const handleCreateGroup = async () => {
 }
 
 const startEdit = (group: SessionGroup) => {
-    editingId.value = group.id
-    editingName.value = group.name
-}
-
-const saveEdit = async () => {
-    if (!editingId.value) return
-    const name = editingName.value.trim()
-    if (!name) {
-        toast.error('分组名称不能为空')
-        return
-    }
-    const success = await sessionGroupStore.updateGroup(editingId.value, name)
-    if (success) {
-        toast.success('分组名称已更新')
-        editingId.value = null
-    } else {
-        toast.error('更新失败')
-    }
-}
-
-const cancelEdit = () => {
-    editingId.value = null
-    editingName.value = ''
+    editGroup.value = group
+    editVisible.value = true
 }
 
 const handleDeleteGroup = async (group: SessionGroup) => {
