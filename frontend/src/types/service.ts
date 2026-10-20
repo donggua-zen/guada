@@ -248,6 +248,7 @@ export interface SearchGroupSettings {
     bocha?: { apiKey?: string }
     tavily?: { apiKey?: string }
     metaso?: { apiKey?: string }
+    deepseek?: { apiKey?: string; useProviderKey?: boolean }
 }
 
 // ========== 文件上传类型 ==========

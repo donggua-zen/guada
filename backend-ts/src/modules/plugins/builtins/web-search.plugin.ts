@@ -2,7 +2,9 @@ import { Injectable, Logger } from "@nestjs/common";
 import { PluginBase } from "../base-plugin";
 import { PluginApi } from "../api/plugin-api";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
+import { ProviderFileStore } from "../../llm-core/provider-file.store";
 import { BochaProvider } from "./search-providers/bocha.provider";
+import { DeepSeekProvider } from "./search-providers/deepseek.provider";
 import { MetasoProvider } from "./search-providers/metaso.provider";
 import { TavilyProvider } from "./search-providers/tavily.provider";
 import { SearchProvider } from "./search-providers/search-provider.interface";
@@ -29,6 +31,8 @@ export class WebSearchPlugin extends PluginBase {
     private readonly bochaProvider: BochaProvider,
     private readonly metasoProvider: MetasoProvider,
     private readonly tavilyProvider: TavilyProvider,
+    private readonly deepSeekProvider: DeepSeekProvider,
+    private readonly providerStore: ProviderFileStore,
   ) {
     super();
   }
@@ -36,7 +40,12 @@ export class WebSearchPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
-    this.providers = [this.bochaProvider, this.tavilyProvider, this.metasoProvider];
+    this.providers = [
+      this.bochaProvider,
+      this.tavilyProvider,
+      this.metasoProvider,
+      this.deepSeekProvider,
+    ];
 
     // 读取当前供应商，动态决定注册哪些参数
     const settings = await this.settingsStorage.getSettings("search");
@@ -155,20 +164,50 @@ export class WebSearchPlugin extends PluginBase {
     const provider = this.providers.find((p) => p.name === providerName) || this.bochaProvider;
 
     const providerCfg = settings[providerName];
-    const apiKey = providerCfg?.apiKey || "";
+    const apiKey = this.resolveApiKey(providerName, providerCfg);
 
     if (!apiKey) {
-      const names: Record<string, string> = {
-        bocha: "博查",
-        tavily: "Tavily",
-        metaso: "秘塔",
-      };
       throw new Error(
-        `Please configure the ${names[providerName] || providerName} API Key in the system settings > Search settings.`,
+        `Please configure the ${provider.displayName} API Key in the system settings > Search settings.`,
       );
     }
 
     return { provider, apiKey };
+  }
+
+  /**
+   * 解析搜索用的 API Key
+   *
+   * DeepSeek 支持勾选「使用模型服务 Key」：直接复用 Models 设置里同类型供应商的 Key，
+   * 避免用户在搜索设置里重复粘贴。
+   */
+  private resolveApiKey(providerName: string, providerCfg: any): string {
+    if (providerName === "deepseek" && providerCfg?.useProviderKey === true) {
+      const modelKey = this.findModelProviderKey(providerName);
+      if (!modelKey) {
+        throw new Error(
+          "No DeepSeek API Key found in Models settings. Configure a DeepSeek provider there, " +
+            'or uncheck "Use model provider key" in Settings > Search.',
+        );
+      }
+      return modelKey;
+    }
+
+    return providerCfg?.apiKey || "";
+  }
+
+  /** 从模型供应商配置中取同类型且已启用的 Key（优先 enabled，其次任意非空） */
+  private findModelProviderKey(type: string): string {
+    try {
+      const candidates = this.providerStore
+        .listProviders()
+        .filter((p) => p.type === type && p.apiKey?.trim());
+      const preferred = candidates.find((p) => p.enabled) || candidates[0];
+      return preferred?.apiKey?.trim() || "";
+    } catch (error: any) {
+      this.logger.warn(`Failed to read model provider key: ${error.message}`);
+      return "";
+    }
   }
 
   /**
