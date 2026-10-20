@@ -284,6 +284,11 @@ export default {
     deleteTurn: '删除本轮对话',
     branchFromHere: '从此分支新会话',
     branching: '分支中…',
+    // 操作条同一行的元信息（MessageActions.vue）
+    tokenUsage: '用量 {count} tok',
+    tokenUsageDetail: 'Prompt {prompt} · Completion {completion} · Total {total}',
+    durationSeconds: '{seconds} 秒',
+    durationMinutes: '{minutes} 分 {seconds} 秒',
   },
 
   // ── 统一交互卡（审批/询问共用） ──

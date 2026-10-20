@@ -284,6 +284,11 @@
     deleteTurn: 'Delete This Turn',
     branchFromHere: 'Branch From Here',
     branching: 'Branching…',
+    // Meta info sharing the action row (MessageActions.vue)
+    tokenUsage: 'Usage {count} tok',
+    tokenUsageDetail: 'Prompt {prompt} · Completion {completion} · Total {total}',
+    durationSeconds: '{seconds}s',
+    durationMinutes: '{minutes}m {seconds}s',
   },
 
   // ── 统一交互卡（审批/询问共用） ──

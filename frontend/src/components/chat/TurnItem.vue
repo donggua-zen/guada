@@ -157,30 +157,6 @@
               </div>
             </div>
           </template>
-
-
-          <!-- Token 消耗 -->
-          <div v-if="tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2 flex">
-            <div class="flex items-center gap-3 text-xs text-gray-400">
-              <el-icon size="14" class="text-gray-400">
-                <InsightsTwotone />
-              </el-icon>
-              <span class="text-gray-500">Tokens:</span>
-              <span class="token-item">
-                <span class="text-gray-400 dark:text-gray-300 text-xs">Prompt</span>&nbsp;<span
-                  class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.promptTokens) }}</span>
-              </span>
-              <span class="token-item">
-                <span class="text-gray-400 dark:text-gray-300">Completion</span>&nbsp;<span
-                  class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.completionTokens) }}</span>
-              </span>
-              <span class="token-item">
-                <span class="text-gray-400 dark:text-gray-300">Total</span>&nbsp;<span
-                  class="text-gray-500 dark:text-gray-300">{{
-                    formatTokenNumber(tokenUsage.totalTokens) }}</span>
-              </span>
-            </div>
-          </div>
         </div>
 
         <!-- 文件变更摘要（文件名 → 文件标签；行其余部分 → 编辑记录标签） -->
@@ -230,8 +206,8 @@
          控制条（复制/再生/编辑/删除/时间）不依赖 assistant 消息存在，流结束即显示；
          仅复制按钮与 assistant 消息相关（无消息时复制空内容即可）。 -->
     <MessageActions v-if="!streamingState.isStreaming" :is-assistant="true" :is-last="isLast"
-      :allow-generate="false" :time-full="assistantTime.full"
-      :time-friendly="assistantTime.firendly" :duration-text="durationText" @copy="emit('copy', activeBlock)"
+      :allow-generate="false" :time-full="assistantTime.full" :time-friendly="assistantTime.firendly"
+      :duration-ms="durationMs" :token-usage="tokenUsage" @copy="emit('copy', activeBlock)"
       @regenerate="emit('regenerate', props.turn)" @edit="emit('edit', activeBlock)"
       @delete="emit('delete', props.turn)" @branch="emit('branch', props.turn)"
       :branching="branching" :branch-disabled="branchDisabled" />
@@ -251,7 +227,7 @@
 import { computed, ref, watch, nextTick, inject } from "vue";
 import { ElAlert, ElIcon, ElImageViewer } from "element-plus";
 import { useI18n } from "vue-i18n";
-import { InsightsTwotone, MenuBookOutlined } from "@vicons/material";
+import { MenuBookOutlined } from "@vicons/material";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, PanelRightExpand20Filled } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
@@ -719,13 +695,6 @@ const tokenUsage = computed(() => {
   return { promptTokens: totalPromptTokens, completionTokens: totalCompletionTokens, totalTokens };
 });
 
-const formatTokenNumber = (num: number | null): string => {
-  if (!num && num !== 0) return '0';
-  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
-  return num.toString();
-};
-
 // ============================================
 // 图片预览
 // ============================================
@@ -1057,35 +1026,6 @@ const handleImageClick = (file: FileAttachment) => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-}
-
-/* Token 消耗 */
-.token-usage-section {
-  padding: 4px 0;
-  animation: fadeIn 0.3s ease;
-}
-
-.dark .token-usage-section {
-  opacity: 0.8;
-}
-
-.token-item {
-  display: inline-flex;
-  align-items: center;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-5px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .max-iterations-notice {

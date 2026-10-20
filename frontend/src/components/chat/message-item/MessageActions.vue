@@ -1,5 +1,6 @@
 <template>
-  <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
+  <div
+    class="message-actions flex flex-nowrap gap-0 text-sm w-full mt-3 text-gray-500 items-center min-w-0 whitespace-nowrap"
     :class="[isAssistant ? 'justify-start -translate-x-1' : 'justify-end translate-x-1']">
 
     <GdTooltip :content="t('chat.messageActions.copy')" placement="top">
@@ -68,25 +69,35 @@
       </template>
     </DropdownMenu>
     </GdTooltip>
-    <template v-if="isAssistant">
-      <div class="flex text-gray-500 shrink-0 items-center justify-center ml-2">
-        <AccessTimeTwotone class="w-3 h-3 mr-1" />
-        <span class="text-xs" :title="props.timeFull">{{ props.timeFriendly }}</span>
-        <template v-if="props.durationText">
-          <span class="text-gray-300 dark:text-gray-600 mx-1">·</span>
-          <span class="text-xs">{{ props.durationText }}</span>
-        </template>
+
+    <!-- 用量：只常显总量，明细走 tooltip（窄屏优先截断这一段） -->
+    <GdTooltip v-if="isAssistant && tokenUsage" class="min-w-0" :content="tokenDetail" placement="top">
+      <div class="ml-2 flex min-w-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+        <el-icon :size="14" class="shrink-0">
+          <InsightsTwotone />
+        </el-icon>
+        <span class="truncate">{{ tokenSummary }}</span>
       </div>
+    </GdTooltip>
+
+    <template v-if="isAssistant">
+      <div v-if="durationText" class="ml-2 flex shrink-0 items-center justify-center text-gray-500">
+        <AccessTimeTwotone class="w-3 h-3 mr-1" />
+        <span class="text-xs">{{ durationText }}</span>
+      </div>
+      <span class="ml-2 shrink-0 text-xs text-gray-500" :title="props.timeFull">{{ props.timeFriendly }}</span>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import DropdownMenu from '../../ui/DropdownMenu.vue';
 import DropdownMenuItem from '../../ui/DropdownMenuItem.vue';
 import GdTooltip from '../../ui/GdTooltip.vue';
+import { formatCompactTokens } from '@/utils/usageFormat';
 
 const { t } = useI18n();
 import {
@@ -97,8 +108,14 @@ import {
   Edit16Regular,
   BranchFork16Regular,
 } from '@vicons/fluent';
-import { ArrowDownwardTwotone, AccessTimeTwotone } from '@vicons/material';
+import { ArrowDownwardTwotone, AccessTimeTwotone, InsightsTwotone } from '@vicons/material';
 import { LoadingOutlined } from '@vicons/antd';
+
+interface TokenUsageLike {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
 
 const props = defineProps<{
   isAssistant: boolean;
@@ -106,12 +123,48 @@ const props = defineProps<{
   allowGenerate: boolean;
   timeFull: string;
   timeFriendly: string;
-  durationText?: string | null;
+  /** 工作时长（ms）；与用量、时间同处一行，窄屏时让位给用量文案 */
+  durationMs?: number | null;
+  /** Token 用量：只常显总量，明细进 tooltip */
+  tokenUsage?: TokenUsageLike | null;
   /** 本回合分支进行中：图标转圈且不可点 */
   branching?: boolean;
   /** 有任意分支在飞行中：禁用（防并发 fork） */
   branchDisabled?: boolean;
 }>();
+
+// 12.04s → 12s、12.35s → 12.4s（与用量统计页的 trimZero 口径一致）
+const trimSecond = (value: number): string => value.toFixed(1).replace(/\.0$/, '');
+
+const durationText = computed(() => {
+  const ms = props.durationMs;
+  if (ms == null || !Number.isFinite(ms)) return null;
+  // 先按 0.1s 舍入，避免 59.96s 显示成「60 秒」却走秒分支
+  const rounded = Math.max(0, Math.round(ms / 100) / 10);
+  if (rounded < 60) {
+    return t('chat.messageActions.durationSeconds', { seconds: trimSecond(rounded) });
+  }
+  const minutes = Math.floor(rounded / 60);
+  const seconds = Math.round(rounded % 60);
+  return t('chat.messageActions.durationMinutes', { minutes, seconds });
+});
+
+const tokenSummary = computed(() => {
+  if (!props.tokenUsage) return '';
+  return t('chat.messageActions.tokenUsage', {
+    count: formatCompactTokens(props.tokenUsage.totalTokens),
+  });
+});
+
+const tokenDetail = computed(() => {
+  const usage = props.tokenUsage;
+  if (!usage) return '';
+  return t('chat.messageActions.tokenUsageDetail', {
+    prompt: formatCompactTokens(usage.promptTokens),
+    completion: formatCompactTokens(usage.completionTokens),
+    total: formatCompactTokens(usage.totalTokens),
+  });
+});
 
 const emit = defineEmits<{
   (e: 'copy'): void;
@@ -141,6 +194,6 @@ const handleBranch = () => {
 @reference "tailwindcss";
 
 .message-action-button {
-  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded-md mr-1 hover:bg-(--gd-color-surface-hover) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
+  @apply shrink-0 cursor-pointer flex items-center gap-1 py-1 px-1 rounded-md mr-1 hover:bg-(--gd-color-surface-hover) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
 </style>
