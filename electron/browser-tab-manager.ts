@@ -4,11 +4,110 @@ import {
   session,
   Menu,
   MenuItem,
+  ipcMain,
   app,
 } from "electron";
 import * as path from "path";
 import * as url from "url";
 import log from "electron-log/main";
+
+/** 宿主释放键：Ctrl+Alt+R（macOS 为 Control+Option+R） */
+const RELEASE_SHORTCUT_CODE = "KeyR";
+
+/**
+ * 在目标 frame 中执行：释放指针锁 / HTML 全屏 / 键盘锁。
+ * 仅当当前 frame 真的处于锁定或全屏状态时才设置重新锁定封锁，
+ * 避免普通页面按 Esc 后误伤后续的 pointer lock 请求。
+ */
+const RELEASE_INPUT_SCRIPT = `(() => {
+  const locked = !!document.pointerLockElement;
+  const fullscreen = !!document.fullscreenElement;
+  if (locked || fullscreen) {
+    try { window.__guadaBlockPointerLock = true; } catch (e) {}
+    try { if (locked) document.exitPointerLock(); } catch (e) {}
+    try {
+      if (fullscreen) {
+        const result = document.exitFullscreen();
+        if (result && typeof result.catch === "function") result.catch(() => {});
+      }
+    } catch (e) {}
+  }
+  try {
+    if (navigator.keyboard && typeof navigator.keyboard.unlock === "function") {
+      const result = navigator.keyboard.unlock();
+      if (result && typeof result.catch === "function") result.catch(() => {});
+    }
+  } catch (e) {}
+  return { locked, fullscreen };
+})()`;
+
+/**
+ * 防止页面在宿主释放后立即重新锁定。
+ * 只有下一次真实用户 pointerdown 才解除封锁，实现类似虚拟机的 Host Key 切换。
+ */
+const INPUT_GUARD_SCRIPT = `(() => {
+  if (window.__guadaInputGuardInstalled) return;
+  window.__guadaInputGuardInstalled = true;
+
+  try {
+    const originalPointerLock = Element.prototype.requestPointerLock;
+    if (typeof originalPointerLock === "function") {
+      Element.prototype.requestPointerLock = function () {
+        if (window.__guadaBlockPointerLock) {
+          return Promise.reject(new DOMException("Pointer lock released by host", "NotAllowedError"));
+        }
+        return originalPointerLock.apply(this, arguments);
+      };
+    }
+  } catch (e) {}
+
+  try {
+    const originalFullscreen = Element.prototype.requestFullscreen;
+    if (typeof originalFullscreen === "function") {
+      Element.prototype.requestFullscreen = function () {
+        if (window.__guadaBlockPointerLock) {
+          return Promise.reject(new DOMException("Fullscreen released by host", "NotAllowedError"));
+        }
+        return originalFullscreen.apply(this, arguments);
+      };
+    }
+  } catch (e) {}
+
+  window.addEventListener("pointerdown", function (event) {
+    if (event && event.isTrusted) {
+      window.__guadaBlockPointerLock = false;
+    }
+  }, true);
+
+  // 兜底：页面若绕过上面的包装重新锁定，立即退出
+  document.addEventListener("pointerlockchange", function () {
+    if (window.__guadaBlockPointerLock && document.pointerLockElement) {
+      try { document.exitPointerLock(); } catch (e) {}
+    }
+  }, true);
+
+  // 子 frame（含跨域 iframe）通过 postMessage 把锁定状态汇总到顶层 preload。
+  // 只上报本 frame 真正进入/退出锁定或全屏的时刻，避免尚未锁定的新 iframe
+  // 用一次 "false" 覆盖其它 frame 的 true 状态。
+  var wasActive = false;
+  function reportState() {
+    var locked = !!document.pointerLockElement;
+    var fullscreen = !!document.fullscreenElement;
+    var active = locked || fullscreen;
+    if (!active && !wasActive) return;
+    wasActive = active;
+    try {
+      window.top.postMessage({
+        __guadaPointerLock: true,
+        locked: locked,
+        fullscreen: fullscreen
+      }, "*");
+    } catch (e) {}
+  }
+  document.addEventListener("pointerlockchange", reportState, true);
+  document.addEventListener("fullscreenchange", reportState, true);
+  reportState();
+})()`;
 
 /**
  * 窗口信息接口
@@ -58,6 +157,11 @@ export class BrowserWebviewManager {
   private pendingDialogs = new Map<string, { type: string; message: string; defaultValue: string }>();
   // dialog resolver：用于 Promise.race 检测弹窗
   private dialogResolvers = new Map<string, (v: any) => void>();
+  // guest → 主进程的指针锁状态监听只注册一次
+  private pointerLockIpcRegistered = false;
+  // 当前处于 Pointer Lock / HTML 全屏的窗口，用于 Esc 兜底与状态清理
+  private pointerLockedWindows = new Set<string>();
+  private fullscreenWindows = new Set<string>();
 
   constructor(_maxWindows?: number) {
     // 参数已忽略，不再限制窗口数量
@@ -68,6 +172,27 @@ export class BrowserWebviewManager {
    */
   attachMainWindow(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow;
+
+    if (!this.pointerLockIpcRegistered) {
+      this.pointerLockIpcRegistered = true;
+      ipcMain.on("browser:pointer-lock-state", (event, state) => {
+        const windowId = this.getWindowIdByWebContentsId(event.sender.id);
+        if (!windowId) return;
+        const locked = !!state?.locked;
+        const fullscreen = !!state?.fullscreen;
+        if (locked) {
+          this.pointerLockedWindows.add(windowId);
+        } else {
+          this.pointerLockedWindows.delete(windowId);
+        }
+        if (fullscreen) {
+          this.fullscreenWindows.add(windowId);
+        } else {
+          this.fullscreenWindows.delete(windowId);
+        }
+        this.sendPointerLockStateToHost(windowId, locked, fullscreen);
+      });
+    }
 
     mainWindow.webContents.on(
       "did-attach-webview",
@@ -108,6 +233,8 @@ export class BrowserWebviewManager {
     }
     this.pendingResolvers.clear();
     this.pendingAttachQueue.length = 0;
+    this.pointerLockedWindows.clear();
+    this.fullscreenWindows.clear();
 
     this.webviews.clear();
   }
@@ -180,6 +307,12 @@ export class BrowserWebviewManager {
         if (isMainFrame && !navigationUrl.startsWith("chrome-error://")) {
           mainFrameLoadFailed = false;
         }
+        if (isMainFrame) {
+          // 导航会销毁旧文档，指针锁/全屏状态随之失效
+          this.pointerLockedWindows.delete(windowId);
+          this.fullscreenWindows.delete(windowId);
+          this.sendPointerLockStateToHost(windowId, false, false);
+        }
       },
     );
 
@@ -210,6 +343,44 @@ export class BrowserWebviewManager {
       webviewWC.loadURL(url);
       return { action: "deny" };
     });
+
+    // 宿主释放键。before-input-event 在页面之前触发，即使页面启用了
+    // Keyboard Lock 也能可靠拦截。
+    webviewWC.on("before-input-event", (event, input) => {
+      const isReleaseCombo =
+        input.code === RELEASE_SHORTCUT_CODE &&
+        input.control &&
+        input.alt &&
+        !input.shift &&
+        !input.meta;
+
+      if (isReleaseCombo) {
+        event.preventDefault();
+        if (input.type === "keyDown" && !input.isAutoRepeat) {
+          log.info(`Window ${windowId} release shortcut pressed`);
+          void this.releaseInput(windowId, { focusHost: true });
+        }
+        return;
+      }
+
+      if (
+        input.type === "keyDown" &&
+        !input.isAutoRepeat &&
+        input.key === "Escape" &&
+        (this.pointerLockedWindows.has(windowId) ||
+          this.fullscreenWindows.has(windowId))
+      ) {
+        // 不 preventDefault：页面仍能收到 Esc（游戏暂停菜单等），
+        // 但宿主保证指针锁/全屏被释放。
+        void this.releaseInput(windowId, { focusHost: true });
+      }
+    });
+
+    // 尽早安装输入守卫，防止页面在宿主释放后立刻重新 requestPointerLock。
+    webviewWC.on("dom-ready", () => this.installInputGuard(webviewWC));
+    webviewWC.on("did-frame-finish-load", () =>
+      this.installInputGuard(webviewWC),
+    );
 
     // 监听导航完成 — 注入新标签页内容（反检测脚本已通过 CDP addScriptToEvaluateOnNewDocument 预注册）
     webviewWC.on("did-finish-load", () => {
@@ -261,6 +432,9 @@ export class BrowserWebviewManager {
         log.error(
           `Window ${windowId} webview render process gone, reason=${details?.reason}, exitCode=${details?.exitCode}`,
         );
+        this.pointerLockedWindows.delete(windowId);
+        this.fullscreenWindows.delete(windowId);
+        this.sendPointerLockStateToHost(windowId, false, false);
       },
     );
 
@@ -274,10 +448,113 @@ export class BrowserWebviewManager {
     // 监听 webview 销毁（前端刷新或关闭标签时 DOM 元素移除）
     // 直接删除 entry，防止 getWindowList()/getCurrentTabId() 返回已销毁的 windowId
     webviewWC.once("destroyed", () => {
+      this.pointerLockedWindows.delete(windowId);
+      this.fullscreenWindows.delete(windowId);
       if (this.webviews.delete(windowId)) {
         log.info(`Window ${windowId} destroyed, entry removed`);
       }
     });
+  }
+
+  /**
+   * 获取 WebContents 下所有未销毁的 frame（含主 frame 与 iframe）。
+   */
+  private getFrames(webContents: WebContents): Electron.WebFrameMain[] {
+    try {
+      return webContents.mainFrame.framesInSubtree.filter((frame) => {
+        try {
+          return !frame.isDestroyed();
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 在指定 frame 执行脚本，吞掉同步异常与异步 rejection。
+   * 跨域 frame、正在导航的 frame、已销毁的 frame 都可能失败。
+   */
+  private executeInFrame(
+    frame: Electron.WebFrameMain,
+    script: string,
+    userGesture = false,
+  ): Promise<unknown> {
+    try {
+      return frame.executeJavaScript(script, userGesture).catch(() => undefined);
+    } catch {
+      return Promise.resolve(undefined);
+    }
+  }
+
+  /**
+   * 在所有 frame 安装输入守卫：宿主释放后阻止页面立即重新锁定，
+   * 直到下一次真实用户 pointerdown。
+   */
+  private installInputGuard(webContents: WebContents): void {
+    if (webContents.isDestroyed()) return;
+    for (const frame of this.getFrames(webContents)) {
+      void this.executeInFrame(frame, INPUT_GUARD_SCRIPT);
+    }
+  }
+
+  /**
+   * 强制释放窗口内的鼠标/键盘捕获。
+   * 遍历主 frame 与所有 iframe，兼容游戏嵌在 iframe 里的场景。
+   */
+  async releaseInput(
+    windowId: string,
+    options: { focusHost?: boolean } = {},
+  ): Promise<boolean> {
+    const wv = this.webviews.get(windowId);
+    const webContents = wv?.webContents;
+    if (!webContents || webContents.isDestroyed()) return false;
+
+    // 先清状态，保证预览区提示立即消失
+    this.pointerLockedWindows.delete(windowId);
+    this.fullscreenWindows.delete(windowId);
+    this.sendPointerLockStateToHost(windowId, false, false);
+
+    const frames = this.getFrames(webContents);
+    await Promise.race([
+      Promise.allSettled(
+        frames.map((frame) => this.executeInFrame(frame, RELEASE_INPUT_SCRIPT)),
+      ),
+      new Promise<void>((resolve) => setTimeout(resolve, 600)),
+    ]);
+
+    if (options.focusHost && this.mainWindow && !this.mainWindow.isDestroyed()) {
+      try {
+        this.mainWindow.focus();
+        this.mainWindow.webContents.focus();
+      } catch {
+        // 窗口可能正在销毁
+      }
+    }
+
+    log.info(`Window ${windowId} input released`);
+    return true;
+  }
+
+  /** 将 guest 的指针锁/全屏状态转发给宿主渲染进程 */
+  private sendPointerLockStateToHost(
+    windowId: string,
+    locked: boolean,
+    fullscreen: boolean,
+  ): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      try {
+        this.mainWindow.webContents.send("browser:pointer-lock-changed", {
+          windowId,
+          locked,
+          fullscreen,
+        });
+      } catch {
+        // 窗口/渲染进程正在销毁
+      }
+    }
   }
 
   /**
@@ -492,6 +769,9 @@ export class BrowserWebviewManager {
     }
 
     log.info(`🗑️ Closing webview window: ${windowId}`);
+
+    // 销毁 guest 前先尝试释放指针锁/全屏
+    void this.releaseInput(windowId, { focusHost: false }).catch(() => {});
 
     try {
       // 通知前端销毁 <webview> 元素
@@ -714,6 +994,8 @@ export class BrowserWebviewManager {
     if (!wv) return;
 
     wv.info.isVisible = false;
+    // 隐藏前释放鼠标/键盘捕获，避免后台页面继续锁定输入
+    void this.releaseInput(windowId, { focusHost: false }).catch(() => {});
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send("browser:set-webview-visibility", {
         windowId,
@@ -851,6 +1133,15 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
           label: "刷新",
           click: () => {
             webContents.reload();
+          },
+        }),
+      );
+
+      menu.append(
+        new MenuItem({
+          label: "释放鼠标 / 退出全屏",
+          click: () => {
+            void this.releaseInput(windowId, { focusHost: true });
           },
         }),
       );

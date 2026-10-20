@@ -10,6 +10,14 @@
         @page-title-updated="onTitleUpdated($event, wv.windowId)" @did-stop-loading="onStopLoading($event, wv.windowId)"
         @did-start-loading="onStartLoading($event, wv.windowId)" />
     </div>
+    <!-- 指针锁提示：网页（如 three.js 游戏）锁定鼠标时显示，不阻挡画面事件 -->
+    <div
+      v-if="store.isActivePointerLocked && store.previewRect"
+      class="pointer-lock-hint"
+      :style="getPointerLockHintStyle()"
+    >
+      {{ t('chat.workspace.pointerLockHint') }}
+    </div>
     <!-- 拖拽遮罩层：覆盖在 webview 上方，阻止 webview 截获鼠标事件 -->
     <div v-if="store.isDragging && store.previewRect" class="drag-overlay" :style="getOverlayStyle()"></div>
   </div>
@@ -19,6 +27,7 @@
 import { nextTick, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
 import { useBrowserWebviewStore, type PreviewRect } from '@/stores/browserWebview'
 import type {
+  BrowserPointerLockPayload,
   WebviewCreatePayload,
   WebviewDestroyPayload,
   WebviewRenderablePayload,
@@ -194,6 +203,16 @@ function getOverlayStyle(): Record<string, string> {
   }
 }
 
+/** 指针锁提示位置：预览区顶部居中 */
+function getPointerLockHintStyle(): Record<string, string> {
+  const rect = store.previewRect
+  if (!rect) return { display: 'none' }
+  return {
+    left: `${rect.x + rect.width / 2}px`,
+    top: `${rect.y + 12}px`,
+  }
+}
+
 // ── Webview 事件处理 ──
 
 function onNavigate(event: ElectronWebviewNavigateEvent, windowId: string): void {
@@ -250,6 +269,31 @@ function onStopLoading(_event: unknown, windowId: string): void {
 }
 
 // ── 监听活跃窗口变化，同步 webview 元素和导航状态 ──
+
+// 切换标签/会话时释放旧窗口的指针锁，避免隐藏的页面继续锁定输入
+watch(
+  () => store.activeWindowId,
+  (windowId, previousWindowId) => {
+    if (previousWindowId && previousWindowId !== windowId) {
+      void window.electronAPI?.releaseBrowserInput?.(previousWindowId, {
+        focusHost: false,
+      })
+    }
+  },
+)
+
+// 预览区隐藏（关闭工作区/折叠侧栏）时同样释放
+watch(
+  () => store.previewRect,
+  (rect) => {
+    const windowId = store.activeWindowId
+    if (!rect && windowId) {
+      void window.electronAPI?.releaseBrowserInput?.(windowId, {
+        focusHost: false,
+      })
+    }
+  },
+)
 
 watch(
   () => store.activeWindowId,
@@ -319,6 +363,11 @@ function handleSetRenderable(_event: unknown, data: WebviewRenderablePayload): v
   store.setRenderableOverride(data.windowId, data.renderable)
 }
 
+function handlePointerLockChanged(_event: unknown, data: BrowserPointerLockPayload): void {
+  if (!data?.windowId) return
+  store.setPointerLocked(data.windowId, !!data.locked)
+}
+
 onMounted(() => {
   // 默认渲染视口由启动流程统一加载（main.js → loadBrowserSettings，browser 分组只拉一次），
   // 本组件只读 store 现值，不再自己发请求。
@@ -331,6 +380,7 @@ onMounted(() => {
   api.onSetWebviewVisibility?.(handleSetVisibility)
   api.onSetWebviewRenderable?.(handleSetRenderable)
   api.onWindowFaviconUpdated?.(handleWindowFaviconUpdated)
+  api.onBrowserPointerLockChanged?.(handlePointerLockChanged)
 })
 
 onUnmounted(() => {
@@ -362,6 +412,23 @@ onUnmounted(() => {
   border: none;
   display: flex;
   pointer-events: auto;
+}
+
+/* 指针锁提示：网页锁定鼠标时显示在预览区顶部 */
+.pointer-lock-hint {
+  position: fixed;
+  z-index: 45;
+  transform: translateX(-50%);
+  pointer-events: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.78);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(4px);
 }
 
 /* 拖拽遮罩层：覆盖在 webview 上方，阻止 webview 截获鼠标事件 */

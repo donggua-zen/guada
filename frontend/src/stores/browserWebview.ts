@@ -60,6 +60,9 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
   /** 截图等操作临时需要渲染的 webview（visibility:visible 但离屏定位），不改变 activeWindowId */
   const renderableOverrides = ref<Set<string>>(new Set())
 
+  /** 当前被网页 Pointer Lock 锁定的 webview（windowId 集合） */
+  const pointerLockedWindows = ref<Set<string>>(new Set())
+
   /**
    * 全局默认渲染视口（默认 1280×720，来源：设置中心，utils/browserViewport.ts）。
    * 所有 webview 恒定使用固定视口渲染，保证 window.innerWidth/innerHeight
@@ -100,6 +103,12 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
       const next = new Map(viewportOverrides.value)
       next.delete(windowId)
       viewportOverrides.value = next
+    }
+    // 清理该网页的指针锁状态
+    if (pointerLockedWindows.value.has(windowId)) {
+      const next = new Set(pointerLockedWindows.value)
+      next.delete(windowId)
+      pointerLockedWindows.value = next
     }
     // 不自动清除 activeWindowId —— 由调用方通过 setActive 控制切换，
     // 避免关闭标签时中间态 null → preview-close → 再 setActive → preview-open 造成闪烁
@@ -142,6 +151,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     activeWebviewEl.value = null
     renderableOverrides.value.clear()
     renderableOverrides.value = new Set()
+    pointerLockedWindows.value = new Set()
   }
 
   function setDragging(val: boolean): void {
@@ -156,6 +166,17 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     }
     // 触发响应式
     renderableOverrides.value = new Set(renderableOverrides.value)
+  }
+
+  /** 更新某网页的 Pointer Lock 状态 */
+  function setPointerLocked(windowId: string, locked: boolean): void {
+    const next = new Set(pointerLockedWindows.value)
+    if (locked) {
+      next.add(windowId)
+    } else {
+      next.delete(windowId)
+    }
+    pointerLockedWindows.value = next
   }
 
   /** 设置渲染视口尺寸（所有 webview 立即按新尺寸重排，来源见 utils/browserViewport.ts） */
@@ -212,6 +233,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     renderableOverrides.value.clear()
     renderableOverrides.value = new Set()
     viewportOverrides.value = new Map()
+    pointerLockedWindows.value = new Set()
   }
 
   // ── Getters ──
@@ -240,6 +262,12 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     return webviews.value.get(activeWindowId.value) || null
   })
 
+  /** 当前活跃 webview 是否被网页锁定鼠标 */
+  const isActivePointerLocked = computed(() => {
+    const id = activeWindowId.value
+    return !!id && pointerLockedWindows.value.has(id)
+  })
+
   /** 所有 webview（用于 BrowserWebviewLayer 渲染） */
   const allWebviews = computed<WebviewState[]>(() => {
     return Array.from(webviews.value.values())
@@ -253,6 +281,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     currentSessionId,
     isDragging,
     renderableOverrides,
+    pointerLockedWindows,
     viewportWidth,
     viewportHeight,
     viewportOverrides,
@@ -265,6 +294,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     sessionWebviews,
     agentWebviews,
     activeWebview,
+    isActivePointerLocked,
     allWebviews,
     // actions
     addWebview,
@@ -275,6 +305,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     setCurrentSession,
     setDragging,
     setRenderableOverride,
+    setPointerLocked,
     setViewportSize,
     getViewportSize,
     setWebviewViewport,

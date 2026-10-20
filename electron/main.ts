@@ -2488,6 +2488,22 @@ function setupIpcHandlers() {
     }
   });
 
+  // 强制释放 webview 内的指针锁 / 全屏 / 键盘锁
+  ipcMain.handle(
+    "browser:release-input",
+    async (_, { windowId, focusHost }) => {
+      try {
+        const success = await windowManager!.releaseInput(windowId, {
+          focusHost: focusHost !== false,
+        });
+        return { success };
+      } catch (error: any) {
+        log.error("释放浏览器输入失败:", error.message);
+        return { success: false, error: error.message };
+      }
+    },
+  );
+
   // 获取窗口列表
   ipcMain.handle("browser:get-windows", () => {
     try {

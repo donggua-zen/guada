@@ -97,6 +97,13 @@ export interface WindowFaviconPayload {
   favicon: string
 }
 
+/** Webview 指针锁 / 全屏状态（主进程 → 前端） */
+export interface BrowserPointerLockPayload {
+  windowId: string
+  locked: boolean
+  fullscreen?: boolean
+}
+
 export interface ElectronAPI {
   platform: string
   versions: {
@@ -161,6 +168,17 @@ export interface ElectronAPI {
   showBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
   toggleBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
   getBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
+
+  // 强制释放 webview 内被页面锁定的鼠标/键盘（Pointer Lock / Fullscreen）
+  releaseBrowserInput: (
+    windowId: string,
+    options?: { focusHost?: boolean },
+  ) => Promise<{ success: boolean; error?: string }>
+
+  // Webview 指针锁 / 全屏状态变化（主进程 → 前端）
+  onBrowserPointerLockChanged?: (
+    callback: (event: unknown, data: BrowserPointerLockPayload) => void,
+  ) => void
 
   // Webview 生命周期事件（主进程 → 前端）
   onCreateWebview?: (callback: (event: unknown, data: WebviewCreatePayload) => void) => void

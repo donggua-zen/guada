@@ -28,6 +28,26 @@ Electron 主进程
     └── BrowserAutomationService.handleToolCall()
 ```
 
+## 输入捕获与释放
+
+预览窗口是主窗口内的 `<webview>`，页面可以通过 Pointer Lock 或 HTML Fullscreen 捕获鼠标/键盘（three.js 的 PointerLockControls、FPS 类游戏等很常见）。一旦捕获，宿主界面收不到鼠标事件，光标也会隐藏。
+
+浏览器自动化为此提供宿主级释放机制：
+
+| 操作 | 行为 |
+|------|------|
+| `Esc` | 释放指针锁 / 退出 HTML 全屏；**不拦截按键**，页面仍能收到 Esc（游戏自己的暂停菜单可用） |
+| `Ctrl+Alt+R` | 宿主键，完全拦截；释放指针锁 / 全屏 / 键盘锁，并把焦点交回应用 |
+| 切换标签、隐藏工作区、关闭标签 / 窗口 | 自动释放，避免后台页面继续锁定输入 |
+
+释放后，主进程会在页面主世界设置临时封锁（`__guadaBlockPointerLock`），阻止页面在没有新用户手势的情况下立即重新 `requestPointerLock()`；下一次真实 `pointerdown` 会自动解除封锁，因此再次点击游戏画面即可重新锁定，行为类似虚拟机的 Host Key 切换。
+
+实现位置：
+
+- `electron/browser-tab-manager.ts`：在 guest WebContents 的 `before-input-event` 中拦截按键；释放脚本遍历主 frame 与所有 iframe 执行。
+- `electron/browser-preload.ts`：监听 `pointerlockchange` / `fullscreenchange`，把状态上报主进程。
+- `frontend/src/components/BrowserWebviewLayer.vue`：在预览区显示锁定提示与释放说明。
+
 ## 三种快照类型
 
 | type | AI 输出格式 | 默认 | 适用场景 |

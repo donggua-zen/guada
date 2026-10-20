@@ -115,6 +115,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBrowserWindowVisibility: (windowId: string) =>
     ipcRenderer.invoke('browser:get-window-visibility', { windowId }),
 
+  // 强制释放 webview 内被页面锁定的鼠标/键盘（Pointer Lock / Fullscreen）
+  releaseBrowserInput: (windowId: string, options?: { focusHost?: boolean }) =>
+    ipcRenderer.invoke('browser:release-input', { windowId, ...options }),
+
+  // Webview 指针锁 / 全屏状态变化（主进程 → 前端）
+  onBrowserPointerLockChanged: (
+    callback: (event: any, data: { windowId: string; locked: boolean; fullscreen?: boolean }) => void
+  ) => {
+    ipcRenderer.on('browser:pointer-lock-changed', callback)
+  },
+
   // Webview 生命周期事件（主进程 → 前端）
   onCreateWebview: (callback: (event: any, data: { windowId: string; partition: string; url: string; preloadUrl: string; metadata?: any }) => void) => {
     ipcRenderer.on('browser:create-webview', callback)

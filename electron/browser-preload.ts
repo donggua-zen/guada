@@ -136,6 +136,41 @@ contextBridge.exposeInMainWorld('_browserBridge', {
     ipcRenderer.send('browser:dialog-auto-dismissed', { type, message }),
 })
 
+// ── 指针锁 / 全屏状态上报 ──
+// 页面进入 Pointer Lock 或 HTML 全屏时通知主进程，宿主据此显示释放提示。
+// 只在状态真正由无到有 / 由有到无时上报，避免失败请求或 iframe 事件互相覆盖。
+let wasPointerLockedOrFullscreen = false
+function notifyPointerLockState(): void {
+  const locked = !!document.pointerLockElement
+  const fullscreen = !!document.fullscreenElement
+  const active = locked || fullscreen
+  if (!active && !wasPointerLockedOrFullscreen) return
+  wasPointerLockedOrFullscreen = active
+  try {
+    ipcRenderer.send('browser:pointer-lock-state', { locked, fullscreen })
+  } catch {
+    // 页面正在销毁/导航时忽略
+  }
+}
+
+document.addEventListener('pointerlockchange', notifyPointerLockState)
+document.addEventListener('pointerlockerror', notifyPointerLockState)
+document.addEventListener('fullscreenchange', notifyPointerLockState)
+
+// 子 frame 的输入守卫通过 postMessage 上报锁定状态（兼容 iframe 内嵌游戏）
+window.addEventListener('message', (event) => {
+  const data = event?.data
+  if (!data || data.__guadaPointerLock !== true) return
+  try {
+    ipcRenderer.send('browser:pointer-lock-state', {
+      locked: !!data.locked,
+      fullscreen: !!data.fullscreen,
+    })
+  } catch {
+    // 页面正在销毁/导航时忽略
+  }
+})
+
 // ── 反检测 + 弹窗自动关闭 ──
 // 在页面脚本之前注入，通过 <script> 标签在主世界执行
 ;(function injectAntiDetection() {

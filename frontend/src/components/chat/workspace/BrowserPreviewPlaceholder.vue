@@ -127,6 +127,20 @@
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
         </svg>
       </button>
+
+      <!-- 指针锁释放：网页锁定鼠标时显示（也可用 Esc / Ctrl+Alt+R） -->
+      <button
+        v-if="store.isActivePointerLocked"
+        class="pointer-lock-chip"
+        :title="t('chat.workspace.pointerLockHint')"
+        @click="releasePointerLock"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+        </svg>
+        <span>{{ t('chat.workspace.releasePointer') }}</span>
+      </button>
     </div>
 
     <!-- 空壳占位区域：webview 实际覆盖在此区域上方（由 BrowserWebviewLayer 定位） -->
@@ -235,6 +249,13 @@ function refresh(): void {
 function stopLoading(): void {
   const wv = store.activeWebviewEl as ElectronWebviewElement | null
   if (wv) wv.stop()
+}
+
+/** 强制释放网页对鼠标/键盘的锁定（Pointer Lock / Fullscreen） */
+function releasePointerLock(): void {
+  const windowId = store.activeWindowId
+  if (!windowId) return
+  void window.electronAPI?.releaseBrowserInput?.(windowId, { focusHost: true })
 }
 
 async function navigateToUrl(): Promise<void> {
@@ -374,6 +395,34 @@ onUnmounted(() => {
 
 .dark .nav-btn:hover:not(:disabled) {
   background: var(--gd-color-hover-bg, #3e4147);
+}
+
+/* 指针锁释放按钮 */
+.pointer-lock-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  margin-left: 4px;
+  border: 1px solid #f59e0b;
+  border-radius: 13px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pointer-lock-chip:hover {
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.dark .pointer-lock-chip {
+  border-color: #b45309;
+  color: #fbbf24;
 }
 
 .close-btn:hover {
