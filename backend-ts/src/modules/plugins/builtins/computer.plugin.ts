@@ -42,7 +42,9 @@ export class ComputerPlugin extends PluginBase {
     name: "%computer.name%",
     description: "%computer.description%",
     version: "0.1.0",
-    category: "core" as const,
+    // Extended plugins ship disabled; desktop control stays opt-in until the
+    // user enables it from the plugin list or the Computer Use settings page.
+    category: "extended" as const,
   };
 
   constructor(

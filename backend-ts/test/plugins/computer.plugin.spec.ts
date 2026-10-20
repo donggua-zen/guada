@@ -69,6 +69,11 @@ function tool(tools: any[], name: string) {
 }
 
 describe("ComputerPlugin", () => {
+  it("ships disabled by default as an extended plugin", () => {
+    const { plugin } = createHarness();
+    expect(plugin.manifest.category).toBe("extended");
+  });
+
   it("registers the three lazy tools", () => {
     const { tools } = createHarness();
     expect(tools.map((entry) => entry.name).sort()).toEqual([

@@ -12,10 +12,12 @@ backend process.
 - Out of scope for this release: application launch, drag, macOS, Linux,
   Set-of-Marks overlays, OCR
 
-The capability is opt-in. It is disabled until the user enables the plugin
-master switch and grants the toolkit to an agent. The **Settings → Computer
-Use** page keeps its switch in sync with the plugin master switch; the
-`computerUse.enabled` value is UI state and is **not** a second execution gate.
+The capability is opt-in. The plugin is registered as an `extended` plugin, so
+it is disabled by default on a fresh install and stays disabled until the user
+enables the plugin master switch and grants the toolkit to an agent. The
+**Settings → Computer Use** page keeps its switch in sync with the plugin
+master switch; the `computerUse.enabled` value is UI state and is **not** a
+second execution gate.
 
 ## Architecture
 
