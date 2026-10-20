@@ -77,6 +77,10 @@
   --gd-color-text-disabled: #9ca3af;
   --gd-color-surface: #fff;
   --gd-color-secondary-surface: var(--gd-color-sidebar-bg);
+  /* 轻量填充面（插件卡片等）：从 surface 混入少量 text 派生，
+     主题覆盖 surface/text 后会自动跟随，无需逐主题定义 */
+  --gd-color-surface-subtle: color-mix(in srgb, var(--gd-color-text) 3.5%, var(--gd-color-surface));
+  --gd-color-surface-subtle-hover: color-mix(in srgb, var(--gd-color-text) 5.5%, var(--gd-color-surface));
   /*#fcfcfc*/
   --gd-color-surface-border: #efefef;
   --gd-color-surface-hover: var(--gd-color-sidebar-bg-hover);
@@ -315,6 +319,9 @@ html.dark {
 
   /* 表面层背景 - 用于卡片、面板等 */
   --gd-color-surface: #222;
+  /* 轻量填充面（插件卡片等）：从 surface 混入少量 text 派生，自动跟随主题 */
+  --gd-color-surface-subtle: color-mix(in srgb, var(--gd-color-text) 6.8%, var(--gd-color-surface));
+  --gd-color-surface-subtle-hover: color-mix(in srgb, var(--gd-color-text) 12%, var(--gd-color-surface));
   --gd-color-surface-border: oklch(28% 0.02 250);
   --gd-color-secondary-surface: #222;
   /* #2e3035 左右 */

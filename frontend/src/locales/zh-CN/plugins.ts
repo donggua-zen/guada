@@ -182,6 +182,8 @@ export default {
     uninstall: '卸载',
     enable: '启用',
     disable: '禁用',
+    empty: '暂无插件',
+    emptyHint: '点击右上角「安装插件」添加',
     // 详情弹窗
     descLabel: '描述',
     toolsLabel: '工具列表 ({count})',

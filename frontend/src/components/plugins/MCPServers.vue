@@ -1,6 +1,6 @@
 <template>
     <div class="flex-1 overflow-hidden">
-        <div class="flex items-center justify-between gap-4 mb-8 mt-2">
+        <div class="flex items-center justify-between gap-4 mb-6 mt-2">
             <div class="min-w-0">
                 <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('plugins.mcp.title') }}</h1>
                 <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('plugins.mcp.subtitle') }}</p>
@@ -22,31 +22,22 @@
         </div>
 
         <!-- MCP 服务器列表 -->
-        <div v-if="servers.length > 0" class="grid gap-y-4 gap-x-3"
-            style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
-            <div v-for="server in servers" :key="server.id"
-                class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
-                @click="handleEditServer(server)">
-                <div class="flex items-center gap-2.5 mb-3">
-                    <CardAvatar :name="server.name" :disabled="!server.enabled" />
-                    <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
-                        {{ server.name }}
-                    </h3>
-                </div>
-
-                <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
-                    {{ server.description || t('plugins.mcp.noDescription') }}
-                </p>
-
-                <div class="flex items-center justify-end gap-2 mt-3">
-                    <el-button link size="small" type="danger" @click.stop="handleDeleteServer(server)">
-                        {{ t('common.delete') }}
-                    </el-button>
+        <div v-if="servers.length > 0" class="grid gap-4"
+            style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));">
+            <PluginListRow
+                v-for="server in servers"
+                :key="server.id"
+                :name="server.name"
+                :description="server.description || t('plugins.mcp.noDescription')"
+                :menu-items="mcpMenuItems"
+                @click="handleEditServer(server)"
+                @command="(command) => handleServerCommand(command, server)"
+            >
+                <template #actions>
                     <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
-                        @change="handleToggleServer(server)" @click.stop size="small" inline-prompt
-                        :active-text="t('plugins.mcp.enable')" :inactive-text="t('plugins.mcp.disable')" />
-                </div>
-            </div>
+                        @change="handleToggleServer(server)" @click.stop size="small" />
+                </template>
+            </PluginListRow>
         </div>
         <div v-else
             class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
@@ -282,9 +273,9 @@ import {
 } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
-import CardAvatar from '@/components/ui/CardAvatar.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import PluginListRow from './PluginListRow.vue'
 
 const { toast } = usePopup()
 const { t } = useI18n()
@@ -301,6 +292,15 @@ const activeTab = ref('config')
 const refreshingTools = ref(false)
 const testingConnection = ref(false)
 const toolsList = ref([])
+
+// 行内「…」菜单：删除服务器
+const mcpMenuItems = computed(() => [
+    { command: 'delete', label: t('common.delete'), danger: true }
+])
+
+const handleServerCommand = (command, server) => {
+    if (command === 'delete') handleDeleteServer(server)
+}
 
 const formRef = ref(null)
 

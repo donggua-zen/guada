@@ -1,7 +1,7 @@
 <template>
     <div class="flex-1 skills-page">
         <!-- 头部区域 -->
-        <div class="flex items-center justify-between gap-4 mb-8 mt-2">
+        <div class="flex items-center justify-between gap-4 mb-6 mt-2">
             <div class="min-w-0">
                 <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('plugins.skills.title') }}</h1>
                 <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('plugins.skills.subtitle') }}</p>
@@ -33,42 +33,26 @@
 
         <!-- Skills 列表 -->
         <div class="space-y-4">
-            <!-- 技能卡片列表 -->
-            <div class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
-                <div v-for="skill in skills" :key="skill.id"
-                    class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
-                    :style="skill.enabled === false ? { opacity: 0.6 } : {}"
-                    @click="handleViewDocumentation(skill.id)">
-                    <div class="flex items-center gap-2.5 mb-3">
-                        <CardAvatar :name="skill.manifest.name || skill.id" :disabled="skill.enabled === false" />
-                        <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
-                            {{ skill.manifest.name || skill.id }}
-                        </h3>
+            <!-- 技能列表 -->
+            <div v-if="skills.length > 0" class="grid gap-4"
+                style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));">
+                <PluginListRow
+                    v-for="skill in skills"
+                    :key="skill.id"
+                    :name="skill.manifest.name || skill.id"
+                    :description="skill.manifest.description || t('plugins.skills.noDescription')"
+                    :muted="skill.enabled === false"
+                    :menu-items="getSkillMenuItems(skill)"
+                    @click="handleViewDocumentation(skill.id)"
+                    @command="(command) => handleSkillCommand(command, skill)"
+                >
+                    <template #badges>
                         <el-tag v-if="skill.provider" size="small" type="warning" effect="light">{{ t('plugins.skills.fromPlugin') }}</el-tag>
                         <el-tag v-else-if="skill.source === 'system'" size="small" type="success" effect="light">{{ t('plugins.skills.sourceBuiltin') }}</el-tag>
                         <el-tag v-else-if="skill.source === 'agents'" size="small" type="warning" effect="light">{{ t('plugins.skills.sourceShared') }}</el-tag>
                         <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</el-tag>
-                    </div>
-
-                    <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
-                    {{ skill.manifest.description || t('plugins.skills.noDescription') }}
-                    </p>
-
-                    <div class="flex items-center justify-end gap-2 mt-3">
-                        <el-button link size="small" @click.stop="handleReloadSkill(skill.id)"
-                            :loading="reloadingSkills.has(skill.id)">
-                            {{ t('plugins.skills.reload') }}
-                        </el-button>
-                        <el-button v-if="skill.source !== 'system' && skill.source !== 'agents'" link size="small" type="danger"
-                            @click.stop="handleUninstallSkill(skill.id)"
-                            :loading="uninstallingSkills.has(skill.id)">
-                            {{ t('plugins.skills.uninstall') }}
-                        </el-button>
-                        <GdTooltip v-else-if="skill.source === 'agents'" :content="t('plugins.skills.sharedTooltip')" placement="top">
-                            <el-button link size="small" type="danger" disabled>
-                                {{ t('plugins.skills.uninstall') }}
-                            </el-button>
-                        </GdTooltip>
+                    </template>
+                    <template #actions>
                         <GdTooltip v-if="skill.provider" :content="t('plugins.skills.pluginManaged')" placement="top">
                             <el-switch :model-value="skill.enabled !== false" disabled size="small" />
                         </GdTooltip>
@@ -79,12 +63,9 @@
                             @update:model-value="(val: string | number | boolean) => handleToggleSkill(skill.id, !!val)"
                             @click.stop
                             size="small"
-                            inline-prompt
-                            :active-text="t('common.enable')"
-                            :inactive-text="t('common.disable')"
                         />
-                    </div>
-                </div>
+                    </template>
+                </PluginListRow>
             </div>
 
             <!-- 空状态 -->
@@ -136,38 +117,31 @@
             </div>
 
             <!-- 推荐列表 -->
-            <div v-else-if="marketSkills.length > 0" class="grid gap-3"
-                style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
-                <div v-for="skill in marketSkills" :key="skill.id"
-                    class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
-                    @click="handleShowMarketInstallDialog(skill)">
-                    <div class="flex items-center gap-2.5 mb-3">
-                        <CardAvatar :name="skill.name" />
-                        <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
-                            {{ skill.name }}
-                        </h3>
+            <div v-else-if="marketSkills.length > 0" class="grid gap-4"
+                style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));">
+                <PluginListRow
+                    v-for="skill in marketSkills"
+                    :key="skill.id"
+                    :name="skill.name"
+                    :description="skill.description || t('plugins.skills.noDescription')"
+                    :icon-src="skill.icon"
+                    @click="handleShowMarketInstallDialog(skill)"
+                >
+                    <template #badges>
                         <el-tag v-if="skill.localStatus === 'installed'" type="success" size="small" effect="plain">{{ t('plugins.skills.marketInstalled') }}</el-tag>
                         <el-tag v-else-if="skill.localStatus === 'updatable'" type="warning" size="small" effect="plain">{{ t('plugins.skills.marketUpdatable') }}</el-tag>
-                    </div>
-
-                    <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
-                    {{ skill.description || t('plugins.skills.noDescription') }}
-                    </p>
-
-                    <div class="flex items-center justify-between gap-2 mt-3">
-                        <div v-if="skill.labels && skill.labels.length > 0" class="flex flex-wrap gap-1 min-w-0 overflow-hidden">
-                            <el-tag v-for="label in skill.labels"
-                                :key="label" size="small" effect="light">
-                                {{ label }}
-                            </el-tag>
-                        </div>
+                        <el-tag v-for="label in (skill.labels || []).slice(0, 2)" :key="label" size="small" effect="light">
+                            {{ label }}
+                        </el-tag>
+                    </template>
+                    <template #actions>
                         <el-button link size="small" shrink-0
                             :type="skill.localStatus === 'updatable' ? 'warning' : 'primary'"
                             @click.stop="handleShowMarketInstallDialog(skill)">
                             {{ installingFromMarket.has(skill.id) ? t('plugins.skills.marketInstalling') : getMarketButtonLabel(skill) }}
                         </el-button>
-                    </div>
-                </div>
+                    </template>
+                </PluginListRow>
             </div>
 
             <!-- 底部提示 -->
@@ -375,6 +349,8 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import PluginListRow from './PluginListRow.vue'
+import type { PluginRowMenuItem } from './pluginList.types'
 import type { Skill } from '@/types/skills'
 
 const loading = ref(false)
@@ -665,6 +641,38 @@ async function handleToggleSkill(skillId: string, enabled: boolean) {
     } finally {
         updatingSkills.value.delete(skillId)
     }
+}
+
+function getSkillMenuItems(skill: Skill): PluginRowMenuItem[] {
+    const items: PluginRowMenuItem[] = [{
+        command: 'reload',
+        label: t('plugins.skills.reload'),
+        disabled: reloadingSkills.value.has(skill.id),
+    }]
+
+    if (skill.source === 'agents') {
+        items.push({
+            command: 'uninstall',
+            label: t('plugins.skills.uninstall'),
+            disabled: true,
+            danger: true,
+            title: t('plugins.skills.sharedTooltip'),
+        })
+    } else if (skill.source !== 'system') {
+        items.push({
+            command: 'uninstall',
+            label: t('plugins.skills.uninstall'),
+            danger: true,
+            disabled: uninstallingSkills.value.has(skill.id),
+        })
+    }
+
+    return items
+}
+
+function handleSkillCommand(command: string, skill: Skill) {
+    if (command === 'reload') void handleReloadSkill(skill.id)
+    else if (command === 'uninstall') void handleUninstallSkill(skill.id)
 }
 
 /**

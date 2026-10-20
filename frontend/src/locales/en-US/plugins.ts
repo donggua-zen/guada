@@ -182,6 +182,8 @@
     uninstall: 'Uninstall',
     enable: 'Enable',
     disable: 'Disable',
+    empty: 'No plugins',
+    emptyHint: 'Click "Install Plugin" in the top right to add one',
     // 详情弹窗
     descLabel: 'Description',
     toolsLabel: 'Tools ({count})',

@@ -1,6 +1,6 @@
 <template>
   <div class="flex-1 overflow-hidden">
-    <div class="flex items-center justify-between gap-4 mb-8 mt-2">
+    <div class="flex items-center justify-between gap-4 mb-6 mt-2">
       <div class="min-w-0">
           <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('plugins.localTools.title') }}</h1>
         <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('plugins.localTools.subtitle') }}</p>
@@ -41,53 +41,43 @@
       </template>
     </GdDialog>
 
-    <div class="space-y-4">
-      <div class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
-        <div
-          v-for="tool in globalTools"
-          :key="tool.pluginId"
-          class="plugin-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
-          @click="showDetail(tool)"
-        >
-          <!-- Header: icon + name + source tag -->
-          <div class="flex items-center gap-2.5 mb-3">
-            <CardAvatar :src="tool.icon ? `/api/v1/plugins/${tool.pluginId}/icon` : null" :name="tool.displayName" :disabled="!tool.enabled" />
-            <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);">
-              {{ tool.displayName }}
-            </h3>
-            <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
-            <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
-          </div>
+    <div
+      v-if="globalTools.length > 0"
+      class="grid gap-4"
+      style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));"
+    >
+      <PluginListRow
+        v-for="tool in globalTools"
+        :key="tool.pluginId"
+        :name="tool.displayName || tool.name || tool.pluginId"
+        :description="tool.description || t('plugins.localTools.noDescription')"
+        :icon-src="tool.icon ? `/api/v1/plugins/${tool.pluginId}/icon` : null"
+        :menu-items="getPluginMenuItems(tool)"
+        @click="showDetail(tool)"
+        @command="(command) => handlePluginCommand(command, tool)"
+      >
+        <template #badges>
+          <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
+          <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
+        </template>
+        <template #actions>
+          <el-switch
+            :model-value="tool.enabled"
+            :loading="updatingTools.has(tool.pluginId)"
+            @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
+            @click.stop
+            size="small"
+          />
+        </template>
+      </PluginListRow>
+    </div>
 
-          <!-- Description (max 2 lines) -->
-          <p class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
-            {{ tool.description }}
-          </p>
-
-          <!-- Footer: uninstall + switch -->
-          <div class="flex items-center justify-end gap-2 mt-3">
-            <el-button
-              v-if="tool.source === 'dev' || tool.source === 'user'"
-              link
-              size="small"
-              type="danger"
-              @click.stop="handleUninstall(tool.pluginId)"
-            >
-              {{ t('plugins.localTools.uninstall') }}
-            </el-button>
-            <el-switch
-              :model-value="tool.enabled"
-              :loading="updatingTools.has(tool.pluginId)"
-              @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
-              @click.stop
-              size="small"
-              inline-prompt
-              :active-text="t('plugins.localTools.enable')"
-              :inactive-text="t('plugins.localTools.disable')"
-            />
-          </div>
-        </div>
-      </div>
+    <div
+      v-else-if="!loading"
+      class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-10 text-center"
+    >
+      <div class="text-sm text-(--gd-color-text-gray)">{{ t('plugins.localTools.empty') }}</div>
+      <div class="mt-1 text-xs text-(--gd-color-text-disabled)">{{ t('plugins.localTools.emptyHint') }}</div>
     </div>
 
     <!-- Detail Dialog -->
@@ -140,6 +130,8 @@ import { getLocale } from '@/locales'
 import { usePopup } from '@/composables/usePopup'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import PluginListRow from './PluginListRow.vue'
+import type { PluginRowMenuItem } from './pluginList.types'
 import type { PluginQueryPlugin } from '@/services/modules/settings.api'
 
 const { t } = useI18n()
@@ -160,6 +152,15 @@ const currentTool = ref<PluginQueryPlugin | null>(null)
 function showDetail(tool: PluginQueryPlugin) {
   currentTool.value = tool
   detailVisible.value = true
+}
+
+function getPluginMenuItems(tool: PluginQueryPlugin): PluginRowMenuItem[] {
+  if (tool.source !== 'dev' && tool.source !== 'user') return []
+  return [{ command: 'uninstall', label: t('plugins.localTools.uninstall'), danger: true }]
+}
+
+function handlePluginCommand(command: string, tool: PluginQueryPlugin) {
+  if (command === 'uninstall') void handleUninstall(tool.pluginId)
 }
 
 // ── 安装假终端（轮询日志）──

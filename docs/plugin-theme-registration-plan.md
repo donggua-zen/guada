@@ -326,7 +326,13 @@ electron/preload.ts                                         (+getThemeBootstrap 
 - **assetRev** 改递归扫描插件全目录（主题移出 frontend/dist 后 rev 仍能感知变化）
 - **dotfiles 坑（2026-09-02 修复）**：`res.sendFile` 默认 `dotfiles: 'ignore'`，拒绝路径中点开头段——用户插件目录（如 `C:\Users\22071\.guada-dev\plugins`）下的插件资产 sendFile 一律 404（文件存在也 404）。`sendFile(filePath, { dotfiles: "allow" }, cb)` 放行（插件资产服务场景必须显式设置）
 - **验证**：`assets/themes/cyberpunk.css` → 200 text/css；`assets/themes/fonts/*.woff2` → 200 font/woff2；编码穿越 `themes/..%2f..%2fwin.ini` → 403；`%2e%2e` 段 → 404（路由层归一化）；**点目录插件资产（example_plugin @ .guada-dev）→ 200**；契约测试 5/5；前端 vite build 通过
+
 - **生产部署缺口**（plugins/ 需打包 + 插件入口需可在纯 Node 加载）已于 2026-10-08 修复，见下节
+
+### 主题表面 token 派生约定（2026-10-20）
+- `--gd-color-surface-subtle` / `--gd-color-surface-subtle-hover` **不要求主题单独定义**：`frontend/src/style.css` 中由 `color-mix(in srgb, var(--gd-color-text) N%, var(--gd-color-surface))` 派生（亮色 3.5% / 5.5%，暗色 6.8% / 12%）。主题覆盖 `--gd-color-surface` / `--gd-color-text` 后自动跟随，新增主题无需额外适配。
+- 需要特殊色感时，可在主题的亮色块 `[data-theme="id"]` 或暗色块 `html.dark[data-theme="id"]` 显式覆盖这两个变量；仅亮色/仅暗色主题只写对应块。
+- 注意特异性：`html.dark`（0,1,1）会压过 `[data-theme="id"]`（0,1,0），所以暗色覆盖必须写在 `html.dark[data-theme="id"]` 里。
 
 ### 生产部署缺口（2026-09-02 识别，**2026-10-08 已修复**）
 
