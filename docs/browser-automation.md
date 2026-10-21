@@ -1,6 +1,6 @@
 # 浏览器自动化
 
-> **已退役（2026-10）**：本文描述的 8 个 `browser_*` 扁平工具已从内置插件移除。当前浏览器自动化入口是 `browser-script` 插件的 `browser_run`，见 [browser-script.md](./browser-script.md)。底层 `BrowserAutomationService`、`BrowserWebviewManager` 与 CDP 快照管线仍被复用。
+> **已退役（2026-10）**：本文描述的扁平 `browser_*` 工具已从内置插件移除。当前浏览器自动化入口是 `browser-script` 插件的 `browser_run`，见 [browser-script.md](./browser-script.md)。底层 `BrowserAutomationService`、`BrowserWebviewManager`、`BrowserActionEngine` 与 CDP 快照管线仍被复用。
 
 Electron 桌面端内嵌 Chromium 浏览器引擎，Agent 可直接操控浏览器完成各种 Web 操作。默认 `simple` 快照通过 Chromium 无障碍树生成精简的 role/name/ref YAML；需要排查无障碍语义缺失的元素时可使用 `struct` 获取详细 DOM JSON，阅读正文时可使用 `summary`。
 
@@ -9,20 +9,19 @@ Electron 桌面端内嵌 Chromium 浏览器引擎，Agent 可直接操控浏览�
 ```
 Electron 主进程
 └── BrowserAutomationService
-    ├── BrowserWindowManager → 多窗口管理
-    │   ├── createWindow   → 新建浏览器窗口
-    │   ├── closeWindow    → 关闭窗口
-    │   └── getWindowList  → 窗口列表
-    ├── 窗口生命周期
-    │   ├── 5 分钟无操作自动关闭
-    │   └── 最多 6 个并发窗口
-    └── 操作引擎（14 种操作）
+    ├── BrowserActionEngine → 动作探测 + trusted input
+    ├── BrowserWindowManager → <webview> 标签管理
+    │   ├── createWindow   → 新建标签
+    │   ├── closeWindow    → 关闭标签
+    │   └── getWindowList  → 标签列表
+    ├── 窗口生命周期：无数量上限、无空闲自动关闭
+    └── 操作引擎
         ├── navigate / goBack / goForward / reload
-        ├── click / fillForm / waitForSelector
+        ├── click / fillForm / hover / press / scroll / select / check
+        ├── waitForSelector（attached/visible/hidden/detached）
         ├── executeJavaScript
         ├── getPageSimpleSnapshot ← AX 无障碍树（默认）
         ├── getPageStruct         ← 详细 DOM JSON
-        ├── getPageText           ← 纯文本提取
         └── getPageSummary        ← 页面摘要
 
 后端（Named Pipe / Unix Domain Socket）
@@ -86,14 +85,14 @@ Electron 主进程
 }
 ```
 
-AI 可直接使用 `ref` 值（如 `e2`）在 `browser_interact` 中定位元素，无需构造 CSS 选择器。
+AI 可直接使用 `ref` 值（如 `e2`）在 `browser_run` 的 `tab.click` / `tab.fill` 中定位元素，无需构造 CSS 选择器。
 
 ### ref ID 机制
 
 - 每次 `simple` 或 `struct` 快照调用时，在真实 DOM 元素上设置 `data-ai-ref` 属性（如 `data-ai-ref="e0"`）
 - `simple` 通过 AX 节点的 `backendDOMNodeId` 将 ref 写回 DOM；`struct` 在 DOM 遍历时写入
-- `browser_interact` 和 `browser_wait` 的 `selector` 参数同时支持 ref ID（`e0`）和 CSS 选择器
-- 页面导航后旧 ref 失效，AI 应重新调用 `browser_snapshot` 获取新 ref
+- `tab.click` / `fill` / `hover` / `press` / `scroll` / `selectOption` / `check` / `elementState` 的 target 同时支持 ref ID（`e0`）、CSS 选择器、快照节点和 locator
+- 页面导航或改变 DOM 的动作后旧 ref 失效，模型应重新调用 `tab.snapshot()` 获取新 ref
 
 ### 压缩管线（6 层）
 
@@ -204,47 +203,80 @@ children: [e4, e5]
 
 
 
-## 其他操作
+## 当前 Bridge 契约
 
-### 页面操作
+旧的 8 个 `browser_*` 扁平工具已退役；下面只列 `browser-script` runtime 实际使用的方法。
 
-| 操作 | 说明 |
-|------|------|
-| **navigate(url)** | 打开 URL，等待 `did-finish-load` 事件 |
-| **click(selector)** | ref ID（如 `e0`）或 CSS 选择器定位元素并触发 click |
-| **fillForm(selector, value)** | ref ID 或 CSS 选择器定位输入框，赋值并触发 input/change 事件 |
-| **executeJavaScript(code, isAsync)** | 页面上下文执行任意 JS |
-| **goBack / goForward / reload** | 浏览器导航 |
-| **waitForSelector(selector, timeout)** | 等待元素出现（ref ID 或 CSS 选择器，默认 10 秒） |
+| method | 请求 | 成功返回 |
+|---|---|---|
+| `browser_navigate` | `url, new_tab?, wait_until?, session_path?, session_id?, created_by?` | `{ok, tabId, url, title, readyState?}` |
+| `browser_snapshot` | `type?, wait_for_load?, created_by` | `{generation, type, url, title, source?, stats?, tree}` |
+| `browser_click` | `selector, generation?, button?, click_count?, modifiers?, force?, timeout?, trusted?, created_by` | `{ok, action, target, url, title}` |
+| `browser_input` | `selector, value, generation?, force?, timeout?, trusted?, created_by` | `{ok, action, target, value, url, title}` |
+| `browser_hover` | `selector, generation?, force?, timeout?, trusted?, created_by` | `{ok, action, target, url, title}` |
+| `browser_press` | `selector?, key, generation?, modifiers?, timeout?, trusted?, created_by` | `{ok, action, target?, key, url, title}` |
+| `browser_scroll` | `selector?, delta_x?, delta_y?, timeout?, generation?, created_by` | `{ok, action, deltaX, deltaY, scrollX, scrollY, url, title}` |
+| `browser_select` | `selector, values, generation?, force?, timeout?, created_by` | `{ok, action, target, selected, url, title}` |
+| `browser_check` | `selector, checked?, generation?, force?, timeout?, trusted?, created_by` | `{ok, action, target, checked, url, title}` |
+| `browser_element_state` | `selector, generation?, created_by` | probe 对象 |
+| `browser_wait` | `selector, timeout?, state?, generation?, created_by` | `{ok, found, selector, state}` |
+| `browser_evaluate` | `code, timeout_ms?, mutates?, created_by` | 页面结果原值 |
+| `browser_screenshot` | `file_path?, session_path?, full_page?, created_by` | `{ok, path, width, height}` |
+| `browser_console` | `created_by, clear?` | `string[]` |
+| `browser_history` | `action: "back"\|"forward"\|"reload", created_by` | `{ok, url}` |
+| `browser_tabs` | `action: "list"\|"current"\|"select"\|"close"\|"close_all", index?, tab_id?, created_by` | list: `TabInfo[]`；current: `TabInfo\|null`；select: `TabInfo`；close: `{ok,closedTabId,currentTabId}`；close_all: `{ok,closedCount}` |
+| `browser_close_by_creator` | `created_by` | `{closedCount}` |
 
-### 窗口管理
+`TabInfo = { index, tabId, url, title, isCurrent }`。
 
-| 操作 | 说明 |
-|------|------|
-| **createWindow(url?)** | 创建新窗口，默认 6 个并发上限 |
-| **closeWindow(windowId)** | 关闭指定窗口 |
-| **getWindowList()** | 获取所有窗口（URL、标题、加载状态） |
-| **openNewWindow(url, sessionPath?)** | 打开独立 session 的窗口 |
+### 导航等待
 
-### 窗口隔离安全机制
+`browser_navigate.wait_until`：
 
-每个自动化窗口使用独立的 Chromium session（`partition` 隔离），与主窗口 cookie/ localStorage 完全隔离，避免影响用户登录态。
+- `none`：发起导航后立即返回，不等待加载；`readyState` 为 `loading`。
+- `domcontentloaded`：等待 Electron `dom-ready`。
+- `load`：等待 `did-stop-loading`（默认，保持旧行为）。
 
-### 超时回收
+脚本的 `tab.goto` 默认传 `domcontentloaded`；`tab.waitForLoadState` 仍可用于显式等待。
 
-窗口无操作超过阈值（默认 5 分钟）自动关闭。超时时间可通过 `inactivityTimeout` 配置。
+### 快照 generation
 
-### 通信协议
+- 每个 tab 维护一个 `generation`。
+- `snapshot`、`navigate`、`reload`、`back/forward`、`click`、`hover`、`press`、`check`、`select`、`evaluate` 会递增；`fill`、`scroll`、`elementState`、`wait` 不递增。
+- 动作可携带 `generation`；与当前 tab 不一致时返回 `STALE_REF`。
+- 快照返回统一 `tree` 字段；`summary` 的 `tree` 是 `{text, links, headings}`。
+
+### 动作可靠性
+
+- 动作先经过 `BrowserActionEngine` 探测：存在、可见、启用、可编辑（fill）、稳定（两次采样）、在视口内、未被遮挡。
+- 默认动作超时 3000ms；重试时按 `center → end → start → nearest` 轮换滚动对齐。
+- 默认 trusted 输入：`webContents.sendInputEvent` 优先，CDP `Input.*` 兜底；`trusted:false` 才使用 JS 合成事件。
+- `force:true` 跳过可见性/稳定性/遮挡检查，但仍要求元素存在。
+- 失败返回 `NOT_ACTIONABLE`，`details.reason` 为 `hidden/disabled/not-editable/not-stable/outside-viewport/covered`。
+- `fill` 对 select/file/checkbox/radio 返回 `UNSUPPORTED`；select/check 有独立方法。
+- `browser_console` 默认只读，`clear:true` 才清空。
+
+### 导航与截图安全
+
+- 导航只允许 `http:`、`https:`、`about:blank`；`javascript:`、`file:`、`data:`、`chrome:` 返回 `NAVIGATION_BLOCKED`。newTab、当前 tab、`window.open` 转发统一校验。
+- 截图 `file_path` 必须落在 `session_path` 内；绝对路径越界或 `..` 穿越返回 `INVALID_ARGUMENT`；无会话路径时只写临时目录。
+
+### 错误
+
+Bridge response 的错误统一为：
 
 ```typescript
-interface ToolRequest {
-  id: string;      // 请求 ID
-  method: string;  // 操作名
-  params: any;     // 参数
-}
-interface ToolResponse {
-  id: string;
-  result?: any;    // 成功结果
-  error?: string;  // 错误信息
+interface BridgeError {
+  code: string;       // 如 NOT_FOUND / STALE_REF / TIMEOUT / NAVIGATION_FAILED
+  message: string;
+  details?: unknown;
 }
 ```
+
+backend 的 `BridgeClient` 保留 `code/details`，runtime 再映射为脚本错误码。
+
+### 窗口与隔离
+
+- 所有标签共用 `persist:browser_shared`；会话隔离是 `createdBy` 过滤，**不是** cookie/localStorage 隔离。
+- 当前没有窗口数量上限、空闲自动关闭或崩溃恢复；这些是后续资源治理项。
+- 子 Agent 关闭时由 `browser-script` 插件调用 `browser_close_by_creator` 清理其标签。

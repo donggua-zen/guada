@@ -175,7 +175,7 @@ children:
 ## 结论
 
 - AX 树方案可在当前 Electron webview 架构中工作。
-- `backendDOMNodeId` 可稳定映射回真实 DOM，现有 `browser_interact` 的 `[data-ai-ref]` 链路无需重写。
+- `backendDOMNodeId` 可稳定映射回真实 DOM，现有 `tab.click`/`tab.fill` 的 `[data-ai-ref]` 链路无需重写。
 - simple 快照对大型页面的 token 压缩非常明显，适合作为默认类型。
 - AX 树依赖页面无障碍语义；自定义可点击 `div` 可能缺失，因此保留 `struct` 作为手动回退。
 - DevTools 占用 debugger 或 CDP 调用失败时，服务会自动使用旧 DOM struct 压缩为 simple 树。

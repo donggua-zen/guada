@@ -35,6 +35,7 @@
     "test:browser-snapshot:unit": "cd electron && tsc && cd .. && node scripts/test-accessibility-snapshot.js",
     "test:browser-snapshot:fixture": "cd electron && tsc && cd .. && electron scripts/test-browser-snapshot-electron.js",
     "test:browser-snapshot:bilibili": "cd electron && tsc && cd .. && electron scripts/test-browser-snapshot-electron.js https://www.bilibili.com/",
+    "test:browser-actions": "pnpm run build:electron-ts && electron scripts/test-browser-actions-electron.js",
     "test:webview-navigation-crash": "node --test --test-concurrency=1 scripts/test-webview-navigation-crash.js",
     "test:computer-sidecar": "node --test scripts/test-computer-sidecar.js",
     "test:computer-sidecar:electron": "pnpm run build:electron-ts && electron scripts/test-computer-sidecar-electron.js",

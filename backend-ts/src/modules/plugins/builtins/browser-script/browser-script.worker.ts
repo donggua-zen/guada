@@ -73,6 +73,31 @@ function makeLocator(descriptor) {
     fill: function (value, options) {
       return hostCall('locator', { locator: descriptor, action: 'fill', value: value, options: options || {} });
     },
+    hover: function (options) {
+      return hostCall('locator', { locator: descriptor, action: 'hover', options: options || {} });
+    },
+    press: function (key, options) {
+      return hostCall('locator', { locator: descriptor, action: 'press', key: key, options: options || {} });
+    },
+    scroll: function (options) {
+      return hostCall('locator', { locator: descriptor, action: 'scroll', options: options || {} });
+    },
+    selectOption: function (values, options) {
+      return hostCall('locator', { locator: descriptor, action: 'selectOption', values: values, options: options || {} });
+    },
+    check: function (checked, options) {
+      if (checked && typeof checked === 'object') {
+        options = checked;
+        checked = true;
+      }
+      return hostCall('locator', { locator: descriptor, action: 'check', checked: checked !== false, options: options || {} });
+    },
+    uncheck: function (options) {
+      return hostCall('locator', { locator: descriptor, action: 'uncheck', checked: false, options: options || {} });
+    },
+    state: function () {
+      return hostCall('locator', { locator: descriptor, action: 'state' });
+    },
     count: function () {
       return hostCall('locator', { locator: descriptor, action: 'count' });
     },
@@ -84,6 +109,15 @@ function makeLocator(descriptor) {
     },
     waitFor: function (options) {
       return hostCall('locator', { locator: descriptor, action: 'waitFor', options: options || {} });
+    },
+    first: function () {
+      return makeLocator(Object.assign({}, descriptor, { index: 0 }));
+    },
+    last: function () {
+      return makeLocator(Object.assign({}, descriptor, { index: -1 }));
+    },
+    nth: function (index) {
+      return makeLocator(Object.assign({}, descriptor, { index: Number(index) }));
     },
   };
 }
@@ -172,6 +206,44 @@ const tab = Object.freeze({
   fill: function (target, value, options) {
     return hostCall('fill', Object.assign({}, options || {}, { target: serializeTarget(target), value: value }));
   },
+  hover: function (target, options) {
+    return hostCall('hover', Object.assign({}, options || {}, { target: serializeTarget(target) }));
+  },
+  press: function (key, options) {
+    var params = Object.assign({}, options || {}, { key: key });
+    if (params.target !== undefined) params.target = serializeTarget(params.target);
+    return hostCall('press', params);
+  },
+  scroll: function (options) {
+    var params = Object.assign({}, options || {});
+    if (params.target !== undefined) params.target = serializeTarget(params.target);
+    return hostCall('scroll', params);
+  },
+  selectOption: function (target, values, options) {
+    return hostCall('selectOption', Object.assign({}, options || {}, {
+      target: serializeTarget(target),
+      values: values,
+    }));
+  },
+  check: function (target, checked, options) {
+    if (checked && typeof checked === 'object') {
+      options = checked;
+      checked = true;
+    }
+    return hostCall('check', Object.assign({}, options || {}, {
+      target: serializeTarget(target),
+      checked: checked !== false,
+    }));
+  },
+  uncheck: function (target, options) {
+    return hostCall('check', Object.assign({}, options || {}, {
+      target: serializeTarget(target),
+      checked: false,
+    }));
+  },
+  elementState: function (target) {
+    return hostCall('elementState', { target: serializeTarget(target) });
+  },
   waitFor: function (target, options) {
     return hostCall('waitFor', Object.assign({}, options || {}, { target: serializeTarget(target) }));
   },
@@ -185,7 +257,7 @@ const tab = Object.freeze({
     });
   },
   screenshot: function (options) { return hostCall('screenshot', options || {}); },
-  console: function () { return hostCall('console', {}); },
+  console: function (options) { return hostCall('console', options || {}); },
   back: function (options) {
     return hostCall('history', Object.assign({}, options || {}, { action: 'back' }));
   },
@@ -317,6 +389,7 @@ async function main() {
       error: {
         code: (error && error.fatal && error.code) || (error instanceof SyntaxError ? 'SCRIPT_PARSE' : 'SCRIPT_ERROR'),
         message: (error && error.message) || String(error),
+        ...(error && error.details !== undefined ? { details: error.details } : {}),
       },
     });
     return;
@@ -346,6 +419,7 @@ main().catch(function (error) {
     error: {
       code: 'SCRIPT_ERROR',
       message: (error && error.message) || String(error),
+      ...(error && error.details !== undefined ? { details: error.details } : {}),
     },
   });
 });

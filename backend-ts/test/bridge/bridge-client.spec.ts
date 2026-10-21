@@ -240,6 +240,29 @@ describe("BridgeClient", () => {
       await expect(pending).rejects.toThrow("宿主侧执行失败");
     });
 
+    it("结构化 error 对象保留 code/details", async () => {
+      const client = await connectClient("error-structured");
+
+      const pending = client.request("m", {});
+      await waitUntil(() => bridge!.received.some((m) => m.type === "request"));
+      const req = bridge!.received.find((m) => m.type === "request");
+
+      bridge!.reply({
+        type: "response",
+        id: req.id,
+        error: {
+          code: "ELEMENT_NOT_FOUND",
+          message: "missing",
+          details: { selector: "#x" },
+        },
+      });
+
+      await expect(pending).rejects.toMatchObject({
+        code: "ELEMENT_NOT_FOUND",
+        details: { selector: "#x" },
+      });
+    });
+
     it("未连接的 request 直接 reject（Bridge not connected）", async () => {
       delete process.env.GUADA_BRIDGE_PATH;
       const client = new BridgeClient();
@@ -281,7 +304,7 @@ describe("BridgeClient", () => {
 
         jest.advanceTimersByTime(120_001);
 
-        await expect(pending).rejects.toThrow("Bridge request timeout: never-reply");
+        await expect(pending).rejects.toThrow("Bridge request timeout");
       } finally {
         jest.useRealTimers();
       }

@@ -1,6 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { Worker } from "worker_threads";
-import { BridgeClient } from "../../../bridge/bridge-client";
+import { BridgeClient, BridgeRequestError } from "../../../bridge/bridge-client";
 import { BROWSER_SCRIPT_WORKER_SOURCE } from "./browser-script.worker";
 import {
   BrowserScriptErrorPayload,
@@ -11,6 +11,8 @@ import {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_TIMEOUT_MS = 300_000;
+const DEFAULT_ACTION_TIMEOUT_MS = 3_000;
+const MAX_ACTION_TIMEOUT_MS = 30_000;
 const MAX_TRACE_STEPS = 100;
 const MAX_LOGS = 100;
 const WAIT_POLL_MS = 100;
@@ -352,6 +354,50 @@ export class BrowserScriptRuntime {
         );
         return this.fill(selector, params.value, params, state, run, signal);
       }
+      case "hover": {
+        const selector = await this.resolveTarget(
+          params.target,
+          state,
+          run,
+          signal,
+          true,
+        );
+        return this.hover(selector, params, state, run, signal);
+      }
+      case "press":
+        return this.press(params, state, run, signal);
+      case "scroll":
+        return this.scroll(params, state, run, signal);
+      case "selectOption": {
+        const selector = await this.resolveTarget(
+          params.target,
+          state,
+          run,
+          signal,
+          true,
+        );
+        return this.selectOption(selector, params, state, run, signal);
+      }
+      case "check": {
+        const selector = await this.resolveTarget(
+          params.target,
+          state,
+          run,
+          signal,
+          true,
+        );
+        return this.check(selector, params, state, run, signal);
+      }
+      case "elementState": {
+        const selector = await this.resolveTarget(
+          params.target,
+          state,
+          run,
+          signal,
+          false,
+        );
+        return this.elementState(selector, state, run, signal);
+      }
       case "waitFor":
         return this.handleWaitFor(params, state, run, signal);
       case "locator":
@@ -363,7 +409,7 @@ export class BrowserScriptRuntime {
       case "screenshot":
         return this.handleScreenshot(params, state, run, signal);
       case "console":
-        return this.handleConsole(run, signal);
+        return this.handleConsole(params, run, signal);
       case "history":
         return this.handleHistory(params, state, run, signal);
       case "tabs":
@@ -381,22 +427,16 @@ export class BrowserScriptRuntime {
   // ── 导航与快照 ──
 
   private async handleConsole(
+    params: any,
     run: BrowserScriptRunParams,
     signal?: AbortSignal,
   ): Promise<any[]> {
-    const res = await this.bridge.request(
+    const logs = await this.bridge.request(
       "browser_console",
-      { created_by: run.createdBy },
+      { created_by: run.createdBy, clear: params?.clear === true },
       signal,
     );
-    if (res?.success === false) {
-      throw new BrowserScriptError(
-        "CONSOLE_FAILED",
-        res?.message || "Failed to read console logs",
-        res,
-      );
-    }
-    return Array.isArray(res?.logs) ? res.logs : [];
+    return Array.isArray(logs) ? logs : [];
   }
 
   private async goto(
@@ -424,6 +464,7 @@ export class BrowserScriptRuntime {
       {
         url,
         new_tab: Boolean(params.newTab),
+        wait_until: String(params.waitUntil || "domcontentloaded"),
         session_path: run.sessionPath,
         session_id: run.ownerSessionId,
         created_by: run.createdBy,
@@ -431,29 +472,10 @@ export class BrowserScriptRuntime {
       signal,
     );
 
-    if (res?.success === false) {
-      throw new BrowserScriptError(
-        "NAVIGATION_FAILED",
-        res?.message || res?.error || `Navigation failed for ${url}`,
-        res,
-      );
-    }
-
     state.lastSnapshot = null;
     state.lastUrl = res?.url ?? state.lastUrl;
     state.lastTitle = res?.title ?? state.lastTitle;
-
-    const waitUntil = String(params.waitUntil || "domcontentloaded");
-    if (waitUntil !== "none") {
-      await this.waitForLoadState(waitUntil, params, run, signal);
-    }
-
-    return {
-      ok: true,
-      tabId: res?.tab_id,
-      url: res?.url ?? url,
-      title: res?.title ?? "",
-    };
+    return res;
   }
 
   private async snapshot(
@@ -472,63 +494,33 @@ export class BrowserScriptRuntime {
 
     const res = await this.bridge.request(
       "browser_snapshot",
-      { type, created_by: run.createdBy },
+      {
+        type,
+        wait_for_load: params.waitForLoad === true,
+        created_by: run.createdBy,
+      },
       signal,
     );
 
-    if (res?.success === false) {
-      throw new BrowserScriptError(
-        "SNAPSHOT_FAILED",
-        res?.error || res?.message || "Snapshot failed",
-        res,
-      );
-    }
-
-    state.generation += 1;
+    state.generation = Number(res?.generation ?? state.generation);
     const generation = state.generation;
     state.lastUrl = res?.url ?? state.lastUrl;
     state.lastTitle = res?.title ?? state.lastTitle;
 
-    if (type === "simple") {
+    if (type === "simple" || type === "struct") {
       state.lastSnapshot = {
         generation,
-        type: "simple",
-        tree: res?.snapshot,
-        url: res?.url,
-        title: res?.title,
-      };
-      return {
-        generation,
         type,
+        tree: res?.tree,
         url: res?.url,
         title: res?.title,
-        source: res?.source,
-        stats: res?.stats,
-        tree: res?.snapshot,
       };
+    } else {
+      // summary 没有可复用的 ref 树，明确作废旧快照
+      state.lastSnapshot = null;
     }
 
-    if (type === "struct") {
-      state.lastSnapshot = {
-        generation,
-        type: "struct",
-        tree: res?.struct,
-        url: res?.url,
-        title: res?.title,
-      };
-      return {
-        generation,
-        type,
-        url: res?.url,
-        title: res?.title,
-        stats: res?.stats,
-        tree: res?.struct,
-      };
-    }
-
-    // summary 没有可复用的 ref 树，明确作废旧快照
-    state.lastSnapshot = null;
-    return { generation, type, ...res };
+    return res;
   }
 
   private async ensureSnapshot(
@@ -722,7 +714,7 @@ export class BrowserScriptRuntime {
 
   private findLocatorMatches(descriptor: any, tree: any): any[] {
     if (!tree) return [];
-    return findNodes(tree, (node: any) => {
+    const matches = findNodes(tree, (node: any) => {
       if (!node || typeof node !== "object") return false;
       if (descriptor.kind === "role") {
         if (node.role !== descriptor.role) return false;
@@ -737,6 +729,14 @@ export class BrowserScriptRuntime {
       }
       return false;
     });
+
+    if (typeof descriptor.index === "number" && Number.isFinite(descriptor.index)) {
+      const index = Math.trunc(descriptor.index);
+      const picked = index < 0 ? matches[matches.length + index] : matches[index];
+      return picked ? [picked] : [];
+    }
+
+    return matches;
   }
 
   private async assertUniqueSelector(
@@ -772,25 +772,191 @@ export class BrowserScriptRuntime {
     run: BrowserScriptRunParams,
     signal?: AbortSignal,
   ): Promise<any> {
+    const generation = /^e\d+$/.test(selector)
+      ? state.lastSnapshot?.generation
+      : undefined;
     const res = await this.bridge.request(
       "browser_click",
       {
         selector,
-        full_simulation: Boolean(options?.fullSimulation),
+        generation,
+        button: normalizeMouseButton(options?.button),
+        click_count: options?.clickCount,
+        modifiers: normalizeModifiers(options?.modifiers),
+        force: options?.force === true,
+        timeout: actionTimeout(options),
+        trusted: resolveTrustedOption(options),
         created_by: run.createdBy,
       },
       signal,
     );
-    if (res?.success === false || res?.clicked === false) {
-      throw new BrowserScriptError(
-        "ACTION_FAILED",
-        res?.error || res?.message || `Click failed for "${selector}"`,
-        res,
-      );
-    }
     // 点击后 DOM 可能已变化，旧 ref 不再可信
     state.lastSnapshot = null;
-    return { ok: true, target: selector };
+    return res;
+  }
+
+  private async hover(
+    selector: string,
+    options: any,
+    state: RunState,
+    run: BrowserScriptRunParams,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const generation = /^e\d+$/.test(selector)
+      ? state.lastSnapshot?.generation
+      : undefined;
+    const res = await this.bridge.request(
+      "browser_hover",
+      {
+        selector,
+        generation,
+        force: options?.force === true,
+        timeout: actionTimeout(options),
+        trusted: resolveTrustedOption(options),
+        created_by: run.createdBy,
+      },
+      signal,
+    );
+    // hover 可能展开菜单/浮层，旧快照不再完整
+    state.lastSnapshot = null;
+    return res;
+  }
+
+  private async press(
+    params: any,
+    state: RunState,
+    run: BrowserScriptRunParams,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const key = String(params?.key ?? "").trim();
+    if (!key) {
+      throw new BrowserScriptError(
+        "INVALID_ARGUMENT",
+        "press(key) requires a key name such as Enter, Tab, Escape, ArrowDown, or Control+A",
+      );
+    }
+
+    const hasTarget = params?.target !== undefined;
+    const selector = hasTarget
+      ? await this.resolveTarget(params.target, state, run, signal, true)
+      : undefined;
+    const generation =
+      selector && /^e\d+$/.test(selector)
+        ? state.lastSnapshot?.generation
+        : undefined;
+
+    const res = await this.bridge.request(
+      "browser_press",
+      {
+        key,
+        ...(selector ? { selector } : {}),
+        generation,
+        modifiers: normalizeModifiers(params?.modifiers),
+        timeout: actionTimeout(params),
+        trusted: resolveTrustedOption(params),
+        created_by: run.createdBy,
+      },
+      signal,
+    );
+    state.lastSnapshot = null;
+    return res;
+  }
+
+  private async scroll(
+    params: any,
+    state: RunState,
+    run: BrowserScriptRunParams,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const hasTarget = params?.target !== undefined;
+    const selector = hasTarget
+      ? await this.resolveTarget(params.target, state, run, signal, true)
+      : undefined;
+    const generation =
+      selector && /^e\d+$/.test(selector)
+        ? state.lastSnapshot?.generation
+        : undefined;
+    return this.bridge.request(
+      "browser_scroll",
+      {
+        ...(selector ? { selector } : {}),
+        generation,
+        delta_x: params?.deltaX,
+        delta_y: params?.deltaY,
+        timeout: actionTimeout(params),
+        created_by: run.createdBy,
+      },
+      signal,
+    );
+  }
+
+  private async selectOption(
+    selector: string,
+    params: any,
+    state: RunState,
+    run: BrowserScriptRunParams,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const generation = /^e\d+$/.test(selector)
+      ? state.lastSnapshot?.generation
+      : undefined;
+    const res = await this.bridge.request(
+      "browser_select",
+      {
+        selector,
+        values: params?.values ?? params?.value,
+        generation,
+        force: params?.force === true,
+        timeout: actionTimeout(params),
+        created_by: run.createdBy,
+      },
+      signal,
+    );
+    state.lastSnapshot = null;
+    return res;
+  }
+
+  private async check(
+    selector: string,
+    params: any,
+    state: RunState,
+    run: BrowserScriptRunParams,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const generation = /^e\d+$/.test(selector)
+      ? state.lastSnapshot?.generation
+      : undefined;
+    const res = await this.bridge.request(
+      "browser_check",
+      {
+        selector,
+        checked: params?.checked !== false,
+        generation,
+        force: params?.force === true,
+        timeout: actionTimeout(params),
+        trusted: resolveTrustedOption(params),
+        created_by: run.createdBy,
+      },
+      signal,
+    );
+    state.lastSnapshot = null;
+    return res;
+  }
+
+  private async elementState(
+    selector: string,
+    state: RunState,
+    run: BrowserScriptRunParams,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const generation = /^e\d+$/.test(selector)
+      ? state.lastSnapshot?.generation
+      : undefined;
+    return this.bridge.request(
+      "browser_element_state",
+      { selector, generation, created_by: run.createdBy },
+      signal,
+    );
   }
 
   private async fill(
@@ -807,24 +973,22 @@ export class BrowserScriptRuntime {
         "fill(target, value) requires a string value",
       );
     }
-    const res = await this.bridge.request(
+    const generation = /^e\d+$/.test(selector)
+      ? state.lastSnapshot?.generation
+      : undefined;
+    return this.bridge.request(
       "browser_input",
       {
         selector,
         value,
-        full_simulation: Boolean(options?.fullSimulation),
+        generation,
+        force: options?.force === true,
+        timeout: actionTimeout(options),
+        trusted: resolveTrustedOption(options),
         created_by: run.createdBy,
       },
       signal,
     );
-    if (res?.success === false || res?.filled === false) {
-      throw new BrowserScriptError(
-        "ACTION_FAILED",
-        res?.error || res?.message || `Fill failed for "${selector}"`,
-        res,
-      );
-    }
-    return { ok: true, target: selector, value };
   }
 
   private async handleWaitFor(
@@ -852,29 +1016,38 @@ export class BrowserScriptRuntime {
       signal,
       false,
     );
-    return this.waitForSelector(selector, params.options ?? params, run, signal);
+    return this.waitForSelector(
+      selector,
+      params.options ?? params,
+      state,
+      run,
+      signal,
+    );
   }
 
   private async waitForSelector(
     selector: string,
     options: any,
+    state: RunState,
     run: BrowserScriptRunParams,
     signal?: AbortSignal,
   ): Promise<any> {
     const timeout = clamp(options?.timeout, 100, 30_000, 3_000);
-    const res = await this.bridge.request(
+    const stateName = normalizeWaitState(options?.state);
+    const generation = /^e\d+$/.test(selector)
+      ? state.lastSnapshot?.generation
+      : undefined;
+    return this.bridge.request(
       "browser_wait",
-      { selector, timeout, created_by: run.createdBy },
+      {
+        selector,
+        timeout,
+        state: stateName,
+        generation,
+        created_by: run.createdBy,
+      },
       signal,
     );
-    if (res?.success === false || res?.found === false) {
-      throw new BrowserScriptError(
-        "TIMEOUT",
-        `Timed out after ${timeout}ms waiting for "${selector}".`,
-        res,
-      );
-    }
-    return { ok: true, found: true, selector };
   }
 
   private async waitForLocator(
@@ -885,8 +1058,20 @@ export class BrowserScriptRuntime {
     signal?: AbortSignal,
   ): Promise<string> {
     const timeout = clamp(options?.timeout, 100, 30_000, 3_000);
+    const stateName = normalizeWaitState(options?.state);
+    if (
+      descriptor.kind !== "selector" &&
+      (stateName === "hidden" || stateName === "detached")
+    ) {
+      throw new BrowserScriptError(
+        "UNSUPPORTED",
+        `waitFor({state:"${stateName}"}) requires a CSS selector or ref; role/text locators can only wait for attached/visible.`,
+      );
+    }
+
     const deadline = Date.now() + timeout;
     let lastMatches: any[] = [];
+    let sawMatches = false;
 
     for (;;) {
       const resolved = await this.resolveLocator(
@@ -897,17 +1082,36 @@ export class BrowserScriptRuntime {
         { allowEmpty: true, allowNonActionable: true },
       );
       lastMatches = resolved.matches;
-      if (resolved.selector) return resolved.selector;
+      if (resolved.selector) {
+        if (stateName !== "attached") {
+          await this.waitForSelector(
+            resolved.selector,
+            {
+              state: stateName,
+              timeout: Math.max(100, deadline - Date.now()),
+            },
+            state,
+            run,
+            signal,
+          );
+        }
+        return resolved.selector;
+      }
       if (lastMatches.length > 0) {
-        throw new BrowserScriptError(
-          "NOT_ACTIONABLE",
-          `Matched ${describeLocator(
-            descriptor,
-          )} but it has no interactive ref.`,
-          { candidates: candidateList(lastMatches) },
-        );
+        // 元素已出现但还没有可交互 ref：继续等布局/交互属性就绪，
+        // 而不是立刻判死（旧实现会在这里直接抛 NOT_ACTIONABLE）。
+        sawMatches = true;
       }
       if (Date.now() >= deadline) {
+        if (sawMatches) {
+          throw new BrowserScriptError(
+            "NOT_ACTIONABLE",
+            `Matched ${describeLocator(
+              descriptor,
+            )} but it has no interactive ref after ${timeout}ms.`,
+            { candidates: candidateList(lastMatches) },
+          );
+        }
         throw new BrowserScriptError(
           "TIMEOUT",
           `Timed out after ${timeout}ms waiting for ${describeLocator(
@@ -957,18 +1161,36 @@ export class BrowserScriptRuntime {
         );
       }
 
+      const hasIndex =
+        typeof descriptor.index === "number" &&
+        Number.isFinite(descriptor.index);
+      if (hasIndex && action !== "count" && action !== "text") {
+        throw new BrowserScriptError(
+          "UNSUPPORTED",
+          "first()/last()/nth() on a CSS locator is not supported for actions; use a unique CSS selector or a role/text locator.",
+          { selector, action, index: descriptor.index },
+        );
+      }
+
       if (action === "count") {
-        return this.evaluateRaw(
+        const count = await this.evaluateRaw(
           `document.querySelectorAll(${JSON.stringify(selector)}).length`,
           run,
           signal,
         );
+        if (hasIndex && typeof count === "number") {
+          const index = Math.trunc(descriptor.index);
+          const withinRange = index >= 0 ? index < count : -index <= count;
+          return withinRange ? 1 : 0;
+        }
+        return count;
       }
       if (action === "text") {
+        const index = hasIndex ? Math.trunc(descriptor.index) : 0;
         return this.evaluateRaw(
-          `(() => { const el = document.querySelector(${JSON.stringify(
+          `(() => { const list = document.querySelectorAll(${JSON.stringify(
             selector,
-          )}); return el ? (el.innerText || el.textContent || '') : ''; })()`,
+          )}); const idx = ${JSON.stringify(index)}; const el = idx < 0 ? list[list.length + idx] : list[idx]; return el ? (el.innerText || el.textContent || '') : ''; })()`,
           run,
           signal,
         );
@@ -976,14 +1198,57 @@ export class BrowserScriptRuntime {
       if (action === "isVisible") {
         return this.isVisibleSelector(selector, run, signal);
       }
+      if (action === "state") {
+        return this.elementState(selector, state, run, signal);
+      }
       if (action === "waitFor") {
-        return this.waitForSelector(selector, options, run, signal);
+        return this.waitForSelector(selector, options, state, run, signal);
       }
       if (action === "click" || action === "fill") {
         await this.assertUniqueSelector(selector, run, signal);
         return action === "click"
           ? this.click(selector, options, state, run, signal)
           : this.fill(selector, params.value, options, state, run, signal);
+      }
+      if (action === "hover" || action === "selectOption" || action === "check" || action === "uncheck") {
+        await this.assertUniqueSelector(selector, run, signal);
+        if (action === "hover") {
+          return this.hover(selector, options, state, run, signal);
+        }
+        if (action === "selectOption") {
+          return this.selectOption(
+            selector,
+            { ...options, values: params.values ?? params.value },
+            state,
+            run,
+            signal,
+          );
+        }
+        return this.check(
+          selector,
+          { ...options, checked: action === "check" ? params.checked !== false : false },
+          state,
+          run,
+          signal,
+        );
+      }
+      if (action === "press") {
+        await this.assertUniqueSelector(selector, run, signal);
+        return this.press(
+          { ...options, key: params.key, target: { kind: "selector", selector } },
+          state,
+          run,
+          signal,
+        );
+      }
+      if (action === "scroll") {
+        await this.assertUniqueSelector(selector, run, signal);
+        return this.scroll(
+          { ...options, target: { kind: "selector", selector } },
+          state,
+          run,
+          signal,
+        );
       }
       throw new BrowserScriptError(
         "UNKNOWN_ACTION",
@@ -1021,7 +1286,26 @@ export class BrowserScriptRuntime {
         { allowEmpty: true, allowMultiple: true, allowNonActionable: true },
       );
       if (!resolved.selector) return false;
-      return this.isVisibleSelector(resolved.selector, run, signal);
+      return this.isVisibleSelector(
+        resolved.selector,
+        run,
+        signal,
+        state.lastSnapshot?.generation,
+      );
+    }
+
+    if (action === "state") {
+      const resolved = await this.resolveLocator(
+        descriptor,
+        state,
+        run,
+        signal,
+        { allowEmpty: true, allowMultiple: true, allowNonActionable: true },
+      );
+      if (!resolved.selector) {
+        return { ok: true, found: false, visible: false, enabled: false, editable: false, stable: false, inViewport: false, covered: true, tagName: "", rect: { x: 0, y: 0, width: 0, height: 0 }, viewport: { width: 0, height: 0 } };
+      }
+      return this.elementState(resolved.selector, state, run, signal);
     }
 
     if (action === "waitFor") {
@@ -1035,7 +1319,16 @@ export class BrowserScriptRuntime {
       return { ok: true, found: true, selector };
     }
 
-    if (action === "click" || action === "fill") {
+    if (
+      action === "click" ||
+      action === "fill" ||
+      action === "hover" ||
+      action === "selectOption" ||
+      action === "check" ||
+      action === "uncheck" ||
+      action === "press" ||
+      action === "scroll"
+    ) {
       const resolved = await this.resolveLocator(
         descriptor,
         state,
@@ -1048,16 +1341,54 @@ export class BrowserScriptRuntime {
           `No actionable element matched ${describeLocator(descriptor)}.`,
         );
       }
-      return action === "click"
-        ? this.click(resolved.selector, options, state, run, signal)
-        : this.fill(
-            resolved.selector,
-            params.value,
-            options,
-            state,
-            run,
-            signal,
-          );
+      if (action === "click") {
+        return this.click(resolved.selector, options, state, run, signal);
+      }
+      if (action === "fill") {
+        return this.fill(
+          resolved.selector,
+          params.value,
+          options,
+          state,
+          run,
+          signal,
+        );
+      }
+      if (action === "hover") {
+        return this.hover(resolved.selector, options, state, run, signal);
+      }
+      if (action === "selectOption") {
+        return this.selectOption(
+          resolved.selector,
+          { ...options, values: params.values ?? params.value },
+          state,
+          run,
+          signal,
+        );
+      }
+      if (action === "check" || action === "uncheck") {
+        return this.check(
+          resolved.selector,
+          { ...options, checked: action === "check" ? params.checked !== false : false },
+          state,
+          run,
+          signal,
+        );
+      }
+      if (action === "press") {
+        return this.press(
+          { ...options, key: params.key, target: { kind: "selector", selector: resolved.selector } },
+          state,
+          run,
+          signal,
+        );
+      }
+      return this.scroll(
+        { ...options, target: { kind: "selector", selector: resolved.selector } },
+        state,
+        run,
+        signal,
+      );
     }
 
     throw new BrowserScriptError(
@@ -1070,16 +1401,14 @@ export class BrowserScriptRuntime {
     selector: string,
     run: BrowserScriptRunParams,
     signal?: AbortSignal,
+    generation?: number,
   ): Promise<boolean> {
-    return Boolean(
-      await this.evaluateRaw(
-        `(() => { const el = document.querySelector(${JSON.stringify(
-          selector,
-        )}); if (!el) return false; const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden'; })()`,
-        run,
-        signal,
-      ),
+    const state = await this.bridge.request(
+      "browser_element_state",
+      { selector, generation, created_by: run.createdBy },
+      signal,
     );
+    return state?.found === true && state?.visible === true;
   }
 
   // ── 页面 JavaScript ──
@@ -1091,7 +1420,7 @@ export class BrowserScriptRuntime {
     signal?: AbortSignal,
   ): Promise<any> {
     const code = toPageCode(params.fn, params.arg);
-    const value = await this.evaluateRaw(code, run, signal);
+    const value = await this.evaluateRaw(code, run, signal, true);
     // evaluate 可能改 DOM，旧 ref 不再可信
     state.lastSnapshot = null;
     return value;
@@ -1101,20 +1430,13 @@ export class BrowserScriptRuntime {
     code: string,
     run: BrowserScriptRunParams,
     signal?: AbortSignal,
+    mutates: boolean = false,
   ): Promise<any> {
-    const res = await this.bridge.request(
+    return this.bridge.request(
       "browser_evaluate",
-      { code, is_async: true, created_by: run.createdBy },
+      { code, mutates, created_by: run.createdBy },
       signal,
     );
-    if (res?.success === false) {
-      throw new BrowserScriptError(
-        "EVALUATE_FAILED",
-        res?.error || res?.message || "Page evaluation failed",
-        res,
-      );
-    }
-    return res?.result;
   }
 
   // ── 截图 / 历史 / 标签 ──
@@ -1135,21 +1457,14 @@ export class BrowserScriptRuntime {
       },
       signal,
     );
-    if (res?.success === false) {
-      throw new BrowserScriptError(
-        "SCREENSHOT_FAILED",
-        res?.error || res?.message || "Screenshot failed",
-        res,
-      );
-    }
 
     const screenshot: BrowserScriptScreenshot = {
-      path: res?.saved_path,
+      path: res?.path,
       width: res?.width,
       height: res?.height,
     };
     if (screenshot.path) state.screenshots.push(screenshot);
-    return { ok: true, ...screenshot };
+    return res;
   }
 
   private async handleHistory(
@@ -1159,30 +1474,21 @@ export class BrowserScriptRuntime {
     signal?: AbortSignal,
   ): Promise<any> {
     const action = String(params.action || "");
-    let res: any;
-
-    if (action === "reload") {
-      // browser_history 只处理 back/forward，reload 必须走独立方法
-      res = await this.bridge.request(
-        "browser_reload",
-        { created_by: run.createdBy },
-        signal,
-      );
-    } else if (action === "back" || action === "forward") {
-      res = await this.bridge.request(
-        "browser_history",
-        { action, created_by: run.createdBy },
-        signal,
-      );
-    } else {
+    if (action !== "back" && action !== "forward" && action !== "reload") {
       throw new BrowserScriptError(
         "INVALID_ARGUMENT",
         'history action must be "back", "forward", or "reload"',
       );
     }
 
+    const res = await this.bridge.request(
+      "browser_history",
+      { action, created_by: run.createdBy },
+      signal,
+    );
+
     state.lastSnapshot = null;
-    return { ok: true, url: res?.url };
+    return res;
   }
 
   private async handleTabs(
@@ -1202,57 +1508,10 @@ export class BrowserScriptRuntime {
       signal,
     );
 
-    if (res?.success === false) {
-      throw new BrowserScriptError(
-        "TABS_FAILED",
-        res?.message || `Tabs action "${action}" failed`,
-        res,
-      );
-    }
-
-    if (action === "list") {
-      const tabs = Array.isArray(res?.tabs) ? res.tabs : [];
-      return tabs.map((tab: any) => ({
-        index: tab.index,
-        tabId: tab.tab_id,
-        url: tab.url,
-        title: tab.title,
-        isCurrent: Boolean(tab.is_current),
-      }));
-    }
-
-    if (action === "select") {
+    if (action === "select" || action === "close" || action === "close_all") {
       state.lastSnapshot = null;
-      return {
-        index: typeof params.index === "number" ? params.index : -1,
-        tabId: res?.tab_id,
-        url: res?.url,
-        title: res?.title,
-        isCurrent: true,
-      };
     }
-
-    if (action === "close") {
-      state.lastSnapshot = null;
-      return {
-        ok: true,
-        closedTabId: res?.closed_tab_id ?? null,
-        currentTabId: res?.current_tab_id ?? null,
-      };
-    }
-
-    if (action === "close_all") {
-      state.lastSnapshot = null;
-      return {
-        ok: true,
-        closedCount: Number(res?.closed_count ?? 0),
-      };
-    }
-
-    throw new BrowserScriptError(
-      "UNKNOWN_ACTION",
-      `Unknown tabs action: ${action}`,
-    );
+    return res;
   }
 
   private async handleInfo(
@@ -1260,24 +1519,16 @@ export class BrowserScriptRuntime {
     run: BrowserScriptRunParams,
     signal?: AbortSignal,
   ): Promise<any> {
-    const res = await this.bridge.request(
+    const current = await this.bridge.request(
       "browser_tabs",
-      { action: "list", created_by: run.createdBy },
+      { action: "current", created_by: run.createdBy },
       signal,
     );
-    const tabs = Array.isArray(res?.tabs) ? res.tabs : [];
-    const current = tabs.find((tab: any) => tab?.is_current);
     if (!current) return null;
 
     state.lastUrl = current.url ?? state.lastUrl;
     state.lastTitle = current.title ?? state.lastTitle;
-    return {
-      index: current.index,
-      tabId: current.tab_id,
-      url: current.url,
-      title: current.title,
-      isCurrent: true,
-    };
+    return current;
   }
 }
 
@@ -1292,6 +1543,53 @@ function clamp(
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+}
+
+function actionTimeout(options: any): number {
+  return clamp(
+    options?.timeout,
+    100,
+    MAX_ACTION_TIMEOUT_MS,
+    DEFAULT_ACTION_TIMEOUT_MS,
+  );
+}
+
+function normalizeMouseButton(value: unknown): "left" | "right" | "middle" | undefined {
+  const button = typeof value === "string" ? value.toLowerCase() : "";
+  return button === "right" || button === "middle" || button === "left"
+    ? button
+    : undefined;
+}
+
+function normalizeModifiers(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const modifiers = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return modifiers.length > 0 ? modifiers : undefined;
+}
+
+function resolveTrustedOption(options: any): boolean | undefined {
+  if (options?.trusted !== undefined) return options.trusted === true;
+  if (options?.fullSimulation !== undefined) {
+    return options.fullSimulation === true;
+  }
+  return undefined;
+}
+
+function normalizeWaitState(value: unknown): "attached" | "visible" | "hidden" | "detached" {
+  if (value === "attached" || value === "hidden" || value === "detached") {
+    return value;
+  }
+  if (value === undefined || value === null || value === "visible") {
+    return "visible";
+  }
+  throw new BrowserScriptError(
+    "INVALID_ARGUMENT",
+    'waitFor state must be "attached", "visible", "hidden", or "detached"',
+    { state: value },
+  );
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -1409,8 +1707,19 @@ function summarizeCall(method: string, params: any): string | undefined {
       return String(params?.type ?? "simple");
     case "click":
     case "fill":
+    case "hover":
     case "waitFor":
+    case "selectOption":
+    case "check":
+    case "uncheck":
+    case "elementState":
       return describeTarget(params?.target);
+    case "press":
+      return `${String(params?.key ?? "")}${params?.target ? ` @ ${describeTarget(params.target)}` : ""}`;
+    case "scroll":
+      return params?.target
+        ? describeTarget(params.target)
+        : `${params?.deltaX ?? 0},${params?.deltaY ?? 0}`;
     case "locator":
       return `${describeLocator(params?.locator)}:${String(
         params?.action ?? "",
@@ -1460,10 +1769,29 @@ function toPageCode(fn: unknown, arg: unknown): string {
   return `(async () => (${source}))()`;
 }
 
+const BRIDGE_ERROR_CODE_MAP: Record<string, string> = {
+  ELEMENT_NOT_FOUND: "NOT_FOUND",
+  ACTION_TIMEOUT: "TIMEOUT",
+  NAVIGATION_TIMEOUT: "TIMEOUT",
+  BRIDGE_TIMEOUT: "TIMEOUT",
+  BRIDGE_DISCONNECTED: "CALL_FAILED",
+};
+
+function mapBridgeCode(code: string): string {
+  return BRIDGE_ERROR_CODE_MAP[code] || code;
+}
+
 function toErrorPayload(error: unknown): BrowserScriptErrorPayload {
   if (error instanceof BrowserScriptError) {
     return {
       code: error.code,
+      message: error.message,
+      ...(error.details === undefined ? {} : { details: error.details }),
+    };
+  }
+  if (error instanceof BridgeRequestError) {
+    return {
+      code: mapBridgeCode(error.code),
       message: error.message,
       ...(error.details === undefined ? {} : { details: error.details }),
     };
@@ -1473,7 +1801,7 @@ function toErrorPayload(error: unknown): BrowserScriptErrorPayload {
     return { code: "CANCELLED", message: "Browser call was cancelled" };
   }
   return {
-    code: String(any?.code || "CALL_FAILED"),
+    code: mapBridgeCode(String(any?.code || "CALL_FAILED")),
     message: String(any?.message || error),
     ...(any?.details === undefined ? {} : { details: any.details }),
   };

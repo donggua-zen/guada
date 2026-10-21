@@ -243,14 +243,33 @@ export class BridgeServer {
       const { id, method, params } = msg;
       const handler = this.handlers.get(method) || this.defaultHandler;
       if (!handler) {
-        this.send(socket, { type: "response", id, error: `Unknown method: ${method}` });
+        this.send(socket, {
+          type: "response",
+          id,
+          error: {
+            code: "INVALID_ARGUMENT",
+            message: `Unknown method: ${method}`,
+          },
+        });
         return;
       }
       try {
         const result = await handler(params, method);
         this.send(socket, { type: "response", id, result });
       } catch (err: any) {
-        this.send(socket, { type: "response", id, error: err.message });
+        // 结构化错误：{ code, message, details? }，让 backend 保留语义
+        const error =
+          err && typeof err === "object" && typeof err.code === "string"
+            ? {
+                code: err.code,
+                message: String(err.message || err),
+                ...(err.details !== undefined ? { details: err.details } : {}),
+              }
+            : {
+                code: "BRIDGE_ERROR",
+                message: String(err?.message || err),
+              };
+        this.send(socket, { type: "response", id, error });
       }
     } else if (msg.type === "event") {
       const listeners = this.eventListeners.get(msg.event);

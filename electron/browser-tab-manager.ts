@@ -10,6 +10,7 @@ import {
 import * as path from "path";
 import * as url from "url";
 import log from "electron-log/main";
+import { isNavigableUrl } from "./browser-url";
 
 /** 宿主释放键：Ctrl+Alt+R（macOS 为 Control+Option+R） */
 const RELEASE_SHORTCUT_CODE = "KeyR";
@@ -153,10 +154,6 @@ export class BrowserWebviewManager {
     string,
     { resolve: (wc: WebContents) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
   >();
-  // dialog 待处理状态：windowId → 弹窗信息
-  private pendingDialogs = new Map<string, { type: string; message: string; defaultValue: string }>();
-  // dialog resolver：用于 Promise.race 检测弹窗
-  private dialogResolvers = new Map<string, (v: any) => void>();
   // guest → 主进程的指针锁状态监听只注册一次
   private pointerLockIpcRegistered = false;
   // 当前处于 Pointer Lock / HTML 全屏的窗口，用于 Esc 兜底与状态清理
@@ -335,8 +332,12 @@ export class BrowserWebviewManager {
     webviewWC.setUserAgent(edgeUserAgent);
     log.info(`Custom User Agent set to Edge for webview ${windowId}`);
 
-    // 拦截新窗口请求，在当前 webview 打开
+    // 拦截新窗口请求，在当前 webview 打开；非白名单协议直接拒绝
     webviewWC.setWindowOpenHandler(({ url }: { url: string }) => {
+      if (!isNavigableUrl(url)) {
+        log.warn(`Blocked new window navigation to non-allowlisted URL: ${url}`);
+        return { action: "deny" };
+      }
       log.info(
         `Intercepting new window request: ${url}, loading in current webview`,
       );
@@ -896,34 +897,6 @@ export class BrowserWebviewManager {
   clearConsoleLogs(windowId: string): void {
     const wv = this.webviews.get(windowId);
     if (wv) wv.consoleLogs.length = 0;
-  }
-
-  /** 注册 dialog 检测 resolver（Promise.race 用），返回当前是否已有待处理弹窗 */
-  setDialogResolver(windowId: string, resolve: (v: any) => void): boolean {
-    // 如果已有待处理弹窗，立即 resolve
-    if (this.pendingDialogs.has(windowId)) {
-      const dlg = this.pendingDialogs.get(windowId)!;
-      resolve({ type: dlg.type, message: dlg.message, __dialog: true });
-      this.pendingDialogs.delete(windowId);
-      return true;
-    }
-    this.dialogResolvers.set(windowId, resolve);
-    return false;
-  }
-
-  /** 清除 dialog resolver */
-  clearDialogResolver(windowId: string): void {
-    this.dialogResolvers.delete(windowId);
-  }
-
-  /** 当前窗口是否有待处理弹窗 */
-  hasPendingDialog(windowId: string): boolean {
-    return this.pendingDialogs.has(windowId);
-  }
-
-  /** 清除待处理弹窗状态 */
-  clearPendingDialog(windowId: string): void {
-    this.pendingDialogs.delete(windowId);
   }
 
   async closeAllWindows(): Promise<void> {

@@ -1,13 +1,27 @@
-import { BrowserWindow } from "electron";
 import log from "electron-log/main";
 import * as path from "path";
 import * as fs from "fs";
+import * as os from "os";
 import { BrowserWindowManager, WindowInfo } from "./browser-tab-manager";
 import {
   buildSimpleTreeFromLegacyStruct,
   captureAccessibilitySnapshot,
   measureSimpleTree,
 } from "./accessibility-snapshot";
+import { BrowserBridgeError } from "./browser-errors";
+import { assertNavigableUrl } from "./browser-url";
+import {
+  ActionOptions,
+  BrowserActionEngine,
+  FillOptions,
+  PressOptions,
+  ScrollOptions,
+  SelectOptions,
+  WaitState,
+} from "./browser-action-engine";
+
+export { BrowserBridgeError };
+
 
 /**
  * 浏览器自动化工具请求接口
@@ -28,6 +42,14 @@ export interface ToolResponse {
 }
 
 /**
+ * 浏览器 Bridge 的结构化错误。
+ *
+ * 通过 bridge-server 序列化为 { code, message, details }，
+ * 让 backend 能把 NOT_FOUND / STALE_REF / TIMEOUT 等语义透传给脚本。
+ */
+export type BrowserWaitUntil = "none" | "domcontentloaded" | "load";
+
+/**
  * 浏览器自动化核心服务（基于独立窗口系统)
  *
  * 职责说明：
@@ -42,17 +64,51 @@ export interface ToolResponse {
  */
 export class BrowserAutomationService {
   private windowManager: BrowserWindowManager | null = null;
+  private actionEngine: BrowserActionEngine | null = null;
   // 每个 session (createdBy) 的当前标签映射
   private currentTabs = new Map<string, string>();
   // 同一 webContents 的 CDP 快照必须串行，避免 debugger attach/command 冲突
   private snapshotLocks = new Map<number, Promise<void>>();
+  // 每个 tab 的快照代际：snapshot 与会改变 DOM 的动作递增，用于拒绝过期 ref
+  private generations = new Map<string, number>();
 
   /**
    * 初始化窗口管理器（必须在应用启动时调用）
    */
   initializeWindowManager(windowManager: BrowserWindowManager): void {
     this.windowManager = windowManager;
+    this.actionEngine = new BrowserActionEngine({
+      isWindowVisible: (windowId) => windowManager.isWindowVisible(windowId),
+      setWebviewRenderable: (windowId, renderable) =>
+        windowManager.setWebviewRenderable(windowId, renderable),
+    });
     log.info("BrowserAutomationService initialized with WindowManager");
+  }
+
+  private getGeneration(windowId: string): number {
+    return this.generations.get(windowId) ?? 0;
+  }
+
+  private bumpGeneration(windowId: string): number {
+    const next = this.getGeneration(windowId) + 1;
+    this.generations.set(windowId, next);
+    return next;
+  }
+
+  private clearGeneration(windowId: string): void {
+    this.generations.delete(windowId);
+  }
+
+  private assertGeneration(windowId: string, generation?: number): void {
+    if (generation === undefined || generation === null) return;
+    const current = this.getGeneration(windowId);
+    if (Number(generation) !== current) {
+      throw new BrowserBridgeError(
+        "STALE_REF",
+        `Snapshot generation ${generation} is stale; current generation is ${current}. Take a fresh snapshot before acting.`,
+        { expected: current, received: generation },
+      );
+    }
   }
 
   private async withSnapshotLock<T>(
@@ -87,7 +143,11 @@ export class BrowserAutomationService {
   async createWindow(
     url?: string,
     metadata?: Record<string, any>,
+    waitUntil: BrowserWaitUntil = "load",
   ): Promise<string> {
+    if (url) {
+      assertNavigableUrl(url, "createWindow");
+    }
     if (!this.windowManager) {
       throw new Error(
         "WindowManager not initialized. Call initializeWindowManager() first.",
@@ -95,21 +155,27 @@ export class BrowserAutomationService {
     }
 
     const windowInfo = await this.windowManager.createWindow(url, metadata);
+    this.generations.set(windowInfo.windowId, 0);
 
-    // 等待初始导航完成（架构统一：与 navigate 使用相同的 waitForPageLoad）
-    if (url && windowInfo.windowId) {
+    // 等待初始导航完成：waitUntil=none 时完全跳过，由脚本自行决定何时观察。
+    if (url && windowInfo.windowId && waitUntil !== "none") {
       try {
         const wc = await this.windowManager.getWebviewWebContents(
           windowInfo.windowId,
         );
         if (wc) {
-          await this.waitForPageLoad(wc);
-          // waitForPageLoad 在页面已加载（含 chrome-error 错误页）时会立即 resolve，
-          // 需要额外检查是否落在了错误页
+          if (waitUntil === "domcontentloaded") {
+            await this.waitForDomReady(wc);
+          } else {
+            await this.waitForPageLoad(wc);
+          }
+          // 页面可能落在 chrome-error 错误页
           const currentUrl = wc.getURL();
           if (currentUrl.startsWith("chrome-error://")) {
-            throw new Error(
+            throw new BrowserBridgeError(
+              "NAVIGATION_FAILED",
               `Initial navigation failed: page loaded chrome-error for ${url}`,
+              { url, currentUrl },
             );
           }
         }
@@ -262,7 +328,10 @@ export class BrowserAutomationService {
     createdBy: string,
     sessionPath?: string,
     sessionId?: string,
+    waitUntil: BrowserWaitUntil = "load",
   ): Promise<any> {
+    assertNavigableUrl(url, "browser_navigate");
+
     if (!this.windowManager) {
       throw new Error("WindowManager not initialized");
     }
@@ -276,19 +345,18 @@ export class BrowserAutomationService {
       if (sessionId) metadata.sessionId = sessionId;
       if (createdBy) metadata.createdBy = createdBy;
 
-      wid = await this.createWindow(url, metadata);
+      wid = await this.createWindow(url, metadata, waitUntil);
       if (createdBy) this.setCurrentTab(createdBy, wid);
 
       const wc = this.windowManager.getWebContents(wid);
-      if (wc) {
-        return {
-          success: true,
-          tab_id: wid,
-          url: wc.getURL(),
-          title: wc.getTitle(),
-        };
-      }
-      return { success: true, tab_id: wid, url, title: "" };
+      return {
+        ok: true,
+        tabId: wid,
+        // wait_until=none 时 webview 可能还没提交导航，优先返回请求的 URL
+        url: waitUntil === "none" ? url : wc?.getURL() || url,
+        title: wc?.getTitle() || "",
+        readyState: await this.readReadyState(wc),
+      };
     }
 
     // 在当前标签导航（无标签时自动创建）
@@ -296,11 +364,14 @@ export class BrowserAutomationService {
       const currentWid = this.getCurrentTabId(createdBy);
       if (!currentWid) {
         // 无当前标签，自动创建
-        return this.navigate(url, true, createdBy, sessionPath, sessionId);
+        return this.navigate(url, true, createdBy, sessionPath, sessionId, waitUntil);
       }
       wid = currentWid;
     } else {
-      throw new Error("No active tab. Call browser_navigate(url, new_tab=true) first.");
+      throw new BrowserBridgeError(
+        "TAB_NOT_FOUND",
+        "No active tab. Call browser_navigate(url, new_tab=true) first.",
+      );
     }
 
     // 所有权验证
@@ -310,35 +381,85 @@ export class BrowserAutomationService {
 
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
+    }
+
+    // 拒绝 javascript: 协议（安全风险，且会导致等待挂起）
+    // 统一白名单已在方法入口校验；这里保留注释说明历史原因。
+
+    // 导航开始即作废旧 ref；即使页面还没加载完，旧 DOM 也不再可信
+    this.bumpGeneration(wid);
+
+    let navError: Error | null = null;
+    const navigation = webContents.loadURL(url).catch((err: any) => {
+      if (this.isAbortedNavigationError(err)) return;
+      navError = err instanceof Error ? err : new Error(String(err));
+    });
+
+    if (waitUntil === "none") {
+      // 不等待页面加载；loadURL 的失败只记日志，由后续显式等待/观察暴露
+      void navigation.then(() => {
+        if (navError) {
+          log.warn(`Navigation (no-wait) failed for ${url}: ${navError.message}`);
+        }
+      });
+      return {
+        ok: true,
+        tabId: wid,
+        url,
+        title: webContents.getTitle(),
+        readyState: "loading",
+      };
     }
 
     try {
-      // 拒绝 javascript: 协议（安全风险，且会导致 waitForPageLoad 挂起）
-      if (/^javascript:/i.test(url)) {
-        throw new Error("Navigation to javascript: URLs is not allowed");
+      if (waitUntil === "domcontentloaded") {
+        // 让 loadURL 先进入 loading，避免 waitForDomReady 对旧页面立即 resolve
+        await new Promise((r) => setImmediate(r));
+        void navigation.then(() => {
+          if (navError) {
+            log.warn(
+              `Navigation (domcontentloaded) later failed for ${url}: ${navError.message}`,
+            );
+          }
+        });
+        await this.waitForDomReady(webContents);
+      } else {
+        await navigation;
+        await this.waitForPageLoad(webContents);
       }
 
-      // loadURL 在页面重定向/JS 跳转时会 reject (ERR_ABORTED -3)，
-      // 但页面实际上可能已成功加载。仅吞 ERR_ABORTED，其他错误上抛。
-      await webContents.loadURL(url).catch((err: any) => {
-        const code = err?.code ?? err?.errno;
-        const isAborted = code === -3 || String(err?.message || "").includes("ERR_ABORTED");
-        if (!isAborted) throw err;
-      });
-      await this.waitForPageLoad(webContents);
+      if (navError) {
+        throw new BrowserBridgeError(
+          "NAVIGATION_FAILED",
+          `Navigation failed: ${(navError as Error).message}`,
+          { url },
+        );
+      }
+
       const currentUrl = webContents.getURL();
       if (currentUrl.startsWith("chrome-error://")) {
-        throw new Error(`Navigation failed: page loaded chrome-error for ${url}`);
+        throw new BrowserBridgeError(
+          "NAVIGATION_FAILED",
+          `Navigation failed: page loaded chrome-error for ${url}`,
+          { url, currentUrl },
+        );
       }
+
       return {
-        success: true,
-        tab_id: wid,
+        ok: true,
+        tabId: wid,
         url: currentUrl,
         title: webContents.getTitle(),
+        readyState: await this.readReadyState(webContents),
       };
     } catch (error: any) {
-      throw new Error(`Navigation failed: ${error.message}`);
+      if (error instanceof BrowserBridgeError) throw error;
+      throw new BrowserBridgeError(
+        "NAVIGATION_FAILED",
+        `Navigation failed: ${error?.message || error}`,
+        { url },
+      );
     }
   }
 
@@ -361,19 +482,26 @@ export class BrowserAutomationService {
 
     const webContents = await this.windowManager.getWebviewWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
     }
 
-    await this.waitForPageLoad(webContents);
-
-    // webview visibility:hidden 时 Chromium 不产生合成器帧，CDP/capturePage 都无法截图。
-    // 临时将 webview 设为可渲染（视口内 + opacity:0），截图后恢复。
-    // 无条件调用：前端的 getWebviewStyle 会判断是否已可见，已可见时不受影响。
-    this.windowManager.setWebviewRenderable(wid, true);
-    // 等待合成器产生帧
-    await new Promise((r) => setTimeout(r, 300));
-
+    let renderableToggled = false;
     try {
+      await this.waitForPageLoad(webContents);
+
+      // webview visibility:hidden 时 Chromium 不产生合成器帧，CDP/capturePage 都无法截图。
+      // 临时将 webview 设为可渲染（视口内 + opacity:0），截图后恢复。
+      // 已经可见的标签不需要切换，避免每次截图都闪一下。
+      const wasVisible = this.windowManager.isWindowVisible(wid);
+      if (!wasVisible) {
+        this.windowManager.setWebviewRenderable(wid, true);
+        renderableToggled = true;
+        // 等待合成器产生帧
+        await new Promise((r) => setTimeout(r, 300));
+      } else {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
       let buffer: Buffer;
       let imgWidth: number;
       let imgHeight: number;
@@ -403,40 +531,67 @@ export class BrowserAutomationService {
         }
       }
 
-      let savedPath: string | undefined;
+      // 保存到文件；file_path 必须落在会话目录内，无会话路径时只允许临时目录
+      const targetPath = this.resolveScreenshotPath(filePath, sessionPath);
 
-      // 保存到文件
-      const targetPath = filePath
-        ? path.isAbsolute(filePath)
-          ? filePath
-          : sessionPath
-            ? path.join(sessionPath, filePath)
-            : undefined
-        : sessionPath
-          ? path.join(sessionPath, `screenshot-${Date.now()}.png`)
-          : undefined;
-
-      if (targetPath) {
-        const dir = path.dirname(targetPath);
-        if (!fs.existsSync(dir)) {
-          fs.mkdirSync(dir, { recursive: true });
-        }
-        await fs.promises.writeFile(targetPath, buffer);
-        savedPath = targetPath;
-        log.info(`Screenshot saved: ${savedPath}`);
+      const dir = path.dirname(targetPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
       }
+      await fs.promises.writeFile(targetPath, buffer);
+      log.info(`Screenshot saved: ${targetPath}`);
 
       return {
-        success: true,
-        tab_id: wid,
-        format: "png",
-        saved_path: savedPath,
+        ok: true,
+        path: targetPath,
         width: imgWidth,
         height: imgHeight,
       };
+    } catch (error: any) {
+      if (
+        error instanceof BrowserBridgeError &&
+        (error.code === "SCREENSHOT_FAILED" || error.code === "INVALID_ARGUMENT")
+      ) {
+        throw error;
+      }
+      throw new BrowserBridgeError(
+        "SCREENSHOT_FAILED",
+        error?.message || "Screenshot failed",
+        {
+          ...(error instanceof BrowserBridgeError
+            ? { cause: error.code, ...(error.details === undefined ? {} : { details: error.details }) }
+            : {}),
+        },
+      );
     } finally {
-      this.windowManager.setWebviewRenderable(wid, false);
+      if (renderableToggled) {
+        this.windowManager.setWebviewRenderable(wid, false);
+      }
     }
+  }
+
+  /**
+   * 截图路径收敛：相对路径基于 sessionPath，绝对路径也必须在 sessionPath 内；
+   * 没有 sessionPath 时只允许系统临时目录，避免页面/脚本任意写文件。
+   */
+  private resolveScreenshotPath(
+    filePath: string | undefined,
+    sessionPath: string | undefined,
+  ): string {
+    const base = path.resolve(sessionPath || os.tmpdir());
+    const target = filePath
+      ? path.resolve(base, filePath)
+      : path.join(base, `screenshot-${Date.now()}.png`);
+
+    if (!isPathInside(base, target)) {
+      throw new BrowserBridgeError(
+        "INVALID_ARGUMENT",
+        `Screenshot path must stay inside the session directory: ${base}`,
+        { filePath, base, target },
+      );
+    }
+
+    return target;
   }
 
   /**
@@ -447,35 +602,17 @@ export class BrowserAutomationService {
       ms: number,
       label: string,
   ): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(label)), ms),
-      ),
-    ]);
-  }
-
-  /**
-   * 执行 JS 并与弹窗检测竞争：
-   * 如果 JS 执行期间触发了 alert/confirm/prompt，
-   * 弹窗 resolver 先 resolve，返回 { __dialog: true, type, message }。
-   * 否则正常返回 JS 执行结果。
-   */
-  private async raceWithDialog(
-    webContents: Electron.WebContents,
-    wid: string,
-    code: string,
-  ): Promise<any> {
-    let dialogResolve!: (v: any) => void;
-    const dialogPromise = new Promise<any>((resolve) => { dialogResolve = resolve; });
-    this.windowManager!.setDialogResolver(wid, dialogResolve);
-
-    const result = await Promise.race([
-      webContents.executeJavaScript(code, true),
-      dialogPromise,
-    ]);
-    this.windowManager!.clearDialogResolver(wid);
-    return result;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(label)), ms);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
   /**
@@ -512,13 +649,15 @@ export class BrowserAutomationService {
    * 执行 JavaScript 代码
    * @param code JavaScript 代码
    * @param windowId 窗口 ID（可选）
-   * @param isAsync 是否支持异步代码（默认 false）
+   * @param createdBy 会话标识
+   * @param timeoutMs 执行超时（默认 30s）
    */
   async executeJavaScript(
     code: string,
     windowId: string,
-    isAsync: boolean = false,
     createdBy?: string,
+    timeoutMs: number = 30000,
+    mutates: boolean = true,
   ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
@@ -530,61 +669,43 @@ export class BrowserAutomationService {
 
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
     }
 
     try {
-      let dialogResolve!: (v: any) => void;
-      const dialogPromise = new Promise((resolve) => { dialogResolve = resolve; });
-      const alreadyPending = this.windowManager.setDialogResolver(wid, dialogResolve);
+      const result = await this.withTimeout(
+        webContents.executeJavaScript(code, true),
+        timeoutMs,
+        `JavaScript execution timeout (${timeoutMs}ms)`,
+      );
 
-      const result = await Promise.race([
-        this.withTimeout(
-          webContents.executeJavaScript(code, true),
-          30000,
-          "JavaScript execution timeout (30s)",
-        ),
-        dialogPromise,
-      ]);
-      this.windowManager.clearDialogResolver(wid);
-
-      if (result && (result as any).__dialog) {
-        const dlg = result as { type: string; message: string };
-        const hint = dlg.type === 'prompt'
-          ? `, prompt_text='...')`
-          : `')`;
-        return {
-          success: true,
-          windowId: wid,
-          dialog: dlg,
-          error: `A ${dlg.type} dialog appeared: "${dlg.message}". Use browser_interact(action='dialog', accept=true/false${hint} to respond.`,
-        } as any;
+      // 只有可能修改 DOM 的 evaluate 才作废旧 ref；内部只读查询不递增
+      if (mutates) {
+        this.bumpGeneration(wid);
       }
-
-      return {
-        success: true,
-        windowId: wid,
-        result,
-      };
+      return result;
     } catch (error: any) {
-      log.error(`JavaScript execution failed in tab ${wid}:`, error.message);
-      if (error.message?.includes("timeout")) {
-        return {
-          success: false,
-          windowId: wid,
-          error: `Execution exceeded 30s and timed out. The script may still be running and cannot be cancelled. To force stop, reload the window (browser_history action='reload').`,
-          timedOut: true,
-        };
+      log.error(`JavaScript execution failed in tab ${wid}:`, error?.message || error);
+      if (error instanceof BrowserBridgeError) throw error;
+      if (String(error?.message || "").includes("timeout")) {
+        throw new BrowserBridgeError(
+          "TIMEOUT",
+          `Execution exceeded ${timeoutMs}ms and timed out. The script may still be running and cannot be cancelled.`,
+          { timeout: timeoutMs },
+        );
       }
-      return {
-        success: false,
-        windowId: wid,
-        error: error.message,
-      };
+      throw new BrowserBridgeError(
+        "EVALUATE_FAILED",
+        error?.message || String(error),
+      );
     }
   }
 
-  async getPageStruct(windowId: string, createdBy?: string): Promise<any> {
+  async getPageStruct(
+    windowId: string,
+    createdBy?: string,
+    waitForLoad: boolean = true,
+  ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -596,13 +717,14 @@ export class BrowserAutomationService {
       );
     }
     return this.withSnapshotLock(webContents, () =>
-      this.getPageStructUnlocked(wid, createdBy),
+      this.getPageStructUnlocked(wid, createdBy, waitForLoad),
     );
   }
 
   private async getPageStructUnlocked(
     windowId: string,
     createdBy?: string,
+    waitForLoad: boolean = true,
   ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
@@ -619,8 +741,10 @@ export class BrowserAutomationService {
       );
     }
 
-    // 等待页面完全加载
-    await this.waitForPageLoad(webContents);
+    // 只在显式要求时等待页面完全加载；脚本已通过 goto 控制等待级别
+    if (waitForLoad) {
+      await this.waitForPageLoad(webContents);
+    }
 
     // 记录页面状态信息用于调试
     const currentUrl = webContents.getURL();
@@ -930,6 +1054,7 @@ export class BrowserAutomationService {
   async getPageSimpleSnapshot(
     windowId: string,
     createdBy?: string,
+    waitForLoad: boolean = true,
   ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
     if (!this.windowManager) {
@@ -943,7 +1068,9 @@ export class BrowserAutomationService {
       );
     }
 
-    await this.waitForPageLoad(webContents);
+    if (waitForLoad) {
+      await this.waitForPageLoad(webContents);
+    }
     const startedAt = Date.now();
 
     try {
@@ -966,7 +1093,7 @@ export class BrowserAutomationService {
       };
     } catch (error: any) {
       log.warn(`Accessibility snapshot failed, using DOM fallback: ${error.message}`);
-      const legacy = await this.getPageStruct(wid, createdBy);
+      const legacy = await this.getPageStruct(wid, createdBy, waitForLoad);
       const snapshot = buildSimpleTreeFromLegacyStruct(legacy.struct);
       const measured = measureSimpleTree(snapshot);
       return {
@@ -988,81 +1115,11 @@ export class BrowserAutomationService {
     }
   }
 
-  async getPageText(windowId: string, createdBy?: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-
-    if (!this.windowManager) {
-      throw new Error("TabManager not initialized");
-    }
-
-    log.info(`Getting page text (tab: ${wid})...`);
-
-    const webContents = await this.windowManager.getWebviewWebContents(wid);
-    if (!webContents) {
-      throw new Error(
-        `Window ${wid} webview not ready (did-attach-webview not fired)`,
-      );
-    }
-
-    // 等待页面完全加载
-    await this.waitForPageLoad(webContents);
-
-    // 记录页面状态信息用于调试
-    const currentUrl = webContents.getURL();
-    const pageTitle = webContents.getTitle();
-    log.info(`Page status for text: URL=${currentUrl}, Title=${pageTitle}`);
-
-    let text = "";
-    try {
-      log.debug("Executing JavaScript to extract plain text...");
-      text = await webContents.executeJavaScript(`
-        (function() {
-          try {
-            const clone = document.cloneNode(true)
-            const scripts = clone.querySelectorAll('script, style, noscript')
-            for (let i = 0; i < scripts.length; i++) {
-              if (scripts[i].parentNode) {
-                scripts[i].parentNode.removeChild(scripts[i])
-              }
-            }
-            
-            let text = clone.body ? clone.body.innerText : clone.textContent || ''
-            
-            text = text
-              .split('\n')
-              .map(function(line) { return line.trim() })
-              .filter(function(line) { return line.length > 0 })
-              .join('\n')
-            
-            return text
-          } catch (error) {
-            console.error('Error in getPageText:', error)
-            return ''
-          }
-        })()
-      `);
-    } catch (error: any) {
-      log.error(`Failed to get plain text`);
-      log.error(`   Error message: ${error.message}`);
-      log.error(`   Error name: ${error.name}`);
-      log.error(`   Tab ID: ${wid}`);
-      log.error(`   URL: ${currentUrl}`);
-      throw new Error(`Failed to get plain text: ${error.message}`);
-    }
-
-    const title = webContents.getTitle();
-    const url = webContents.getURL();
-
-    return {
-      success: true,
-      windowId: wid,
-      url,
-      title,
-      text,
-    };
-  }
-
-  async getPageSummary(windowId: string, createdBy?: string): Promise<any> {
+  async getPageSummary(
+    windowId: string,
+    createdBy?: string,
+    waitForLoad: boolean = true,
+  ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
@@ -1078,8 +1135,9 @@ export class BrowserAutomationService {
       );
     }
 
-    // 等待页面完全加载
-    await this.waitForPageLoad(webContents);
+    if (waitForLoad) {
+      await this.waitForPageLoad(webContents);
+    }
 
     // 记录页面状态信息用于调试
     const currentUrl = webContents.getURL();
@@ -1205,19 +1263,59 @@ export class BrowserAutomationService {
 
   /**
    * 统一快照接口：simple（默认）/ struct / summary。
+   *
+   * 返回脚本友好的扁平结构；generation 由后端拥有，动作可用它拒绝过期 ref。
    */
-  async snapshot(type: string, createdBy: string): Promise<any> {
+  async snapshot(
+    type: string,
+    createdBy: string,
+    waitForLoad: boolean = false,
+  ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow("", createdBy);
+    const generation = this.bumpGeneration(wid);
+
     if (type === "summary") {
-      return this.getPageSummary(wid, createdBy);
+      const res = await this.getPageSummary(wid, createdBy, waitForLoad);
+      return {
+        generation,
+        type: "summary",
+        url: res.url,
+        title: res.title,
+        tree: {
+          text: res.text,
+          links: res.links,
+          headings: res.headings,
+        },
+      };
     }
     if (type === "struct") {
-      return this.getPageStruct(wid, createdBy);
+      const res = await this.getPageStruct(wid, createdBy, waitForLoad);
+      return {
+        generation,
+        type: "struct",
+        url: res.url,
+        title: res.title,
+        source: "dom",
+        stats: res.stats,
+        tree: res.struct,
+      };
     }
     if (type === "simple") {
-      return this.getPageSimpleSnapshot(wid, createdBy);
+      const res = await this.getPageSimpleSnapshot(wid, createdBy, waitForLoad);
+      return {
+        generation,
+        type: "simple",
+        url: res.url,
+        title: res.title,
+        source: res.source,
+        stats: res.stats,
+        tree: res.snapshot,
+      };
     }
-    throw new Error(`Unknown snapshot type: ${type}`);
+    throw new BrowserBridgeError(
+      "INVALID_ARGUMENT",
+      `Unknown snapshot type: ${type}`,
+    );
   }
 
   /**
@@ -1235,161 +1333,231 @@ export class BrowserAutomationService {
     timeout: number = 10000,
     windowId: string,
     createdBy?: string,
+    generation?: number,
+    state: WaitState = "attached",
   ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
+    this.assertGeneration(wid, generation);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
     }
-
-    log.info(`Waiting for selector: ${selector} (tab: ${wid})`);
-
-    const cssSelector = this.resolveSelector(selector);
-
-    const webContents = this.windowManager.getWebContents(wid);
-    if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
+    if (!this.actionEngine) {
+      throw new Error("Action engine not initialized");
     }
 
-    const selectorLiteral = JSON.stringify(cssSelector);
-    const safeTimeout = Number.isFinite(timeout) ? Math.max(0, timeout) : 10000;
-    const result = await this.withSnapshotLock(webContents, () =>
-      webContents.executeJavaScript(`
-        new Promise((resolve) => {
-          const element = document.querySelector(${selectorLiteral})
-          if (element) {
-            resolve({ found: true, exists: true })
-            return
-          }
+    const normalizedState: WaitState =
+      state === "visible" || state === "hidden" || state === "detached"
+        ? state
+        : "attached";
 
-          const observer = new MutationObserver(() => {
-            const el = document.querySelector(${selectorLiteral})
-            if (el) {
-              observer.disconnect()
-              resolve({ found: true, exists: true })
-            }
-          })
-
-          observer.observe(document.body, { childList: true, subtree: true })
-
-          setTimeout(() => {
-            observer.disconnect()
-            resolve({ found: false, exists: false })
-          }, ${safeTimeout})
-        })
-      `),
+    log.info(
+      `Waiting for selector: ${selector} to be ${normalizedState} (tab: ${wid})`,
     );
 
-    return {
-      success: true,
-      windowId: wid,
-      ...result,
-    };
-  }
-
-  async click(selector: string, windowId: string, createdBy?: string, fullSimulation: boolean = false): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-
-    if (!this.windowManager) {
-      throw new Error("TabManager not initialized");
-    }
-
-    log.info(`Clicking element: ${selector} (tab: ${wid}, fullSimulation: ${fullSimulation})`);
-
     const cssSelector = this.resolveSelector(selector);
 
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
     }
 
-    const selectorLiteral = JSON.stringify(cssSelector);
+    return this.withSnapshotLock(webContents, () =>
+      this.actionEngine!.waitForState(
+        webContents,
+        cssSelector,
+        normalizedState,
+        timeout,
+      ),
+    );
+  }
 
-    if (!fullSimulation) {
-      // JS 模拟路径：不依赖渲染状态，直接 DOM 操作
-      const jsResult = await this.withSnapshotLock(webContents, () =>
-        this.raceWithDialog(webContents, wid, `
-          new Promise((resolve) => {
-            const element = document.querySelector(${selectorLiteral})
-            if (!element) { resolve({ clicked: false, error: 'Element not found' }); return }
-            element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
-            element.click()
-            resolve({ clicked: true })
-          })
-        `),
-      );
-      if (jsResult && (jsResult as any).__dialog) {
-        return { windowId: wid, ...jsResult as any };
-      }
-      return { windowId: wid, ...jsResult };
+  /**
+   * 动作前的公共准备：所有权、当前标签、generation、webContents。
+   */
+  private async prepareAction(
+    selector: string,
+    windowId: string,
+    createdBy?: string,
+    generation?: number,
+  ): Promise<{ wid: string; webContents: Electron.WebContents; selector: string }> {
+    if (!this.windowManager) {
+      throw new Error("TabManager not initialized");
+    }
+    if (!this.actionEngine) {
+      throw new Error("Action engine not initialized");
+    }
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
+    this.assertGeneration(wid, generation);
+    const webContents = this.windowManager.getWebContents(wid);
+    if (!webContents) {
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
+    }
+    return { wid, webContents, selector: this.resolveSelector(selector) };
+  }
+
+  async click(
+    selector: string,
+    windowId: string,
+    createdBy?: string,
+    options: ActionOptions = {},
+    generation?: number,
+  ): Promise<any> {
+    const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
+    log.info(`Clicking element: ${selector} (tab: ${prepared.wid})`);
+
+    const result = await this.withSnapshotLock(prepared.webContents, () =>
+      this.actionEngine!.click(
+        prepared.webContents,
+        prepared.wid,
+        prepared.selector,
+        options,
+      ),
+    );
+    this.bumpGeneration(prepared.wid);
+    return result;
+  }
+
+  async hover(
+    selector: string,
+    windowId: string,
+    createdBy?: string,
+    options: ActionOptions = {},
+    generation?: number,
+  ): Promise<any> {
+    const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
+    log.info(`Hovering element: ${selector} (tab: ${prepared.wid})`);
+
+    const result = await this.withSnapshotLock(prepared.webContents, () =>
+      this.actionEngine!.hover(
+        prepared.webContents,
+        prepared.wid,
+        prepared.selector,
+        options,
+      ),
+    );
+    this.bumpGeneration(prepared.wid);
+    return result;
+  }
+
+  async press(
+    key: string,
+    windowId: string,
+    createdBy?: string,
+    options: PressOptions = {},
+    generation?: number,
+  ): Promise<any> {
+    if (!this.windowManager) {
+      throw new Error("TabManager not initialized");
+    }
+    if (!this.actionEngine) {
+      throw new Error("Action engine not initialized");
+    }
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
+    this.assertGeneration(wid, generation);
+    const webContents = this.windowManager.getWebContents(wid);
+    if (!webContents) {
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
     }
 
-    // CDP 全仿真路径：需要合成器帧
-    const result = await this.withSnapshotLock(webContents, async () => {
-      const rectInfo = await webContents.executeJavaScript(`
-        new Promise((resolve) => {
-          const element = document.querySelector(${selectorLiteral})
-          if (!element) {
-            resolve(null)
-            return
-          }
-          element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
-          const rect = element.getBoundingClientRect()
-          resolve({
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-            vw: window.innerWidth,
-            vh: window.innerHeight,
-          })
-        })
-      `);
+    const selector = options.selector
+      ? this.resolveSelector(options.selector)
+      : undefined;
+    log.info(`Pressing key: ${key} (tab: ${wid})`);
 
-      if (!rectInfo) {
-        return { success: false, clicked: false, error: 'Element not found' };
-      }
+    const result = await this.withSnapshotLock(webContents, () =>
+      this.actionEngine!.press(webContents, wid, key, {
+        ...options,
+        ...(selector ? { selector } : {}),
+      }),
+    );
+    this.bumpGeneration(wid);
+    return result;
+  }
 
-      const targetX = Math.max(0, Math.min(rectInfo.x, rectInfo.vw));
-      const targetY = Math.max(0, Math.min(rectInfo.y, rectInfo.vh));
+  async scroll(
+    windowId: string,
+    createdBy?: string,
+    options: ScrollOptions = {},
+    generation?: number,
+  ): Promise<any> {
+    if (!this.windowManager) {
+      throw new Error("TabManager not initialized");
+    }
+    if (!this.actionEngine) {
+      throw new Error("Action engine not initialized");
+    }
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
+    this.assertGeneration(wid, generation);
+    const webContents = this.windowManager.getWebContents(wid);
+    if (!webContents) {
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
+    }
 
-      // 临时设为可渲染，使 CDP 坐标映射有效
-      this.windowManager!.setWebviewRenderable(wid, true);
-      await new Promise((r) => setTimeout(r, 300));
+    const selector = options.selector
+      ? this.resolveSelector(options.selector)
+      : undefined;
+    return this.withSnapshotLock(webContents, () =>
+      this.actionEngine!.scroll(webContents, wid, {
+        ...options,
+        ...(selector ? { selector } : {}),
+      }),
+    );
+  }
 
-      const cdpSuccess = await this.cdpClick(webContents, targetX, targetY, rectInfo.vw, rectInfo.vh);
+  async selectOption(
+    selector: string,
+    values: unknown,
+    windowId: string,
+    createdBy?: string,
+    options: SelectOptions = {},
+    generation?: number,
+  ): Promise<any> {
+    const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
+    const result = await this.withSnapshotLock(prepared.webContents, () =>
+      this.actionEngine!.selectOption(
+        prepared.webContents,
+        prepared.selector,
+        values,
+        options,
+      ),
+    );
+    this.bumpGeneration(prepared.wid);
+    return result;
+  }
 
-      // 恢复隐藏状态
-      this.windowManager!.setWebviewRenderable(wid, false);
+  async check(
+    selector: string,
+    checked: boolean,
+    windowId: string,
+    createdBy?: string,
+    options: ActionOptions = {},
+    generation?: number,
+  ): Promise<any> {
+    const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
+    const result = await this.withSnapshotLock(prepared.webContents, () =>
+      this.actionEngine!.check(
+        prepared.webContents,
+        prepared.wid,
+        prepared.selector,
+        checked,
+        options,
+      ),
+    );
+    this.bumpGeneration(prepared.wid);
+    return result;
+  }
 
-      if (cdpSuccess) {
-        return { success: true, clicked: true };
-      }
-
-      // CDP 失败，降级到 dispatchEvent
-      await webContents.executeJavaScript(`
-        new Promise((resolve) => {
-          const element = document.querySelector(${selectorLiteral})
-          if (element) {
-            const rect = element.getBoundingClientRect()
-            element.dispatchEvent(new MouseEvent('click', {
-              bubbles: true,
-              cancelable: true,
-              view: window,
-              clientX: rect.left + rect.width / 2,
-              clientY: rect.top + rect.height / 2,
-            }))
-            resolve(true)
-          } else {
-            resolve(false)
-          }
-        })
-      `);
-      return { success: true, clicked: true };
-    });
-
-    return {
-      windowId: wid,
-      ...result,
-    };
+  async elementState(
+    selector: string,
+    windowId: string,
+    createdBy?: string,
+    generation?: number,
+  ): Promise<any> {
+    const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
+    return this.withSnapshotLock(prepared.webContents, () =>
+      this.actionEngine!.elementState(prepared.webContents, prepared.selector),
+    );
   }
 
   async fillForm(
@@ -1397,362 +1565,30 @@ export class BrowserAutomationService {
     value: string,
     windowId: string,
     createdBy?: string,
-    fullSimulation: boolean = false,
+    options: FillOptions = {},
+    generation?: number,
   ): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-
-    if (!this.windowManager) {
-      throw new Error("TabManager not initialized");
-    }
-
     if (typeof value !== "string") {
-      throw new Error("value is required when action is input");
-    }
-
-    log.info(`Filling form field: ${selector} (tab: ${wid}, fullSimulation: ${fullSimulation})`);
-
-    const cssSelector = this.resolveSelector(selector);
-
-    const webContents = this.windowManager.getWebContents(wid);
-    if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
-    }
-
-    const selectorLiteral = JSON.stringify(cssSelector);
-
-    if (!fullSimulation) {
-      // JS 模拟路径：使用 native value setter 兼容 React/Vue 受控组件
-      // contenteditable 元素使用 execCommand 模拟键入
-      const valueLiteral = JSON.stringify(value);
-      const jsResult = await this.withSnapshotLock(webContents, () =>
-        this.raceWithDialog(webContents, wid, `
-          new Promise((resolve) => {
-            const element = document.querySelector(${selectorLiteral})
-            if (!element) { resolve({ filled: false, error: 'Element not found' }); return }
-            element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
-            element.focus()
-
-            if (element.isContentEditable) {
-              // contenteditable: 全选后插入文本
-              var range = document.createRange()
-              range.selectNodeContents(element)
-              var sel = window.getSelection()
-              sel.removeAllRanges()
-              sel.addRange(range)
-              document.execCommand('insertText', false, ${valueLiteral})
-              resolve({ filled: true })
-              return
-            }
-
-            // input/textarea/select: native value setter
-            var proto = element.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype
-              : element.tagName === 'SELECT' ? HTMLSelectElement.prototype
-              : HTMLInputElement.prototype
-            var setter = Object.getOwnPropertyDescriptor(proto, 'value')
-            if (setter && setter.set) {
-              setter.set.call(element, ${valueLiteral})
-            } else {
-              element.value = ${valueLiteral}
-            }
-            element.dispatchEvent(new Event('input', { bubbles: true }))
-            element.dispatchEvent(new Event('change', { bubbles: true }))
-            resolve({ filled: true })
-          })
-        `),
+      throw new BrowserBridgeError(
+        "INVALID_ARGUMENT",
+        "value is required when action is input",
       );
-      if (jsResult && (jsResult as any).__dialog) {
-        return { windowId: wid, ...jsResult as any };
-      }
-      return { windowId: wid, ...jsResult };
     }
 
-    // CDP 全仿真路径：需要合成器帧
-    const result = await this.withSnapshotLock(webContents, async () => {
-      const rectInfo = await webContents.executeJavaScript(`
-        new Promise((resolve) => {
-          const element = document.querySelector(${selectorLiteral})
-          if (!element) { resolve(null); return }
-          element.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' })
-          const rect = element.getBoundingClientRect()
-          resolve({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, vw: window.innerWidth, vh: window.innerHeight })
-        })
-      `);
+    const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
+    log.info(`Filling form field: ${selector} (tab: ${prepared.wid})`);
 
-      if (!rectInfo) {
-        return { success: false, filled: false, error: 'Element not found' };
-      }
-
-      // 临时设为可渲染
-      this.windowManager!.setWebviewRenderable(wid, true);
-      await new Promise((r) => setTimeout(r, 300));
-
-      const cdpSuccess = await this.cdpTypeText(webContents, rectInfo.x, rectInfo.y, rectInfo.vw, rectInfo.vh, value);
-
-      // 恢复隐藏状态
-      this.windowManager!.setWebviewRenderable(wid, false);
-
-      if (cdpSuccess) {
-        return { success: true, filled: true };
-      }
-
-      // 降级：native setter + dispatchEvent（支持 contenteditable）
-      const valueLiteral = JSON.stringify(value);
-      await webContents.executeJavaScript(`
-        new Promise((resolve) => {
-          const element = document.querySelector(${selectorLiteral})
-          if (element) {
-            if (element.isContentEditable) {
-              element.focus()
-              var range = document.createRange()
-              range.selectNodeContents(element)
-              var sel = window.getSelection()
-              sel.removeAllRanges()
-              sel.addRange(range)
-              document.execCommand('insertText', false, ${valueLiteral})
-            } else {
-              var proto = element.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype
-                : element.tagName === 'SELECT' ? HTMLSelectElement.prototype
-                : HTMLInputElement.prototype
-              var setter = Object.getOwnPropertyDescriptor(proto, 'value')
-              if (setter && setter.set) {
-                setter.set.call(element, ${valueLiteral})
-              } else {
-                element.value = ${valueLiteral}
-              }
-              element.dispatchEvent(new Event('input', { bubbles: true }))
-              element.dispatchEvent(new Event('change', { bubbles: true }))
-            }
-            resolve(true)
-          } else {
-            resolve(false)
-          }
-        })
-      `);
-      return { success: true, filled: true };
-    });
-
-    return {
-      windowId: wid,
-      ...result,
-    };
-  }
-
-  /**
-   * 通过 CDP Input.dispatchMouseEvent 模拟鼠标点击（isTrusted=true）。
-   * 包含鼠标轨迹模拟：从随机起点经多步移动到目标，然后按下/释放。
-   * 返回 false 表示 CDP 不可用，调用方应降级。
-   */
-  private async cdpClick(
-    webContents: Electron.WebContents,
-    targetX: number,
-    targetY: number,
-    viewportW: number,
-    viewportH: number,
-  ): Promise<boolean> {
-    const debuggerApi = webContents.debugger;
-    let attachedByUs = false;
-
-    try {
-      if (!debuggerApi.isAttached()) {
-        debuggerApi.attach("1.3");
-        attachedByUs = true;
-      }
-
-      const send = (method: string, params: any) =>
-        debuggerApi.sendCommand(method, params);
-
-      // 起点：从视口边缘随机选择
-      const startSide = Math.floor(Math.random() * 4);
-      let startX: number, startY: number;
-      switch (startSide) {
-        case 0: startX = Math.random() * viewportW * 0.3; startY = Math.random() * viewportH; break;
-        case 1: startX = viewportW - Math.random() * viewportW * 0.3; startY = Math.random() * viewportH; break;
-        case 2: startX = Math.random() * viewportW; startY = Math.random() * viewportH * 0.3; break;
-        default: startX = Math.random() * viewportW; startY = viewportH - Math.random() * viewportH * 0.3; break;
-      }
-
-      // 生成贝塞尔轨迹（5-8 步）
-      const steps = 5 + Math.floor(Math.random() * 4);
-      const controlX = startX + (targetX - startX) * 0.5 + (Math.random() - 0.5) * 100;
-      const controlY = startY + (targetY - startY) * 0.5 + (Math.random() - 0.5) * 100;
-
-      for (let i = 1; i <= steps; i++) {
-        const t = i / steps;
-        // 二次贝塞尔曲线
-        const x = (1 - t) * (1 - t) * startX + 2 * (1 - t) * t * controlX + t * t * targetX;
-        const y = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * controlY + t * t * targetY;
-        await send("Input.dispatchMouseEvent", {
-          type: "mouseMoved",
-          x: Math.round(x * 100) / 100,
-          y: Math.round(y * 100) / 100,
-        });
-        await new Promise((r) => setTimeout(r, 10 + Math.random() * 20));
-      }
-
-      // 短暂停留后点击
-      await new Promise((r) => setTimeout(r, 30 + Math.random() * 50));
-
-      await send("Input.dispatchMouseEvent", {
-        type: "mousePressed",
-        x: targetX,
-        y: targetY,
-        button: "left",
-        clickCount: 1,
-      });
-      await new Promise((r) => setTimeout(r, 30 + Math.random() * 40));
-      await send("Input.dispatchMouseEvent", {
-        type: "mouseReleased",
-        x: targetX,
-        y: targetY,
-        button: "left",
-        clickCount: 1,
-      });
-
-      return true;
-    } catch (err: any) {
-      log.warn(`CDP click failed, will fallback to dispatchEvent: ${err.message}`);
-      return false;
-    } finally {
-      if (attachedByUs && debuggerApi.isAttached()) {
-        try { debuggerApi.detach(); } catch {}
-      }
-    }
-  }
-
-  /**
-   * 通过 CDP Input.dispatchKeyEvent 模拟键盘输入（isTrusted=true）。
-   * 先点击聚焦元素，Ctrl+A 清空，然后逐字符输入。
-   * 返回 false 表示 CDP 不可用，调用方应降级。
-   */
-  private async cdpTypeText(
-    webContents: Electron.WebContents,
-    elementX: number,
-    elementY: number,
-    viewportW: number,
-    viewportH: number,
-    text: string,
-  ): Promise<boolean> {
-    const debuggerApi = webContents.debugger;
-    let attachedByUs = false;
-
-    try {
-      if (!debuggerApi.isAttached()) {
-        debuggerApi.attach("1.3");
-        attachedByUs = true;
-      }
-
-      const send = (method: string, params: any) =>
-        debuggerApi.sendCommand(method, params);
-
-      // 先点击元素以获取焦点
-      await send("Input.dispatchMouseEvent", {
-        type: "mouseMoved",
-        x: elementX,
-        y: elementY,
-      });
-      await new Promise((r) => setTimeout(r, 50));
-      await send("Input.dispatchMouseEvent", {
-        type: "mousePressed",
-        x: elementX,
-        y: elementY,
-        button: "left",
-        clickCount: 1,
-      });
-      await send("Input.dispatchMouseEvent", {
-        type: "mouseReleased",
-        x: elementX,
-        y: elementY,
-        button: "left",
-        clickCount: 1,
-      });
-      await new Promise((r) => setTimeout(r, 50));
-
-      // Ctrl+A 全选
-      await send("Input.dispatchKeyEvent", {
-        type: "keyDown",
-        key: "a",
-        code: "KeyA",
-        modifiers: 2,
-      });
-      await send("Input.dispatchKeyEvent", {
-        type: "keyUp",
-        key: "a",
-        code: "KeyA",
-        modifiers: 2,
-      });
-      await new Promise((r) => setTimeout(r, 30));
-
-      // Backspace 删除
-      await send("Input.dispatchKeyEvent", {
-        type: "keyDown",
-        key: "Backspace",
-        code: "Backspace",
-      });
-      await send("Input.dispatchKeyEvent", {
-        type: "keyUp",
-        key: "Backspace",
-        code: "Backspace",
-      });
-      await new Promise((r) => setTimeout(r, 30));
-
-      // 逐字符输入
-      for (const char of text) {
-        const isAscii = char.charCodeAt(0) < 128;
-        const keyInfo = isAscii
-          ? this.charToKeyCode(char)
-          : { key: "Unidentified", code: "Unidentified" };
-
-        await send("Input.dispatchKeyEvent", {
-          type: "keyDown",
-          key: keyInfo.key,
-          code: keyInfo.code,
-          text: char,
-        });
-        if (isAscii) {
-          await send("Input.dispatchKeyEvent", {
-            type: "keyUp",
-            key: keyInfo.key,
-            code: keyInfo.code,
-          });
-        } else {
-          // 非 ASCII 字符（中文等），发送 keyUp 不带 text
-          await send("Input.dispatchKeyEvent", {
-            type: "keyUp",
-            key: keyInfo.key,
-            code: keyInfo.code,
-          });
-        }
-        // 随机化打字间隔
-        await new Promise((r) => setTimeout(r, 30 + Math.random() * 50));
-      }
-
-      return true;
-    } catch (err: any) {
-      log.warn(`CDP typeText failed, will fallback to dispatchEvent: ${err.message}`);
-      return false;
-    } finally {
-      if (attachedByUs && debuggerApi.isAttached()) {
-        try { debuggerApi.detach(); } catch {}
-      }
-    }
-  }
-
-  /**
-   * 将 ASCII 字符映射为 CDP key/code
-   */
-  private charToKeyCode(char: string): { key: string; code: string } {
-    if (char === " ") return { key: " ", code: "Space" };
-    if (char === "\n") return { key: "Enter", code: "Enter" };
-    if (char === "\t") return { key: "Tab", code: "Tab" };
-    const upper = char.toUpperCase();
-    if (upper.length === 1 && upper >= "A" && upper <= "Z") {
-      return { key: upper, code: `Key${upper}` };
-    }
-    if (char >= "0" && char <= "9") {
-      return { key: char, code: `Digit${char}` };
-    }
-    // 标点符号等
-    return { key: char, code: "Unidentified" };
+    const result = await this.withSnapshotLock(prepared.webContents, () =>
+      this.actionEngine!.fill(
+        prepared.webContents,
+        prepared.wid,
+        prepared.selector,
+        value,
+        options,
+      ),
+    );
+    // fill 不改变 DOM 结构，保留 ref 可用性；与既有语义一致。
+    return result;
   }
 
   /**
@@ -1770,18 +1606,18 @@ export class BrowserAutomationService {
 
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
     }
 
     // 使用新的 navigationHistory API
     if (webContents.navigationHistory.canGoBack()) {
       webContents.navigationHistory.goBack();
       await this.waitForPageLoad(webContents);
+      this.bumpGeneration(wid);
     }
 
     return {
-      success: true,
-      windowId: wid,
+      ok: true,
       url: webContents.getURL(),
     };
   }
@@ -1800,18 +1636,18 @@ export class BrowserAutomationService {
 
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
     }
 
     // 使用新的 navigationHistory API
     if (webContents.navigationHistory.canGoForward()) {
       webContents.navigationHistory.goForward();
       await this.waitForPageLoad(webContents);
+      this.bumpGeneration(wid);
     }
 
     return {
-      success: true,
-      windowId: wid,
+      ok: true,
       url: webContents.getURL(),
     };
   }
@@ -1830,15 +1666,15 @@ export class BrowserAutomationService {
 
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
+      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
     }
 
     webContents.reload();
     await this.waitForPageLoad(webContents);
+    this.bumpGeneration(wid);
 
     return {
-      success: true,
-      windowId: wid,
+      ok: true,
       url: webContents.getURL(),
     };
   }
@@ -1858,7 +1694,10 @@ export class BrowserAutomationService {
     tabId?: string,
   ): Promise<any> {
     if (!this.windowManager) {
-      return { success: false, message: "WindowManager not initialized" };
+      throw new BrowserBridgeError(
+        "TABS_FAILED",
+        "WindowManager not initialized",
+      );
     }
 
     // 获取当前 session 的标签列表
@@ -1867,21 +1706,24 @@ export class BrowserAutomationService {
     );
 
     const currentTabId = createdBy ? this.getCurrentTabId(createdBy) : undefined;
+    const toTabInfo = (w: WindowInfo, i: number) => ({
+      index: i,
+      tabId: w.windowId,
+      url: w.url,
+      title: w.title,
+      isCurrent: w.windowId === currentTabId,
+    });
 
     switch (action) {
       case "list": {
-        return {
-          success: true,
-          tabs: sessionWindows.map((w, i) => ({
-            index: i,
-            tab_id: w.windowId,
-            url: w.url,
-            title: w.title,
-            is_current: w.windowId === currentTabId,
-          })),
-          current_tab_id: currentTabId || null,
-          count: sessionWindows.length,
-        };
+        return sessionWindows.map((w, i) => toTabInfo(w, i));
+      }
+
+      case "current": {
+        const idx = sessionWindows.findIndex(
+          (w) => w.windowId === currentTabId,
+        );
+        return idx >= 0 ? toTabInfo(sessionWindows[idx], idx) : null;
       }
 
       case "select": {
@@ -1893,24 +1735,32 @@ export class BrowserAutomationService {
         }
 
         if (!targetWid) {
-          throw new Error(
-            `Tab not found. Use browser_tabs(action="list") to see available tabs.`,
+          throw new BrowserBridgeError(
+            "NOT_FOUND",
+            'Tab not found. Use browser_tabs(action="list") to see available tabs.',
           );
         }
 
-        const found = sessionWindows.find((w) => w.windowId === targetWid);
-        if (!found) {
-          throw new Error(`Tab ${targetWid} does not belong to this session.`);
+        const targetIndex = sessionWindows.findIndex(
+          (w) => w.windowId === targetWid,
+        );
+        if (targetIndex < 0) {
+          throw new BrowserBridgeError(
+            "NOT_FOUND",
+            `Tab ${targetWid} does not belong to this session.`,
+          );
         }
 
         if (createdBy) this.setCurrentTab(createdBy, targetWid);
 
+        const found = sessionWindows[targetIndex];
         const wc = this.windowManager.getWebContents(targetWid);
         return {
-          success: true,
-          tab_id: targetWid,
+          index: targetIndex,
+          tabId: targetWid,
           url: wc ? wc.getURL() : found.url,
           title: wc ? wc.getTitle() : found.title,
+          isCurrent: true,
         };
       }
 
@@ -1926,29 +1776,39 @@ export class BrowserAutomationService {
         }
 
         if (!targetWid) {
-          return { success: false, message: "No tab to close" };
+          throw new BrowserBridgeError("NOT_FOUND", "No tab to close");
+        }
+
+        // 与 select 一致：显式 tab_id 也必须属于当前 session
+        if (!sessionWindows.some((w) => w.windowId === targetWid)) {
+          throw new BrowserBridgeError(
+            "NOT_FOUND",
+            `Tab ${targetWid} does not belong to this session.`,
+          );
         }
 
         await this.windowManager.closeWindow(targetWid);
+        this.clearGeneration(targetWid);
 
-        // 如果关闭的是当前标签，自动切换到相邻标签
-        let newCurrentTabId: string | null = null;
+        // 关闭的是当前标签时自动切换到相邻标签；否则当前标签保持不变
+        let nextCurrentTabId: string | null = currentTabId || null;
         if (targetWid === currentTabId && createdBy) {
           const remaining = this.getWindowList().filter(
             (w) => w.metadata?.createdBy === createdBy,
           );
           if (remaining.length > 0) {
-            newCurrentTabId = remaining[0].windowId;
-            this.setCurrentTab(createdBy, newCurrentTabId);
+            nextCurrentTabId = remaining[0].windowId;
+            this.setCurrentTab(createdBy, nextCurrentTabId);
           } else {
+            nextCurrentTabId = null;
             this.clearCurrentTab(createdBy);
           }
         }
 
         return {
-          success: true,
-          closed_tab_id: targetWid,
-          current_tab_id: newCurrentTabId,
+          ok: true,
+          closedTabId: targetWid,
+          currentTabId: nextCurrentTabId,
         };
       }
 
@@ -1956,61 +1816,19 @@ export class BrowserAutomationService {
         let count = 0;
         for (const w of sessionWindows) {
           await this.windowManager.closeWindow(w.windowId);
+          this.clearGeneration(w.windowId);
           count++;
         }
         if (createdBy) this.clearCurrentTab(createdBy);
-        return { success: true, closed_count: count };
+        return { ok: true, closedCount: count };
       }
 
       default:
-        throw new Error(`Unknown tabs action: ${action}`);
+        throw new BrowserBridgeError(
+          "INVALID_ARGUMENT",
+          `Unknown tabs action: ${action}`,
+        );
     }
-  }
-
-  /**
-   * 打开新标签页（兼容旧接口）
-   */
-  async openNewWindow(
-    url: string,
-    sessionPath?: string,
-    sessionId?: string,
-    createdBy?: string,
-  ): Promise<any> {
-    const metadata: Record<string, any> = {};
-    if (sessionPath) metadata.sessionPath = sessionPath;
-    if (sessionId) metadata.sessionId = sessionId;
-    if (createdBy) metadata.createdBy = createdBy;
-    const wid = await this.createWindow(
-      url,
-      Object.keys(metadata).length > 0 ? metadata : undefined,
-    );
-    if (createdBy) this.setCurrentTab(createdBy, wid);
-
-    return {
-      success: true,
-      windowId: wid,
-      tab_id: wid,
-      url: url,
-      message: "Tab created and set as current",
-    };
-  }
-
-  /**
-   * 关闭指定标签（兼容旧接口）
-   */
-  async closeWindow(windowId: string, createdBy?: string): Promise<any> {
-    try {
-      await this.ensureWindow(windowId, createdBy);
-    } catch (e: any) {
-      return { success: false, message: e.message };
-    }
-
-    if (!this.windowManager) {
-      return { success: false, message: "TabManager not initialized" };
-    }
-
-    const success = await this.windowManager.closeWindow(windowId);
-    return { success, message: success ? "Tab closed" : "Failed to close tab" };
   }
 
   /**
@@ -2018,7 +1836,10 @@ export class BrowserAutomationService {
    */
   async closeWindowsByCreator(createdBy: string): Promise<any> {
     if (!this.windowManager) {
-      return { success: false, message: "TabManager not initialized" };
+      throw new BrowserBridgeError(
+        "TABS_FAILED",
+        "TabManager not initialized",
+      );
     }
     const windows = this.getWindowList().filter(
       (w) => w.metadata?.createdBy === createdBy,
@@ -2026,73 +1847,120 @@ export class BrowserAutomationService {
     log.info(`Closing ${windows.length} windows for creator ${createdBy}`);
     for (const w of windows) {
       await this.windowManager.closeWindow(w.windowId);
+      this.clearGeneration(w.windowId);
     }
     this.clearCurrentTab(createdBy);
-    return { success: true, closed: windows.length };
+    return { closedCount: windows.length };
   }
 
   /**
   /**
    * 获取当前标签控制台日志
    */
-  async getConsoleLogs(createdBy: string): Promise<any> {
+  async getConsoleLogs(createdBy: string, clear: boolean = false): Promise<string[]> {
     if (!this.windowManager) {
-      return { success: false, message: "TabManager not initialized" };
+      throw new BrowserBridgeError(
+        "CONSOLE_FAILED",
+        "TabManager not initialized",
+      );
     }
     const { windowId: wid } = await this.ensureWindow("", createdBy);
-    // 复制一份再清空，避免返回的引用被 clearConsoleLogs 清空
+    // 默认只读：脚本可能需要多次读取同一段日志。显式 clear 才清空。
     const logs = [...this.windowManager.getConsoleLogs(wid)];
-    this.windowManager.clearConsoleLogs(wid);
-    return {
-      success: true,
-      tab_id: wid,
-      logs: logs || [],
-      recent: (logs || []).slice(-50).join("\n"),
-    };
+    if (clear) {
+      this.windowManager.clearConsoleLogs(wid);
+    }
+    return logs;
+  }
+
+  private isAbortedNavigationError(error: any): boolean {
+    const code = error?.code ?? error?.errno;
+    return (
+      code === -3 ||
+      String(error?.message || "").includes("ERR_ABORTED")
+    );
+  }
+
+  private async readReadyState(
+    webContents?: Electron.WebContents | null,
+  ): Promise<string | undefined> {
+    if (!webContents) return undefined;
+    try {
+      return await webContents.executeJavaScript("document.readyState");
+    } catch {
+      return undefined;
+    }
   }
 
   /**
-   * 处理待处理弹窗（alert/confirm/prompt）
-   * 不走 withSnapshotLock：JS 事件循环阻塞时 withSnapshotLock 会死锁，
-   * 但 CDP Page.handleJavaScriptDialog 走独立消息管道，在 JS 阻塞时仍可执行。
+   * 等待 DOM ready（document.readyState >= interactive）。
+   * 用于 navigate wait_until="domcontentloaded"，不等待子资源。
    */
-  async handleDialog(
-    accept: boolean,
-    promptText: string | undefined,
-    windowId: string,
-    createdBy?: string,
-  ): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-    if (!this.windowManager) {
-      throw new Error("TabManager not initialized");
-    }
-    const webContents = this.windowManager.getWebContents(wid);
-    if (!webContents) {
-      throw new Error(`Tab ${wid} not found`);
-    }
+  private async waitForDomReady(
+    webContents: Electron.WebContents,
+    timeout: number = 30000,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timer: NodeJS.Timeout;
 
-    const debuggerApi = webContents.debugger;
-    let attachedByUs = false;
-    try {
-      if (!debuggerApi.isAttached()) {
-        debuggerApi.attach("1.3");
-        attachedByUs = true;
+      const cleanup = () => {
+        clearTimeout(timer);
+        webContents.removeListener("dom-ready", onDomReady);
+        webContents.removeListener("did-fail-load", onFailLoad);
+      };
+      const succeed = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+      const onDomReady = () => succeed();
+      const onFailLoad = (
+        _event: Electron.Event,
+        errorCode: number,
+        errorDescription: string,
+        _validatedURL: string,
+        isMainFrame: boolean,
+      ) => {
+        if (errorCode === -3 || !isMainFrame) return;
+        fail(
+          new BrowserBridgeError(
+            "NAVIGATION_FAILED",
+            `Page DOM load failed: ${errorCode} - ${errorDescription}`,
+            { errorCode },
+          ),
+        );
+      };
+
+      timer = setTimeout(
+        () =>
+          fail(
+            new BrowserBridgeError(
+              "NAVIGATION_TIMEOUT",
+              `DOM ready timeout after ${timeout}ms`,
+              { timeout },
+            ),
+          ),
+        timeout,
+      );
+
+      // 页面可能已经完成 DOM 解析
+      const currentUrl = webContents.getURL();
+      if (!webContents.isLoading() && currentUrl !== "") {
+        succeed();
+        return;
       }
-      await debuggerApi.sendCommand("Page.handleJavaScriptDialog", {
-        accept,
-        promptText: promptText || "",
-      });
-      this.windowManager.clearPendingDialog(wid);
-      log.info(`Dialog handled on tab ${wid}: accept=${accept}`);
-      return { success: true, windowId: wid, dialogHandled: true };
-    } catch (err: any) {
-      log.error(`Failed to handle dialog on tab ${wid}:`, err.message);
-      return { success: false, windowId: wid, error: err.message };
-    } finally {
-      if (attachedByUs && debuggerApi.isAttached()) {
-        try { debuggerApi.detach(); } catch {}
-      }
-    }
+
+      webContents.on("dom-ready", onDomReady);
+      webContents.on("did-fail-load", onFailLoad);
+    });
   }
 
   /**
@@ -2133,10 +2001,26 @@ export class BrowserAutomationService {
       ) => {
         // ERR_ABORTED 常由重定向/JS 跳转触发；子框架失败也不代表主页面失败。
         if (errorCode === -3 || !isMainFrame) return;
-        fail(new Error(`Page load failed: ${errorCode} - ${errorDescription}`));
+        fail(
+          new BrowserBridgeError(
+            "NAVIGATION_FAILED",
+            `Page load failed: ${errorCode} - ${errorDescription}`,
+            { errorCode },
+          ),
+        );
       };
 
-      timer = setTimeout(() => fail(new Error("Page load timeout")), timeout);
+      timer = setTimeout(
+        () =>
+          fail(
+            new BrowserBridgeError(
+              "NAVIGATION_TIMEOUT",
+              `Page load timeout after ${timeout}ms`,
+              { timeout },
+            ),
+          ),
+        timeout,
+      );
 
       const currentUrl = webContents.getURL();
       if (
@@ -2165,8 +2049,6 @@ export class BrowserAutomationService {
 
     try {
       switch (method) {
-        // ── 新统一接口 ──
-
         case "browser_navigate":
           return await this.navigate(
             params.url,
@@ -2174,6 +2056,7 @@ export class BrowserAutomationService {
             params.created_by,
             params.session_path,
             params.session_id,
+            params.wait_until || "load",
           );
 
         case "browser_tabs":
@@ -2188,22 +2071,16 @@ export class BrowserAutomationService {
           return await this.snapshot(
             params.type || "simple",
             params.created_by,
+            params.wait_for_load === true,
           );
-
-        // ── 保留接口（操作当前标签）──
 
         case "browser_evaluate":
           return await this.executeJavaScript(
             params.code,
             "",
-            params.is_async || false,
             params.created_by,
-          );
-
-        case "browser_page_text":
-          return await this.getPageText(
-            "",
-            params.created_by,
+            params.timeout_ms,
+            params.mutates !== false,
           );
 
         case "browser_wait":
@@ -2212,6 +2089,8 @@ export class BrowserAutomationService {
             params.timeout,
             "",
             params.created_by,
+            params.generation,
+            params.state || "attached",
           );
 
         case "browser_click":
@@ -2219,7 +2098,15 @@ export class BrowserAutomationService {
             params.selector,
             "",
             params.created_by,
-            params.full_simulation || false,
+            {
+              button: params.button,
+              clickCount: params.click_count,
+              modifiers: params.modifiers,
+              force: params.force === true,
+              timeout: params.timeout,
+              trusted: resolveTrusted(params),
+            },
+            params.generation,
           );
 
         case "browser_input":
@@ -2228,38 +2115,94 @@ export class BrowserAutomationService {
             params.value,
             "",
             params.created_by,
-            params.full_simulation || false,
+            {
+              force: params.force === true,
+              timeout: params.timeout,
+              trusted: resolveTrusted(params),
+            },
+            params.generation,
           );
 
-        case "browser_interact":
-          if (params.action === "dialog") {
-            return await this.handleDialog(
-              !!params.accept,
-              params.prompt_text,
-              "",
-              params.created_by,
-            );
-          }
-          if (params.action === "click") {
-            return await this.click(
-              params.selector,
-              "",
-              params.created_by,
-              params.full_simulation || false,
-            );
-          } else {
-            return await this.fillForm(
-              params.selector,
-              params.value,
-              "",
-              params.created_by,
-              params.full_simulation || false,
-            );
-          }
+        case "browser_hover":
+          return await this.hover(
+            params.selector,
+            "",
+            params.created_by,
+            {
+              force: params.force === true,
+              timeout: params.timeout,
+              trusted: resolveTrusted(params),
+            },
+            params.generation,
+          );
+
+        case "browser_press":
+          return await this.press(
+            params.key,
+            "",
+            params.created_by,
+            {
+              selector: params.selector,
+              modifiers: params.modifiers,
+              timeout: params.timeout,
+              trusted: resolveTrusted(params),
+            },
+            params.generation,
+          );
+
+        case "browser_scroll":
+          return await this.scroll(
+            "",
+            params.created_by,
+            {
+              selector: params.selector,
+              deltaX: params.delta_x,
+              deltaY: params.delta_y,
+              timeout: params.timeout,
+            },
+            params.generation,
+          );
+
+        case "browser_select":
+          return await this.selectOption(
+            params.selector,
+            params.values,
+            "",
+            params.created_by,
+            {
+              force: params.force === true,
+              timeout: params.timeout,
+            },
+            params.generation,
+          );
+
+        case "browser_check":
+          return await this.check(
+            params.selector,
+            params.checked !== false,
+            "",
+            params.created_by,
+            {
+              button: "left",
+              force: params.force === true,
+              timeout: params.timeout,
+              trusted: resolveTrusted(params),
+            },
+            params.generation,
+          );
+
+        case "browser_element_state":
+          return await this.elementState(
+            params.selector,
+            "",
+            params.created_by,
+            params.generation,
+          );
 
         case "browser_console":
           return await this.getConsoleLogs(
             params.created_by,
+            params.clear === true,
           );
 
         case "browser_screenshot":
@@ -2270,71 +2213,36 @@ export class BrowserAutomationService {
             params.full_page || false,
           );
 
-        case "browser_history":
-        case "browser_navigate_history": {
+        case "browser_history": {
           if (params.action === "back") {
-            return await this.goBack(
-              "",
-              params.created_by,
-            );
-          } else {
-            return await this.goForward(
-              "",
-              params.created_by,
-            );
+            return await this.goBack("", params.created_by);
           }
+          if (params.action === "forward") {
+            return await this.goForward("", params.created_by);
+          }
+          if (params.action === "reload") {
+            return await this.reload("", params.created_by);
+          }
+          throw new BrowserBridgeError(
+            "INVALID_ARGUMENT",
+            `browser_history action must be "back", "forward", or "reload"`,
+            { action: params.action },
+          );
         }
-
-        case "browser_reload":
-          return await this.reload(
-            "",
-            params.created_by,
-          );
-
-        // ── 兼容旧接口（仍接受 window_id）──
-
-        case "browser_new_window":
-          return await this.openNewWindow(
-            params?.url,
-            params?.session_path,
-            params?.session_id,
-            params?.created_by,
-          );
-
-        case "browser_page_struct":
-          return await this.snapshot("struct", params.created_by);
-
-        case "browser_page_summary":
-          return await this.snapshot("summary", params.created_by);
-
-        case "browser_close":
-          return await this.tabsManage(
-            "close",
-            params.created_by,
-            undefined,
-            params.window_id,
-          );
 
         case "browser_close_by_creator":
           return await this.closeWindowsByCreator(params.created_by);
 
-        case "browser_windows":
-          return await this.tabsManage("list", params.created_by || params.session_id);
-
         default:
-          throw new Error(`Unknown method: ${method}`);
+          throw new BrowserBridgeError(
+            "INVALID_ARGUMENT",
+            `Unknown method: ${method}`,
+          );
       }
     } catch (error: any) {
       log.error(`Error handling tool call ${method}:`, error);
       throw error;
     }
-  }
-
-  /**
-   * 检查服务是否就绪
-   */
-  isReady(): boolean {
-    return this.windowManager !== null;
   }
 
   /**
@@ -2350,48 +2258,15 @@ export class BrowserAutomationService {
       .getWindowList()
       .filter((w) => w.windowId !== "main_app");
   }
+}
 
-  /**
-   * 获取当前窗口数量
-   */
-  getWindowCount(): number {
-    if (!this.windowManager) {
-      return 0;
-    }
-    return this.windowManager
-      .getWindowList()
-      .filter((w) => w.windowId !== "main_app").length;
-  }
-  private truncateConsoleLogs(
-    logs: Array<{ level: number; message: string }>,
-    maxChars: number,
-  ): Array<{ level: number; message: string }> {
-    if (logs.length === 0) return [];
+function resolveTrusted(params: any): boolean | undefined {
+  if (params?.trusted !== undefined) return params.trusted === true;
+  if (params?.full_simulation !== undefined) return params.full_simulation === true;
+  return undefined;
+}
 
-    let totalChars = 0;
-    const selectedLogs: Array<{ level: number; message: string }> = [];
-
-    // 从后往前遍历，保留最近的日志
-    const reversedLogs = [...logs].reverse();
-
-    for (const log of reversedLogs) {
-      const levelNames: Record<number, string> = {
-        0: "verbose",
-        1: "info",
-        2: "warning",
-        3: "error",
-      };
-      const levelName = levelNames[log.level] || "unknown";
-      const logLine = `[${levelName}] ${log.message}`;
-
-      if (totalChars + logLine.length <= maxChars) {
-        selectedLogs.unshift(log);
-        totalChars += logLine.length + 1; // +1 for newline
-      } else {
-        break;
-      }
-    }
-
-    return selectedLogs;
-  }
+function isPathInside(base: string, target: string): boolean {
+  const relative = path.relative(base, target);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }

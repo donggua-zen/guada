@@ -18,6 +18,24 @@ interface PendingRequest {
   resolve: (v: any) => void;
   reject: (r: any) => void;
   timeout: NodeJS.Timeout;
+  method: string;
+  /** 移除 abort 监听，避免成功响应后监听器累积 */
+  cleanupAbort?: () => void;
+}
+
+/**
+ * Bridge 请求错误：保留 Electron 侧返回的 code/details。
+ */
+export class BridgeRequestError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly details?: unknown,
+    public readonly method?: string,
+  ) {
+    super(message);
+    this.name = "BridgeRequestError";
+  }
 }
 
 /**
@@ -88,6 +106,22 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
     }
     this.connected = false;
     this.authenticated = false;
+    this.rejectAllPending(
+      "BRIDGE_DISCONNECTED",
+      "Bridge client destroyed",
+    );
+  }
+
+  /** 断线/销毁时立即失败所有在途请求，避免挂到 120s 超时 */
+  private rejectAllPending(code: string, message: string): void {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timeout);
+      pending.cleanupAbort?.();
+      pending.reject(
+        new BridgeRequestError(code, message, undefined, pending.method),
+      );
+    }
+    this.pending.clear();
   }
 
   /**
@@ -150,6 +184,10 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
       this.connected = false;
       this.authenticated = false;
       this.logger.warn("Bridge socket closed");
+      this.rejectAllPending(
+        "BRIDGE_DISCONNECTED",
+        "Bridge socket closed before response",
+      );
       this.exitIfHostGone();
       this.scheduleReconnect();
     });
@@ -208,9 +246,28 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
       const pending = this.pending.get(msg.id);
       if (pending) {
         clearTimeout(pending.timeout);
+        pending.cleanupAbort?.();
         this.pending.delete(msg.id);
         if (msg.error) {
-          pending.reject(new Error(msg.error));
+          if (msg.error && typeof msg.error === "object") {
+            pending.reject(
+              new BridgeRequestError(
+                String(msg.error.code || "BRIDGE_ERROR"),
+                String(msg.error.message || "Bridge request failed"),
+                msg.error.details,
+                pending.method,
+              ),
+            );
+          } else {
+            pending.reject(
+              new BridgeRequestError(
+                "BRIDGE_ERROR",
+                String(msg.error),
+                undefined,
+                pending.method,
+              ),
+            );
+          }
         } else {
           pending.resolve(msg.result);
         }
@@ -229,9 +286,19 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
   /**
    * 发送请求并等待响应
    */
-  async request(method: string, params: any, abortSignal?: AbortSignal): Promise<any> {
+  async request(
+    method: string,
+    params: any,
+    abortSignal?: AbortSignal,
+    timeoutMs: number = 120000,
+  ): Promise<any> {
     if (!this.connected || !this.socket) {
-      throw new Error("Bridge not connected");
+      throw new BridgeRequestError(
+        "BRIDGE_DISCONNECTED",
+        "Bridge not connected",
+        undefined,
+        method,
+      );
     }
 
     const id = String(++this.requestCounter);
@@ -240,14 +307,30 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
     let reject!: (r: any) => void;
     const promise = new Promise<any>((resolve, rj) => {
       reject = rj;
-      this.pending.set(id, { resolve, reject: rj, timeout: null as any });
+      this.pending.set(id, {
+        resolve,
+        reject: rj,
+        timeout: null as any,
+        method,
+      });
     });
 
     // 超时定时器
     const timeout = setTimeout(() => {
-      this.pending.delete(id);
-      reject(new Error(`Bridge request timeout: ${method}`));
-    }, 120000);
+      const pending = this.pending.get(id);
+      if (pending) {
+        pending.cleanupAbort?.();
+        this.pending.delete(id);
+      }
+      reject(
+        new BridgeRequestError(
+          "BRIDGE_TIMEOUT",
+          `Bridge request timeout after ${timeoutMs}ms: ${method}`,
+          { timeoutMs },
+          method,
+        ),
+      );
+    }, timeoutMs);
     // 更新 pending 中的 timeout 引用
     this.pending.get(id)!.timeout = timeout;
 
@@ -256,14 +339,32 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
       if (abortSignal.aborted) {
         clearTimeout(timeout);
         this.pending.delete(id);
-        throw new Error(`Aborted: ${method}`);
+        throw new BridgeRequestError(
+          "CANCELLED",
+          `Aborted: ${method}`,
+          undefined,
+          method,
+        );
       }
-      abortSignal.addEventListener("abort", () => {
+      const onAbort = () => {
         clearTimeout(timeout);
         if (this.pending.delete(id)) {
-          reject(new Error(`Aborted: ${method}`));
+          reject(
+            new BridgeRequestError(
+              "CANCELLED",
+              `Aborted: ${method}`,
+              undefined,
+              method,
+            ),
+          );
         }
-      }, { once: true });
+      };
+      abortSignal.addEventListener("abort", onAbort, { once: true });
+      const pending = this.pending.get(id);
+      if (pending) {
+        pending.cleanupAbort = () =>
+          abortSignal.removeEventListener("abort", onAbort);
+      }
     }
 
     this.send({ type: "request", id, method, params });

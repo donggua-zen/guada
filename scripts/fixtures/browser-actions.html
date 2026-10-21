@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Browser Actions Fixture</title>
+  <style>
+    body { margin: 0; padding: 16px; font-family: sans-serif; }
+    #covered-wrap { position: relative; width: 200px; height: 52px; margin-top: 8px; }
+    #covered { position: absolute; inset: 0; }
+    #overlay { position: absolute; inset: 0; z-index: 2; background: rgba(255, 0, 0, 0.15); }
+    #hidden { display: none; }
+    #delayed { display: none; }
+    #menu { display: none; position: absolute; left: 16px; top: 260px; padding: 4px 8px; background: #eee; }
+    #scroller { width: 200px; height: 60px; overflow: auto; border: 1px solid #ccc; }
+    #scroller-content { height: 800px; }
+    #removable { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <button id="normal">Normal</button>
+  <button id="multi">Multi</button>
+  <button id="disabled" disabled>Disabled</button>
+  <button id="hidden">Hidden</button>
+  <div id="covered-wrap">
+    <button id="covered">Covered</button>
+    <div id="overlay"></div>
+  </div>
+  <button id="delayed">Delayed</button>
+  <button id="removable">Removable</button>
+  <button id="hover-target">Hover me</button>
+  <div id="menu">Menu</div>
+
+  <label for="text-input">Text</label>
+  <input id="text-input" type="text" />
+  <label for="ta">Textarea</label>
+  <textarea id="ta"></textarea>
+  <div id="ce" contenteditable="true" style="border:1px solid #ccc; min-height:32px"></div>
+
+  <select id="select">
+    <option value="us">United States</option>
+    <option value="cn">China</option>
+    <option value="jp">Japan</option>
+  </select>
+
+  <label><input id="check" type="checkbox" /> Check me</label>
+  <label><input id="radio" type="radio" name="r" /> Radio</label>
+
+  <input id="keylog" type="text" aria-label="Key log" />
+
+  <div id="scroller"><div id="scroller-content">scroll content</div></div>
+
+  <script>
+    window.__events = [];
+    window.__clicks = 0;
+    window.__overlayClicks = 0;
+    window.__coveredClicks = 0;
+    window.__dblClicks = 0;
+    window.__contextMenus = 0;
+
+    function record(name, event) {
+      window.__events.push({ name: name, trusted: !!(event && event.isTrusted) });
+    }
+
+    document.getElementById('normal').addEventListener('click', function (e) {
+      window.__clicks += 1;
+      record('normal-click', e);
+    });
+    document.getElementById('covered').addEventListener('click', function (e) {
+      window.__coveredClicks += 1;
+      record('covered-click', e);
+    });
+    document.getElementById('overlay').addEventListener('click', function (e) {
+      window.__overlayClicks += 1;
+      record('overlay-click', e);
+    });
+    document.getElementById('multi').addEventListener('dblclick', function (e) {
+      window.__dblClicks += 1;
+      record('dblclick', e);
+    });
+    document.getElementById('multi').addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      window.__contextMenus += 1;
+      record('contextmenu', e);
+    });
+
+    document.getElementById('hover-target').addEventListener('mouseover', function (e) {
+      document.getElementById('menu').style.display = 'block';
+      record('hover', e);
+    });
+
+    document.getElementById('text-input').addEventListener('input', function (e) {
+      record('text-input', e);
+    });
+    document.getElementById('text-input').addEventListener('change', function (e) {
+      record('text-change', e);
+    });
+    document.getElementById('ta').addEventListener('input', function (e) {
+      record('ta-input', e);
+    });
+    document.getElementById('ce').addEventListener('input', function (e) {
+      record('ce-input', e);
+    });
+    document.getElementById('select').addEventListener('change', function (e) {
+      record('select-change', e);
+    });
+    document.getElementById('check').addEventListener('change', function (e) {
+      record('check-change', e);
+    });
+    document.getElementById('keylog').addEventListener('keydown', function (e) {
+      window.__events.push({ name: 'keydown', key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, trusted: e.isTrusted });
+    });
+
+    setTimeout(function () {
+      document.getElementById('removable').remove();
+    }, 250);
+    setTimeout(function () {
+      document.getElementById('delayed').style.display = 'inline-block';
+    }, 500);
+  </script>
+</body>
+</html>
