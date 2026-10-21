@@ -3,8 +3,8 @@
   "browserScript.description": "用 JavaScript 编排多步骤浏览器自动化",
   "browserScript.toolkitName": "浏览器脚本",
   "browserScript.toolkitDescription": "用 browser_run 执行多步骤浏览器自动化脚本",
-  "browser_run.executing": "正在运行浏览器脚本",
-  "browser_run.completed": "浏览器脚本已完成",
-  "browser_run.aggregate.executing": "正在运行{n}个浏览器脚本",
-  "browser_run.aggregate.completed": "已完成{n}个浏览器脚本"
+  "browser_run.executing": "正在操作浏览器",
+  "browser_run.completed": "已操作浏览器",
+  "browser_run.aggregate.executing": "正在操作{n}个浏览器",
+  "browser_run.aggregate.completed": "已操作{n}个浏览器"
 }
