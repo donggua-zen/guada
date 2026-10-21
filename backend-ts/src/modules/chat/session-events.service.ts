@@ -420,6 +420,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       case "compression_error": return EVENT_METHOD.STREAM_COMPRESSION_ERROR;
       case "compression_end": return EVENT_METHOD.STREAM_COMPRESSION_END;
       case "compaction_summary": return EVENT_METHOD.STREAM_COMPACTION_SUMMARY;
+      case "context_window_changed": return EVENT_METHOD.STREAM_CONTEXT_WINDOW_CHANGED;
       // 统一交互（审批/询问共用）
       case "ask_requested": return EVENT_METHOD.STREAM_ASK_REQUESTED;
       case "ask_resolved": return EVENT_METHOD.STREAM_ASK_RESOLVED;

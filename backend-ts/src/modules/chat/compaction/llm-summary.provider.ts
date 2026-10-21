@@ -3,13 +3,12 @@
  *
  * 对齐 deepseek-harness summarizer：
  * - COMPACTION_INSTRUCTION 作为**最后一条 user 消息**（非独立 system prompt）
- * - KV 缓存友好（buildSummarizationInput 语义）：请求复用会话真实前缀——
- *   `[...prelude, ...被压缩区域消息, 指令]` + 相同的工具定义，使该调用是
- *   "压缩前最后一次主请求"的真前缀（head-anchored 压缩保证区域=请求前导），
- *   命中 provider 的 warm prefix cache；指令是唯一 novel 输入
+ * - 前缀缓存可复用时（同模型、上一次主请求即当前模型）走 KV 缓存友好模式：
+ *   `[...prelude, ...被压缩区域消息, 指令]` + 相同的工具定义，命中 warm prefix cache；
+ *   模型刚切换 / 使用专用压缩模型时前缀缓存已失效，改走"序列化单 user 消息"分支
+ *   （跳过思考、截断工具结果、图片/文件只留标记），显著缩小摘要请求。
  * - 流式传输 + BlockAssembler 累积（对齐 DSH ctx.llm.stream()），拿 usage/finishReason
  * - 增量合并旧 <compacted-summary> 检查点（从历史 compaction 事件提取）
- * - 无 prefix / 无主请求消息时可回退为"序列化单 user 消息"方案（不破坏现有路径）
  */
 import { Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
@@ -24,7 +23,7 @@ import type {
 } from '../../tools/interfaces/tool-provider.interface';
 import type { LLMCompletionParams } from '../../llm-core/types/llm.types';
 import type { SummaryInput, SummaryProvider, SummaryResult } from './compression-engine';
-import { kbRefsToText } from '../../../common/utils/kb-ref.util';
+import { serializeSummaryMessages } from './summary-serializer';
 
 /** 摘要模型引用（模型名 + provider 运行时配置 + 能力配置 + 档位菜单） */
 export interface SummaryModelRef {
@@ -55,10 +54,12 @@ export interface LLMSummaryProviderOptions {
    * 传入后 generate 用它组装 completions 参数，仅 override system/tools（前缀一致）与 maxTokens。
    */
   buildParams?: (messages: Message[]) => LLMCompletionParams;
+  /**
+   * 摘要模型与会话模型不同（专用压缩模型）：buildParams 产出的是主请求模型/供应商，
+   * 必须用摘要模型自身覆盖 model/provider/thinkingEffort/能力，否则摘要请求会发错端点。
+   */
+  overrideModel?: boolean;
 }
-
-/** 单条 tool-result 入摘要的最大长度（回退序列化方案用） */
-const MAX_TOOL_RESULT_CHARS = 2000;
 
 /** KV 前缀模式下 shadowed 消息为空时的占位兜底 */
 const EMPTY_REGION_PLACEHOLDER =
@@ -124,19 +125,24 @@ export class LLMSummaryProvider implements SummaryProvider {
    */
   async generate(input: SummaryInput): Promise<SummaryResult> {
     const previousSummary = extractPreviousSummary(input.allMessages);
-
+    // 无稳定前缀（模型刚切换/专用压缩模型）→ 序列化拼接；只算一次，诊断与请求共用
+    const serializedText = this.options.prefix
+      ? undefined
+      : serializeSummaryMessages(input.shadowed);
     const requestMessages = this.buildRequestMessages(
       previousSummary,
       input.shadowed,
+      serializedText,
+      input.instructions,
     );
     const maxSummaryTokens = this.options.maxSummaryTokens ?? 2000;
 
     this.logger.debug(
-      `[summary] generating (model=${this.model.modelName}, shadowed=${input.shadowed.length} msgs, maxTokens=${maxSummaryTokens}, kvPrefix=${this.options.prefix ? 'yes' : 'no'})`,
+      `[summary] generating (model=${this.model.modelName}, shadowed=${input.shadowed.length} msgs, maxTokens=${maxSummaryTokens}, mode=${this.options.prefix ? 'prefixed' : 'serialized'})`,
     );
 
     // 摘要请求规模诊断（只读，调用前打印——失败时也有数）：
-    // 摘要请求 = 前缀（system+tools） + 遮蔽区 + 指令；字符量按 ~3.5 字符/token 粗估。
+    // prefixed：前缀（system+tools）+ 遮蔽区原消息 + 指令；serialized：单条 user 消息 + 指令。
     {
       const shadowedChars = input.shadowed.reduce(
         (n, m) => n + JSON.stringify(m.content ?? '').length,
@@ -145,13 +151,19 @@ export class LLMSummaryProvider implements SummaryProvider {
       const instruction =
         requestMessages.messages[requestMessages.messages.length - 1];
       const instructionChars = JSON.stringify(instruction?.content ?? '').length;
+      const customInstructionsChars = input.instructions?.length ?? 0;
       const prefixSystemChars = this.options.prefix?.system?.length ?? 0;
       const prefixTools = this.options.prefix?.tools?.length ?? 0;
       const approx = (chars: number) => Math.ceil(chars / 3.5);
       this.logger.log(
-        `[compact.diag.summary] shadowedMsgs=${input.shadowed.length} shadowedChars=${shadowedChars}` +
+        `[compact.diag.summary] mode=${this.options.prefix ? 'prefixed' : 'serialized'}` +
+          ` shadowedMsgs=${input.shadowed.length} shadowedChars=${shadowedChars}` +
+          (serializedText === undefined
+            ? ''
+            : ` serializedChars=${serializedText.length}`) +
           ` prefixSystemChars=${prefixSystemChars} prefixTools=${prefixTools} instructionChars=${instructionChars}` +
-          ` approxPrefixTokens=${approx(prefixSystemChars)} approxShadowedTokens=${approx(shadowedChars)}` +
+          ` customInstructionsChars=${customInstructionsChars}` +
+          ` approxPrefixTokens=${approx(prefixSystemChars)} approxShadowedTokens=${approx(serializedText?.length ?? shadowedChars)}` +
           ` maxTokens=${maxSummaryTokens}`,
       );
     }
@@ -164,6 +176,26 @@ export class LLMSummaryProvider implements SummaryProvider {
       params = this.options.buildParams(requestMessages.messages);
       if (requestMessages.system !== undefined) params.system = requestMessages.system;
       if (requestMessages.tools !== undefined) params.tools = requestMessages.tools;
+      if (this.options.prefix === undefined) {
+        // 序列化分支没有"主请求前缀"可复用：不再携带主请求的 system/tools
+        //（摘要指令自包含；也避免把主模型的工具 schema 发给专用压缩模型）。
+        params.system = requestMessages.system;
+        params.tools = requestMessages.tools;
+        // 无缓存可保：摘要调用不需要思考模式（与手工组装分支一致）。
+        params.thinkingEffort = resolveThinkingEffort(this.model, 'none');
+      }
+      if (this.options.overrideModel) {
+        // 专用压缩模型：buildParams 的 model/provider/能力来自会话主模型，必须用摘要模型覆盖，
+        // 否则摘要请求会发到主模型端点（预算按摘要模型窗口算、请求却走主模型）。
+        params.model = this.model.modelName || params.model;
+        params.providerConfig = this.model.provider ?? params.providerConfig;
+        params.modelCapabilities = {
+          supportsImageInput:
+            this.model.config?.inputCapabilities?.includes('image') ?? false,
+        };
+        params.thinkingEffort = resolveThinkingEffort(this.model, 'none');
+        params.temperature = this.model.config?.temperature ?? 0.4;
+      }
       params.maxTokens = maxSummaryTokens;
     } else {
       params = {
@@ -220,13 +252,20 @@ export class LLMSummaryProvider implements SummaryProvider {
   private buildRequestMessages(
     previousSummary: string | undefined,
     shadowed: Message[],
+    serializedText?: string,
+    instructions?: string,
   ): { system?: string; messages: Message[]; tools?: ToolDefinition[] } {
     const checkpointBlock = previousSummary
       ? `<compacted-summary>\n${previousSummary}\n</compacted-summary>\n\n`
       : '';
+    // 手动命令的附加指令（/compact <instructions>）：只作为本次摘要请求的临时指令，
+    // 不写用户消息、不落库、不进对话历史（对齐 zcode 的 Additional Instructions）。
+    const additionalBlock = instructions?.trim()
+      ? `\n\nAdditional Instructions:\n${instructions.trim()}`
+      : '';
     // 指令以 <system_reminder> 标签包裹（GuaDa 系统级注入惯例）
     const instruction =
-      `<system_reminder>\n${COMPACTION_INSTRUCTION}\n\n${checkpointBlock}Compression checkpoint:\n</system_reminder>`;
+      `<system_reminder>\n${COMPACTION_INSTRUCTION}${additionalBlock}\n\n${checkpointBlock}Compression checkpoint:\n</system_reminder>`;
 
     if (this.options.prefix) {
       // KV 前缀模式：system 走 envelope 独立字段（对齐 DSH SummarizationInput），
@@ -245,7 +284,7 @@ export class LLMSummaryProvider implements SummaryProvider {
     }
 
     // 回退模式：序列化对话为单条 user 消息
-    const shadowedText = serializeMessages(shadowed);
+    const shadowedText = serializedText ?? serializeSummaryMessages(shadowed);
     return {
       messages: [
         this.instructionMessage(
@@ -291,56 +330,4 @@ function extractPreviousSummary(messages: Message[]): string | undefined {
     if (compactInfo?.summary) return compactInfo.summary;
   }
   return undefined;
-}
-
-/** 将待遮蔽消息序列化为摘要输入的紧凑文本（回退模式） */
-function serializeMessages(messages: Message[]): string {
-  const lines: string[] = [];
-  for (const msg of messages) {
-    // 消息角色已无 event（检查点是 user + source.plugin='compact'，自然进入序列化——模型看到旧摘要做增量合并）
-    const parts: string[] = [];
-    for (const block of msg.content) {
-      switch (block.type) {
-        case 'text':
-          parts.push(block.text);
-          break;
-        case 'reasoning':
-          break; // 思考块不入摘要（体积大且非事实）
-        case 'tool-call':
-          parts.push(`[tool_call ${block.name}(${block.arguments})]`);
-          break;
-        case 'tool-result': {
-          const content = block.isError
-            ? `[error] ${block.content}`
-            : block.content;
-          parts.push(
-            `[tool_result ${block.name}] ${truncate(content, MAX_TOOL_RESULT_CHARS)}`,
-          );
-          // 工具图片不拆分落库：在摘要里保留轻量标记，避免"工具产出过图片"这一事实丢失
-          for (const image of block.images ?? []) {
-            parts.push(`[image ${image.name ?? '(attachment)'}]`);
-          }
-          break;
-        }
-        case 'image':
-          parts.push(`[image ${block.attachment.name ?? '(attachment)'}]`);
-          break;
-        case 'file':
-          parts.push(`[file ${block.attachment.name ?? '(attachment)'}]`);
-          break;
-        case 'kb-ref':
-          // 与请求视图投影口径一致（kbRefProjectionStep）：引用清单进摘要
-          parts.push(kbRefsToText(block.kbRefs));
-          break;
-      }
-    }
-    const text = parts.join('\n').replace(/\n\s*\n/g, '\n').trim();
-    if (text) lines.push(`${msg.role}: ${text}`);
-  }
-  return lines.join('\n');
-}
-
-function truncate(str: string, max: number): string {
-  if (str.length <= max) return str;
-  return `${str.slice(0, Math.floor(max / 2))}...[omitted ${str.length - max} chars]...${str.slice(-Math.floor(max / 2))}`;
 }

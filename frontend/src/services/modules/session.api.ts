@@ -294,7 +294,14 @@ export interface SessionApi {
 
 
 
-  compressSession(sessionId: string): Promise<{ success: boolean; started: boolean }>;
+  /**
+   * 手动压缩会话上下文。
+   * @param instructions `/compact <instructions>` 的附加指令：只拼进摘要提示词，不落库
+   */
+  compressSession(
+    sessionId: string,
+    instructions?: string,
+  ): Promise<{ success: boolean; started: boolean }>;
   fetchSessionSummaries(
     sessionId: string,
     limit?: number,
@@ -545,9 +552,14 @@ export const sessionApi: SessionApi = {
     });
   },
 
-  async compressSession(this: ApiContext, sessionId: string) {
+  async compressSession(
+    this: ApiContext,
+    sessionId: string,
+    instructions?: string,
+  ) {
     return await this._request(`/sessions/${sessionId}/compress`, {
       method: "POST",
+      data: instructions === undefined ? {} : { instructions },
     });
   },
 

@@ -14,7 +14,7 @@
 import type { Message } from '../../../common/types/conversation.types';
 import type { ToolDefinition } from '../../tools/interfaces/tool-provider.interface';
 import type { ModelConfig } from '../session-context';
-import type { SummaryMode } from './compression-engine';
+import type { SummaryDegradation, SummaryMode } from './compression-engine';
 
 /** 合并后的压缩配置（档位折算产物；对齐 DSH thresholdRatio + retainRatio） */
 export interface CompactionConfig {
@@ -62,6 +62,8 @@ export interface CompactWrite {
   summary: string;
   mode?: string;
   usage?: import('../../../common/types/stream-chunk.types').StreamUsage;
+  /** 摘要输入降级统计（剥离/丢弃过内容时写入；随 compaction/summary 持久化供前端摘要卡展示） */
+  degraded?: SummaryDegradation;
   /** 保留尾裁剪的节省清单（锚点之前的条目需显式扣减；遮蔽区由 shadowedTokens 结算） */
   savings?: readonly CompressionSaving[];
 }

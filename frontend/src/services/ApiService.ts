@@ -16,7 +16,11 @@ import { useStorage } from "@vueuse/core";
 import { getClientId } from "@/utils/clientId";
 import { NetworkError, AuthError, ApiError } from "@/utils/errors";
 import { t } from "@/locales";
-import { ChatStreamService, type ChatStreamParams } from "./modules/ChatStreamService";
+import {
+  ChatStreamService,
+  type ChatStreamParams,
+  type ChatStreamResponse,
+} from "./modules/ChatStreamService";
 import {
   WorkspaceWatcherService,
   type FileChangeEvent,
@@ -258,7 +262,7 @@ class ApiService {
 
   // ========== 流式聊天 ==========
   /** 触发后端流(合并后为 RPC,立即返回;流式事件经全局 SSE → StreamEventHub) */
-  async chat(params: ChatStreamParams): Promise<void> {
+  async chat(params: ChatStreamParams): Promise<ChatStreamResponse> {
     return this.chatStreamService.chat(params);
   }
 

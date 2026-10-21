@@ -258,6 +258,17 @@ export default {
     contextPruned: '已裁剪 {count} 处超长工具结果',
     contextThinkingStripped: '已剥离 {count} 条历史思考',
     contextNotCompacted: '未压缩',
+    // EventCard.vue 上下文窗口变化提示（模型切换 / 会话上限调整）
+    contextWindowNoticeTitle: '上下文窗口提示',
+    contextWindowChanged: '已切换到 {model}：上下文窗口从 {previous} 降至 {current}。',
+    contextWindowCurrent: '当前模型 {model} 的上下文窗口为 {current}。',
+    contextWindowOver: '当前历史约 {used} tokens，已超过新窗口；',
+    contextWindowNearLimit: '当前历史约 {used} tokens，已达到 {ratio}% 压缩触发线；',
+    contextWindowWillCompact: '将尝试自动压缩，必要时省略工具结果/思考并丢弃最早内容。',
+    contextWindowAutoCompactOff: '自动压缩未启用，请手动压缩或删除历史。',
+    // EventCard.vue 摘要输入降级说明（剥离/丢弃过内容）
+    contextDegradedStripped: '本次压缩为适配窗口省略了 {count} 处工具结果/思考内容。',
+    contextDegradedTruncated: '本次压缩丢弃了最早的 {rounds} 轮（约 {tokens} tokens），摘要未覆盖这部分内容。',
     compressSkip: {
       belowThreshold: '未达触发线',
       pruneSufficient: '裁剪后已低于触发线',
@@ -517,6 +528,12 @@ export default {
     deleteSuccess: '删除成功',
     deleteFailed: '删除失败',
     createWindowFailed: '创建窗口失败',
+  },
+
+  // ── 本地斜杠命令（/compact 等，不进 LLM） ──
+  command: {
+    compactDescription: '压缩当前会话上下文（可选：附加摘要要求）',
+    attachmentsNotSupported: '斜杠命令不支持附件，请移除附件后重试',
   },
 
   // ── 备忘录 ──

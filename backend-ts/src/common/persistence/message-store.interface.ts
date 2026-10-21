@@ -199,6 +199,8 @@ export interface IMessageStore {
       summary: string;
       summaryMessageId?: string;
       mode?: string;
+      /** 摘要输入降级统计（剥离/丢弃过内容时写入 compaction/summary） */
+      degraded?: import('./types').CompactionDegradationData;
       /** 摘要调用 usage（流式累积，对齐 DSH SummaryResult） */
       usage?: import('../types/stream-chunk.types').StreamUsage;
       /** 压缩后完整请求 token（compaction/end 携带，前端上下文占用锚点） */

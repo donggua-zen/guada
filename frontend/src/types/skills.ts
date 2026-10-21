@@ -47,6 +47,11 @@ export interface SkillCommand {
     trigger: 'slash' | 'mention'
     /** 友好展示名（技能提供者附加；缺省回退 name） */
     label?: string
+    /**
+     * 本地命令（如 /compact）：选中后插入纯文本而非标签节点；发送前由前端/后端拦截执行，
+     * 不写用户消息、不进 LLM 上下文。
+     */
+    local?: boolean
     /** 各提供者附加的自定义字段 */
     [key: string]: unknown
 }

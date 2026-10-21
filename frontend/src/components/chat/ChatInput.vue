@@ -1322,27 +1322,34 @@ const checkCommandTrigger = () => {
   closeCommandPicker();
 };
 
-const handlePickerKeydown = (e: KeyboardEvent) => {
-  if (!commandPickerVisible.value || !commandPickerRef.value) return;
+const handlePickerKeydown = (e: KeyboardEvent): boolean => {
+  if (!commandPickerVisible.value || !commandPickerRef.value) return false;
 
   switch (e.key) {
     case 'ArrowDown':
       e.preventDefault();
       commandPickerRef.value.moveDown();
-      break;
+      return true;
     case 'ArrowUp':
       e.preventDefault();
       commandPickerRef.value.moveUp();
-      break;
+      return true;
     case 'Enter':
-      e.preventDefault();
-      commandPickerRef.value.confirmSelection();
-      break;
+      if (commandPickerRef.value.hasMatches()) {
+        e.preventDefault();
+        commandPickerRef.value.confirmSelection();
+        return true;
+      }
+      // 无匹配项：关闭面板并放行 Enter。否则输入 `/compact`（列表尚未加载/无匹配）时
+      // 回车被面板吞掉，消息发不出去。
+      closeCommandPicker();
+      return false;
     case 'Escape':
       e.preventDefault();
       closeCommandPicker();
-      break;
+      return true;
   }
+  return false;
 };
 
 const selectCommand = (item: SkillCommand) => {
@@ -1370,6 +1377,19 @@ const selectCommand = (item: SkillCommand) => {
   const label = item.label || item.name;
   const trigger = commandTrigger.value === 'mention' ? '@' : '/';
 
+  // 本地命令：插入纯文本（供用户继续补参数），不生成标签节点。
+  // 发送时由 ChatPanel/后端识别并本地执行，命令文本不会进入对话历史。
+  if (item.local === true) {
+    editor.value
+      .chain()
+      .focus()
+      .insertContent(`/${name} `)
+      .run();
+    closeCommandPicker();
+    editorContent.value = editor.value.getText();
+    return;
+  }
+
   editor.value
     .chain()
     .focus()
@@ -1384,12 +1404,31 @@ const selectCommand = (item: SkillCommand) => {
 };
 
 // ==================== 命令数据加载（按需 + 缓存） ====================
+/**
+ * 本地命令（picker 展示用）。
+ * 选中后插入纯文本 `/compact `，真正执行由 ChatPanel / 后端在发送时拦截，
+ * 不产生 `[/provider:name]` 标签、不写用户消息、不进 LLM 上下文。
+ */
+const localSlashCommandItems = (): SkillCommand[] => [
+  {
+    name: 'compact',
+    label: 'compact',
+    description: t('chat.command.compactDescription'),
+    providerId: 'local',
+    trigger: 'slash',
+    local: true,
+  },
+];
+
 const loadCommands = async (trigger: 'slash' | 'mention') => {
+  const local = trigger === 'slash' ? localSlashCommandItems() : [];
   try {
     const res = await apiService.fetchCommands(trigger, props.agentId || undefined);
-    commandsCache[trigger] = res.items || [];
+    commandsCache[trigger] = [...local, ...(res.items || [])];
   } catch (error) {
     console.error('获取命令列表失败:', error);
+    // 命令列表接口失败时仍保留本地命令（/compact 不依赖后端注册表）
+    commandsCache[trigger] = local;
   }
 };
 
@@ -1451,8 +1490,8 @@ onMounted(() => {
           // 弹窗打开时拦截键盘事件
           if (commandPickerVisible.value) {
             if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) {
-              handlePickerKeydown(event);
-              return true;
+              if (handlePickerKeydown(event)) return true;
+              // Enter 且面板无匹配项：继续走下方正常发送逻辑
             }
           }
           // Shift+Enter 换行，Enter 发送消息

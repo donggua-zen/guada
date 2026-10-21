@@ -24,6 +24,7 @@ import { SessionStreamManager } from "./session-stream.manager";
 import { ChatRunnerService } from "./chat-runner.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 import { InteractionWaitService } from "../../common/services/interaction-wait.service";
+import { parseLocalSlashCommand } from "./commands/local-slash-command";
 
 @Controller("chat")
 @UseGuards(AuthGuard)
@@ -72,6 +73,40 @@ export class ChatController {
       userMessage,
     } = body;
 
+    // 本地斜杠命令（/compact、/compress）：控制指令，**不写用户消息、不进 LLM 上下文**。
+    // 必须在标签解析与 chatRunner.startStream 之前拦截——一旦进入 startStream，
+    // agent-engine 会先 addUserMessage 落库，再想"不发给模型"就只能删回合（zcode 同款做法是
+    // 在 core runtime 的 addUser/persistUserPrompt 之前短路，见 zcode turn.ts executeTurnCommand）。
+    const localCommand = parseLocalSlashCommand(userMessage?.content);
+    if (localCommand) {
+      if (userMessage?.files?.length) {
+        throw new BadRequestException({
+          error: "斜杠命令不支持附件，请移除附件后重试",
+          code: "LOCAL_COMMAND_WITH_FILES",
+        });
+      }
+      try {
+        const result = await this.sessionService.compressSession(sessionId, {
+          instructions: localCommand.instructions,
+        });
+        if (!res.writableEnded) {
+          res.status(200).json({
+            ok: true,
+            localCommand: {
+              name: localCommand.name,
+              ...(localCommand.instructions === undefined
+                ? {}
+                : { instructions: localCommand.instructions }),
+              started: result?.started === true,
+            },
+          });
+        }
+      } catch (error: any) {
+        this.respondStartError(res, error, "压缩启动失败");
+      }
+      return;
+    }
+
     // 构建 source 对象（包含客户端 ID 和命令标记解析产物）
     const source: Record<string, any> = { clientId: clientId || null };
 
@@ -110,25 +145,34 @@ export class ChatController {
         res.status(200).json({ ok: true });
       }
     } catch (error: any) {
-      if (error instanceof HttpException) {
-        const response = error.getResponse() as any;
-        const status = error.getStatus();
-        if (!res.writableEnded) {
-          res.status(status).json(response);
-        }
-      } else {
-        this.logger.error(
-          `启动流失败: ${error?.message || 'Unknown error'}`,
-          error instanceof Error ? error.stack : JSON.stringify(error, null, 2),
-        );
-        if (!res.writableEnded) {
-          res.status(500).json({
-            error: error.message || "启动流失败",
-            code: "STREAM_START_FAILED",
-          });
-        }
-      }
+      this.respondStartError(res, error, "启动流失败");
     }
+  }
+
+  /**
+   * 启动类请求的统一错误响应（chat 流 / 本地命令共用）。
+   * HttpException（如压缩的 409 SESSION_STREAMING/SESSION_BUSY）原样透传状态与 body，
+   * 其余按 500 返回，便于前端按 code 区分提示。
+   */
+  private respondStartError(
+    res: Response,
+    error: any,
+    fallbackMessage: string,
+  ): void {
+    if (res.writableEnded) return;
+    if (error instanceof HttpException) {
+      const response = error.getResponse() as any;
+      res.status(error.getStatus()).json(response);
+      return;
+    }
+    this.logger.error(
+      `${fallbackMessage}: ${error?.message || 'Unknown error'}`,
+      error instanceof Error ? error.stack : JSON.stringify(error, null, 2),
+    );
+    res.status(500).json({
+      error: error.message || fallbackMessage,
+      code: "STREAM_START_FAILED",
+    });
   }
 
   /**

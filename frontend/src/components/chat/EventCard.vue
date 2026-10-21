@@ -63,6 +63,27 @@
           {{ summaryText }}
         </div>
       </template>
+      <!-- 降级说明（摘要卡/结果卡共用；成功摘要后仍保留，刷新由 compaction_summary.degraded 重建） -->
+      <div v-if="degradedLabel" class="event-card__result event-card__notice-detail">
+        {{ degradedLabel }}
+      </div>
+    </div>
+
+    <!-- 上下文窗口变化提示（模型切换 / 会话 token 上限调整） -->
+    <div v-else-if="eventType === 'context-notice'" class="event-card__compaction">
+      <div class="event-card__divider">
+        <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
+        <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
+          <el-icon size="14">
+            <Warning />
+          </el-icon>
+          <span class="event-card__compaction-text">{{ t('chat.turn.contextWindowNoticeTitle') }}</span>
+        </span>
+        <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
+      </div>
+      <div class="event-card__result event-card__notice-detail">
+        {{ contextNoticeLabel }}
+      </div>
     </div>
 
     <!-- 其他事件类消息：通用兜底（workflow 进度不落 JSONL，改由 workflow_run 工具行原地渲染，
@@ -76,7 +97,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { Loading } from "@element-plus/icons-vue";
+import { Loading, Warning } from "@element-plus/icons-vue";
 import { KeyCommand16Regular, ArrowUp16Regular, Archive20Regular } from "@vicons/fluent";
 import type { Turn, MessageBundle } from "@/types/message";
 
@@ -103,6 +124,80 @@ const shadowedCount = computed(
 const summaryText = computed(
   () => compactInfo.value?.summary ?? props.event?.metadata?.summary ?? "",
 );
+const contextNotice = computed(
+  () => props.event?.metadata?.contextNotice ?? null,
+);
+
+/** token 数展示（千分位；缺省用 -，避免 NaN） */
+const formatTokenCount = (value: number | undefined): string =>
+  typeof value === "number" ? value.toLocaleString("en-US") : "-";
+
+/** 上下文窗口提示文案：模型/窗口变化 + 当前占用 + 将自动压缩与否 */
+const contextNoticeLabel = computed(() => {
+  const notice = contextNotice.value;
+  if (!notice) return "";
+  const parts: string[] = [];
+  if (typeof notice.previousEffectiveContextWindow === "number") {
+    parts.push(
+      t("chat.turn.contextWindowChanged", {
+        model: notice.modelName ?? "",
+        previous: formatTokenCount(notice.previousEffectiveContextWindow),
+        current: formatTokenCount(notice.effectiveContextWindow),
+      }),
+    );
+  } else {
+    parts.push(
+      t("chat.turn.contextWindowCurrent", {
+        model: notice.modelName ?? "",
+        current: formatTokenCount(notice.effectiveContextWindow),
+      }),
+    );
+  }
+  parts.push(
+    t(
+      notice.overWindow
+        ? "chat.turn.contextWindowOver"
+        : "chat.turn.contextWindowNearLimit",
+      {
+        used: formatTokenCount(notice.usedTokens),
+        ratio: Math.round((notice.triggerRatio ?? 0) * 100),
+      },
+    ),
+  );
+  parts.push(
+    t(
+      notice.willAutoCompact
+        ? "chat.turn.contextWindowWillCompact"
+        : "chat.turn.contextWindowAutoCompactOff",
+    ),
+  );
+  return parts.join("");
+});
+
+/** 摘要输入降级说明（剥离/丢弃统计；成功摘要与结果卡共用） */
+const degradedLabel = computed(() => {
+  const degraded =
+    compactInfo.value?.degraded ?? compressResult.value?.degraded ?? null;
+  if (!degraded) return "";
+  const parts: string[] = [];
+  const stripped =
+    (degraded.strippedToolResults ?? 0) +
+    (degraded.strippedReasoning ?? 0) +
+    (degraded.strippedImages ?? 0) +
+    (degraded.strippedFiles ?? 0);
+  if (stripped > 0) {
+    parts.push(t("chat.turn.contextDegradedStripped", { count: stripped }));
+  }
+  if ((degraded.truncatedRounds ?? 0) > 0) {
+    parts.push(
+      t("chat.turn.contextDegradedTruncated", {
+        rounds: degraded.truncatedRounds,
+        tokens: formatTokenCount(degraded.droppedTokens),
+      }),
+    );
+  }
+  return parts.join("");
+});
 
 const compactLabel = computed(() => {
   if (expanded.value) return t("chat.turn.collapseSummary");
@@ -171,6 +266,12 @@ const outcomeClass = computed(() => {
 .event-card__summary {
   @apply mt-1.5 rounded-md bg-gray-50 dark:bg-gray-800/40 px-3 py-2 text-xs text-gray-500 dark:text-gray-400
     whitespace-pre-wrap break-words border border-gray-200/60 dark:border-gray-700/60;
+}
+
+/* 窗口变化/降级提示：暖色底突出"需要用户知道"的非致命状态 */
+.event-card__notice-detail {
+  @apply bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300
+    border-amber-200/70 dark:border-amber-700/50;
 }
 
 .event-card__divider {

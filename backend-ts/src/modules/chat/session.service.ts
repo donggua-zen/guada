@@ -1386,7 +1386,10 @@ ${diffText}
    * 压缩事件（compression_start/end/summary/error）经现有流管道下发，REST 立即返回。
    * 使用 SessionContextFactory 确保与 Agent 对话使用完全一致的参数
    */
-  async compressSession(sessionId: string) {
+  async compressSession(
+    sessionId: string,
+    opts: { instructions?: string } = {},
+  ) {
     const session = await this.hydrateSession(sessionId);
     if (!session) {
       throw new Error("Session not found or unauthorized");
@@ -1435,6 +1438,9 @@ ${diffText}
         force: true,
         reason: "manual",
         abortSignal: abortController.signal,
+        ...(opts.instructions === undefined
+          ? {}
+          : { instructions: opts.instructions }),
       })
       .then(() => {
         this.streamManager.stopStream(sessionId, "completed");

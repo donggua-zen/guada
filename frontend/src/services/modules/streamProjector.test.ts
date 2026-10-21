@@ -444,6 +444,101 @@ describe("StreamProjector 折叠器", () => {
     expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(false);
   });
 
+  it("context_window_changed：生成上下文窗口提示卡，重复事件只保留最近一条", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    applyLiveChunk(store as any, "s1", {
+      type: "context_window_changed",
+      reason: "model-switch",
+      previousModelName: "long",
+      modelName: "short",
+      previousEffectiveContextWindow: 1_000_000,
+      effectiveContextWindow: 128_000,
+      usedTokens: 450_000,
+      triggerRatio: 0.9,
+      willAutoCompact: true,
+      overWindow: true,
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "context_window_changed",
+      reason: "token-limit",
+      modelName: "short",
+      effectiveContextWindow: 64_000,
+      usedTokens: 450_000,
+      triggerRatio: 0.9,
+      willAutoCompact: true,
+      overWindow: true,
+    } as any);
+    const notices = store.state.turns
+      .flatMap((t: any) => t.messages ?? [])
+      .filter(
+        (m: any) =>
+          m.role === "event" && m.metadata?.eventType === "context-notice",
+      )
+      .map((m: any) => m.metadata.contextNotice);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      reason: "token-limit",
+      effectiveContextWindow: 64_000,
+      overWindow: true,
+    });
+  });
+
+  it("compaction_summary 携带 degraded：摘要卡 metadata 保留降级信息", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    const degraded = {
+      reason: "budget-infeasible",
+      strippedToolResults: 16,
+      strippedReasoning: 3,
+      strippedImages: 0,
+      strippedFiles: 0,
+      truncatedRounds: 2,
+      droppedMessages: 6,
+      droppedTokens: 12_345,
+      summaryInputTokens: 100_000,
+      budgetTokens: 118_000,
+    };
+    applyLiveChunk(store as any, "s1", {
+      type: "compaction_summary",
+      shadowedEndId: "m_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+      shadowedCount: 1,
+      summary: "已优化对话历史",
+      messageId: "c_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+      degraded,
+    } as any);
+    const carrier = store.state.turns
+      .flatMap((t: any) => [t, ...(t.messages ?? [])])
+      .find((x: any) => x.metadata?.compactInfo);
+    expect(carrier?.metadata.compactInfo.degraded).toEqual(degraded);
+  });
+
+  it("compression_end 携带 degraded：结果卡 metadata 保留降级信息", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    const degraded = {
+      reason: "provider-window-exceeded",
+      strippedToolResults: 0,
+      strippedReasoning: 0,
+      strippedImages: 0,
+      strippedFiles: 0,
+      truncatedRounds: 3,
+      droppedMessages: 9,
+      droppedTokens: 20_000,
+      summaryInputTokens: 90_000,
+      budgetTokens: 118_000,
+    };
+    applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "compression_end",
+      contextStats: { usedTokens: 100, effectiveContextWindow: 1000 },
+      compacted: false,
+      skipReason: "retain-budget-exceeds-history",
+      degraded,
+    } as any);
+    const carrier = store.state.turns
+      .flatMap((t: any) => [t, ...(t.messages ?? [])])
+      .find((x: any) => x.metadata?.compressResult);
+    expect(carrier?.metadata.compressResult.degraded).toEqual(degraded);
+  });
+
   it("compression_end（纯裁剪）：'压缩中'占位替换为压缩结果卡（不再一闪而过）", () => {
     foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
     applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);

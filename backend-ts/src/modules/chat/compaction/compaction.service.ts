@@ -11,6 +11,7 @@
  */
 import { Injectable, Logger } from "@nestjs/common";
 import { CompressionEngine, SummaryMode, resolveSummaryInputBudgetTokens } from "./compression-engine";
+import type { SummaryDegradation } from "./compression-engine";
 import { LLMSummaryProvider } from "./llm-summary.provider";
 import { LLMService } from "../../llm-core/llm.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
@@ -36,8 +37,18 @@ export interface CompressOptions {
   abortSignal?: AbortSignal;
   /** 强制压缩（溢出恢复/手动路径）：跳过阈值判断 */
   force?: boolean;
-  /** 触发来源（透传引擎：manual 允许"超窗时截断最旧遮蔽区"，auto/overflow 不允许） */
+  /** 触发来源（事件/诊断用；降级阶梯对所有触发源统一开放） */
   reason?: 'auto' | 'manual' | 'overflow';
+  /**
+   * 主请求前缀缓存是否仍可复用（由协调器按"模型是否刚切换"判定）。
+   * false/缺省 → 摘要走序列化拼接分支（跳过思考、截断工具结果），不再假装能命中前缀缓存。
+   */
+  useStablePrefix?: boolean;
+  /**
+   * 手动压缩的附加指令（`/compact <instructions>` 的自由文本）。
+   * 只拼进摘要提示词的 Additional Instructions，不进对话历史、不落库。
+   */
+  instructions?: string;
   /**
    * 钩子 payload 来源：确认二级压缩（摘要/丢弃）后发 compaction.before 事件
    * （记忆同步等订阅者须先于摘要完成；事件通道为唯一机制，替代旧 onBeforeCompaction 回调穿透）
@@ -66,6 +77,8 @@ export interface CompressOutcome {
   summaryMessageId?: string;
   /** 摘要文本（DISABLED 模式为空串） */
   summary?: string;
+  /** 摘要输入降级统计（为适配窗口剥离工具结果/思考或丢弃最旧轮次时给出） */
+  degraded?: SummaryDegradation;
   /** 压缩运行结束后当前完整请求统计（live 广播压缩事件时携带，前端即时更新环形指示器） */
   contextStats?: ContextStatsPayload;
 }
@@ -159,7 +172,11 @@ export class CompactionService {
     const summaryRuntime =
       summaryMode === SummaryMode.DISABLED
         ? undefined
-        : await this.buildSummaryRuntime(ds, opts.abortSignal);
+        : await this.buildSummaryRuntime(
+            ds,
+            opts.abortSignal,
+            opts.useStablePrefix ?? true,
+          );
     this.throwIfCancelled(opts.abortSignal);
 
     const result = await this.compressionEngine.execute(ds.sessionId, {
@@ -177,6 +194,12 @@ export class CompactionService {
       retainRatio: config.compressionRetainRatio ?? 0.2,
       // 摘要输入硬上限（摘要模型窗口 − 输出预留 − 安全余量）：超窗会话据此抬高保留量
       summaryInputBudgetTokens: summaryRuntime?.summaryInputBudgetTokens,
+      // 摘要输入形态（raw=前缀缓存分支 / serialized=拼接分支）：预算循环按实际形态估算
+      summaryInputFormat: summaryRuntime?.summaryInputFormat,
+      // 手动压缩附加指令（/compact <instructions>）：只进摘要提示词，不落库
+      ...(opts.instructions === undefined
+        ? {}
+        : { instructions: opts.instructions }),
       // 触发来源：manual 允许超窗时截断最旧遮蔽区（auto/溢出不截断）
       trigger: opts.reason ?? (opts.force ? 'manual' : 'auto'),
       // 手动/溢出路径：跳过触发判断（retain 仍按配置比例，不归零）
@@ -223,6 +246,7 @@ export class CompactionService {
       shadowedEndId: result.shadowedEndId,
       summaryMessageId: result.summaryMessageId,
       summary: result.summary,
+      ...(result.degraded === undefined ? {} : { degraded: result.degraded }),
       contextStats,
     };
   }
@@ -280,23 +304,37 @@ export class CompactionService {
    * 构建摘要运行环境：
    * - provider：摘要模型 = SK_MOD_COMPRESS_MODEL 配置优先，回退会话当前模型
    * - summaryInputBudgetTokens：摘要输入硬上限（按**摘要模型窗口**计算；超窗会话据此抬高保留量）
-   * KV 缓存友好前缀：prelude + tools 与主请求一致（对齐 DSH requestHeader 重放）
+   * - summaryInputFormat：raw（前缀缓存可复用）/ serialized（模型刚切换或专用压缩模型）
+   *
+   * 分支判据：只有"摘要模型 = 会话模型，且上一次主请求也是该模型"时，请求前缀才可能命中
+   * provider 的 warm prefix cache；否则按原消息发送只是徒增体积，改走序列化拼接。
    */
   private async buildSummaryRuntime(
     ds: CompactionDataSource,
-    abortSignal?: AbortSignal,
-  ): Promise<{ provider?: LLMSummaryProvider; summaryInputBudgetTokens?: number }> {
+    abortSignal: AbortSignal | undefined,
+    useStablePrefix: boolean,
+  ): Promise<{
+    provider?: LLMSummaryProvider;
+    summaryInputBudgetTokens?: number;
+    summaryInputFormat?: 'raw' | 'serialized';
+  }> {
     const fallbackModel = ds.getModelConfig();
-    const model = await this.resolveCompressionModel(fallbackModel);
+    const { model, dedicated } = await this.resolveCompressionModel(fallbackModel);
     if (!model?.modelName) return {};
 
     const system = ds.getSystemText();
     const tools = ds.getTools();
+    // 专用压缩模型（不同模型/端点）没有主请求前缀可复用；模型刚切换同理。
+    const usePrefix = useStablePrefix && !dedicated;
+    const summaryInputFormat: 'raw' | 'serialized' = usePrefix
+      ? 'raw'
+      : 'serialized';
 
-    // 前缀诊断：摘要请求 = 前缀（system+tools）+ 遮蔽区 + 指令。
-    // 前缀规模是"遮蔽区还剩多少余量"的关键未知量，这里落一行字符量便于换算。
+    // 前缀诊断：prefixed 模式 = 前缀（system+tools）+ 遮蔽区原消息 + 指令；
+    // serialized 模式 = 单条 user 消息（指令 + 序列化对话），体积与实际发送形态相关。
     this.logger.log(
-      `[compact.diag.prefix] systemChars=${system.length} tools=${tools.length} toolsJsonChars=${JSON.stringify(tools).length}`,
+      `[compact.diag.prefix] mode=${summaryInputFormat} dedicated=${dedicated}` +
+        ` systemChars=${system.length} tools=${tools.length} toolsJsonChars=${JSON.stringify(tools).length}`,
     );
 
     // 摘要输入硬预算：摘要模型窗口 − 输出预留（2000）− 安全余量 max(8K, 5%)。
@@ -305,7 +343,9 @@ export class CompactionService {
       model.config?.contextWindow,
     );
     this.logger.log(
-      `[compact.diag.budget] modelWindow=${model.config?.contextWindow ?? 128000} summaryInputBudgetTokens=${summaryInputBudgetTokens}`,
+      `[compact.diag.budget] modelWindow=${model.config?.contextWindow ?? 128000}` +
+        ` summaryInputBudgetTokens=${summaryInputBudgetTokens}` +
+        ` mode=${summaryInputFormat} dedicated=${dedicated}`,
     );
 
     const provider = new LLMSummaryProvider(
@@ -319,10 +359,17 @@ export class CompactionService {
       {
         maxSummaryTokens: 2000,
         abortSignal,
-        prefix: {
-          system,
-          ...tools.length > 0 ? { tools } : {},
-        },
+        // 仅前缀缓存可复用时携带主请求前缀；序列化分支由 provider 组装单条 user 消息
+        ...(usePrefix
+          ? {
+              prefix: {
+                system,
+                ...tools.length > 0 ? { tools } : {},
+              },
+            }
+          : {}),
+        // 专用压缩模型：buildParams 的 model/provider 来自会话主模型，需用摘要模型覆盖
+        overrideModel: dedicated,
         // 复用主请求构建器：thinkingEffort/temperature/modelCapabilities 与主请求同源
         // → 前缀缓存最大命中（思考模式不一致会导致缓存失效）
         // 注：生产注入的 ds 为 JsonlSessionContext（同时 implements ISessionContext + CompactionDataSource），
@@ -339,29 +386,33 @@ export class CompactionService {
           }),
       },
     );
-    return { provider, summaryInputBudgetTokens };
+    return { provider, summaryInputBudgetTokens, summaryInputFormat };
   }
 
-  /** 压缩模型解析：SK_MOD_COMPRESS_MODEL 配置优先，回退会话模型 */
-  private async resolveCompressionModel(fallbackModel: any): Promise<any> {
+  /** 压缩模型解析：SK_MOD_COMPRESS_MODEL 配置优先，回退会话模型；dedicated=是否指向不同模型 */
+  private async resolveCompressionModel(
+    fallbackModel: any,
+  ): Promise<{ model: any; dedicated: boolean }> {
     const compressionModelId = await this.settingsStorage.getSettingValue(
       SG_MODELS,
       SK_MOD_COMPRESS_MODEL,
       null,
     );
-    if (!compressionModelId) return fallbackModel;
+    if (!compressionModelId) return { model: fallbackModel, dedicated: false };
     try {
       const model = this.modelStore.findModel(compressionModelId);
       if (model) {
+        const dedicated = compressionModelId !== fallbackModel?.id;
         this.logger.debug(
-          `Using dedicated compression model: ${model.modelName}`,
+          `Using dedicated compression model: ${model.modelName}` +
+            (dedicated ? '' : ' (same as session model)'),
         );
-        return model;
+        return { model, dedicated };
       }
     } catch (error) {
       this.logger.error(`Failed to load compression model:`, error);
     }
-    return fallbackModel;
+    return { model: fallbackModel, dedicated: false };
   }
 
   // ─── 持久化与事件 ───

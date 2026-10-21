@@ -393,6 +393,7 @@ function applyDomainEvent(
         shadowedMessageIds: data.shadowedMessageIds,
         summary: data.summary ?? "",
         messageId: data.summaryMessageId,
+        degraded: data.degraded,
       }, mode);
       return;
     }
@@ -629,6 +630,7 @@ function upsertCompressResultPlaceholder(
       thinkingStrippedCount: chunk.thinkingStrippedCount ?? 0,
       compacted: chunk.compacted === true,
       skipReason: chunk.skipReason,
+      degraded: chunk.degraded,
     },
   };
   const eventBundle: MessageBundle = {
@@ -668,6 +670,90 @@ function upsertCompressResultPlaceholder(
 
 
 /**
+ * 上下文窗口变化提示（模型切换 / 会话 token 上限调整）。
+ *
+ * 纯 UI 事件、不落库：对话流内只保留最近一条，刷新后消失；
+ * 压缩降级结果由摘要卡（compaction_summary.degraded）持久呈现。
+ * 落位规则与压缩占位一致：有宿主回合 → 回合内 event 束；否则列表末尾独立事件回合。
+ */
+function upsertContextNotice(
+  sessionStore: ProjectorSessionStore,
+  sessionId: string,
+  chunk: Extract<ProjectorChunk, { type: "context_window_changed" }>,
+): void {
+  const turns = sessionStore.getTurns(sessionId) || [];
+  // 清旧提示（独立 event 回合整体移除；回合内 event 束逐条摘除）
+  for (let ti = turns.length - 1; ti >= 0; ti--) {
+    const turn = turns[ti];
+    if (turn.kind === "event" && turn.metadata?.eventType === "context-notice") {
+      turns.splice(ti, 1);
+      continue;
+    }
+    if (!Array.isArray(turn.messages)) continue;
+    for (let i = turn.messages.length - 1; i >= 0; i--) {
+      const m = turn.messages[i];
+      if (m.role === "event" && m.metadata?.eventType === "context-notice") {
+        turn.messages.splice(i, 1);
+      }
+    }
+  }
+
+  const now = new Date().toISOString();
+  const messageId = `__context_notice_${Date.now()}`;
+  const metadata = {
+    eventType: "context-notice",
+    contextNotice: {
+      reason: chunk.reason,
+      previousModelName: chunk.previousModelName,
+      modelName: chunk.modelName,
+      previousEffectiveContextWindow: chunk.previousEffectiveContextWindow,
+      effectiveContextWindow: chunk.effectiveContextWindow,
+      usedTokens: chunk.usedTokens,
+      triggerRatio: chunk.triggerRatio,
+      willAutoCompact: chunk.willAutoCompact,
+      overWindow: chunk.overWindow,
+    },
+  };
+  const eventBundle: MessageBundle = {
+    messageId,
+    role: "event",
+    metadata,
+    blocks: [
+      {
+        id: messageId,
+        role: "event",
+        messageId,
+        content: "",
+        reasoningContent: null,
+        additionalKwargs: [],
+        metadata,
+        createdAt: now,
+        updatedAt: now,
+        thinkingStartedAt: null,
+        thinkingDurationMs: null,
+        state: { isStreaming: false, isThinking: false },
+      },
+    ],
+  };
+  const currentTurnId = getCurrentTurn(sessionId);
+  const hostTurn = currentTurnId
+    ? turns.find((t) => t.id === currentTurnId)
+    : undefined;
+  if (hostTurn) {
+    if (!Array.isArray(hostTurn.messages)) hostTurn.messages = [];
+    hostTurn.messages.push(eventBundle);
+  } else {
+    turns.push({
+      id: eventBundle.messageId,
+      kind: "event",
+      metadata,
+      visible: true,
+      messages: [eventBundle],
+    });
+  }
+}
+
+/**
  * ask_requested 帧 → 会话级交互卡状态（projectChunk 门控前直写与 live 分支共用，防字段漂移）。
  */
 function toPendingAsk(
@@ -699,6 +785,11 @@ export function applyChunkToStore(
     return;
   }
   // 引擎级附属（上下文压缩）
+  // 上下文窗口变化提示（模型切换/会话上限调整）：对话流内只保留最近一条
+  if (chunk.type === "context_window_changed") {
+    upsertContextNotice(sessionStore, sessionId, chunk);
+    return;
+  }
   if (chunk.type === "compression_start") {
     // 压缩开始（auto 回合内 / manual 维护流）：置位 + "压缩中"占位卡（幂等）；
     // 上一次的"压缩结果"卡先清掉（只保留最近一次结果）
@@ -773,6 +864,7 @@ export function applyChunkToStore(
       shadowedCount: chunk.shadowedCount,
       shadowedMessageIds: chunk.shadowedMessageIds,
       summary: chunk.summary ?? "",
+      degraded: chunk.degraded,
     };
     const eventBundle: MessageBundle = {
       messageId: chunk.messageId || `__compact_${Date.now()}`,

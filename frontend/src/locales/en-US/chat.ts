@@ -258,6 +258,17 @@
     contextPruned: 'Pruned {count} oversized tool results',
     contextThinkingStripped: 'Stripped {count} historical reasoning blocks',
     contextNotCompacted: 'Not compacted',
+    // EventCard.vue context window change notice (model switch / session limit)
+    contextWindowNoticeTitle: 'Context window notice',
+    contextWindowChanged: 'Switched to {model}: context window reduced from {previous} to {current}. ',
+    contextWindowCurrent: 'Current model {model} has a context window of {current}. ',
+    contextWindowOver: 'History is about {used} tokens, exceeding the new window; ',
+    contextWindowNearLimit: 'History is about {used} tokens, at {ratio}% of the compaction trigger; ',
+    contextWindowWillCompact: 'Auto-compaction will be attempted; tool results/thinking may be omitted and the earliest content dropped if needed.',
+    contextWindowAutoCompactOff: 'Auto-compaction is off; compact manually or delete history.',
+    // EventCard.vue degraded summary input (stripped/dropped content)
+    contextDegradedStripped: 'This compaction omitted {count} tool result/thinking item(s) to fit the window. ',
+    contextDegradedTruncated: 'This compaction dropped the earliest {rounds} round(s) (~{tokens} tokens); the summary does not cover them.',
     compressSkip: {
       belowThreshold: 'below trigger threshold',
       pruneSufficient: 'pruning already brought it below the trigger',
@@ -517,6 +528,12 @@
     deleteSuccess: 'Deleted successfully',
     deleteFailed: 'Delete failed',
     createWindowFailed: 'Failed to create window',
+  },
+
+  // ── Local slash commands (/compact etc., not sent to the LLM) ──
+  command: {
+    compactDescription: 'Compact the current conversation context (optional summary instructions)',
+    attachmentsNotSupported: 'Slash commands do not support attachments. Remove them and retry.',
   },
 
   // ── 备忘录 ──

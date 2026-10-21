@@ -253,8 +253,14 @@ export class SessionsController {
   @Post("sessions/:id/compress")
   async compressSession(
     @Param("id") id: string,
+    @Body() body?: { instructions?: string },
   ) {
-    return this.sessionService.compressSession(id);
+    const instructions =
+      typeof body?.instructions === "string" ? body.instructions : undefined;
+    return this.sessionService.compressSession(
+      id,
+      instructions === undefined ? {} : { instructions },
+    );
   }
 
   @Get("sessions/:id/workspace-path")

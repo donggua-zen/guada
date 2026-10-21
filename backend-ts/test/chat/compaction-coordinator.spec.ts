@@ -13,6 +13,10 @@ import { SummaryMode } from '../../src/modules/chat/compaction/compression-engin
 import type { CompactionDataSource } from '../../src/modules/chat/compaction/types';
 import type { Message } from '../../src/common/types/conversation.types';
 import type { PreStepPayload, RequestErrorPayload } from '../../src/modules/chat/types/hooks.contract';
+import {
+  clearMediaBudgetPressure,
+  getMediaBudgetBytesForSession,
+} from '../../src/modules/llm-core/media-budget';
 
 /// <reference types="jest" />
 
@@ -181,6 +185,211 @@ describe('CompactionCoordinatorService', () => {
       await coordinator.onPreStep(preStepPayload(ctx));
       expect((coordinator as any).autoCompactFailures.get('s1')).toBe(1);
       await coordinator.onPreStep(preStepPayload(ctx));
+      expect((coordinator as any).autoCompactFailures.has('s1')).toBe(false);
+    });
+
+    it('模型窗口变小且历史超窗 → 发 context_window_changed（model-switch），同窗口不重复', async () => {
+      let model: any = {
+        id: 'providerA:long',
+        modelName: 'long',
+        config: { contextWindow: 1_000_000 },
+      };
+      let window = 1_000_000;
+      const ctx = createContext({
+        getModelConfig: jest.fn(() => model),
+        getEffectiveContextWindow: jest.fn(() => window),
+        getTokenCount: jest.fn(async () => 450_000),
+        getCompressionConfig: jest.fn(() => ({
+          enabled: true,
+          compressionTriggerRatio: 0.9,
+        })),
+      } as any);
+      const compactionService = {
+        shouldCompress: jest.fn(async () => false),
+        compress: jest.fn(),
+      };
+      const coordinator = createCoordinator(compactionService);
+
+      // 基线：长窗口，不发提示
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(ctx.publishStream).not.toHaveBeenCalled();
+
+      // 切到短窗口：历史 450K > 128K
+      model = {
+        id: 'providerB:short',
+        modelName: 'short',
+        config: { contextWindow: 128_000 },
+      };
+      window = 128_000;
+      await coordinator.onPreStep(preStepPayload(ctx));
+      const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: 'context_window_changed',
+        reason: 'model-switch',
+        previousModelId: 'providerA:long',
+        modelId: 'providerB:short',
+        previousEffectiveContextWindow: 1_000_000,
+        effectiveContextWindow: 128_000,
+        usedTokens: 450_000,
+        overWindow: true,
+        willAutoCompact: true,
+      });
+      expect(events[0].triggerRatio).toBe(0.9);
+
+      // 同窗口再走一步：不重复提示
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(ctx.publishStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('同模型调小 maxTokensLimit → reason=token-limit（不当作换模型）', async () => {
+      const model: any = {
+        id: 'p:m',
+        modelName: 'm',
+        config: { contextWindow: 1_000_000 },
+      };
+      let window = 1_000_000;
+      const ctx = createContext({
+        getModelConfig: jest.fn(() => model),
+        getEffectiveContextWindow: jest.fn(() => window),
+        getTokenCount: jest.fn(async () => 500_000),
+        getCompressionConfig: jest.fn(() => ({
+          enabled: true,
+          compressionTriggerRatio: 0.9,
+        })),
+      } as any);
+      const coordinator = createCoordinator({
+        shouldCompress: jest.fn(async () => false),
+        compress: jest.fn(),
+      });
+
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(ctx.publishStream).not.toHaveBeenCalled();
+
+      window = 200_000;
+      await coordinator.onPreStep(preStepPayload(ctx));
+      const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: 'context_window_changed',
+        reason: 'token-limit',
+        effectiveContextWindow: 200_000,
+        overWindow: true,
+      });
+    });
+
+    it('无历史基线但已硬超窗（如进程重启后）→ reason=over-window', async () => {
+      const ctx = createContext({
+        getModelConfig: jest.fn(() => ({
+          id: 'p:short',
+          modelName: 'short',
+          config: { contextWindow: 128_000 },
+        })),
+        getEffectiveContextWindow: jest.fn(() => 128_000),
+        getTokenCount: jest.fn(async () => 200_000),
+        getCompressionConfig: jest.fn(() => ({
+          enabled: false,
+          compressionTriggerRatio: 0.9,
+        })),
+      } as any);
+      const coordinator = createCoordinator({
+        shouldCompress: jest.fn(async () => false),
+        compress: jest.fn(),
+      });
+
+      await coordinator.onPreStep(preStepPayload(ctx));
+      const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: 'context_window_changed',
+        reason: 'over-window',
+        overWindow: true,
+        willAutoCompact: false, // 压缩档位关闭
+      });
+    });
+
+    it('模型切换后 useStablePrefix=false；同模型后续步恢复 true', async () => {
+      let model: any = {
+        id: 'providerA:long',
+        modelName: 'long',
+        config: { contextWindow: 1_000_000 },
+      };
+      let window = 1_000_000;
+      const ctx = createContext({
+        getModelConfig: jest.fn(() => model),
+        getEffectiveContextWindow: jest.fn(() => window),
+        getTokenCount: jest.fn(async () => 450_000),
+        getCompressionConfig: jest.fn(() => ({
+          enabled: true,
+          compressionTriggerRatio: 0.9,
+        })),
+      } as any);
+      const compactionService = {
+        shouldCompress: jest.fn(async () => true),
+        compress: jest.fn(async () => replacedOutcome()),
+      };
+      const coordinator = createCoordinator(compactionService);
+      const lastCompressArgs = () => {
+        const calls = (compactionService.compress as jest.Mock).mock.calls;
+        return calls[calls.length - 1][1];
+      };
+
+      // 首步：无基线 → 不可假设前缀缓存
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(lastCompressArgs()).toMatchObject({ useStablePrefix: false });
+
+      // 切换到短窗口模型：上一次主请求在旧模型 → 缓存不可复用
+      model = {
+        id: 'providerB:short',
+        modelName: 'short',
+        config: { contextWindow: 128_000 },
+      };
+      window = 128_000;
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(lastCompressArgs()).toMatchObject({ useStablePrefix: false });
+
+      // 同模型同窗口的下一步：上一次主请求就是当前模型 → 可复用
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(lastCompressArgs()).toMatchObject({ useStablePrefix: true });
+    });
+
+    it('窗口变化清零旧窗口下的 auto 熔断（切回大窗口后可恢复尝试）', async () => {
+      let model: any = {
+        id: 'providerA:long',
+        modelName: 'long',
+        config: { contextWindow: 1_000_000 },
+      };
+      let window = 1_000_000;
+      const ctx = createContext({
+        getModelConfig: jest.fn(() => model),
+        getEffectiveContextWindow: jest.fn(() => window),
+        getTokenCount: jest.fn(async () => 200_000),
+        getCompressionConfig: jest.fn(() => ({
+          enabled: true,
+          compressionTriggerRatio: 0.9,
+        })),
+      } as any);
+      const compactionService = {
+        shouldCompress: jest.fn(async () => true),
+        compress: jest.fn(async () => replacedOutcome()),
+      };
+      const coordinator = createCoordinator(compactionService);
+      (coordinator as any).autoCompactFailures.set('s1', 3);
+      (coordinator as any).overflowRetries.set('s1', 1);
+
+      // 基线步：旧窗口下熔断仍生效（跳过压缩）
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(compactionService.compress).not.toHaveBeenCalled();
+
+      // 切到新窗口：清零熔断/溢出计数 → 压缩重新执行并成功
+      model = {
+        id: 'providerB:short',
+        modelName: 'short',
+        config: { contextWindow: 128_000 },
+      };
+      window = 128_000;
+      await coordinator.onPreStep(preStepPayload(ctx));
+      expect(compactionService.compress).toHaveBeenCalledTimes(1);
       expect((coordinator as any).autoCompactFailures.has('s1')).toBe(false);
     });
   });
@@ -484,6 +693,60 @@ describe('CompactionCoordinatorService', () => {
       const forced = await coordinator.maybeCompress(ctx as any, { force: true, reason: 'manual' });
       expect(forced.didRun).toBe(true);
       expect(compactionService.compress).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('onRequestError（请求体过大 / 413）', () => {
+    afterEach(() => clearMediaBudgetPressure('s1'));
+
+    it('413 → 收紧媒体预算并返回 retry，不走压缩', async () => {
+      const ctx = createContext();
+      const compactionService = {
+        shouldCompress: jest.fn(async () => true),
+        compress: jest.fn(),
+      };
+      const coordinator = createCoordinator(compactionService);
+      const before = getMediaBudgetBytesForSession('s1');
+
+      const action = await coordinator.onRequestError(
+        requestErrorPayload(ctx, { message: 'Payload Too Large', status: 413 }),
+      );
+
+      expect(action).toEqual({ kind: 'retry' });
+      expect(getMediaBudgetBytesForSession('s1')).toBe(Math.floor(before / 2));
+      // token 未超窗时压缩无用（图片集中在保留尾），不应白跑一次摘要
+      expect(compactionService.compress).not.toHaveBeenCalled();
+    });
+
+    it('连续 413：预算每次对半砍，用尽次数后保留原始错误', async () => {
+      const ctx = createContext();
+      const coordinator = createCoordinator();
+      const error = { status: 413, message: 'request entity too large' };
+
+      const seen: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        const action = await coordinator.onRequestError(requestErrorPayload(ctx, error));
+        expect(action).toEqual({ kind: 'retry' });
+        seen.push(getMediaBudgetBytesForSession('s1'));
+      }
+      expect(seen[1]).toBeLessThan(seen[0]!);
+      expect(seen[2]).toBeLessThan(seen[1]!);
+      expect(
+        await coordinator.onRequestError(requestErrorPayload(ctx, error)),
+      ).toBeUndefined();
+    });
+
+    it('普通 4xx 不触发媒体预算收缩', async () => {
+      const ctx = createContext();
+      const coordinator = createCoordinator();
+      const before = getMediaBudgetBytesForSession('s1');
+
+      const action = await coordinator.onRequestError(
+        requestErrorPayload(ctx, { message: 'bad request', status: 400 }),
+      );
+
+      expect(action).toBeUndefined();
+      expect(getMediaBudgetBytesForSession('s1')).toBe(before);
     });
   });
 });

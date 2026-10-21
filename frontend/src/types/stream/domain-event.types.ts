@@ -6,6 +6,7 @@
  * （块级增量协议）为两种独立输入形态，折叠器同时支持。
  */
 import type { ContentBlock, FileRef } from "./content-block.types";
+import type { SummaryDegradation } from "./event-chunk.types";
 
 /**
  * 用户消息附件（FileRef 前端镜像，self-contained 契约）。
@@ -127,6 +128,8 @@ export type DomainEvent =
         shadowedMessageIds?: string[];
         summary: string;
         summaryMessageId?: string;
+        /** 摘要输入降级统计（为适配窗口剥离/丢弃过内容时写入） */
+        degraded?: SummaryDegradation;
       };
     }
   | { type: "message/prune"; seq: number; data: { messageId: string; newContent: string; strategy?: string; prunedBytes?: number } }

@@ -119,14 +119,16 @@ function makeToolMessages(count: number, length = 5000): Message[] {
   }));
 }
 
-/** 确定性 token 估算：每消息按 text 长度 / 4 */
+/** 确定性 token 估算：text/reasoning/tool-result/tool-call 按长度 / 4，image 固定 1500 */
 function estimateTokensFor(messages: Message[]): number {
   let total = 0;
   for (const m of messages) {
     for (const b of m.content) {
       if (b.type === 'text') total += Math.ceil(b.text.length / 4);
+      if (b.type === 'reasoning') total += Math.ceil(b.summary.length / 4);
       if (b.type === 'tool-result') total += Math.ceil(b.content.length / 4);
       if (b.type === 'tool-call') total += Math.ceil(b.arguments.length / 4);
+      if (b.type === 'image') total += 1500;
     }
   }
   return total;
@@ -508,6 +510,29 @@ describe('CompressionEngine', () => {
       expect(tr.content.length).toBe(5000);
       expect(tr.content).not.toContain('[omitted');
     });
+
+    it('/compact 附加指令透传给摘要 provider（只进提示词，不改消息）', async () => {
+      const msgs = makeMessages(4);
+      const { ds } = createDataSource();
+      const engine = createEngine();
+      const provider = { generate: jest.fn(async () => ({ summary: 's' })) };
+
+      await engine.execute('s1', {
+        messages: msgs,
+        contextWindow: 100,
+        force: true,
+        instructions: '保留关键决策',
+        summaryProvider: provider,
+        dataSource: ds as any,
+      });
+
+      expect(provider.generate).toHaveBeenCalledWith(
+        expect.objectContaining({ instructions: '保留关键决策' }),
+      );
+      const genInput = (provider.generate as jest.Mock).mock.calls[0][0];
+      // 附加指令不写入任何用户消息（只在摘要请求的临时提示词里）
+      expect(JSON.stringify(genInput.allMessages)).not.toContain('保留关键决策');
+    });
   });
 });
 
@@ -694,6 +719,26 @@ describe('LLMSummaryProvider', () => {
     expect(prompt).toContain('待压缩对话');
   });
 
+  it('/compact 附加指令：拼进提示词 Additional Instructions（不改变消息历史）', async () => {
+    const { LLMSummaryProvider } = await import('../../src/modules/chat/compaction/llm-summary.provider');
+    const llmService = {
+      completions: jest.fn(async () => streamMock('summary')),
+    } as any;
+    const provider = new LLMSummaryProvider(llmService, {
+      modelName: 'gpt-4o',
+      provider: { id: 'test', type: 'openai', protocol: 'openai' },
+    });
+    await provider.generate({
+      allMessages: [],
+      shadowed: [makeMessages(1)[0]],
+      instructions: '保留关键决策与文件路径',
+    });
+    const call = llmService.completions.mock.calls[0][0];
+    const prompt = call.messages[0].content[0].text as string;
+    expect(prompt).toContain('Additional Instructions:');
+    expect(prompt).toContain('保留关键决策与文件路径');
+  });
+
   it('KV 前缀模式：system 走 envelope 独立字段 + 遮蔽区（引擎传入的请求消息）+ 指令，携带 tools', async () => {
     const { LLMSummaryProvider } = await import('../../src/modules/chat/compaction/llm-summary.provider');
     const llmService = {
@@ -788,6 +833,85 @@ it('buildParams 复用：摘要请求参数与主请求同源，system/tools/max
   expect(call.tools[0].name).toBe('shell');
   expect(call.maxTokens).toBe(2000);
 });
+
+  it('序列化分支：即使注入 buildParams 也不携带主请求 system/tools，思考模式降级', async () => {
+    const { LLMSummaryProvider } = await import('../../src/modules/chat/compaction/llm-summary.provider');
+    const llmService = { completions: jest.fn(async () => streamMock('x')) } as any;
+    const buildParams = jest.fn((messages: any[]) => ({
+      model: 'main-model',
+      system: 'MAIN-SYSTEM',
+      messages,
+      tools: [{ name: 'main-tool' }] as any,
+      thinkingEffort: 'high',
+      temperature: 0.7,
+      stream: true,
+      purpose: 'compaction',
+    }));
+    const shadowedMsg: Message = {
+      id: 'm0',
+      role: 'user',
+      kind: 'user',
+      source: { kind: 'user' },
+      metadata: {},
+      content: [{ type: 'text', text: 'history' }],
+    };
+    // 无 prefix → 序列化分支（模型刚切换/首步：没有可命中的主请求前缀）
+    const provider = new LLMSummaryProvider(llmService, {
+      modelName: 'gpt-4o',
+      provider: { id: 'test', type: 'openai', protocol: 'openai' },
+      thinkingEfforts: ['low', 'high'],
+    }, {
+      buildParams,
+    });
+    await provider.generate({ allMessages: [], shadowed: [shadowedMsg] });
+    const call = llmService.completions.mock.calls[0][0];
+    // 无 overrideModel：仍使用会话模型（摘要模型回退会话模型），但清掉主请求前缀
+    expect(call.model).toBe('main-model');
+    expect(call.system).toBeUndefined();
+    expect(call.tools).toBeUndefined();
+    expect(call.thinkingEffort).not.toBe('high');
+    expect(call.messages).toHaveLength(1);
+  });
+
+  it('专用压缩模型：overrideModel 用摘要模型覆盖 model/provider/能力/温度', async () => {
+    const { LLMSummaryProvider } = await import('../../src/modules/chat/compaction/llm-summary.provider');
+    const llmService = { completions: jest.fn(async () => streamMock('x')) } as any;
+    const buildParams = jest.fn((messages: any[]) => ({
+      model: 'main-model',
+      system: 'MAIN-SYSTEM',
+      messages,
+      tools: [{ name: 'main-tool' }] as any,
+      thinkingEffort: 'high',
+      temperature: 0.7,
+      modelCapabilities: { supportsImageInput: true },
+      stream: true,
+      purpose: 'compaction',
+    }));
+    const shadowedMsg: Message = {
+      id: 'm0',
+      role: 'user',
+      kind: 'user',
+      source: { kind: 'user' },
+      metadata: {},
+      content: [{ type: 'text', text: 'history' }],
+    };
+    const provider = new LLMSummaryProvider(llmService, {
+      modelName: 'summary-model',
+      provider: { id: 'summary-provider', type: 'openai', protocol: 'openai' },
+      config: { inputCapabilities: ['text'], temperature: 0.2 },
+      thinkingEfforts: [],
+    }, {
+      buildParams,
+      overrideModel: true,
+    });
+    await provider.generate({ allMessages: [], shadowed: [shadowedMsg] });
+    const call = llmService.completions.mock.calls[0][0];
+    expect(call.model).toBe('summary-model');
+    expect(call.providerConfig.id).toBe('summary-provider');
+    expect(call.modelCapabilities).toEqual({ supportsImageInput: false });
+    expect(call.thinkingEffort).toBe('none');
+    expect(call.temperature).toBe(0.2);
+  });
 });
 
 describe('TokenMeterService', () => {
@@ -897,6 +1021,93 @@ describe('CompressionEngine — 摘要输入硬预算与超窗恢复阶梯', () 
     return out;
   }
 
+  /** 构造 N 轮纯文本（user 超长 + assistant 短）：不可剥离，只能力竭后按轮丢弃 */
+  function makeTextRounds(rounds: number, userChars: number): Message[] {
+    const out: Message[] = [];
+    for (let i = 0; i < rounds; i++) {
+      out.push({
+        id: `tr${i}_u`,
+        role: 'user',
+        kind: 'user',
+        source: { kind: 'user' },
+        metadata: {},
+        content: [{ type: 'text', text: `ask ${i} ` + 'x'.repeat(userChars) }],
+      });
+      out.push({
+        id: `tr${i}_a`,
+        role: 'assistant',
+        kind: 'model',
+        source: { kind: 'model', provider: 't', model: 'm' },
+        metadata: {},
+        content: [{ type: 'text', text: `answer ${i}` }],
+      });
+    }
+    return out;
+  }
+
+  /** 构造 N 轮富内容（思考 + 图片 + 工具调用/结果）：用于验证极致剥离 */
+  function makeRichRounds(rounds: number, toolChars = 8000): Message[] {
+    const out: Message[] = [];
+    for (let i = 0; i < rounds; i++) {
+      out.push({
+        id: `rr${i}_u`,
+        role: 'user',
+        kind: 'user',
+        source: { kind: 'user' },
+        metadata: {},
+        content: [
+          { type: 'text', text: `ask ${i}` },
+          ...(i === 0
+            ? [
+                {
+                  type: 'image' as const,
+                  attachment: {
+                    mediaType: 'image/png',
+                    bytes: 1,
+                    name: `image-${i}.png`,
+                    url: `file:///image-${i}.png`,
+                  },
+                },
+              ]
+            : []),
+        ],
+      });
+      out.push({
+        id: `rr${i}_a`,
+        role: 'assistant',
+        kind: 'model',
+        source: { kind: 'model', provider: 't', model: 'm' },
+        metadata: {},
+        content: [
+          { type: 'text', text: `answer ${i}` },
+          { type: 'reasoning', summary: 'r'.repeat(4000) },
+          {
+            type: 'tool-call',
+            toolCallId: `rc${i}`,
+            name: 'shell',
+            arguments: '{"cmd":"echo hi"}',
+          },
+        ],
+      });
+      out.push({
+        id: `rr${i}_t`,
+        role: 'tool',
+        kind: 'model',
+        source: { kind: 'tool', toolCallId: `rc${i}` },
+        metadata: {},
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: `rc${i}`,
+            name: 'shell',
+            content: 'x'.repeat(toolChars),
+          },
+        ],
+      });
+    }
+    return out;
+  }
+
   /** 模拟 provider：输入（遮蔽区 + 600 指令）超过 limit 时按网关文案报错 */
   function makeLimitedProvider(limit: number) {
     return {
@@ -969,8 +1180,83 @@ describe('CompressionEngine — 摘要输入硬预算与超窗恢复阶梯', () 
     expect(shadowedTokens / total).toBeGreaterThan(0.85);
   });
 
-  it('合同外（预算太小，两侧约束不可能同时满足）→ 抛带数字的明确错误', async () => {
-    const messages = makeRounds(20, 8000);
+  it('serialized 摘要按拼接文本估算：原消息超预算但序列化后装得下 → 不降级', async () => {
+    const messages = makeRichRounds(10, 8000);
+    const provider = { generate: jest.fn(async () => ({ summary: 'S' })) };
+    const { ds, compacted } = createDataSource();
+    const engine = createEngine();
+
+    const result = await engine.execute('s1', {
+      messages,
+      contextWindow: 1_000_000,
+      force: true,
+      retainRatio: 0.4,
+      summaryInputBudgetTokens: 10_000,
+      summaryInputFormat: 'serialized',
+      summaryProvider: provider,
+      dataSource: ds as any,
+    });
+
+    expect(result.compacted).toBe(true);
+    expect(result.degraded).toBeUndefined();
+    expect(provider.generate).toHaveBeenCalledTimes(1);
+    const genInput = (provider.generate as jest.Mock).mock.calls[0][0];
+    // 引擎没有剥离：思考/原始工具结果仍在（序列化与截断由 provider 负责）
+    expect(
+      genInput.shadowed.some((m: Message) =>
+        m.content.some((b) => b.type === 'reasoning'),
+      ),
+    ).toBe(true);
+    // 未发生按轮丢弃：记账条数 = 摘要输入条数
+    expect(compacted[0].shadowedCount).toBe(genInput.shadowed.length);
+  });
+
+  it('预算不可行 → 极致剥离工具结果/思考/图片后成功（不再直接抛错）', async () => {
+    const messages = makeRichRounds(10, 8000);
+    const provider = { generate: jest.fn(async () => ({ summary: 'S' })) };
+    const { ds, compacted } = createDataSource();
+    const engine = createEngine();
+
+    const result = await engine.execute('s1', {
+      messages,
+      contextWindow: 1_000_000,
+      force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
+      retainRatio: 0.4,
+      summaryInputBudgetTokens: 10_000,
+      summaryProvider: provider,
+      dataSource: ds as any,
+    });
+
+    expect(result.compacted).toBe(true);
+    expect(result.degraded?.reason).toBe('budget-infeasible');
+    expect(result.degraded?.strippedToolResults).toBeGreaterThan(0);
+    expect(result.degraded?.strippedReasoning).toBeGreaterThan(0);
+    expect(result.degraded?.strippedImages).toBeGreaterThan(0);
+    expect(result.degraded?.truncatedRounds).toBe(0);
+
+    const genInput = (provider.generate as jest.Mock).mock.calls[0][0];
+    const stripped = genInput.shadowed as Message[];
+    expect(estimateTokensFor(stripped) + 600).toBeLessThanOrEqual(10_000);
+    // 工具结果：块保留、内容变占位（toolCallId 不变 → 配对不破坏）
+    const toolResults = stripped.flatMap((m) =>
+      m.content.filter((b) => b.type === 'tool-result'),
+    );
+    expect(toolResults.length).toBeGreaterThan(0);
+    for (const block of toolResults) {
+      expect(block.type === 'tool-result' && block.content.startsWith('[tool result omitted:')).toBe(true);
+    }
+    // 思考块删光；图片变占位文本；tool-call 保留
+    expect(stripped.some((m) => m.content.some((b) => b.type === 'reasoning'))).toBe(false);
+    expect(stripped.some((m) => m.content.some((b) => b.type === 'image'))).toBe(false);
+    expect(JSON.stringify(stripped)).toContain('[image omitted]');
+    expect(stripped.some((m) => m.content.some((b) => b.type === 'tool-call'))).toBe(true);
+    // 未发生按轮丢弃 → 摘要输入覆盖全部遮蔽消息；记账条数 = 摘要输入条数
+    expect(compacted[0].shadowedCount).toBe(stripped.length);
+    expect(compacted[0].degraded).toMatchObject({ reason: 'budget-infeasible' });
+  });
+
+  it('预算不可行 + 内容不可剥离（单轮文本超预算）→ 抛带数字错误', async () => {
+    const messages = makeTextRounds(2, 60_000);
     const provider = { generate: jest.fn(async () => ({ summary: 'S' })) };
     const { ds } = createDataSource();
     const engine = createEngine();
@@ -981,12 +1267,43 @@ describe('CompressionEngine — 摘要输入硬预算与超窗恢复阶梯', () 
         contextWindow: 1_000_000,
         force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
         retainRatio: 0.4,
-        summaryInputBudgetTokens: 10_000,
+        summaryInputBudgetTokens: 5_000,
         summaryProvider: provider,
         dataSource: ds as any,
       }),
-    ).rejects.toThrow(/exceeds the model context window/);
+    ).rejects.toThrow(/still exceeds the model context window/);
     expect(provider.generate).not.toHaveBeenCalled();
+  });
+
+  it('预算不可行 + 不可剥离 → 按轮丢弃最旧内容后成功（降级标记）', async () => {
+    const messages = makeTextRounds(8, 12_000);
+    const provider = { generate: jest.fn(async () => ({ summary: 'S' })) };
+    const { ds, compacted } = createDataSource();
+    const engine = createEngine();
+
+    const result = await engine.execute('s1', {
+      messages,
+      contextWindow: 1_000_000,
+      force: true,
+      retainRatio: 0.4,
+      summaryInputBudgetTokens: 10_000,
+      summaryProvider: provider,
+      dataSource: ds as any,
+    });
+
+    expect(result.compacted).toBe(true);
+    expect(result.degraded?.reason).toBe('budget-infeasible');
+    expect(result.degraded?.truncatedRounds).toBeGreaterThan(0);
+    expect(result.degraded?.droppedTokens).toBeGreaterThan(0);
+    const genInput = (provider.generate as jest.Mock).mock.calls[0][0];
+    expect(estimateTokensFor(genInput.shadowed) + 600).toBeLessThanOrEqual(10_000);
+    // 首条为 assistant → 截断标记
+    expect(genInput.shadowed[0].role).toBe('user');
+    expect(JSON.stringify(genInput.shadowed[0].content)).toContain(
+      'earlier conversation truncated for compaction retry',
+    );
+    // 遮蔽记账按原 boundary
+    expect(compacted[0].shadowedCount).toBeGreaterThan(genInput.shadowed.length);
   });
 
   it('provider 仍拒绝 → 解析上限、收紧预算抬高保留后重试成功', async () => {
@@ -1019,16 +1336,33 @@ describe('CompressionEngine — 摘要输入硬预算与超窗恢复阶梯', () 
     expect(compacted[0].shadowedCount).toBeGreaterThanOrEqual(second.shadowed.length);
   });
 
-  it('手动路径：budget 收紧仍不可行时截断最旧遮蔽区（插标记；boundary 记账不变）', async () => {
-    const leadingAssistant: Message = {
-      id: 'lead_a',
-      role: 'assistant',
-      kind: 'model',
-      source: { kind: 'model', provider: 't', model: 'm' },
-      metadata: {},
-      content: [{ type: 'text', text: 'lead' }],
-    };
-    const messages = [leadingAssistant, ...makeRounds(60, 16000)];
+  it('provider 收紧后仍不可行 → 极致剥离工具结果后成功', async () => {
+    const messages = makeRounds(60, 16000);
+    const provider = makeLimitedProvider(60_000);
+    const { ds, compacted } = createDataSource();
+    const engine = createEngine();
+
+    const result = await engine.execute('s1', {
+      messages,
+      contextWindow: 1_000_000,
+      force: true,
+      retainRatio: 0.4,
+      summaryInputBudgetTokens: 300_000,
+      summaryProvider: provider,
+      dataSource: ds as any,
+    });
+
+    expect(result.compacted).toBe(true);
+    expect(result.degraded?.reason).toBe('provider-window-exceeded');
+    expect(result.degraded?.strippedToolResults).toBeGreaterThan(0);
+    const calls = (provider.generate as jest.Mock).mock.calls;
+    const lastInput = calls[calls.length - 1][0];
+    expect(estimateTokensFor(lastInput.shadowed) + 600).toBeLessThanOrEqual(60_000);
+    expect(compacted[0].shadowedCount).toBe(lastInput.shadowed.length);
+  });
+
+  it('手动路径：不可剥离时按轮截断最旧遮蔽区（插标记；boundary 记账不变）', async () => {
+    const messages = makeTextRounds(60, 12_000);
     const provider = makeLimitedProvider(60_000); // 任何 boundary 都装不下 → 必须截断
     const { ds, compacted } = createDataSource();
     const engine = createEngine();
@@ -1045,39 +1379,43 @@ describe('CompressionEngine — 摘要输入硬预算与超窗恢复阶梯', () 
     });
 
     expect(result.compacted).toBe(true);
+    expect(result.degraded?.truncatedRounds).toBeGreaterThan(0);
     const calls = (provider.generate as jest.Mock).mock.calls;
     expect(calls.length).toBeGreaterThanOrEqual(2);
     const lastInput = calls[calls.length - 1][0];
-    const lastTokens = estimateTokensFor(lastInput.shadowed);
-    expect(lastTokens + 600).toBeLessThanOrEqual(60_000);
+    expect(estimateTokensFor(lastInput.shadowed) + 600).toBeLessThanOrEqual(60_000);
     // 首条为 assistant → 截断标记（zcode 同款文案）
-    const firstMsg = lastInput.shadowed[0];
-    expect(firstMsg.role).toBe('user');
-    expect(JSON.stringify(firstMsg.content)).toContain(
+    expect(lastInput.shadowed[0].role).toBe('user');
+    expect(JSON.stringify(lastInput.shadowed[0].content)).toContain(
       'earlier conversation truncated for compaction retry',
     );
     // 遮蔽记账按原 boundary（截断只改摘要输入）
     expect(compacted[0].shadowedCount).toBeGreaterThan(lastInput.shadowed.length);
   });
 
-  it('auto 路径：同一超紧上限下不截断，直接以带数字错误终结', async () => {
-    const messages = makeRounds(60, 16000);
+  it('auto 路径：同一超紧上限下也允许按轮丢弃（降级标记）', async () => {
+    const messages = makeTextRounds(60, 12_000);
     const provider = makeLimitedProvider(60_000);
     const { ds } = createDataSource();
     const engine = createEngine();
 
-    await expect(
-      engine.execute('s1', {
-        messages,
-        contextWindow: 1_000_000,
-        force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
-        retainRatio: 0.4,
-        summaryInputBudgetTokens: 300_000,
-        trigger: 'auto',
-        summaryProvider: provider,
-        dataSource: ds as any,
-      }),
-    ).rejects.toThrow(/exceeds the model context window/);
+    const result = await engine.execute('s1', {
+      messages,
+      contextWindow: 1_000_000,
+      force: true, // 用例聚焦预算/边界数学，跳过触发阈值（fixture 总量远小于窗口）
+      retainRatio: 0.4,
+      summaryInputBudgetTokens: 300_000,
+      trigger: 'auto',
+      summaryProvider: provider,
+      dataSource: ds as any,
+    });
+
+    expect(result.compacted).toBe(true);
+    expect(result.degraded?.reason).toBe('provider-window-exceeded');
+    expect(result.degraded?.truncatedRounds).toBeGreaterThan(0);
+    const calls = (provider.generate as jest.Mock).mock.calls;
+    const lastInput = calls[calls.length - 1][0];
+    expect(estimateTokensFor(lastInput.shadowed) + 600).toBeLessThanOrEqual(60_000);
   });
 
   it('isContextWindowExceeded 覆盖第三方网关文案（"context limit"）', async () => {

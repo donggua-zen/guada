@@ -1,7 +1,12 @@
 /// <reference types="jest" />
 
 import { ChatController } from '../../src/modules/chat/chat.controller';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
 import { InteractionWaitService } from '../../src/common/services/interaction-wait.service';
 import type { AskQuestion } from '../../src/common/types/ask.types';
 
@@ -108,5 +113,124 @@ describe('ChatController - respond（统一交互应答：审批/询问/继续�
         answers: [{ id: 'approval', selected: ['同意', '拒绝'] }],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('ChatController - streamMessage 本地斜杠命令', () => {
+  function createStreamHarness(opts: { compressError?: any } = {}) {
+    const res = {
+      writableEnded: false,
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+    const sessionService = {
+      compressSession: opts.compressError
+        ? jest.fn(async () => {
+            throw opts.compressError;
+          })
+        : jest.fn(async () => ({ success: true, started: true })),
+    };
+    const chatRunner = { startStream: jest.fn(async () => () => {}) };
+    const tagParserPipeline = {
+      parse: jest.fn(async () => ({ injectionBlocks: [] })),
+    };
+    const controller = new ChatController(
+      sessionService as any,
+      { hasActiveStream: jest.fn(() => false) } as any,
+      chatRunner as any,
+      tagParserPipeline as any,
+      new InteractionWaitService(),
+    );
+    return { controller, res, sessionService, chatRunner, tagParserPipeline };
+  }
+
+  const call = (
+    controller: ChatController,
+    res: any,
+    userMessage: any,
+  ) =>
+    controller.streamMessage(
+      { sessionId: 's1', userMessage },
+      res,
+      {} as any,
+      'client-1',
+    );
+
+  it('/compact 在落库/建流前拦截：转手动压缩，不写用户消息、不解析标签', async () => {
+    const { controller, res, sessionService, chatRunner, tagParserPipeline } =
+      createStreamHarness();
+
+    await call(controller, res, { content: '/compact 只保留最近 10 轮' });
+
+    expect(sessionService.compressSession).toHaveBeenCalledWith('s1', {
+      instructions: '只保留最近 10 轮',
+    });
+    expect(chatRunner.startStream).not.toHaveBeenCalled();
+    expect(tagParserPipeline.parse).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: true,
+        localCommand: expect.objectContaining({
+          name: 'compact',
+          instructions: '只保留最近 10 轮',
+          started: true,
+        }),
+      }),
+    );
+  });
+
+  it('/compress 别名同样拦截；无参数时不传 instructions', async () => {
+    const { controller, res, sessionService, chatRunner } =
+      createStreamHarness();
+
+    await call(controller, res, { content: '/compress' });
+
+    expect(sessionService.compressSession).toHaveBeenCalledWith('s1', {});
+    expect(chatRunner.startStream).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        localCommand: expect.objectContaining({ name: 'compress' }),
+      }),
+    );
+  });
+
+  it('未知斜杠命令按普通消息处理（仍进入 chatRunner，不触发压缩）', async () => {
+    const { controller, res, sessionService, chatRunner } =
+      createStreamHarness();
+
+    await call(controller, res, { content: '/help 看看用法' });
+
+    expect(sessionService.compressSession).not.toHaveBeenCalled();
+    expect(chatRunner.startStream).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it('本地命令带附件 → 400（不静默丢弃附件）', async () => {
+    const { controller, res, sessionService } = createStreamHarness();
+
+    await expect(
+      call(controller, res, {
+        content: '/compact',
+        files: [{ mediaType: 'text/plain', bytes: 1, url: 'x' }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(sessionService.compressSession).not.toHaveBeenCalled();
+  });
+
+  it('压缩忙（409 SESSION_STREAMING）原样透传，便于前端提示', async () => {
+    const busy = new HttpException(
+      { error: '当前会话正在流式输出，请等待结束后再压缩', code: 'SESSION_STREAMING' },
+      HttpStatus.CONFLICT,
+    );
+    const { controller, res } = createStreamHarness({ compressError: busy });
+
+    await call(controller, res, { content: '/compact' });
+
+    expect(res.status).toHaveBeenCalledWith(HttpStatus.CONFLICT);
+    expect(res.json).toHaveBeenCalledWith({
+      error: '当前会话正在流式输出，请等待结束后再压缩',
+      code: 'SESSION_STREAMING',
+    });
   });
 });

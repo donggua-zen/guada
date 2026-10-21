@@ -147,6 +147,7 @@ describe('CompactionService', () => {
         's1',
         expect.objectContaining({
           summaryInputBudgetTokens: 118_000, // 128000 − 2000 − max(8000, 6400)
+          summaryInputFormat: 'raw', // 无专用模型且默认假定前缀可复用
           trigger: 'manual',
         }),
       );
@@ -164,11 +165,56 @@ describe('CompactionService', () => {
       await service.compress(ds, { force: true, reason: 'manual' });
       expect(engine.execute).toHaveBeenCalledWith(
         's1',
-        expect.objectContaining({ summaryInputBudgetTokens: 948_000 }), // 1M − 2000 − 50000
+        expect.objectContaining({
+          summaryInputBudgetTokens: 948_000, // 1M − 2000 − 50000
+          summaryInputFormat: 'serialized', // 专用压缩模型没有主请求前缀可复用
+        }),
       );
     });
 
-    it('trigger 透传：reason=overflow → 引擎收到 overflow（自动/溢出不允许截断）', async () => {
+    it('摘要分支：前缀缓存不可用（模型刚切换）→ serialized；可复用 → raw', async () => {
+      const { service, engine } = createService();
+      const ds = createDataSource({ getTokenCount: jest.fn(async () => 900) });
+      await service.compress(ds, { force: true, useStablePrefix: false });
+      expect(engine.execute).toHaveBeenLastCalledWith(
+        's1',
+        expect.objectContaining({ summaryInputFormat: 'serialized' }),
+      );
+      await service.compress(ds, { force: true, useStablePrefix: true });
+      expect(engine.execute).toHaveBeenLastCalledWith(
+        's1',
+        expect.objectContaining({ summaryInputFormat: 'raw' }),
+      );
+    });
+
+    it('摘要输入降级：引擎 degraded 透传到 CompressOutcome（供事件/摘要卡展示）', async () => {
+      const { service, engine } = createService();
+      const degraded = {
+        reason: 'budget-infeasible' as const,
+        strippedToolResults: 16,
+        strippedReasoning: 3,
+        strippedImages: 1,
+        strippedFiles: 0,
+        truncatedRounds: 2,
+        droppedMessages: 6,
+        droppedTokens: 12_345,
+        summaryInputTokens: 100_000,
+        budgetTokens: 118_000,
+      };
+      engine.execute.mockResolvedValueOnce({
+        compacted: true,
+        shadowedCount: 48,
+        shadowedEndId: 'm0',
+        summaryMessageId: 'm_sum',
+        summary: 'S',
+        degraded,
+      } as any);
+      const ds = createDataSource({ getTokenCount: jest.fn(async () => 900) });
+      const result = await service.compress(ds, { force: true });
+      expect(result.degraded).toEqual(degraded);
+    });
+
+    it('trigger 透传：reason=overflow → 引擎收到 overflow（触发源仅用于诊断，降级阶梯统一）', async () => {
       const { service, engine } = createService();
       const ds = createDataSource({ getTokenCount: jest.fn(async () => 900) });
       await service.compress(ds, { force: true, reason: 'overflow' });

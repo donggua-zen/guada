@@ -247,6 +247,23 @@ export interface CompactionStartData {
   sourceCommandId?: string;
 }
 
+/**
+ * 摘要输入降级统计（持久化镜像，与 chat/compaction 的 SummaryDegradation 同构）。
+ * 持久化层不反向依赖模块层类型；字段增删需两边同步。
+ */
+export interface CompactionDegradationData {
+  reason: 'budget-infeasible' | 'provider-window-exceeded';
+  strippedToolResults: number;
+  strippedReasoning: number;
+  strippedImages: number;
+  strippedFiles: number;
+  truncatedRounds: number;
+  droppedMessages: number;
+  droppedTokens: number;
+  summaryInputTokens: number;
+  budgetTokens?: number;
+}
+
 export interface CompactionSummaryData {
   /** 遮蔽末位（分界点）消息 id——前端标记"已压缩"的唯一依据 */
   shadowedEndId?: string;
@@ -256,6 +273,8 @@ export interface CompactionSummaryData {
   shadowedMessageIds?: string[];
   summary: string;                // 摘要文本
   summaryMessageId: string;       // 摘要作为一条消息
+  /** 摘要输入降级统计（为适配窗口剥离工具结果/思考或丢弃最旧轮次时写入） */
+  degraded?: CompactionDegradationData;
   /** 摘要调用 usage（流式累积，对齐 DSH SummaryResult 记录调用 envelope） */
   usage?: {
     promptTokens?: number;

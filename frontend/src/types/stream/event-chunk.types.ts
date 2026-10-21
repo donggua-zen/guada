@@ -162,6 +162,20 @@ export interface CompressionErrorEvent {
   cancelled?: boolean;
 }
 
+/** 摘要输入降级统计（与后端 SummaryDegradation 逐字段同构） */
+export interface SummaryDegradation {
+  reason: "budget-infeasible" | "provider-window-exceeded";
+  strippedToolResults: number;
+  strippedReasoning: number;
+  strippedImages: number;
+  strippedFiles: number;
+  truncatedRounds: number;
+  droppedMessages: number;
+  droppedTokens: number;
+  summaryInputTokens: number;
+  budgetTokens?: number;
+}
+
 /** 上下文压缩结束（引擎级：任何一次压缩运行成功后广播；微压缩与摘要压缩都发）。
  *  携带压缩后占用（contextStats）——前端据此即时更新环形指示器，无需 REST；
  *  并携带本次结果（裁剪条数/思考剥离数/是否压缩/跳过原因），用于展示"这次压缩做了什么"。 */
@@ -186,6 +200,8 @@ export interface CompressionEndEvent {
   shadowedCount?: number;
   /** 未压缩原因（below-threshold / no-summary-provider / retain-budget-exceeds-history / tier-disabled；prune-sufficient 为旧事件遗留） */
   skipReason?: string;
+  /** 摘要输入降级统计（为适配窗口剥离工具结果/思考或丢弃最旧轮次时给出） */
+  degraded?: SummaryDegradation;
 }
 
 /**
@@ -207,11 +223,32 @@ export interface CompactionSummaryEvent {
   shadowedMessageIds?: string[];
   /** 摘要文本 */
   summary: string;
+  /** 摘要输入降级统计（为适配窗口剥离工具结果/思考或丢弃最旧轮次时给出） */
+  degraded?: SummaryDegradation;
   /** 压缩后当前完整请求 token + 窗口（前端即时更新环形指示器，无需 REST） */
   contextStats?: {
     usedTokens: number;
     effectiveContextWindow: number;
   };
+}
+
+/**
+ * 上下文窗口变化提示（模型切换/会话 maxTokensLimit 调整后，历史相对新窗口过大）。
+ * 纯 UI 提示：前端据此在对话流提醒"将自动压缩/可能丢弃早期内容"。
+ */
+export interface ContextWindowChangedEvent {
+  type: "context_window_changed";
+  reason: "model-switch" | "token-limit" | "model-config" | "over-window";
+  previousModelId?: string;
+  previousModelName?: string;
+  modelId: string;
+  modelName: string;
+  previousEffectiveContextWindow?: number;
+  effectiveContextWindow: number;
+  usedTokens: number;
+  triggerRatio: number;
+  willAutoCompact: boolean;
+  overWindow: boolean;
 }
 
 /**
@@ -346,6 +383,7 @@ export type SessionStreamEvent =
   | CompressionErrorEvent
   | CompressionEndEvent
   | CompactionSummaryEvent
+  | ContextWindowChangedEvent
   | AskRequestedEvent
   | AskResolvedEvent
   | WorkflowEvent

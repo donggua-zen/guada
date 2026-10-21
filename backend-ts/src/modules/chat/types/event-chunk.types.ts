@@ -14,6 +14,7 @@
 import type { StreamChunk, StreamUsage } from "../../../common/types/stream-chunk.types";
 import type { TokenBreakdown } from "../../../common/persistence/message-store.interface";
 import type { FileRef } from "../../../common/types/conversation.types";
+import type { SummaryDegradation } from "../compaction/compression-engine";
 
 // ==================== 回合级事件 ====================
 
@@ -158,6 +159,32 @@ export interface CompressionEndEvent {
   shadowedCount?: number;
   /** 未压缩原因（compacted=false 时给出；见 CompressionSkipReason） */
   skipReason?: string;
+  /** 摘要输入降级统计（本次为适配窗口剥离工具结果/思考或丢弃最旧轮次时给出） */
+  degraded?: SummaryDegradation;
+}
+
+/**
+ * 上下文窗口变化提示（模型切换/会话 maxTokensLimit 调整后，历史相对新窗口过大）。
+ * 纯 UI 提示：不影响请求；前端据此在对话流提醒"将自动压缩/可能丢弃早期内容"。
+ */
+export interface ContextWindowChangedEvent {
+  type: "context_window_changed";
+  /** 变化原因：换模型 / 调整会话 token 上限 / 模型窗口配置变化 / 无历史基线但已超窗 */
+  reason: "model-switch" | "token-limit" | "model-config" | "over-window";
+  previousModelId?: string;
+  previousModelName?: string;
+  modelId: string;
+  modelName: string;
+  previousEffectiveContextWindow?: number;
+  effectiveContextWindow: number;
+  /** 当前完整请求 token（与压缩阈值同口径） */
+  usedTokens: number;
+  /** 压缩触发比例（用于文案：达到该比例将自动压缩） */
+  triggerRatio: number;
+  /** 自动压缩是否启用且当前已过触发线 */
+  willAutoCompact: boolean;
+  /** 当前历史是否已硬超新窗口 */
+  overWindow: boolean;
 }
 
 /**
@@ -181,6 +208,8 @@ export interface CompactionSummaryEvent {
   shadowedMessageIds?: string[];
   /** 摘要文本 */
   summary: string;
+  /** 摘要输入降级统计（本次为适配窗口剥离工具结果/思考或丢弃最旧轮次时给出） */
+  degraded?: SummaryDegradation;
   /** 压缩后当前完整请求 token + 窗口（前端即时更新环形指示器，无需 REST） */
   contextStats?: ContextStatsPayload;
 }
@@ -271,6 +300,7 @@ export type SessionStreamEvent =
   | CompressionErrorEvent
   | CompressionEndEvent
   | CompactionSummaryEvent
+  | ContextWindowChangedEvent
   | AskRequestedEvent
   | AskResolvedEvent
   | WorkflowEvent

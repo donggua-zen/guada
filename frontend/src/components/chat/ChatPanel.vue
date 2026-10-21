@@ -223,7 +223,11 @@ import {
 import { useMessageOperations, toPayloadFileRefs } from '@/composables/useMessageOperations'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
-import { getErrorMessage } from '@/utils/errorMessage'
+import { getErrorMessage, getApiErrorStatus } from '@/utils/errorMessage'
+import {
+  parseLocalSlashCommand,
+  type LocalSlashCommand,
+} from '@/utils/localSlashCommand'
 import type { SnipData } from './workspace/FilePreviewPanel.vue'
 
 // 组件导入
@@ -1242,6 +1246,70 @@ async function copyMessage(block: MessageActionTarget) {
 }
 
 /**
+ * 发送本地斜杠命令（当前仅 /compact、/compress）。
+ *
+ * 执行逻辑只留在后端：这里仍走统一的 `/chat/stream` 入口，由后端在落库/建流前识别
+ * 本地命令并转手动压缩。前端只负责前置门控（流式中/附件）、输入恢复与结果提示，
+ * 保证"命令文本不落库、不进 LLM"的定义只有后端一处（也便于未来命令插件化）。
+ */
+async function sendLocalSlashCommand(
+  command: LocalSlashCommand,
+  fileCount: number,
+  originalContent: string,
+) {
+  const sessionId = currentSessionId.value;
+  if (!sessionId) return;
+  // 命令被拒绝时把文本放回输入框（ChatInput.sendMessage 会在 emit 后同步清空编辑器）。
+  // nextTick 确保恢复发生在清空之后，否则会被紧随其后的 clearContent 覆盖。
+  const restoreInput = () => {
+    void nextTick(() => {
+      if (!inputMessage.value.content) {
+        inputMessage.value.content = originalContent;
+      }
+    });
+  };
+  if (fileCount > 0) {
+    toast.warning(t('chat.command.attachmentsNotSupported'));
+    restoreInput();
+    return;
+  }
+  if (isStreaming.value || sessionStore.sessionIsCompressing(sessionId)) {
+    toast.warning(t('chat.memo.streamingWarning'));
+    restoreInput();
+    return;
+  }
+  try {
+    // 统一入口：后端 ChatController 在写用户消息前识别并执行本地命令。
+    // 命中时响应体带 localCommand，且不会产生 user/message 或对话回合。
+    const res = await apiService.chat({
+      sessionId,
+      userMessage: { content: originalContent },
+    });
+    if (res?.localCommand) {
+      toast.success(t('chat.memo.compressStarted'));
+      return;
+    }
+    // 理论上不会走到：后端词表未同步（前端识别为命令、后端按普通消息处理）。
+    // 此时已正常建流，交给 SSE 驱动，不额外提示。
+    console.warn(
+      `[local-command] backend did not intercept /${command.name}`,
+    );
+  } catch (error) {
+    const msg = getErrorMessage(error);
+    if (
+      getApiErrorStatus(error) === 409 ||
+      msg.includes('busy') ||
+      msg.includes('STREAMING')
+    ) {
+      toast.warning(t('chat.memo.streamingWarning'));
+    } else {
+      toast.error(msg || t('chat.memo.compressFailed'));
+    }
+    restoreInput();
+  }
+}
+
+/**
  * 处理发送消息
  * 合并消息创建和流式启动为一个原子操作
  */
@@ -1254,6 +1322,14 @@ async function handleSendMessage(payload?: InputMessageState) {
 
   try {
     const { content, files, knowledgeBaseIds } = data;
+
+    // 本地斜杠命令（/compact）：控制指令，直接执行，不进消息队列、不发模型。
+    // 必须在"流式入队"之前拦截——否则命令会被当成普通文本排队，流结束后再发给模型。
+    const localCommand = parseLocalSlashCommand(content);
+    if (localCommand) {
+      await sendLocalSlashCommand(localCommand, files.length, content);
+      return;
+    }
 
     // 流式进行中：消息入队，等 stream_finished 后自动消费
     if (currentSessionId.value && isStreaming.value) {

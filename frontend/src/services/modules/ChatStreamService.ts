@@ -34,6 +34,20 @@ export interface ChatStreamParams {
   };
 }
 
+/**
+ * /chat/stream 的响应体（RPC 模式：立即返回，流事件走全局 SSE）。
+ * localCommand 非空表示后端在落库/建流前把该输入识别成本地控制命令并已执行
+ *（如 /compact → 手动压缩），此时不会产生用户消息或对话回合。
+ */
+export interface ChatStreamResponse {
+  ok?: boolean;
+  localCommand?: {
+    name: string;
+    instructions?: string;
+    started?: boolean;
+  };
+}
+
 export class ChatStreamService {
   private abortControllerMap: Map<string, AbortController>;
 
@@ -64,7 +78,7 @@ export class ChatStreamService {
    * → SessionEventsService → StreamEventHub 路由到前端增量组装。
    * 此处只负责触发后端启动流,并处理业务错误(会话不存在/忙碌/无活跃流)。
    */
-  async chat(params: ChatStreamParams): Promise<void> {
+  async chat(params: ChatStreamParams): Promise<ChatStreamResponse> {
     const {
       sessionId,
       regenerationMode = null,
@@ -114,6 +128,9 @@ export class ChatStreamService {
         }
         throw new Error(errorData.error || t("session.api.responseFailed", { status: response.status }));
       }
+
+      // 响应体只有本地命令需要（/compact 等），普通消息可安全忽略
+      return (await response.json().catch(() => ({}))) as ChatStreamResponse;
     } finally {
       this.abortControllerMap.delete(sessionId);
     }

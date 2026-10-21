@@ -25,6 +25,7 @@ import {
   AskAnsweredData,
   SessionModeChangedData,
   ContextStatsData,
+  CompactionDegradationData,
 } from './types';
 import { generateOrderedMessageId } from '../utils/ordered-id.util';
 import { isVisionImageMediaType } from '../utils/media-type.util';
@@ -1251,6 +1252,8 @@ export class JsonlMessageService implements IMessageStore {
     summary: string;
     summaryMessageId?: string;
     mode?: string;
+    /** 摘要输入降级统计（剥离/丢弃过内容时写入 compaction/summary） */
+    degraded?: CompactionDegradationData;
     usage?: import('../types/stream-chunk.types').StreamUsage;
     /** 压缩后完整请求 token（会话层结算；compaction/end 携带，前端上下文占用锚点） */
     usedTokens?: number;
@@ -1275,6 +1278,8 @@ export class JsonlMessageService implements IMessageStore {
     summary: string;
     summaryMessageId?: string;
     mode?: string;
+    /** 摘要输入降级统计（剥离/丢弃过内容时写入 compaction/summary） */
+    degraded?: CompactionDegradationData;
     usage?: import('../types/stream-chunk.types').StreamUsage;
     /** 压缩后完整请求 token（会话层结算；compaction/end 携带，前端上下文占用锚点） */
     usedTokens?: number;
@@ -1308,6 +1313,7 @@ export class JsonlMessageService implements IMessageStore {
           shadowedCount: data.shadowedCount,
           summary: data.summary,
           summaryMessageId,
+          ...data.degraded === undefined ? {} : { degraded: data.degraded },
           ...data.usage === undefined ? {} : { usage: data.usage },
         },
       },

@@ -21,7 +21,7 @@
           </span>
           <div class="command-picker-info flex items-center gap-2">
             <div class="command-picker-name whitespace-nowrap" :class="{ 'text-primary': index === selectedIndex }">
-              {{ (item.providerId || 'skill') + ':' + (item.label || item.name || '') }}
+              {{ itemTitle(item) }}
             </div>
             <div class="command-picker-desc truncate">
               {{ item.description || '' }}
@@ -101,6 +101,12 @@ const filteredCommands = computed(() => {
   });
 });
 
+/** 列表标题：本地命令显示 /name，标签命令保持 provider:name */
+const itemTitle = (item: SkillCommand) =>
+  item.local === true
+    ? `/${item.label || item.name || ''}`
+    : `${item.providerId || 'skill'}:${item.label || item.name || ''}`;
+
 const scrollToSelectedItem = () => {
   nextTick(() => {
     const listEl = pickerRef.value?.querySelector('.command-picker-list');
@@ -154,6 +160,8 @@ defineExpose({
   moveUp,
   confirmSelection,
   close,
+  /** 当前是否有匹配项（无匹配时 Enter 应放行给输入框发送，而不是被面板吞掉） */
+  hasMatches: () => filteredCommands.value.length > 0,
 });
 </script>
 

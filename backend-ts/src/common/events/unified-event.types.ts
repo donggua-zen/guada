@@ -34,6 +34,7 @@ export const EVENT_METHOD = {
   STREAM_COMPRESSION_ERROR: "stream/compression_error",
   STREAM_COMPRESSION_END: "stream/compression_end",
   STREAM_COMPACTION_SUMMARY: "stream/compaction_summary",
+  STREAM_CONTEXT_WINDOW_CHANGED: "stream/context_window_changed",
   STREAM_ASK_REQUESTED: "stream/ask_requested",
   STREAM_ASK_RESOLVED: "stream/ask_resolved",
   STREAM_WORKFLOW_EVENT: "stream/workflow_event",

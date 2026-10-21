@@ -13,15 +13,21 @@
  * 写入统一经 CompactionDataSource 的窄写接口（options.dataSource）——引擎不感知持久化后端细节。
  *
  * 不变量：
- * - 摘要输入与上一次主请求逐字节一致（此时未写入任何改写）→ KV 前缀命中。
+ * - 正常路径：摘要输入与上一次主请求逐字节一致（此时未写入任何改写）→ KV 前缀命中。
+ * - 降级路径（预算装不下/端点拒绝）：摘要输入会被剥离工具结果/思考并按轮丢弃最旧内容，
+ *   不再与主请求一致——这是用前缀缓存换"可完成"的显式取舍，见 SummaryDegradation。
  * - 遮蔽区不做裁剪：整段由摘要替换；保留尾同样不再裁剪（微压缩独立处理）。
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { TokenMeterService } from '../token-meter.service';
-import type { Message } from '../../../common/types/conversation.types';
+import type {
+  ContentBlock,
+  Message,
+} from '../../../common/types/conversation.types';
 import type { CompactionDataSource } from './types';
 import { CompactionCancelledError } from './compaction-cancelled.error';
 import { toolPairingBalancedBefore } from './tool-pairing';
+import { serializeSummaryMessages } from './summary-serializer';
 import { isContextWindowExceeded } from '../../llm-core/utils/retry-on-error.util';
 
 /** 压缩时保留的最近消息条数下限（token 预算过小时强制保留） */
@@ -36,10 +42,16 @@ export const SUMMARY_INPUT_SAFETY_MARGIN_RATIO = 0.05;
 export const SUMMARY_INSTRUCTION_TOKENS_EST = 600;
 /** provider 仍拒绝时"收紧预算 + 抬高边界"的重试上限（zcode 同款 3） */
 const MAX_SUMMARY_INPUT_RETRIES = 3;
-/** 手动路径截断最旧遮蔽区的最多次数（zcode 同款 3） */
+/** 摘要输入极致剥离的层级数（一次完整剥离：工具结果/思考/图片/文件） */
+const MAX_STRIP_ATTEMPTS = 1;
+/** 从最旧端按轮丢弃的最多次数（zcode 同款 3；auto/manual/overflow 共用） */
 const MAX_SUMMARY_TRUNCATION_ATTEMPTS = 3;
-/** 摘要输入外循环的硬上限（防止收紧/截断两条路径叠加失控） */
-const MAX_SUMMARY_INPUT_LOOP_ATTEMPTS = MAX_SUMMARY_INPUT_RETRIES + MAX_SUMMARY_TRUNCATION_ATTEMPTS + 1;
+/** 摘要输入外循环的硬上限（收紧 ×（剥离+截断）叠加的防御性上界） */
+const MAX_SUMMARY_INPUT_LOOP_ATTEMPTS =
+  MAX_SUMMARY_INPUT_RETRIES * (1 + MAX_STRIP_ATTEMPTS + MAX_SUMMARY_TRUNCATION_ATTEMPTS) +
+  MAX_STRIP_ATTEMPTS +
+  MAX_SUMMARY_TRUNCATION_ATTEMPTS +
+  1;
 /** 截断标记（与 zcode COMPACT_PROMPT_TOO_LONG_RETRY_MARKER 同款文案） */
 export const SUMMARY_TRUNCATION_MARKER = '[earlier conversation truncated for compaction retry]';
 
@@ -140,11 +152,17 @@ function parseProviderContextLimit(error: unknown): number | undefined {
 function createSummaryInputOverBudgetError(input: {
   needTokens: number;
   budget: number | undefined;
+  degradation?: SummaryDegradation;
 }): Error {
+  const degraded = input.degradation;
+  const attempts = degraded
+    ? ` after stripping ${degraded.strippedToolResults} tool result(s) / ${degraded.strippedReasoning} thinking block(s)` +
+      ` and dropping ${degraded.truncatedRounds} earliest round(s)`
+    : '';
   return new Error(
-    `Compaction failed: the summary input exceeds the model context window (need ~${Math.ceil(
+    `Compaction failed: the summary input still exceeds the model context window (need ~${Math.ceil(
       input.needTokens,
-    )} tokens, budget ${input.budget ?? 'unknown'}). Try again after narrowing the active context.`,
+    )} tokens, budget ${input.budget ?? 'unknown'})${attempts}. Try again after narrowing the active context.`,
   );
 }
 
@@ -178,6 +196,91 @@ function groupByAssistantStartedRounds<T extends { role: string }>(
   return groups;
 }
 
+/** 极致剥离的块级统计（仅内存副本，不落库） */
+interface SummaryStripStats {
+  toolResults: number;
+  reasoning: number;
+  images: number;
+  files: number;
+  changed: boolean;
+}
+
+/**
+ * 摘要输入极致剥离：预算装不下时的第一级降级。
+ *
+ * - 工具结果：content 换成短占位（保留块与 toolCallId → 工具配对不被破坏）
+ * - 思考：整块删除（消息因此为空时补一条极短占位）
+ * - 图片/文件：换成占位文本（摘要只需要知道"有过这个附件"）
+ * - 文本/工具调用/kb 引用保留：仍超预算时交给按轮丢弃处理
+ *
+ * 只读入参：返回新消息/新 content 数组，不修改会话快照或 shadowedMessages 记账。
+ */
+function stripSummaryInputContent(entries: readonly Message[]): {
+  entries: Message[];
+  stats: SummaryStripStats;
+} {
+  const stats: SummaryStripStats = {
+    toolResults: 0,
+    reasoning: 0,
+    images: 0,
+    files: 0,
+    changed: false,
+  };
+  const out: Message[] = [];
+  for (const msg of entries) {
+    let changed = false;
+    const content: ContentBlock[] = [];
+    for (const block of msg.content) {
+      switch (block.type) {
+        case 'tool-result':
+          stats.toolResults += 1;
+          changed = true;
+          content.push({
+            ...block,
+            content: `[tool result omitted: ${block.content.length} chars]`,
+            images: undefined,
+          });
+          break;
+        case 'reasoning':
+          stats.reasoning += 1;
+          changed = true;
+          break; // 思考块整体删除（摘要不需要思考过程）
+        case 'image':
+          stats.images += 1;
+          changed = true;
+          content.push({ type: 'text', text: '[image omitted]' });
+          break;
+        case 'file':
+          stats.files += 1;
+          changed = true;
+          content.push({
+            type: 'text',
+            text: `[file omitted: ${block.attachment?.name ?? block.attachment?.url ?? '(attachment)'}]`,
+          });
+          break;
+        default:
+          content.push(block);
+          break;
+      }
+    }
+    if (content.length === 0) {
+      // 纯思考消息：保留极短占位，避免空 content 打乱请求序列
+      content.push({ type: 'text', text: '[thinking omitted]' });
+    }
+    if (changed) stats.changed = true;
+    out.push(changed ? { ...msg, content } : msg);
+  }
+  return { entries: out, stats };
+}
+
+/** 按轮截断结果（含实测丢弃规模） */
+interface SummaryTruncationResult {
+  entries: Message[];
+  droppedRounds: number;
+  droppedMessages: number;
+  droppedTokens: number;
+}
+
 /** 摘要生成模式 */
 export enum SummaryMode {
   /** 关闭摘要：直接丢弃待压缩内容，不生成摘要 */
@@ -198,8 +301,13 @@ export enum SummaryMode {
 export interface SummaryInput {
   /** 全部可见消息（含历史 compaction 摘要事件消息，供提取旧检查点） */
   allMessages: Message[];
-  /** 遮蔽消息（来自请求消息列表本身，与主请求逐字节一致） */
+  /**
+   * 遮蔽消息（正常路径 = 请求消息本身，逐字节一致 → KV 前缀命中；
+   * 降级路径可能已被剥离/截断，见 SummaryDegradation）。
+   */
   shadowed: Message[];
+  /** 手动压缩附加指令（/compact <instructions>）：拼进摘要提示词，不落库、不进对话历史 */
+  instructions?: string;
 }
 
 /** 摘要生成结果（流式累积可取 usage，对齐 DSH SummaryResult） */
@@ -229,8 +337,23 @@ export interface CompressionOptions {
    */
   summaryInputBudgetTokens?: number;
   /**
-   * 触发来源：manual 允许"超窗时截断最旧遮蔽区"的降级（zcode 同款），auto/overflow 不允许
-   * （自动路径不得静默丢历史）。缺省按 auto 处理。
+   * 摘要输入格式（与 provider 的实际组装方式保持一致）：
+   * - raw：原消息直接作为摘要请求前缀（KV 缓存可复用时）
+   * - serialized：拼接为紧凑文本（模型切换/专用压缩模型，前缀缓存不可用时）
+   *
+   * 预算循环必须按**实际发送形态**估算：serialized 会跳过思考、截断工具结果，
+   * 若仍按原消息 token 数判断，会把本可装下的内容误判为超预算并白白丢弃。
+   */
+  summaryInputFormat?: 'raw' | 'serialized';
+  /**
+   * 手动压缩附加指令（`/compact <instructions>` 的自由文本）。
+   * 只拼进摘要提示词末尾的 Additional Instructions，不写用户消息、不落库、不进对话历史；
+   * 其 token 估算计入摘要输入预算（避免预算低估）。
+   */
+  instructions?: string;
+  /**
+   * 触发来源（诊断/兼容保留）：降级阶梯（剥离 + 按轮丢弃）对所有触发源统一开放，
+   * 不再用 trigger 决定是否允许丢弃。缺省按 auto 处理。
    */
   trigger?: 'auto' | 'manual' | 'overflow';
   /**
@@ -277,6 +400,35 @@ export type CompressionSkipReason =
   | 'no-summary-provider'
   | 'retain-budget-exceeds-history';
 
+/**
+ * 摘要输入降级统计（超预算/端点拒绝时的"可完成"取舍）。
+ *
+ * 只描述摘要输入（遮蔽前缀）被削减的规模；`shadowedCount` 记账不变——
+ * 被丢弃的最旧内容仍随遮蔽区移出 LLM 视图，只是没有进入摘要。
+ */
+export interface SummaryDegradation {
+  /** 触发原因：两侧预算约束不可行 / provider 仍报超窗 */
+  reason: 'budget-infeasible' | 'provider-window-exceeded';
+  /** 被替换为占位文本的工具结果块数 */
+  strippedToolResults: number;
+  /** 被删除的思考块数 */
+  strippedReasoning: number;
+  /** 被替换为占位文本的图片块数 */
+  strippedImages: number;
+  /** 被替换为占位文本的文件引用块数 */
+  strippedFiles: number;
+  /** 从最旧端按轮丢弃的轮数（assistant 起始轮） */
+  truncatedRounds: number;
+  /** 丢弃的消息条数 */
+  droppedMessages: number;
+  /** 丢弃内容对应的估算 token（丢弃前后差值） */
+  droppedTokens: number;
+  /** 最终摘要输入估算 token（仅遮蔽区，不含前缀/指令） */
+  summaryInputTokens: number;
+  /** 摘要输入预算（含输出预留/安全余量口径；缺省表示调用方未提供预算） */
+  budgetTokens?: number;
+}
+
 export interface CompressionResult {
   /** 是否触发二级压缩 */
   compacted: boolean;
@@ -289,6 +441,8 @@ export interface CompressionResult {
   summary?: string;
   /** 未压缩原因（compacted=false 时给出） */
   skipReason?: CompressionSkipReason;
+  /** 摘要输入降级统计（仅在确实剥离/丢弃过内容时给出） */
+  degraded?: SummaryDegradation;
 }
 
 @Injectable()
@@ -302,6 +456,30 @@ export class CompressionEngine {
     if (options.abortSignal?.aborted) {
       throw new CompactionCancelledError();
     }
+  }
+
+  /**
+   * 摘要输入 token 估算（与 provider 的实际组装形态一致）。
+   * - raw：逐消息估算（与主请求同口径，前缀缓存分支）
+   * - serialized：按序列化文本估算（跳过思考、截断工具结果、附件只留标记）
+   */
+  private async estimateSummaryInputTokens(input: {
+    sessionId: string;
+    modelName: string;
+    entries: readonly Message[];
+    format?: 'raw' | 'serialized';
+  }): Promise<number> {
+    if (input.format === 'serialized') {
+      return this.tokenMeter.estimateTextTokens(
+        input.modelName,
+        serializeSummaryMessages(input.entries),
+      );
+    }
+    return this.tokenMeter.estimateMessages(
+      input.sessionId,
+      input.modelName,
+      input.entries as Message[],
+    );
   }
 
   /**
@@ -357,7 +535,6 @@ export class CompressionEngine {
     //    超窗会话（实际远大于有效窗口）靠 minRetain 抬高保留量，确保"前缀+遮蔽区+指令"装得下；
     //    maxRetain 反向约束保留尾，避免压完的主请求再次超窗。
     const retainRatio = options.retainRatio ?? 0.2;
-    const trigger = options.trigger ?? 'auto';
     let effectiveBudget = options.summaryInputBudgetTokens;
     let budgetState = computeRetainBudget({
       contextWindow: options.contextWindow,
@@ -368,7 +545,13 @@ export class CompressionEngine {
     });
     // 预算驱动的边界（可重试）：先按 retainTokens 回退，再按"遮蔽区装得下"精确校正
     // （computeBoundary 可能在"下一条装不下"处停下，使遮蔽区超预算最多一条消息）。
-    const staticTokens = envelopeDelta + SUMMARY_INSTRUCTION_TOKENS_EST;
+    // 附加指令（/compact <instructions>）也要占摘要输入预算：按实际文本估算，
+    // 否则长指令会把请求顶出预算（provider 侧拒绝后又要多走一轮收紧/截断）。
+    const instructionTokens = options.instructions
+      ? await this.tokenMeter.estimateTextTokens(modelName, options.instructions)
+      : 0;
+    const staticTokens =
+      envelopeDelta + SUMMARY_INSTRUCTION_TOKENS_EST + instructionTokens;
     const resolveBudgetedBoundary = async (
       budget: number | undefined,
       state: RetainBudgetState,
@@ -398,12 +581,16 @@ export class CompressionEngine {
       effectiveBudget,
       budgetState,
     );
-    if (!initialBoundary.feasible) {
-      // 合同外场景：前缀/单条不可分消息本身就超预算（连"最小遮蔽区"都装不下）→ 不发注定失败的请求
-      throw createSummaryInputOverBudgetError({
-        needTokens: total + SUMMARY_INSTRUCTION_TOKENS_EST - budgetState.maxRetain,
-        budget: effectiveBudget,
-      });
+    // 预算不可行（两侧约束无法同时满足）不再直接失败：boundary 已按 maxRetain 取最小遮蔽区，
+    // 先对摘要输入做极致剥离，再按轮丢弃最旧内容——只有连降级都装不下才报错。
+    const budgetInfeasible =
+      effectiveBudget !== undefined && !initialBoundary.feasible;
+    if (budgetInfeasible) {
+      this.logger.warn(
+        `[compress] summary budget infeasible (total=${total}, budget=${effectiveBudget},` +
+          ` minRetain=${budgetState.minRetain}, maxRetain=${budgetState.maxRetain});` +
+          ` degrading summary input`,
+      );
     }
     let boundary = initialBoundary.boundary;
     let shadowedMessages = messages.slice(0, boundary);
@@ -417,9 +604,42 @@ export class CompressionEngine {
     }
 
     let retryAttempts = 0;
+    let stripAttempts = 0;
     let truncationAttempts = 0;
+    // 降级实测累计：跨边界重选保留累计；剥离/截断计数按新遮蔽区重置。
+    const stripped = { toolResults: 0, reasoning: 0, images: 0, files: 0 };
+    let truncatedRounds = 0;
+    let droppedMessages = 0;
+    let droppedTokens = 0;
+    let degradationReason: SummaryDegradation['reason'] | undefined =
+      budgetInfeasible ? 'budget-infeasible' : undefined;
+    const buildDegradation = (
+      summaryInputTokens: number,
+    ): SummaryDegradation | undefined => {
+      if (degradationReason === undefined) return undefined;
+      const changed =
+        stripped.toolResults > 0 ||
+        stripped.reasoning > 0 ||
+        stripped.images > 0 ||
+        stripped.files > 0 ||
+        truncatedRounds > 0;
+      if (!changed) return undefined;
+      return {
+        reason: degradationReason,
+        strippedToolResults: stripped.toolResults,
+        strippedReasoning: stripped.reasoning,
+        strippedImages: stripped.images,
+        strippedFiles: stripped.files,
+        truncatedRounds,
+        droppedMessages,
+        droppedTokens,
+        summaryInputTokens,
+        budgetTokens: effectiveBudget,
+      };
+    };
+
     // 压缩诊断（只读，一行）：预算/边界/遮蔽-保留实测对账 + 快照对齐检查。
-    // retainedTokens≈retainTokens ⇒ 预算正常生效；feasible=false ⇒ 合同外（前缀/不可分单元超预算）。
+    // retainedTokens≈retainTokens ⇒ 预算正常生效；feasible=false ⇒ 降级路径（剥离/丢弃）。
     this.logCompactBoundaryDiagnostics({
       messages,
       perMessageTokens: options.perMessageTokens,
@@ -435,17 +655,28 @@ export class CompressionEngine {
       maxRetain: budgetState.maxRetain,
       feasible: budgetState.feasible,
       retryAttempts,
+      stripAttempts,
       truncationAttempts,
+      summaryInputFormat: options.summaryInputFormat,
     });
 
-    // ④a 摘要输入 = messages[0..boundary)（原消息——此时未写入任何改写 → 与上次主请求一致 → 前缀命中）。
-    //    超窗恢复阶梯（对齐 zcode）：provider 仍拒绝时 ① 收紧预算 + 抬高边界重试（所有路径）
-    //    → ② 手动路径截断最旧遮蔽区（插标记）→ ③ 带数字终结。
-    //    截断只改摘要输入，boundary 记账不变：被丢内容不进摘要也不保留（存储仍在），与 zcode 一致。
+    // ④a 摘要输入 = messages[0..boundary)（正常路径为原消息 → 与上次主请求一致 → 前缀命中）。
+    //    超窗恢复阶梯：① 收紧预算 + 重选边界 → ② 极致剥离（工具结果/思考/图片/文件）
+    //    → ③ 按轮丢弃最旧遮蔽区（插标记）→ ④ 带数字终结。auto/manual/overflow 共用；
+    //    剥离/截断只改摘要输入，boundary 记账不变：被丢内容不进摘要也不保留（存储仍在）。
     let summaryInputEntries: Message[] = shadowedMessages;
     let summary = '';
     let summaryUsage: SummaryResult['usage'] | undefined;
     let mode = options.summaryMode ?? SummaryMode.DEFAULT;
+    let finalSummaryInputTokens = 0;
+    // 截断辅助与预算循环共用同一估算口径（raw / serialized）
+    const estimateEntries = (entries: readonly Message[]) =>
+      this.estimateSummaryInputTokens({
+        sessionId,
+        modelName,
+        entries,
+        format: options.summaryInputFormat,
+      });
     if (options.summaryProvider) {
       // 确认需要二级压缩后才触发回调（记忆保存等订阅者须先于摘要完成）
       if (options.onBeforeCompaction) {
@@ -461,20 +692,78 @@ export class CompressionEngine {
 
       let loopAttempts = 0;
       while (true) {
-        const summaryInputTokens = await this.tokenMeter.estimateMessages(
+        const summaryInputTokens = await this.estimateSummaryInputTokens({
           sessionId,
           modelName,
-          summaryInputEntries,
-        );
+          entries: summaryInputEntries,
+          format: options.summaryInputFormat,
+        });
+        finalSummaryInputTokens = summaryInputTokens;
         loopAttempts += 1;
         if (loopAttempts > MAX_SUMMARY_INPUT_LOOP_ATTEMPTS) {
-          // 收紧/截断两条路径叠加后的硬上限（防御性；正常应在下面 ③ 终结）
+          // 收紧/剥离/截断叠加后的硬上限（防御性；正常应在下面的终结分支报错）
           throw createSummaryInputOverBudgetError({
-            needTokens:
-              summaryInputTokens + envelopeDelta + SUMMARY_INSTRUCTION_TOKENS_EST,
+            needTokens: summaryInputTokens + staticTokens,
             budget: effectiveBudget,
+            degradation: buildDegradation(summaryInputTokens),
           });
         }
+
+        // ④a-1 预算内检查（调用 provider 之前）：先剥离一次，再按轮丢弃。
+        // 两侧约束不可行的会话在这一步被救回；仍装不下才终结。
+        const overBudget =
+          effectiveBudget !== undefined &&
+          summaryInputTokens + staticTokens > effectiveBudget;
+        if (overBudget) {
+          if (stripAttempts < MAX_STRIP_ATTEMPTS) {
+            const result = stripSummaryInputContent(summaryInputEntries);
+            if (result.stats.changed) {
+              stripAttempts += 1;
+              stripped.toolResults += result.stats.toolResults;
+              stripped.reasoning += result.stats.reasoning;
+              stripped.images += result.stats.images;
+              stripped.files += result.stats.files;
+              summaryInputEntries = result.entries;
+              degradationReason ??= 'budget-infeasible';
+              this.logger.warn(
+                `[compress] summary input over budget; stripped tool results/thinking` +
+                  ` (attempt ${stripAttempts}/${MAX_STRIP_ATTEMPTS}, toolResults=${result.stats.toolResults},` +
+                  ` reasoning=${result.stats.reasoning}, images=${result.stats.images}, files=${result.stats.files})`,
+              );
+              continue;
+            }
+          }
+          if (truncationAttempts < MAX_SUMMARY_TRUNCATION_ATTEMPTS) {
+            const truncated = await this.truncateSummaryInputOldest({
+              sessionId,
+              modelName,
+              entries: summaryInputEntries,
+              targetTokens: Math.max(0, effectiveBudget - staticTokens),
+              estimate: estimateEntries,
+            });
+            if (truncated) {
+              truncationAttempts += 1;
+              truncatedRounds += truncated.droppedRounds;
+              droppedMessages += truncated.droppedMessages;
+              droppedTokens += truncated.droppedTokens;
+              summaryInputEntries = truncated.entries;
+              degradationReason ??= 'budget-infeasible';
+              this.logger.warn(
+                `[compress] summary input over budget; truncated oldest shadowed rounds` +
+                  ` (attempt ${truncationAttempts}/${MAX_SUMMARY_TRUNCATION_ATTEMPTS},` +
+                  ` droppedRounds=${truncated.droppedRounds}, droppedMessages=${truncated.droppedMessages},` +
+                  ` droppedTokens=${truncated.droppedTokens}, entries=${truncated.entries.length})`,
+              );
+              continue;
+            }
+          }
+          throw createSummaryInputOverBudgetError({
+            needTokens: summaryInputTokens + staticTokens,
+            budget: effectiveBudget,
+            degradation: buildDegradation(summaryInputTokens),
+          });
+        }
+
         try {
           const gen = await this.generateSummary(
             sessionId,
@@ -489,9 +778,10 @@ export class CompressionEngine {
         } catch (error) {
           if (!isContextWindowExceeded(error)) throw error;
           this.throwIfCancelled(options);
+          degradationReason ??= 'provider-window-exceeded';
 
-          // ① 收紧预算 + 抬高边界重试：provider 只报上限不报 actual（zcode 的 token gap 不可得），
-          //    故按 10% 递减，并以解析到的上限为封顶；预算装不下的边界由 minRetain 自动抬升。
+          // ① 收紧预算 + 重选边界：即使两侧约束不可行也采用新 maxRetain 边界
+          //    （保留更多 → 遮蔽区更小，有利于装下）；boundary 没变则不再重发同一请求。
           const tightened = this.tightenSummaryInputBudget(
             effectiveBudget,
             parseProviderContextLimit(error),
@@ -504,33 +794,55 @@ export class CompressionEngine {
               retainRatio,
               budget: tightened,
             });
-            const nextBoundaryResult = nextState.feasible
-              ? await resolveBudgetedBoundary(tightened, nextState)
-              : { boundary, feasible: false };
-            if (nextBoundaryResult.feasible) {
-              retryAttempts += 1;
-              effectiveBudget = tightened;
-              budgetState = nextState;
-              if (nextBoundaryResult.boundary !== boundary) {
-                boundary = nextBoundaryResult.boundary;
-                shadowedMessages = messages.slice(0, boundary);
-                summaryInputEntries = shadowedMessages;
-                truncationAttempts = 0; // 边界已变：截断按新遮蔽区重新开始
-              }
+            const nextBoundaryResult = await resolveBudgetedBoundary(
+              tightened,
+              nextState,
+            );
+            retryAttempts += 1;
+            effectiveBudget = tightened;
+            budgetState = nextState;
+            if (nextBoundaryResult.boundary !== boundary) {
+              boundary = nextBoundaryResult.boundary;
+              shadowedMessages = messages.slice(0, boundary);
+              summaryInputEntries = shadowedMessages;
+              // 边界已变：剥离/截断按新遮蔽区重新开始（累计统计保留）
+              stripAttempts = 0;
+              truncationAttempts = 0;
               this.logger.warn(
-                `[compress] summary input over window; raised retention and retrying (attempt ${retryAttempts}/${MAX_SUMMARY_INPUT_RETRIES}, budget=${tightened}, boundary=${boundary})`,
+                `[compress] summary input over window; reselected boundary and retrying` +
+                  ` (attempt ${retryAttempts}/${MAX_SUMMARY_INPUT_RETRIES}, budget=${tightened},` +
+                  ` boundary=${boundary}, feasible=${nextBoundaryResult.feasible})`,
+              );
+              continue;
+            }
+            this.logger.warn(
+              `[compress] tightened budget did not move boundary; degrading summary input` +
+                ` (attempt ${retryAttempts}/${MAX_SUMMARY_INPUT_RETRIES}, budget=${tightened})`,
+            );
+          }
+
+          // ② 极致剥离（若尚未做过）
+          if (stripAttempts < MAX_STRIP_ATTEMPTS) {
+            const result = stripSummaryInputContent(summaryInputEntries);
+            if (result.stats.changed) {
+              stripAttempts += 1;
+              stripped.toolResults += result.stats.toolResults;
+              stripped.reasoning += result.stats.reasoning;
+              stripped.images += result.stats.images;
+              stripped.files += result.stats.files;
+              summaryInputEntries = result.entries;
+              this.logger.warn(
+                `[compress] summary input over window; stripped tool results/thinking` +
+                  ` (attempt ${stripAttempts}/${MAX_STRIP_ATTEMPTS}, toolResults=${result.stats.toolResults},` +
+                  ` reasoning=${result.stats.reasoning})`,
               );
               continue;
             }
           }
 
-          // ② 手动路径：截断最旧遮蔽区（auto/overflow 不截断——自动路径不得静默丢历史）。
-          //    目标取"provider 报错推出的上限"（tightened）：即使两侧边界约束不可行，
-          //    它仍是截断唯一可信的目标；无 tightened 时退回当前预算或按 80% 递减。
-          if (
-            trigger === 'manual' &&
-            truncationAttempts < MAX_SUMMARY_TRUNCATION_ATTEMPTS
-          ) {
+          // ③ 按轮丢弃最旧遮蔽区（所有触发路径共用；auto 不再直接失败）
+          //    目标取"provider 报错推出的上限"（tightened）；无 tightened 时退回当前预算或按 80% 递减。
+          if (truncationAttempts < MAX_SUMMARY_TRUNCATION_ATTEMPTS) {
             const targetBudget = tightened ?? effectiveBudget;
             const targetTokens =
               targetBudget === undefined
@@ -541,22 +853,29 @@ export class CompressionEngine {
               modelName,
               entries: summaryInputEntries,
               targetTokens,
+              estimate: estimateEntries,
             });
             if (truncated) {
               truncationAttempts += 1;
-              summaryInputEntries = truncated;
+              truncatedRounds += truncated.droppedRounds;
+              droppedMessages += truncated.droppedMessages;
+              droppedTokens += truncated.droppedTokens;
+              summaryInputEntries = truncated.entries;
               this.logger.warn(
-                `[compress] summary input over window; truncated oldest shadowed rounds (attempt ${truncationAttempts}/${MAX_SUMMARY_TRUNCATION_ATTEMPTS}, entries=${truncated.length})`,
+                `[compress] summary input over window; truncated oldest shadowed rounds` +
+                  ` (attempt ${truncationAttempts}/${MAX_SUMMARY_TRUNCATION_ATTEMPTS},` +
+                  ` droppedRounds=${truncated.droppedRounds}, droppedMessages=${truncated.droppedMessages},` +
+                  ` droppedTokens=${truncated.droppedTokens}, entries=${truncated.entries.length})`,
               );
               continue;
             }
           }
 
-          // ③ 终结：带实测数字，便于用户/日志定位
+          // ④ 终结：带实测数字与降级统计，便于用户/日志定位
           throw createSummaryInputOverBudgetError({
-            needTokens:
-              summaryInputTokens + envelopeDelta + SUMMARY_INSTRUCTION_TOKENS_EST,
+            needTokens: summaryInputTokens + staticTokens,
             budget: effectiveBudget,
+            degradation: buildDegradation(summaryInputTokens),
           });
         }
       }
@@ -564,9 +883,11 @@ export class CompressionEngine {
       mode = SummaryMode.DISABLED; // 无 provider → DISABLED 丢弃
     }
 
+    const degraded = buildDegradation(finalSummaryInputTokens);
+
     // ④b 写 compaction 括号事件（遮蔽 [0..boundary) + 摘要）——提交前最后一道中止检查，
     // 保证取消后不落任何 compaction 写入。遮蔽记账按**最终 boundary**；摘要内容可能只覆盖
-    // summaryInputEntries（手动截断时小于遮蔽区：被丢内容不进摘要也不保留，存储仍在）。
+    // summaryInputEntries（降级剥离/截断时小于遮蔽区：被丢内容不进摘要也不保留，存储仍在）。
     this.throwIfCancelled(options);
     const shadowedCount = shadowedMessages.length;
     const shadowedEndId = shadowedMessages[shadowedCount - 1]!.id;
@@ -576,12 +897,16 @@ export class CompressionEngine {
       summary,
       mode,
       ...(summaryUsage === undefined ? {} : { usage: summaryUsage }),
+      ...(degraded === undefined ? {} : { degraded }),
     });
 
     this.logger.log(
       `[compress] compacted ${shadowedCount} messages (mode=${mode}), retained ${messages.length - boundary} messages, summary=${summary.length} chars` +
-        (retryAttempts > 0 || truncationAttempts > 0
-          ? ` (retryAttempts=${retryAttempts}, truncationAttempts=${truncationAttempts})`
+        (retryAttempts > 0 || stripAttempts > 0 || truncationAttempts > 0
+          ? ` (retryAttempts=${retryAttempts}, stripAttempts=${stripAttempts}, truncationAttempts=${truncationAttempts})`
+          : '') +
+        (degraded
+          ? ` (degraded: strippedToolResults=${degraded.strippedToolResults}, strippedReasoning=${degraded.strippedReasoning}, droppedRounds=${degraded.truncatedRounds}, droppedTokens=${degraded.droppedTokens})`
           : ''),
     );
     return {
@@ -590,6 +915,7 @@ export class CompressionEngine {
       shadowedEndId,
       summaryMessageId,
       summary,
+      ...(degraded === undefined ? {} : { degraded }),
     };
   }
 
@@ -611,7 +937,9 @@ export class CompressionEngine {
     maxRetain?: number;
     feasible?: boolean;
     retryAttempts?: number;
+    stripAttempts?: number;
     truncationAttempts?: number;
+    summaryInputFormat?: 'raw' | 'serialized';
   }): void {
     const { messages, perMessageTokens, boundary } = input;
     let detail = 'perMessageTokens=n/a';
@@ -649,7 +977,9 @@ export class CompressionEngine {
         ` historyTokens=${input.historyTokens} envelopeDelta=${input.envelopeDelta} total=${input.total}` +
         ` retainTokens=${input.retainTokens} boundary=${boundary}` +
         ` shadowedMsgs=${boundary} retainedMsgs=${messages.length - boundary}${budgetDetail}` +
-        ` retryAttempts=${input.retryAttempts ?? 0} truncationAttempts=${input.truncationAttempts ?? 0}`,
+        ` summaryInputFormat=${input.summaryInputFormat ?? 'raw'}` +
+        ` retryAttempts=${input.retryAttempts ?? 0} stripAttempts=${input.stripAttempts ?? 0}` +
+        ` truncationAttempts=${input.truncationAttempts ?? 0}`,
     );
   }
 
@@ -752,31 +1082,54 @@ export class CompressionEngine {
   }
 
   /**
-   * 从最旧端截断摘要输入（仅手动路径）：按 assistant 起始轮分组，逐组丢弃直到估算规模 ≤ targetTokens。
-   * 只改摘要输入；boundary 记账不变 —— 被丢内容不进摘要也不保留（存储仍在），与 zcode 的手动截断一致。
+   * 从最旧端截断摘要输入：按 assistant 起始轮分组，逐组丢弃直到估算规模 ≤ targetTokens。
+   * 只改摘要输入；boundary 记账不变 —— 被丢内容不进摘要也不保留（存储仍在）。
    * 首条为 assistant 时插入截断标记（避免 provider 侧以 assistant 开头，并让模型知道前文被省略）。
-   * @returns 截断后的摘要输入；至少保留 1 组仍装不下 / 无可截断时返回 null
+   *
+   * 实现：先逐消息估算一次并按组做前缀和，再线性找最小丢弃组数
+   * （降级路径可能在数千条消息上反复触发，避免 O(丢弃次数 × 全量估算)）。
+   * @returns 至少保留 1 组仍装不下 / 无可截断时返回 null
    */
   private async truncateSummaryInputOldest(input: {
     sessionId: string;
     modelName: string;
     entries: readonly Message[];
     targetTokens: number;
-  }): Promise<Message[] | null> {
+    /** 与预算循环同口径的估算器（raw / serialized）；缺省按逐消息估算 */
+    estimate?: (entries: readonly Message[]) => Promise<number>;
+  }): Promise<SummaryTruncationResult | null> {
     const groups = groupByAssistantStartedRounds(input.entries);
     if (groups.length < 2) return null;
+    const estimate =
+      input.estimate ??
+      ((entries: readonly Message[]) =>
+        this.tokenMeter.estimateMessages(
+          input.sessionId,
+          input.modelName,
+          entries as Message[],
+        ));
+    const groupTokens: number[] = [];
+    for (const group of groups) {
+      groupTokens.push(await estimate(group));
+    }
+    const totalTokens = groupTokens.reduce((sum, n) => sum + n, 0);
+    let remainingTokens = totalTokens;
     for (let drop = 1; drop <= groups.length - 1; drop += 1) {
+      remainingTokens -= groupTokens[drop - 1] ?? 0;
+      if (remainingTokens > input.targetTokens) continue;
       const remaining = groups.slice(drop).flat();
-      const tokens = await this.tokenMeter.estimateMessages(
-        input.sessionId,
-        input.modelName,
-        remaining,
-      );
-      if (tokens <= input.targetTokens) {
-        return remaining[0]?.role === 'assistant'
+      const entries =
+        remaining[0]?.role === 'assistant'
           ? [createSummaryTruncationMarker(), ...remaining]
           : remaining;
-      }
+      return {
+        entries,
+        droppedRounds: drop,
+        droppedMessages: groups
+          .slice(0, drop)
+          .reduce((count, group) => count + group.length, 0),
+        droppedTokens: totalTokens - remainingTokens,
+      };
     }
     return null;
   }
@@ -838,6 +1191,9 @@ export class CompressionEngine {
       const result = await options.summaryProvider!.generate({
         allMessages: messages,
         shadowed: shadowedMessages,
+        ...(options.instructions === undefined
+          ? {}
+          : { instructions: options.instructions }),
       });
       summary = result.summary;
       usage = result.usage;
