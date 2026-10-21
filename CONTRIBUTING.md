@@ -462,7 +462,7 @@ docker compose up -d --build
 | 渠道 | 地址 |
 |------|------|
 | QQ 群 | 1047993501 |
-| 公众号 | 冬瓜编程实验室 |
+| 微信群 | [GuaDa 用户交流群](https://wxhm.dingd.cn/q/ifa4qwg7df)（活码，长期有效） |
 | Issue | [Gitee Issues](https://gitee.com/zhendongdong/guada_ai/issues) |
 
 ---
