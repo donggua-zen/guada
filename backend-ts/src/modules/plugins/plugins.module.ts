@@ -8,7 +8,7 @@ import { FilePlugin } from "./builtins/file.plugin";
 import { ImageRecognitionPlugin } from "./builtins/image-recognition.plugin";
 import { MemoryPlugin } from "./builtins/memory.plugin";
 import { TimePlugin } from "./builtins/time.plugin";
-import { BrowserPlugin } from "./builtins/browser.plugin";
+import { BrowserScriptPlugin } from "./builtins/browser-script.plugin";
 import { ComputerPlugin } from "./builtins/computer.plugin";
 import { TodoPlugin } from "./builtins/todo.plugin";
 import { WebSearchPlugin } from "./builtins/web-search.plugin";
@@ -38,7 +38,7 @@ import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
     ImageRecognitionPlugin,
     MemoryPlugin,
     TimePlugin,
-    BrowserPlugin,
+    BrowserScriptPlugin,
     ComputerPlugin,
     TodoPlugin,
     WebSearchPlugin,
@@ -70,7 +70,7 @@ export class PluginsModule implements OnModuleInit {
     await this.pluginManager.registerPlugin(this.moduleRef.get(AskUserPlugin));
 
     if (process.env.ELECTRON_APP === "true") {
-      await this.pluginManager.registerPlugin(this.moduleRef.get(BrowserPlugin));
+      await this.pluginManager.registerPlugin(this.moduleRef.get(BrowserScriptPlugin));
       if (process.platform === "win32") {
         await this.pluginManager.registerPlugin(this.moduleRef.get(ComputerPlugin));
       }

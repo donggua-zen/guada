@@ -18,6 +18,7 @@ import { safeTruncate } from "../../common/utils/string.utils";
 import { ISessionContext } from "../chat/session-context";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { AskDeniedError } from "../../common/types/ask.types";
+import { getRetiredToolMessage } from "./retired-tools";
 
 /**
  * 工具执行器
@@ -205,6 +206,18 @@ export class ToolExecutor {
     abortSignal?: AbortSignal,
     opts?: { allowLazy?: boolean },
   ): Promise<ToolCallResponse> {
+    // 退役工具：不广告、不注册，但旧会话可能仍然按历史习惯调用。
+    // 在任何插件查找之前拦截，返回明确的迁移提示而不是“工具不存在”。
+    const retiredHint = getRetiredToolMessage(fullToolName);
+    if (retiredHint) {
+      return {
+        toolCallId,
+        name: fullToolName,
+        content: retiredHint,
+        isError: true,
+      };
+    }
+
     const resolved = session.getResolvedPlugins();
     const allowLazy = opts?.allowLazy === true;
     const toolEntry = ToolExecutor.findTool(resolved, fullToolName, allowLazy);

@@ -11,6 +11,7 @@ import {
   ResolvedPluginInfo,
 } from "../../plugins/types/plugin.types";
 import { ToolExecutor } from "../tool-executor.service";
+import { getRetiredToolkitMessage } from "../retired-tools";
 import type { ContentBlock } from "../../../common/types/conversation.types";
 import { HOOKS } from "../../chat/types/hooks.contract";
 import langZh from "./universal-tools.lang.zh.json";
@@ -125,10 +126,17 @@ export class UniversalToolsPlugin extends PluginBase {
         );
         // 透传 images / imageRefs（多模态图片返回，base64 与磁盘引用两种形态，由引擎
         // 物化后注入为隐藏 user 消息）与 meta（内层工具的结构化结果元数据，如 todo 的
-        // 待办列表）；不传则在本通道被静默丢弃
-        if (result.images?.length || result.imageRefs?.length || result.meta) {
+        // 待办列表）；不传则在本通道被静默丢弃。isError 也要透传，否则退役工具/参数
+        // 校验失败等错误会退化成普通成功结果。
+        if (
+          result.isError ||
+          result.images?.length ||
+          result.imageRefs?.length ||
+          result.meta
+        ) {
           return {
             content: result.content,
+            ...(result.isError ? { isError: true } : {}),
             ...(result.images?.length ? { images: result.images } : {}),
             ...(result.imageRefs?.length ? { imageRefs: result.imageRefs } : {}),
             ...(result.meta ? { meta: result.meta } : {}),
@@ -345,6 +353,10 @@ export class UniversalToolsPlugin extends PluginBase {
     name: string,
     ctx: ToolExecCtx,
   ): Promise<string> {
+    // 旧工具包已退役：旧会话可能仍在 tool_learn 旧名称，直接给迁移提示。
+    const retiredKit = getRetiredToolkitMessage(name);
+    if (retiredKit) return retiredKit;
+
     const resolved = ctx?.session?.getResolvedPlugins();
     if (!resolved || resolved.length === 0)
       return "Error: no available toolkits";

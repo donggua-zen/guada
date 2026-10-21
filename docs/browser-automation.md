@@ -1,5 +1,7 @@
 # 浏览器自动化
 
+> **已退役（2026-10）**：本文描述的 8 个 `browser_*` 扁平工具已从内置插件移除。当前浏览器自动化入口是 `browser-script` 插件的 `browser_run`，见 [browser-script.md](./browser-script.md)。底层 `BrowserAutomationService`、`BrowserWebviewManager` 与 CDP 快照管线仍被复用。
+
 Electron 桌面端内嵌 Chromium 浏览器引擎，Agent 可直接操控浏览器完成各种 Web 操作。默认 `simple` 快照通过 Chromium 无障碍树生成精简的 role/name/ref YAML；需要排查无障碍语义缺失的元素时可使用 `struct` 获取详细 DOM JSON，阅读正文时可使用 `summary`。
 
 ## 架构
@@ -24,7 +26,7 @@ Electron 主进程
         └── getPageSummary        ← 页面摘要
 
 后端（Named Pipe / Unix Domain Socket）
-└── BrowserPlugin → BridgeClient → Electron BridgeServer
+└── BrowserScriptPlugin (browser_run) → BridgeClient → Electron BridgeServer
     └── BrowserAutomationService.handleToolCall()
 ```
 
