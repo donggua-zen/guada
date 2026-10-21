@@ -36,6 +36,7 @@ import {
   backendError,
   isElectron,
 } from "@/composables/useBackendStatus";
+import { rememberSettingsReturnPath } from "@/composables/settingsReturn";
 import { i18n } from "./locales";
 
 // 亚像素自检（仅 dev）：控制台执行 __subpixelAudit() 扫描小数几何。
@@ -258,11 +259,31 @@ router.beforeEach(async (to, from, next) => {
   next();
 });
 
+// 「返回应用」不接受这些来源：设置页自身、登录/加载页，以及只做重定向的旧入口
+const NON_RETURNABLE_ROUTE_NAMES = new Set([
+  "SystemSettings",
+  "Login",
+  "Empty",
+  "Home",
+]);
+const NON_RETURNABLE_PATHS = new Set(["/models"]);
+
 // 全局后置守卫
-router.afterEach(() => {
+router.afterEach((to, from) => {
   // 仅在非 Electron 环境下结束进度条
   if (!isElectron) {
     NProgress.done();
+  }
+
+  // 记录进入设置页前所在的应用内路由（会话/Tab/查询参数），
+  // 供「返回应用」原样恢复，而不是固定落到新建会话页。
+  if (
+    to.name === "SystemSettings" &&
+    from.name &&
+    !NON_RETURNABLE_ROUTE_NAMES.has(from.name) &&
+    !NON_RETURNABLE_PATHS.has(from.path)
+  ) {
+    rememberSettingsReturnPath(from.fullPath);
   }
 });
 

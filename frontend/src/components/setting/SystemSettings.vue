@@ -121,6 +121,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { NEW_SESSION_ID } from '@/constants'
+import { getSettingsReturnPath } from '@/composables/settingsReturn'
 import DefaultModelSettings from './DefaultModelSettings.vue'
 import GeneralSettings from './GeneralSettings.vue'
 // 模型供应商：体量大（列表+详情约 1700 行），分区级懒加载避免拖大设置页 chunk
@@ -357,9 +358,10 @@ const handleItemClick = (path: string) => {
     router.replace({ name: 'SystemSettings', params: { tab: path } })
 }
 
-// 返回应用
+// 返回应用：回到进入设置前所在页面；无记录时才回新建会话
 const goBack = () => {
-    router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
+    const returnPath = getSettingsReturnPath()
+    router.replace(returnPath || { name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
 }
 
 // 监听路由参数变化
