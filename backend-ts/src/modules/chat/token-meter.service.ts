@@ -116,7 +116,14 @@ export class TokenMeterService {
           false,
         );
       case 'tool-result':
-        return this.tokenizer.countTextTokens(modelName, block.content, false);
+        // 工具结果内嵌图片与 image 块同口径（图像统一按 1500 估算）
+        return (
+          (await this.tokenizer.countTextTokens(
+            modelName,
+            block.content,
+            false,
+          )) + (block.images?.length ?? 0) * 1500
+        );
       case 'image':
         return 1500;
       case 'kb-ref':

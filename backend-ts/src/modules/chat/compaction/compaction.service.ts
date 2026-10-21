@@ -333,6 +333,9 @@ export class CompactionService {
             purpose: 'compaction',
             stream: true,
             maxTokens: 2000,
+            // 摘要输入已是序列化文本：不把 tool-result.images 展开成图片消息，
+            // 避免图片 token 挤占摘要预算（图片以 [image ...] 文本标记保留语义）
+            deriveToolResultImages: false,
           }),
       },
     );

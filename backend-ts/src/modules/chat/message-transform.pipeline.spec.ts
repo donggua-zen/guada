@@ -162,6 +162,48 @@ describe('image-projection step', () => {
     const t = (out[0].content[0] as { text: string }).text;
     expect(t).toContain('No readable file path is available');
   });
+
+  it('不支持图片输入时 tool-result.images → 追加占位文本并从视图副本移除', () => {
+    const msgs = [
+      makeMsg('tool', [
+        {
+          type: 'tool-result',
+          toolCallId: 'c1',
+          name: 'image_view',
+          content: 'loaded',
+          images: [
+            {
+              mediaType: 'image/png',
+              bytes: 100,
+              url: 'uploads/images/tool.png',
+            },
+          ],
+        } as ContentBlock,
+      ]),
+    ];
+
+    const out = imageProjectionStep.apply(msgs, {
+      ...baseCtx,
+      supportsImageInput: false,
+    });
+
+    expect(out).not.toBe(msgs);
+    const block = out[0].content[0] as {
+      type: string;
+      content: string;
+      images?: unknown[];
+    };
+    expect(block.type).toBe('tool-result');
+    // 视图副本移除 images（adapter 只读 content；保留会触发 fail-loud 断言误判）
+    expect(block.images).toBeUndefined();
+    expect(block.content).toContain('loaded');
+    expect(block.content).toContain('Image omitted');
+    expect(block.content).toContain(
+      `Image file path: ${path.join(path.resolve(uploadRoot), 'images/tool.png')}`,
+    );
+    // 存储层对象不被修改（副本变换）
+    expect((msgs[0].content[0] as { images?: unknown[] }).images).toHaveLength(1);
+  });
 });
 
 describe('image-path-annotation step', () => {

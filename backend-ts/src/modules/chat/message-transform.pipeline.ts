@@ -30,6 +30,7 @@ import { Logger } from '@nestjs/common';
 import {
   Message,
   ContentBlock,
+  FileRef,
 } from '../../common/types/conversation.types';
 import { resolveModelVisiblePath, resolveRefPhysicalPath, normalizeRefType } from '../llm-core/utils/attachment.util';
 import { kbRefsToText } from '../../common/utils/kb-ref.util';
@@ -100,40 +101,71 @@ export const kbRefProjectionStep: TransformStep = {
 /**
  * 步骤 1：图片投影。
  * 不支持图片输入的模型：image 块 → 确定性占位文本（含文件路径，英文）。
+ * 工具结果内嵌图片（tool-result.images）同口径处理：占位文本追加到 tool-result
+ * 的 content 尾部并从视图副本移除 images（存储层原样保留）。
  * 路径经请求时桥接为模型工具可读的绝对物理路径（存储层只存相对引用，引用不当路径用）；
  * 无法桥接（data: 内联图/未配置上传目录）时明确告知无可用文件路径。
  * 纯信息占位，不内联 base64、不暗示调用工具；模型若要识别图片，
  * 可凭此路径调用 image_recognize 工具（由 image-recognition 插件在纯文本模型上自动加载）。
- * 存储层原样保留 image 块，仅在读取视图投影。
+ * 存储层原样保留 image 块与 tool-result.images，仅在读取视图投影。
  */
 export const imageProjectionStep: TransformStep = {
   name: 'image-projection',
   apply(messages, ctx) {
     if (ctx.supportsImageInput) return messages;
     return messages.map((msg) => {
-      if (!msg.content.some((b) => b.type === 'image')) return msg;
+      const hasImage = msg.content.some(
+        (b) =>
+          b.type === 'image' ||
+          (b.type === 'tool-result' && (b.images?.length ?? 0) > 0),
+      );
+      if (!hasImage) return msg;
       return {
         ...msg,
         content: msg.content.map((block): ContentBlock => {
-          if (block.type !== 'image') return block;
-          // 仅存储锚点 url 可桥接（attachmentId 是旧数据标识，不是路径）
-          const imagePath = resolveModelVisiblePath(block.attachment, {
-            workspaceDir: ctx.workspaceDir,
-          });
-          const pathInfo = imagePath
-            ? `Image file path: ${imagePath}. To inspect it, call image_recognize with this path.`
-            : 'No readable file path is available for this image (it was provided inline).';
-          return {
-            type: 'text',
-            text:
-              `[Image omitted: the current model accepts text input only and cannot view images. ` +
-              `${pathInfo}]`,
-          };
+          if (block.type === 'image') {
+            return {
+              type: 'text',
+              text: imageOmissionText(block.attachment, ctx),
+            };
+          }
+          if (block.type === 'tool-result' && block.images?.length) {
+            const omissions = block.images
+              .map((attachment) => imageOmissionText(attachment, ctx))
+              .join('\n');
+            // 从视图副本移除 images：adapter 只读 content，保留会让 fail-loud
+            // 断言误判；存储层不受影响
+            const rest = { ...block };
+            delete rest.images;
+            return {
+              ...rest,
+              content: `${rest.content}${rest.content ? '\n' : ''}${omissions}`,
+            };
+          }
+          return block;
         }),
       };
     });
   },
 };
+
+/** 非多模态模型的图片占位文案（image 块与 tool-result.images 共用） */
+function imageOmissionText(
+  attachment: FileRef,
+  ctx: TransformContext,
+): string {
+  // 仅存储锚点 url 可桥接（attachmentId 是旧数据标识，不是路径）
+  const imagePath = resolveModelVisiblePath(attachment, {
+    workspaceDir: ctx.workspaceDir,
+  });
+  const pathInfo = imagePath
+    ? `Image file path: ${imagePath}. To inspect it, call image_recognize with this path.`
+    : 'No readable file path is available for this image (it was provided inline).';
+  return (
+    `[Image omitted: the current model accepts text input only and cannot view images. ` +
+    `${pathInfo}]`
+  );
+}
 
 /**
  * 步骤 1b：多模态路径注解。

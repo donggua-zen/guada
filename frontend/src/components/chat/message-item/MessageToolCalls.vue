@@ -22,6 +22,14 @@
             :class="tool.outcome === 'aborted' ? 'text-gray-400 dark:text-gray-500 font-medium' : 'text-gray-700 dark:text-gray-300 font-medium'">{{
               getActionText(tool, toolIndex) }}</span>
           <span v-if="rowDisplays[toolIndex].argsText" class="text-sm ml-2 truncate">{{ rowDisplays[toolIndex].argsText }}</span>
+          <!-- 工具产出图片数量徽标（缩略图在展开区；此处让闭合状态也能看出有图） -->
+          <span v-if="toolImages[toolIndex].length" class="tool-image-count shrink-0"
+            :title="t('chat.toolCalls.imageCount', { count: toolImages[toolIndex].length })">
+            <el-icon size="13">
+              <Image24Regular />
+            </el-icon>
+            {{ toolImages[toolIndex].length }}
+          </span>
           <!-- diff 类工具的增删行数徽章 -->
           <span v-if="rendererStat(toolIndex)" class="ml-2 shrink-0 font-mono text-xs flex items-center gap-1.5">
             <span v-if="rendererStat(toolIndex)!.added" style="color: var(--el-color-success)">+{{ rendererStat(toolIndex)!.added }}</span>
@@ -47,7 +55,7 @@
         </el-icon>
       </div>
 
-      <!-- 内联结果区（默认闭合，点击展开后显示；统一卡片容器区分展开内容）。
+      <!-- 内联结果区（默认闭合，点击展开；带图片的工具行默认展开，直接展示产出）。
            独立渲染工具行（计划卡等）不套这层外框——卡片自带边框，避免双边框；
            同时整行只有卡片（见 .is-plain 清掉的 22px 左缩进）。 -->
       <div v-if="isExpanded(toolIndex)" class="tool-result-inline"
@@ -88,20 +96,27 @@
           :response="getToolResponses(toolIndex)" :executing="isToolExecuting(tool, toolIndex)"
           :session-id="props.sessionId" />
 
-        <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式 -->
+        <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式。
+             工具产出图片属于输出，放在"输出"段内、文本结果之前。 -->
         <div v-else class="io-layout">
           <div class="io-section">
             <span class="io-label">{{ t('chat.toolCalls.inputLabel') }}</span>
             <pre class="io-content">{{ formatToolArgs(tool) }}</pre>
           </div>
-          <template v-if="getToolResponses(toolIndex)">
+          <template v-if="getToolResponses(toolIndex) && (responseTexts[toolIndex] || toolImages[toolIndex].length)">
             <div class="io-divider" role="separator"></div>
-            <div class="io-section">
+            <div class="io-section io-section--output">
               <span class="io-label">{{ t('chat.toolCalls.outputLabel') }}</span>
-              <pre class="io-content">{{ formatToolResponse(getToolResponses(toolIndex)) }}</pre>
+              <div class="io-output">
+                <ToolImageGrid :images="toolImages[toolIndex]" />
+                <pre v-if="responseTexts[toolIndex]" class="io-content">{{ responseTexts[toolIndex] }}</pre>
+              </div>
             </div>
           </template>
         </div>
+
+        <!-- 定制卡片/子代理/工作流行的图片：放在卡片之后（这些分支没有通用"输出"段） -->
+        <ToolImageGrid v-if="!genericIoRows[toolIndex]" :images="toolImages[toolIndex]" after />
       </div>
     </div>
   </div>
@@ -111,7 +126,7 @@
 import { computed, ref, watch, inject } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { ErrorCircle16Regular, ChevronDown12Regular, PanelRightExpand20Filled } from '@vicons/fluent';
+import { ErrorCircle16Regular, ChevronDown12Regular, PanelRightExpand20Filled, Image24Regular } from '@vicons/fluent';
 import { parse as partialParse } from 'partial-json';
 import {
   type ToolCall,
@@ -130,10 +145,12 @@ import { extractResultContent } from '@/utils/toolResult';
 import { formatArgsTextWithRemote, getRemoteWorkspaceName } from '@/utils/toolWorkspace';
 import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
 import type { ToolCallResponseEntry } from '@/types/message';
+import type { FileRef } from '@/types/stream/content-block.types';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import ToolCustomView from './tool-renderers/ToolCustomView.vue';
 import SubAgentToolRow from './SubAgentToolRow.vue';
 import WorkflowRunInlineCard from './WorkflowRunInlineCard.vue';
+import ToolImageGrid from './ToolImageGrid.vue';
 import { useSessionStore } from '@/stores/session';
 
 const props = defineProps<{
@@ -221,10 +238,14 @@ watch(() => props.autoExpand, (auto) => {
   collapsedIndexes.value = new Set();
 }, { immediate: true });
 
-/** 默认展开的行（独立渲染工具：正文即内容，与分组判定共用 isStandaloneTool） */
+/** 默认展开的行（独立渲染工具 / 带图片的工具：正文即内容，与分组判定共用 isStandaloneTool） */
 const isDefaultExpandedRow = (index: number): boolean => {
   const tool = props.toolCalls[index];
-  return !!tool && isStandaloneTool(tool);
+  if (!tool) return false;
+  return (
+    isStandaloneTool(tool) ||
+    (getToolResponses(index)?.images?.length ?? 0) > 0
+  );
 };
 
 const isExpanded = (index: number): boolean => {
@@ -280,6 +301,18 @@ const getToolResponses = (index: number): ToolCallResponseEntry | undefined => {
   return findToolResponse(tool, index, props.toolResponses) as ToolCallResponseEntry | undefined;
 };
 
+// ── 工具产出图片（tool-result.images）──
+
+/** 每个工具行产出的图片引用；无图/结果未到时为空数组 */
+const toolImages = computed<FileRef[][]>(() =>
+  props.toolCalls.map((_, index) => getToolResponses(index)?.images ?? []),
+);
+
+/** 通用 IO 区的输出文本（空内容不渲染输出段，纯图片结果不显示 [object Object]） */
+const responseTexts = computed<string[]>(() =>
+  props.toolCalls.map((_, index) => formatToolResponse(getToolResponses(index))),
+);
+
 // ── 远程工作区标识（通用 workspace 参数约定，无工具名白名单）──
 // 单行摘要加「远程·」前缀；展开区显示连接名。本地调用两项均为空。
 const rowDisplays = computed(() =>
@@ -320,6 +353,16 @@ const rendererInfos = computed<(ToolRendererInfo | null)[]>(() =>
   }),
 );
 
+/** 通用 IO 行：没有定制卡片/子代理/工作流分支，图片放在"输出"段内 */
+const genericIoRows = computed<boolean[]>(() =>
+  props.toolCalls.map(
+    (_, index) =>
+      !rendererInfos.value[index] &&
+      !subAgentSpawnRows.value[index] &&
+      !workflowRunRows.value[index],
+  ),
+);
+
 /** 计划卡终态徽标（批准/拒绝/中断/失败）；undefined = 执行中，卡片显示流式提示 */
 const planCardStatus = (index: number): PlanCardStatus | undefined => {
   const tool = props.toolCalls[index];
@@ -355,6 +398,8 @@ const formatToolArgs = (tool: ToolCall): string => {
 
 const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   if (!response) return t('chat.toolCalls.noResponse');
+  // 纯图片结果（content 为空）：输出段留空，避免把整个响应对象序列化成 [object Object]
+  if (!response.content) return '';
   const content = extractResultContent(response);
   if (content) {
     if (typeof content === 'string') return content;
@@ -465,5 +510,32 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   margin: 0;
   line-height: 1.5;
+}
+
+/* 输出段：图片从顶部开始排列，标签与内容顶部对齐（baseline 会让标签被图片底边拉低） */
+.io-section--output {
+  align-items: flex-start;
+}
+
+/* 输出段容器：图片与文本结果纵向排列（图片在上，文本在下）。
+   右侧留白收在容器上，图片和文本都不会压到滚动条；内部 .io-content 不再重复留白 */
+.io-output {
+  flex: 1;
+  min-width: 0;
+  padding-right: var(--tool-card-pad-x);
+}
+
+.io-output .io-content {
+  padding-right: 0;
+}
+
+/* 工具行头部的图片数量徽标 */
+.tool-image-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

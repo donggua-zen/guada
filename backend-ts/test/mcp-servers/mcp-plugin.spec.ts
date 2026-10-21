@@ -171,4 +171,63 @@ describe("McpPlugin 工具包注册与角色门控", () => {
       });
     });
   });
+
+  describe("handler：MCP 图片 content → images 旁路字段", () => {
+    async function handlerFor(callTool: jest.Mock) {
+      const mcpStore = {
+        initialize: jest.fn(async () => undefined),
+        listEnabled: () => [createServer("srv1", "图", ["shot"])],
+      } as any;
+      const plugin = new McpPlugin({ callTool } as any, mcpStore);
+      const { api, toolKits } = createApiCapture();
+      await plugin.onLoad(api);
+      return toolKits[0].tools[0].handler as (
+        args: any,
+        ctx?: any,
+      ) => Promise<any>;
+    }
+
+    it("type:'image' 项映射为 images（base64 原样），文本保留", async () => {
+      const callTool = jest.fn(async () => ({
+        success: true,
+        content: "screenshot\n[image: image/png]",
+        result: {
+          content: [
+            { type: "text", text: "screenshot" },
+            { type: "image", data: "QUJD", mimeType: "image/png" },
+          ],
+        },
+      }));
+
+      const handler = await handlerFor(callTool);
+      const result = await handler({}, {});
+
+      expect(result.content).toBe("screenshot\n[image: image/png]");
+      expect(result.images).toEqual([
+        { media_type: "image/png", data: "QUJD" },
+      ]);
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("畸形 image 项（缺 data）跳过，不影响文本与其它图片", async () => {
+      const callTool = jest.fn(async () => ({
+        success: true,
+        content: "a\n[image: image/jpeg]",
+        result: {
+          content: [
+            { type: "text", text: "a" },
+            { type: "image", mimeType: "image/png" },
+            { type: "image", data: "QUJD", mimeType: "image/jpeg" },
+          ],
+        },
+      }));
+
+      const handler = await handlerFor(callTool);
+      const result = await handler({}, {});
+
+      expect(result.images).toEqual([
+        { media_type: "image/jpeg", data: "QUJD" },
+      ]);
+    });
+  });
 });

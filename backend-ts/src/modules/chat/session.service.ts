@@ -855,6 +855,8 @@ export class SessionService {
   /**
    * 改写事件前缀中的会话内附件引用（refType='session'，url 内嵌 sessionId）：
    * sessions/<srcId>/... → sessions/<newId>/...（url 与 previewUrl 同步改写）。
+   * 覆盖：user/message.blocks、assistant/message.content 的 attachment，
+   * tool-result 块的 images，以及 tool/result 事件顶层的 images（工具图片归属字段）。
    * 就地修改传入事件（调用方持有的是 getAllEvents 新解析出的对象，无共享引用）。
    */
   private rewriteSessionFileRefs(
@@ -868,17 +870,31 @@ export class SessionService {
       url.includes(srcSegment) ? url.split(srcSegment).join(dstSegment) : url;
 
     for (const event of events) {
-      // 附件只内嵌于 user/message 的 blocks 与 assistant/message 的 content 块数组
-      const data = event.data as { blocks?: any[]; content?: any[] };
+      // 附件内嵌位置：user/message 的 blocks、assistant/message 的 content 块数组、
+      // tool/result 顶层 images（工具图片不拆分落库，引用挂在工具结果上）
+      const data = event.data as {
+        blocks?: any[];
+        content?: any[];
+        images?: any[];
+      };
       const blocks =
         event.type === "user/message"
           ? data?.blocks
           : event.type === "assistant/message"
             ? data?.content
             : undefined;
-      if (!Array.isArray(blocks)) continue;
-      for (const block of blocks) {
-        const ref = block?.attachment;
+      const refs: any[] = [];
+      if (Array.isArray(blocks)) {
+        for (const block of blocks) {
+          if (block?.attachment) refs.push(block.attachment);
+          // tool-result 块内嵌图片（兼容形态）
+          if (Array.isArray(block?.images)) refs.push(...block.images);
+        }
+      }
+      if (event.type === "tool/result" && Array.isArray(data?.images)) {
+        refs.push(...data.images);
+      }
+      for (const ref of refs) {
         if (ref?.refType !== "session") continue;
         if (typeof ref.url === "string") ref.url = rewriteUrl(ref.url);
         if (typeof ref.previewUrl === "string") {

@@ -13,6 +13,7 @@
 
 import type { StreamChunk, StreamUsage } from "../../../common/types/stream-chunk.types";
 import type { TokenBreakdown } from "../../../common/persistence/message-store.interface";
+import type { FileRef } from "../../../common/types/conversation.types";
 
 // ==================== 回合级事件 ====================
 
@@ -110,6 +111,8 @@ export interface ToolCallsResponseEvent {
     content: string;
     toolCallId: string;
     outcome?: "success" | "error" | "rejected";
+    /** 工具产出的图片引用（物化后的 FileRef；前端据此渲染缩略图/大图） */
+    images?: FileRef[];
     /** UI 渲染元数据（仅前端消费，不进 LLM 上下文），来自工具返回的 meta */
     meta?: Record<string, any>;
   }>;

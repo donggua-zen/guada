@@ -108,6 +108,12 @@ export interface ToolResultBlock {
   content: string;
   isError?: boolean;
   /**
+   * 工具产出的图片（物化后的 FileRef 路径指针，归属与 name/toolCallId 同块）。
+   * 存储层原样落库；LLM 侧由请求组装边界派生为独立 user 消息（多模态模型），
+   * 纯文本模型由 L1 管线投影为占位文本。
+   */
+  images?: FileRef[];
+  /**
    * UI 渲染元数据（仅前端消费，不进 LLM 上下文）。
    * card 标识结果卡片类型（terminal/diff/read/...），其余为该卡片的结构化字段。
    */
@@ -162,8 +168,9 @@ export type MessageKind = 'user' | 'model';
  *
  * 各写入点约定：
  * - user    ：终端用户真实输入（前端可见）
- * - plugin  ：插件注入（interceptor=TURN_STOPPING 续跑 / image=工具图片 /
- *             todo=待办注入 / compact=压缩检查点），非人类输入
+ * - plugin  ：插件注入（interceptor=TURN_STOPPING 续跑 / todo=待办注入 /
+ *             compact=压缩检查点），非人类输入；历史数据中的 image=旧版工具图片注入
+ *             仍保留读取兼容（新版工具图片内嵌于 tool-result.images）
  * - model   ：模型产出（role=assistant）
  * - tool    ：工具结果（role=tool）
  * - sub_agent / scheduler / process_monitor：跨回合投递的入站消息（队列来源）

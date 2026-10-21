@@ -128,7 +128,8 @@ export interface ContextStatsData {
  * user/message：用户消息（一次写入）。
  * kind 区分逻辑归属：
  *   - kind='user' ：用户真实输入（回合锚点）
- *   - kind='model'：自动注入的系统提示/图片（metadata.hidden 标记）
+ *   - kind='model'：自动注入的系统提示（metadata.hidden 标记）；历史数据中的
+ *                   旧版工具图片注入消息也走此形态（新版图片内嵌于 tool/result.images）
  * role 由事件名隐含为 'user'。
  */
 export interface UserMessageData {
@@ -178,6 +179,12 @@ export interface ToolResultData {
   content: string;
   /** 工具结果是否异常 */
   isError?: boolean;
+  /**
+   * 工具产出的图片引用（物化后的 FileRef，路径指针）。
+   * 与 name/toolCallId 同一条事件落库，图片归属可直接追溯；
+   * LLM 侧在请求组装边界派生为独立 user 消息，不在此处拆分。
+   */
+  images?: import('../types/conversation.types').FileRef[];
   /** UI 渲染元数据（不进 LLM 上下文），来自 tool-result 块 */
   meta?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;

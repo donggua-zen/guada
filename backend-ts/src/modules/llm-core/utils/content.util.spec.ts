@@ -26,6 +26,26 @@ describe('content.util', () => {
       expect(hasImageBlock([msgWithImage(false)])).toBe(false);
       expect(hasImageBlock([])).toBe(false);
     });
+
+    it('检测 tool-result 内嵌图片（工具图片不拆分落库）', () => {
+      const msg: Message = {
+        id: 'm2',
+        role: 'tool',
+        kind: 'model',
+        source: { kind: 'tool', toolCallId: 'c1' },
+        metadata: {},
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'c1',
+            name: 'image_view',
+            content: 'loaded',
+            images: [{ mediaType: 'image/png', bytes: 1, url: 'u' }],
+          },
+        ],
+      };
+      expect(hasImageBlock([msg])).toBe(true);
+    });
   });
 
   describe('assertNoImageContent', () => {
@@ -51,6 +71,28 @@ describe('content.util', () => {
       expect(() =>
         assertNoImageContent([msgWithImage(false)], false, 'openai', 'deepseek-chat'),
       ).not.toThrow();
+    });
+
+    it('不支持图片且 tool-result 含图片 → 抛 UNSUPPORTED_CONTENT', () => {
+      const msg: Message = {
+        id: 'm2',
+        role: 'tool',
+        kind: 'model',
+        source: { kind: 'tool', toolCallId: 'c1' },
+        metadata: {},
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'c1',
+            name: 'image_view',
+            content: 'loaded',
+            images: [{ mediaType: 'image/png', bytes: 1, url: 'u' }],
+          },
+        ],
+      };
+      expect(() =>
+        assertNoImageContent([msg], false, 'openai', 'deepseek-chat'),
+      ).toThrow(/UNSUPPORTED_CONTENT.*deepseek-chat.*openai/s);
     });
   });
 });

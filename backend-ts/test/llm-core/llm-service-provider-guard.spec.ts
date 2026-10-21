@@ -28,7 +28,12 @@ function makeService(): LLMService {
     new MockAdapter(),
   );
   const settings = { getSettingValue: jest.fn(async () => null) } as any;
-  return new LLMService(registry, settings, capability);
+  // 本套件只验证 providerConfig 守卫：usage 观测替身即可（守卫在写 usage 之前抛错）
+  const usage = {
+    resolveSource: jest.fn(() => 'other'),
+    recordSafely: jest.fn(),
+  } as any;
+  return new LLMService(registry, settings, capability, usage);
 }
 
 describe('LLMService 供应商配置守卫', () => {

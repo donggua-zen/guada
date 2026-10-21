@@ -5,7 +5,7 @@
  * 直接消费——不再要求后端转码为块级 SSE 事件。与 live SSE 的 WireStreamEvent
  * （块级增量协议）为两种独立输入形态，折叠器同时支持。
  */
-import type { ContentBlock } from "./content-block.types";
+import type { ContentBlock, FileRef } from "./content-block.types";
 
 /**
  * 用户消息附件（FileRef 前端镜像，self-contained 契约）。
@@ -107,6 +107,8 @@ export type DomainEvent =
         name?: string;
         content: string;
         isError?: boolean;
+        /** 工具产出的图片引用（物化后的 FileRef，与 name/toolCallId 同条事件） */
+        images?: FileRef[];
         /** UI 渲染元数据（仅前端消费，不进 LLM 上下文） */
         meta?: Record<string, unknown>;
         metadata?: Record<string, unknown>;

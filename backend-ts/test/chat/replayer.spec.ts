@@ -2,6 +2,7 @@
 
 import { foldEvents } from '../../src/common/persistence/replayer';
 import type { BaseEvent } from '../../src/common/persistence/types';
+import type { FileRef } from '../../src/common/types/conversation.types';
 
 // ─── 事件构造辅助 ───
 
@@ -251,5 +252,47 @@ describe('replayer 折叠 - 视图占用锚点（OccupancyAnchor）', () => {
       assistantWithUsage('a2', 5, 700),
     ]);
     expect(state.occupancyAnchor).toEqual({ kind: 'usage' });
+  });
+});
+
+describe('replayer 折叠 - tool/result 图片引用', () => {
+  it('tool/result.images 原样恢复到 tool-result 块（归属与 name/toolCallId 同块）', () => {
+    const images: FileRef[] = [
+      {
+        mediaType: 'image/jpeg',
+        bytes: 123,
+        name: 'shot.jpg',
+        url: 'sessions/s1/images/20261021/shot.jpg',
+        previewUrl: 'sessions/s1/previews/20261021/shot.jpg',
+        refType: 'session',
+      },
+    ];
+    const state = foldEvents([
+      turnStart('t1', 1),
+      ev({
+        type: 'tool/result',
+        seq: 2,
+        data: {
+          messageId: 'tool1',
+          toolCallId: 'call_1',
+          name: 'image_view',
+          content: 'loaded',
+          images,
+        },
+      }),
+      turnFinish('t1', 3),
+    ]);
+
+    const node = state.messages.find((m) => m.id === 'tool1')!;
+    expect(node.role).toBe('tool');
+    expect(node.source).toEqual({ kind: 'tool', toolCallId: 'call_1' });
+    const block = node.content[0] as {
+      type: string;
+      name: string;
+      images?: FileRef[];
+    };
+    expect(block.type).toBe('tool-result');
+    expect(block.name).toBe('image_view');
+    expect(block.images).toEqual(images);
   });
 });

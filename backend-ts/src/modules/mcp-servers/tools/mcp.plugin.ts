@@ -120,8 +120,12 @@ export class McpPlugin extends PluginBase {
             );
             // isError 必须一路带到工具执行器：只返回 content 的话，模型会把
             // 「连接失败/工具报错」的文字当成工具的正常输出使用
+            // MCP 图片内容（type:'image' + base64）→ images 旁路字段，由引擎物化
+            // 进会话目录并挂到 tool-result.images（前端可渲染、归属可追溯）。
+            const images = extractMcpImages(result.result);
             return {
               content: result.content || "",
+              ...(images.length > 0 ? { images } : {}),
               ...(result.success ? {} : { isError: true }),
             };
           },
@@ -129,4 +133,27 @@ export class McpPlugin extends PluginBase {
       }
     }
   }
+}
+
+/**
+ * 从 MCP CallToolResult.content 提取图片项（base64 形态，交给引擎物化）。
+ * 非图片项/缺 data 的畸形项静默跳过——文本已由 flattenToolResult 保留。
+ */
+function extractMcpImages(
+  result: unknown,
+): Array<{ media_type: string; data: string }> {
+  const content = (result as { content?: unknown })?.content;
+  if (!Array.isArray(content)) return [];
+  const images: Array<{ media_type: string; data: string }> = [];
+  for (const item of content as Array<Record<string, unknown>>) {
+    if (item?.type !== "image" || typeof item.data !== "string") continue;
+    images.push({
+      media_type:
+        typeof item.mimeType === "string" && item.mimeType
+          ? item.mimeType
+          : "image/png",
+      data: item.data,
+    });
+  }
+  return images;
 }

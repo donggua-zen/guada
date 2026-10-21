@@ -8,6 +8,19 @@ import { createAllMocks } from './helpers/mock-factories';
 import { loadChunksFromJsonl } from './helpers/chunk-replayer';
 import * as path from 'path';
 
+// 单测不需要真实退避：超时用例只验证"重试耗尽后的错误收尾"，
+// 生产退避是指数 backoff（最长 20s+），会把 Jest 默认 5s 超时拖爆。
+jest.mock('../../src/modules/llm-core/utils/retry-on-error.util', () => {
+  const actual = jest.requireActual(
+    '../../src/modules/llm-core/utils/retry-on-error.util',
+  );
+  return {
+    ...actual,
+    computeRetryDelayMs: () => 0,
+    retrySleep: async () => undefined,
+  };
+});
+
 /**
  * 有界 LLM 生成器：第 1 轮返回工具调用，之后返回纯文本收尾。
  *

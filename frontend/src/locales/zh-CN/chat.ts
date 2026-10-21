@@ -327,6 +327,7 @@ export default {
     terminalTruncated: '输出已截断，完整日志：{path}',
     inputLabel: '输入',
     outputLabel: '输出',
+    imageCount: '{count} 张图片',
     openSubAgentPanel: '打开子代理面板',
     subAgentLabel: '子智能体',
     remote: '远程',

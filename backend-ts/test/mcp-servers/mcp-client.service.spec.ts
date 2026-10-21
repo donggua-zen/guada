@@ -59,6 +59,21 @@ describe("McpClientService.callTool", () => {
     expect(result.content).toBe("line1\nline2");
   });
 
+  it("图片 content 不把 base64 拼进文本，只留 [image: mime] 标记", async () => {
+    const { service, client } = build();
+    client.callTool.mockResolvedValueOnce({
+      content: [
+        { type: "text", text: "screenshot" },
+        { type: "image", data: "QUJD", mimeType: "image/png" },
+      ],
+    });
+
+    const result = await service.callTool(CONFIG, "shot", {});
+
+    expect(result.content).toBe("screenshot\n[image: image/png]");
+    expect(result.content).not.toContain("QUJD");
+  });
+
   it("协议级 isError 透传：不能让模型把工具错误当成正常输出", async () => {
     const { service, client } = build();
     client.callTool.mockResolvedValueOnce({

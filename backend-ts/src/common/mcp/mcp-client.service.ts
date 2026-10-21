@@ -149,13 +149,21 @@ export class McpClientService {
   }
 }
 
-/** 把 CallToolResult 的 content 数组拍平成文本 */
+/** 把 CallToolResult 的 content 数组拍平成文本（图片项只留轻量标记） */
 function flattenToolResult(result: unknown): string {
   if (result && typeof result === "object") {
     const content = (result as any).content;
     if (Array.isArray(content)) {
       return content
-        .map((item: any) => item?.text ?? JSON.stringify(item))
+        .map((item: any) => {
+          // 图片内容由 mcp.plugin 映射为 images 走物化链路；这里绝不把整段
+          // base64 拼进工具结果（既污染模型上下文，也可能撑爆事件日志）
+          if (item?.type === "image") {
+            return `[image: ${item.mimeType || "image"}]`;
+          }
+          if (typeof item?.text === "string") return item.text;
+          return JSON.stringify(item);
+        })
         .join("\n");
     }
     // 结构化输出（outputSchema）场景下 content 可能为空，退回整体序列化

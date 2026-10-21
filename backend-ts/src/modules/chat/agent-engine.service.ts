@@ -682,7 +682,6 @@ export class AgentEngine {
 
         // 空消息（toMessage 返回 null）已在上方跳过；此处无需 token 统计
 
-        // 【DSH 对齐（agent.ts:354-390）】assembler 自判内容，空消息（null）跳过一切消息后处理：
         // 有内容 → 落库 assistant 消息 + 中止注入合成工具响应；
         // 空（立即报错/中止无任何产出）→ 不落地、不注入——业务错误由 finalizeTurn 归拢 turn 级。
         // 注：429 限流通常发生在请求阶段（模型尚无输出）→ 空消息路径自然覆盖；罕见的流中段
@@ -1122,8 +1121,10 @@ export class AgentEngine {
       return { toolParts: [] };
     }
 
-    // 构建 parts（tool 结果消息 + 图片注入消息，三层 Message[]）——
+    // 构建 parts（tool 结果消息，三层 Message[]）——
     // 每个工具结果是独立消息（独立 id），与含调用的 assistant 消息 id 无关（对齐 DSH：独立节点 + callId 关联）。
+    // 工具产出图片不拆消息：物化后的 FileRef 内嵌在 tool-result.images，与 name/toolCallId 同块，
+    // 图片归属可直接追溯；请求组装边界再派生为隐藏 user 消息（多模态模型）。
     const toolParts: Message[] = [];
     /** 本批工具结果里转交的用户输入（followUpUserInput，取第一个非空） */
     let followUpUserInput: string | undefined;
@@ -1134,10 +1135,30 @@ export class AgentEngine {
       content: string;
       toolCallId: string;
       outcome?: "success" | "error" | "rejected";
+      images?: FileRef[];
     }> = [];
 
     for (const res of toolResponses) {
       const toolResultId = sessionContext.generateMessageId();
+
+      // 图片物化：统一进会话 images 目录，FileRef 只落路径指针——
+      // 持久化契约：快照/事件日志不存 base64（jsonl-persistence-design §3.3，dsh 明确禁止）。
+      // 物化结果直接内嵌到 tool-result，不再单独生成隐藏 user 消息。
+      let content = res.content ?? "";
+      let images: FileRef[] | undefined;
+      if ((res.images?.length ?? 0) > 0 || (res.imageRefs?.length ?? 0) > 0) {
+        const materialized = await this.materializeToolImages(
+          sessionContext.sessionId,
+          res.images,
+          res.imageRefs,
+        );
+        if (materialized.refs.length > 0) images = materialized.refs;
+        if (materialized.failures.length > 0) {
+          // 物化彻底失败（如引用路径已失效）：以文本告知模型，避免它以为图已注入
+          content = `${content}${content ? "\n" : ""}[image unavailable: ${materialized.failures.join("; ")}]`;
+        }
+      }
+
       toolParts.push({
         id: toolResultId,
         role: "tool",
@@ -1149,8 +1170,9 @@ export class AgentEngine {
             type: "tool-result",
             toolCallId: res.toolCallId,
             name: res.name,
-            content: res.content,
+            content,
             isError: !!res.isError,
+            ...(images ? { images } : {}),
             ...(res.meta ? { meta: res.meta } : {}),
           },
         ],
@@ -1158,50 +1180,12 @@ export class AgentEngine {
       responseEntries.push({
         messageId: toolResultId,
         name: res.name,
-        content: res.content,
+        content,
         toolCallId: res.toolCallId,
         outcome: res.outcome,
+        ...(images ? { images } : {}),
         ...(res.meta ? { meta: res.meta } : {}),
       });
-
-      if (
-        (res.images && res.images.length > 0) ||
-        (res.imageRefs && res.imageRefs.length > 0)
-      ) {
-        // 图片注入：统一物化进会话 images 目录，FileRef 只落路径指针——
-        // 持久化契约：快照/事件日志不存 base64（jsonl-persistence-design §3.3，dsh 明确禁止）。
-        const { refs, failures } = await this.materializeToolImages(
-          sessionContext.sessionId,
-          res.images,
-          res.imageRefs,
-        );
-        const imageBlocks: ContentBlock[] = [
-          {
-            type: "text",
-            text: res.content || "",
-          },
-          ...refs.map((attachment) => ({
-            type: "image" as const,
-            attachment,
-          })),
-        ];
-        if (failures.length > 0) {
-          // 物化彻底失败（如引用路径已失效）：以文本告知模型，避免它以为图已注入
-          imageBlocks.push({
-            type: "text",
-            text: `[image unavailable: ${failures.join("; ")}]`,
-          });
-        }
-        const imageMessageId = sessionContext.generateMessageId();
-        toolParts.push({
-          id: imageMessageId,
-          role: "user",
-          kind: "model",
-          source: { kind: "plugin", plugin: "image" },
-          metadata: { hidden: true },
-          content: imageBlocks,
-        });
-      }
 
       // 工具转交的用户输入（计划审批反馈）：只收集不注入——它不属于本轮，
       // 由调用方终止回合后交回 chat-runner，作为**真实用户消息开启新轮次**
@@ -1233,7 +1217,8 @@ export class AgentEngine {
    * - images（base64）：MCP 等线上字节来源的兜底——解码后走同一落盘路径。
    *
    * 单张失败先降级 data: URL（legacy 形态，仅该张图）；连字节都拿不到（如引用路径
-   * 已失效）→ 记入 failures，由调用方以文本块告知模型。任何情况下不抛错、不终止回合。
+   * 已失效）→ 记入 failures，由调用方追加到 tool-result 文本告知模型。
+   * 任何情况下不抛错、不终止回合。
    */
   private async materializeToolImages(
     sessionId: string,

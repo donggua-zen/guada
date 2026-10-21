@@ -131,6 +131,25 @@ uploadFile(sessionId, file)
   唯一的新安全面，由 `resolveSessionAttachmentPath`（id 合法性 + 会话目录前缀校验）
   封死，纯函数单测覆盖穿越用例。
 
+### 3.2 工具产出图片：落库不拆，请求时派生
+
+工具（`image_view` / `browser_run` 截图 / `computer_observe` / MCP image content）产出的
+图片，物化后以 `FileRef[]` 内嵌在 `tool/result` 事件的 `images` 字段，与
+`name`/`toolCallId` 同一条记录——图片归属可直接追溯，不再落库时拆成一条隐藏 user 消息。
+
+- **存储层**：`ToolResultBlock.images` / `ToolResultData.images` 只存路径指针
+  （`sessions/<id>/images|previews/...`），不存 base64；旧事件没有该字段按空处理。
+- **请求组装边界**（`session-llm-request.builder`）：多模态模型由
+  `expandToolResultImages` 把连续工具结果的 `images` 派生为整组之后的一条隐藏 user
+  消息（标签 + image 块 + 只读路径注解）；纯文本模型由 L1 `image-projection` 把
+  `tool-result.images` 投影成占位文本并从视图副本移除。
+- **不放进 L1 管线增删消息**：管线输出必须与 store 折叠列表 1:1（压缩记账依赖该性质），
+  派生放在与 `ensureToolPairing` 同层的 wire 视图。
+- **前端**：`tool_calls_response` 条目与 `tool/result` 事件都携带 `images`，
+  `MessageToolCalls` 在工具结果区渲染缩略图并支持大图预览。
+- **旧会话兼容**：历史数据里的隐藏图片 user 消息（`source.plugin='image'`）继续可读，
+  不回填、不迁移。
+
 ### 3.1 没有类型白名单
 
 普通文件既是路径引用，限制可附格式就没有意义，所以限制整体取消：

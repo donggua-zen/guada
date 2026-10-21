@@ -10,9 +10,15 @@
 
 import type { Message } from '../../../common/types/conversation.types';
 
-/** 消息数组中是否存在 image 内容块 */
+/** 消息数组中是否存在图片内容（image 块或工具结果内嵌图片） */
 export function hasImageBlock(messages: Message[]): boolean {
-  return messages.some((m) => m.content.some((b) => b.type === 'image'));
+  return messages.some((m) =>
+    m.content.some(
+      (b) =>
+        b.type === 'image' ||
+        (b.type === 'tool-result' && (b.images?.length ?? 0) > 0),
+    ),
+  );
 }
 
 /**

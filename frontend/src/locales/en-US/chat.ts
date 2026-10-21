@@ -327,6 +327,7 @@
     terminalTruncated: 'Output truncated — full log: {path}',
     inputLabel: 'Input',
     outputLabel: 'Output',
+    imageCount: '{count} images',
     openSubAgentPanel: 'Open sub-agent panel',
     subAgentLabel: 'Sub-agent',
     remote: 'Remote',

@@ -190,6 +190,8 @@ export class TokenizerService {
           break;
         case "tool-result":
           total += await this.countTextTokens(modelName, block.content, useCache);
+          // 工具结果内嵌图片与 image 块同口径
+          total += (block.images?.length ?? 0) * 1500;
           break;
         case "image":
           total += 1500; // 图片统一按 1500 估算

@@ -316,6 +316,10 @@ function serializeMessages(messages: Message[]): string {
           parts.push(
             `[tool_result ${block.name}] ${truncate(content, MAX_TOOL_RESULT_CHARS)}`,
           );
+          // 工具图片不拆分落库：在摘要里保留轻量标记，避免"工具产出过图片"这一事实丢失
+          for (const image of block.images ?? []) {
+            parts.push(`[image ${image.name ?? '(attachment)'}]`);
+          }
           break;
         }
         case 'image':

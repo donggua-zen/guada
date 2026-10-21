@@ -3,7 +3,7 @@
  */
 
 import type { ISODateString } from './common'
-import type { FileRefType } from './stream/content-block.types'
+import type { FileRef, FileRefType } from './stream/content-block.types'
 
 /**
  * 消息角色类型（与后端协议对齐）
@@ -119,6 +119,8 @@ export interface ToolCallResponseEntry {
     content: string
     toolCallId: string
     outcome?: 'success' | 'error' | 'rejected'
+    /** 工具产出的图片引用（物化后的 FileRef；工具结果区渲染缩略图/大图） */
+    images?: FileRef[]
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     meta?: Record<string, any>
 }

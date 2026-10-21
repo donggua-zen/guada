@@ -3,7 +3,7 @@
  * 用于 ApiService 的完整类型支持
  */
 
-import type { FileRefType } from './stream/content-block.types'
+import type { FileRef, FileRefType } from './stream/content-block.types'
 
 // ========== 流式响应类型 ==========
 
@@ -84,6 +84,8 @@ export interface StreamToolCallsResponseEvent {
         content: string
         toolCallId?: string
         outcome?: 'success' | 'error' | 'rejected'
+        /** 工具产出的图片引用（物化后的 FileRef；工具结果区渲染缩略图/大图） */
+        images?: FileRef[]
         /** UI 渲染元数据（仅前端消费，不进 LLM 上下文） */
         meta?: Record<string, unknown>
     }>  // 驼峰式

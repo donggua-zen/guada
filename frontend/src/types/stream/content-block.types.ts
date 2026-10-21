@@ -102,6 +102,11 @@ export interface ToolResultBlock {
   content: string;
   isError?: boolean;
   /**
+   * 工具产出的图片（物化后的 FileRef 路径指针，归属与 name/toolCallId 同块）。
+   * 前端据此在工具结果区渲染缩略图/大图；模型侧由后端请求组装边界派生。
+   */
+  images?: FileRef[];
+  /**
    * UI 渲染元数据（仅前端消费，不进 LLM 上下文）。
    * card 标识结果卡片类型（terminal/diff/read/...），其余为该卡片的结构化字段。
    */

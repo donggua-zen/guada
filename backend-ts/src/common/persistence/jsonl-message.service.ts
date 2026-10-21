@@ -744,6 +744,9 @@ export class JsonlMessageService implements IMessageStore {
             name: tr?.name,
             content: tr?.content ?? messageToEventContent(message.content),
             isError: tr?.isError,
+            // 工具产出的图片引用与 name/toolCallId 同条落库：归属可直接追溯，
+            // 请求侧再派生为独立 user 消息（存储层不拆分）
+            images: tr?.images,
             // UI 渲染元数据（不进 LLM 上下文），随事件持久化供前端回放重建卡片
             meta: tr?.meta,
             metadata: message.metadata,
@@ -982,6 +985,7 @@ export class JsonlMessageService implements IMessageStore {
               name: tr?.name,
               content: tr?.content ?? messageToEventContent(message.content),
               isError: tr?.isError,
+              images: tr?.images,
               metadata: message.metadata ?? {},
             },
           });
@@ -1427,7 +1431,11 @@ function estimateMessageTokens(message: Message): number {
   let total = 0;
   for (const b of message.content) {
     if (b.type === 'text') total += Math.ceil(b.text.length / 4);
-    if (b.type === 'tool-result') total += Math.ceil(b.content.length / 4);
+    if (b.type === 'tool-result') {
+      total += Math.ceil(b.content.length / 4);
+      // 工具结果内嵌图片与 image 块同口径（图像统一按 1500 估算）
+      total += (b.images?.length ?? 0) * 1500;
+    }
     if (b.type === 'tool-call') total += Math.ceil(b.arguments.length / 4);
     if (b.type === 'reasoning') total += Math.ceil(b.summary.length / 4);
   }

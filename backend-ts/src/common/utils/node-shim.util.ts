@@ -63,9 +63,11 @@ set "ELECTRON_RUN_AS_NODE=1"
  */
 function resolveElectronBin(): string | null {
   // 显式覆盖（也用于单测固定运行时，避免依赖 electron 包是否可解析）。
+  // 覆盖具权威性：指向不存在的路径时视为"无可用运行时"，不再回退到 electron 包——
+  // 否则调用方无法通过覆盖关闭 shim（单测也无法确定性复现该分支）。
   const override = process.env[ELECTRON_BIN_ENV]?.trim();
-  if (override && fs.existsSync(override)) {
-    return override;
+  if (override) {
+    return fs.existsSync(override) ? override : null;
   }
 
   if (process.versions.electron && process.execPath) {

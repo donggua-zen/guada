@@ -194,6 +194,36 @@ describe("StreamProjector 折叠器", () => {
     expect(block.metadata.toolCallsResponse[0].content).toBe("结果");
   });
 
+  it("tool_calls_response 携带 images 时原样挂到结果条目", () => {
+    const images = [
+      {
+        mediaType: "image/jpeg",
+        bytes: 10,
+        name: "shot.jpg",
+        url: "sessions/s1/images/shot.jpg",
+        previewUrl: "sessions/s1/previews/shot.jpg",
+        refType: "session",
+      },
+    ] as any[];
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 0, blockType: "tool-call" } as any,
+      { type: "tool_call_delta", messageId: "T1_a", turnId: "T1", index: 0, toolCallId: "tc1", name: "image_view", argumentsDelta: "{}" } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 0, block: { type: "tool-call", contentId: "tc_c1", toolCallId: "tc1", name: "image_view", arguments: "{}" } } as any,
+      {
+        type: "tool_calls_response",
+        turnId: "T1",
+        toolCallsResponse: [
+          { messageId: "m_t1", name: "image_view", content: "loaded", toolCallId: "tc1", outcome: "success", images },
+        ],
+      } as any,
+      { type: "turn_end", turnId: "T1" } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    const block = blocksOf(store.state.turns[0]).find((b: any) => b.role === "assistant");
+    expect(block.metadata.toolCallsResponse[0].images).toEqual(images);
+  });
+
   it("并行调用：一条 tool_calls_response 逐条挂回各自的块（首条失败不吞掉其它工具终态）", () => {
     // 并行调用各占一个块（wire index 0 / 1）——后端按 wire index 分通道，前端按 index 建块
     const events: WireStreamEvent[] = [
@@ -545,6 +575,49 @@ describe("StreamProjector 折叠器", () => {
     expect(c1.metadata.toolCallsResponse[0].content).toBe("结果A");
     expect(c2.metadata.toolCallsResponse[0].content).toBe("结果B");
     expect(c2.metadata.toolCalls.find((tc: any) => tc.id === "call_2").outcome).toBe("error");
+  });
+
+  it("回放 tool/result：images 随条目挂到 toolCallsResponse", () => {
+    const images = [
+      {
+        mediaType: "image/jpeg",
+        bytes: 10,
+        name: "shot.jpg",
+        url: "sessions/s1/images/shot.jpg",
+        previewUrl: "sessions/s1/previews/shot.jpg",
+        refType: "session",
+      },
+    ] as any[];
+    foldEvents(store as any, "s1", [
+      { type: "turn/start", seq: 1, data: { turnId: "T1" } },
+      {
+        type: "assistant/message",
+        seq: 2,
+        data: {
+          messageId: "m_a1",
+          content: [
+            { type: "tool-call", toolCallId: "call_1", name: "image_view", arguments: "{}" },
+          ],
+          metadata: {},
+        },
+      },
+      {
+        type: "tool/result",
+        seq: 3,
+        data: {
+          messageId: "m_t1",
+          toolCallId: "call_1",
+          name: "image_view",
+          content: "loaded",
+          images,
+        },
+      },
+      { type: "turn/finish", seq: 4, data: { turnId: "T1" } },
+    ]);
+    const block = blocksOf(store.state.turns[0]).find((b: any) =>
+      (b.metadata?.toolCalls || []).some((tc: any) => tc.id === "call_1"),
+    );
+    expect(block.metadata.toolCallsResponse[0].images).toEqual(images);
   });
 
   it("领域事件 context/stats：不改变回合树（只供冷启动扫描）", () => {

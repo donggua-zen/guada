@@ -406,7 +406,8 @@ function appendFileBlocks(blocks: ContentBlock[], cid: string, files?: MessageFi
 
 /**
  * user/message → 三层 Message。
- * kind='user' → source.user（真实用户）；kind='model' → source.plugin（注入的系统提示/图片，metadata.hidden）。
+ * kind='user' → source.user（真实用户）；kind='model' → source.plugin（注入的系统提示，metadata.hidden；
+ * 历史数据中的旧版工具图片注入消息也走此形态）。
  * 归属由节点 turnId 承载，Message 本身不再带 turnId。
  */
 function userMessageFromData(data: UserMessageData, time: number): ThreeTierMessage {
@@ -492,6 +493,7 @@ function toolResultFromData(data: ToolResultData, time: number): ThreeTierMessag
         name: data.name ?? '',
         content: data.content,
         isError: data.isError ?? false,
+        ...(data.images?.length ? { images: data.images } : {}),
         ...(data.meta ? { meta: data.meta } : {}),
       },
     ],
