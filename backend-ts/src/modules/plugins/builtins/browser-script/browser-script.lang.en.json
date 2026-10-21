@@ -1,0 +1,10 @@
+{
+  "browserScript.name": "Browser Script",
+  "browserScript.description": "Multi-step browser automation written as JavaScript",
+  "browserScript.toolkitName": "Browser Script",
+  "browserScript.toolkitDescription": "Run multi-step browser automation scripts with browser_run",
+  "browser_run.executing": "Running browser script...",
+  "browser_run.completed": "Browser script completed",
+  "browser_run.aggregate.executing": "Running browser scripts...",
+  "browser_run.aggregate.completed": "Browser scripts completed"
+}

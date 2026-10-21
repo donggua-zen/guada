@@ -13,6 +13,8 @@ import {
   BROWSER_SCRIPT_SKILL_DESCRIPTION,
 } from "./browser-script/browser-script.skill";
 import { BrowserScriptRunResult } from "./browser-script/browser-script.types";
+import langZh from "./browser-script/browser-script.lang.zh.json";
+import langEn from "./browser-script/browser-script.lang.en.json";
 
 const MAX_RESULT_CHARS = 30_000;
 
@@ -31,8 +33,8 @@ export class BrowserScriptPlugin extends PluginBase {
 
   manifest = {
     id: "browser-script",
-    name: "Browser Script",
-    description: "Multi-step browser automation written as a JavaScript script",
+    name: "%browserScript.name%",
+    description: "%browserScript.description%",
     version: "0.1.0",
     category: "core" as const,
   };
@@ -43,10 +45,13 @@ export class BrowserScriptPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
+
     const kit = api.registerToolKit({
       id: "browser-script",
-      name: "Browser Script",
-      description: "Run multi-step browser automation as JavaScript",
+      name: "%browserScript.toolkitName%",
+      description: "%browserScript.toolkitDescription%",
       loadMode: "eager",
       handler: (ctx) => {
         // 会话级开关：settings.browserScript = { enabled: false } 可关闭，
@@ -134,12 +139,12 @@ Before writing a non-trivial script, call skill_learn("browser-script") for the 
       display: {
         actionType: "browser_script",
         text: {
-          executing: "Running browser script...",
-          completed: "Browser script completed",
+          executing: "%browser_run.executing%",
+          completed: "%browser_run.completed%",
         },
         aggregate: {
-          executing: "Running browser scripts...",
-          completed: "Browser scripts completed",
+          executing: "%browser_run.aggregate.executing%",
+          completed: "%browser_run.aggregate.completed%",
         },
         argsKey: "name",
         icon: "browser",
