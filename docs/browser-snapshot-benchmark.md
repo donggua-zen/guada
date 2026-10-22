@@ -1,15 +1,17 @@
 # 浏览器快照实测报告
 
+> **历史报告（2026-07）**：当时使用 `backendDOMNodeId` 将 ref 写回 DOM。当前版本已移除 ref/generation，snapshot 只用于观察，动作使用 ivya live locator。本报告仅保留当时的快照压缩数据，ref 相关描述不再适用于当前 API。
+
 测试日期：2026-07-22  
 测试平台：Windows / Electron 41 / Chromium 内核  
-测试实现：`Accessibility.getFullAXTree` + AX 语义压缩 + `backendDOMNodeId` ref 写回
+测试实现：`Accessibility.getFullAXTree` + AX 语义压缩（历史版本包含 ref 写回）
 
 ## 快照类型
 
 | 类型 | AI 输出 | 默认 | 用途 |
 |---|---|---:|---|
 | `simple` | 精简无障碍树 YAML | 是 | 浏览、定位、点击和输入 |
-| `struct` | 详细 DOM role/ref 树 JSON | 否 | 无障碍语义遗漏元素时排查 |
+| `struct` | 详细 DOM role 树 JSON | 否 | 无障碍语义遗漏元素时排查 |
 | `summary` | 文本、标题和链接摘要 | 否 | 阅读页面主要内容 |
 
 ## 测试方式
@@ -175,7 +177,7 @@ children:
 ## 结论
 
 - AX 树方案可在当前 Electron webview 架构中工作。
-- `backendDOMNodeId` 可稳定映射回真实 DOM，现有 `tab.click`/`tab.fill` 的 `[data-ai-ref]` 链路无需重写。
+- `backendDOMNodeId` 可稳定映射回真实 DOM；当前版本已改为 ivya live locator，snapshot 不再写 `data-ai-ref`。
 - simple 快照对大型页面的 token 压缩非常明显，适合作为默认类型。
 - AX 树依赖页面无障碍语义；自定义可点击 `div` 可能缺失，因此保留 `struct` 作为手动回退。
 - DevTools 占用 debugger 或 CDP 调用失败时，服务会自动使用旧 DOM struct 压缩为 simple 树。

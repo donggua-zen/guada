@@ -42,6 +42,8 @@ export interface ImageRefContent {
   media_type?: string;
   bytes?: number;
   name?: string;
+  /** 会话副本的前端缩略图引用（refType='session' 时可选；零复制转正时原样保留） */
+  previewUrl?: string;
 }
 
 export interface ToolResultObject {

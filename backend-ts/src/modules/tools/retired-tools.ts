@@ -24,7 +24,7 @@ const RETIRED_TOOL_REPLACEMENTS: Record<string, string> = {
   browser_reload: 'Use browser_run with `await tab.reload()` instead.',
   browser_console: 'Use browser_run with `await tab.console()` instead.',
   browser_screenshot:
-    'Use browser_run with `await tab.screenshot({ filePath?, fullPage? })` instead.',
+    'Use browser_run with `await tab.screenshot({ fullPage?, saveTo? })` instead.',
   browser_wait:
     'Use browser_run with `await tab.waitFor(target, { timeout? })` instead.',
   browser_page_text:

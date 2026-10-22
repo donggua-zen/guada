@@ -53,14 +53,27 @@ function isRegExp(value) {
 }
 
 function serializeTarget(target) {
-  if (typeof target === 'string') return { kind: 'selector', selector: target };
+  if (typeof target === 'string') {
+    if (/^e\d+$/.test(target)) {
+      throw fatal(
+        'INVALID_ARGUMENT',
+        'Ref targets were removed. Use tab.getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/getByAltText/getByTitle or tab.locator(css).'
+      );
+    }
+    return { kind: 'selector', selector: target };
+  }
   if (target && typeof target === 'object') {
     if (target.__browserLocator) return target.__browserLocator;
-    if (typeof target.ref === 'string') return { kind: 'selector', selector: target.ref };
+    if (typeof target.ref === 'string') {
+      throw fatal(
+        'INVALID_ARGUMENT',
+        'Snapshot node refs were removed. Use tab.getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/getByAltText/getByTitle or tab.locator(css).'
+      );
+    }
   }
   throw fatal(
     'INVALID_ARGUMENT',
-    'target must be a ref/CSS selector string, a snapshot node with ref, or a locator from getByRole/getByText/locator'
+    'target must be a CSS selector string or a locator from getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/getByAltText/getByTitle/locator'
   );
 }
 
@@ -139,7 +152,7 @@ function findNodes(node, query, firstOnly, out) {
 function matches(node, query) {
   if (!query) return false;
   if (typeof query === 'string') {
-    return node.role === query || node.name === query || node.ref === query;
+    return node.role === query || node.name === query;
   }
   if (query.ref !== undefined && node.ref !== query.ref) return false;
   if (query.role !== undefined && node.role !== query.role) return false;
@@ -268,16 +281,46 @@ const tab = Object.freeze({
     return hostCall('history', Object.assign({}, options || {}, { action: 'reload' }));
   },
   getByRole: function (role, options) {
-    return makeLocator({
+    return makeLocator(Object.assign({}, options || {}, {
       kind: 'role',
       role: role,
-      name: options && options.name,
       exact: Boolean(options && options.exact),
-    });
+    }));
   },
   getByText: function (text, options) {
     return makeLocator({
       kind: 'text',
+      text: text,
+      exact: Boolean(options && options.exact),
+    });
+  },
+  getByLabel: function (text, options) {
+    return makeLocator({
+      kind: 'label',
+      text: text,
+      exact: Boolean(options && options.exact),
+    });
+  },
+  getByPlaceholder: function (text, options) {
+    return makeLocator({
+      kind: 'placeholder',
+      text: text,
+      exact: Boolean(options && options.exact),
+    });
+  },
+  getByTestId: function (testId) {
+    return makeLocator({ kind: 'testid', testId: testId });
+  },
+  getByAltText: function (text, options) {
+    return makeLocator({
+      kind: 'altText',
+      text: text,
+      exact: Boolean(options && options.exact),
+    });
+  },
+  getByTitle: function (text, options) {
+    return makeLocator({
+      kind: 'title',
       text: text,
       exact: Boolean(options && options.exact),
     });

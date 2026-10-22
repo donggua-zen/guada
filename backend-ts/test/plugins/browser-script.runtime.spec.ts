@@ -4,7 +4,6 @@ import {
 import { BridgeRequestError } from "../../src/modules/bridge/bridge-client";
 
 function createBridge() {
-  let snapshotGeneration = 0;
   const calls: Array<{ method: string; params: any }> = [];
   const bridge: any = {
     async request(method: string, params: any) {
@@ -19,9 +18,7 @@ function createBridge() {
             readyState: "interactive",
           };
         case "browser_snapshot":
-          snapshotGeneration += 1;
           return {
-            generation: snapshotGeneration,
             type: params.type || "simple",
             url: "https://example.com",
             title: "Example",
@@ -29,100 +26,62 @@ function createBridge() {
             stats: { nodes: 2 },
             tree: {
               role: "document",
-              ref: "root",
-              children: [{ role: "button", name: "Submit", ref: "e0" }],
+              children: [{ role: "button", name: "Submit" }],
             },
           };
-        case "browser_click":
+        case "browser_locator": {
+          if (params.action === "count") return 2;
+          if (params.action === "text") return "More info";
+          if (params.action === "isVisible") return true;
+          if (params.action === "wait") {
+            return {
+              ok: true,
+              found: true,
+              state: params.state,
+              descriptor: params.descriptor,
+            };
+          }
+          if (params.action === "state") {
+            return {
+              ok: true,
+              found: true,
+              visible: true,
+              enabled: true,
+              editable: true,
+              stable: true,
+              inViewport: true,
+              covered: false,
+              tagName: "button",
+              rect: { x: 0, y: 0, width: 100, height: 30 },
+              viewport: { width: 800, height: 600 },
+            };
+          }
           return {
             ok: true,
-            action: "click",
-            target: params.selector,
+            action: params.action,
+            target: '[data-guada-loc="t"]',
             url: "https://example.com",
             title: "Example",
-            button: params.button || "left",
-            clickCount: params.click_count || 1,
+            ...(params.value !== undefined ? { value: params.value } : {}),
+            ...(params.values !== undefined ? { selected: [String(params.values)] } : {}),
+            ...(params.checked !== undefined ? { checked: params.checked } : {}),
           };
-        case "browser_input":
-          return {
-            ok: true,
-            action: "fill",
-            target: params.selector,
-            value: params.value,
-            url: "https://example.com",
-            title: "Example",
-          };
-        case "browser_hover":
-          return {
-            ok: true,
-            action: "hover",
-            target: params.selector,
-            url: "https://example.com",
-            title: "Example",
-          };
+        }
         case "browser_press":
-          return {
-            ok: true,
-            action: "press",
-            target: params.selector,
-            key: params.key,
-            url: "https://example.com",
-            title: "Example",
-          };
+          return { ok: true, action: "press", key: params.key };
         case "browser_scroll":
-          return {
-            ok: true,
-            action: "scroll",
-            deltaX: params.delta_x || 0,
-            deltaY: params.delta_y || 0,
-            scrollX: 0,
-            scrollY: 500,
-            url: "https://example.com",
-            title: "Example",
-          };
-        case "browser_select":
-          return {
-            ok: true,
-            action: "select",
-            target: params.selector,
-            selected: ["cn"],
-            url: "https://example.com",
-            title: "Example",
-          };
-        case "browser_check":
-          return {
-            ok: true,
-            action: "check",
-            target: params.selector,
-            checked: params.checked !== false,
-            url: "https://example.com",
-            title: "Example",
-          };
-        case "browser_element_state":
-          return {
-            ok: true,
-            found: true,
-            visible: true,
-            enabled: true,
-            editable: true,
-            stable: true,
-            inViewport: true,
-            covered: false,
-            tagName: "button",
-            rect: { x: 0, y: 0, width: 100, height: 30 },
-            viewport: { width: 800, height: 600 },
-          };
-        case "browser_wait":
-          return {
-            ok: true,
-            found: true,
-            selector: params.selector,
-            state: params.state,
-          };
+          return { ok: true, action: "scroll", deltaY: params.delta_y };
         case "browser_evaluate":
           return 1;
         case "browser_screenshot":
-          return { ok: true, path: "C:/tmp/shot.png", width: 800, height: 600 };
+          // 后端只回字节 + 尺寸；截图落盘由 persistScreenshot 回调负责
+          return {
+            ok: true,
+            data: Buffer.from("fake-png-bytes").toString("base64"),
+            mime_type: "image/png",
+            width: 800,
+            height: 600,
+          };
         case "browser_console":
           return ["log one", "log two"];
         case "browser_history":
@@ -179,279 +138,304 @@ function createBridge() {
   return { bridge, calls };
 }
 
-async function runScript(bridge: any, script: string) {
+async function runScript(
+  bridge: any,
+  script: string,
+  persistScreenshot?: (
+    data: Buffer,
+    meta: { width?: number; height?: number; saveTo?: string },
+  ) => Promise<{ ref?: any; absolutePath?: string; exportedPath?: string }>,
+) {
   const runtime = new BrowserScriptRuntime(bridge);
   return runtime.run({
     script,
     createdBy: "s1",
     ownerSessionId: "s1",
     sessionPath: "C:/tmp",
+    ...(persistScreenshot ? { persistScreenshot } : {}),
   });
 }
 
-describe("BrowserScriptRuntime Bridge contract", () => {
+describe("BrowserScriptRuntime live locator contract", () => {
   jest.setTimeout(15000);
 
-  it("透传新的脚本友好返回结构", async () => {
-    const { bridge } = createBridge();
+  it("使用 locator descriptor，不再依赖 snapshot/ref", async () => {
+    const { bridge, calls } = createBridge();
     const result = await runScript(
       bridge,
       `
-const nav = await tab.goto("https://example.com");
-const page = await tab.snapshot();
-const clicked = await tab.click("e0");
-const filled = await tab.fill("e0", "x");
-const waited = await tab.waitFor("#x");
-const value = await tab.evaluate(() => 1 + 1);
-const shot = await tab.screenshot();
-const logs = await tab.console();
-const hist = await tab.reload();
-const tabs = await browser.tabs.list();
-const current = await browser.current();
-const selected = await browser.tabs.select(1);
-const closed = await browser.tabs.close(0);
-const closedAll = await browser.tabs.closeAll();
-return {
-  nav,
-  pageGeneration: page.generation,
-  clicked,
-  filled,
-  waited,
-  value,
-  shot,
-  logs,
-  hist,
-  tabCount: tabs.length,
-  tabIds: tabs.map(t => t.tabId),
-  current,
-  selected,
-  closed,
-  closedAll,
-};
+await tab.goto("https://example.com");
+const clicked = await tab.getByRole("button", { name: "Submit" }).click();
+const filled = await tab.getByLabel("Email").fill("user@example.com");
+const count = await tab.getByPlaceholder("Search").count();
+const text = await tab.getByText("More info").text();
+const visible = await tab.getByTestId("submit").isVisible();
+const state = await tab.getByRole("button", { name: "Submit" }).state();
+const waited = await tab.waitFor(
+  tab.getByRole("button", { name: "Next" }),
+  { state: "hidden", timeout: 500 },
+);
+return { clicked, filled, count, text, visible, state, waited };
 `,
     );
 
     expect(result.status).toBe("completed");
     const value: any = result.value;
-    expect(value.nav).toMatchObject({ ok: true, tabId: "t1" });
-    expect(value.pageGeneration).toBe(1);
-    expect(value.clicked).toMatchObject({
-      ok: true,
-      action: "click",
-      target: "e0",
-    });
+    expect(value.clicked).toMatchObject({ ok: true, action: "click" });
     expect(value.filled).toMatchObject({
       ok: true,
       action: "fill",
-      target: "e0",
-      value: "x",
+      value: "user@example.com",
     });
-    expect(value.waited).toMatchObject({
-      ok: true,
-      found: true,
-      state: "visible",
+    expect(value.count).toBe(2);
+    expect(value.text).toBe("More info");
+    expect(value.visible).toBe(true);
+    expect(value.state).toMatchObject({ ok: true, visible: true, editable: true });
+    expect(value.waited).toMatchObject({ ok: true, state: "hidden" });
+
+    expect(calls.some((call) => call.method === "browser_snapshot")).toBe(false);
+
+    const locatorCalls = calls.filter((call) => call.method === "browser_locator");
+    expect(locatorCalls.map((call) => call.params.action)).toEqual([
+      "click",
+      "fill",
+      "count",
+      "text",
+      "isVisible",
+      "state",
+      "wait",
+    ]);
+    expect(locatorCalls[0].params.descriptor).toMatchObject({
+      kind: "role",
+      role: "button",
+      name: "Submit",
     });
-    expect(value.value).toBe(1);
-    expect(value.shot.path).toBe("C:/tmp/shot.png");
-    expect(value.logs).toEqual(["log one", "log two"]);
-    expect(value.hist).toMatchObject({ ok: true });
-    expect(value.tabCount).toBe(2);
-    expect(value.tabIds).toEqual(["t1", "t2"]);
-    expect(value.current.tabId).toBe("t1");
-    expect(value.selected.tabId).toBe("t2");
-    expect(value.closed).toMatchObject({
-      ok: true,
-      closedTabId: "t1",
-      currentTabId: "t2",
+    expect(locatorCalls[1].params.descriptor).toMatchObject({
+      kind: "label",
+      text: "Email",
     });
-    expect(value.closedAll.closedCount).toBe(2);
+    expect(locatorCalls[6].params.state).toBe("hidden");
+    expect(locatorCalls[6].params.timeout).toBe(500);
   });
 
-  it("保留 Bridge 结构化错误码与 details", async () => {
-    const { bridge } = createBridge();
-    bridge.request = async (method: string) => {
-      if (method === "browser_snapshot") {
-        return {
-          generation: 1,
-          type: "simple",
-          url: "https://example.com",
-          title: "Example",
-          source: "ax",
-          stats: {},
-          tree: {
-            role: "document",
-            ref: "root",
-            children: [{ role: "button", name: "Submit", ref: "e0" }],
-          },
-        };
-      }
-      if (method === "browser_click") {
-        throw new BridgeRequestError(
-          "STALE_REF",
-          "Snapshot generation 1 is stale",
-          { expected: 2, received: 1 },
-          "browser_click",
-        );
-      }
-      throw new Error("unexpected method " + method);
-    };
-
-    const result = await runScript(
-      bridge,
-      `
-await tab.snapshot();
-await tab.click("e0");
-return 1;
-`,
-    );
-
-    expect(result.status).toBe("failed");
-    expect(result.error).toMatchObject({
-      code: "STALE_REF",
-      details: { expected: 2, received: 1 },
-    });
-  });
-
-  it("把后端 ELEMENT_NOT_FOUND 映射为 NOT_FOUND", async () => {
-    const { bridge } = createBridge();
-    bridge.request = async (method: string) => {
-      if (method === "browser_wait") {
-        throw new BridgeRequestError(
-          "ELEMENT_NOT_FOUND",
-          "missing",
-          { selector: "#x" },
-          "browser_wait",
-        );
-      }
-      throw new Error("unexpected method " + method);
-    };
-
-    const result = await runScript(bridge, `await tab.waitFor("#x"); return 1;`);
-
-    expect(result.status).toBe("failed");
-    expect(result.error?.code).toBe("NOT_FOUND");
-    expect(result.error?.details).toEqual({ selector: "#x" });
-  });
-
-  it("透传动作选项并支持新原语", async () => {
+  it("透传 getByRole 的全部 Playwright options 与动作 options", async () => {
     const { bridge, calls } = createBridge();
     const result = await runScript(
       bridge,
       `
-await tab.snapshot();
-await tab.click("e0", { button: "right", clickCount: 2, modifiers: ["Control"], force: true, timeout: 1500, trusted: false });
-await tab.hover("e0", { force: true });
-await tab.press("Control+A", { target: "#q", modifiers: ["Shift"], timeout: 1200 });
-await tab.scroll({ deltaY: 500 });
-await tab.selectOption("e0", "cn");
-await tab.check("e0", false);
+await tab.getByRole("button", {
+  name: "Submit",
+  exact: true,
+  checked: true,
+  disabled: false,
+  expanded: true,
+  includeHidden: true,
+  level: 2,
+  pressed: false,
+  selected: true,
+}).click({
+  button: "right",
+  clickCount: 2,
+  modifiers: ["Control"],
+  force: true,
+  timeout: 1500,
+  trusted: false,
+});
 return 1;
 `,
     );
 
     expect(result.status).toBe("completed");
-    const click = calls.find((c) => c.method === "browser_click");
-    expect(click?.params).toMatchObject({
-      selector: "e0",
+    const call = calls.find((entry) => entry.method === "browser_locator");
+    expect(call?.params.descriptor).toMatchObject({
+      kind: "role",
+      role: "button",
+      name: "Submit",
+      exact: true,
+      checked: true,
+      disabled: false,
+      expanded: true,
+      includeHidden: true,
+      level: 2,
+      pressed: false,
+      selected: true,
+    });
+    expect(call?.params.options).toMatchObject({
       button: "right",
-      click_count: 2,
+      clickCount: 2,
       modifiers: ["Control"],
       force: true,
       timeout: 1500,
       trusted: false,
     });
-
-    const hover = calls.find((c) => c.method === "browser_hover");
-    expect(hover?.params).toMatchObject({
-      selector: "e0",
-      force: true,
-    });
-
-    const press = calls.find((c) => c.method === "browser_press");
-    expect(press?.params).toMatchObject({
-      selector: "#q",
-      key: "Control+A",
-      modifiers: ["Shift"],
-      timeout: 1200,
-    });
-
-    const scroll = calls.find((c) => c.method === "browser_scroll");
-    expect(scroll?.params).toMatchObject({ delta_y: 500 });
-
-    const select = calls.find((c) => c.method === "browser_select");
-    expect(select?.params).toMatchObject({ selector: "e0", values: "cn" });
-
-    const check = calls.find((c) => c.method === "browser_check");
-    expect(check?.params).toMatchObject({ selector: "e0", checked: false });
+    expect(call?.params.timeout).toBe(1500);
   });
 
-  it("elementState 与 locator.isVisible 使用真实 DOM 状态", async () => {
+  it("把 RegExp locator 序列化为 Bridge 可传输的 wire format", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `await tab.getByRole("button", { name: /submit/i }).click(); return 1;`,
+    );
+
+    expect(result.status).toBe("completed");
+    const call = calls.find((entry) => entry.method === "browser_locator");
+    expect(call?.params.descriptor.name).toEqual({
+      __regexp: "submit",
+      flags: "i",
+    });
+  });
+
+  it("tab 级便利方法同样透传顶层 options", async () => {
     const { bridge, calls } = createBridge();
     const result = await runScript(
       bridge,
       `
-await tab.snapshot();
-const state = await tab.elementState("e0");
-const visible = await tab.getByRole("button", { name: "Submit" }).isVisible();
-return { state, visible };
+await tab.click(tab.getByRole("button", { name: "Submit" }), {
+  button: "right",
+  timeout: 1500,
+});
+await tab.fill(tab.getByLabel("Email"), "user@example.com");
+return 1;
 `,
     );
 
     expect(result.status).toBe("completed");
-    const value: any = result.value;
-    expect(value.state.visible).toBe(true);
-    expect(value.state.found).toBe(true);
-    expect(value.visible).toBe(true);
-    const stateCalls = calls.filter((c) => c.method === "browser_element_state");
-    expect(stateCalls.length).toBe(2);
-    expect(stateCalls.every((c) => c.params.selector === "e0")).toBe(true);
+    const locatorCalls = calls.filter((call) => call.method === "browser_locator");
+    expect(locatorCalls[0].params.options).toMatchObject({
+      button: "right",
+      timeout: 1500,
+    });
+    expect(locatorCalls[0].params.timeout).toBe(1500);
+    expect(locatorCalls[1].params).toMatchObject({
+      action: "fill",
+      value: "user@example.com",
+    });
   });
 
-  it("waitForLocator 在匹配到但不可操作时继续轮询", async () => {
+  it("保留 Bridge 结构化错误码与 details", async () => {
     const { bridge } = createBridge();
-    let snapshotCount = 0;
-    bridge.request = async (method: string, params: any) => {
-      if (method === "browser_snapshot") {
-        snapshotCount += 1;
-        const tree =
-          snapshotCount === 1
-            ? {
-                role: "document",
-                ref: "root",
-                children: [{ role: "heading", name: "Submit" }],
-              }
-            : {
-                role: "document",
-                ref: "root",
-                children: [{ role: "button", name: "Submit", ref: "e0" }],
-              };
-        return {
-          generation: snapshotCount,
-          type: "simple",
-          url: "https://example.com",
-          title: "Example",
-          source: "ax",
-          stats: {},
-          tree,
-        };
-      }
-      if (method === "browser_wait") {
-        return {
-          ok: true,
-          found: true,
-          selector: params.selector,
-          state: params.state,
-        };
+    bridge.request = async (method: string) => {
+      if (method === "browser_locator") {
+        throw new BridgeRequestError(
+          "AMBIGUOUS",
+          "Locator matched 2 elements",
+          { candidates: [{ tag: "button", text: "Delete" }] },
+          "browser_locator",
+        );
       }
       throw new Error("unexpected method " + method);
     };
 
     const result = await runScript(
       bridge,
-      `await tab.waitFor(tab.getByText("Submit")); return 1;`,
+      `await tab.getByRole("button", { name: "Delete" }).click(); return 1;`,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toMatchObject({
+      code: "AMBIGUOUS",
+      details: { candidates: [{ tag: "button", text: "Delete" }] },
+    });
+  });
+
+  it("拒绝已移除的 ref target", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(bridge, `await tab.click("e3"); return 1;`);
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("INVALID_ARGUMENT");
+    expect(result.error?.message).toContain("Ref targets were removed");
+    expect(calls.length).toBe(0);
+  });
+
+  it("waitFor 默认 visible，并支持 attached/detached", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `
+await tab.waitFor(tab.getByText("Next"));
+await tab.waitFor(tab.getByText("Next"), { state: "attached" });
+await tab.waitFor(tab.getByText("Next"), { state: "detached" });
+return 1;
+`,
     );
 
     expect(result.status).toBe("completed");
-    expect(snapshotCount).toBeGreaterThanOrEqual(2);
+    const waits = calls.filter(
+      (call) => call.method === "browser_locator" && call.params.action === "wait",
+    );
+    expect(waits.map((call) => call.params.state)).toEqual([
+      "visible",
+      "attached",
+      "detached",
+    ]);
+  });
+
+  it("snapshot 不再返回 generation/ref", async () => {
+    const { bridge } = createBridge();
+    const result = await runScript(
+      bridge,
+      `const snap = await tab.snapshot(); return snap;`,
+    );
+
+    expect(result.status).toBe("completed");
+    const snapshot: any = result.value;
+    expect(snapshot.generation).toBeUndefined();
+    expect(snapshot.tree.children[0].ref).toBeUndefined();
+  });
+
+  it("截图：字节交给 persistScreenshot，不回传 worker，state 不存 base64", async () => {
+    const { bridge, calls } = createBridge();
+    const seen: Array<{ bytes: Buffer; meta: any }> = [];
+    const ref = {
+      mediaType: "image/jpeg",
+      bytes: 14,
+      name: "shot.jpg",
+      url: "sessions/s1/images/20261022/shot_1200_abc123.jpg",
+      previewUrl: "sessions/s1/previews/20261022/shot_1200_abc123.jpg",
+      fileExtension: "jpg",
+      refType: "session" as const,
+    };
+
+    const result = await runScript(
+      bridge,
+      `const shot = await tab.screenshot({ fullPage: true }); return shot;`,
+      async (data, meta) => {
+        seen.push({ bytes: data, meta });
+        return {
+          ref,
+          absolutePath: "C:/sessions/s1/images/20261022/shot_1200_abc123.jpg",
+        };
+      },
+    );
+
+    expect(result.status).toBe("completed");
+
+    // 1) 落盘回调拿到原始字节与尺寸
+    expect(seen).toHaveLength(1);
+    expect(Buffer.isBuffer(seen[0].bytes)).toBe(true);
+    expect(seen[0].bytes.toString()).toBe("fake-png-bytes");
+    expect(seen[0].meta).toMatchObject({ width: 800, height: 600 });
+
+    // 2) 返回给 worker 的值不含 base64
+    const value: any = result.value;
+    expect(value).toMatchObject({ ok: true, width: 800, height: 600 });
+    expect(value.data).toBeUndefined();
+
+    // 3) 结果里只留引用；meta/结果都不含 base64
+    expect(result.screenshots).toHaveLength(1);
+    expect(result.screenshots[0].ref).toEqual(ref);
+    expect(JSON.stringify(result.screenshots)).not.toContain("ZmFrZS1wbmctYnl0ZXM");
+
+    // 4) 桥请求不再携带 file_path / session_path
+    const shotCall = calls.find((call) => call.method === "browser_screenshot");
+    expect(shotCall?.params).toMatchObject({
+      created_by: "s1",
+      full_page: true,
+      wants_save: false,
+    });
+    expect(shotCall?.params.file_path).toBeUndefined();
+    expect(shotCall?.params.session_path).toBeUndefined();
   });
 });

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Browser Locator Fixture</title>
+  <style>
+    #hidden { display: none; }
+    #delayed { display: none; }
+  </style>
+</head>
+<body>
+  <button id="submit">Submit</button>
+  <h1 id="heading">Section heading</h1>
+  <a id="link" href="#target">More info</a>
+  <button id="close" aria-label="Close">×</button>
+  <span id="save-label">Save changes</span>
+  <button id="save" aria-labelledby="save-label">💾</button>
+  <img id="logo" alt="Company logo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" />
+  <button id="title-btn" title="Tooltip title">Icon</button>
+
+  <label for="email">Email</label>
+  <input id="email" type="text" />
+  <input id="search" placeholder="Search" />
+  <button id="testid" data-testid="submit-testid">Test ID</button>
+
+  <label><input id="remember" type="checkbox" /> Remember me</label>
+  <select id="country" aria-label="Country">
+    <option value="us">United States</option>
+    <option value="cn">China</option>
+  </select>
+  <textarea id="bio" aria-label="Bio"></textarea>
+
+  <div id="custom" role="button" tabindex="0">Custom role button</div>
+  <button id="hidden">Hidden button</button>
+  <div id="hidden-text" style="display: none">Hidden text</div>
+  <button id="aria-hidden" aria-hidden="true">Aria hidden button</button>
+
+  <table>
+    <tr><td>Alice</td><td><button class="delete" data-row="alice">Delete</button></td></tr>
+    <tr><td>Bob</td><td><button class="delete" data-row="bob">Delete</button></td></tr>
+  </table>
+
+  <div id="shadow-host"></div>
+  <iframe id="frame" srcdoc="<button>Inside Frame</button>"></iframe>
+
+  <button id="dynamic">Dynamic</button>
+  <div id="delayed">Delayed</div>
+  <div id="removable">Removable</div>
+
+  <script>
+    window.__clicks = [];
+    window.__click = (name) => window.__clicks.push(name);
+
+    document.getElementById("submit").addEventListener("click", () => window.__click("submit"));
+    document.getElementById("heading").addEventListener("click", () => window.__click("heading"));
+    document.getElementById("link").addEventListener("click", (e) => { e.preventDefault(); window.__click("link"); });
+    document.getElementById("close").addEventListener("click", () => window.__click("close"));
+    document.getElementById("save").addEventListener("click", () => window.__click("save"));
+    document.getElementById("testid").addEventListener("click", () => window.__click("testid"));
+    document.getElementById("custom").addEventListener("click", () => window.__click("custom"));
+    document.getElementById("dynamic").addEventListener("click", () => window.__click("dynamic"));
+    document.querySelectorAll(".delete").forEach((btn) => {
+      btn.addEventListener("click", () => window.__click("delete:" + btn.dataset.row));
+    });
+
+    const shadow = document.getElementById("shadow-host").attachShadow({ mode: "open" });
+    shadow.innerHTML = '<button id="shadow-button">Shadow Action</button>';
+    shadow.getElementById("shadow-button").addEventListener("click", () => window.__click("shadow"));
+
+    setTimeout(() => {
+      document.getElementById("removable").remove();
+    }, 300);
+    setTimeout(() => {
+      document.getElementById("delayed").style.display = "block";
+    }, 300);
+  </script>
+</body>
+</html>

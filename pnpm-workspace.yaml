@@ -3,3 +3,4 @@
 # electron 需要下载二进制；其余根依赖无构建脚本
 allowBuilds:
   electron: true
+  esbuild: true

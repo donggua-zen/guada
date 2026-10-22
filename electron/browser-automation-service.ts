@@ -1,7 +1,7 @@
 import log from "electron-log/main";
 import * as path from "path";
 import * as fs from "fs";
-import * as os from "os";
+import { nativeImage } from "electron";
 import { BrowserWindowManager, WindowInfo } from "./browser-tab-manager";
 import {
   buildSimpleTreeFromLegacyStruct,
@@ -10,6 +10,11 @@ import {
 } from "./accessibility-snapshot";
 import { BrowserBridgeError } from "./browser-errors";
 import { assertNavigableUrl } from "./browser-url";
+import {
+  BrowserLocatorEngine,
+  LocatorDescriptor,
+  LocatorWaitState,
+} from "./browser-locator-engine";
 import {
   ActionOptions,
   BrowserActionEngine,
@@ -65,12 +70,11 @@ export type BrowserWaitUntil = "none" | "domcontentloaded" | "load";
 export class BrowserAutomationService {
   private windowManager: BrowserWindowManager | null = null;
   private actionEngine: BrowserActionEngine | null = null;
+  private readonly locatorEngine = new BrowserLocatorEngine();
   // 每个 session (createdBy) 的当前标签映射
   private currentTabs = new Map<string, string>();
   // 同一 webContents 的 CDP 快照必须串行，避免 debugger attach/command 冲突
   private snapshotLocks = new Map<number, Promise<void>>();
-  // 每个 tab 的快照代际：snapshot 与会改变 DOM 的动作递增，用于拒绝过期 ref
-  private generations = new Map<string, number>();
 
   /**
    * 初始化窗口管理器（必须在应用启动时调用）
@@ -78,37 +82,17 @@ export class BrowserAutomationService {
   initializeWindowManager(windowManager: BrowserWindowManager): void {
     this.windowManager = windowManager;
     this.actionEngine = new BrowserActionEngine({
-      isWindowVisible: (windowId) => windowManager.isWindowVisible(windowId),
-      setWebviewRenderable: (windowId, renderable) =>
-        windowManager.setWebviewRenderable(windowId, renderable),
+      isWindowVisible: (windowId) =>
+        typeof (windowManager as any).isWindowVisible === "function"
+          ? windowManager.isWindowVisible(windowId)
+          : true,
+      setWebviewRenderable: (windowId, renderable) => {
+        if (typeof (windowManager as any).setWebviewRenderable === "function") {
+          windowManager.setWebviewRenderable(windowId, renderable);
+        }
+      },
     });
     log.info("BrowserAutomationService initialized with WindowManager");
-  }
-
-  private getGeneration(windowId: string): number {
-    return this.generations.get(windowId) ?? 0;
-  }
-
-  private bumpGeneration(windowId: string): number {
-    const next = this.getGeneration(windowId) + 1;
-    this.generations.set(windowId, next);
-    return next;
-  }
-
-  private clearGeneration(windowId: string): void {
-    this.generations.delete(windowId);
-  }
-
-  private assertGeneration(windowId: string, generation?: number): void {
-    if (generation === undefined || generation === null) return;
-    const current = this.getGeneration(windowId);
-    if (Number(generation) !== current) {
-      throw new BrowserBridgeError(
-        "STALE_REF",
-        `Snapshot generation ${generation} is stale; current generation is ${current}. Take a fresh snapshot before acting.`,
-        { expected: current, received: generation },
-      );
-    }
   }
 
   private async withSnapshotLock<T>(
@@ -155,7 +139,6 @@ export class BrowserAutomationService {
     }
 
     const windowInfo = await this.windowManager.createWindow(url, metadata);
-    this.generations.set(windowInfo.windowId, 0);
 
     // 等待初始导航完成：waitUntil=none 时完全跳过，由脚本自行决定何时观察。
     if (url && windowInfo.windowId && waitUntil !== "none") {
@@ -387,9 +370,6 @@ export class BrowserAutomationService {
     // 拒绝 javascript: 协议（安全风险，且会导致等待挂起）
     // 统一白名单已在方法入口校验；这里保留注释说明历史原因。
 
-    // 导航开始即作废旧 ref；即使页面还没加载完，旧 DOM 也不再可信
-    this.bumpGeneration(wid);
-
     let navError: Error | null = null;
     const navigation = webContents.loadURL(url).catch((err: any) => {
       if (this.isAbortedNavigationError(err)) return;
@@ -464,13 +444,18 @@ export class BrowserAutomationService {
   }
 
   /**
-   * 截图当前页面，保存到本地文件
+   * 截图当前页面，返回 PNG 字节（base64）。
+   *
+   * 不落盘：截图只有一份持久副本，由后端转码后写入会话附件目录
+   * （sessions/<id>/images|previews/）。工作区不再产生全尺寸 PNG。
+   *
+   * wantsSave=true 时跳过降采样：调用方显式要求导出原始质量（工作区另存）。
+   * 其余情况按模型侧预算降采样，避免几 MB 的 PNG base64 过桥。
    */
   async screenshot(
     createdBy: string,
-    filePath?: string,
-    sessionPath?: string,
     fullPage: boolean = false,
+    wantsSave: boolean = false,
   ): Promise<any> {
     if (!this.windowManager) {
       throw new Error("WindowManager not initialized");
@@ -531,19 +516,22 @@ export class BrowserAutomationService {
         }
       }
 
-      // 保存到文件；file_path 必须落在会话目录内，无会话路径时只允许临时目录
-      const targetPath = this.resolveScreenshotPath(filePath, sessionPath);
-
-      const dir = path.dirname(targetPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      await fs.promises.writeFile(targetPath, buffer);
-      log.info(`Screenshot saved: ${targetPath}`);
+      // 降采样：模型侧转码目标就是最长边 1920，先在捕获端收敛可显著减小
+      // base64 过桥体积（视口截图约 0.1–0.4MB），且不损失模型可见质量。
+      // wantsSave=true（显式导出）跳过，保留原始画质。
+      const capped = wantsSave
+        ? { buffer, width: imgWidth, height: imgHeight }
+        : shrinkRasterForModel(buffer, imgWidth, imgHeight);
+      buffer = capped.buffer;
+      imgWidth = capped.width;
+      imgHeight = capped.height;
 
       return {
         ok: true,
-        path: targetPath,
+        // 必须是 base64 字符串：直接返回 Buffer 会被 JSON.stringify 成
+        // {type:"Buffer",data:[...]}，体积与解析成本远高于 base64。
+        data: buffer.toString("base64"),
+        mime_type: "image/png",
         width: imgWidth,
         height: imgHeight,
       };
@@ -568,30 +556,6 @@ export class BrowserAutomationService {
         this.windowManager.setWebviewRenderable(wid, false);
       }
     }
-  }
-
-  /**
-   * 截图路径收敛：相对路径基于 sessionPath，绝对路径也必须在 sessionPath 内；
-   * 没有 sessionPath 时只允许系统临时目录，避免页面/脚本任意写文件。
-   */
-  private resolveScreenshotPath(
-    filePath: string | undefined,
-    sessionPath: string | undefined,
-  ): string {
-    const base = path.resolve(sessionPath || os.tmpdir());
-    const target = filePath
-      ? path.resolve(base, filePath)
-      : path.join(base, `screenshot-${Date.now()}.png`);
-
-    if (!isPathInside(base, target)) {
-      throw new BrowserBridgeError(
-        "INVALID_ARGUMENT",
-        `Screenshot path must stay inside the session directory: ${base}`,
-        { filePath, base, target },
-      );
-    }
-
-    return target;
   }
 
   /**
@@ -673,17 +637,11 @@ export class BrowserAutomationService {
     }
 
     try {
-      const result = await this.withTimeout(
+      return await this.withTimeout(
         webContents.executeJavaScript(code, true),
         timeoutMs,
         `JavaScript execution timeout (${timeoutMs}ms)`,
       );
-
-      // 只有可能修改 DOM 的 evaluate 才作废旧 ref；内部只读查询不递增
-      if (mutates) {
-        this.bumpGeneration(wid);
-      }
-      return result;
     } catch (error: any) {
       log.error(`JavaScript execution failed in tab ${wid}:`, error?.message || error);
       if (error instanceof BrowserBridgeError) throw error;
@@ -780,17 +738,7 @@ export class BrowserAutomationService {
               MAX_ATTR_VALUE_LENGTH: 300  // 属性值最大长度
             };
 
-            // 清理旧 ref，在真实 DOM 上重新分配
-            document.querySelectorAll('[data-ai-ref]').forEach(function(el) {
-              el.removeAttribute('data-ai-ref');
-            });
-            var refCounter = 0;
-            function assignRef(element) {
-              var refId = 'e' + (refCounter++);
-              element.setAttribute('data-ai-ref', refId);
-              return refId;
-            }
-
+            // 不再向 DOM 写入 ref；快照只返回语义结构。
             // role 推导：显式 ARIA role > tag→role 映射 > tag 名
             function getRole(element) {
               var explicit = element.getAttribute('role');
@@ -867,15 +815,14 @@ export class BrowserAutomationService {
                 return { role: '...', text: 'Maximum depth exceeded' };
               }
 
-              var ref = assignRef(element);
               var role = getRole(element);
 
-              // 超过 SIMPLE_DEPTH 后，仅返回 role + ref
+              // 超过 SIMPLE_DEPTH 后，仅返回 role
               if (depth > CONFIG.SIMPLE_DEPTH) {
-                return { role: role, ref: ref };
+                return { role: role };
               }
 
-              var node = { role: role, ref: ref };
+              var node = { role: role };
 
               // 文本（仅叶子节点）
               var text = getText(element);
@@ -1264,7 +1211,7 @@ export class BrowserAutomationService {
   /**
    * 统一快照接口：simple（默认）/ struct / summary。
    *
-   * 返回脚本友好的扁平结构；generation 由后端拥有，动作可用它拒绝过期 ref。
+   * snapshot 只用于观察，不再返回 ref/generation。
    */
   async snapshot(
     type: string,
@@ -1272,12 +1219,10 @@ export class BrowserAutomationService {
     waitForLoad: boolean = false,
   ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow("", createdBy);
-    const generation = this.bumpGeneration(wid);
 
     if (type === "summary") {
       const res = await this.getPageSummary(wid, createdBy, waitForLoad);
       return {
-        generation,
         type: "summary",
         url: res.url,
         title: res.title,
@@ -1291,7 +1236,6 @@ export class BrowserAutomationService {
     if (type === "struct") {
       const res = await this.getPageStruct(wid, createdBy, waitForLoad);
       return {
-        generation,
         type: "struct",
         url: res.url,
         title: res.title,
@@ -1303,7 +1247,6 @@ export class BrowserAutomationService {
     if (type === "simple") {
       const res = await this.getPageSimpleSnapshot(wid, createdBy, waitForLoad);
       return {
-        generation,
         type: "simple",
         url: res.url,
         title: res.title,
@@ -1318,26 +1261,15 @@ export class BrowserAutomationService {
     );
   }
 
-  /**
-   * 将 ref ID（如 "e0"）解析为 CSS 属性选择器；非 ref 格式原样返回
-   */
-  private resolveSelector(selector: string): string {
-    if (/^e\d+$/.test(selector)) {
-      return `[data-ai-ref="${selector}"]`;
-    }
-    return selector;
-  }
-
   async waitForSelector(
     selector: string,
     timeout: number = 10000,
     windowId: string,
     createdBy?: string,
-    generation?: number,
+    _generation?: number,
     state: WaitState = "attached",
   ): Promise<any> {
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-    this.assertGeneration(wid, generation);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -1355,7 +1287,7 @@ export class BrowserAutomationService {
       `Waiting for selector: ${selector} to be ${normalizedState} (tab: ${wid})`,
     );
 
-    const cssSelector = this.resolveSelector(selector);
+    const cssSelector = selector;
 
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
@@ -1373,14 +1305,12 @@ export class BrowserAutomationService {
   }
 
   /**
-   * 动作前的公共准备：所有权、当前标签、generation、webContents。
+   * 动作前的公共准备：所有权、当前标签、webContents。
    */
-  private async prepareAction(
-    selector: string,
+  private async prepareContext(
     windowId: string,
     createdBy?: string,
-    generation?: number,
-  ): Promise<{ wid: string; webContents: Electron.WebContents; selector: string }> {
+  ): Promise<{ wid: string; webContents: Electron.WebContents }> {
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
     }
@@ -1388,12 +1318,31 @@ export class BrowserAutomationService {
       throw new Error("Action engine not initialized");
     }
     const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-    this.assertGeneration(wid, generation);
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
       throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
     }
-    return { wid, webContents, selector: this.resolveSelector(selector) };
+    return { wid, webContents };
+  }
+
+  private async prepareAction(
+    selector: string,
+    windowId: string,
+    createdBy?: string,
+    _generation?: number,
+  ): Promise<{ wid: string; webContents: Electron.WebContents; selector: string }> {
+    const context = await this.prepareContext(windowId, createdBy);
+    return {
+      ...context,
+      selector,
+    };
+  }
+
+  private withPreparedSelector(
+    context: { wid: string; webContents: Electron.WebContents },
+    selector: string,
+  ): { wid: string; webContents: Electron.WebContents; selector: string } {
+    return { ...context, selector };
   }
 
   async click(
@@ -1405,17 +1354,22 @@ export class BrowserAutomationService {
   ): Promise<any> {
     const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
     log.info(`Clicking element: ${selector} (tab: ${prepared.wid})`);
-
     const result = await this.withSnapshotLock(prepared.webContents, () =>
-      this.actionEngine!.click(
-        prepared.webContents,
-        prepared.wid,
-        prepared.selector,
-        options,
-      ),
+      this.clickInternal(prepared, options),
     );
-    this.bumpGeneration(prepared.wid);
     return result;
+  }
+
+  private clickInternal(
+    prepared: { wid: string; webContents: Electron.WebContents; selector: string },
+    options: ActionOptions,
+  ): Promise<any> {
+    return this.actionEngine!.click(
+      prepared.webContents,
+      prepared.wid,
+      prepared.selector,
+      options,
+    );
   }
 
   async hover(
@@ -1427,17 +1381,22 @@ export class BrowserAutomationService {
   ): Promise<any> {
     const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
     log.info(`Hovering element: ${selector} (tab: ${prepared.wid})`);
-
     const result = await this.withSnapshotLock(prepared.webContents, () =>
-      this.actionEngine!.hover(
-        prepared.webContents,
-        prepared.wid,
-        prepared.selector,
-        options,
-      ),
+      this.hoverInternal(prepared, options),
     );
-    this.bumpGeneration(prepared.wid);
     return result;
+  }
+
+  private hoverInternal(
+    prepared: { wid: string; webContents: Electron.WebContents; selector: string },
+    options: ActionOptions,
+  ): Promise<any> {
+    return this.actionEngine!.hover(
+      prepared.webContents,
+      prepared.wid,
+      prepared.selector,
+      options,
+    );
   }
 
   async press(
@@ -1447,32 +1406,28 @@ export class BrowserAutomationService {
     options: PressOptions = {},
     generation?: number,
   ): Promise<any> {
-    if (!this.windowManager) {
-      throw new Error("TabManager not initialized");
-    }
-    if (!this.actionEngine) {
-      throw new Error("Action engine not initialized");
-    }
-    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-    this.assertGeneration(wid, generation);
-    const webContents = this.windowManager.getWebContents(wid);
-    if (!webContents) {
-      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
-    }
-
-    const selector = options.selector
-      ? this.resolveSelector(options.selector)
-      : undefined;
-    log.info(`Pressing key: ${key} (tab: ${wid})`);
-
-    const result = await this.withSnapshotLock(webContents, () =>
-      this.actionEngine!.press(webContents, wid, key, {
-        ...options,
-        ...(selector ? { selector } : {}),
-      }),
+    const prepared = await this.prepareAction(
+      options.selector || "",
+      windowId,
+      createdBy,
+      generation,
     );
-    this.bumpGeneration(wid);
+    log.info(`Pressing key: ${key} (tab: ${prepared.wid})`);
+    const result = await this.withSnapshotLock(prepared.webContents, () =>
+      this.pressInternal(prepared, key, options),
+    );
     return result;
+  }
+
+  private pressInternal(
+    prepared: { wid: string; webContents: Electron.WebContents; selector: string },
+    key: string,
+    options: PressOptions,
+  ): Promise<any> {
+    return this.actionEngine!.press(prepared.webContents, prepared.wid, key, {
+      ...options,
+      ...(prepared.selector ? { selector: prepared.selector } : {}),
+    });
   }
 
   async scroll(
@@ -1481,28 +1436,25 @@ export class BrowserAutomationService {
     options: ScrollOptions = {},
     generation?: number,
   ): Promise<any> {
-    if (!this.windowManager) {
-      throw new Error("TabManager not initialized");
-    }
-    if (!this.actionEngine) {
-      throw new Error("Action engine not initialized");
-    }
-    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
-    this.assertGeneration(wid, generation);
-    const webContents = this.windowManager.getWebContents(wid);
-    if (!webContents) {
-      throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
-    }
-
-    const selector = options.selector
-      ? this.resolveSelector(options.selector)
-      : undefined;
-    return this.withSnapshotLock(webContents, () =>
-      this.actionEngine!.scroll(webContents, wid, {
-        ...options,
-        ...(selector ? { selector } : {}),
-      }),
+    const prepared = await this.prepareAction(
+      options.selector || "",
+      windowId,
+      createdBy,
+      generation,
     );
+    return this.withSnapshotLock(prepared.webContents, () =>
+      this.scrollInternal(prepared, options),
+    );
+  }
+
+  private scrollInternal(
+    prepared: { wid: string; webContents: Electron.WebContents; selector: string },
+    options: ScrollOptions,
+  ): Promise<any> {
+    return this.actionEngine!.scroll(prepared.webContents, prepared.wid, {
+      ...options,
+      ...(prepared.selector ? { selector: prepared.selector } : {}),
+    });
   }
 
   async selectOption(
@@ -1515,15 +1467,22 @@ export class BrowserAutomationService {
   ): Promise<any> {
     const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
     const result = await this.withSnapshotLock(prepared.webContents, () =>
-      this.actionEngine!.selectOption(
-        prepared.webContents,
-        prepared.selector,
-        values,
-        options,
-      ),
+      this.selectOptionInternal(prepared, values, options),
     );
-    this.bumpGeneration(prepared.wid);
     return result;
+  }
+
+  private selectOptionInternal(
+    prepared: { webContents: Electron.WebContents; selector: string },
+    values: unknown,
+    options: SelectOptions,
+  ): Promise<any> {
+    return this.actionEngine!.selectOption(
+      prepared.webContents,
+      prepared.selector,
+      values,
+      options,
+    );
   }
 
   async check(
@@ -1536,16 +1495,23 @@ export class BrowserAutomationService {
   ): Promise<any> {
     const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
     const result = await this.withSnapshotLock(prepared.webContents, () =>
-      this.actionEngine!.check(
-        prepared.webContents,
-        prepared.wid,
-        prepared.selector,
-        checked,
-        options,
-      ),
+      this.checkInternal(prepared, checked, options),
     );
-    this.bumpGeneration(prepared.wid);
     return result;
+  }
+
+  private checkInternal(
+    prepared: { wid: string; webContents: Electron.WebContents; selector: string },
+    checked: boolean,
+    options: ActionOptions,
+  ): Promise<any> {
+    return this.actionEngine!.check(
+      prepared.webContents,
+      prepared.wid,
+      prepared.selector,
+      checked,
+      options,
+    );
   }
 
   async elementState(
@@ -1556,8 +1522,15 @@ export class BrowserAutomationService {
   ): Promise<any> {
     const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
     return this.withSnapshotLock(prepared.webContents, () =>
-      this.actionEngine!.elementState(prepared.webContents, prepared.selector),
+      this.elementStateInternal(prepared),
     );
+  }
+
+  private elementStateInternal(prepared: {
+    webContents: Electron.WebContents;
+    selector: string;
+  }): Promise<any> {
+    return this.actionEngine!.elementState(prepared.webContents, prepared.selector);
   }
 
   async fillForm(
@@ -1577,18 +1550,151 @@ export class BrowserAutomationService {
 
     const prepared = await this.prepareAction(selector, windowId, createdBy, generation);
     log.info(`Filling form field: ${selector} (tab: ${prepared.wid})`);
-
-    const result = await this.withSnapshotLock(prepared.webContents, () =>
-      this.actionEngine!.fill(
-        prepared.webContents,
-        prepared.wid,
-        prepared.selector,
-        value,
-        options,
-      ),
+    return this.withSnapshotLock(prepared.webContents, () =>
+      this.fillInternal(prepared, value, options),
     );
-    // fill 不改变 DOM 结构，保留 ref 可用性；与既有语义一致。
-    return result;
+  }
+
+  private fillInternal(
+    prepared: { wid: string; webContents: Electron.WebContents; selector: string },
+    value: string,
+    options: FillOptions,
+  ): Promise<any> {
+    return this.actionEngine!.fill(
+      prepared.webContents,
+      prepared.wid,
+      prepared.selector,
+      value,
+      options,
+    );
+  }
+
+  /**
+   * 统一 locator 入口：查询 → strictness → materialize → 现有动作引擎。
+   */
+  async locator(params: any): Promise<any> {
+    const descriptor = params?.descriptor as LocatorDescriptor;
+    if (!descriptor || typeof descriptor !== "object") {
+      throw new BrowserBridgeError(
+        "INVALID_ARGUMENT",
+        "browser_locator requires a locator descriptor",
+      );
+    }
+    const action = String(params.action || "");
+    const context = await this.prepareContext(
+      params.window_id || params.tab_id || "",
+      params.created_by,
+    );
+    return this.withSnapshotLock(context.webContents, async () => {
+      if (action === "count") {
+        return (await this.locatorEngine.queryAll(context.webContents, descriptor)).count;
+      }
+      if (action === "text") {
+        return this.locatorEngine.text(context.webContents, descriptor);
+      }
+      if (action === "isVisible") {
+        return this.locatorEngine.isVisible(context.webContents, descriptor);
+      }
+      if (action === "wait") {
+        const state = normalizeLocatorWaitState(params.state);
+        return this.locatorEngine.waitFor(
+          context.webContents,
+          descriptor,
+          state,
+          Number(params.timeout) || 3000,
+        );
+      }
+
+      const materialized = await this.locatorEngine.materialize(
+        context.webContents,
+        action === "state" && descriptor.kind === "role"
+          ? { ...descriptor, includeHidden: true }
+          : descriptor,
+      );
+      if (!materialized.ok) {
+        if (materialized.count === 0) {
+          throw new BrowserBridgeError(
+            "NOT_FOUND",
+            "No element matched the locator.",
+            { descriptor },
+          );
+        }
+        throw new BrowserBridgeError(
+          "AMBIGUOUS",
+          `Locator matched ${materialized.count} elements. Narrow it with a more specific locator or use first/last/nth.`,
+          { descriptor, candidates: materialized.candidates || [] },
+        );
+      }
+      if (materialized.inShadow) {
+        throw new BrowserBridgeError(
+          "UNSUPPORTED",
+          "Locator actions inside shadow roots are not supported yet; query/count/text are available.",
+          { descriptor, candidate: materialized.candidate },
+        );
+      }
+      if (!materialized.selector || !materialized.token) {
+        throw new BrowserBridgeError(
+          "CALL_FAILED",
+          "Locator materialization did not return a selector.",
+          { descriptor, materialized },
+        );
+      }
+
+      const prepared = this.withPreparedSelector(context, materialized.selector);
+      try {
+        if (action === "click") {
+          return await this.clickInternal(prepared, params.options || {});
+        }
+        if (action === "fill") {
+          if (typeof params.value !== "string") {
+            throw new BrowserBridgeError(
+              "INVALID_ARGUMENT",
+              "value is required when action is fill",
+            );
+          }
+          return await this.fillInternal(prepared, params.value, params.options || {});
+        }
+        if (action === "hover") {
+          return await this.hoverInternal(prepared, params.options || {});
+        }
+        if (action === "press") {
+          if (!params.key) {
+            throw new BrowserBridgeError(
+              "INVALID_ARGUMENT",
+              "key is required when action is press",
+            );
+          }
+          return await this.pressInternal(prepared, String(params.key), params.options || {});
+        }
+        if (action === "scroll") {
+          return await this.scrollInternal(prepared, params.options || {});
+        }
+        if (action === "selectOption") {
+          return await this.selectOptionInternal(
+            prepared,
+            params.values,
+            params.options || {},
+          );
+        }
+        if (action === "check" || action === "uncheck") {
+          return await this.checkInternal(
+            prepared,
+            action === "check" ? params.checked !== false : false,
+            params.options || {},
+          );
+        }
+        if (action === "state") {
+          const probe = await this.elementStateInternal(prepared);
+          return { ok: true, ...probe };
+        }
+        throw new BrowserBridgeError(
+          "INVALID_ARGUMENT",
+          `Unknown browser_locator action: ${action}`,
+        );
+      } finally {
+        await this.locatorEngine.release(context.webContents, materialized.token);
+      }
+    });
   }
 
   /**
@@ -1613,7 +1719,6 @@ export class BrowserAutomationService {
     if (webContents.navigationHistory.canGoBack()) {
       webContents.navigationHistory.goBack();
       await this.waitForPageLoad(webContents);
-      this.bumpGeneration(wid);
     }
 
     return {
@@ -1643,7 +1748,6 @@ export class BrowserAutomationService {
     if (webContents.navigationHistory.canGoForward()) {
       webContents.navigationHistory.goForward();
       await this.waitForPageLoad(webContents);
-      this.bumpGeneration(wid);
     }
 
     return {
@@ -1671,7 +1775,6 @@ export class BrowserAutomationService {
 
     webContents.reload();
     await this.waitForPageLoad(webContents);
-    this.bumpGeneration(wid);
 
     return {
       ok: true,
@@ -1788,7 +1891,6 @@ export class BrowserAutomationService {
         }
 
         await this.windowManager.closeWindow(targetWid);
-        this.clearGeneration(targetWid);
 
         // 关闭的是当前标签时自动切换到相邻标签；否则当前标签保持不变
         let nextCurrentTabId: string | null = currentTabId || null;
@@ -1816,7 +1918,6 @@ export class BrowserAutomationService {
         let count = 0;
         for (const w of sessionWindows) {
           await this.windowManager.closeWindow(w.windowId);
-          this.clearGeneration(w.windowId);
           count++;
         }
         if (createdBy) this.clearCurrentTab(createdBy);
@@ -1847,7 +1948,6 @@ export class BrowserAutomationService {
     log.info(`Closing ${windows.length} windows for creator ${createdBy}`);
     for (const w of windows) {
       await this.windowManager.closeWindow(w.windowId);
-      this.clearGeneration(w.windowId);
     }
     this.clearCurrentTab(createdBy);
     return { closedCount: windows.length };
@@ -2093,6 +2193,9 @@ export class BrowserAutomationService {
             params.state || "attached",
           );
 
+        case "browser_locator":
+          return await this.locator(params);
+
         case "browser_click":
           return await this.click(
             params.selector,
@@ -2206,11 +2309,12 @@ export class BrowserAutomationService {
           );
 
         case "browser_screenshot":
+          // 不再落工作区；返回 base64 由后端转码进会话附件目录。
+          // wants_save 仅决定是否保留原始栅格（显式导出场景）。
           return await this.screenshot(
             params.created_by,
-            params.file_path,
-            params.session_path,
             params.full_page || false,
+            params.wants_save === true,
           );
 
         case "browser_history": {
@@ -2266,7 +2370,50 @@ function resolveTrusted(params: any): boolean | undefined {
   return undefined;
 }
 
-function isPathInside(base: string, target: string): boolean {
-  const relative = path.relative(base, target);
-  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+function normalizeLocatorWaitState(value: unknown): LocatorWaitState {
+  return value === "attached" || value === "hidden" || value === "detached"
+    ? value
+    : "visible";
+}
+
+/** 模型侧截图栅格上限（与后端转码预算一致：最长边 1920） */
+const SCREENSHOT_MAX_EDGE = 1920;
+/** 像素上限（16MP）：超长整页截图先收敛，避免 base64 过桥体积失控 */
+const SCREENSHOT_MAX_PIXELS = 16 * 1024 * 1024;
+
+/**
+ * 按模型侧预算把截图栅格收敛到 ≤1920 长边 / ≤16MP。
+ *
+ * 后端转码本来就会缩到同一上限，在捕获端先缩可以直接减小 base64 体积
+ * （视口截图通常只剩 0.1–0.4MB）。失败时原样返回，交给后端转码兜底。
+ */
+function shrinkRasterForModel(
+  buffer: Buffer,
+  width: number,
+  height: number,
+): { buffer: Buffer; width: number; height: number } {
+  const longest = Math.max(width, height, 1);
+  const pixels = Math.max(width * height, 1);
+  const scale = Math.min(
+    longest > SCREENSHOT_MAX_EDGE ? SCREENSHOT_MAX_EDGE / longest : 1,
+    pixels > SCREENSHOT_MAX_PIXELS ? Math.sqrt(SCREENSHOT_MAX_PIXELS / pixels) : 1,
+  );
+  if (scale >= 1) return { buffer, width, height };
+
+  try {
+    const image = nativeImage.createFromBuffer(buffer);
+    if (image.isEmpty()) return { buffer, width, height };
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+    const resized = image.resize({
+      width: targetWidth,
+      height: targetHeight,
+      quality: "best",
+    });
+    const size = resized.getSize();
+    return { buffer: resized.toPNG(), width: size.width, height: size.height };
+  } catch (error: any) {
+    log.warn(`screenshot downscale failed, using original: ${error?.message ?? error}`);
+    return { buffer, width, height };
+  }
 }

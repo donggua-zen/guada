@@ -23,7 +23,6 @@ export interface RawAXNode {
 export interface SimpleAXNode {
   role: string;
   name?: string;
-  ref?: string;
   value?: string;
   checked?: boolean | string;
   selected?: boolean;
@@ -49,7 +48,6 @@ export interface AXSnapshotOptions {
 
 export interface AXSnapshotResult {
   tree: SimpleAXNode;
-  refTargets: Array<{ ref: string; backendDOMNodeId: number }>;
   stats: AXSnapshotStats;
 }
 
@@ -211,7 +209,7 @@ export function measureSimpleTree(
 
   const walk = (node: SimpleAXNode, depth: number) => {
     outputNodeCount++;
-    if (node.ref && node.ref !== "root") interactiveNodeCount++;
+    if (INTERACTIVE_ROLES.has(node.role)) interactiveNodeCount++;
     maxDepth = Math.max(maxDepth, depth);
     node.children?.forEach((child) => walk(child, depth + 1));
   };
@@ -238,8 +236,7 @@ export function buildSimpleAccessibilityTree(
 
   if (!root) {
     return {
-      tree: { role: "document", ref: "root" },
-      refTargets: [],
+      tree: { role: "document" },
       stats: {
         rawNodeCount: 0,
         outputNodeCount: 1,
@@ -252,8 +249,6 @@ export function buildSimpleAccessibilityTree(
 
   let emitted = 0;
   let omittedNodeCount = 0;
-  let refCounter = 0;
-  const refTargets: AXSnapshotResult["refTargets"] = [];
   const countSubtree = (raw: RawAXNode): number =>
     1 +
     (raw.childIds || []).reduce((count, id) => {
@@ -298,14 +293,6 @@ export function buildSimpleAccessibilityTree(
     }
     emitted++;
 
-    if (isRoot) {
-      output.ref = "root";
-    } else if (meaningfulInteractive && raw.backendDOMNodeId) {
-      const ref = `e${refCounter++}`;
-      output.ref = ref;
-      refTargets.push({ ref, backendDOMNodeId: raw.backendDOMNodeId });
-    }
-
     // 原子控件和标题的 accessible name 已聚合内部文本/图像；复合控件保留 option/treeitem 等子项。
     const suppressChildren =
       (ATOMIC_INTERACTIVE_ROLES.has(role) && Boolean(name)) ||
@@ -316,7 +303,7 @@ export function buildSimpleAccessibilityTree(
   };
 
   const converted = convert(root, true);
-  const tree = converted[0] || { role: "document", ref: "root" };
+  const tree = converted[0] || { role: "document" };
   if (omittedNodeCount > 0) {
     tree.children ||= [];
     tree.children.push({ role: "omitted", name: `${omittedNodeCount} nodes omitted` });
@@ -325,7 +312,6 @@ export function buildSimpleAccessibilityTree(
 
   return {
     tree,
-    refTargets,
     stats: {
       rawNodeCount: nodes.length,
       ...stats,
@@ -347,8 +333,6 @@ export function buildSimpleTreeFromLegacyStruct(struct: any): SimpleAXNode {
     const name = normalizeText(node.name ?? node.text, 160);
     const output: SimpleAXNode = { role: isRoot ? "document" : role };
     if (name) output.name = name;
-    if (isRoot) output.ref = "root";
-    else if (node.ref && INTERACTIVE_ROLES.has(role)) output.ref = node.ref;
 
     const keep = isRoot || INTERACTIVE_ROLES.has(role) || SEMANTIC_ROLES.has(role) || Boolean(name);
     if (!keep || (FLATTENABLE_ROLES.has(role) && !name)) return children;
@@ -356,7 +340,7 @@ export function buildSimpleTreeFromLegacyStruct(struct: any): SimpleAXNode {
     return [output];
   };
 
-  return convert(struct, true)[0] || { role: "document", ref: "root" };
+  return convert(struct, true)[0] || { role: "document" };
 }
 
 /**
@@ -417,60 +401,6 @@ export async function captureAccessibilitySnapshot(
       throw new Error("Accessibility tree is empty");
     }
     const converted = buildSimpleAccessibilityTree(result.nodes, options);
-
-    await withTimeout(
-      webContents.executeJavaScript(`
-        document.querySelectorAll('[data-ai-ref]').forEach(function(el) {
-          el.removeAttribute('data-ai-ref');
-        });
-      `),
-      "clear data-ai-ref",
-    );
-
-    const failedRefs = new Set<string>();
-    for (const target of converted.refTargets) {
-      let objectId: string | undefined;
-      try {
-        const resolved = await sendCommand<{ object?: { objectId?: string } }>(
-          "DOM.resolveNode",
-          { backendNodeId: target.backendDOMNodeId },
-        );
-        objectId = resolved.object?.objectId;
-        if (!objectId) {
-          failedRefs.add(target.ref);
-          continue;
-        }
-        const call = await sendCommand<{ result?: { value?: boolean } }>(
-          "Runtime.callFunctionOn",
-          {
-            objectId,
-            functionDeclaration:
-              "function(ref) { if (!(this instanceof Element) || window !== window.top) return false; this.setAttribute('data-ai-ref', ref); return true; }",
-            arguments: [{ value: target.ref }],
-            returnByValue: true,
-          },
-        );
-        if (call.result?.value !== true) failedRefs.add(target.ref);
-      } catch {
-        if (Date.now() >= deadline) {
-          throw new Error(`Accessibility snapshot timed out after ${commandTimeoutMs}ms`);
-        }
-        failedRefs.add(target.ref);
-      } finally {
-        if (objectId) {
-          await sendCommand("Runtime.releaseObject", { objectId }).catch(() => {});
-        }
-      }
-    }
-
-    if (failedRefs.size > 0) {
-      const stripFailedRefs = (node: SimpleAXNode) => {
-        if (node.ref && failedRefs.has(node.ref)) delete node.ref;
-        node.children?.forEach(stripFailedRefs);
-      };
-      stripFailedRefs(converted.tree);
-    }
-
     const measured = measureSimpleTree(converted.tree);
     return {
       tree: converted.tree,

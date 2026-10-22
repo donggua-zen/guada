@@ -147,17 +147,19 @@ async function run() {
   };
 
   if (!requestedUrl) {
-    const buttonRef = findRefByName(simple.snapshot, "提交");
-    const inputRef = findRefByName(simple.snapshot, "搜索内容");
+    const buttonNode = findNodeByName(simple.snapshot, "提交");
+    const inputNode = findNodeByName(simple.snapshot, "搜索内容");
     const prose = findNodeByName(simple.snapshot, "这是一段普通可见正文");
     const theme = findNodeByName(simple.snapshot, "主题");
     const checkbox = findNodeByName(simple.snapshot, "记住设置");
     const hidden = findNodeByName(simple.snapshot, "不可见按钮");
-    const shadowAction = findNodeByName(simple.snapshot, "Shadow Action");
-    if (!buttonRef || !inputRef) {
+    if (!buttonNode || !inputNode) {
       throw new Error(
-        `Expected refs missing: button=${buttonRef || "none"}, input=${inputRef || "none"}\n${simpleYaml}`,
+        `Expected nodes missing: button=${buttonNode ? "yes" : "none"}, input=${inputNode ? "yes" : "none"}\n${simpleYaml}`,
       );
+    }
+    if (buttonNode.ref || inputNode.ref) {
+      throw new Error("Snapshot still exposes refs after ref removal");
     }
     if (!prose) throw new Error("Visible prose missing from simple snapshot");
     if (!theme?.children?.some((node) => node.name === "浅色")) {
@@ -165,41 +167,49 @@ async function run() {
     }
     if (checkbox?.checked !== true) throw new Error("Checkbox state was not normalized");
     if (hidden) throw new Error("aria-hidden content leaked into simple snapshot");
-    if (shadowAction?.ref) throw new Error("Shadow DOM node received an unusable top-document ref");
     if (win.webContents.debugger.isAttached()) {
       throw new Error("Debugger remained attached after snapshot capture");
     }
 
     const refAttributes = await win.webContents.executeJavaScript(`
-      Array.from(document.querySelectorAll('[data-ai-ref]')).map(function(el) {
-        return { ref: el.getAttribute('data-ai-ref'), tag: el.tagName.toLowerCase() };
-      })
+      Array.from(document.querySelectorAll('[data-ai-ref]')).length
     `);
+    if (refAttributes !== 0) throw new Error("data-ai-ref attributes are still written");
     const inputValue = "hello'\\line\nnext";
-    await service.click(buttonRef, "win_test", "snapshot-test");
-    await service.fillForm(inputRef, inputValue, "win_test", "snapshot-test");
+    await service.handleToolCall({
+      id: "0",
+      method: "browser_locator",
+      params: {
+        descriptor: { kind: "role", role: "button", name: "提交" },
+        action: "click",
+        created_by: "snapshot-test",
+        window_id: "win_test",
+      },
+    });
+    await service.handleToolCall({
+      id: "0",
+      method: "browser_locator",
+      params: {
+        descriptor: { kind: "role", role: "textbox", name: "搜索内容" },
+        action: "fill",
+        value: inputValue,
+        created_by: "snapshot-test",
+        window_id: "win_test",
+      },
+    });
     const state = await win.webContents.executeJavaScript(`({
       clicked: document.body.dataset.clicked,
       inputValue: document.body.dataset.inputValue,
       actualInputValue: document.getElementById('search').value
     })`);
 
-    if (state.clicked !== "yes") throw new Error("Ref click did not reach target button");
+    if (state.clicked !== "yes") throw new Error("Locator click did not reach target button");
     if (state.inputValue !== inputValue || state.actualInputValue !== inputValue) {
-      throw new Error("Ref input did not preserve quotes, backslashes and newlines");
+      throw new Error("Locator input did not preserve quotes, backslashes and newlines");
     }
-    win.webContents.debugger.attach("1.3");
-    const fallback = await service.getPageSimpleSnapshot(
-      "win_test",
-      "snapshot-test",
-    );
-    if (fallback.source !== "dom-fallback") {
-      throw new Error(`Expected DOM fallback, got ${fallback.source}`);
+    if ((await win.webContents.executeJavaScript("document.querySelectorAll('[data-guada-loc]').length")) !== 0) {
+      throw new Error("temporary locator attribute leaked");
     }
-    if (!win.webContents.debugger.isAttached()) {
-      throw new Error("Snapshot fallback detached a debugger it did not own");
-    }
-    win.webContents.debugger.detach();
 
     const unrelatedFailListener = () => {};
     win.webContents.on("did-fail-load", unrelatedFailListener);
@@ -229,8 +239,8 @@ async function run() {
     }
 
     result.interaction = {
-      buttonRef,
-      inputRef,
+      buttonNode: buttonNode.name,
+      inputNode: inputNode.name,
       refAttributes,
       clickPassed: true,
       inputPassed: true,
@@ -238,8 +248,6 @@ async function run() {
       compositeControlPassed: true,
       hiddenContentPassed: true,
       debuggerDetached: true,
-      shadowRefExcluded: true,
-      fallbackPassed: true,
       pageLoadListenerCleanupPassed: true,
       extractionFailurePropagationPassed: true,
     };

@@ -2,7 +2,7 @@
 
 > **已退役（2026-10）**：本文描述的扁平 `browser_*` 工具已从内置插件移除。当前浏览器自动化入口是 `browser-script` 插件的 `browser_run`，见 [browser-script.md](./browser-script.md)。底层 `BrowserAutomationService`、`BrowserWebviewManager`、`BrowserActionEngine` 与 CDP 快照管线仍被复用。
 
-Electron 桌面端内嵌 Chromium 浏览器引擎，Agent 可直接操控浏览器完成各种 Web 操作。默认 `simple` 快照通过 Chromium 无障碍树生成精简的 role/name/ref YAML；需要排查无障碍语义缺失的元素时可使用 `struct` 获取详细 DOM JSON，阅读正文时可使用 `summary`。
+Electron 桌面端内嵌 Chromium 浏览器引擎，Agent 可直接操控浏览器完成各种 Web 操作。默认 `simple` 快照通过 Chromium 无障碍树生成精简的 role/name 语义树；需要排查无障碍语义缺失的元素时可使用 `struct` 获取详细 DOM JSON，阅读正文时可使用 `summary`。动作使用 ivya live locator，snapshot 不返回 ref。
 
 ## 架构
 
@@ -10,6 +10,7 @@ Electron 桌面端内嵌 Chromium 浏览器引擎，Agent 可直接操控浏览�
 Electron 主进程
 └── BrowserAutomationService
     ├── BrowserActionEngine → 动作探测 + trusted input
+    ├── BrowserLocatorEngine → ivya live locator（isolated world）
     ├── BrowserWindowManager → <webview> 标签管理
     │   ├── createWindow   → 新建标签
     │   ├── closeWindow    → 关闭标签
@@ -53,15 +54,17 @@ Electron 主进程
 
 | type | AI 输出格式 | 默认 | 适用场景 |
 |------|----------|:---:|----------|
-| **`simple`** | AX role/name/ref YAML | ✓ | 默认浏览和交互，token 最低 |
-| **`struct`** | DOM role/ref JSON | | 无障碍树遗漏元素时深入检查 |
+| **`simple`** | AX role/name YAML | ✓ | 默认浏览和交互，token 最低 |
+| **`struct`** | DOM role JSON | | 无障碍树遗漏元素时深入检查 |
 | **`summary`** | 文本 + 链接 + 标题 | | 阅读页面主要内容 |
 
-`simple` 通过 CDP `Accessibility.getFullAXTree` 获取语义树，仅为可交互 DOM 节点分配 ref；CDP 不可用时自动回退到 DOM struct 压缩。实测见 [浏览器快照实测报告](./browser-snapshot-benchmark.md)。
+`simple` 通过 CDP `Accessibility.getFullAXTree` 获取语义树，只保留 role/name/value/state；CDP 不可用时自动回退到 DOM struct 压缩。实测见 [浏览器快照实测报告](./browser-snapshot-benchmark.md)。
 
 ---
 
 ## 详细 DOM 快照 (`struct`)
+
+> 以下压缩管线与示例来自旧版本；当前 `simple`/`struct` 输出不再包含 `ref` 字段，示例中的 `ref` 仅作历史结构展示。
 
 这是 GuaDa 浏览器自动化的**特色功能**。传统方案直接塞 HTML 给 AI，Token 消耗巨大。GuaDa 在浏览器端执行一系列压缩，将 DOM 树变成极精简的 YAML 结构树，每个节点用语义化的 `role` + `ref` 标识。
 
@@ -85,14 +88,15 @@ Electron 主进程
 }
 ```
 
-AI 可直接使用 `ref` 值（如 `e2`）在 `browser_run` 的 `tab.click` / `tab.fill` 中定位元素，无需构造 CSS 选择器。
+AI 通过 `browser_run` 的 locator API（`getByRole/getByText/getByLabel/...`）定位元素；快照只用于观察，不再提供 ref。
 
-### ref ID 机制
+### 快照与 locator
 
-- 每次 `simple` 或 `struct` 快照调用时，在真实 DOM 元素上设置 `data-ai-ref` 属性（如 `data-ai-ref="e0"`）
-- `simple` 通过 AX 节点的 `backendDOMNodeId` 将 ref 写回 DOM；`struct` 在 DOM 遍历时写入
-- `tab.click` / `fill` / `hover` / `press` / `scroll` / `selectOption` / `check` / `elementState` 的 target 同时支持 ref ID（`e0`）、CSS 选择器、快照节点和 locator
-- 页面导航或改变 DOM 的动作后旧 ref 失效，模型应重新调用 `tab.snapshot()` 获取新 ref
+- `simple` / `struct` 快照返回 role/name/value/state/children，不再写 `data-ai-ref`，也不再返回 ref。
+- 动作使用 `getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/getByAltText/getByTitle/locator(css)`。
+- locator 由 Electron 的 `BrowserLocatorEngine` 在动作时注入 ivya 到 isolated world，实时查询当前 DOM。
+- 0 个匹配 → `NOT_FOUND`；多个 → `AMBIGUOUS`；1 个 → materialize 临时属性并交给 `BrowserActionEngine`。
+- 动作目标可以是任意元素；actionability 决定是否能点击。
 
 ### 压缩管线（6 层）
 
@@ -115,12 +119,12 @@ function getFilteredChildren(element) {
 }
 ```
 
-#### 第 3 层：role/ref 序列化
+#### 第 3 层：role/name 序列化
 
 每个节点转为语义化的 `role` + 短 `ref` ID，而非 CSS 选择器字符串：
 
 - `role`：显式 ARIA role > tag→role 映射（a→link, button→button, nav→navigation 等）> tag 名
-- `ref`：自增短 ID（e0, e1, e2...），同时设置到真实 DOM 的 `data-ai-ref` 属性
+- `name`：可访问名称，来自 aria-label、label、alt、文本等
 
 ```yaml
 # 压缩前
@@ -175,7 +179,7 @@ groupMap.forEach(function(group, groupKey) {
 | 配置 | 值 | 作用 |
 |------|-----|------|
 | `MAX_DEPTH` | 50 | 最大递归深度，防止无限递归 |
-| `SIMPLE_DEPTH` | 15 | 超过此深度只输出 `role` + `ref`，不展开 |
+| `SIMPLE_DEPTH` | 15 | 超过此深度只输出 `role` + `name`，不展开 |
 | `MAX_SIBLINGS` | 10 | 同类型兄弟节点超过此数触发列表压缩 |
 | `KEEP_HEAD_COUNT` | 5 | 列表压缩保留的头部数量 |
 | `KEEP_TAIL_COUNT` | 3 | 列表压缩保留的尾部数量 |
@@ -210,22 +214,18 @@ children: [e4, e5]
 | method | 请求 | 成功返回 |
 |---|---|---|
 | `browser_navigate` | `url, new_tab?, wait_until?, session_path?, session_id?, created_by?` | `{ok, tabId, url, title, readyState?}` |
-| `browser_snapshot` | `type?, wait_for_load?, created_by` | `{generation, type, url, title, source?, stats?, tree}` |
-| `browser_click` | `selector, generation?, button?, click_count?, modifiers?, force?, timeout?, trusted?, created_by` | `{ok, action, target, url, title}` |
-| `browser_input` | `selector, value, generation?, force?, timeout?, trusted?, created_by` | `{ok, action, target, value, url, title}` |
-| `browser_hover` | `selector, generation?, force?, timeout?, trusted?, created_by` | `{ok, action, target, url, title}` |
-| `browser_press` | `selector?, key, generation?, modifiers?, timeout?, trusted?, created_by` | `{ok, action, target?, key, url, title}` |
-| `browser_scroll` | `selector?, delta_x?, delta_y?, timeout?, generation?, created_by` | `{ok, action, deltaX, deltaY, scrollX, scrollY, url, title}` |
-| `browser_select` | `selector, values, generation?, force?, timeout?, created_by` | `{ok, action, target, selected, url, title}` |
-| `browser_check` | `selector, checked?, generation?, force?, timeout?, trusted?, created_by` | `{ok, action, target, checked, url, title}` |
-| `browser_element_state` | `selector, generation?, created_by` | probe 对象 |
-| `browser_wait` | `selector, timeout?, state?, generation?, created_by` | `{ok, found, selector, state}` |
+| `browser_snapshot` | `type?, wait_for_load?, created_by` | `{type, url, title, source?, stats?, tree}` |
+| `browser_locator` | `descriptor, action, options?, value?, key?, values?, checked?, state?, timeout?, created_by` | 动作结果 / count / text / isVisible / state / wait |
+| `browser_press` | `key, modifiers?, timeout?, trusted?, created_by` | `{ok, action, key, url, title}` |
+| `browser_scroll` | `delta_x?, delta_y?, timeout?, created_by` | `{ok, action, deltaX, deltaY, scrollX, scrollY, url, title}` |
 | `browser_evaluate` | `code, timeout_ms?, mutates?, created_by` | 页面结果原值 |
-| `browser_screenshot` | `file_path?, session_path?, full_page?, created_by` | `{ok, path, width, height}` |
+| `browser_screenshot` | `full_page?, wants_save?, created_by` | `{ok, data(base64 PNG), mime_type, width, height}` |
 | `browser_console` | `created_by, clear?` | `string[]` |
 | `browser_history` | `action: "back"\|"forward"\|"reload", created_by` | `{ok, url}` |
 | `browser_tabs` | `action: "list"\|"current"\|"select"\|"close"\|"close_all", index?, tab_id?, created_by` | list: `TabInfo[]`；current: `TabInfo\|null`；select: `TabInfo`；close: `{ok,closedTabId,currentTabId}`；close_all: `{ok,closedCount}` |
 | `browser_close_by_creator` | `created_by` | `{closedCount}` |
+
+`browser_locator` 的 `descriptor` 支持 `role/text/label/placeholder/testid/altText/title/selector` 和 `index`（first/last/nth）；不再接受 ref/generation。
 
 `TabInfo = { index, tabId, url, title, isCurrent }`。
 
@@ -239,12 +239,12 @@ children: [e4, e5]
 
 脚本的 `tab.goto` 默认传 `domcontentloaded`；`tab.waitForLoadState` 仍可用于显式等待。
 
-### 快照 generation
+### 快照与 live locator
 
-- 每个 tab 维护一个 `generation`。
-- `snapshot`、`navigate`、`reload`、`back/forward`、`click`、`hover`、`press`、`check`、`select`、`evaluate` 会递增；`fill`、`scroll`、`elementState`、`wait` 不递增。
-- 动作可携带 `generation`；与当前 tab 不一致时返回 `STALE_REF`。
-- 快照返回统一 `tree` 字段；`summary` 的 `tree` 是 `{text, links, headings}`。
+- snapshot 只返回语义树，不返回 ref，也不维护 generation。
+- `browser_locator` 在动作时用 ivya 查询当前 DOM；不再有 `STALE_REF`。
+- 多匹配返回 `AMBIGUOUS`，候选包含 tag/id/text/inShadow；`first/last/nth` 通过 descriptor.index 显式选择。
+- shadow root 内元素可查询，但动作返回 `UNSUPPORTED`；iframe 只查顶层文档。
 
 ### 动作可靠性
 
@@ -259,7 +259,7 @@ children: [e4, e5]
 ### 导航与截图安全
 
 - 导航只允许 `http:`、`https:`、`about:blank`；`javascript:`、`file:`、`data:`、`chrome:` 返回 `NAVIGATION_BLOCKED`。newTab、当前 tab、`window.open` 转发统一校验。
-- 截图 `file_path` 必须落在 `session_path` 内；绝对路径越界或 `..` 穿越返回 `INVALID_ARGUMENT`；无会话路径时只写临时目录。
+- 截图不落工作区：`browser_screenshot` 返回 base64 PNG（默认按模型预算降采样到 ≤1920 长边 / ≤16MP），后端转码后只写一份会话副本（`sessions/<id>/images|previews/`）。`wants_save=true` 跳过降采样，仅用于显式导出原始质量。
 
 ### 错误
 
@@ -267,7 +267,7 @@ Bridge response 的错误统一为：
 
 ```typescript
 interface BridgeError {
-  code: string;       // 如 NOT_FOUND / STALE_REF / TIMEOUT / NAVIGATION_FAILED
+  code: string;       // 如 NOT_FOUND / AMBIGUOUS / TIMEOUT / NAVIGATION_FAILED
   message: string;
   details?: unknown;
 }
