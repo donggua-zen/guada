@@ -27,7 +27,7 @@
 
 <p align="center">
   <a href="README.en.md">English</a> · 
-  <b>Gitee</b> ·
+  <a href="https://gitee.com/zhendongdong/guada_ai">Gitee</a> ·
   <a href="https://github.com/donggua-zen/guada">GitHub</a> ·
   <a href="https://atomgit.com/donggua_sherlock/GuaDaAI">GitCode</a>
 </p>
