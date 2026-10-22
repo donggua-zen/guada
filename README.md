@@ -195,6 +195,19 @@ pnpm run dev
 
 ---
 
+## 📚 部署文档索引
+
+按场景挑一份看即可：
+
+| 场景 | 文档 |
+|------|------|
+| Docker 快速上手 | [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) |
+| Docker 完整部署（端口、数据卷、环境变量） | [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) |
+| Electron 桌面端打包与安装 | [docs/ELECTRON_DEPLOYMENT.md](docs/ELECTRON_DEPLOYMENT.md) |
+| 生产环境部署（反向代理、HTTPS、备份） | [docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md) |
+
+---
+
 ## 🏗️ 系统架构
 
 ![系统架构](./images/system-architecture.png)
