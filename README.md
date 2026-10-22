@@ -193,8 +193,6 @@ pnpm run dev
 # 访问 http://localhost:5173
 ```
 
-> 更多部署细节：[Docker 部署](docs/DOCKER_DEPLOYMENT.md) · [Electron 部署](docs/ELECTRON_DEPLOYMENT.md) · [生产环境部署](docs/PRODUCTION_DEPLOYMENT.md) · [快速上手](QUICK_START.md)
-
 ---
 
 ## 📚 部署文档索引
@@ -207,6 +205,7 @@ pnpm run dev
 | Docker 完整部署（端口、数据卷、环境变量） | [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) |
 | Electron 桌面端打包与安装 | [docs/ELECTRON_DEPLOYMENT.md](docs/ELECTRON_DEPLOYMENT.md) |
 | 生产环境部署（反向代理、HTTPS、备份） | [docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md) |
+| 快速上手（源码 / Docker 对照） | [QUICK_START.md](QUICK_START.md) |
 
 ---
 
