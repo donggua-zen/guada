@@ -19,6 +19,8 @@
   <a href="#-核心能力"><b>🧠 核心能力</b></a> ·
   <a href="#-远程工作区本地大脑远程手脚"><b>🖥️ 远程工作区</b></a> ·
   <a href="#-快速开始5分钟上手"><b>🚀 快速开始</b></a> ·
+  <a href="#-部署文档索引"><b>📚 部署文档</b></a> ·
+  <a href="#-常见问题"><b>❓ 常见问题</b></a> ·
   <a href="https://gitee.com/zhendongdong/guada_ai/issues"><b>💬 反馈</b></a> ·
   <a href="#-社区"><b>🤝 加入社区</b></a>
 </p>
