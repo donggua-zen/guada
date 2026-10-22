@@ -248,6 +248,17 @@ ai_chat/
 
 ---
 
+## 🛠️ 参与贡献
+
+欢迎提交 Issue 和 Pull Request。动手之前建议先读一遍 [CONTRIBUTING.md](CONTRIBUTING.md)，
+里面有分支约定、提交信息格式和本地开发流程。
+
+- 🐛 **发现问题**：[提交 Issue](https://github.com/donggua-zen/guada/issues)
+- 🔧 **想改代码**：Fork 仓库 → 从 `develop` 切出功能分支 → 提交 PR
+- 📝 **提交信息**：建议使用 `feat:` / `fix:` / `docs:` / `chore:` 前缀，便于整理更新日志
+
+---
+
 ## 🤝 社区
 
 **遇到问题？想交流技术？下载预编译客户端？来这里：**
