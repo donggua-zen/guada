@@ -86,3 +86,4 @@ eval/**/__pycache__/
 # remote_transfer 的宿主落点（评测中容器文件可能被拉到这里）
 backend-ts/work/
 backend-ts/workspace/**
+tmp/**
