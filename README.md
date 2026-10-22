@@ -149,7 +149,7 @@ docker compose up -d --build
 
 ### 方式二：Electron 桌面端
 
-下载预编译安装包（见 [QQ 群 1047993501](#-社区)），或从源码构建：
+下载预编译安装包：[GitHub Releases](https://github.com/donggua-zen/guada/releases) · [Gitee 发行版](https://gitee.com/zhendongdong/guada_ai/releases)（也可在 [QQ 群](#-社区) 获取），或从源码构建：
 
 ```bash
 pnpm install
