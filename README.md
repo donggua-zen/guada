@@ -248,6 +248,21 @@ ai_chat/
 
 ---
 
+## ❓ 常见问题
+
+**Docker 部署后 8787 端口被占用怎么办？**
+改 `docker-compose.yml` 里的端口映射（形如 `"8787:8787"` 左侧改成别的端口），再 `docker compose up -d` 重启。
+
+**macOS 提示「已损坏，无法打开」？**
+这是 Gatekeeper 对未公证应用的拦截，不是文件损坏。处理办法见
+[方式二：Electron 桌面端](#方式二electron-桌面端) 里的 `xattr -cr` 与 ad-hoc 重签步骤。
+
+**该选 Docker 还是 Electron 桌面端？**
+想跑在服务器 / NAS 上、多人用浏览器访问，选 Docker；想在本机用完整桌面能力
+（浏览器自动化、沙箱 Shell、本地文件），选 Electron 桌面端。
+
+---
+
 ## 🛠️ 参与贡献
 
 欢迎提交 Issue 和 Pull Request。动手之前建议先读一遍 [CONTRIBUTING.md](CONTRIBUTING.md)，
