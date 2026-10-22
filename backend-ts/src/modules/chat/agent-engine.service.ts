@@ -13,10 +13,9 @@ import {
 } from "../../common/utils/media-type.util";
 import { normalizeRefType } from "../llm-core/utils/attachment.util";
 import { FileNamingService } from "../../common/services/file-naming.service";
+import { SessionImageStore } from "../../common/services/session-image.store";
 import { getSessionDir } from "../../common/utils/session-path.util";
 import {
-  transcodeImage,
-  transcodePreview,
   getImageTargetBytes,
   getToolImageTargetBytes,
 } from "../../common/utils/image-transcode.util";
@@ -75,6 +74,13 @@ function inlineDataRef(mediaType: string, base64: string, byteLength: number): F
   };
 }
 
+/**
+ * data: URL 兜底的单图字节上限（512KB）。
+ * 这条降级路径会把完整 base64 内嵌进 tool-result.images 并落 JSONL、随每次请求重发，
+ * 是唯一能绕过单图转码预算的入口；超限时宁可如实告知模型「图不可用」，也不写进去。
+ */
+const INLINE_FALLBACK_MAX_BYTES = 512 * 1024;
+
 /** 判定绝对路径是否位于会话数据目录内；是则返回目录内相对路径（POSIX 分隔），否则 null */
 function relativeToSessionDir(sessionDir: string, absolutePath: string): string | null {
   const rel = path.relative(sessionDir, path.resolve(absolutePath));
@@ -124,6 +130,12 @@ export class AgentEngine {
    * 命名策略。字段初始化手工实例化——避免为纯工具依赖改动构造签名（多处测试手工 new 本类）。
    */
   private readonly fileNaming = new FileNamingService();
+
+  /**
+   * 会话图片落盘（与 browser-script 截图共用同一实现）。
+   * 同样手工实例化：构造签名保持不变，测试里的 `new AgentEngine(...)` 无需改动。
+   */
+  private readonly sessionImages = new SessionImageStore(this.fileNaming);
 
   /**
    * 主循环 LLM 流式请求：纯传输 + 重试壳（agent 循环局部语义，对齐 DSH retryPolicy 在 agent 层）。
@@ -1234,16 +1246,27 @@ export class AgentEngine {
       } catch (error: any) {
         try {
           const buf = await fs.promises.readFile(ref.url);
-          this.logger.warn(
-            `工具图片物化失败，降级 data: URL：${ref.url}：${error.message}`,
-          );
-          refs.push(
-            inlineDataRef(
-              ref.media_type ?? mimeFromExtension(path.extname(ref.url)),
-              buf.toString("base64"),
-              buf.byteLength,
-            ),
-          );
+          if (buf.byteLength > INLINE_FALLBACK_MAX_BYTES) {
+            // 体积兜底：data: URL 会原样落进 tool-result.images 并随每次请求重发，
+            // 无上限时这条降级路径能绕过单图转码预算（唯一的体积控制缺口）
+            failures.push(
+              `${ref.url} (materialization failed: ${error.message}; file is ${buf.byteLength} bytes, too large to inline)`,
+            );
+            this.logger.warn(
+              `工具图片物化失败且体积超限，跳过内联：${ref.url}：${error.message}`,
+            );
+          } else {
+            this.logger.warn(
+              `工具图片物化失败，降级 data: URL：${ref.url}：${error.message}`,
+            );
+            refs.push(
+              inlineDataRef(
+                ref.media_type ?? mimeFromExtension(path.extname(ref.url)),
+                buf.toString("base64"),
+                buf.byteLength,
+              ),
+            );
+          }
         } catch {
           failures.push(`${ref.url} (${error.message})`);
           this.logger.warn(
@@ -1258,14 +1281,18 @@ export class AgentEngine {
         const buf = Buffer.from(img.data, "base64");
         refs.push(await this.materializeImageBuffer(sessionId, buf, "tool-image"));
       } catch (error: any) {
+        const byteLength = Math.floor((img.data.length * 3) / 4);
+        if (byteLength > INLINE_FALLBACK_MAX_BYTES) {
+          failures.push(
+            `tool-image (materialization failed: ${error.message}; ${byteLength} bytes is too large to inline)`,
+          );
+          this.logger.warn(
+            `工具图片落盘失败且体积超限，跳过内联：${error.message}`,
+          );
+          continue;
+        }
         this.logger.warn(`工具图片落盘失败，降级 data: URL：${error.message}`);
-        refs.push(
-          inlineDataRef(
-            img.media_type,
-            img.data,
-            Math.floor((img.data.length * 3) / 4),
-          ),
-        );
+        refs.push(inlineDataRef(img.media_type, img.data, byteLength));
       }
     }
 
@@ -1289,6 +1316,7 @@ export class AgentEngine {
         bytes: ref.bytes ?? stat.size,
         ...(ref.name ? { name: ref.name } : {}),
         url: ref.url,
+        ...(ref.previewUrl ? { previewUrl: ref.previewUrl } : {}),
         refType: "session",
       };
     }
@@ -1326,39 +1354,15 @@ export class AgentEngine {
   }
 
   /**
-   * 字节 → 转码（同款体积阶梯，工具图独立预算 150KB）→ 落会话 images|previews → session 引用
+   * 字节 → 转码（工具图预算 150KB）→ 落会话 images|previews → session 引用
+   * （转码/命名/落盘统一在 SessionImageStore，browser-script 截图复用同一实现）
    */
   private async materializeImageBuffer(
     sessionId: string,
     buf: Buffer,
     baseName: string,
   ): Promise<FileRef> {
-    const sessionDir = getSessionDir(sessionId);
-    // 输出恒为 JPEG（transcode 契约）：name/fileExtension/mediaType 跟着 jpg 走
-    const stem = baseName.replace(/\.[^.]+$/, "") || "tool-image";
-    const image = await transcodeImage(buf, {
-      targetBytes: getToolImageTargetBytes(),
-    });
-    const preview = await transcodePreview(buf);
-    const imageRes = await this.fileNaming.generateFilePathWithDate(
-      path.join(sessionDir, "images"),
-      `${stem}.jpg`,
-    );
-    const previewRes = await this.fileNaming.generateFilePathWithDate(
-      path.join(sessionDir, "previews"),
-      `${stem}.jpg`,
-    );
-    await fs.promises.writeFile(imageRes.filePath, image.data);
-    await fs.promises.writeFile(previewRes.filePath, preview.data);
-
-    return {
-      mediaType: "image/jpeg",
-      bytes: image.data.byteLength,
-      name: imageRes.fileName,
-      url: `sessions/${sessionId}/images/${imageRes.relativePath}`,
-      previewUrl: `sessions/${sessionId}/previews/${previewRes.relativePath}`,
-      fileExtension: "jpg",
-      refType: "session",
-    };
+    const { ref } = await this.sessionImages.save(sessionId, buf, { baseName });
+    return ref;
   }
 }

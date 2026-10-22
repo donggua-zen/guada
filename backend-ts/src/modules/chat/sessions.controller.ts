@@ -41,6 +41,11 @@ import { sniffFileHead, decodeTextWithEncoding, type FileSniffResult } from '../
 const MAX_PREVIEW_ASSET_SIZE = 2 * 1024 * 1024 * 1024;
 /** 其余二进制（.zip/.exe 之类不可预览的文件）上限，沿用原 10MB 策略 */
 const MAX_BINARY_FILE_SIZE = 10 * 1024 * 1024;
+/**
+ * 可长期缓存的位图扩展名。
+ * 会话 images|previews 是物化产物：文件名带随机短哈希且永不覆写，可安全 immutable。
+ */
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp']);
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -708,6 +713,12 @@ export class SessionsController {
       res.setHeader(key, value);
     }
     res.setHeader('Content-Length', stat.size);
+    // 会话图片文件名唯一且永不覆写（物化时带随机短哈希）→ 可安全长缓存。
+    // 否则每次打开会话都会重新拉一遍全部缩略图，「一张图一次 IO」被反复放大。
+    const ext = path.extname(resolvedPath).toLowerCase();
+    if (IMAGE_EXTENSIONS.has(ext)) {
+      res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    }
 
     const stream = fs.createReadStream(resolvedPath);
     stream.pipe(res);

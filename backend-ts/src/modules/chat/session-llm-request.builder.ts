@@ -15,6 +15,10 @@ import type { ISessionContext } from "./session-context";
 import { ToolExecutor } from "../tools/tool-executor.service";
 import { ensureToolPairing } from "../llm-core/tool-pairing.guard";
 import { expandToolResultImages } from "../llm-core/tool-image-expansion";
+import {
+  getMediaBudgetBytesForSession,
+  projectMessagesForMediaBudget,
+} from "../llm-core/media-budget";
 
 export interface BuildCompletionParamsOptions {
   messages: Message[];
@@ -28,6 +32,8 @@ export interface BuildCompletionParamsOptions {
    * 纯文本辅助调用（如摘要）可关闭，避免图片进入其预算。
    */
   deriveToolResultImages?: boolean;
+  /** 覆盖本次请求的媒体字节预算（测试注入用；缺省取会话级预算） */
+  requestMediaBudgetBytes?: number;
   /** 用量统计上下文（builder 自动补 sessionId） */
   usageContext?: LLMUsageContext;
   stream?: boolean;
@@ -47,12 +53,21 @@ export function buildSessionLlmParams(
   // 工具图片派生：存储层把 FileRef 挂在 tool-result.images（归属可追溯），
   // wire 视图再展开为隐藏 user 消息——多模态协议不允许 tool 结果消息携带图片。
   // 与 ensureToolPairing 同层（只改本次请求，不写回存储）；L1 管线保持 1:1 不变量。
-  const messages = (opts.deriveToolResultImages ?? true)
+  const expanded = (opts.deriveToolResultImages ?? true)
     ? expandToolResultImages(paired, {
         supportsImageInput,
         workspaceDir: ctx.getWorkspacePath?.() ?? null,
       })
     : paired;
+  // 请求级媒体字节预算：单图转码只约束体积，张数无上限会让请求体无限膨胀
+  // （每轮都把全部历史截图重新 base64 化）。这里按字节算总账，旧图换带路径的占位。
+  // 关闭图片派生时本可跳过（没有 image 块），但用户上传图同样计入，故统一执行。
+  const messages = projectMessagesForMediaBudget(expanded, {
+    maxMediaBytes:
+      opts.requestMediaBudgetBytes ??
+      getMediaBudgetBytesForSession(ctx.sessionId),
+    workspaceDir: ctx.getWorkspacePath?.() ?? null,
+  }).messages;
   return {
     model: modelConfig.modelName,
     // envelope：system 提示词独立字段（协议槽位由 adapter 映射，对齐 DSH LlmCallConfig.system）
