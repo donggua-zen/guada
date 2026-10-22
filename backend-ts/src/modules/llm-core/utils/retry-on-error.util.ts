@@ -243,6 +243,58 @@ export function isContextWindowExceeded(error: any): boolean {
 }
 
 /**
+ * 检测「请求体过大」错误（HTTP 413 / payload too large）。
+ *
+ * 与上下文窗口溢出不同：token 数可能远未达窗口，但 base64 图片等媒体把 HTTP body
+ * 撑过了 provider 或中间网关的限制。退避重试无用、压缩历史也未必有效（图片张数在
+ * 保留尾内），正确动作是收紧请求级媒体预算后重试一次
+ * （见 compaction-coordinator 的 request_error 恢复路径）。
+ */
+export function isPayloadTooLarge(error: any): boolean {
+  if (!error) return false;
+
+  const status =
+    error?.status ?? error?.statusCode ?? error?.response?.status ?? error?.error?.status;
+  if (status === 413) return true;
+
+  const code = error?.code ?? error?.error?.code ?? error?.error?.error?.code;
+  if (typeof code === "string") {
+    const c = code.toLowerCase();
+    if (
+      c.includes("payload_too_large") ||
+      c.includes("payloadtoolarge") ||
+      c.includes("request_too_large") ||
+      c.includes("requestentitytoolarge") ||
+      c.includes("entity_too_large") ||
+      c === "413"
+    ) {
+      return true;
+    }
+  }
+
+  const rawMessages = [
+    error?.message,
+    error?.error?.message,
+    error?.error?.error?.message,
+    typeof error === "string" ? error : undefined,
+  ].filter(Boolean);
+  const msg = rawMessages.join(" ").toLowerCase();
+  return (
+    msg.includes("payload too large") ||
+    msg.includes("request entity too large") ||
+    msg.includes("request body too large") ||
+    msg.includes("request body is too large") ||
+    msg.includes("entity too large") ||
+    msg.includes("content too large") ||
+    msg.includes("body size limit") ||
+    msg.includes("body exceeded") ||
+    msg.includes("exceeds the maximum allowed size") ||
+    // Anthropic 侧：「request_too_large」
+    msg.includes("request_too_large")
+  );
+}
+
+/**
  * 检测「工具调用配对非法」错误（上游对 wire 形状的硬校验）。
  *
  * 触发条件：assistant 消息声明了 tool_calls，但后面没有回应其 tool_call_id 的

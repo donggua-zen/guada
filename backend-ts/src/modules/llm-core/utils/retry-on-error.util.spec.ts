@@ -2,7 +2,7 @@ import {
   APIConnectionError,
   APIConnectionTimeoutError,
 } from "openai";
-import { classifyError } from "./retry-on-error.util";
+import { classifyError, isPayloadTooLarge } from "./retry-on-error.util";
 import {
   UpstreamNetworkError,
   UpstreamRequestError,
@@ -67,5 +67,55 @@ describe("classifyError", () => {
       "network_error",
     );
     expect(classifyError(new UpstreamRequestError("bad request"))).toBeNull();
+  });
+});
+
+describe("isPayloadTooLarge", () => {
+  it("识别 413 状态码", () => {
+    expect(isPayloadTooLarge(makeError("nope", { status: 413 }))).toBe(true);
+    expect(isPayloadTooLarge(makeError("nope", { statusCode: 413 }))).toBe(true);
+    expect(
+      isPayloadTooLarge(makeError("nope", { response: { status: 413 } })),
+    ).toBe(true);
+  });
+
+  it("识别错误码", () => {
+    expect(
+      isPayloadTooLarge(makeError("x", { code: "request_too_large" })),
+    ).toBe(true);
+    expect(
+      isPayloadTooLarge(makeError("x", { code: "payload_too_large" })),
+    ).toBe(true);
+  });
+
+  it("识别网关文案", () => {
+    expect(
+      isPayloadTooLarge(makeError("Request entity too large")),
+    ).toBe(true);
+    expect(
+      isPayloadTooLarge(makeError("request body is too large")),
+    ).toBe(true);
+    expect(
+      isPayloadTooLarge(
+        makeError("Request exceeds the maximum allowed size of 10485760 bytes"),
+      ),
+    ).toBe(true);
+    expect(
+      isPayloadTooLarge(makeError("413 Payload Too Large")),
+    ).toBe(true);
+  });
+
+  it("普通 400 不误判（交给其他分类器）", () => {
+    expect(isPayloadTooLarge(makeError("bad request", { status: 400 }))).toBe(
+      false,
+    );
+    expect(isPayloadTooLarge(makeError("invalid json"))).toBe(false);
+    expect(isPayloadTooLarge(null)).toBe(false);
+  });
+
+  it("上下文超长不被误判为体积超限", () => {
+    expect(
+      isPayloadTooLarge(makeError("maximum context length is 128000 tokens")),
+    ).toBe(false);
   });
 });
