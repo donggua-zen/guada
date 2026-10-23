@@ -1,7 +1,7 @@
 // stores/git.ts
 import { getErrorMessage } from '@/utils/errorMessage'
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, ref, shallowRef } from "vue";
 import { ElMessage } from "element-plus";
 import { apiService } from "@/services/ApiService";
 import type { GitStatus, GitBranch } from "@/services/modules/git.api";
@@ -23,7 +23,12 @@ export interface GitDiffStats {
 
 export const useGitStore = defineStore("git", () => {
   const sessionId = ref<string | null>(null);
-  const status = ref<GitStatus | null>(null);
+  /**
+   * shallowRef：超大仓库的 files 可能有数万条，深响应式会把每个对象都转成 Proxy，
+   * 仅创建代理就足以让渲染进程内存翻倍。status 只在刷新时整体替换，消费方只读，
+   * 用 shallowRef 不影响任何现有逻辑。
+   */
+  const status = shallowRef<GitStatus | null>(null);
   const branches = ref<GitBranch[]>([]);
   const selectedBranch = ref("");
   const refreshing = ref(false);
@@ -56,17 +61,45 @@ export const useGitStore = defineStore("git", () => {
 
   // ── 派生统计 ──
   const isGitRepo = computed(() => status.value?.isGitRepo ?? false);
-  const totalChanges = computed(() => status.value?.files.length ?? 0);
+  /**
+   * 变更总数：后端在大仓库降级时会返回 totalFiles（files 只保留前 N 条）。
+   * 不能用 files.length，否则 25 万变更会被显示成 2000。
+   */
+  const totalChanges = computed(
+    () => status.value?.totalFiles ?? status.value?.files.length ?? 0,
+  );
 
-  /** 全量变更统计：所有变更文件增删行数之和（HEAD vs 工作区，含未跟踪） */
+  /** 全量变更统计：优先用后端聚合字段，避免前端遍历数万条 files */
   const totalStats = computed<GitDiffStats>(() => {
+    const st = status.value;
+    if (!st) return { add: 0, del: 0 };
+    if (
+      typeof st.totalAdditions === "number" ||
+      typeof st.totalDeletions === "number"
+    ) {
+      return { add: st.totalAdditions ?? 0, del: st.totalDeletions ?? 0 };
+    }
     let add = 0;
     let del = 0;
-    for (const f of status.value?.files || []) {
+    for (const f of st.files || []) {
       add += f.additions || 0;
       del += f.deletions || 0;
     }
     return { add, del };
+  });
+
+  /**
+   * 大工作区降级标记：后端超时/截断，或存在未逐文件展开的未跟踪目录。
+   * 用于把事件驱动的自动刷新从 5s 拉长到 60s（对齐 ZCode 的大仓库策略）。
+   */
+  const largeWorkspace = computed<boolean>(() => {
+    const st = status.value;
+    if (!st) return false;
+    return (
+      !!st.statusError ||
+      !!st.truncated ||
+      (st.collapsedUntrackedDirs?.length ?? 0) > 0
+    );
   });
 
   /** 仅暂存统计（HEAD vs 暂存区）——提交弹窗未勾选「包含未暂存」时的提交量 */
@@ -169,6 +202,13 @@ export const useGitStore = defineStore("git", () => {
   let gitRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   let lastOwnGitWrite = 0;
   const OWN_GIT_WRITE_SUPPRESS_MS = 1000;
+  /**
+   * 事件驱动刷新防抖：普通仓库 5s；大工作区 60s。
+   * ZCode 的取舍是统一 60s —— agent 批量写文件时，短防抖会把一个批次拆成多轮
+   * `git status`。我们保留普通仓库的 5s 体感，只对已降级的大工作区拉长到 60s。
+   */
+  const GIT_AUTO_REFRESH_DEBOUNCE_MS = 5_000;
+  const LARGE_WORKSPACE_GIT_AUTO_REFRESH_DEBOUNCE_MS = 60_000;
 
   function markGitWrite(): void {
     lastOwnGitWrite = Date.now();
@@ -179,11 +219,14 @@ export const useGitStore = defineStore("git", () => {
     if (event.sessionId && event.sessionId !== sessionId.value) return;
     if (Date.now() - lastOwnGitWrite < OWN_GIT_WRITE_SUPPRESS_MS) return;
     if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
+    const delay = largeWorkspace.value
+      ? LARGE_WORKSPACE_GIT_AUTO_REFRESH_DEBOUNCE_MS
+      : GIT_AUTO_REFRESH_DEBOUNCE_MS;
     gitRefreshTimer = setTimeout(() => {
       gitRefreshTimer = null;
       // 事件驱动：不拉分支列表（省一组 git 进程，见 refresh 的 withBranches）
       void refresh({ withBranches: false });
-    }, 200);
+    }, delay);
   }
 
   // store 单例：订阅一次（概览/面板任一启用即生效，生命周期随应用）
@@ -373,6 +416,7 @@ export const useGitStore = defineStore("git", () => {
     isGitRepo,
     totalChanges,
     totalStats,
+    largeWorkspace,
     stagedStats,
     commitStats,
     refreshSeq,

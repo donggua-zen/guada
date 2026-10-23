@@ -441,6 +441,7 @@
     openWith: 'Choose open method',
     openInTerminal: 'Open in System Terminal',
     noFiles: 'No files',
+    treeTruncated: 'Too many entries; showing the first 2000',
     noPreviewFile: 'No preview file',
     newBrowser: 'New Browser',
     newFile: 'File',

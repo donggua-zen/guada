@@ -130,6 +130,26 @@ describe("gitStore 会话切换竞态", () => {
     expect(git.status?.files.map((f) => f.path)).toEqual(["b.ts"]);
   });
 
+  it("大工作区降级：totalChanges 用 totalFiles，totalStats 用后端聚合字段", async () => {
+    const git = useGitStore();
+    apiMocks.getGitStatus.mockResolvedValue({
+      ...repoStatus(["a.ts"]),
+      totalFiles: 256336,
+      truncated: true,
+      totalAdditions: 120,
+      totalDeletions: 30,
+      collapsedUntrackedDirs: ["workbuddy-market/"],
+    });
+    apiMocks.getGitBranches.mockResolvedValue({ branches: [] });
+
+    git.bindSession("s1");
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(git.totalChanges).toBe(256336);
+    expect(git.totalStats).toEqual({ add: 120, del: 30 });
+    expect(git.largeWorkspace).toBe(true);
+  });
+
   it("事件驱动的自动刷新不拉分支列表（省一组 git 进程），绑定/手动刷新仍拉", async () => {
     const git = useGitStore();
     apiMocks.getGitStatus.mockResolvedValue(repoStatus(["a.ts"]));
@@ -144,8 +164,8 @@ describe("gitStore 会话切换竞态", () => {
     const handler = apiMocks.onWorkspaceChange.mock.calls[0][0];
     handler({ type: "git", path: "", sessionId: "s1", timestamp: Date.now() });
 
-    await new Promise((r) => setTimeout(r, 250)); // 事件侧 200ms 防抖
+    await new Promise((r) => setTimeout(r, 5_100)); // 事件侧 5s 防抖（大工作区会拉长到 60s）
     expect(apiMocks.getGitStatus).toHaveBeenCalledTimes(2);
     expect(apiMocks.getGitBranches).toHaveBeenCalledTimes(1); // 未增加
-  });
+  }, 10_000);
 });

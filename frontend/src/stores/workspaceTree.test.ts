@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 
 vi.mock("@/services/ApiService", () => ({
-  apiService: { getWorkspacePath: vi.fn() },
+  apiService: {
+    getWorkspacePath: vi.fn(),
+    getWorkspaceTree: vi.fn(),
+    getWorkspaceChildren: vi.fn(),
+  },
 }));
 
 import { useWorkspaceTreeStore } from "./workspaceTree";
@@ -27,6 +31,8 @@ import type { WorkspaceNode } from "@/types/workspace";
  */
 
 const mockedGetPath = vi.mocked(apiService.getWorkspacePath);
+const mockedGetTree = vi.mocked(apiService.getWorkspaceTree);
+const mockedGetChildren = vi.mocked(apiService.getWorkspaceChildren);
 
 describe("workspaceTree.ensureWorkspacePath", () => {
   beforeEach(() => {
@@ -168,10 +174,52 @@ describe("workspaceTree.ensureWorkspacePath", () => {
  * 深层文件（页面刷新后恢复的标签、聊天链接打开、树刷新后）因此收不到刷新信号，
  * 表现为同一文件有时能自动刷新、有时毫无反应。
  */
+describe("workspaceTree 目录树截断", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockedGetTree.mockReset();
+    mockedGetChildren.mockReset();
+    mockedGetPath.mockReset();
+  });
+
+  it("loadTree 收到 truncated 时设置 treeTruncated", async () => {
+    const store = useWorkspaceTreeStore();
+    store.resetForSession("s1");
+    store.workspacePath = "/ws";
+    mockedGetTree.mockResolvedValue({
+      tree: [{ name: "a", path: "a", isDirectory: false }],
+      truncated: true,
+    });
+
+    await store.loadTree("s1", true);
+
+    expect(store.treeTruncated).toBe(true);
+  });
+
+  it("loadChildren 把 truncated 写回节点", async () => {
+    const store = useWorkspaceTreeStore();
+    store.resetForSession("s1");
+    const node: WorkspaceNode = {
+      name: "big",
+      path: "big",
+      isDirectory: true,
+      children: [],
+    };
+    mockedGetChildren.mockResolvedValue({ children: [], truncated: true });
+
+    const children = await store.loadChildren("s1", node);
+
+    expect(children).toEqual([]);
+    expect(node.truncated).toBe(true);
+  });
+});
+
 describe("workspaceTree.applyFileChange", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     mockedGetPath.mockReset();
+    mockedGetTree.mockReset();
+    mockedGetChildren.mockReset();
   });
 
   /** 初始树：根级 README.md + 已加载子节点的 src/（deep/ 从未展开） */
@@ -289,6 +337,46 @@ describe("workspaceTree.applyFileChange", () => {
 
     expect(store.findNodeByPath(store.treeData, "deep")).toBeNull();
     expect(store.fileChangeVersions["deep/nested/new.ts"]).toBeUndefined();
+  });
+
+  it("大量 change 事件：版本号逐次递增（不再整表克隆）", () => {
+    seedTree();
+    const store = useWorkspaceTreeStore();
+
+    for (let i = 0; i < 1000; i++) {
+      store.applyFileChange(changeEvent("src/a.ts"));
+    }
+
+    expect(store.fileChangeVersions["src/a.ts"]).toBe(1000);
+  });
+
+  it("overflow：不逐文件更新，防抖后重载根 + 已展开目录", async () => {
+    const store = useWorkspaceTreeStore();
+    store.resetForSession("s1");
+    seedTree();
+    store.workspacePath = "/ws";
+    store.expandedPaths = new Set(["src"]);
+
+    mockedGetTree.mockResolvedValue({
+      tree: [
+        { name: "src", path: "src", isDirectory: true, hasChildren: true },
+      ],
+    });
+    mockedGetChildren.mockResolvedValue({ children: [] });
+
+    store.applyFileChange({
+      type: "overflow",
+      path: "",
+      sessionId: "s1",
+      timestamp: 1,
+    });
+
+    expect(store.fileChangeVersions).toEqual({});
+
+    await new Promise((r) => setTimeout(r, 350));
+
+    expect(mockedGetTree).toHaveBeenCalledWith("s1");
+    expect(mockedGetChildren).toHaveBeenCalledWith("s1", "src");
   });
 
   it("heartbeat / git / 空路径事件忽略", () => {

@@ -23,20 +23,24 @@
             :collapsed-keys="collapsedTreeKeys" class="flex-1 min-h-0"
             @select="onTreeSelect" @dblclick="onTreeDblClick" @toggle="onTreeToggle" @contextmenu="onTreeContextMenu">
             <template #row="{ row }">
-                <!-- 文件图标（目录行与 diff 树一致：仅 chevron + 名称，无文件夹图标） -->
-                <span v-if="!row.isDir" class="node-icon file-icon">
-                    <img :src="getFileIcon(row.name)" width="16" height="16" />
-                </span>
-                <!-- 节点名称 -->
-                <span class="node-label">{{ row.name }}</span>
-                <!-- 加载中（右对齐，带淡出过渡） -->
-                <Transition name="fade">
-                    <span v-if="treeStore.loadingPaths.has(row.path)" class="loading-indicator">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="spin">
-                            <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                        </svg>
+                <!-- 截断提示行：只读，不打开文件、不参与选中 -->
+                <span v-if="row.isTruncated" class="node-label node-label--truncated">{{ row.name }}</span>
+                <template v-else>
+                    <!-- 文件图标（目录行与 diff 树一致：仅 chevron + 名称，无文件夹图标） -->
+                    <span v-if="!row.isDir" class="node-icon file-icon">
+                        <img :src="getFileIcon(row.name)" width="16" height="16" />
                     </span>
-                </Transition>
+                    <!-- 节点名称 -->
+                    <span class="node-label">{{ row.name }}</span>
+                    <!-- 加载中（右对齐，带淡出过渡） -->
+                    <Transition name="fade">
+                        <span v-if="treeStore.loadingPaths.has(row.path)" class="loading-indicator">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="spin">
+                                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                            </svg>
+                        </span>
+                    </Transition>
+                </template>
             </template>
             <template #empty>
                 <div class="text-center py-12 text-gray-400 dark:text-[#6b6d73] text-xs p-2">
@@ -119,14 +123,34 @@ function flattenWorkspaceTree(
         });
         if (isDir && expanded.has(n.path)) {
             flattenWorkspaceTree(n.children || [], expanded, depth + 1, out);
+            // 后端条目上限截断：在子项末尾插入只读提示行
+            if (n.truncated) {
+                out.push(makeTruncatedRow(n.path, depth + 1));
+            }
         }
     }
+}
+
+/** 截断提示行：isGroup 让 TreeView 不响应选中/展开 */
+function makeTruncatedRow(parentPath: string, depth: number): TreeViewRow {
+    return {
+        key: `truncated:${parentPath}`,
+        depth,
+        isDir: false,
+        isGroup: true,
+        isTruncated: true,
+        name: t('chat.workspace.treeTruncated'),
+        path: '',
+    };
 }
 
 /** 目录树扁平行（store treeData + expandedPaths 派生，供 TreeView 渲染） */
 const treeRows = computed<TreeViewRow[]>(() => {
     const out: TreeViewRow[] = [];
     flattenWorkspaceTree(treeStore.treeData, treeStore.expandedPaths, 0, out);
+    if (treeStore.treeTruncated) {
+        out.push(makeTruncatedRow('', 0));
+    }
     return out;
 });
 
@@ -147,6 +171,7 @@ const collapsedTreeKeys = computed<Set<string>>(() => {
 
 /** TreeView 行事件 → WorkspaceNode 事件适配 */
 function onTreeSelect(row: TreeViewRow): void {
+    if (row.isTruncated) return;
     handleTreeNodeSelect(row.node as WorkspaceNode);
 }
 
@@ -563,6 +588,13 @@ defineExpose({ revealAndScroll });
     flex: 1;
     min-width: 0;
     color: var(--gd-color-text);
+}
+
+/* 目录条目超过后端上限时的只读提示行 */
+.node-label--truncated {
+    color: var(--gd-color-text-gray);
+    font-size: 11px;
+    font-style: italic;
 }
 
 .loading-indicator {

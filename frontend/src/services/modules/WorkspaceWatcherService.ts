@@ -10,8 +10,11 @@ import { getClientId } from "@/utils/clientId";
  * 工作目录文件变化事件
  */
 export interface FileChangeEvent {
-  /** git = git 状态可能已变化（.git 目录变化，或工作树文件被增删改），消费方应刷新 git 状态 */
-  type: "add" | "change" | "unlink" | "addDir" | "unlinkDir" | "heartbeat" | "git";
+  /**
+   * git = git 状态可能已变化（.git 目录变化，或工作树文件被增删改），消费方应刷新 git 状态；
+   * overflow = 事件风暴熔断，消费方应整体刷新根 + 已展开目录，而不是逐文件处理。
+   */
+  type: "add" | "change" | "unlink" | "addDir" | "unlinkDir" | "heartbeat" | "git" | "overflow";
   path: string;
   sessionId: string;
   timestamp: number;

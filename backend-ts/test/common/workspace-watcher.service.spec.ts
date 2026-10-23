@@ -20,6 +20,7 @@ import { gitActivity } from "../../src/common/services/git-activity";
 import {
   WorkspaceWatcherService,
   FileChangeEvent,
+  parseWatchIgnoreLines,
 } from "../../src/common/services/workspace-watcher.service";
 import * as parcelWatcher from "@parcel/watcher";
 
@@ -90,6 +91,8 @@ describe("WorkspaceWatcherService", () => {
   beforeEach(async () => {
     ws = fs.mkdtempSync(path.join(os.tmpdir(), "ws-watch-unit-"));
     service = new WorkspaceWatcherService();
+    // 既有用例断言「scope 关闭立即退订」；宽限行为由单独的用例覆盖
+    service.setOptionsForTesting({ scopeUnsubscribeGraceMs: 0 });
     caps = setup(service);
     gitActivity.lastReadAt = 0; // 抑制窗口复位，保证 .git 事件可推送
   });
@@ -414,5 +417,175 @@ describe("WorkspaceWatcherService", () => {
     service.startWatching("session", ws, "client");
     expect(service.getWorkspacePath("session")).toBe(ws);
     expect(service.getWorkspacePath("unknown")).toBeUndefined();
+  });
+
+  it("file/git scope 隔离：文件事件只到 file 会话，git 事件只到 git 会话", async () => {
+    fs.mkdirSync(path.join(ws, ".git"));
+    service.startWatching("session-file", ws, "client-file");
+    service.setWatchScope("session-file", "client-file", "file", true);
+    service.startWatching("session-git", ws, "client-git");
+    service.setWatchScope("session-git", "client-git", "git", true);
+    await waitReady(service);
+
+    const fileListener = jest.fn();
+    const gitListener = jest.fn();
+    service.onFileChange("session-file", fileListener);
+    service.onFileChange("session-git", gitListener);
+
+    // 先验证 git 事件：.git watcher 先触发时用 300ms 窗口
+    const gitCap = caps.find(
+      (c) => path.resolve(c.dir) === path.resolve(path.join(ws, ".git")),
+    );
+    gitCap!.cb(null);
+    await sleep(400);
+
+    expect(
+      gitListener.mock.calls.filter((c) => c[0].type === "git"),
+    ).toHaveLength(1);
+    expect(
+      fileListener.mock.calls.filter((c) => c[0].type === "git"),
+    ).toHaveLength(0);
+
+    // 再验证文件事件：只有 file scope 会话收到 change
+    fireParcel(caps, ws, [{ type: "update", path: path.join(ws, "a.ts") }]);
+    await sleep(80);
+
+    expect(
+      fileListener.mock.calls.filter((c) => c[0].type === "change"),
+    ).toHaveLength(1);
+    expect(
+      gitListener.mock.calls.filter((c) => c[0].type === "change"),
+    ).toHaveLength(0);
+  });
+
+  it("事件风暴：degraded 只发一条 overflow，不逐文件推送", async () => {
+    const burstService = new WorkspaceWatcherService();
+    burstService.setOptionsForTesting({
+      scopeUnsubscribeGraceMs: 0,
+      eventRateThreshold: 10,
+    });
+    const burstCaps = setup(burstService);
+    burstService.startWatching("session", ws, "client");
+    burstService.setWatchScope("session", "client", "file", true);
+    await waitReady(burstService);
+
+    const listener = jest.fn();
+    burstService.onFileChange("session", listener);
+
+    fireParcel(
+      burstCaps,
+      ws,
+      Array.from({ length: 20 }, (_, i) => ({
+        type: "update",
+        path: path.join(ws, `f${i}.ts`),
+      })),
+    );
+    await sleep(650); // DEGRADED_COALESCE_MS(500)
+
+    expect(
+      listener.mock.calls.filter((c) => c[0].type === "overflow"),
+    ).toHaveLength(1);
+    expect(
+      listener.mock.calls.filter((c) => c[0].type === "change"),
+    ).toHaveLength(0);
+
+    await burstService.onModuleDestroy();
+  });
+
+  it("degraded 下 create 事件不逐条 enqueue，只发 overflow", async () => {
+    const burstService = new WorkspaceWatcherService();
+    burstService.setOptionsForTesting({
+      scopeUnsubscribeGraceMs: 0,
+      eventRateThreshold: 1,
+    });
+    const burstCaps = setup(burstService);
+    burstService.startWatching("session", ws, "client");
+    burstService.setWatchScope("session", "client", "file", true);
+    await waitReady(burstService);
+
+    const listener = jest.fn();
+    burstService.onFileChange("session", listener);
+
+    fs.writeFileSync(path.join(ws, "ghost-1"), "x");
+    fs.writeFileSync(path.join(ws, "ghost-2"), "x");
+    fireParcel(burstCaps, ws, [
+      { type: "create", path: path.join(ws, "ghost-1") },
+      { type: "create", path: path.join(ws, "ghost-2") },
+    ]);
+    await sleep(650);
+
+    // 正常模式这里会是两条 add；degraded 直接熔断为一条 overflow
+    expect(
+      listener.mock.calls.filter(
+        (c) => c[0].type === "add" || c[0].type === "addDir",
+      ),
+    ).toHaveLength(0);
+    expect(
+      listener.mock.calls.filter((c) => c[0].type === "overflow"),
+    ).toHaveLength(1);
+
+    await burstService.onModuleDestroy();
+  });
+
+  it("scope 解除有宽限：期间恢复不退订，超时后退订", async () => {
+    const graceService = new WorkspaceWatcherService();
+    graceService.setOptionsForTesting({ scopeUnsubscribeGraceMs: 60 });
+    const graceCaps = setup(graceService);
+    graceService.startWatching("session", ws, "client");
+    graceService.setWatchScope("session", "client", "file", true);
+    await waitReady(graceService);
+
+    graceService.setWatchScope("session", "client", "file", false);
+    await sleep(20);
+    graceService.setWatchScope("session", "client", "file", true);
+    await sleep(120);
+    expect(graceCaps[0].unsubscribe).not.toHaveBeenCalled();
+
+    graceService.setWatchScope("session", "client", "file", false);
+    await sleep(120);
+    expect(graceCaps[0].unsubscribe).toHaveBeenCalledTimes(1);
+
+    await graceService.onModuleDestroy();
+  });
+
+  it(".guada/watch-ignore 解析并合并到 parcel ignore", async () => {
+    fs.mkdirSync(path.join(ws, ".guada"));
+    fs.writeFileSync(
+      path.join(ws, ".guada", "watch-ignore"),
+      ["# comment", "workbuddy-market/", "*.log", "src/generated.ts"].join("\n"),
+    );
+
+    service.startWatching("session", ws, "client");
+    service.setWatchScope("session", "client", "file", true);
+    await waitReady(service);
+
+    const rootCall = (
+      parcelWatcher.subscribe as unknown as jest.Mock
+    ).mock.calls.find((call) => path.resolve(call[0]) === path.resolve(ws));
+    const ignore = rootCall?.[2]?.ignore as string[];
+    expect(ignore).toEqual(
+      expect.arrayContaining([
+        "**/workbuddy-market/**",
+        "**/*.log",
+        "**/src/generated.ts",
+      ]),
+    );
+  });
+});
+
+describe("parseWatchIgnoreLines", () => {
+  it("解析常见 gitignore 子集", () => {
+    expect(
+      parseWatchIgnoreLines(
+        ["# comment", "foo/", "*.log", "src/generated.ts", "node_modules"].join(
+          "\n",
+        ),
+      ),
+    ).toEqual([
+      "**/foo/**",
+      "**/*.log",
+      "**/src/generated.ts",
+      "**/node_modules/**",
+    ]);
   });
 });

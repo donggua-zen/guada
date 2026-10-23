@@ -171,6 +171,8 @@ const EXIT_CODE_HINTS: Record<number, string> = {
   0xc00000fd: "栈溢出",
   0xc0000409: "fail-fast（__fastfail）：Node abort 路径，绕过 WER，故常无崩溃报告",
   0xc0000374: "堆损坏",
+  // 0x80000003（无符号）以有符号 int32 传给 Electron 时是 -2147483645
+  [-2147483645]: "0x80000003：渲染进程中止（常见于 V8 堆内存耗尽/OOM）",
 };
 
 function describeExitCode(code: number | null): string {
@@ -611,10 +613,47 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) {
   process.on(signal, () => handleTerminationSignal(signal));
 }
 
+/** 渲染进程崩溃后的自动 reload 冷却：避免「崩溃 → reload → 立刻再崩」死循环 */
+const RENDERER_RELOAD_COOLDOWN_MS = 60_000;
+let lastRendererReloadAt = 0;
+
 app.on("render-process-gone", (_event, webContents, details) => {
+  const hint =
+    details.exitCode === -2147483645
+      ? "（0x80000003，V8 OOM/渲染进程中止）"
+      : "";
   log.error(
-    `[Process] Renderer gone: webContentsId=${webContents.id}, reason=${details.reason}, exitCode=${details.exitCode}, url=${webContents.getURL()}`,
+    `[Process] Renderer gone: webContentsId=${webContents.id}, reason=${details.reason}, exitCode=${details.exitCode}${hint}, url=${webContents.getURL()}`,
   );
+
+  // 只处理主窗口；webview/浮窗崩溃仍只记录日志
+  if (!mainWindow || webContents !== mainWindow.webContents) return;
+  if (details.reason === "clean-exit") return;
+
+  const now = Date.now();
+  if (now - lastRendererReloadAt < RENDERER_RELOAD_COOLDOWN_MS) {
+    log.error("[Process] Renderer crashed again within cooldown, skip auto reload");
+    if (!mainWindow.isDestroyed()) {
+      void dialog
+        .showMessageBox(mainWindow, {
+          type: "error",
+          title: "界面进程已崩溃",
+          message: "界面进程因内存耗尽或异常退出。",
+          detail: "建议关闭占用内存较大的工作区后重启应用。",
+          buttons: ["确定"],
+        })
+        .catch(() => undefined);
+    }
+    return;
+  }
+
+  lastRendererReloadAt = now;
+  log.warn("[Process] Reloading renderer after crash");
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !webContents.isDestroyed()) {
+      webContents.reload();
+    }
+  }, 500);
 });
 
 app.on("child-process-gone", (_event, details) => {

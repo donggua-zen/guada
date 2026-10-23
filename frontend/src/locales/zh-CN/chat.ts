@@ -441,6 +441,7 @@ export default {
     openWith: '选择打开方式',
     openInTerminal: '在系统终端中打开',
     noFiles: '暂无文件',
+    treeTruncated: '目录条目过多，仅显示前 2000 项',
     noPreviewFile: '暂无预览文件',
     newBrowser: '新建浏览器',
     newFile: '文件',

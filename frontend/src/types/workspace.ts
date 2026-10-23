@@ -11,4 +11,6 @@ export interface WorkspaceNode {
     size?: number
     /** 目录是否已知有子项（懒加载标记） */
     hasChildren?: boolean
+    /** 目录子项被后端条目上限截断（仅显示前 N 项） */
+    truncated?: boolean
 }

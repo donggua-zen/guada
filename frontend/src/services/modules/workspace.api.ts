@@ -17,8 +17,8 @@ export interface WorkspaceFileResponse {
 }
 
 export interface WorkspaceApi {
-  getWorkspaceTree(sessionId: string): Promise<{ tree: WorkspaceNode[] }>;
-  getWorkspaceChildren(sessionId: string, dirPath: string): Promise<{ children: WorkspaceNode[] }>;
+  getWorkspaceTree(sessionId: string): Promise<{ tree: WorkspaceNode[]; truncated?: boolean }>;
+  getWorkspaceChildren(sessionId: string, dirPath: string): Promise<{ children: WorkspaceNode[]; truncated?: boolean }>;
   getWorkspaceFile(
     sessionId: string,
     filePath: string,
@@ -34,11 +34,13 @@ export interface WorkspaceApi {
 
 export const workspaceApi: WorkspaceApi = {
   async getWorkspaceTree(this: ApiContext, sessionId: string) {
-    return await this._request<{ tree: WorkspaceNode[] }>(`/sessions/${sessionId}/workspace/tree`);
+    return await this._request<{ tree: WorkspaceNode[]; truncated?: boolean }>(
+      `/sessions/${sessionId}/workspace/tree`,
+    );
   },
 
   async getWorkspaceChildren(this: ApiContext, sessionId: string, dirPath: string) {
-    return await this._request<{ children: WorkspaceNode[] }>(
+    return await this._request<{ children: WorkspaceNode[]; truncated?: boolean }>(
       `/sessions/${sessionId}/workspace/children?path=${encodeURIComponent(dirPath)}`,
     );
   },

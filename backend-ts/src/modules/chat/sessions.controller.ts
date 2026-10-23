@@ -36,6 +36,7 @@ import { resolveSessionAttachmentPath } from '../../common/utils/session-path.ut
 import { resolveAttachmentResponseHeaders } from '../../common/utils/attachment-serving.util';
 import { resolveServingMimeType, isKnownExtension } from '../../common/utils/media-type.util';
 import { sniffFileHead, decodeTextWithEncoding, type FileSniffResult } from '../../common/utils/file-sniff.util';
+import { buildDirectoryTreeBounded } from './workspace-tree.util';
 
 /** 预览类资源（位图/音视频/pdf）上限：浏览器按 Range 分块取，此处仅兜底防呆 */
 const MAX_PREVIEW_ASSET_SIZE = 2 * 1024 * 1024 * 1024;
@@ -332,8 +333,13 @@ export class SessionsController {
 
     const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
-    const tree = await this.buildDirectoryTree(workspacePath, '', 0, 0);
-    return { tree };
+    const { nodes, truncated } = await buildDirectoryTreeBounded(
+      workspacePath,
+      '',
+      0,
+      0,
+    );
+    return { tree: nodes, truncated };
   }
 
   @Get("sessions/:id/workspace/file")
@@ -536,70 +542,13 @@ export class SessionsController {
     }
 
     // 获取子节点（只加载一层，递归深度为 0）
-    const children = await this.buildDirectoryTree(resolvedDirPath, dirPath, 0, 0);
-    return { children };
-  }
-
-  /**
-   * 构建目录树（限制深度）
-   * @param dirPath 目录路径
-   * @param relativePath 相对路径
-   * @param currentDepth 当前深度
-   * @param maxDepth 最大深度（默认 3 层）
-   */
-  private async buildDirectoryTree(
-    dirPath: string,
-    relativePath: string = '',
-    currentDepth: number = 0,
-    maxDepth: number = 1
-  ): Promise<any[]> {
-    try {
-      const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
-      const tree: any[] = [];
-
-      // 只跳过 node_modules，保留隐藏目录（如 .guada）
-      const filteredEntries = entries.filter(entry =>
-        entry.name !== 'node_modules'
-      );
-
-      // 批量构建节点（并行化子目录递归）
-      const nodePromises = filteredEntries.map(async (entry) => {
-        const fullPath = path.join(dirPath, entry.name);
-        const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
-
-        const node: any = {
-          name: entry.name,
-          path: relPath,
-          isDirectory: entry.isDirectory(),
-        };
-
-        if (entry.isDirectory()) {
-          // 如果未达到最大深度，递归获取子目录
-          if (currentDepth < maxDepth) {
-            node.children = await this.buildDirectoryTree(fullPath, relPath, currentDepth + 1, maxDepth);
-          } else {
-            // 达到最大深度，标记为有子节点但不加载
-            node.hasChildren = true;
-            node.children = [];
-          }
-        }
-
-        return node;
-      });
-
-      const nodes = await Promise.all(nodePromises);
-      tree.push(...nodes);
-
-      // 按名称排序，目录在前
-      return tree.sort((a, b) => {
-        if (a.isDirectory && !b.isDirectory) return -1;
-        if (!a.isDirectory && b.isDirectory) return 1;
-        return a.name.localeCompare(b.name);
-      });
-    } catch (error: any) {
-      console.error(`Failed to build directory tree: ${error.message}`);
-      return [];
-    }
+    const { nodes, truncated } = await buildDirectoryTreeBounded(
+      resolvedDirPath,
+      dirPath,
+      0,
+      0,
+    );
+    return { children: nodes, truncated };
   }
 
   @Get("sessions/:id/workspace/raw-file")

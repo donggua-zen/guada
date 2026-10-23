@@ -81,4 +81,68 @@ describe("GitService 子进程环境", () => {
 
     expect(status.files.map((f) => f.path)).toContain("b.txt");
   }, 30000);
+
+  it("超大未跟踪目录：折叠为一条目录记录，不逐文件枚举", async () => {
+    if (!hasGit) return;
+
+    initRepoWithCommit();
+    const huge = path.join(repo, "huge");
+    fs.mkdirSync(huge);
+    for (let i = 0; i < 2500; i++) {
+      fs.writeFileSync(path.join(huge, `f-${i}.txt`), "x\n");
+    }
+
+    const status = await new GitService().getStatus(repo);
+
+    // 25 万文件仓库的等价场景：只保留 git 的 `huge/` 折叠记录。
+    expect(status.files.map((f) => f.path)).toEqual(["huge/"]);
+    expect(status.collapsedUntrackedDirs).toEqual(["huge/"]);
+    expect(status.files[0]?.additions).toBe(0);
+    expect(status.totalFiles).toBe(1);
+  }, 60000);
+
+  it("小未跟踪目录：仍逐文件展开（普通项目行为不回退）", async () => {
+    if (!hasGit) return;
+
+    initRepoWithCommit();
+    const newDir = path.join(repo, "newdir");
+    fs.mkdirSync(newDir);
+    fs.writeFileSync(path.join(newDir, "a.txt"), "a\n");
+    fs.writeFileSync(path.join(newDir, "b.txt"), "b\n");
+
+    const status = await new GitService().getStatus(repo);
+
+    expect(status.files.map((f) => f.path).sort()).toEqual([
+      "newdir/a.txt",
+      "newdir/b.txt",
+    ]);
+    expect(status.collapsedUntrackedDirs).toBeUndefined();
+  }, 30000);
+
+  it("未跟踪大文件：保留条目但不读取全文统计行数", async () => {
+    if (!hasGit) return;
+
+    initRepoWithCommit();
+    fs.writeFileSync(path.join(repo, "big.txt"), Buffer.alloc(2 * 1024 * 1024, 97));
+
+    const status = await new GitService().getStatus(repo);
+    const big = status.files.find((f) => f.path === "big.txt");
+
+    expect(big).toBeDefined();
+    expect(big?.additions).toBe(0);
+  }, 30000);
+
+  it("未跟踪文件 diff：走 ls-files 定向判断，返回 new-file", async () => {
+    if (!hasGit) return;
+
+    initRepoWithCommit();
+    const newDir = path.join(repo, "newdir");
+    fs.mkdirSync(newDir);
+    fs.writeFileSync(path.join(newDir, "a.txt"), "hello\n");
+
+    const diff = await new GitService().getDiff(repo, "newdir/a.txt", false);
+
+    expect(diff.type).toBe("new-file");
+    expect(diff.content).toBe("hello\n");
+  }, 30000);
 });

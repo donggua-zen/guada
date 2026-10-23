@@ -3,8 +3,11 @@
        统一处理缩进、chevron、hover/选中/键盘高亮、滚动定位、点击/右键转发。
        文件树（WorkspaceSidebar）与 git 变更树（GitChangesPanel）共用。 -->
   <div ref="scrollRef" class="tree-view-scroll" :class="{ focused }" tabindex="0"
-    @keydown="onKeydown" @focus="focused = true" @blur="focused = false">
-    <div v-for="row in rows" :key="row.key" :data-row-key="row.key" class="tree-view-row"
+    @scroll.passive="onScroll" @keydown="onKeydown" @focus="focused = true" @blur="focused = false">
+    <!-- 固定行高虚拟化：只渲染可视区间，上下用占位高度撑出真实滚动范围。
+         文件树/Git 变更树共用，避免数万行一次性挂 DOM。 -->
+    <div v-if="visibleRange.topSpacer > 0" :style="{ height: visibleRange.topSpacer + 'px' }" aria-hidden="true" />
+    <div v-for="row in visibleRows" :key="row.key" :data-row-key="row.key" class="tree-view-row"
       :class="{
         'tree-view-row--dir': row.isDir,
         'tree-view-row--group': row.isGroup,
@@ -28,6 +31,7 @@
         <slot name="row" :row="row" :collapsed="isCollapsed(row)" />
       </template>
     </div>
+    <div v-if="visibleRange.bottomSpacer > 0" :style="{ height: visibleRange.bottomSpacer + 'px' }" aria-hidden="true" />
     <!-- 空态插槽：仅当没有任何行时渲染（有文件/变更时不再显示"暂无文件"等提示） -->
     <template v-if="rows.length === 0">
       <slot name="empty" />
@@ -36,8 +40,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { ArrowRight } from "@element-plus/icons-vue";
+import { computeTreeViewVisibleRange } from "./treeViewVirtual";
 
 /**
  * 扁平行树节点：key 唯一标识（如 'path' 或 'group:path'）、depth 缩进层级、
@@ -49,6 +54,8 @@ export interface TreeViewRow {
   isDir: boolean;
   /** 组头行（git 变更树的分组标题）：不参与选中/折叠，仅展示 */
   isGroup?: boolean;
+  /** 截断提示行（目录条目超过后端上限）：只读，不响应选中 */
+  isTruncated?: boolean;
   // 行为开放扩展点：文件树/git 树各自附加 name/path/file 等字段并由插槽盲读，
   // 收敛为 unknown 会把错误推向范围外的插槽模板，故保留 any 并在此说明
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
@@ -88,6 +95,61 @@ const emit = defineEmits<{
 
 const scrollRef = ref<HTMLElement | null>(null);
 const focused = ref(false);
+
+// ── 固定行高虚拟化 ──
+/** 与 .tree-view-row 的 height 保持一致；group 行也统一为 26px，否则占位会漂移 */
+const ROW_HEIGHT = 26;
+const OVERSCAN = 12;
+const scrollTop = ref(0);
+const viewportHeight = ref(0);
+let resizeObserver: ResizeObserver | null = null;
+
+const visibleRange = computed(() =>
+  computeTreeViewVisibleRange(
+    props.rows.length,
+    scrollTop.value,
+    viewportHeight.value,
+    ROW_HEIGHT,
+    OVERSCAN,
+  ),
+);
+
+const visibleRows = computed(() =>
+  props.rows.slice(visibleRange.value.start, visibleRange.value.end),
+);
+
+function onScroll(event: Event): void {
+  scrollTop.value = (event.target as HTMLElement).scrollTop;
+}
+
+onMounted(() => {
+  const el = scrollRef.value;
+  if (!el) return;
+  viewportHeight.value = el.clientHeight;
+  resizeObserver = new ResizeObserver(() => {
+    viewportHeight.value = el.clientHeight;
+  });
+  resizeObserver.observe(el);
+});
+
+onUnmounted(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+});
+
+// 行数变少（折叠/刷新）时把滚动位置夹回有效范围，避免停在空白区
+watch(
+  () => props.rows.length,
+  () => {
+    const el = scrollRef.value;
+    if (!el) return;
+    const max = Math.max(0, props.rows.length * ROW_HEIGHT - el.clientHeight);
+    if (scrollTop.value > max) {
+      scrollTop.value = max;
+      el.scrollTop = max;
+    }
+  },
+);
 
 function isCollapsed(row: TreeViewRow): boolean {
   return !!props.collapsedKeys?.has(row.key);
@@ -161,8 +223,16 @@ function onKeydown(e: KeyboardEvent): void {
 
 /** 滚动到指定行（键盘/定位场景；行不存在则忽略） */
 function scrollToKey(key: string): void {
-  const el = scrollRef.value?.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(key)}"]`);
-  el?.scrollIntoView({ block: "nearest" });
+  const el = scrollRef.value;
+  if (!el) return;
+  const index = props.rows.findIndex((r) => r.key === key);
+  if (index < 0) return;
+  const max = Math.max(0, props.rows.length * ROW_HEIGHT - el.clientHeight);
+  // 居中定位；越界时夹到两端。行可能未渲染，所以按索引算 scrollTop，不能查 DOM。
+  const centered = index * ROW_HEIGHT - (el.clientHeight - ROW_HEIGHT) / 2;
+  const target = Math.min(max, Math.max(0, centered));
+  el.scrollTop = target;
+  scrollTop.value = el.scrollTop;
 }
 
 watch(
@@ -267,7 +337,8 @@ defineExpose({ scrollToKey });
   font-weight: 500;
   color: var(--gd-color-text-gray);
   cursor: default;
-  height: 24px;
+  /* 与 ROW_HEIGHT 一致：虚拟化按固定行高计算占位，group 行不能更矮 */
+  height: 26px;
 }
 
 .tree-view-row--group:hover {

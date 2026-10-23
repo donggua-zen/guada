@@ -11,7 +11,18 @@ export interface FileChangeEvent {
    * 两个来源：.git 目录内容变化（外部 commit/stage/checkout 等），
    * 以及工作树文件的增删改（编辑文件不触碰 .git，只有根 watcher 看得到）。
    */
-  type: "add" | "change" | "unlink" | "addDir" | "unlinkDir" | "git";
+  type:
+    | "add"
+    | "change"
+    | "unlink"
+    | "addDir"
+    | "unlinkDir"
+    | "git"
+    /**
+     * 事件风暴熔断信号：不再逐文件推送，前端应整体刷新根 + 已展开目录。
+     * 由 degraded 模式发出，每个会话在合并窗口内最多一条。
+     */
+    | "overflow";
   path: string;
   sessionId: string;
   timestamp: number;
@@ -54,7 +65,16 @@ interface WatchEntry {
   gitTimer: ReturnType<typeof setTimeout> | null;
   /** 熔断：事件风暴时增大合并窗口 */
   degraded: boolean;
-  eventTimestamps: number[];
+  /** 速率窗口（不再用数组 + shift，避免风暴下的 O(n²)） */
+  eventWindowStart: number;
+  eventWindowCount: number;
+  /** 上一次收到事件的时间：久静后自动退出 degraded */
+  lastEventAt: number;
+  /** degraded 期间有待发送的 overflow 信号 */
+  pendingOverflow: boolean;
+  /** scope 解除宽限定时器：会话切换时避免 watcher 反复 unsubscribe/subscribe */
+  rootUnsubscribeTimer: ReturnType<typeof setTimeout> | null;
+  gitUnsubscribeTimer: ReturnType<typeof setTimeout> | null;
   lastUsedAt: number;
   ready: boolean;
 }
@@ -93,6 +113,11 @@ const DEGRADED_COALESCE_MS = 500;
 const EVENT_RATE_WINDOW_MS = 5_000;
 const EVENT_RATE_THRESHOLD = 5_000;
 const MAX_EVENTS_PER_FLUSH = 500;
+/**
+ * scope 解除宽限：会话切换时前端会先 file=false（旧会话）再 file=true（新会话），
+ * 两个请求的到达顺序不保证；立即退订会让同一工作区的 watcher 反复 unsubscribe/subscribe。
+ */
+const SCOPE_UNSUBSCRIBE_GRACE_MS = 5_000;
 /** .git 变化防抖：一次 commit 会连续写 HEAD/refs/index 等，合并为单次「git 已变化」通知 */
 const GIT_DEBOUNCE_MS = 300;
 /**
@@ -130,11 +155,57 @@ const IGNORE_GLOBS: string[] = [
   "**/node_modules_backup/**",
   "**/node_modules.bak/**",
   "**/.cache/**",
+  // 常见构建产物 / 缓存目录：不参与实时文件事件（需要时可在 .guada/watch-ignore 追加）
+  "**/.nuxt/**",
+  "**/.output/**",
+  "**/coverage/**",
+  "**/target/**",
+  "**/vendor/**",
+  "**/out/**",
+  "**/.turbo/**",
+  "**/.gradle/**",
+  "**/.parcel-cache/**",
+  "**/.svelte-kit/**",
+  "**/.angular/**",
+  "**/.idea/**",
+  "**/.vs/**",
+  "**/bin/**",
+  "**/obj/**",
 ];
+
+/**
+ * 解析工作区级 `.guada/watch-ignore`：每行一个 gitignore 风格 glob，`#` 注释。
+ * - 以 `/` 结尾：整目录忽略；
+ * - 含 `.` 的文件名：按文件 glob 忽略；
+ * - 其余：按目录忽略。
+ * 只做常见子集，不实现 gitignore 的否定/锚定语义。
+ */
+export function parseWatchIgnoreLines(content: string): string[] {
+  const globs: string[] = [];
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+
+    if (line.endsWith("/")) {
+      globs.push(`**/${line.replace(/^\/+/, "").replace(/\/+$/, "")}/**`);
+      continue;
+    }
+    const normalized = line.replace(/^\/+/, "");
+    const basename = normalized.split("/").pop() ?? normalized;
+    if (basename.includes(".")) {
+      globs.push(`**/${normalized}`);
+    } else {
+      globs.push(`**/${normalized}/**`);
+    }
+  }
+  return globs;
+}
 
 @Injectable()
 export class WorkspaceWatcherService implements OnModuleDestroy {
   private readonly logger = new Logger(WorkspaceWatcherService.name);
+  private scopeUnsubscribeGraceMs = SCOPE_UNSUBSCRIBE_GRACE_MS;
+  private eventRateThreshold = EVENT_RATE_THRESHOLD;
   private readonly watchers = new Map<string, WatchEntry>();
   private readonly sessions = new Map<string, SessionState>();
   /** REST 订阅先于 SSE 连接时暂存：sessionId → clientId → scopes（连接建立后迁入 sessionState） */
@@ -144,6 +215,19 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     Set<(event: FileChangeEvent) => void>
   >();
   private destroyed = false;
+
+  /** 仅供单测调整阈值/宽限期；生产使用默认常量（构造参数会触发 Nest DI 解析） */
+  setOptionsForTesting(options: {
+    scopeUnsubscribeGraceMs?: number;
+    eventRateThreshold?: number;
+  }): void {
+    if (options.scopeUnsubscribeGraceMs !== undefined) {
+      this.scopeUnsubscribeGraceMs = options.scopeUnsubscribeGraceMs;
+    }
+    if (options.eventRateThreshold !== undefined) {
+      this.eventRateThreshold = options.eventRateThreshold;
+    }
+  }
 
   /**
    * 注册一条会话监听连接，返回幂等释放函数。
@@ -286,6 +370,8 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       if (entry.coalesceTimer) clearTimeout(entry.coalesceTimer);
       if (entry.idleTimer) clearTimeout(entry.idleTimer);
       if (entry.gitTimer) clearTimeout(entry.gitTimer);
+      if (entry.rootUnsubscribeTimer) clearTimeout(entry.rootUnsubscribeTimer);
+      if (entry.gitUnsubscribeTimer) clearTimeout(entry.gitUnsubscribeTimer);
       try {
         await entry.subscription?.unsubscribe();
       } catch (error: unknown) {
@@ -364,7 +450,12 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       gitDirtyFromWorkTree: false,
       gitTimer: null,
       degraded: false,
-      eventTimestamps: [],
+      eventWindowStart: 0,
+      eventWindowCount: 0,
+      lastEventAt: 0,
+      pendingOverflow: false,
+      rootUnsubscribeTimer: null,
+      gitUnsubscribeTimer: null,
       lastUsedAt: Date.now(),
       ready: false,
     };
@@ -441,6 +532,14 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     return { file, git };
   }
 
+  /** 会话是否至少有一个在线 client 订阅了指定范围 */
+  private hasScope(sessionState: SessionState, scope: WatchScope): boolean {
+    for (const scopes of sessionState.scopes.values()) {
+      if (scopes.has(scope)) return true;
+    }
+    return false;
+  }
+
   /** 按激活范围增删两个独立 parcel watcher（root / .git），幂等、防重入 */
   private updateWatcherSubscriptions(entry: WatchEntry): void {
     const { file, git } = this.computeEntryScopes(entry);
@@ -453,31 +552,90 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
 
     // 根 watcher（工作区文件事件）
     // 在途标记（fileSubscribing）防止 subscribe Promise resolve 前 scope 重入造成重复订阅
-    if (wantRoot && !entry.subscription && !entry.fileSubscribing) {
-      this.subscribeRoot(entry);
-    } else if (!wantRoot && entry.subscription) {
-      const sub = entry.subscription;
-      entry.subscription = null;
-      entry.ready = false;
-      sub.unsubscribe().catch((error: unknown) => {
-        this.logger.warn(
-          `Failed to unsubscribe root watcher ${entry.absolutePath}: ${String(error)}`,
-        );
-      });
+    if (wantRoot) {
+      this.clearUnsubscribeTimer(entry, "root");
+      if (!entry.subscription && !entry.fileSubscribing) {
+        this.subscribeRoot(entry);
+      }
+    } else if (entry.subscription) {
+      // 会话切换时旧 file=false / 新 file=true 的到达顺序不保证：
+      // 给 5s 宽限，期间 scope 恢复则取消退订。
+      this.scheduleRootUnsubscribe(entry);
     }
 
     // .git watcher（git 事件，独立订阅）
-    if (gitDir && !entry.gitSubscription && !entry.gitSubscribing) {
-      this.subscribeGitEntry(entry, gitDir);
-    } else if (!gitDir && entry.gitSubscription) {
-      const sub = entry.gitSubscription;
-      entry.gitSubscription = null;
-      sub.unsubscribe().catch((error: unknown) => {
-        this.logger.warn(
-          `Failed to unsubscribe git watcher ${entry.absolutePath}: ${String(error)}`,
-        );
-      });
+    if (gitDir) {
+      this.clearUnsubscribeTimer(entry, "git");
+      if (!entry.gitSubscription && !entry.gitSubscribing) {
+        this.subscribeGitEntry(entry, gitDir);
+      }
+    } else if (entry.gitSubscription) {
+      this.scheduleGitUnsubscribe(entry);
     }
+  }
+
+  private clearUnsubscribeTimer(
+    entry: WatchEntry,
+    kind: "root" | "git",
+  ): void {
+    const timer =
+      kind === "root" ? entry.rootUnsubscribeTimer : entry.gitUnsubscribeTimer;
+    if (timer) clearTimeout(timer);
+    if (kind === "root") entry.rootUnsubscribeTimer = null;
+    else entry.gitUnsubscribeTimer = null;
+  }
+
+  private scheduleRootUnsubscribe(entry: WatchEntry): void {
+    if (entry.rootUnsubscribeTimer) return;
+    if (this.scopeUnsubscribeGraceMs <= 0) {
+      this.unsubscribeRoot(entry);
+      return;
+    }
+    entry.rootUnsubscribeTimer = setTimeout(() => {
+      entry.rootUnsubscribeTimer = null;
+      if (this.needsRootWatcher(entry)) return;
+      this.unsubscribeRoot(entry);
+    }, this.scopeUnsubscribeGraceMs);
+    entry.rootUnsubscribeTimer.unref?.();
+  }
+
+  private scheduleGitUnsubscribe(entry: WatchEntry): void {
+    if (entry.gitUnsubscribeTimer) return;
+    if (this.scopeUnsubscribeGraceMs <= 0) {
+      this.unsubscribeGit(entry);
+      return;
+    }
+    entry.gitUnsubscribeTimer = setTimeout(() => {
+      entry.gitUnsubscribeTimer = null;
+      if (this.computeEntryScopes(entry).git) return;
+      this.unsubscribeGit(entry);
+    }, this.scopeUnsubscribeGraceMs);
+    entry.gitUnsubscribeTimer.unref?.();
+  }
+
+  private unsubscribeRoot(entry: WatchEntry): void {
+    const sub = entry.subscription;
+    if (!sub) return;
+    entry.subscription = null;
+    entry.ready = false;
+    this.logger.debug(`Unsubscribing root watcher for ${entry.absolutePath}`);
+    sub.unsubscribe().catch((error: unknown) => {
+      this.logger.warn(
+        `Failed to unsubscribe root watcher ${entry.absolutePath}: ${String(error)}`,
+      );
+    });
+  }
+
+  private unsubscribeGit(entry: WatchEntry): void {
+    const sub = entry.gitSubscription;
+    if (!sub) return;
+    entry.gitSubscription = null;
+    this.logger.debug(`Unsubscribing git watcher for ${entry.absolutePath}`);
+    sub.unsubscribe().catch((error: unknown) => {
+      this.logger.warn(
+        `Failed to unsubscribe git watcher ${entry.absolutePath}: ${String(error)}`,
+      );
+    });
   }
 
   /**
@@ -507,7 +665,7 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
           }
           this.handleParcelEvents(entry, events);
         },
-        { ignore: IGNORE_GLOBS, ...PARCEL_WATCH_OPTIONS },
+        { ignore: this.resolveIgnoreGlobs(entry), ...PARCEL_WATCH_OPTIONS },
       )
       .then((subscription) => {
         entry.fileSubscribing = false;
@@ -529,6 +687,33 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
           `Failed to subscribe watcher for ${entry.absolutePath}: ${String(error)}`,
         );
       });
+  }
+
+  /** 默认忽略规则 + 工作区级 `.guada/watch-ignore` */
+  private resolveIgnoreGlobs(entry: WatchEntry): string[] {
+    const custom = this.readWatchIgnoreGlobs(entry.absolutePath);
+    return custom.length > 0 ? [...IGNORE_GLOBS, ...custom] : IGNORE_GLOBS;
+  }
+
+  private readWatchIgnoreGlobs(workspacePath: string): string[] {
+    try {
+      const ignoreFile = path.join(workspacePath, ".guada", "watch-ignore");
+      if (!fs.existsSync(ignoreFile)) return [];
+      const globs = parseWatchIgnoreLines(
+        fs.readFileSync(ignoreFile, "utf-8"),
+      );
+      if (globs.length > 0) {
+        this.logger.debug(
+          `Loaded ${globs.length} watch-ignore glob(s) from ${ignoreFile}`,
+        );
+      }
+      return globs;
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Failed to read .guada/watch-ignore for ${workspacePath}: ${String(error)}`,
+      );
+      return [];
+    }
   }
 
   /**
@@ -604,7 +789,9 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     if (fromWorkTree) entry.gitDirtyFromWorkTree = true;
     else entry.gitDirty = true;
 
-    if (entry.gitTimer) clearTimeout(entry.gitTimer);
+    // 已有窗口就保留（不重置）：持续风暴/批量写文件时，纯 trailing 防抖会把 git
+    // 刷新无限推迟；这里退化为「首个事件后 300ms/1s 必刷一次」的节流语义。
+    if (entry.gitTimer) return;
     entry.gitTimer = setTimeout(() => {
       entry.gitTimer = null;
       const workTreeChanged = entry.gitDirtyFromWorkTree;
@@ -634,6 +821,8 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     for (const sessionId of entry.sessionIds) {
       const sessionState = this.sessions.get(sessionId);
       if (!sessionState) continue;
+      // 只推给真正订阅了 git 的会话：只有 file scope 的会话没必要重复拉 status
+      if (!this.hasScope(sessionState, "git")) continue;
       this.notifyListeners(sessionId, {
         type: "git",
         path: "",
@@ -665,6 +854,11 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     this.watchers.delete(entry.pathKey);
     if (entry.coalesceTimer) clearTimeout(entry.coalesceTimer);
     if (entry.gitTimer) clearTimeout(entry.gitTimer);
+    if (entry.rootUnsubscribeTimer) clearTimeout(entry.rootUnsubscribeTimer);
+    if (entry.gitUnsubscribeTimer) clearTimeout(entry.gitUnsubscribeTimer);
+    entry.rootUnsubscribeTimer = null;
+    entry.gitUnsubscribeTimer = null;
+    entry.pendingOverflow = false;
     entry.subscription
       ?.unsubscribe()
       .catch((error: unknown) => {
@@ -718,23 +912,49 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
     if (!entry.ready) return;
 
     const now = Date.now();
-    for (const _ of events) {
-      entry.eventTimestamps.push(now);
-    }
-    while (
-      entry.eventTimestamps.length &&
-      now - entry.eventTimestamps[0] > EVENT_RATE_WINDOW_MS
+
+    // 久静后退出 degraded：避免一次风暴后永久停用逐文件事件
+    if (
+      entry.lastEventAt > 0 &&
+      now - entry.lastEventAt > EVENT_RATE_WINDOW_MS
     ) {
-      entry.eventTimestamps.shift();
+      entry.eventWindowStart = now;
+      entry.eventWindowCount = 0;
+      if (entry.degraded) {
+        entry.degraded = false;
+        entry.pendingOverflow = false;
+        this.logger.warn(
+          `Watcher ${entry.absolutePath} degraded mode recovered`,
+        );
+      }
     }
+    entry.lastEventAt = now;
+
+    // 速率窗口（计数器，不再维护时间戳数组）
+    if (now - entry.eventWindowStart > EVENT_RATE_WINDOW_MS) {
+      entry.eventWindowStart = now;
+      entry.eventWindowCount = 0;
+    }
+    entry.eventWindowCount += events.length;
+
+    // 单次回调超过 MAX_EVENTS_PER_FLUSH 也视为风暴：逐条 statSync/enqueue 会把
+    // 事件循环卡住，直接转 degraded + overflow。
     if (
       !entry.degraded &&
-      entry.eventTimestamps.length > EVENT_RATE_THRESHOLD
+      (entry.eventWindowCount > this.eventRateThreshold ||
+        events.length > MAX_EVENTS_PER_FLUSH)
     ) {
       entry.degraded = true;
+      entry.pendingOverflow = true;
       this.logger.warn(
-        `Watcher ${entry.absolutePath} event rate high (${entry.eventTimestamps.length}/${EVENT_RATE_WINDOW_MS / 1000}s), enabling degraded mode`,
+        `Watcher ${entry.absolutePath} event rate high (${entry.eventWindowCount}/${EVENT_RATE_WINDOW_MS / 1000}s), enabling degraded mode`,
       );
+    }
+
+    if (entry.degraded) {
+      entry.pendingOverflow = true;
+      this.scheduleCoalesce(entry);
+      return;
     }
 
     for (const ev of events) {
@@ -797,6 +1017,21 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       clearTimeout(entry.coalesceTimer);
       entry.coalesceTimer = null;
     }
+
+    // degraded：不再逐文件推送，合并为一条 overflow；git 事件仍按常规防抖发出
+    if (entry.degraded) {
+      const hadOverflow =
+        entry.pendingOverflow || entry.pendingEvents.size > 0;
+      entry.pendingOverflow = false;
+      entry.pendingEvents.clear();
+      if (!hadOverflow) return;
+      if (this.computeEntryScopes(entry).git) {
+        this.scheduleGitNotify(entry, true);
+      }
+      this.emitOverflow(entry);
+      return;
+    }
+
     if (entry.pendingEvents.size === 0) return;
 
     const events = Array.from(entry.pendingEvents.values());
@@ -807,23 +1042,11 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
       this.scheduleGitNotify(entry, true);
     }
 
-    // 事件风暴平息后恢复
-    if (entry.degraded) {
-      const now = Date.now();
-      while (
-        entry.eventTimestamps.length &&
-        now - entry.eventTimestamps[0] > EVENT_RATE_WINDOW_MS
-      ) {
-        entry.eventTimestamps.shift();
-      }
-      if (entry.eventTimestamps.length <= EVENT_RATE_THRESHOLD) {
-        entry.degraded = false;
-      }
-    }
-
     for (const sessionId of entry.sessionIds) {
       const sessionState = this.sessions.get(sessionId);
       if (!sessionState) continue;
+      // 只给 file scope 会话发逐文件事件；git scope 会话只收 type:"git"
+      if (!this.hasScope(sessionState, "file")) continue;
 
       for (const ev of events) {
         if (
@@ -850,6 +1073,27 @@ export class WorkspaceWatcherService implements OnModuleDestroy {
         });
       }
     }
+  }
+
+  /** degraded 模式：向 file scope 会话发一条「请整体刷新」信号 */
+  private emitOverflow(entry: WatchEntry): void {
+    const now = Date.now();
+    let recipients = 0;
+    for (const sessionId of entry.sessionIds) {
+      const sessionState = this.sessions.get(sessionId);
+      if (!sessionState) continue;
+      if (!this.hasScope(sessionState, "file")) continue;
+      recipients++;
+      this.notifyListeners(sessionId, {
+        type: "overflow",
+        path: "",
+        sessionId,
+        timestamp: now,
+      });
+    }
+    this.logger.debug(
+      `Watcher ${entry.absolutePath} emitted overflow event to ${recipients} session(s)`,
+    );
   }
 
   private notifyListeners(sessionId: string, event: FileChangeEvent): void {

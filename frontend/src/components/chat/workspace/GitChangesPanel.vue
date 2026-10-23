@@ -69,7 +69,36 @@
     <!-- 左：选中文件 diff 预览（弹性，窗口缩小时优先被压缩）| 右：变更文件目录树
          （固定像素宽，GdSplitpanes 拖拽分割；优先压缩的仍是 diff 预览，规则不变） -->
     <div ref="bodyRef" class="git-body flex-1 min-h-0">
+      <!-- 大工作区降级：不建目录树、不渲染 diff，避免数十万 DOM 节点/Proxy 撑爆渲染进程 -->
+      <div v-if="tooManyFiles" class="git-too-many">
+        <div class="git-too-many-title">
+          {{ status?.statusError === 'timeout' ? t('git.statusDegradedTitle') : t('git.tooManyFilesTitle') }}
+        </div>
+        <div class="git-too-many-desc">
+          <template v-if="status?.statusError === 'timeout'">
+            {{ t('git.statusTimeout') }}
+          </template>
+          <template v-else-if="status?.statusError">
+            {{ t('git.tooManyChanges') }}
+          </template>
+          <template v-else>
+            {{ t('git.tooManyFiles', {
+              count: status?.totalFiles ?? status?.files.length ?? 0,
+              limit: MAX_RENDER_FILES,
+            }) }}
+          </template>
+        </div>
+        <div v-if="status?.collapsedUntrackedDirs?.length" class="git-too-many-desc">
+          {{ t('git.collapsedUntrackedDirs', {
+            dirs: status.collapsedUntrackedDirs.slice(0, 5).join('、'),
+          }) }}
+        </div>
+        <button class="git-commit-btn" :disabled="refreshing" @click="refresh">
+          {{ t('git.refresh') }}
+        </button>
+      </div>
       <GdSplitpanes
+        v-else
         :split-size="diffSplitPct"
         :min-size="diffMinPct"
         :max-size="100"
@@ -236,6 +265,12 @@
                 <el-icon :size="12"><Close /></el-icon>
               </button>
             </div>
+            <!-- 折叠的未跟踪目录提示：目录行本身可 stage，但用户需要知道它没有逐文件展开 -->
+            <div v-if="status?.collapsedUntrackedDirs?.length" class="git-collapsed-hint">
+              {{ t('git.collapsedUntrackedDirs', {
+                dirs: status.collapsedUntrackedDirs.slice(0, 5).join('、'),
+              }) }}
+            </div>
             <TreeView ref="treeViewRef" :rows="gitTreeRows" :selected-key="selectedKey"
               :active-key="activeTreeKey" :collapsed-keys="collapsedDirs" keyboard-nav class="git-tree-scroll"
               @select="onTreeSelect" @toggle="onTreeToggle">
@@ -374,6 +409,11 @@ interface GitTreeNode {
 
 /** 单文件 diff 行数上限，防止大文件拖垮渲染 */
 const MAX_DIFF_LINES = 800;
+/**
+ * 单次渲染的变更文件上限。后端通常已把超大未跟踪目录折叠/截断，
+ * 这里是最后一道防线：超过后不建树、不排序，只显示降级提示。
+ */
+const MAX_RENDER_FILES = 2000;
 
 /**
  * 全文模式：后端随 diff 附带两侧完整内容时，diff 只作对齐信息（行号/类型/gap 区间），
@@ -399,6 +439,15 @@ const refreshing = computed(() => git.refreshing);
 const isGitRepo = computed(() => git.isGitRepo);
 const totalChanges = computed(() => git.totalChanges);
 const totalStats = computed(() => git.totalStats);
+/**
+ * 大工作区降级：后端 statusError（超时/条目超限）或 files 超过渲染上限。
+ * 命中后不建目录树（groups 直接返回空），避免百万节点/数十万 DOM 行。
+ */
+const tooManyFiles = computed<boolean>(() => {
+  const st = status.value;
+  if (!st) return false;
+  return !!st.statusError || (st.files?.length ?? 0) > MAX_RENDER_FILES;
+});
 /** 左侧当前选中文件（主从布局单选中） */
 const selectedKey = ref<string | null>(null);
 /** 正在加载的选中 key（单并发） */
@@ -582,7 +631,7 @@ function classifyFile(f: GitFileChange): Pick<GitRow, "group" | "statusChar" | "
 
 const groups = computed<GitGroup[]>(() => {
   const st = status.value;
-  if (!st) return [];
+  if (!st || tooManyFiles.value) return [];
 
   const conflicts: GitRow[] = [];
   const staged: GitRow[] = [];
@@ -622,7 +671,9 @@ function buildTree(rows: GitRow[]): GitTreeNode[] {
   const roots: GitTreeNode[] = [];
   const map = new Map<string, GitTreeNode>();
   for (const r of rows) {
-    if (r.file.path.endsWith("/")) continue;
+    // git 折叠的未跟踪目录（path 带尾斜杠）：作为可 stage/unstage 的目录行保留，
+    // 不尝试展开成文件（展开会重新枚举数万文件，正是本次 OOM 的根因）。
+    const isCollapsedDir = r.file.path.endsWith("/");
     const parts = r.file.path.split("/").filter(Boolean);
     if (!parts.length) continue;
     let cur = "";
@@ -631,11 +682,25 @@ function buildTree(rows: GitRow[]): GitTreeNode[] {
       cur = cur ? `${cur}/${parts[i]}` : parts[i];
       let node = map.get(cur);
       if (!node) {
-        node = { name: parts[i], path: cur, isDir: i < parts.length - 1, children: [], stagedCount: 0, unstagedCount: 0 };
+        node = {
+          name: parts[i],
+          path: cur,
+          isDir: i < parts.length - 1 || isCollapsedDir,
+          children: [],
+          stagedCount: 0,
+          unstagedCount: 0,
+        };
         map.set(cur, node);
         parent.push(node);
       }
-      if (i === parts.length - 1) node.row = r;
+      if (i === parts.length - 1) {
+        node.row = r;
+        if (isCollapsedDir) {
+          node.isDir = true;
+          node.stagedCount = r.group === "staged" ? 1 : 0;
+          node.unstagedCount = r.group !== "staged" ? 1 : 0;
+        }
+      }
       parent = node.children;
     }
   }
@@ -648,9 +713,15 @@ function buildTree(rows: GitRow[]): GitTreeNode[] {
 function aggregateCounts(nodes: GitTreeNode[]): void {
   for (const n of nodes) {
     if (n.isDir) {
-      aggregateCounts(n.children);
-      n.stagedCount = n.children.reduce((s, c) => s + c.stagedCount, 0);
-      n.unstagedCount = n.children.reduce((s, c) => s + c.unstagedCount, 0);
+      if (n.row) {
+        // 折叠的未跟踪目录：没有 children，计数来自它自己这条记录
+        n.stagedCount = n.row.group === "staged" ? 1 : 0;
+        n.unstagedCount = n.row.group !== "staged" ? 1 : 0;
+      } else {
+        aggregateCounts(n.children);
+        n.stagedCount = n.children.reduce((s, c) => s + c.stagedCount, 0);
+        n.unstagedCount = n.children.reduce((s, c) => s + c.unstagedCount, 0);
+      }
     } else {
       n.stagedCount = n.row?.group === "staged" ? 1 : 0;
       n.unstagedCount = n.row?.group !== "staged" ? 1 : 0;
@@ -687,8 +758,10 @@ function flattenTree(nodes: GitTreeNode[], depth: number, groupKey: string, out:
 /** 收集分组内所有真实目录的 key（用于折叠状态修剪） */
 function collectDirKeys(rows: GitRow[], groupKey: string, out: Set<string>): void {
   for (const r of rows) {
-    const parts = r.file.path.split("/");
-    for (let i = 0; i < parts.length - 1; i++) {
+    const parts = r.file.path.split("/").filter(Boolean);
+    const isCollapsedDir = r.file.path.endsWith("/");
+    const dirDepth = isCollapsedDir ? parts.length : parts.length - 1;
+    for (let i = 0; i < dirDepth; i++) {
       out.add(`d:${groupKey}:${parts.slice(0, i + 1).join("/")}`);
     }
   }
@@ -1879,6 +1952,13 @@ function selectNextAfterCached(cachedPath: string): boolean {
  */
 let didInitialSelect = false;
 function ensureDefaultSelection(): void {
+  // 隐藏标签不自动选文件/拉 diff（面板用 v-show 常驻，隐藏时也应零网络开销）
+  if (!props.active) return;
+  // 大工作区降级：没有可安全预览的文件列表，清掉旧选中即可
+  if (tooManyFiles.value) {
+    clearSelection();
+    return;
+  }
   // 非 git 仓库：没有可预览的文件。清空选中，并丢掉该会话缓存的文件选中 ——
   // 它是旧工作区（曾是仓库）留下的，留着会在下次进入仓库会话时复活成幽灵路径。
   if (!git.isGitRepo) {
@@ -2016,6 +2096,41 @@ defineExpose({ refresh });
 <style scoped>
 .git-changes-panel {
   background: var(--gd-color-bg);
+}
+
+/* 大工作区降级提示：替代 diff + 目录树两个 pane，避免渲染海量节点 */
+.git-too-many {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+.git-too-many-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gd-color-text);
+}
+
+.git-too-many-desc {
+  max-width: 520px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--gd-color-text-gray);
+  word-break: break-word;
+}
+
+.git-collapsed-hint {
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--gd-color-text-gray);
+  border-bottom: 1px solid var(--gd-color-surface-border);
+  word-break: break-all;
 }
 
 .git-tool-btn {

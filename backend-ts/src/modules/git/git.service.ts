@@ -5,6 +5,8 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import { markGitRead } from "../../common/services/git-activity";
 import { pathExecutableCandidates } from "../shell/windows-shell-detect";
+import { runGitWithOutputCap } from "./git-command-runner";
+import { parseGitStatusPorcelain } from "./git-status-parser";
 
 export interface GitFileChange {
   /** 相对工作目录的路径（正斜杠分隔） */
@@ -20,13 +22,24 @@ export interface GitFileChange {
 }
 
 export interface GitStatusResult {
-  branch: string;
+  branch: string | null;
   ahead: number;
   behind: number;
   files: GitFileChange[];
   /** 仅暂存区的增删行数（HEAD vs 暂存区）——提交弹窗未勾选「包含未暂存」时的提交量 */
   stagedAdditions: number;
   stagedDeletions: number;
+  /** 变更条目总数（files 被上限截断时仍为真实数量） */
+  totalFiles?: number;
+  /** true 表示 files 不是完整列表（超大仓库降级） */
+  truncated?: boolean;
+  /** 未跟踪目录过大、未逐文件展开的目录（path 带尾斜杠） */
+  collapsedUntrackedDirs?: string[];
+  /** 降级原因：timeout / too_many_changes */
+  statusError?: string;
+  /** 聚合增删行数：前端顶部统计直接使用，避免遍历全部 files */
+  totalAdditions?: number;
+  totalDeletions?: number;
 }
 
 export interface GitFileLinesResult {
@@ -60,6 +73,24 @@ export interface GitDiffResult {
 const MAX_FULL_CONTENT_BYTES = 512 * 1024;
 /** 未跟踪文件行数统计的体积上限（超出不计数，避免读大文件） */
 const MAX_STAT_BYTES = 1024 * 1024;
+/**
+ * 单次 git status 返回的变更条目上限。
+ * 超过后只保留前 N 条并标记 truncated：真正防 OOM 的是渲染进程，但后端也不该把
+ * 数十万条对象继续往下游传（JSON 序列化/传输本身就会产生几十 MB 峰值）。
+ */
+const MAX_STATUS_FILES = 2000;
+/** 未跟踪目录有界扫描：探测到这么多文件就判定为大目录，保持折叠 */
+const UNTRACKED_SCAN_MAX_FILES = 2000;
+const UNTRACKED_SCAN_MAX_DIRS = 20;
+const UNTRACKED_SCAN_MAX_DEPTH = 8;
+/** 未跟踪行数统计预算（对齐 ZCode）：4 个 worker、每个复用 64KB buffer */
+const STAT_CHUNK_BYTES = 64 * 1024;
+const STAT_CONCURRENCY = 4;
+const MAX_UNTRACKED_LINE_COUNTS = 500;
+/** git status/numstat 硬超时：超时后降级，避免 29s 的全量枚举拖住事件循环 */
+const GIT_STATUS_TIMEOUT_MS = 15_000;
+/** 折叠模式仍超限的 repo，60s 内直接返回降级，避免重复 spawn 一个必然失败的 status */
+const TOO_LARGE_REPO_TTL_MS = 60_000;
 /**
  * 预览总体积兜底上限（2MB）：超过则拒绝预览。多行大文件（package-lock / 大 i18n /
  * 生成的 .d.ts 等）行都很短，由 MAX_DIFF_LINES=800 + 虚拟化 + 降级高亮正常预览，
@@ -136,22 +167,6 @@ function diffHasTooLongLine(diff: string, maxBytes: number): boolean {
 }
 
 /**
- * 过滤目录级状态条目（不支持嵌套仓库/子目录 diff）：
- * 1. 未跟踪目录：git status 折叠为 `?? dir/`（path 带尾斜杠）——嵌入式仓库（内含 .git
- *    的独立仓库）也走这条路，diff 无法展开；
- * 2. 实际是目录的条目（gitlink/子模块注册在 index 时可能不带尾斜杠）：目录本身不可 diff。
- * 其余（含已删除文件，路径可能已不存在）保留。
- */
-function isSkipStatusEntry(workspacePath: string, entryPath: string): boolean {
-  if (entryPath.endsWith("/")) return true;
-  try {
-    return fs.statSync(path.resolve(workspacePath, entryPath)).isDirectory();
-  } catch {
-    return false; // 文件已删除等路径不存在的情况：不是目录，保留
-  }
-}
-
-/**
  * PATH 上是否存在 git 可执行文件（**纯 fs，零子进程**）。
  *
  * 不能用 `execFileSync("git", ["--version"])` 探测：打包版后端由 Electron 以
@@ -190,8 +205,19 @@ function isGitExecutableOnPath(): boolean {
 @Injectable()
 export class GitService {
   private readonly logger = new Logger(GitService.name);
-  /** 每个工作目录一个 SimpleGit 实例，复用连接池 */
+  /** 每个工作目录一个 SimpleGit 实例，复用连接池（diff/show/commit 等） */
   private readonly gitInstances = new Map<string, SimpleGit>();
+  /** 同一 workspace 的 status 在飞请求合并（并发刷新共享一份结果） */
+  private readonly statusInFlight = new Map<string, Promise<GitStatusResult>>();
+  /** `-u all` 曾超限的 repoRoot：后续刷新直接走折叠模式，不再重复触发必然超限的详细命令 */
+  private readonly collapsedUntrackedRepoRoots = new Set<string>();
+  /** 折叠模式仍超限的 repoRoot → 过期时间与降级原因；TTL 内直接返回同一降级结果 */
+  private readonly tooLargeRepoRoots = new Map<
+    string,
+    { until: number; reason: string }
+  >();
+  /** repoRoot 解析在途合并（子目录 workspace 共用同一 repo 状态） */
+  private readonly repoRootInFlight = new Map<string, Promise<string>>();
 
   constructor() {
     // 进程级 git 策略：读命令（status/diff/show）在 stat 缓存过期时会刷新并写 .git/index，
@@ -244,97 +270,421 @@ export class GitService {
   }
 
   async getStatus(workspacePath: string): Promise<GitStatusResult> {
-    const git = this.getGit(workspacePath);
-    markGitRead(); // 读命令打点：抑制 .git watcher 对本命令引发的 index 刷新噪声
-    const status = await git.status();
+    const existing = this.statusInFlight.get(workspacePath);
+    if (existing) return existing;
 
-    // 行数统计（顶部聚合 +N -M 用）：
-    // - tracked 文件：git diff HEAD --numstat -z（HEAD vs 工作区，一次命令覆盖暂存+未暂存；
-    //   -z 输出 NUL 分隔、路径不转义，与 status 的 path 对齐）
-    // - 未跟踪文件：直接读文件数行数（体积上限内）
-    // - 二进制（numstat 为 "-\t-"）计 0/0
-    const numstatMap = new Map<string, { add: number; del: number }>();
-    try {
-      const raw = await git.raw(["diff", "HEAD", "--numstat", "-z"]);
-      for (const entry of raw.split("\0")) {
-        const m = entry.match(/^(\d+|-)\t(\d+|-)\t(.+)$/s);
-        if (!m) continue;
-        numstatMap.set(m[3], {
-          add: m[1] === "-" ? 0 : parseInt(m[1], 10),
-          del: m[2] === "-" ? 0 : parseInt(m[2], 10),
-        });
+    let request: Promise<GitStatusResult>;
+    request = this.doGetStatus(workspacePath).finally(() => {
+      if (this.statusInFlight.get(workspacePath) === request) {
+        this.statusInFlight.delete(workspacePath);
       }
-    } catch {
-      // HEAD 不存在（空仓库）等情况：无统计，保持 0/0
+    });
+    this.statusInFlight.set(workspacePath, request);
+    return request;
+  }
+
+  private async doGetStatus(workspacePath: string): Promise<GitStatusResult> {
+    markGitRead(); // 读命令打点：抑制 .git watcher 对本命令引发的 index 刷新噪声
+    const startedAt = Date.now();
+    const repoRoot = await this.resolveRepoRoot(workspacePath);
+
+    // 折叠模式仍超限的 repo：TTL 内直接降级，避免每次刷新都重复 spawn 一个必然失败的命令。
+    const tooLarge = this.tooLargeRepoRoots.get(repoRoot);
+    if (tooLarge) {
+      if (tooLarge.until > Date.now()) {
+        return this.emptyStatusResult(tooLarge.reason);
+      }
+      this.tooLargeRepoRoots.delete(repoRoot);
     }
 
-    const files = await Promise.all(
-      status.files
-        // 过滤目录级条目（嵌入式仓库/未跟踪目录/子模块），diff 树只保留可预览的文件
-        .filter((f) => !isSkipStatusEntry(workspacePath, f.path))
-        .map(async (f) => {
-          const change: GitFileChange = {
-            path: f.path,
-            // simple-git 无变更时返回单个空格 " "，统一 trim 为空字符串
-            index: f.index.trim(),
-            workingDir: f.working_dir.trim(),
-            additions: 0,
-            deletions: 0,
-          };
-          if (change.index === "?" && change.workingDir === "?") {
-            // 未跟踪：全新增，行数 = 文件行数
-            change.additions = await this.countFileLines(
-              path.resolve(workspacePath, f.path),
-            );
-          } else {
-            const st = numstatMap.get(f.path);
-            if (st) {
-              change.additions = st.add;
-              change.deletions = st.del;
-            }
-          }
-          return change;
-        }),
+    // 先折叠未跟踪目录：超大目录只返回一条 `dir/`，避免把数万/数十万文件逐条枚举。
+    // runGitWithOutputCap 在 512KB 处中途 kill，截断结果不会进入解析。
+    const normalResult = await this.runStatus(workspacePath, "normal");
+    if (normalResult.outputTruncated || normalResult.timedOut) {
+      const reason = normalResult.timedOut ? "timeout" : "too_many_changes";
+      this.tooLargeRepoRoots.set(repoRoot, {
+        until: Date.now() + TOO_LARGE_REPO_TTL_MS,
+        reason,
+      });
+      this.logger.warn(
+        `git status (normal) ${
+          normalResult.timedOut ? "timed out" : "exceeded output cap"
+        } for ${workspacePath}; returning ${reason}`,
+      );
+      return this.emptyStatusResult(reason);
+    }
+
+    let parsed = parseGitStatusPorcelain(normalResult.stdout);
+    let mode: "normal" | "all" = "normal";
+
+    // 普通项目的新目录仍逐文件展示：有界扫描确认目录不大时，再跑一次 -u all。
+    // all 超限/超时 → 回退 normal，并记住该 repoRoot 不再尝试 all。
+    const collapsedDirs = this.collectCollapsedUntrackedDirs(parsed.entries);
+    if (
+      collapsedDirs.length > 0 &&
+      !this.collapsedUntrackedRepoRoots.has(repoRoot) &&
+      (await this.untrackedDirsAreSmall(workspacePath, collapsedDirs))
+    ) {
+      const allResult = await this.runStatus(workspacePath, "all");
+      if (allResult.outputTruncated || allResult.timedOut) {
+        this.collapsedUntrackedRepoRoots.add(repoRoot);
+        this.logger.warn(
+          `git status (all) ${
+            allResult.timedOut ? "timed out" : "exceeded output cap"
+          } for ${workspacePath}; collapsing untracked directories`,
+        );
+      } else {
+        parsed = parseGitStatusPorcelain(allResult.stdout);
+        mode = "all";
+      }
+    }
+
+    const totalFiles = parsed.entries.length;
+    const truncated = totalFiles > MAX_STATUS_FILES;
+    const selected = truncated
+      ? parsed.entries.slice(0, MAX_STATUS_FILES)
+      : parsed.entries;
+
+    const untrackedPaths = selected
+      .filter((entry) => entry.isUntracked && !entry.path.endsWith("/"))
+      .map((entry) => entry.path);
+    const untrackedStats = await this.buildUntrackedStats(
+      workspacePath,
+      untrackedPaths,
     );
+
+    // 行数统计（顶部聚合 +N -M 用）：
+    // - tracked 文件：git diff HEAD --numstat -z（HEAD vs 工作区，一次命令覆盖暂存+未暂存）
+    // - 未跟踪文件：直接数文件行数（ZCode 的 4×64KB 预算）
+    // - 二进制（numstat 为 "-\t-"）计 0/0
+    // 条目超限时跳过 numstat：继续跑只会在超大仓库上重复一次大输出。
+    const numstatMap = truncated
+      ? new Map<string, { add: number; del: number }>()
+      : await this.readNumstatWithRunner(workspacePath, [
+          "diff",
+          "HEAD",
+          "--numstat",
+          "-z",
+        ]);
+
+    const files: GitFileChange[] = selected.map((entry) => {
+      const change: GitFileChange = {
+        path: entry.path,
+        index: entry.index,
+        workingDir: entry.workingDir,
+        additions: 0,
+        deletions: 0,
+      };
+      if (entry.isUntracked) {
+        // 未跟踪：全新增，行数 = 文件行数；折叠目录条目无法统计，保持 0
+        change.additions = untrackedStats.get(entry.path) ?? 0;
+      } else {
+        const st = numstatMap.get(entry.path);
+        if (st) {
+          change.additions = st.add;
+          change.deletions = st.del;
+        }
+      }
+      return change;
+    });
 
     // 已暂存统计（提交弹窗勾选状态切换用）：git diff --cached = HEAD vs 暂存区
     let stagedAdd = 0;
     let stagedDel = 0;
-    try {
-      const stagedRaw = await git.raw(["diff", "--cached", "--numstat", "-z"]);
-      for (const entry of stagedRaw.split("\0")) {
-        const m = entry.match(/^(\d+|-)\t(\d+|-)\t(.+)$/s);
-        if (!m) continue;
-        stagedAdd += m[1] === "-" ? 0 : parseInt(m[1], 10);
-        stagedDel += m[2] === "-" ? 0 : parseInt(m[2], 10);
+    if (!truncated) {
+      const stagedMap = await this.readNumstatWithRunner(workspacePath, [
+        "diff",
+        "--cached",
+        "--numstat",
+        "-z",
+      ]);
+      for (const st of stagedMap.values()) {
+        stagedAdd += st.add;
+        stagedDel += st.del;
       }
-    } catch {
-      // 空仓库等情况：0/0
     }
 
+    const collapsedUntrackedDirs = this.collectCollapsedUntrackedDirs(
+      parsed.entries,
+    );
+    this.logger.debug(
+      `git status ${mode} for ${workspacePath}: ${totalFiles} entries, ` +
+        `${Date.now() - startedAt}ms, truncated=${truncated}, ` +
+        `collapsed=${collapsedUntrackedDirs.length}`,
+    );
+
     return {
-      branch: status.current,
-      ahead: status.ahead,
-      behind: status.behind,
+      branch: parsed.branch,
+      ahead: parsed.ahead,
+      behind: parsed.behind,
       files,
       stagedAdditions: stagedAdd,
       stagedDeletions: stagedDel,
+      totalFiles,
+      truncated,
+      ...(collapsedUntrackedDirs.length > 0
+        ? { collapsedUntrackedDirs }
+        : {}),
+      totalAdditions: files.reduce((sum, f) => sum + f.additions, 0),
+      totalDeletions: files.reduce((sum, f) => sum + f.deletions, 0),
     };
   }
 
-  /** 数文件行数（未跟踪文件的增行统计用）：超体积上限/二进制/读取失败 → 0 */
-  private async countFileLines(absPath: string): Promise<number> {
+  /**
+   * 解析真实 repoRoot，仅用于折叠/超限缓存键；git 命令仍在 workspacePath 下执行，
+   * 保持「路径相对 workspace」的现有语义（子目录 workspace / monorepo）。
+   */
+  private async resolveRepoRoot(workspacePath: string): Promise<string> {
+    const existing = this.repoRootInFlight.get(workspacePath);
+    if (existing) return existing;
+
+    let request: Promise<string>;
+    request = (async () => {
+      const result = await runGitWithOutputCap({
+        cwd: workspacePath,
+        args: ["rev-parse", "--show-toplevel"],
+        timeoutMs: 5_000,
+        maxOutputBytes: 64 * 1024,
+      });
+      if (result.outputTruncated || result.timedOut || result.exitCode !== 0) {
+        return workspacePath;
+      }
+      const root = result.stdout.trim();
+      return root ? path.resolve(root) : workspacePath;
+    })().finally(() => {
+      if (this.repoRootInFlight.get(workspacePath) === request) {
+        this.repoRootInFlight.delete(workspacePath);
+      }
+    });
+    this.repoRootInFlight.set(workspacePath, request);
+    return request;
+  }
+
+  private runStatus(
+    workspacePath: string,
+    untrackedMode: "all" | "normal",
+  ) {
+    return runGitWithOutputCap({
+      cwd: workspacePath,
+      args: [
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        `--untracked-files=${untrackedMode}`,
+        "-z",
+      ],
+      timeoutMs: GIT_STATUS_TIMEOUT_MS,
+    });
+  }
+
+  private collectCollapsedUntrackedDirs(
+    files: Array<{ path: string }>,
+  ): string[] {
+    return files.map((f) => f.path).filter((p) => p.endsWith("/"));
+  }
+
+  /**
+   * 未跟踪目录是否有界可展开：最多探测 2000 个文件/20 个目录/8 层。
+   * 返回 false 表示目录过大，应保持 git 的 `dir/` 折叠记录。
+   */
+  private async untrackedDirsAreSmall(
+    workspacePath: string,
+    dirs: string[],
+  ): Promise<boolean> {
+    if (dirs.length > UNTRACKED_SCAN_MAX_DIRS) return false;
+    let remaining = UNTRACKED_SCAN_MAX_FILES;
+    for (const dir of dirs) {
+      const count = await this.countFilesBounded(
+        path.resolve(workspacePath, dir),
+        remaining,
+        0,
+      );
+      if (count === null) return false;
+      remaining -= count;
+      if (remaining <= 0) return false;
+    }
+    return true;
+  }
+
+  /** 有界统计目录下文件数；超过 budget/深度返回 null（判定为大目录） */
+  private async countFilesBounded(
+    dirPath: string,
+    budget: number,
+    depth: number,
+  ): Promise<number | null> {
+    if (depth > UNTRACKED_SCAN_MAX_DEPTH) return null;
+    let dir: Awaited<ReturnType<typeof fsp.opendir>> | undefined;
+    let count = 0;
     try {
-      const buf = await fsp.readFile(absPath);
-      if (buf.length > MAX_STAT_BYTES || hasNulByte(buf)) return 0;
-      const text = buf.toString("utf-8");
-      if (!text) return 0;
-      const lines = text.split("\n");
-      // 末尾换行产生的空尾巴不算一行
-      if (lines[lines.length - 1] === "") lines.pop();
-      return lines.length;
+      dir = await fsp.opendir(dirPath);
+      for await (const entry of dir) {
+        if (entry.name === ".git" || entry.name === "node_modules") continue;
+        if (entry.isDirectory()) {
+          const sub = await this.countFilesBounded(
+            path.join(dirPath, entry.name),
+            budget - count,
+            depth + 1,
+          );
+          if (sub === null) return null;
+          count += sub;
+        } else {
+          count++;
+        }
+        if (count >= budget) return null;
+      }
+      return count;
+    } catch {
+      return null;
+    } finally {
+      if (dir) {
+        try {
+          await dir.close();
+        } catch {
+          // for-await 正常结束时目录已自动关闭
+        }
+      }
+    }
+  }
+
+  private async readNumstatWithRunner(
+    cwd: string,
+    args: string[],
+  ): Promise<Map<string, { add: number; del: number }>> {
+    const map = new Map<string, { add: number; del: number }>();
+    const result = await runGitWithOutputCap({
+      cwd,
+      args,
+      timeoutMs: GIT_STATUS_TIMEOUT_MS,
+    });
+    if (result.outputTruncated || result.timedOut) {
+      this.logger.warn(
+        `git ${args.join(" ")} ${
+          result.timedOut ? "timed out" : "exceeded output cap"
+        }; stats degraded`,
+      );
+      return map;
+    }
+    if (result.exitCode !== 0) return map;
+
+    // --numstat -z：`<add>\t<del>\t<path>\0`。rename 时 path 为空，
+    // 后面紧跟 oldPath\0newPath\0，统计记到 newPath。
+    const tokens = result.stdout.split("\0");
+    for (let i = 0; i < tokens.length; i++) {
+      const match = tokens[i].match(/^(\d+|-)\t(\d+|-)\t(.*)$/s);
+      if (!match) continue;
+      const stat = {
+        add: match[1] === "-" ? 0 : parseInt(match[1], 10),
+        del: match[2] === "-" ? 0 : parseInt(match[2], 10),
+      };
+      const entryPath = match[3];
+      if (entryPath) {
+        map.set(entryPath, stat);
+      } else {
+        i++; // oldPath
+        const newPath = tokens[++i];
+        if (newPath) map.set(newPath, stat);
+      }
+    }
+    return map;
+  }
+
+  private emptyStatusResult(statusError: string): GitStatusResult {
+    return {
+      branch: null,
+      ahead: 0,
+      behind: 0,
+      files: [],
+      stagedAdditions: 0,
+      stagedDeletions: 0,
+      totalFiles: 0,
+      truncated: true,
+      statusError,
+    };
+  }
+
+  /**
+   * 未跟踪文件行数统计（对齐 ZCode 的读取预算）：
+   * - 先 stat：非普通文件或 >1MB 直接 0，不打开；
+   * - 4 个 worker，各自复用 64KB buffer；
+   * - 任意块含 NUL 按二进制返回 0；超过 1MB+1 字节返回 0，不返回部分计数；
+   * - 只统计前 500 个文件，避免一次刷新放大成上万次读取。
+   */
+  private async buildUntrackedStats(
+    workspacePath: string,
+    paths: string[],
+  ): Promise<Map<string, number>> {
+    const stats = new Map<string, number>();
+    const targets = paths.slice(0, MAX_UNTRACKED_LINE_COUNTS);
+    if (targets.length === 0) return stats;
+
+    let nextIndex = 0;
+    const worker = async () => {
+      const buffer = Buffer.allocUnsafe(STAT_CHUNK_BYTES);
+      while (true) {
+        const index = nextIndex++;
+        if (index >= targets.length) return;
+        const relPath = targets[index];
+        try {
+          stats.set(
+            relPath,
+            await this.countFileLines(
+              path.resolve(workspacePath, relPath),
+              buffer,
+            ),
+          );
+        } catch {
+          stats.set(relPath, 0);
+        }
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(STAT_CONCURRENCY, targets.length) },
+        worker,
+      ),
+    );
+    return stats;
+  }
+
+  private async countFileLines(
+    absPath: string,
+    buffer: Buffer,
+  ): Promise<number> {
+    let handle: Awaited<ReturnType<typeof fsp.open>> | undefined;
+    try {
+      const info = await fsp.stat(absPath);
+      if (!info.isFile() || info.size > MAX_STAT_BYTES) return 0;
+
+      handle = await fsp.open(absPath, "r");
+      let totalBytes = 0;
+      let newlines = 0;
+      let lastByte = 10;
+      while (totalBytes <= MAX_STAT_BYTES) {
+        const length = Math.min(
+          buffer.length,
+          MAX_STAT_BYTES + 1 - totalBytes,
+        );
+        const { bytesRead } = await handle.read(buffer, 0, length, null);
+        if (bytesRead === 0) return newlines + (lastByte === 10 ? 0 : 1);
+        totalBytes += bytesRead;
+        if (totalBytes > MAX_STAT_BYTES) return 0;
+        for (let i = 0; i < bytesRead; i++) {
+          if (buffer[i] === 0) return 0;
+          if (buffer[i] === 10) newlines++;
+        }
+        lastByte = buffer[bytesRead - 1];
+      }
+      return 0;
     } catch {
       return 0;
+    } finally {
+      if (handle) {
+        try {
+          await handle.close();
+        } catch {
+          // ignore
+        }
+      }
     }
   }
 
@@ -447,9 +797,9 @@ export class GitService {
       if (!stat.isFile()) {
         throw new Error(`Not a file: ${filePath}`);
       }
-      const status = await git.status();
-      const entry = status.files.find((f) => f.path === filePath);
-      if (entry && entry.index === "?" && entry.working_dir === "?") {
+      // 单文件是否未跟踪：用 ls-files 定向判断，避免为了一个文件触发全量 status
+      // （超大仓库上 git.status() 会枚举数十万未跟踪文件）。
+      if (!(await this.isTrackedFile(git, filePath))) {
         // 先读 Buffer 嗅探二进制：utf-8 直读会把二进制内容解码成乱码替换符
         const buf = await fsp.readFile(absPath);
         const binary = isBinaryPath(filePath) || hasNulByte(buf);
@@ -498,6 +848,16 @@ export class GitService {
       this.readWorkingTreeCapped(absPath),
     ]);
     return { type: "diff", path: filePath, diff, oldContent, newContent };
+  }
+
+  /** 文件是否已被 git 跟踪（未跟踪 → ls-files --error-unmatch 退出码 1） */
+  private async isTrackedFile(git: SimpleGit, filePath: string): Promise<boolean> {
+    try {
+      await git.raw(["ls-files", "--error-unmatch", "--", filePath]);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** 检查某版本文件是否超过预览体积上限（git cat-file -s，只读大小不读内容） */

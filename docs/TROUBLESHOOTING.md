@@ -15,6 +15,7 @@
 - [SSE 流式传输问题](#sse-流式传输问题)
 - [日志查看与调试](#日志查看与调试)
 - [后端进程静默死亡（dev 环境）](#后端进程静默死亡dev-环境)
+- [大工作区导致渲染进程 OOM（Renderer gone / 0x80000003）](#大工作区导致渲染进程-oomrenderer-gone--0x80000003)
 
 ---
 
@@ -734,6 +735,90 @@ echo "=== 诊断完成 ==="
 chmod +x diagnose.sh
 ./diagnose.sh
 ```
+
+---
+
+## 大工作区导致渲染进程 OOM（Renderer gone / 0x80000003）
+
+### 症状
+
+- 切到一个包含超大目录的会话（例如 `D:\AI\ai_web`，约 28 万文件，其中 `workbuddy-market` 有 25 万未跟踪文件）。
+- 切走再切回后页面卡死，CPU 占满，随后主进程日志出现：
+
+```text
+[Process] Renderer gone: webContentsId=1, reason=crashed, exitCode=-2147483645
+```
+
+- `-2147483645` 即 `0x80000003`，常见于 V8 堆内存耗尽（Crashpad dump 里可看到 `v8-oom-*` 与 `Mark-Compact ... allocation failure`）。
+- 后端偶发崩溃；error 日志可能出现 `EMFILE: too many open files`，watchdog 记录「进程在但事件循环阻塞」。
+
+### 根因
+
+1. 会话打开时前端请求 `GET /sessions/:id/git/status`。
+2. 旧实现用 simple-git `status()`（内部固定 `-u`，等价 `--untracked-files=all`），把 25 万未跟踪文件逐条列出：约 25.6 万条 / 20MB / 29 秒。
+3. 后端随后对每条 `statSync`，并对 25 万未跟踪文件并发 `readFile` 统计行数，阻塞事件循环、耗尽文件句柄。
+4. 渲染进程把 25.6 万条放进深响应式 store，构建约百万节点的 Git 目录树，并用普通 `v-for` 渲染全部行，最终堆内存超过 4GB，V8 OOM。
+
+### 已实现的修复
+
+后端（`backend-ts/src/modules/git/git.service.ts`）：
+
+- 先用 `git.status(["--untracked-files=normal"])` 折叠未跟踪目录；只有目录不大（有界扫描 < 2000 文件）时才再跑 `-u all`，保持普通项目逐文件展示。
+- 折叠目录（`path/`）不再被过滤，作为可 stage/unstage 的目录行返回。
+- 条目上限 `MAX_STATUS_FILES = 2000`，超过标记 `truncated` 并返回 `totalFiles`。
+- status/numstat 走 `runGitWithOutputCap`：stdout/stderr 各自 512KB 上限，超限立即 kill 子进程，截断结果直接丢弃、不解析；15s 硬超时。`-u all` 超限/超时自动回退 `-u normal`，并记住该 repoRoot 不再尝试；`-u normal` 仍超限则返回 `statusError: "too_many_changes"`（60s TTL 内不重复 spawn）。
+- 同一 workspace 的 status 请求 in-flight 合并。
+- 未跟踪行数统计对齐 ZCode：先 `stat`，超过 1MB 不读；4 个 worker、每个 64KB buffer、分块读、遇 NUL 判二进制；最多统计 500 个文件。
+- `getDiff` 的未跟踪判断改用 `git ls-files --error-unmatch -- <file>`，不再触发全量 status。
+
+前端：
+
+- `GitStatus` 增加 `totalFiles/truncated/collapsedUntrackedDirs/statusError/totalAdditions/totalDeletions`。
+- `stores/git.ts` 的 `status` 改为 `shallowRef`；`totalChanges` 用 `totalFiles`；`totalStats` 用后端聚合字段。
+- `GitChangesPanel` 在 `statusError` 或 `files.length > 2000` 时显示降级提示，不建树、不拉 diff；折叠目录行可正常 stage/unstage。
+- `TreeView` 改为固定行高虚拟化（26px），只渲染可视行。
+- 事件驱动 git 刷新：普通仓库 5s、大工作区 60s。
+- watcher 事件风暴：只向有 `file` scope 的会话发逐文件事件、只向 `git` scope 会话发 git 事件；速率窗口超过阈值或单批超过 500 条时进入 degraded，只发一条 `overflow`，前端防抖重载根 + 已展开目录。
+- `.guada/watch-ignore` 支持工作区级 ignore glob；默认 ignore 补充 `.nuxt/.output/coverage/target/vendor/out/.turbo/.gradle` 等构建目录。示例：
+
+  ```text
+  # <workspace>/.guada/watch-ignore
+  workbuddy-market/
+  *.log
+  ```
+
+- scope 解除有 5s 宽限，避免切会话时 watcher 反复 unsubscribe/subscribe。
+- 目录树接口每个目录最多返回 2000 条并带 `truncated`；前端在截断目录末尾显示「仅显示前 2000 项」提示。
+
+Electron（`electron/main.ts`）：
+
+- `0x80000003` 记录为「渲染进程内存耗尽/中止」。
+- 主窗口渲染进程崩溃后限频自动 reload（60s 内最多一次），重复崩溃弹窗提示，避免白屏和崩溃循环。
+
+### 立即缓解（不改代码）
+
+如果暂时无法升级，可在工作区本地排除超大未跟踪目录：
+
+```bash
+# Windows / Git Bash
+printf '\nworkbuddy-market/\n' >> /d/AI/ai_web/.git/info/exclude
+```
+
+这是本地排除，不会修改仓库内容。若该目录确认是构建产物，建议加入 `.gitignore`。
+
+### 验证
+
+- 后端日志中 `git/status` 应从约 29s 降到秒级，且不再出现 `EMFILE` / 事件循环阻塞。
+- Git 面板应显示折叠目录行（如 `workbuddy-market/`，`+0 -0`）以及「未展开的未跟踪目录」提示。
+- 连续切换该会话 3 次，DevTools 中 renderer 内存应稳定在 1GB 以内，不再出现 `Renderer gone`。
+
+### 参考
+
+本方案的关键取舍参考了同级项目 `D:\AI\zcode`：
+- `packages/services/src/git/repo/gitCliRepo.ts`：512KB 输出上限 + 超限折叠 `-u normal`；
+- `packages/services/src/git/repo/gitCliHelpers.ts`：未跟踪行数 4×64KB 读取预算；
+- `packages/ui/src/GitPane.tsx`、`workspace-file-tree/WorkspaceFileTree.tsx`：虚拟列表/虚拟树；
+- `packages/services/src/fileWatcher/fileWatcherService.ts`：按目录非递归 watcher + 目录级事件（P2 再对齐；P1 已先落地 scope 过滤、速率熔断、overflow 和 5s 宽限）。
 
 ---
 

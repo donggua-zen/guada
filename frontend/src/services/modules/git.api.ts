@@ -25,6 +25,17 @@ export interface GitStatus {
   /** 仅暂存区的增删行数（提交弹窗未勾选「包含未暂存」时的提交量） */
   stagedAdditions: number;
   stagedDeletions: number;
+  /** 变更条目总数（files 被上限截断时仍为真实数量） */
+  totalFiles?: number;
+  /** true 表示 files 不是完整列表（超大仓库降级） */
+  truncated?: boolean;
+  /** 未跟踪目录过大、未逐文件展开的目录（path 带尾斜杠） */
+  collapsedUntrackedDirs?: string[];
+  /** 降级原因：timeout / too_many_changes */
+  statusError?: string;
+  /** 聚合增删行数：顶部统计直接使用，避免遍历全部 files */
+  totalAdditions?: number;
+  totalDeletions?: number;
 }
 
 export interface GitBranch {

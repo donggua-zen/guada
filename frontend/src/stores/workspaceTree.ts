@@ -15,11 +15,15 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
   const loadingPaths = ref<Set<string>>(new Set())
   const isLoading = ref(false)
   const workspacePath = ref<string | null>(null)
+  /** 根目录条目超过后端上限（只返回前 N 项） */
+  const treeTruncated = ref(false)
   /** 文件变更版本号（SSE change 事件递增，驱动 FilePreviewPanel 重载） */
   const fileChangeVersions = ref<Record<string, number>>({})
 
   /** 并发加载代际：会话切换/强制刷新时作废旧请求结果 */
   let treeLoadGeneration = 0
+  /** overflow 事件合并定时器（事件风暴时只刷新一次） */
+  let overflowRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
   // 工作目录绝对路径：会话级缓存 + 在途去重。
   //
@@ -75,8 +79,13 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
     const prevSid = sessionId.value
     sessionId.value = sid
     treeLoadGeneration++
+    if (overflowRefreshTimer) {
+      clearTimeout(overflowRefreshTimer)
+      overflowRefreshTimer = null
+    }
     isLoading.value = false
     treeData.value = []
+    treeTruncated.value = false
     expandedPaths.value = new Set()
     loadingPaths.value = new Set()
     fileChangeVersions.value = {}
@@ -116,6 +125,7 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
       if (generation !== treeLoadGeneration || sid !== sessionId.value) return
 
       treeData.value = mergeTreeData(treeData.value, response.tree || [])
+      treeTruncated.value = !!response.truncated
 
       if (!workspacePath.value) {
         const p = await ensureWorkspacePath(sid)
@@ -142,11 +152,60 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
     void loadTree(sid, true)
   }
 
+  /**
+   * overflow 后的保守刷新：重载根 + 已展开目录（并发 2，参考 ZCode 的 bulk refresh）。
+   * 不重置 expandedPaths，用户展开状态保持不变。
+   */
+  async function refreshLoaded(): Promise<void> {
+    const sid = sessionId.value
+    if (!sid) return
+
+    const expanded = [...expandedPaths.value]
+    await loadTree(sid, true)
+    if (sessionId.value !== sid) return
+
+    const queue = [...expanded]
+    const workers = Array.from(
+      { length: Math.min(2, queue.length) },
+      async () => {
+        while (queue.length > 0 && sessionId.value === sid) {
+          const pathKey = queue.shift()!
+          const node = findNodeByPath(treeData.value, pathKey)
+          if (!node?.isDirectory) continue
+          try {
+            node.children = await loadChildren(sid, node)
+          } catch {
+            // 目录已删除/无权限：保持现状，等用户重新展开
+          }
+        }
+      },
+    )
+    await Promise.all(workers)
+    if (sessionId.value !== sid) return
+
+    // 风暴期间所有文件都可能变过：让已打开的文件预览重新加载
+    const tabStore = useTabStore()
+    for (const tab of tabStore.tabs) {
+      if (tab.type === 'file' && tab.path) {
+        bumpFileChangeVersion(tab.path.replace(/\\/g, '/'))
+      }
+    }
+  }
+
+  function scheduleOverflowRefresh(): void {
+    if (overflowRefreshTimer) clearTimeout(overflowRefreshTimer)
+    overflowRefreshTimer = setTimeout(() => {
+      overflowRefreshTimer = null
+      void refreshLoaded()
+    }, 300)
+  }
+
   /** 异步加载目录的子节点 */
   async function loadChildren(sid: string, node: WorkspaceNode): Promise<WorkspaceNode[]> {
     if (!sid) return []
     try {
       const response = await apiService.getWorkspaceChildren(sid, node.path)
+      node.truncated = !!response.truncated
       return response.children || []
     } catch (error) {
       console.error('[WorkspaceTree] Failed to load children:', error)
@@ -238,6 +297,11 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
    */
   function applyFileChange(event: FileChangeEvent): void {
     if (event.type === 'heartbeat' || event.type === 'git') return
+    // 事件风暴熔断：不逐文件更新，防抖后整体刷新根 + 已展开目录
+    if (event.type === 'overflow') {
+      scheduleOverflowRefresh()
+      return
+    }
     if (!event.path) return
 
     const normalizedPath = event.path.replace(/\\/g, '/')
@@ -264,24 +328,43 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
     if (!parentNode.children) parentNode.children = []
     if (parentNode.children.some(child => child.name === fileName)) return
 
-    parentNode.children.push({
+    const newNode: WorkspaceNode = {
       name: fileName,
       path: normalizedPath,
       isDirectory: event.type === 'addDir',
       hasChildren: event.type === 'addDir',
-    })
-    parentNode.children.sort((a, b) => {
-      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
-      return a.name.localeCompare(b.name)
-    })
+    }
+    insertNodeSorted(parentNode.children, newNode)
+  }
+
+  /** 目录优先、名称升序比较（与后端 buildDirectoryTree 的排序一致） */
+  function compareWorkspaceNodes(a: WorkspaceNode, b: WorkspaceNode): number {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+    return a.name.localeCompare(b.name)
+  }
+
+  /**
+   * 有序插入：事件风暴下每个 add 都 push + 全量 sort 是 O(n log n)，
+   * 大目录批量创建文件时会把渲染线程拖死。二分找位置后 splice 是 O(n)（移动数组），
+   * 但不再排序全部兄弟节点。
+   */
+  function insertNodeSorted(children: WorkspaceNode[], node: WorkspaceNode): void {
+    let lo = 0
+    let hi = children.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (compareWorkspaceNodes(children[mid], node) <= 0) lo = mid + 1
+      else hi = mid
+    }
+    children.splice(lo, 0, node)
   }
 
   /** 递增某路径的变更版本号（驱动已打开的 FilePreviewPanel 重载） */
   function bumpFileChangeVersion(normalizedPath: string): void {
-    fileChangeVersions.value = {
-      ...fileChangeVersions.value,
-      [normalizedPath]: (fileChangeVersions.value[normalizedPath] || 0) + 1,
-    }
+    // 直接赋值即可触发响应式：此前每个事件都 { ...整表 } 克隆，
+    // 大工作区一次刷新会产生 O(n²) 的对象拷贝。
+    fileChangeVersions.value[normalizedPath] =
+      (fileChangeVersions.value[normalizedPath] || 0) + 1
   }
 
   /** 关闭受删除影响的文件标签：文件按路径精确匹配，目录匹配其下全部文件 */
@@ -319,11 +402,14 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
     loadingPaths,
     isLoading,
     workspacePath,
+    treeTruncated,
     fileChangeVersions,
     ensureWorkspacePath,
     resetForSession,
     loadTree,
+    loadChildren,
     refresh,
+    refreshLoaded,
     toggleNode,
     resetExpandedPaths,
     findNodeByPath,
