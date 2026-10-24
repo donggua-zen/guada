@@ -330,5 +330,15 @@ describe("TerminalService", () => {
       expect(a.id).toBeTruthy();
       expect(b.id).toBeTruthy();
     });
+    it("onApplicationShutdown 同样销毁所有登记终端", () => {
+      jest.useFakeTimers();
+      service = makeService();
+      service.createUiTerminal("s1", "D:/ws");
+
+      service.onApplicationShutdown();
+
+      expect(service.spawns.every((s) => s.pty.killed)).toBe(true);
+      expect(service.list("s1")).toEqual([]);
+    });
   });
 });

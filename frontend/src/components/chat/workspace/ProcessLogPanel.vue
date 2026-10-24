@@ -10,7 +10,7 @@
       </span>
       <div class="flex-1"></div>
       <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
-        <button class="pl-btn" @click="fetchLog()" :disabled="loading">
+        <button class="pl-btn" @click="fetchLog('initial')" :disabled="loading">
           <el-icon size="14" :class="{ 'is-loading': loading }"><Refresh /></el-icon>
         </button>
       </GdTooltip>
@@ -47,55 +47,73 @@ import { useI18n } from 'vue-i18n';
 import { ElMessage } from 'element-plus';
 import { Refresh, CloseBold } from '@element-plus/icons-vue';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
-import { apiService, type UiProcessLog } from '@/services/ApiService';
+import { apiService, type UiJobOutput } from '@/services/ApiService';
+import { useJobsStore } from '@/stores/jobs';
 import { getApiErrorStatus } from '@/utils/errorMessage';
 
 const props = defineProps<{
     sessionId: string;
-    processId: string;
+    jobId: string;
     command: string;
     tabKey: string;
-    /** 本次运行的启动时间（run token）；同一 PID 被新进程复用时用于识别换了一次运行 */
-    startedAt?: string;
 }>();
 
 const { t } = useI18n();
+const jobsStore = useJobsStore();
 
-const log = ref<UiProcessLog | null>(null);
+interface JobLogView {
+    jobId: string;
+    command: string;
+    status: string;
+    exitCode: number | null;
+    size: number;
+    truncated: boolean;
+    content: string;
+    logFilePath?: string;
+}
+
+const log = ref<JobLogView | null>(null);
 const loading = ref(false);
 const logContainer = ref<HTMLElement | null>(null);
-/** 跟随尾部：用户滚动到底部附近时新输出自动下滚，向上翻阅时不打扰 */
 const followTail = ref(true);
-/** 进程不存在（404 且从未拿到过日志，如刷新后恢复的旧标签） */
 const gone = ref(false);
-/**
- * 正文顶部常驻的命令行（`$ <命令>`）。
- * log.command 是权威值（entry 还在时后端返回），进程被清理后回落到标签里存的那份。
- */
-const commandLine = computed(() => {
-    const cmd = log.value?.command || props.command;
-    return cmd ? `$ ${cmd}` : '';
-});
-/** 超长命令（如整条 ffmpeg/PowerShell 脚本）默认折两行，点击展开全文 */
+/** 下一次增量读取的起点（后端 output 接口返回的 nextOffset） */
+const nextOffset = ref<number | null>(null);
+/** 仅 remote-shell 使用的低频兜底（远端 logSize 不是实时推送） */
+let remotePollTimer: number | null = null;
+/** 终态后的"落定"补拉定时器 */
+let settleTimer: number | null = null;
+/** 切换 job 时丢弃迟到响应 */
+let reloadGeneration = 0;
 const commandExpanded = ref(false);
 
-const isRunning = computed(() => log.value?.status === 'running');
+const job = computed(() => jobsStore.getJob(props.sessionId, props.jobId));
+const effectiveStatus = computed(() => job.value?.status ?? log.value?.status ?? '');
+const isRunning = computed(
+    () => effectiveStatus.value === 'running' || effectiveStatus.value === 'stopping',
+);
+
+const commandLine = computed(() => {
+    const cmd = job.value?.label || log.value?.command || props.command;
+    return cmd ? `$ ${cmd}` : '';
+});
 
 const statusClass = computed(() => ({
     running: isRunning.value,
-    completed: log.value?.status === 'completed',
-    killed: log.value?.status === 'killed',
-    error: log.value?.status === 'error',
-    ended: log.value?.status === 'ended',
+    completed: effectiveStatus.value === 'completed',
+    killed: effectiveStatus.value === 'killed',
+    error: effectiveStatus.value === 'failed',
+    ended: effectiveStatus.value === 'lost' || effectiveStatus.value === 'ended',
 }));
 
 const statusText = computed(() => {
-    switch (log.value?.status) {
-        case 'running': return t('chat.workspace.processRunning');
+    switch (effectiveStatus.value) {
+        case 'running':
+        case 'stopping': return t('chat.workspace.processRunning');
         case 'completed': return t('chat.workspace.processCompleted');
         case 'killed': return t('chat.workspace.processKilled');
-        case 'error': return t('chat.workspace.processError');
-        // 进程已被清理（entry 已从后端注册表消失）：只能确定"已结束"，退出码/终止方式无从得知
+        case 'failed': return t('chat.workspace.processError');
+        case 'lost':
         case 'ended': return t('chat.workspace.processEnded');
         default: return '';
     }
@@ -107,21 +125,6 @@ function formatBytes(bytes: number): string {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// ── 拉取与轮询 ──
-
-let pollTimer: number | null = null;
-/** 终态后的"落定"补拉定时器（见 settleOnTerminal） */
-let settleTimer: number | null = null;
-/** 绑定身份代际：切换进程时 +1；切换前发出的迟到响应据此丢弃（否则旧进程的响应会覆盖新日志、甚至误停轮询） */
-let reloadGeneration = 0;
-
-function stopPolling(): void {
-    if (pollTimer !== null) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-    }
-}
-
 function clearSettleTimer(): void {
     if (settleTimer !== null) {
         clearTimeout(settleTimer);
@@ -129,89 +132,136 @@ function clearSettleTimer(): void {
     }
 }
 
-/**
- * 收到终态（结束/被杀/出错/已结束）：停止轮询，并在 1.5s 后补拉一次。
- * 进程退出瞬间 writeStream 可能还没把最后一段刷到磁盘，这一次补拉专门兜住
- * "结束前最后一次输出"（补拉自身不再续期）。
- */
+function stopRemoteFallback(): void {
+    if (remotePollTimer !== null) {
+        clearInterval(remotePollTimer);
+        remotePollTimer = null;
+    }
+}
+
+function syncRemoteFallback(): void {
+    stopRemoteFallback();
+    if (job.value?.kind !== 'remote-shell' || !isRunning.value) return;
+    remotePollTimer = window.setInterval(() => {
+        void fetchLog('incremental');
+    }, 2000);
+}
+
 function settleOnTerminal(): void {
-    stopPolling();
+    stopRemoteFallback();
     if (settleTimer !== null) return;
     const generation = reloadGeneration;
     settleTimer = window.setTimeout(() => {
         settleTimer = null;
         if (generation !== reloadGeneration) return;
-        void fetchLog({ settle: true });
+        void fetchLog('settle');
     }, 1500);
 }
 
-async function fetchLog(options?: { settle?: boolean }): Promise<void> {
+function applyOutput(res: UiJobOutput, mode: 'initial' | 'incremental' | 'settle'): void {
+    if (mode === 'initial' || log.value === null) {
+        log.value = {
+            jobId: res.jobId,
+            command: job.value?.label || props.command,
+            status: res.status,
+            exitCode: res.exitCode,
+            size: res.size,
+            truncated: res.truncated,
+            content: res.text,
+            logFilePath: res.logFilePath,
+        };
+    } else {
+        log.value = {
+            ...log.value,
+            status: res.status,
+            exitCode: res.exitCode,
+            size: res.size,
+            truncated: res.truncated,
+            content: log.value.content + res.text,
+            logFilePath: res.logFilePath ?? log.value.logFilePath,
+        };
+    }
+    nextOffset.value = res.nextOffset;
+    gone.value = false;
+    if (res.status !== 'running' && res.status !== 'stopping') {
+        if (mode !== 'settle') settleOnTerminal();
+        else stopRemoteFallback();
+    }
+}
+
+async function fetchLog(mode: 'initial' | 'incremental' | 'settle' = 'incremental'): Promise<void> {
     const generation = reloadGeneration;
-    const { sessionId, processId } = props;
-    loading.value = true;
+    const { sessionId, jobId } = props;
+    if (!sessionId || !jobId) return;
+    if (mode === 'initial') loading.value = true;
     try {
-        const res = await apiService.getSessionProcessLog(sessionId, processId);
+        const res = mode === 'initial' || nextOffset.value === null
+            ? await apiService.getSessionJobOutput(sessionId, jobId)
+            : await apiService.getSessionJobOutput(sessionId, jobId, { offset: nextOffset.value });
         if (generation !== reloadGeneration) return;
-        log.value = res;
-        if (res.status !== 'running') {
-            if (options?.settle) stopPolling();
-            else settleOnTerminal();
-        }
+        applyOutput(res, mode);
     } catch (e) {
         if (generation !== reloadGeneration) return;
-        // 404 = 后端注册表里没有该进程，且磁盘上的日志文件也不存在（已被清理/回收）
         if (getApiErrorStatus(e) === 404) {
-            stopPolling();
+            stopRemoteFallback();
             clearSettleTimer();
             log.value = null;
             gone.value = true;
         } else {
-            console.error('[ProcessLogPanel] Failed to fetch log:', e);
+            console.error('[ProcessLogPanel] Failed to fetch job output:', e);
         }
     } finally {
-        if (generation === reloadGeneration) loading.value = false;
+        if (mode === 'initial' && generation === reloadGeneration) loading.value = false;
     }
 }
 
-function startPolling(): void {
-    void fetchLog();
-    pollTimer = window.setInterval(() => { void fetchLog(); }, 2000);
-}
-
-/**
- * 面板绑定的进程身份变化（切到另一个进程日志标签，或同一 PID 承载了新一次运行）：
- * 旧快照与已停止的轮询都不能保留，必须清空后重新拉取。
- */
 function resetAndReload(): void {
     reloadGeneration += 1;
-    stopPolling();
+    stopRemoteFallback();
     clearSettleTimer();
     log.value = null;
+    nextOffset.value = null;
     gone.value = false;
     loading.value = false;
     followTail.value = true;
     commandExpanded.value = false;
-    startPolling();
+    void jobsStore.ensureLoaded(props.sessionId, true);
+    void fetchLog('initial');
+    syncRemoteFallback();
 }
 
-watch(() => [props.sessionId, props.processId, props.startedAt], resetAndReload);
+watch(() => [props.sessionId, props.jobId], resetAndReload);
 
-// ── 终止进程 ──
+// jobs 快照驱动：logSize 增长才拉增量；状态变化驱动终态补拉。
+watch(
+    () => job.value?.logSize,
+    (size, old) => {
+        if (size === undefined || size === old) return;
+        if (isRunning.value) void fetchLog('incremental');
+    },
+);
+watch(
+    () => job.value?.status,
+    (status) => {
+        if (status === 'completed' || status === 'killed' || status === 'failed' || status === 'lost') {
+            settleOnTerminal();
+        }
+        syncRemoteFallback();
+    },
+);
 
 async function killProcess(): Promise<void> {
     try {
-        await apiService.killSessionProcess(props.sessionId, props.processId);
+        await apiService.killSessionJob(props.sessionId, props.jobId);
         ElMessage.success(t('chat.workspace.processKilledToast'));
-        await fetchLog();
+        await fetchLog('incremental');
     } catch (e) {
         if (getApiErrorStatus(e) !== 404) {
-            console.error('[ProcessLogPanel] Failed to kill process:', e);
+            console.error('[ProcessLogPanel] Failed to kill job:', e);
             ElMessage.error(t('chat.workspace.processKillFailed'));
         }
     }
 }
-
-// ── 滚动跟随 ──
 
 function onScroll(): void {
     const el = logContainer.value;
@@ -226,15 +276,26 @@ watch(() => log.value?.content, async () => {
     if (el) el.scrollTop = el.scrollHeight;
 });
 
-// 终止后标签元数据保持原状（进程退出即从列表消失，标签由用户手动关闭）
+let offSnapshot: (() => void) | null = null;
+let offConnected: (() => void) | null = null;
 
 onMounted(() => {
-    startPolling();
+    offSnapshot = apiService.onSessionEvent('jobs_snapshot', (event) => {
+        if (event.sessionId === props.sessionId) jobsStore.applySnapshot(event);
+    });
+    offConnected = apiService.onConnected(() => {
+        void jobsStore.ensureLoaded(props.sessionId, true);
+    });
+    void jobsStore.ensureLoaded(props.sessionId);
+    void fetchLog('initial');
+    syncRemoteFallback();
 });
 
 onUnmounted(() => {
-    stopPolling();
+    stopRemoteFallback();
     clearSettleTimer();
+    offSnapshot?.();
+    offConnected?.();
 });
 </script>
 

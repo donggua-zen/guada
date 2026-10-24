@@ -147,8 +147,8 @@ export class ShellPlugin extends PluginBase {
 - Commands run in the foreground by default; the tool waits for completion and returns the output
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - Prefer single-line commands when possible; for multi-line or long commands, write them to a script file first, then execute the script
-- processId is typically the shell process ID, not the command's own process ID
-- **Remote workspaces**: with workspace="<connection name>" the command runs via POSIX sh on that remote server (\`encoding\` decodes raw output bytes agent-side). Foreground timeout (60s) switches to background there too; background processIds carry the "r:" prefix and are managed with the same process tool.`,
+- Background mode (explicit or after the 60s foreground timeout) returns a stable **job id**. Manage everything with the job tools: job_read to read output (wait=true only when genuinely blocked), job_send to write stdin, job_list to list, job_stop to cancel. You will be notified when a background job finishes.
+- **Remote workspaces**: with workspace="<connection name>" the command runs via POSIX sh on that remote server (\`encoding\` decodes raw output bytes agent-side). Foreground timeout (60s) switches to background there too; the background job is managed with the same job tools.`,
       inputSchema: z.object({
         command: z
           .string()
@@ -293,12 +293,20 @@ export class ShellPlugin extends PluginBase {
           meta.uptimeMs = execResult.uptimeMs;
         } else {
           const body = execResult.output || "(no output)";
+          const jobHint = execResult.jobId
+            ? ` Use job_read ${execResult.jobId} to read the output, job_send to write stdin, or job_stop to stop it.`
+            : "";
           const bgMsg = background
-            ? `[Process moved to background, processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool to manage.]`
-            : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. processId: ${execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}. Use the process tool to manage.]`;
-          content = `${body}${truncatedNote}\n${bgMsg}`;
+            ? `[Process moved to background. Job ID: ${execResult.jobId ?? execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}.${jobHint}]`
+            : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. Job ID: ${execResult.jobId ?? execResult.processId}, uptime: ${formatDuration(execResult.uptimeMs)}.${jobHint}]`;
+          const logLine = execResult.logFilePath
+            ? `\nLog file: ${execResult.logFilePath}`
+            : "";
+          content = `${body}${truncatedNote}\n${bgMsg}${logLine}`;
           meta.backgrounded = true;
+          // processId 仅 UI tooltip 通道，模型面只见 jobId
           meta.processId = execResult.processId;
+          if (execResult.jobId) meta.jobId = execResult.jobId;
           meta.uptimeMs = execResult.uptimeMs;
         }
 
@@ -320,195 +328,6 @@ export class ShellPlugin extends PluginBase {
       allowedInPlanMode: true,
     });
 
-    // ── process 管理工具 ──
-    shellKit.registerTool({
-      name: "process",
-      description: `Background Process Management
-
-- Use the **process** tool to manage background processes. Additional parameters are grouped into the params object:
-- **kill** — Terminate a process, no params required:
-  \`{"action":"kill","processId":"xxx"}\`
-- **poll** — Check for new output. Optional params.timeout (seconds, minimum 30):
-   \`{"action":"poll","processId":"xxx","params":{"timeout":30}}\`
-- **write** — Write input to the process's stdin. Required params.input, optional params.appendNewline (default true):
-    \`{"action":"write","processId":"xxx","params":{"input":"y"}}\``,
-      inputSchema: z.object({
-        action: z.enum(["kill", "poll", "write"]),
-        processId: z.string().describe("Background process ID"),
-        params: z
-          .record(z.string(), z.any())
-          .optional()
-          .describe(
-            "Additional parameters for each action, grouped into this object. ",
-          ),
-      }),
-      execute: async (args, ctx, abortSignal) => {
-        const {
-          action,
-          processId,
-          params = {},
-        } = args as {
-          action: string;
-          processId: string;
-          params?: Record<string, any>;
-        };
-
-        switch (action) {
-          case "kill": {
-            // 远程进程（r:<连接名>:<pid>）→ 路由到对应连接的 provider
-            const remote = parseRemoteProcessId(processId);
-            if (remote?.connectionName) {
-              const target = await this.resolveTarget(
-                ctx,
-                remote.connectionName,
-              );
-              const status = target!.provider.kill(processId);
-              if (status === null) {
-                throw new Error(
-                  `Process ${processId} does not exist or has already ended`,
-                );
-              }
-              this.workspaceRouter.unregisterRemoteProcess(processId);
-              return `Process ${processId} terminated (status: ${status})`;
-            }
-            const status = this.processManager.kill(processId);
-            if (status === null) {
-              throw new Error(
-                `Process ${processId} does not exist or has already ended`,
-              );
-            }
-            return `Process ${processId} terminated (status: ${status})`;
-          }
-
-          case "poll": {
-            let timeoutMs = (params.timeout || 0) * 1000;
-            // Agent 调用不允许低于 30 秒
-            if (timeoutMs < 30_000) {
-              timeoutMs = 30_000;
-            }
-            const remote = parseRemoteProcessId(processId);
-            if (remote?.connectionName) {
-              const target = await this.resolveTarget(
-                ctx,
-                remote.connectionName,
-              );
-              const encoding = this.workspaceRouter.getProcessEncoding(processId);
-              const result = await target!.provider.poll(
-                processId,
-                timeoutMs,
-                abortSignal,
-                encoding,
-              );
-              if (result === null) {
-                throw new Error(`Process ${processId} does not exist`);
-              }
-              const truncatedNote =
-                (result as any).truncated && (result as any).logFilePath
-                  ? `\n[Note: Output was truncated. The complete log is saved on the remote server at: ${(result as any).logFilePath}. Read it with the read tool (workspace="${remote.connectionName}").]`
-                  : "";
-              const statusLine =
-                result.status === "running"
-                  ? `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`
-                  : `[status: ${result.status}, exit code: ${result.exitCode}, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`;
-              const meta: Record<string, any> = {
-                card: "terminal",
-                backgrounded: result.status === "running",
-                processId,
-                processStatus: result.status,
-                uptimeMs: result.uptimeMs,
-                truncated: !!(result as any).truncated,
-              };
-              if ((result as any).logFilePath) {
-                meta.logFilePath = (result as any).logFilePath;
-              }
-              if (result.status !== "running") meta.exitCode = result.exitCode;
-              const content = `${result.output ? this.sanitize(result.output) : "(no output)"}${truncatedNote}\n${statusLine}`;
-              return { content, meta };
-            }
-            const result = await this.processManager.poll(
-              processId,
-              timeoutMs,
-              ctx?.session.sessionId,
-              abortSignal,
-            );
-            if (result === null) {
-              throw new Error(`Process ${processId} does not exist`);
-            }
-
-            const mode: SandboxMode =
-              ctx?.session.getSandboxMode?.() ?? "workspace-write";
-
-            const sandboxForNote = sandboxForMode(mode);
-            const sandboxNote = sandboxForNote?.enabled
-              ? sandboxForNote.readOnly
-                ? "Read-only mode: sandbox read-only enabled, all writes blocked"
-                : "Sandbox mode enabled, read-only outside workspace"
-              : null;
-
-            const truncatedNote =
-              result.truncated && result.logFilePath
-                ? `\n[Note: Output was truncated. The complete log is saved at: ${result.logFilePath}. You can read it using the read tool if needed.]`
-                : "";
-            const statusLine =
-              result.status === "running"
-                ? `[status: running, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`
-                : `[status: ${result.status}, exit code: ${result.exitCode}, uptime: ${formatDuration(result.uptimeMs)}, waited: ${formatDuration(result.waitMs)}]`;
-            const meta: Record<string, any> = {
-              card: "terminal",
-              backgrounded: result.status === "running",
-              processId,
-              processStatus: result.status,
-              uptimeMs: result.uptimeMs,
-              truncated: !!result.truncated,
-            };
-            if (result.logFilePath) meta.logFilePath = result.logFilePath;
-            if (result.status !== "running") meta.exitCode = result.exitCode;
-            if (sandboxNote) meta.sandboxNote = sandboxNote;
-
-            const content = `${result.output || "(no output)"}${truncatedNote}\n${statusLine}`;
-            return sandboxNote
-              ? { content: `${sandboxNote}\n\n${content}`, meta }
-              : { content, meta };
-          }
-
-          case "write": {
-            const input = params.input;
-            if (!input || typeof input !== "string") {
-              throw new Error("params.input cannot be empty");
-            }
-
-            const appendNewline = params.appendNewline !== false;
-            const textToWrite = appendNewline ? input + "\n" : input;
-
-            const remote = parseRemoteProcessId(processId);
-            if (remote?.connectionName) {
-              const target = await this.resolveTarget(
-                ctx,
-                remote.connectionName,
-              );
-              target!.provider.writeToStdin(processId, textToWrite);
-              return `Written ${textToWrite.length} agents to process ${processId}`;
-            }
-
-            this.processManager.writeToStdin(processId, textToWrite);
-
-            return `Written ${textToWrite.length} agents to process ${processId}`;
-          }
-
-          default:
-            throw new Error(`Unknown action: ${action}`);
-        }
-      },
-      display: {
-        actionType: "process",
-        text: { executing: "%process.executing%", completed: "%process.completed%" },
-        aggregate: { executing: "%process.aggregate.executing%", completed: "%process.aggregate.completed%" },
-        argsKey: "action",
-        icon: "terminal",
-      },
-      dangerLevel: "high",
-    });
-
     // ── Prompt ──
     shellKit.registerPrompt({
       frequency: "STATIC",
@@ -519,13 +338,14 @@ export class ShellPlugin extends PluginBase {
 
 ## Background Task Best Practices
 - Prefer foreground execution first to check initial output and verify normal startup
-- Prefer using process(action=kill, processId=xxx) to terminate processes          
+- Use job_stop to terminate a background job that is no longer needed
  ${
    isNotSubAgent
      ? `
 - After switching to background, you can work on other tasks in parallel, or end the current turn and wait for system notifications
-- The system will automatically notify you when a background process finishes — no need for continuous polling
-- Messages already retrieved via poll will not be re-sent as system notifications`
+- The system will automatically notify you when a background job finishes — no need for continuous polling
+- Background commands return a stable **job id** (job-...). Manage everything through the job tools: job_read reads the log tail or an offset increment without consuming it (wait=true only when genuinely blocked), job_send writes stdin (shell) or continues a sub-agent conversation, job_list lists this session's jobs, job_stop cancels
+- Reading a terminal job (or job_stop) marks the output as observed and suppresses the completion notification; reading a running job is only a snapshot`
      : ``
  }`;
       },
@@ -730,7 +550,7 @@ export class ShellPlugin extends PluginBase {
           `in workspace settings (the path is resolved on the remote host).]`
         );
       }
-      return `[Command did not return in time (${e?.message || e}). It may still be running in the background on the remote server. Its output (if any) is written to the agent's log directory (guada-logs under the remote temp dir) — inspect it with glob/read (workspace="${target.connectionName}") on that directory, or use the process tool to check status.]`;
+      return `[Command did not return in time (${e?.message || e}). It may still be running in the background on the remote server. Its output (if any) is written to the agent's log directory (guada-logs under the remote temp dir) — inspect it with glob/read (workspace="${target.connectionName}") on that directory.]`;
     }
 
     const truncatedNote =
@@ -753,20 +573,36 @@ export class ShellPlugin extends PluginBase {
     }
 
     const pid = execResult.processId || "";
+    let jobId = execResult.jobId;
     if (pid && ctx?.session.sessionId) {
-      this.workspaceRouter.registerRemoteProcess(
+      // 旧 agent（<0.7）没有 process_done/readProcess：只登记 processId 供
+      // turn.stopping 收割，不注册一个永远不会结算的 job。
+      const canRegisterJob =
+        !!execResult.jobId && target.provider.supportsRemoteJobs;
+      jobId = this.workspaceRouter.registerRemoteProcess(
         ctx.session.sessionId,
         pid,
         target.connectionName,
         args.encoding,
+        canRegisterJob
+          ? {
+              command: args.command,
+              logFilePath: execResult.logFilePath,
+              provider: target.provider,
+            }
+          : undefined,
       );
     }
+    const jobHint = jobId
+      ? ` Use job_read ${jobId} to read the output or job_stop to stop it.`
+      : "";
     const moved = args.background === true
-      ? `[Process moved to background, processId: ${pid}.`
-      : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s on the remote server, switched to background. processId: ${pid}.`;
-    const content = `${execResult.output ? this.sanitize(execResult.output) : "(no output)"}${truncatedNote}\n${moved} Output is written to the remote log file: ${execResult.logFilePath || "(unknown)"} — read it with the read tool (workspace="${target.connectionName}") or use the process tool (poll) to check status.]`;
+      ? `[Process moved to background. Job ID: ${jobId ?? pid}.`
+      : `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s on the remote server, switched to background. Job ID: ${jobId ?? pid}.`;
+    const content = `${execResult.output ? this.sanitize(execResult.output) : "(no output)"}${truncatedNote}\n${moved}${jobHint} Output is written to the remote log file: ${execResult.logFilePath || "(unknown)"} — read it with the read tool (workspace="${target.connectionName}").]`;
     meta.backgrounded = true;
     meta.processId = pid;
+    if (jobId) meta.jobId = jobId;
     meta.uptimeMs = execResult.uptimeMs;
     return { content, meta };
   }
@@ -863,10 +699,10 @@ const truncNote = r.truncated && r.logFilePath
 
     if (stillRunning.length > 0) {
       const list = stillRunning
-        .map((p) => `- \`${p.id}\` (${p.command})`)
+        .map((p) => `- \`${p.jobId ?? p.id}\` (${p.command})`)
         .join("\n");
       parts.push(
-        `You have ${stillRunning.length} unfinished background processes:\n${list}\n\nYou must use the process tool to check their status (poll), wait for them to complete or terminate them (kill) before ending the current task.`,
+        `You have ${stillRunning.length} unfinished background jobs:\n${list}\n\nYou must use job_read to check their output (wait=true to block until finished) or job_stop to terminate them before ending the current task.`,
       );
     }
 
@@ -875,7 +711,7 @@ const truncNote = r.truncated && r.logFilePath
         .map((id) => `- \`${id}\``)
         .join("\n");
       parts.push(
-        `You have ${remoteRunningIds.length} unfinished background processes on remote workspaces:\n${list}\n\nYou must use the process tool (poll) to check their status or terminate them (kill) before ending the current task.`,
+        `You have ${remoteRunningIds.length} unfinished background jobs on remote workspaces:\n${list}\n\nYou must use job_read to check their status or job_stop to terminate them before ending the current task.`,
       );
     }
 

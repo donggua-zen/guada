@@ -3,16 +3,15 @@
  *
  * 单一来源：会话关联解析（subAgentLink）与独立成行判定（toolDisplay）共用同一份名单，
  * 避免两处硬编码漂移。
+ *
+ * 注：subagent_manager 工具已随工具收敛删除（后台子代理统一走 job_read/job_send/job_stop）；
+ * 历史会话回放里 manager 的结果行没有专属跳转（走 meta.link 兜底），不再解析它的 args。
  */
 
 /** 派生新子代理 */
 export const SUB_AGENT_SPAWN_TOOL = "subagent_spawn";
 
-/** 管理已有子代理（wait / list / close / send_message） */
-export const SUB_AGENT_MANAGER_TOOL = "subagent_manager";
-
-/** 全部子代理工具（含派生与管理） */
+/** 全部子代理工具 */
 export const SUB_AGENT_TOOLS: ReadonlySet<string> = new Set([
   SUB_AGENT_SPAWN_TOOL,
-  SUB_AGENT_MANAGER_TOOL,
 ]);

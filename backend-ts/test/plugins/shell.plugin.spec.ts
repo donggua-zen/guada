@@ -484,4 +484,5 @@ describe('ShellPlugin', () => {
       expect(decision).toBeUndefined();
     });
   });
+
 });

@@ -308,35 +308,63 @@ export interface SessionApi {
   ): Promise<{ items: SessionSummaryItem[]; total: number }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
   getSessionTodo(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
-  getSessionProcesses(sessionId: string): Promise<{ processes: UiProcessInfo[] }>;
-  killSessionProcess(sessionId: string, processId: string): Promise<{ success: boolean; status: string }>;
-  getSessionProcessLog(sessionId: string, processId: string, tailBytes?: number): Promise<UiProcessLog>;
+  getSessionJobs(sessionId: string): Promise<{ revision: number; jobs: UiJobInfo[] }>;
+  killSessionJob(
+    sessionId: string,
+    jobId: string,
+    reason?: string,
+  ): Promise<{ success: boolean; outcome: string; status: string }>;
+  getSessionJobOutput(
+    sessionId: string,
+    jobId: string,
+    opts?: { offset?: number; maxBytes?: number },
+  ): Promise<UiJobOutput>;
   getWorkflowRuns(sessionId: string): Promise<{ runs: import("@/types/stream/workflow.types").WorkflowRunState[] }>;
 }
 
-/** 后台进程条目（GET /sessions/:id/processes 返回） */
-export interface UiProcessInfo {
+export type UiJobKind =
+  | "shell"
+  | "remote-shell"
+  | "pty"
+  | "subagent"
+  | "workflow"
+  | "scheduler";
+
+export type UiJobStatus =
+  | "running"
+  | "stopping"
+  | "completed"
+  | "killed"
+  | "failed"
+  | "lost";
+
+/** 后端 JobSnapshot 的前端形态（GET /sessions/:id/jobs + jobs_snapshot） */
+export interface UiJobInfo {
   id: string;
-  command: string;
-  status: string;
+  kind: UiJobKind;
+  label: string;
   sessionId: string;
-  isBackgrounded: boolean;
-  startedAt: string;
-  finishedAt?: string;
+  status: UiJobStatus;
+  detail?: string;
+  handle?: string;
+  startedAt: number;
+  finishedAt?: number;
+  exitCode?: number | null;
+  logFilePath?: string;
+  logSize?: number;
 }
 
-/** 后台进程日志尾部（GET /sessions/:id/processes/:pid/log 返回） */
-export interface UiProcessLog {
-  processId: string;
-  command: string;
-  status: string;
-  exitCode: number | null;
-  /** 启动时刻（进程已被后端清理时不再返回） */
-  startedAt?: string;
-  finishedAt?: string;
+/** GET /sessions/:id/jobs/:jobId/output */
+export interface UiJobOutput {
+  jobId: string;
+  text: string;
+  offset: number;
+  nextOffset: number;
   size: number;
   truncated: boolean;
-  content: string;
+  logFilePath?: string;
+  status: UiJobStatus;
+  exitCode: number | null;
 }
 
 /** 压缩历史条目（GET /sessions/:id/summaries，与后端 CompactionHistoryItem 同构） */
@@ -578,19 +606,35 @@ export const sessionApi: SessionApi = {
     return await this._request(`/sessions/${sessionId}/todo`);
   },
 
-  async getSessionProcesses(this: ApiContext, sessionId: string) {
-    return await this._request(`/sessions/${sessionId}/processes`);
+  async getSessionJobs(this: ApiContext, sessionId: string) {
+    return await this._request(`/sessions/${sessionId}/jobs`);
   },
 
-  async killSessionProcess(this: ApiContext, sessionId: string, processId: string) {
-    return await this._request(`/sessions/${sessionId}/processes/${processId}/kill`, {
+  async killSessionJob(
+    this: ApiContext,
+    sessionId: string,
+    jobId: string,
+    reason?: string,
+  ) {
+    const query = reason ? `?reason=${encodeURIComponent(reason)}` : "";
+    return await this._request(`/sessions/${sessionId}/jobs/${jobId}/kill${query}`, {
       method: "POST",
     });
   },
 
-  async getSessionProcessLog(this: ApiContext, sessionId: string, processId: string, tailBytes?: number) {
-    const query = tailBytes ? `?tail=${tailBytes}` : "";
-    return await this._request(`/sessions/${sessionId}/processes/${processId}/log${query}`);
+  async getSessionJobOutput(
+    this: ApiContext,
+    sessionId: string,
+    jobId: string,
+    opts?: { offset?: number; maxBytes?: number },
+  ) {
+    const params = new URLSearchParams();
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    if (opts?.maxBytes !== undefined) params.set("maxBytes", String(opts.maxBytes));
+    const query = params.toString();
+    return await this._request(
+      `/sessions/${sessionId}/jobs/${jobId}/output${query ? `?${query}` : ""}`,
+    );
   },
 
   async getWorkflowRuns(this: ApiContext, sessionId: string) {

@@ -9,7 +9,7 @@ export interface UnifiedTab {
      * 此处保留类型以便缓存恢复时过滤旧数据。
      */
     type: 'file' | 'browser' | 'git' | 'terminal' | 'processlog' | 'subagent' | 'subagentlist' | 'workflow' | 'diff' | 'plan' | 'newtab';
-    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'processlog:<sessionId>:<pid>' / 'subagent:<subSessionId>' / 'subagentlist:<sessionId>' / 'workflow:<sessionId>' / 'diff:<turnId>:<path>' / 'plan:<sessionId>' / 'newtab:<id>'
+    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'processlog:<sessionId>:<jobId>' / 'subagent:<subSessionId>' / 'subagentlist:<sessionId>' / 'workflow:<sessionId>' / 'diff:<turnId>:<path>' / 'plan:<sessionId>' / 'newtab:<id>'
     // file
     path?: string;
     name?: string;
@@ -31,14 +31,9 @@ export interface UnifiedTab {
     // terminal
     cwd?: string;
     terminalId?: string;
-    // processlog（后台进程日志）
-    processId?: string;   // 后台进程 ID（ProcessManagerService entry.id，即 OS PID）
-    command?: string;     // 进程命令（标签标题与日志面板头部展示）
-    /**
-     * 本次运行的启动时间（run token）。本进程 ID 就是 OS PID，会被系统回收：
-     * 同一 PID 承载新一次运行时该值变化，日志面板据此丢弃旧快照重新拉取。
-     */
-    startedAt?: string;
+    // processlog（后台作业日志）
+    jobId?: string;       // 稳定 job id（job-...）
+    command?: string;     // 执行器 label/命令（标签标题与日志面板头部展示）
     // diff（编辑记录标签：仅存骨架，FileChangeEntry 由 tabStore 运行时 Map 持有，不持久化）
     turnId?: string;      // 所属回合 ID（标签 key 的一部分）
 }
@@ -125,7 +120,22 @@ export function usePreviewTabCache() {
             lruOrder.value.unshift(sessionId)
         }
 
-        return cache.value[sessionId]
+        // 旧版 processlog 标签以 OS PID 为 key，新版本统一用稳定 jobId。
+    // 前后端一起发布，不迁移旧标签：直接丢弃，避免打开一个永远 404 的面板。
+    const migrated = state.tabs.filter(
+      (tab) => tab.type !== "processlog" || !!(tab as any).jobId,
+    );
+    if (migrated.length !== state.tabs.length) {
+      state.tabs = migrated;
+      if (
+        state.activeTabKey?.startsWith("processlog:") &&
+        !migrated.some((tab) => tab.key === state.activeTabKey)
+      ) {
+        state.activeTabKey = null;
+      }
+    }
+
+    return cache.value[sessionId]
     }
 
     /** 删除会话的缓存 */

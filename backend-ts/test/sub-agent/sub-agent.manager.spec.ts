@@ -8,6 +8,8 @@
  */
 import { Logger } from "@nestjs/common";
 import { SubAgentManager } from "../../src/modules/sub-agent/sub-agent.manager";
+import { JobRegistryService } from "../../src/modules/jobs/job-registry.service";
+import type { JobOutcome } from "../../src/modules/jobs/job.types";
 import {
   FakeAgentFileStore,
   FakeChatRunner,
@@ -18,33 +20,60 @@ import {
   createFakeParentContext,
 } from "./helpers/fakes";
 
-function setup() {
+let activeRegistry: JobRegistryService | undefined;
+
+function setup(options: { withRegistry?: boolean } = {}) {
   const sessionStore = new FakeSessionMetaStore();
   const chatRunner = new FakeChatRunner();
   const eventBus = new FakeEventBus();
   const agentStore = new FakeAgentFileStore();
   const messageStore = new FakeMessageStore();
+  const registry = options.withRegistry
+    ? new JobRegistryService(eventBus as any)
+    : undefined;
+  activeRegistry = registry;
   const manager = new SubAgentManager(
     sessionStore as any,
     chatRunner as any,
     eventBus as any,
     agentStore as any,
     messageStore as any,
+    registry,
   );
-  return { manager, sessionStore, chatRunner, eventBus, agentStore, messageStore };
+  return { manager, sessionStore, chatRunner, eventBus, agentStore, messageStore, registry };
 }
 
 /** 让流立即正常结束（finishReason 可指定） */
 function completesImmediately(chatRunner: FakeChatRunner, finishReason = "stop"): void {
-  chatRunner.startStreamImpl = (_params, cb) => {
+  chatRunner.startStreamImpl = (params, cb) => {
     cb.onEvent?.({ type: "turn_end", finishReason });
     cb.onComplete?.("completed");
+    // 真实 ChatRunner 流结束后 hasActiveStream=false；fake 也保持同一语义。
+    chatRunner.finishStream(params.sessionId);
   };
 }
 
 /** 让流永不结束（模拟长跑子代理） */
 function neverCompletes(chatRunner: FakeChatRunner): void {
   chatRunner.startStreamImpl = () => new Promise<void>(() => undefined);
+}
+
+/** 可被 cancelStream 结束的长跑流：模拟 ChatRunner 取消时触发 onComplete */
+function cancellableStream(chatRunner: FakeChatRunner): void {
+  let callbacks: any;
+  let resolveStart!: () => void;
+  chatRunner.startStreamImpl = (_params, cb) => {
+    callbacks = cb;
+    return new Promise<void>((resolve) => {
+      resolveStart = resolve;
+    });
+  };
+  (chatRunner as any).cancelStream = (sessionId: string) => {
+    chatRunner.cancelCalls.push(sessionId);
+    chatRunner.activeStreams.delete(sessionId);
+    callbacks?.onComplete?.("user_cancel");
+    resolveStart?.();
+  };
 }
 
 async function until(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
@@ -63,19 +92,21 @@ describe("SubAgentManager", () => {
   });
 
   afterEach(() => {
+    activeRegistry?.onModuleDestroy();
+    activeRegistry = undefined;
     jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
   describe("spawn：准入与配置继承", () => {
-    it("每父会话满 10 个子代理后拒绝创建", async () => {
-      const { manager, sessionStore } = setup();
+    it("spawn 不再做独立子代理数预检（配额统一由 Registry 在后台注册时执行）", async () => {
+      const { manager, sessionStore, chatRunner } = setup();
+      completesImmediately(chatRunner);
       sessionStore.setParentCount("parent-1", 10);
 
-      await expect(
-        manager.spawn({ parentContext: createFakeParentContext(), name: "x", task: "t" }),
-      ).rejects.toThrow(/maximum number of sub-agents \(10\)/);
-      expect(sessionStore.createCalls).toHaveLength(0);
+      // 前台 spawn 是阻塞调用，模型自然串行，不占 job 配额；预检已删除
+      await manager.spawn({ parentContext: createFakeParentContext(), name: "x", task: "t" });
+      expect(sessionStore.createCalls).toHaveLength(1);
     });
 
     it("恰好 9 个时仍可创建", async () => {
@@ -116,7 +147,6 @@ describe("SubAgentManager", () => {
       expect(sessionStore.createCalls[0].settings).toMatchObject({
         thinkingEffort: "high",
         sandboxMode: "read-only",
-        lifecycle: "one_shot",
         plugins: ["p1"],
         skills: { s: 1 },
       });
@@ -164,13 +194,13 @@ describe("SubAgentManager", () => {
       expect(sessionStore.createCalls[0].settings.systemPrompt).toBeTruthy();
     });
 
-    it("生命周期参数为 persist 时写入 settings.lifecycle", async () => {
+    it("spawn 不再接受 lifecycle 参数（生命周期唯一，模型面无此概念）", async () => {
       const { manager, sessionStore, chatRunner } = setup();
       completesImmediately(chatRunner);
 
-      await manager.spawn({ parentContext: createFakeParentContext(), name: "x", task: "t", lifecycle: "persist" });
+      await manager.spawn({ parentContext: createFakeParentContext(), name: "x", task: "t" });
 
-      expect(sessionStore.createCalls[0].settings.lifecycle).toBe("persist");
+      expect(sessionStore.createCalls[0].settings.lifecycle).toBeUndefined();
     });
 
     it("创建成功后广播 subagent.created", async () => {
@@ -384,14 +414,14 @@ describe("SubAgentManager", () => {
       });
     });
 
-    it("persist：前台结果交付后不自动冻结", async () => {
+    it("前台结果交付后一律自动冻结（生命周期唯一）", async () => {
       const { manager, sessionStore, chatRunner } = setup();
       completesImmediately(chatRunner);
 
-      await manager.spawn({ parentContext: createFakeParentContext(), name: "x", task: "t", lifecycle: "persist" });
-      await new Promise((r) => setTimeout(r, 50));
+      await manager.spawn({ parentContext: createFakeParentContext(), name: "x", task: "t" });
+      await until(() => sessionStore.updateCalls.length > 0);
 
-      expect(sessionStore.updateCalls).toHaveLength(0);
+      expect(sessionStore.updateCalls[0]).toMatchObject({ id: "sub-1" });
     });
 
     it("冻结携带失败原因：error 结果 → stopReason=error", async () => {
@@ -435,13 +465,23 @@ describe("SubAgentManager", () => {
       ).rejects.toThrow(/does not belong to this parent session/);
     });
 
-    it("子会话已冻结 → 抛错（仅供回放）", async () => {
-      const { manager, sessionStore } = setup();
+    it("子会话已冻结 → 自动解冻后继续执行", async () => {
+      const { manager, sessionStore, chatRunner } = setup();
       seedSub(sessionStore, { closedAt: new Date() });
+      completesImmediately(chatRunner);
 
-      await expect(
-        manager.sendMessage({ parentSessionId: "parent-1", sessionId: "sub-9", message: "hi" }),
-      ).rejects.toThrow(/is closed \(frozen for replay only\)/);
+      const result = await manager.sendMessage({
+        parentSessionId: "parent-1",
+        sessionId: "sub-9",
+        message: "继续",
+      });
+
+      expect(result).toMatchObject({ subSessionId: "sub-9", status: "completed" });
+      // 解冻已发生（closedAt 被清空）
+      const unfreeze = sessionStore.updateCalls.find(
+        (u) => u.id === "sub-9" && u.patch.closedAt === null,
+      );
+      expect(unfreeze).toBeTruthy();
     });
 
     it("子代理正在运行 → 抛错", async () => {
@@ -469,15 +509,15 @@ describe("SubAgentManager", () => {
       expect(chatRunner.startStreamCalls[0].params).toMatchObject({ sessionId: "sub-9" });
     });
 
-    it("sendMessage 固定 persist 生命周期：交互后不冻结会话", async () => {
+    it("sendMessage 交互结果交付后也自动冻结（生命周期唯一）", async () => {
       const { manager, sessionStore, chatRunner } = setup();
       seedSub(sessionStore);
       completesImmediately(chatRunner);
 
       await manager.sendMessage({ parentSessionId: "parent-1", sessionId: "sub-9", message: "继续" });
-      await new Promise((r) => setTimeout(r, 50));
+      await until(() => sessionStore.updateCalls.length > 0);
 
-      expect(sessionStore.updateCalls).toHaveLength(0);
+      expect(sessionStore.updateCalls[0]).toMatchObject({ id: "sub-9" });
     });
   });
 
@@ -671,7 +711,7 @@ describe("SubAgentManager", () => {
       ).resolves.toBeTruthy();
     });
 
-    it("lifecycle 固定 one_shot，并把 runId/label/phase 写入 settings.workflow", async () => {
+    it("runId/label/phase 写入 settings.workflow（不再写 lifecycle）", async () => {
       const { manager, sessionStore, chatRunner } = setup();
       completesImmediately(chatRunner);
 
@@ -683,9 +723,9 @@ describe("SubAgentManager", () => {
       });
 
       expect(sessionStore.createCalls[0].settings).toMatchObject({
-        lifecycle: "one_shot",
         workflow: { runId: "r1", label: "爬取", phase: "P1" },
       });
+      expect(sessionStore.createCalls[0].settings.lifecycle).toBeUndefined();
     });
 
     it("省略 label/phase 时不写入这两个字段", async () => {
@@ -840,6 +880,133 @@ describe("SubAgentManager", () => {
       await until(() => sessionStore.updateCalls.length > 0);
 
       expect(sessionStore.updateCalls[0].patch.closedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe("Job Registry 集成", () => {
+    it("后台 spawn 注册 job，job_output 读最终答案并抑制信箱通知", async () => {
+      const { manager, chatRunner, messageStore, registry, sessionStore } = setup({
+        withRegistry: true,
+      });
+      completesImmediately(chatRunner);
+      messageStore.messages.set("sub-1", [assistantMessage("最终答案")]);
+
+      const result = await manager.spawn(
+        { parentContext: createFakeParentContext(), name: "bg", task: "t" },
+        "background",
+      );
+
+      expect(result.status).toBe("running");
+      const jobId = result.jobId!;
+      expect(jobId).toMatch(/^job-/);
+      expect(registry!.get(jobId, "parent-1")?.handle).toBe("sub-1");
+
+      const settled = await registry!.wait(jobId, "parent-1", 2000);
+      expect(settled).toMatchObject({ status: "completed", handle: "sub-1" });
+
+      const read = await registry!.read(jobId, "parent-1");
+      expect(read.output.text).toBe("最终答案");
+      expect(read.job.reported).toBe(true);
+      // jobId 路径不再写信箱，避免双通知
+      expect(chatRunner.enqueued).toHaveLength(0);
+      await until(() => sessionStore.updateCalls.length > 0);
+      expect(sessionStore.updateCalls[0].patch.closedAt).toBeInstanceOf(Date);
+    });
+
+    it("subagent_manager wait 取走结果后 job reported，不再投递信箱", async () => {
+      const { manager, chatRunner, messageStore, registry } = setup({
+        withRegistry: true,
+      });
+      completesImmediately(chatRunner);
+      messageStore.messages.set("sub-1", [assistantMessage("wait 结果")]);
+
+      const result = await manager.spawn(
+        { parentContext: createFakeParentContext(), name: "bg", task: "t" },
+        "background",
+      );
+      const jobId = result.jobId!;
+      await until(
+        () => registry!.get(jobId, "parent-1")?.status !== "running",
+      );
+
+      const items = await manager.waitForComplete("parent-1", 1000);
+
+      expect(items[0].result.content).toBe("wait 结果");
+      expect(registry!.get(jobId, "parent-1")?.reported).toBe(true);
+      expect(chatRunner.enqueued).toHaveLength(0);
+    });
+
+    it("前台超时转后台时注册 job", async () => {
+      const { manager, chatRunner, registry } = setup({ withRegistry: true });
+      neverCompletes(chatRunner);
+      jest.useFakeTimers();
+
+      const pending = manager.spawn({
+        parentContext: createFakeParentContext(),
+        name: "timeout",
+        task: "t",
+      });
+      await jest.advanceTimersByTimeAsync(20 * 60 * 1000 + 100);
+      const result = await pending;
+
+      expect(result.status).toBe("running");
+      expect(result.jobId).toMatch(/^job-/);
+      expect(registry!.get(result.jobId!, "parent-1")?.status).toBe("running");
+    });
+
+    it("job_kill 取消运行中的子 Agent，且不投递脏通知", async () => {
+      const { manager, chatRunner, messageStore, registry, sessionStore } = setup({
+        withRegistry: true,
+      });
+      cancellableStream(chatRunner);
+      messageStore.messages.set("sub-1", [assistantMessage("部分结果")]);
+
+      const result = await manager.spawn(
+        { parentContext: createFakeParentContext(), name: "bg", task: "t" },
+        "background",
+      );
+      const jobId = result.jobId!;
+
+      expect(registry!.kill(jobId, "parent-1", "test")).toBe("requested");
+      const settled = await registry!.wait(jobId, "parent-1", 2000);
+
+      expect(settled.status).toBe("killed");
+      expect(chatRunner.cancelCalls).toContain("sub-1");
+      expect(chatRunner.enqueued).toHaveLength(0);
+      await until(() => sessionStore.updateCalls.length > 0);
+    });
+
+    it("Registry 配额满时后台 spawn 直接报错（不再回退信箱）", async () => {
+      const { manager, chatRunner, registry } = setup({
+        withRegistry: true,
+      });
+      for (let i = 0; i < 10; i++) {
+        registry!.start({
+          kind: "shell",
+          label: `filler-${i}`,
+          sessionId: "parent-1",
+          read: async () => ({
+            text: "",
+            offset: 0,
+            nextOffset: 0,
+            size: 0,
+            truncated: false,
+          }),
+          cancel: () => undefined,
+          done: new Promise<JobOutcome>(() => undefined),
+        });
+      }
+
+      // 快速失败：子 Agent 不注册 job 就不让跑，否则配额被回退路径架空
+      await expect(
+        manager.spawn(
+          { parentContext: createFakeParentContext(), name: "bg", task: "t" },
+          "background",
+        ),
+      ).rejects.toThrow(/background job limit reached/);
+      // 没有产生任何后台会话或通知
+      expect(chatRunner.enqueued).toHaveLength(0);
+      expect(registry!.list("parent-1")).toHaveLength(10);
     });
   });
 });

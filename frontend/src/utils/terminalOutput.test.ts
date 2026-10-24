@@ -36,9 +36,19 @@ describe("parseTerminalResult", () => {
     expect(info!.exitCode).toBe(0);
   });
 
-  it("新契约：转后台（processId 提取）", () => {
+  it("新契约：转后台（jobId 提取）", () => {
     const text =
-      'node server.js\n[Command exceeded 60s, switched to background. processId: 12345, uptime: 1m 2s. Use the process tool to manage.]';
+      'node server.js\n[Command exceeded 60s, switched to background. Job ID: job-abc123, uptime: 1m 2s. Use job_read job-abc123 to read the output, job_send to write stdin, or job_stop to stop it.]';
+    const info = parseTerminalResult(text);
+    expect(info!.backgrounded).toBe(true);
+    expect(info!.jobId).toBe("job-abc123");
+    expect(info!.uptimeText).toBe("1m 2s");
+    expect(info!.body).toBe("node server.js");
+  });
+
+  it("历史会话：旧文案 processId 兼容提取", () => {
+    const text =
+      'node server.js\n[Process moved to background, processId: 12345, uptime: 1m 2s. Use job_output job-x to read the output (or job_kill to stop it).]';
     const info = parseTerminalResult(text);
     expect(info!.backgrounded).toBe(true);
     expect(info!.processId).toBe("12345");

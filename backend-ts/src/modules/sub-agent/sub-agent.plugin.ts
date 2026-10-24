@@ -104,7 +104,8 @@ export class SubAgentPlugin extends PluginBase {
     subKit.registerTool({
       name: "subagent_spawn",
       description: `Create a sub-agent to execute an independent task.
-The sub-agent has its own independent conversation context and tool capabilities. Returns the sub-session ID immediately after creation.`,
+The sub-agent has its own independent conversation context and tool capabilities.
+Foreground (default) blocks until done and returns the result. Background mode returns a Job ID immediately; track it with job_read / job_stop, continue the conversation with job_send, and you will be notified when it finishes.`,
       inputSchema: z.object({
         name: z
           .string()
@@ -121,12 +122,6 @@ The sub-agent has its own independent conversation context and tool capabilities
           .describe(
             "Execution mode: foreground=wait for completion (default), background=run in background and return immediately",
           ),
-        lifecycle: z
-          .enum(["persist", "one_shot"])
-          .optional()
-          .describe(
-            'Sub-agent lifecycle: one_shot (default) = the sub-session is automatically closed (frozen, kept for replay) once its result is delivered, no close call needed; persist = keep the session for further interaction (send_message), must be closed manually with subagent_manager close',
-          ),
       }),
       execute: async (args, ctx, abortSignal) => {
         // 校验 agentId 是否被允许
@@ -136,10 +131,8 @@ The sub-agent has its own independent conversation context and tool capabilities
           );
         }
 
-        const lifecycle = args.lifecycle || "one_shot";
-
         this.logger.log(
-          `创建子 Agent: ${args.name}, 父会话: ${ctx?.session.sessionId}, 模式: ${args.mode || "foreground"}, 生命周期: ${lifecycle}`,
+          `创建子 Agent: ${args.name}, 父会话: ${ctx?.session.sessionId}, 模式: ${args.mode || "foreground"}`,
         );
         const result = await this.subAgentManager.spawn(
           {
@@ -147,7 +140,6 @@ The sub-agent has its own independent conversation context and tool capabilities
             name: args.name,
             task: args.task,
             agentId: args.agentId,
-            lifecycle,
             // 透传本次调用 id：manager 在子会话创建瞬间据此发布流事件，
             // 让前端在工具结果落库前就能把这次调用关联到子会话
             toolCallId: ctx?.toolCallId,
@@ -158,22 +150,21 @@ The sub-agent has its own independent conversation context and tool capabilities
         const linkMeta = subAgentLinkMeta(result.subSessionId, args.name);
         if (result.status === "running") {
           const reason = result.error ? ` (${result.error})` : "";
+          const jobHint = ` Use job_read ${result.jobId} to read the result, job_send to continue its conversation, or job_stop to cancel.`;
           return {
-            content: `[Sub-agent running. Session ID: ${result.subSessionId}${reason}. Use subagent_manager wait to get the result.]`,
-            meta: linkMeta,
+            content: `[Sub-agent running. Job ID: ${result.jobId}${reason}.${jobHint}]`,
+            meta: { ...linkMeta, jobId: result.jobId },
           };
         }
         const parts: string[] = [];
         if (result.content) parts.push(result.content);
-        // one_shot 模式下会话已在结果交付后自动冻结（仅供回放），不再返回 Session ID，
-        // 避免 AI 对已冻结的会话调用 close / send_message。
-        // 隐藏只针对模型：meta.link 是 UI 通道，用户仍可点开该会话回放
+        // 结果交付后会话已自动冻结（仅供回放），不返回 Session ID：
+        // 继续交互走 job_send（自动解冻）。隐藏只针对模型：
+        // meta.link 是 UI 通道，用户仍可点开该会话回放
         const tag =
           result.status === "error"
-            ? `[Sub-agent ended with error${result.error ? `. Reason: ${result.error}` : ""}${lifecycle === "one_shot" ? ". One-shot sub-agent auto-closed." : `. Session ID: ${result.subSessionId}`}]`
-            : lifecycle === "one_shot"
-              ? "[Sub-agent completed and auto-closed (one_shot).]"
-              : `[Sub-agent completed. Session ID: ${result.subSessionId}]`;
+            ? `[Sub-agent ended with error${result.error ? `. Reason: ${result.error}` : ""}. Sub-agent auto-closed.]`
+            : "[Sub-agent completed and auto-closed.]";
         parts.push(tag);
         return { content: parts.join("\n"), meta: linkMeta };
       },
@@ -186,138 +177,9 @@ The sub-agent has its own independent conversation context and tool capabilities
       },
       // 计划阶段派子代理做调研是正道（本工具包对 sub_agent 返回 loadMode:none，不会递归）。
       // 注意：子代理**不继承** planEnabled——spawn() 只继承 thinkingEffort / sandboxMode /
-      // attachments / lifecycle，所以子代理并不受计划门的只读约束。这是**已知且已接受的风险**（
+      // attachments，所以子代理并不受计划门的只读约束。这是**已知且已接受的风险**（
       // 见 docs/计划模式实施方案.md §8）。计划模式对子代理的不可见性由另两处保证：
       // plan-mode 工具包对 sub_agent 返回 loadMode:none，以及 plan-mode-reminder.util 的会话类型前置条件。
-      allowedInPlanMode: true,
-    });
-
-    // ── manager：管理子代理（wait / list / close / send_message）──
-    subKit.registerTool({
-      name: "subagent_manager",
-      description: `Manage sub-agents: wait for completion / close / list / send message`,
-      inputSchema: z.object({
-        action: z.enum(["wait", "list", "close", "send_message"]),
-        sessionId: z
-          .string()
-          .optional()
-          .describe("Required for close or send_message"),
-        message: z.string().optional().describe("Required for send_message"),
-      }),
-      execute: async (args, ctx, abortSignal) => {
-        const { action, sessionId, message } = args as {
-          action: string;
-          sessionId?: string;
-          message?: string;
-        };
-        switch (action) {
-          case "wait": {
-            this.logger.log(`等待子代理完成: 父会话 ${ctx?.session.sessionId}`);
-            const completed = await this.subAgentManager.waitForComplete(
-              ctx?.session.sessionId,
-              120000,
-              abortSignal,
-            );
-            if (completed.length === 0) {
-              return "[No active sub-agent tasks.]";
-            }
-            const parts: string[] = [];
-            for (const c of completed) {
-              const r = c.result;
-              const lines: string[] = [];
-              if (r.content) lines.push(r.content);
-              const tag =
-                r.status === "error"
-                  ? `[Sub-agent "${c.name}" ended with error. Session ID: ${c.subSessionId}${r.error ? `. Reason: ${r.error}` : ""}]`
-                  : `[Sub-agent "${c.name}" completed. Session ID: ${c.subSessionId}]`;
-              lines.push(tag);
-              parts.push(lines.join("\n"));
-            }
-            // 仅单目标时给跳转：多目标下一行只能开一个面板，不猜
-            if (completed.length === 1) {
-              const one = completed[0];
-              return {
-                content: parts.join("\n\n"),
-                meta: subAgentLinkMeta(one.subSessionId, one.name),
-              };
-            }
-            return parts.join("\n\n");
-          }
-
-          case "list": {
-            const agents = await this.subAgentManager.getSubAgents(
-              ctx?.session.sessionId,
-            );
-            if (agents.length === 0) return "[No sub-agents running.]";
-            const lines = agents.map(
-              (a: any) => `- ${a.name} (${a.subSessionId}) [${a.status}]`,
-            );
-            return `Active sub-agents:\n${lines.join("\n")}`;
-          }
-
-          case "close": {
-            if (!sessionId) throw new Error("Missing sessionId parameter.");
-            try {
-              await this.subAgentManager.closeSubAgent(
-                sessionId,
-                ctx?.session.sessionId,
-                ctx?.session.workspacePath,
-              );
-              return {
-                content: "Sub-agent closed (frozen, kept for replay).",
-                meta: subAgentLinkMeta(sessionId),
-              };
-            } catch (e: any) {
-              throw new Error(e.message || "Failed to close sub-agent.");
-            }
-          }
-
-          case "send_message": {
-            if (!sessionId || !message)
-              throw new Error("Missing sessionId or message parameter.");
-            try {
-              const result = await this.subAgentManager.sendMessage(
-                {
-                  parentSessionId: ctx?.session.sessionId,
-                  sessionId,
-                  message,
-                },
-                "foreground",
-                abortSignal,
-              );
-              if (result.status === "running") {
-                return {
-                  content: `[Message sent. Sub-agent is running. Session ID: ${result.subSessionId}]`,
-                  meta: subAgentLinkMeta(result.subSessionId),
-                };
-              }
-              const parts: string[] = [];
-              if (result.content) parts.push(result.content);
-              const tag =
-                result.status === "error"
-                  ? `[Sub-agent ended with error. Session ID: ${result.subSessionId}${result.error ? `. Reason: ${result.error}` : ""}]`
-                  : `[Sub-agent completed. Session ID: ${result.subSessionId}]`;
-              parts.push(tag);
-              return {
-                content: parts.join("\n"),
-                meta: subAgentLinkMeta(result.subSessionId),
-              };
-            } catch (e: any) {
-              throw new Error(e.message || "Failed to send message.");
-            }
-          }
-
-          default:
-            throw new Error(`Unknown action: ${action}`);
-        }
-      },
-      display: {
-        actionType: "sub_agent_manage",
-        text: { executing: "%subagent_manager.executing%", completed: "%subagent_manager.completed%" },
-        aggregate: { executing: "%subagent_manager.aggregate.executing%", completed: "%subagent_manager.aggregate.completed%" },
-        argsKey: "action",
-        icon: "generic",
-      },
       allowedInPlanMode: true,
     });
 
@@ -385,7 +247,7 @@ The sub-agent has its own independent conversation context and tool capabilities
           "",
           "### 5. Critical Operational Guidelines (Cautions)",
           "   - Boundary isolation: When splitting tasks, the boundaries must be absolutely clear. It is strictly forbidden to assign the same file to multiple sub-agents for modification, or to have overlapping responsibilities among different sub-agents.",
-          "   - Resource release: Sub-agents are one_shot by default: the sub-session is automatically closed (frozen, kept for replay) once its result is delivered to you, so no close call is needed. Only if you explicitly spawned with lifecycle \"persist\" and the task has finished with no further interaction required, you must immediately call close to release session resources in a timely manner.",
+          "   - Resource release: A sub-agent's session is automatically closed (frozen, kept for replay) once its result is delivered to you — no close call is ever needed. To continue interacting with a background sub-agent, use job_send on its Job ID; it resumes automatically.",
           "   - Transparency management: Users cannot see the internal interaction logs between you and the sub-agents. You must not assume that users are aware of execution details. Ultimately, you must summarize and distill the results of sub-tasks and present them to the user in a clear, structured form.",
         ];
 

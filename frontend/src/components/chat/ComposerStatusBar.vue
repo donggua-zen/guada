@@ -1,7 +1,7 @@
 <template>
   <!-- 输入区运行时状态胶囊（共享外壳）：单条 28px 药丸内分三段——待办 / 后台进程 / 子代理，
        任一段没有内容就整段不渲染，三段全空整根不渲染；hover 在上方弹出面板按域分段列细节。
-       数据契约：待办（REST + todo_updated）、进程（REST + process_changed）、
+       数据契约：待办（REST + todo_updated）、进程（jobs_snapshot + jobs REST 基线）、
        子代理（ChatPage 下传的 subSessions + sessionStore.streamStatus），各域逻辑见
        composables/useTodoStatus.ts、composables/useRunningProcesses.ts、utils/subagentDisplay.ts。
        已结束（冻结）子代理不在本胶囊表达（运行时状态专属），回放入口见子代理列表面板
@@ -85,10 +85,10 @@
               <span class="csb-sec-count">{{ processes.length }}</span>
             </header>
             <div class="csb-list">
-              <GdTooltip v-for="p in processes" :key="p.id" :content="p.command" placement="bottom">
+              <GdTooltip v-for="p in processes" :key="p.id" :content="p.label" placement="bottom">
                 <div class="csb-row csb-row--clickable" @click="openProcessLog(p)">
                   <span class="csb-icon"><span class="csb-spinner"></span></span>
-                  <span class="csb-row-text csb-row-text--cmd">{{ shortCommand(p.command) }}</span>
+                  <span class="csb-row-text csb-row-text--cmd">{{ shortCommand(p.label) }}</span>
                   <span class="csb-elapsed">{{ elapsedText(p.startedAt) }}</span>
                   <GdTooltip :content="t('chat.workspace.killProcess')" placement="bottom">
                     <button class="csb-kill" @click.stop="killProcess(p)">

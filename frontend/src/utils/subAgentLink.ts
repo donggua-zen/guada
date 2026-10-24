@@ -1,27 +1,11 @@
-import { parse as partialParse } from 'partial-json';
-import { type ToolCall, resolveToolName, getToolArgs } from './toolDisplay';
-import { SUB_AGENT_MANAGER_TOOL, SUB_AGENT_TOOLS } from './subAgentTools';
+import { type ToolCall, resolveToolName } from './toolDisplay';
+import { SUB_AGENT_TOOLS } from './subAgentTools';
 import type { ToolCallResponseEntry } from '@/types/message';
 
 export interface SubAgentLink {
   subSessionId: string;
-  /** 子代理名称，仅用于展示（后端 meta 提供；从 args 兜底时没有） */
+  /** 子代理名称，仅用于展示（后端 meta 提供） */
   name?: string;
-}
-
-/** 解析工具参数对象（getToolArgs 可能返回原始 JSON 字符串，流式期间还是半截 JSON） */
-function parseArgs(tool: ToolCall): Record<string, unknown> | undefined {
-  const raw = getToolArgs(tool);
-  if (!raw) return undefined;
-  if (typeof raw === 'string') {
-    try {
-      const parsed = partialParse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return typeof raw === 'object' ? raw : undefined;
 }
 
 /**
@@ -33,11 +17,9 @@ function parseArgs(tool: ToolCall): Record<string, unknown> | undefined {
  *    工具结果还没落库，只有它能建立关联（刷新也不丢）。
  * 2. `response.meta.link` —— 后端子代理工具回传、随 tool/result 落库，覆盖回合结束后
  *    的长尾（eventBuffer 随回合销毁，此后靠它）。
- * 3. `args.sessionId` —— 仅 subagent_manager 的 close / send_message：入参直接带目标
- *    会话，用于覆盖后端尚未补 meta 的历史数据。
  *
- * 返回 null = 该行没有唯一可跳转的目标：非子代理工具、subagent_manager 的 list /
- * 多目标 wait（一行只能开一个面板，不猜）、以及结果尚未到达的调用中工具。
+ * 返回 null = 该行没有唯一可跳转的目标：非子代理工具、多目标等待（一行只能开一个面板，
+ * 不猜）、以及结果尚未到达的调用中工具。
  */
 export function resolveSubAgentLink(
   tool: ToolCall,
@@ -64,13 +46,6 @@ export function resolveSubAgentLink(
       subSessionId: link.subSessionId,
       ...(typeof link.name === 'string' && link.name ? { name: link.name } : {}),
     };
-  }
-
-  if (toolName === SUB_AGENT_MANAGER_TOOL) {
-    const sessionId = parseArgs(tool)?.sessionId;
-    if (typeof sessionId === 'string' && sessionId) {
-      return { subSessionId: sessionId };
-    }
   }
 
   return null;

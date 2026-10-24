@@ -68,6 +68,21 @@ describe("KeepAwakeService", () => {
     expect(bridgeClient.emit).toHaveBeenCalledWith("keep_awake_state", { busy: true });
   });
 
+  it("后台 job running 也算 busy（即使 ChatRunner 空闲）", () => {
+    const jobRegistry = { hasActiveJobs: jest.fn(() => true) };
+    service = new KeepAwakeService(
+      chatRunner as any,
+      bridgeClient as any,
+      jobRegistry as any,
+    );
+
+    service.onModuleInit();
+
+    expect(bridgeClient.emit).toHaveBeenCalledWith("keep_awake_state", {
+      busy: true,
+    });
+  });
+
   it("onModuleDestroy 之后不再上报", () => {
     service.onModuleInit();
     expect(bridgeClient.emit).toHaveBeenCalledTimes(1);

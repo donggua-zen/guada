@@ -801,4 +801,80 @@ describe('AgentEngine - completions', () => {
     });
   });
 
+  describe('落盘容错', () => {
+    function emfileError(): NodeJS.ErrnoException {
+      return Object.assign(new Error('EMFILE: too many open files'), {
+        code: 'EMFILE',
+      });
+    }
+
+    function createEngine(mocks: ReturnType<typeof createAllMocks>) {
+      return new AgentEngine(
+        mocks.toolExecutor as any,
+        mocks.llmService as any,
+        {
+          serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
+          parallel: jest.fn(async () => []),
+        } as any,
+      );
+    }
+
+    it('assistant 消息落盘失败：仍收口回合并发布 turn_end(error)', async () => {
+      const chunks = loadChunksFromJsonl(
+        path.join(__dirname, 'fixtures/chunks-text-only.jsonl'),
+      );
+      const mocks = createAllMocks({ llmChunks: chunks });
+      (mocks.sessionContext.appendMessages as jest.Mock).mockRejectedValueOnce(
+        emfileError(),
+      );
+
+      const agentEngine = createEngine(mocks);
+
+      // 原始异常仍然抛给 chat-runner（保留 error 事件 / stopStream('error')）
+      await expect(
+        agentEngine.run(mocks.sessionContext, { id: 'msg-001' }),
+      ).rejects.toMatchObject({ code: 'EMFILE' });
+
+      // 但回合已收口：turn/finish 写入 + turn_end 复位前端工作态
+      expect(mocks.sessionContext.finalizeTurn).toHaveBeenCalledTimes(1);
+      const finishMeta = (mocks.sessionContext.finalizeTurn as jest.Mock).mock
+        .calls[0][2];
+      expect(finishMeta).toMatchObject({
+        finishReason: 'error',
+        errorDetail: expect.stringContaining('EMFILE'),
+      });
+
+      const turnEnd = mocks.publishedEvents.find(
+        (e): e is Extract<SessionStreamEvent, { type: 'turn_end' }> =>
+          e.type === 'turn_end',
+      );
+      expect(turnEnd).toBeDefined();
+      expect(turnEnd!.finishReason).toBe('error');
+      expect(turnEnd!.error).toContain('EMFILE');
+    });
+
+    it('finalizeTurn 失败：turn_end 仍然发布，不静默卡住', async () => {
+      const chunks = loadChunksFromJsonl(
+        path.join(__dirname, 'fixtures/chunks-text-only.jsonl'),
+      );
+      const mocks = createAllMocks({ llmChunks: chunks });
+      (mocks.sessionContext.finalizeTurn as jest.Mock).mockRejectedValueOnce(
+        emfileError(),
+      );
+
+      const agentEngine = createEngine(mocks);
+      const result = await agentEngine.run(mocks.sessionContext, {
+        id: 'msg-001',
+      });
+
+      expect(result.finishReason).toBe('stop');
+      const turnEnd = mocks.publishedEvents.find(
+        (e): e is Extract<SessionStreamEvent, { type: 'turn_end' }> =>
+          e.type === 'turn_end',
+      );
+      expect(turnEnd).toBeDefined();
+      expect(turnEnd!.finishReason).toBe('stop');
+    });
+  });
+
 });

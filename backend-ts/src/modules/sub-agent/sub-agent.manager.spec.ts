@@ -71,7 +71,7 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     };
     manager = new SubAgentManager(
       store,
-      {} as any, // chatRunnerService：runSubAgentStream 被打桩，不触达
+      { hasActiveStream: () => false } as any, // chatRunnerService：runSubAgentStream 被打桩，不触达
       eventBus as any,
       {} as any, // agentStore：generic 子代理不查询
       {} as any, // messageStore：readSubAgentResult 不在本路径上
@@ -97,8 +97,6 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     const sub = store.get(result.subSessionId)!;
     expect(sub.closedAt).toBeTruthy();
     expect(sub.closeReason).toBe("completed");
-    // 生命周期标记与冻结行为一致（此前写死 persist，导致永不冻结）
-    expect((sub.settings as any).lifecycle).toBe("one_shot");
 
     const closed = emitted.find((e) => e.event === "subagent.closed");
     expect(closed).toBeTruthy();
@@ -152,7 +150,7 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     expect(store.countByParentId(PARENT)).toBe(0);
   });
 
-  it("冻结后的子会话拒绝继续发送消息", async () => {
+  it("冻结后的子会话经 sendMessage 自动解冻继续交互", async () => {
     stubStream(workflowResult());
 
     const result = await manager.spawnForWorkflow({
@@ -162,12 +160,24 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
       workflow: { runId: "run-1" },
     });
 
-    await expect(
-      manager.sendMessage({
-        parentSessionId: PARENT,
-        sessionId: result.subSessionId,
-        message: "follow up",
-      }),
-    ).rejects.toThrow(/closed \(frozen for replay only\)/);
+    // 冻结后发送 → 自动解冻，进入执行（第二次 stub 的结果会再次冻结）
+    stubStream(workflowResult({ content: "follow-up reply" }));
+    const second = await manager.sendMessage({
+      parentSessionId: PARENT,
+      sessionId: result.subSessionId,
+      message: "follow up",
+    });
+    expect(second.content).toBe("follow-up reply");
+    // 自动冻结是 fire-and-forget：轮询等待落库
+    const deadline = Date.now() + 2_000;
+    let after = store.get(result.subSessionId)!;
+    while (!after.closedAt && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 25));
+      after = store.get(result.subSessionId)!;
+    }
+    expect(after.closedAt).toBeTruthy();
+
+    // 名额随解冻→再冻结恢复正常
+    expect(store.countByParentId(PARENT)).toBe(0);
   });
 });

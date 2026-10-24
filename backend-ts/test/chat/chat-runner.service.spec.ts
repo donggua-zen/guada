@@ -83,16 +83,35 @@ describe('ChatRunnerService（supervisor：直发模式下的流生命周期收�
     expect((service as any).processQueue).toHaveBeenCalledWith('s1');
   });
 
-  it('finishReason=error → 流收尾但不自动消费队列', async () => {
+  it('finishReason=error → 流收尾、不立即消费队列、进入有界重试', async () => {
     const { service, streamManager } = buildRunner({
       runImpl: async () => ({ finishReason: 'error' }),
     });
+    const scheduleSpy = jest
+      .spyOn(service as any, 'scheduleQueueRetry')
+      .mockImplementation(() => {});
 
     await service.startStream(startParams);
     await flushAsync();
 
     expect(streamManager.stopStream).toHaveBeenCalledWith('s1', 'completed');
     expect((service as any).processQueue).not.toHaveBeenCalled();
+    expect(scheduleSpy).toHaveBeenCalledWith('s1', 'error');
+  });
+
+  it('finishReason=user_cancel → 不自动重开 turn（只交给 scheduleQueueRetry 决定）', async () => {
+    const { service } = buildRunner({
+      runImpl: async () => ({ finishReason: 'user_cancel' }),
+    });
+    const scheduleSpy = jest
+      .spyOn(service as any, 'scheduleQueueRetry')
+      .mockImplementation(() => {});
+
+    await service.startStream(startParams);
+    await flushAsync();
+
+    expect((service as any).processQueue).not.toHaveBeenCalled();
+    expect(scheduleSpy).toHaveBeenCalledWith('s1', 'user_cancel');
   });
 
   it('引擎 reject → 兜底 publish error 事件 + stopStream(error) + error 状态事件', async () => {
@@ -119,6 +138,135 @@ describe('ChatRunnerService（supervisor：直发模式下的流生命周期收�
 
     await expect(service.startStream(startParams)).rejects.toMatchObject({
       response: { code: 'SESSION_BUSY' },
+    });
+  });
+
+  describe('非正常收尾的队列重试策略', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('error 有 pending 通知 → 1s 后重试一次', async () => {
+      const { service } = buildRunner();
+      (service as any).queues.set('s1', {
+        items: [{}],
+        isProcessing: false,
+      });
+
+      jest.useFakeTimers();
+      (service as any).scheduleQueueRetry('s1', 'error');
+
+      expect((service as any).queueRetryTimers.has('s1')).toBe(true);
+      jest.advanceTimersByTime(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect((service as any).processQueue).toHaveBeenCalledWith('s1');
+      expect((service as any).queueRetryAttempts.get('s1')).toBe(1);
+      (service as any).clearQueueRetry('s1');
+    });
+
+    it('user_cancel 有 pending 通知 → 不创建重试 timer', () => {
+      const { service } = buildRunner();
+      (service as any).queues.set('s1', {
+        items: [{}],
+        isProcessing: false,
+      });
+
+      (service as any).scheduleQueueRetry('s1', 'user_cancel');
+
+      expect((service as any).queueRetryTimers.has('s1')).toBe(false);
+      expect((service as any).queueRetryAttempts.get('s1')).toBeUndefined();
+    });
+
+    it('重试次数有上限', () => {
+      const { service } = buildRunner();
+      (service as any).queues.set('s1', {
+        items: [{}],
+        isProcessing: false,
+      });
+
+      jest.useFakeTimers();
+      (service as any).queueRetryAttempts.set('s1', 3);
+      (service as any).scheduleQueueRetry('s1', 'timeout');
+
+      expect((service as any).queueRetryTimers.has('s1')).toBe(false);
+    });
+  });
+
+  describe('合并批次 callbacks', () => {
+    function makeItem(id: string, callbacks: any) {
+      return {
+        id,
+        sessionId: 's1',
+        blocks: [{ type: 'text', text: id }],
+        source: { kind: 'scheduler', schedulerId: id },
+        createdAt: new Date(),
+        callbacks,
+        onConsumed: jest.fn(),
+      };
+    }
+
+    it('合并批次 fan-out 所有 callbacks，onConsumed 全部执行', async () => {
+      const { service } = buildRunner();
+      const cb1 = {
+        onEvent: jest.fn(),
+        onComplete: jest.fn(),
+        onError: jest.fn(),
+      };
+      const cb2 = {
+        onEvent: jest.fn(),
+        onComplete: jest.fn(),
+        onError: jest.fn(),
+      };
+      const items = [makeItem('a', cb1), makeItem('b', cb2)];
+
+      (service as any).startStream = jest.fn(
+        async (_params: any, callbacks: any) => {
+          callbacks?.onEvent?.({ type: 'text_delta', text: 'x' });
+          callbacks?.onComplete?.('completed');
+          return () => {};
+        },
+      );
+
+      await (service as any).executeQueueItem(items);
+
+      for (const cb of [cb1, cb2]) {
+        expect(cb.onEvent).toHaveBeenCalledWith({ type: 'text_delta', text: 'x' });
+        expect(cb.onComplete).toHaveBeenCalledWith('completed');
+        expect(cb.onError).not.toHaveBeenCalled();
+      }
+      expect(items[0].onConsumed).toHaveBeenCalledTimes(1);
+      expect(items[1].onConsumed).toHaveBeenCalledTimes(1);
+    });
+
+    it('非 busy 失败：逐条 onError 后再逐条 onConsumed', async () => {
+      const { service } = buildRunner();
+      const error = new Error('boom');
+      const cb1 = {
+        onEvent: jest.fn(),
+        onComplete: jest.fn(),
+        onError: jest.fn(),
+      };
+      const cb2 = {
+        onEvent: jest.fn(),
+        onComplete: jest.fn(),
+        onError: jest.fn(),
+      };
+      const items = [makeItem('a', cb1), makeItem('b', cb2)];
+
+      (service as any).startStream = jest.fn(async () => {
+        throw error;
+      });
+
+      await (service as any).executeQueueItem(items);
+
+      for (const cb of [cb1, cb2]) {
+        expect(cb.onError).toHaveBeenCalledWith(error);
+        expect(cb.onComplete).not.toHaveBeenCalled();
+      }
+      expect(items[0].onConsumed).toHaveBeenCalledTimes(1);
+      expect(items[1].onConsumed).toHaveBeenCalledTimes(1);
     });
   });
 });

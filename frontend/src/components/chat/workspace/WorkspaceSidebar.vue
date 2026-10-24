@@ -141,12 +141,11 @@
                             @terminal-id="onTerminalIdReady(tab, $event)" />
                     </template>
                 </template>
-                <!-- 进程日志标签（后台进程输出，轮询日志尾部；:key 保证每个标签持有独立面板实例） -->
-                <ProcessLogPanel v-if="activeTab?.type === 'processlog' && sessionId && activeTab.processId"
+                <!-- 后台作业日志标签（jobs 快照驱动增量读取；:key 保证每个标签持有独立面板实例） -->
+                <ProcessLogPanel v-if="activeTab?.type === 'processlog' && sessionId && activeTab.jobId"
                     :key="activeTab.key"
-                    :session-id="sessionId" :process-id="activeTab.processId"
-                    :started-at="activeTab.startedAt"
-                    :command="activeTab.command || activeTab.processId" :tab-key="activeTab.key" />
+                    :session-id="sessionId" :job-id="activeTab.jobId"
+                    :command="activeTab.command || activeTab.jobId" :tab-key="activeTab.key" />
                 <!-- 子代理会话标签（只读查看，与中央主会话同屏并存） -->
                 <SubagentChatTab v-if="activeTab?.type === 'subagent'" class="h-full"
                     :sub-session-id="subSessionIdOf(activeTab.key)"

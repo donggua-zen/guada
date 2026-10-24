@@ -360,60 +360,64 @@ describe("tabStore.openProcessLogTab", () => {
     setActivePinia(createPinia());
   });
 
-  it("首次点击：新建标签并激活，携带 run token", () => {
+  it("首次点击：新建标签并激活，携带稳定 jobId", () => {
     const store = useTabStore();
 
-    store.openProcessLogTab("s1", "1111", "npm run dev", "2026-01-01T00:00:00.000Z");
+    store.openProcessLogTab("s1", "job-1111", "npm run dev");
 
     expect(store.tabs).toHaveLength(1);
     expect(store.tabs[0]).toMatchObject({
       type: "processlog",
-      key: "processlog:s1:1111",
-      processId: "1111",
+      key: "processlog:s1:job-1111",
+      jobId: "job-1111",
       command: "npm run dev",
-      startedAt: "2026-01-01T00:00:00.000Z",
     });
-    expect(store.activeTabKey).toBe("processlog:s1:1111");
+    expect(store.activeTabKey).toBe("processlog:s1:job-1111");
   });
 
-  it("同一进程（pid + startedAt 均相同）重复点击：只激活，不新增标签", () => {
+  it("同一 jobId 重复点击：只激活，不新增标签", () => {
     const store = useTabStore();
-    store.openProcessLogTab("s1", "1111", "npm run dev", "2026-01-01T00:00:00.000Z");
+    store.openProcessLogTab("s1", "job-1111", "npm run dev");
     store.selectTab(null);
 
-    store.openProcessLogTab("s1", "1111", "npm run dev", "2026-01-01T00:00:00.000Z");
+    store.openProcessLogTab("s1", "job-1111", "npm run dev");
 
     expect(store.tabs).toHaveLength(1);
-    expect(store.activeTabKey).toBe("processlog:s1:1111");
+    expect(store.activeTabKey).toBe("processlog:s1:job-1111");
   });
 
-  it("同一 PID 被新进程复用：不新增标签，但同步新命令与新 run token", () => {
+  it("同一 jobId 命令文案更新：只同步元数据", () => {
     const store = useTabStore();
-    store.openProcessLogTab("s1", "1111", "npm run dev", "2026-01-01T00:00:00.000Z");
+    store.openProcessLogTab("s1", "job-1111", "npm run dev");
 
-    store.openProcessLogTab("s1", "1111", "npm run build", "2026-01-01T00:05:00.000Z");
+    store.openProcessLogTab("s1", "job-1111", "npm run build");
 
     expect(store.tabs).toHaveLength(1);
     expect(store.tabs[0].command).toBe("npm run build");
-    expect(store.tabs[0].startedAt).toBe("2026-01-01T00:05:00.000Z");
   });
 
-  it("不同 PID：各自独立标签", () => {
+  it("不同 jobId：各自独立标签", () => {
     const store = useTabStore();
-    store.openProcessLogTab("s1", "1111", "npm run dev", "2026-01-01T00:00:00.000Z");
+    store.openProcessLogTab("s1", "job-1111", "npm run dev");
 
-    store.openProcessLogTab("s1", "2222", "pytest -q", "2026-01-01T00:01:00.000Z");
+    store.openProcessLogTab("s1", "job-2222", "pytest -q");
 
-    expect(store.tabs.map((t) => t.key)).toEqual(["processlog:s1:1111", "processlog:s1:2222"]);
-    expect(store.activeTabKey).toBe("processlog:s1:2222");
+    expect(store.tabs.map((t) => t.key)).toEqual([
+      "processlog:s1:job-1111",
+      "processlog:s1:job-2222",
+    ]);
+    expect(store.activeTabKey).toBe("processlog:s1:job-2222");
   });
 
-  it("同一 PID 但不同会话：标签互不串用", () => {
+  it("同一 jobId 不同会话：标签互不串用", () => {
     const store = useTabStore();
-    store.openProcessLogTab("s1", "1111", "npm run dev", "2026-01-01T00:00:00.000Z");
+    store.openProcessLogTab("s1", "job-1111", "npm run dev");
 
-    store.openProcessLogTab("s2", "1111", "npm run dev", "2026-01-01T00:00:00.000Z");
+    store.openProcessLogTab("s2", "job-1111", "npm run dev");
 
-    expect(store.tabs.map((t) => t.key)).toEqual(["processlog:s1:1111", "processlog:s2:1111"]);
+    expect(store.tabs.map((t) => t.key)).toEqual([
+      "processlog:s1:job-1111",
+      "processlog:s2:job-1111",
+    ]);
   });
 });

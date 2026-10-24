@@ -9,9 +9,8 @@ import type { ToolCall } from "./toolDisplay";
  * 工具调用 → 子代理会话的关联解析测试
  *
  * 覆盖：
- * - resolveSubAgentLink：三段关联键（流事件 subAgentLink → 落库 meta.link →
- *   manager 的 args.sessionId 兜底）、非子代理工具/无目标返回 null、
- *   legacy tool_use 二跳、流式半截 JSON
+ * - resolveSubAgentLink：两段关联键（流事件 subAgentLink → 落库 meta.link）、
+ *   非子代理工具/无目标返回 null、legacy tool_use 二跳
  * - findToolResponse：按 toolCallId 匹配（并行调用结果乱序）、id 缺失回退下标
  */
 describe("resolveSubAgentLink", () => {
@@ -67,7 +66,7 @@ describe("resolveSubAgentLink", () => {
   });
 
   it("meta.link 无 name 时也能跳（name 仅用于展示）", () => {
-    const tool: ToolCall = { id: "call_1", name: "subagent_manager" };
+    const tool: ToolCall = { id: "call_1", name: "subagent_spawn" };
     const response = { meta: { link: { type: "sub_agent", subSessionId: "sub-1" } } };
     expect(resolveSubAgentLink(tool, response)).toEqual({ subSessionId: "sub-1" });
   });
@@ -78,22 +77,7 @@ describe("resolveSubAgentLink", () => {
     expect(resolveSubAgentLink(tool, response)).toBeNull();
   });
 
-  it("兜底：manager 的 close / send_message 入参直接带 sessionId（历史数据无 meta）", () => {
-    const args = { action: "send_message", sessionId: "sub-9", message: "继续" };
-    const tool: ToolCall = { id: "call_2", name: "subagent_manager", arguments: args };
-    expect(resolveSubAgentLink(tool)).toEqual({ subSessionId: "sub-9" });
-  });
-
-  it("manager 的 arguments 是流式半截 JSON 时仍能解析出 sessionId", () => {
-    const tool: ToolCall = {
-      id: "call_2",
-      name: "subagent_manager",
-      arguments: '{"action":"close","sessionId":"sub-7"',
-    };
-    expect(resolveSubAgentLink(tool)).toEqual({ subSessionId: "sub-7" });
-  });
-
-  it("兜底只对 manager 生效：spawn 参数里出现 sessionId 不当作目标", () => {
+  it("spawn 参数里出现 sessionId 不当作目标（无 meta 时不猜）", () => {
     const tool: ToolCall = {
       id: "call_3",
       name: "subagent_spawn",
@@ -102,12 +86,15 @@ describe("resolveSubAgentLink", () => {
     expect(resolveSubAgentLink(tool)).toBeNull();
   });
 
-  it("manager 的 list / 多目标 wait 无唯一目标 → null", () => {
+  it("manager 工具已删除：历史行不再产生专属跳转（走 meta.link 兜底）", () => {
     expect(
       resolveSubAgentLink({ name: "subagent_manager", arguments: { action: "list" } }),
     ).toBeNull();
     expect(
-      resolveSubAgentLink({ name: "subagent_manager", arguments: { action: "wait" } }),
+      resolveSubAgentLink({
+        name: "subagent_manager",
+        arguments: { action: "send_message", sessionId: "sub-9" },
+      }),
     ).toBeNull();
   });
 
@@ -117,15 +104,15 @@ describe("resolveSubAgentLink", () => {
     expect(resolveSubAgentLink({})).toBeNull();
   });
 
-  it("legacy tool_use 包装：二跳解析出真实工具名与内层参数", () => {
+  it("legacy tool_use 包装：二跳解析出真实工具名（非子代理工具 → null）", () => {
     const tool: ToolCall = {
       name: "tool_use",
       arguments: JSON.stringify({
-        tool_name: "subagent_manager",
-        arguments: { action: "close", sessionId: "sub-9" },
+        tool_name: "read",
+        arguments: { file_path: "a.ts" },
       }),
     };
-    expect(resolveSubAgentLink(tool)).toEqual({ subSessionId: "sub-9" });
+    expect(resolveSubAgentLink(tool)).toBeNull();
   });
 
   it("legacy tool_use + meta.link 同样命中（meta 优先于参数）", () => {

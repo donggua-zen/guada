@@ -3,11 +3,12 @@ import { ChatModule } from "../chat/chat.module";
 import { AgentsModule } from "../agents/agents.module";
 import { ToolsModule } from "../tools/tools.module";
 import { PluginManager } from "../plugins";
+import { JobsModule } from "../jobs/jobs.module";
 import { SubAgentManager } from "./sub-agent.manager";
 import { SubAgentPlugin } from "./sub-agent.plugin";
 
 @Module({
-  imports: [ChatModule, AgentsModule, ToolsModule],
+  imports: [ChatModule, AgentsModule, ToolsModule, JobsModule],
   providers: [
     SubAgentManager,
     SubAgentPlugin,

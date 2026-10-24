@@ -109,7 +109,7 @@ const term = computed<
         : (p?.uptimeText ?? undefined),
     processStatus: m?.processStatus ?? p?.processStatus,
     backgrounded: m?.backgrounded ?? p?.backgrounded ?? false,
-    processId: m?.processId ?? p?.processId,
+    processId: (m?.jobId ?? m?.processId) ?? p?.jobId ?? p?.processId,
     truncated: m?.truncated ?? p?.truncated ?? false,
     logFilePath: m?.logFilePath ?? p?.logFilePath,
     sandboxNote: m?.sandboxNote ?? p?.sandboxNote,

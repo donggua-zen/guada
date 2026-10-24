@@ -204,19 +204,16 @@ export const useTabStore = defineStore('tab', () => {
     }
 
     /**
-     * 打开后台进程日志标签（同一进程复用同一标签，已存在则直接激活）
-     * @param startedAt 本次运行的启动时间。进程 ID 即 OS PID，会被系统回收，
-     *   同一 PID 承载新一次运行时该值变化 —— 日志面板 watch 它来丢弃旧快照重新拉取。
+     * 打开后台作业日志标签（同一 job 复用同一标签，已存在则直接激活）
+     * @param jobId 稳定作业 id（job-...），不再依赖会被复用的 OS PID
      */
-    function openProcessLogTab(sessionId: string, processId: string, command: string, startedAt?: string): void {
-        const id = `processlog:${sessionId}:${processId}`
+    function openProcessLogTab(sessionId: string, jobId: string, command: string): void {
+        const id = `processlog:${sessionId}:${jobId}`
         const existing = tabs.value.find(t => t.key === id)
         if (existing) {
-            // 同一进程命令可能已变化（如重启同 PID），同步元数据与 run token
             existing.command = command
-            existing.startedAt = startedAt
         } else {
-            tabs.value.push({ type: 'processlog', key: id, processId, command, startedAt })
+            tabs.value.push({ type: 'processlog', key: id, jobId, command })
         }
         selectTab(id)
     }

@@ -54,7 +54,7 @@ import { usageApi, type UsageApi } from "./modules/usage.api";
 
 export type { FileChangeEvent };
 export type { SessionEvent, SessionEventType };
-export type { UiProcessInfo, UiProcessLog } from "./modules/session.api";
+export type { UiJobInfo, UiJobOutput } from "./modules/session.api";
 
 /**
  * 通过 interface 声明合并，让 ApiService 类型包含所有领域方法。

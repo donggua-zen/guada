@@ -18,6 +18,7 @@ import {
   buildLogFileName,
   ProcessManagerService,
 } from '../../src/modules/shell/process-manager.service';
+import { JobRegistryService } from '../../src/modules/jobs/job-registry.service';
 
 describe('ProcessManagerService UI methods', () => {
   let svc: ProcessManagerService;
@@ -47,7 +48,7 @@ describe('ProcessManagerService UI methods', () => {
     emitted = [];
     const mockRunner: any = { enqueueMessage };
     const mockEmitter: any = { emit: (name: string, payload: any) => { emitted.push({ name, payload }); } };
-    svc = new ProcessManagerService(mockRunner, mockEmitter);
+    svc = new ProcessManagerService(mockRunner, mockEmitter, new JobRegistryService({ emit: () => {} } as any));
   });
 
   afterEach(async () => {
@@ -111,9 +112,6 @@ describe('ProcessManagerService UI methods', () => {
 
     // 其他会话不可见
     expect(svc.listRunningBySession('sess-other')).toHaveLength(0);
-
-    // 转后台时发射了 process.changed 事件（SSE 链路）
-    expect(emitted.some((e) => e.name === 'process.changed' && e.payload.sessionId === 'sess-ui')).toBe(true);
   });
 
   it('readLogTail 读取日志尾部，跨会话返回 null', async () => {
@@ -155,13 +153,8 @@ describe('ProcessManagerService UI methods', () => {
     // 'killed'（幂等语义），而不是 null
     expect(svc.killIfOwned(processId, 'sess-kill')).toBe('killed');
 
-    // kill → close 清理发射 process.changed（结束通知链路）。
-    // 先清空累积：runBackground 转后台时已为同一 sessionId 发过一次事件，
-    // 不清空则这条断言无法区分是不是清理路径发的。
-    emitted.length = 0;
     await waitForCleanup(processId);
     expect(svc.killIfOwned(processId, 'sess-kill')).toBeNull();
-    expect(emitted.some((e) => e.name === 'process.changed' && e.payload.sessionId === 'sess-kill')).toBe(true);
   });
 
   it('readLogTail：entry 被清理后改从磁盘读（按文件名定位），status=ended', async () => {

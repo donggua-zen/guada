@@ -1,7 +1,7 @@
 /**
  * 终端类工具结果解析（标记契约，对齐 DSH parseExitStatus 的思路）
  *
- * 后端 shell 工具（run_command / process）的模型文本契约：
+ * 后端 shell 工具（run_command / job_read）的模型文本契约：
  *   stdout 裸文本（空则 "(no output)"）+ 行级 [...] 标记；[exit code: N, uptime: X] 恒为末行。
  * 旧格式（历史会话）：`Latest output:\n---\nX\n---` 包装 + 标记行（截断/提权提示可能在 exit 标记之后）。
  *
@@ -22,6 +22,9 @@ export interface TerminalResultInfo {
   /** poll 状态行中的进程状态（running/completed/error/...） */
   processStatus?: string;
   backgrounded: boolean;
+  /** 后台任务 id（新文案 Job ID: job-...）；历史会话无 */
+  jobId?: string;
+  /** 旧文案的 processId（历史会话回放兼容；新文案不再出现） */
   processId?: string;
   truncated: boolean;
   logFilePath?: string;
@@ -38,8 +41,9 @@ const TRUNCATED_NOTE =
   /\[Note: Output was truncated\.[^\]]*?at: (.*?)\. (?:You can read it using the read tool if needed|Read it with the read tool)[^\]]*\]\n?/;
 // 沙盒提示行：新文案（denied，引导用户切档）+ 旧版"提权"文案（历史会话回放）
 const SANDBOX_HINT = /\[sandbox: (?:denied|escalation available)[^\]]*\]\n?/g;
+// 新文案带 jobId（Job ID: job-...）；旧文案（历史会话）带 processId。两者取其一。
 const BACKGROUND_MARKER =
-  /\[(?:Process moved to background|Command exceeded [^\]]*?switched to background)\.?[^\]]*?processId:\s*([^\s,\]]+)(?:, uptime: ([^\].]+))?\.?\s*[^\]]*\]\n?/;
+  /\[(?:Process moved to background|Command exceeded [^\]]*?switched to background)[^\]]*?(?:Job ID:\s*(job-[^\s,\]]+)|processId:\s*([^\s,\]]+))(?:, uptime: ([^\].]+))?\.?\s*[^\]]*\]\n?/;
 const STATUS_MARKER =
   /\[status: ([a-z]+)(?:, exit code: (\d+))?(?:, uptime: ([^\]]+?))?(?:, waited: ([^\]]+))?\]/g;
 const EXIT_MARKER = /\[exit code: (\d+)(?:, uptime: ([^\]]+?))?\]/g;
@@ -101,12 +105,13 @@ export function parseTerminalResult(content: string): TerminalResultInfo | null 
     recognized = true;
   }
 
-  // 5. 后台进程标记（run_command 转后台；含 processId）
+  // 5. 后台标记（run_command 转后台；新文案带 jobId，旧文案 processId 仅供历史回放）
   const bg = BACKGROUND_MARKER.exec(text);
   if (bg) {
     info.backgrounded = true;
-    info.processId = bg[1];
-    if (bg[2]) info.uptimeText = bg[2];
+    if (bg[1]) info.jobId = bg[1];
+    if (bg[2]) info.processId = bg[2];
+    if (bg[3]) info.uptimeText = bg[3];
     text = removeLastMatch(text, bg as RegExpMatchArray);
     recognized = true;
   }
