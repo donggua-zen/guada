@@ -5,7 +5,10 @@
     <!-- User 部分 -->
     <!-- ============================================ -->
     <div v-if="user" class="user-section">
-      <div class="message-item__wrapper">
+      <!-- P5c：通知类回合（process_monitor/sub_agent）渲染为压缩卡同款时间卡片，
+           不再占用用户气泡容器（数据不动：role='user' + source.kind 是唯一分流依据） -->
+      <EventCard v-if="isNotificationTurn" :event="user" class="w-full" />
+      <div v-else class="message-item__wrapper">
         <div class="message-item__card">
           <!-- 用户文本 -->
           <div class="message-item__text break-all whitespace-pre-wrap">
@@ -21,33 +24,7 @@
                 <span v-html="userContent"></span>
               </div>
             </template>
-            <!-- P5b：通知类（process_monitor/sub_agent）不显示文本气泡，仅折叠按钮 -->
-            <span v-else-if="!isNotificationUser" v-html="renderSkillBadges(userContent)"></span>
-          </div>
-          <!-- P5b：通知类折叠区（极简显示，可展开看全文；内容为剥离 <system_reminder> 标签后的全文） -->
-          <div v-if="isNotificationUser && notificationText" class="user-reminder">
-            <div class="user-reminder__row">
-              <button type="button" class="user-reminder__toggle" @click="reminderExpanded = !reminderExpanded">
-                <el-icon size="12">
-                  <ChevronDown12Regular v-if="!reminderExpanded" class="user-reminder__arrow" />
-                  <ChevronDown12Regular v-else class="user-reminder__arrow is-expanded" />
-                </el-icon>
-                <span class="user-reminder__label">
-                  {{ reminderExpanded ? t('chat.turn.collapseOutput') : notificationLabel }}
-                </span>
-              </button>
-              <!-- 子代理结果通知：直接点进派生子代理的会话（source.subSessionId 由后端结构化携带，
-                   实时与回放两条路径都透传，刷新后仍在） -->
-              <GdTooltip v-if="notificationSubSessionId && openSubAgentSession"
-                :content="t('chat.toolCalls.openSubAgentPanel')" placement="top">
-                <span class="open-subagent-btn" @click="openNotificationSubAgent">
-                  <el-icon size="14">
-                    <PanelRightExpand20Filled />
-                  </el-icon>
-                </span>
-              </GdTooltip>
-            </div>
-            <div v-if="reminderExpanded" class="user-reminder__body">{{ notificationText }}</div>
+            <span v-else v-html="renderSkillBadges(userContent)"></span>
           </div>
         </div>
         <!-- 知识库引用 chips（kb-ref 块明细，历史数据回退 metadata.referencedKbs） -->
@@ -228,7 +205,7 @@ import { computed, ref, watch, nextTick, inject } from "vue";
 import { ElAlert, ElIcon, ElImageViewer } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { MenuBookOutlined } from "@vicons/material";
-import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, PanelRightExpand20Filled } from "@vicons/fluent";
+import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
@@ -240,7 +217,6 @@ import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
 import ThinkingStatus from './ThinkingStatus.vue';
 import MessageToolCalls from './message-item/MessageToolCalls.vue';
-import GdTooltip from '@/components/ui/GdTooltip.vue';
 import MessageActions from './message-item/MessageActions.vue';
 import FileChangesBar from './message-item/FileChangesBar.vue';
 import EventCard from './EventCard.vue';
@@ -248,7 +224,7 @@ import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChang
 import { useElapsedTicker } from '@/composables/useElapsedTicker';
 import { useTabStore } from '@/stores/tab';
 import { useLayoutStore } from '@/stores/layout';
-import { isHiddenBlock, stripSystemReminder, getThinkingPreview } from '@/utils/messageUtils';
+import { isHiddenBlock, getThinkingPreview } from '@/utils/messageUtils';
 import { previewFile } from '@/utils/workspacePreview';
 
 const { t } = useI18n();
@@ -505,42 +481,12 @@ const userFiles = computed(() => {
 // 用户消息视图（跨块聚合文本+附件，供复制/编辑等旧消费方按单对象访问）
 const userView = computed(() => toUserMessageView(user.value));
 
-// P5b：通知类消息（process_monitor/sub_agent）——只含 <system_reminder> 块，
-// 前端剥离标签后折叠极简显示（点击展开看全文），不混入用户消息气泡。
-const reminderExpanded = ref(false);
-const isNotificationUser = computed(() => {
+// P5c：通知类回合（process_monitor/sub_agent）——数据保持 role='user' 不动，
+// 渲染分流到 EventCard 时间卡片（压缩卡同款分隔线样式），不占用用户气泡容器。
+const isNotificationTurn = computed(() => {
   const kind = user.value?.source?.kind;
   return kind === 'process_monitor' || kind === 'sub_agent';
 });
-const notificationText = computed(() => {
-  if (!isNotificationUser.value) return '';
-  return stripSystemReminder(userContent.value ?? '');
-});
-// 折叠按钮文案按来源区分：进程输出 / 子代理结果
-const notificationLabel = computed(() => {
-  return user.value?.source?.kind === 'process_monitor'
-    ? t('chat.turn.viewProcessOutput')
-    : t('chat.turn.viewSubagentResult');
-});
-
-/** 子代理结果通知目标会话（仅 kind='sub_agent' 有；process_monitor 不参与跳转） */
-const notificationSubSessionId = computed(() => {
-  const source = user.value?.source;
-  if (source?.kind !== 'sub_agent') return '';
-  return typeof source.subSessionId === 'string' ? source.subSessionId : '';
-});
-
-/** 打开子代理面板（ChatPage provide；无 provide 的宿主如 BotSessionDialog 下为 null → 不渲染入口） */
-const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
-  'workspace:openSubAgentSession',
-  null,
-);
-
-const openNotificationSubAgent = (): void => {
-  if (notificationSubSessionId.value) {
-    openSubAgentSession?.(notificationSubSessionId.value);
-  }
-};
 
 const userTime = computed(() => {
   return {
@@ -789,70 +735,6 @@ const handleImageClick = (file: FileAttachment) => {
 .user-section .message-item__wrapper {
   align-items: flex-end;
   max-width: 80%;
-}
-
-/* P5：process_monitor 通知折叠区（居左、灰色极简） */
-.user-reminder {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin-top: 4px;
-  max-width: 100%;
-}
-/* 折叠按钮与"打开子代理面板"同行（后者仅子代理结果通知出现） */
-.user-reminder__row {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-/* 打开子代理面板：与工具行的同名入口保持同一视觉/交互 */
-.open-subagent-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-tertiary, #999);
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-.open-subagent-btn:hover {
-  color: var(--el-color-primary);
-}
-.user-reminder__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--color-border-tertiary, #e0e0e0);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-tertiary, #999);
-  font-size: 12px;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
-}
-.user-reminder__toggle:hover {
-  color: var(--color-text-secondary, #666);
-  border-color: var(--color-border-secondary, #bbb);
-}
-.user-reminder__arrow {
-  transition: transform 0.2s ease;
-}
-.user-reminder__arrow.is-expanded {
-  transform: rotate(180deg);
-}
-.user-reminder__body {
-  margin-top: 4px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--gd-color-surface, #f5f5f5);
-  color: var(--color-text-secondary, #666);
-  font-size: 12px;
-  /* 整数行高：12 × 1.6 = 19.2px 会让每行基线落在设备像素之间 */
-  line-height: 20px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 320px;
-  overflow-y: auto;
 }
 
 /* 助手消息气泡 */

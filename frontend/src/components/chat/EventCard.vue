@@ -69,6 +69,33 @@
       </div>
     </div>
 
+    <!-- 后台作业完成通知（job-notice）：数据仍是 role='user' 消息（source.kind 命中即此分支），
+         仅渲染形态对齐压缩卡分隔线样式；将来注入事件有更好的形态时，本分支独立增删。 -->
+    <div v-else-if="eventType === 'job-notice'" class="event-card__compaction">
+      <div class="event-card__divider">
+        <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
+        <button type="button" class="event-card__compaction-btn" @click="expanded = !expanded">
+          <el-icon size="14">
+            <PanelRightExpand20Filled v-if="isSubagentNotice" />
+            <ArrowUp16Regular v-else-if="expanded" />
+            <ChevronDown12Regular v-else class="rotate-90" />
+          </el-icon>
+          <span class="event-card__compaction-text">{{ noticeLabel }}</span>
+        </button>
+        <!-- 子代理结果通知：点进派生子代理的会话（source.subSessionId 结构化携带） -->
+        <GdTooltip v-if="isSubagentNotice && subSessionId && openSubAgentSession"
+          :content="t('chat.toolCalls.openSubAgentPanel')" placement="top">
+          <span class="event-card__subagent-btn" @click="openSubAgentSession(subSessionId)">
+            <el-icon size="14">
+              <PanelRightExpand20Filled />
+            </el-icon>
+          </span>
+        </GdTooltip>
+        <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
+      </div>
+      <div v-if="expanded && noticeText" class="event-card__summary">{{ noticeText }}</div>
+    </div>
+
     <!-- 上下文窗口变化提示（模型切换 / 会话 token 上限调整） -->
     <div v-else-if="eventType === 'context-notice'" class="event-card__compaction">
       <div class="event-card__divider">
@@ -95,10 +122,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, inject } from "vue";
 import { useI18n } from "vue-i18n";
 import { Loading, Warning } from "@element-plus/icons-vue";
-import { KeyCommand16Regular, ArrowUp16Regular, Archive20Regular } from "@vicons/fluent";
+import {
+  KeyCommand16Regular,
+  ArrowUp16Regular,
+  Archive20Regular,
+  ChevronDown12Regular,
+  PanelRightExpand20Filled,
+} from "@vicons/fluent";
+import GdTooltip from "@/components/ui/GdTooltip.vue";
+import { stripSystemReminder } from "@/utils/messageUtils";
 import type { Turn, MessageBundle } from "@/types/message";
 
 const props = defineProps<{
@@ -109,7 +144,54 @@ const props = defineProps<{
 const { t } = useI18n();
 const expanded = ref(false);
 
-const eventType = computed(() => props.event?.metadata?.eventType ?? "");
+/** 子代理面板跳转：宿主提供（ChatPage）；BotSessionDialog 等无 provide 时按钮不渲染 */
+const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
+  'workspace:openSubAgentSession',
+  null,
+);
+
+const sourceKind = computed(() => {
+  const source = (props.event as MessageBundle | null | undefined)?.source;
+  return source && typeof source.kind === "string" ? source.kind : "";
+});
+
+/**
+ * 事件类型：metadata.eventType 优先（event 外壳/束）；
+ * 通知类消息数据保持 role='user' 不动，以 source.kind 作为渲染分流的兜底判定。
+ */
+const eventType = computed(() => {
+  const declared = props.event?.metadata?.eventType;
+  if (declared) return String(declared);
+  if (sourceKind.value === "process_monitor" || sourceKind.value === "sub_agent") {
+    return "job-notice";
+  }
+  return "";
+});
+
+const isSubagentNotice = computed(() => sourceKind.value === "sub_agent");
+const subSessionId = computed(() => {
+  if (!isSubagentNotice.value) return "";
+  const source = (props.event as MessageBundle | null | undefined)?.source as
+    | { subSessionId?: unknown }
+    | undefined;
+  return typeof source?.subSessionId === "string" ? source.subSessionId : "";
+});
+
+const noticeLabel = computed(() =>
+  isSubagentNotice.value
+    ? t("chat.turn.viewSubagentResult")
+    : t("chat.turn.viewProcessOutput"),
+);
+
+const noticeText = computed(() => {
+  if (!expanded.value) return "";
+  const blocks = (props.event as MessageBundle | null | undefined)?.blocks;
+  const text = (blocks ?? [])
+    .map((b) => (typeof b?.content === "string" ? b.content : ""))
+    .join("\n");
+  return stripSystemReminder(text);
+});
+
 const compressing = computed(() => !!props.event?.metadata?.compressing);
 const compressResult = computed(() => props.event?.metadata?.compressResult ?? null);
 const commandName = computed(() => props.event?.metadata?.commandName ?? "");
@@ -300,6 +382,11 @@ const outcomeClass = computed(() => {
 }
 .event-card__compaction-text {
   @apply text-xs tracking-wide;
+}
+
+.event-card__subagent-btn {
+  @apply flex shrink-0 cursor-pointer items-center rounded-full p-1 text-gray-400 dark:text-gray-500
+    hover:bg-gray-100/70 dark:hover:bg-gray-800/50 hover:text-gray-500 dark:hover:text-gray-400 transition-colors;
 }
 </style>
 

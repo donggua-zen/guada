@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getThinkingPreview, groupContentsForDisplay } from "./messageUtils";
+import { getThinkingPreview, groupContentsForDisplay, stripSystemReminder } from "./messageUtils";
 import type { MessageContent } from "@/types/message";
 
 /**
@@ -155,5 +155,38 @@ describe("groupContentsForDisplay：独立渲染工具分组", () => {
 
     expect(groups.map((g) => g.type)).toEqual(["content", "process"]);
     expect(groups[1].isCollapsible).toBe(false);
+  });
+});
+
+/**
+ * <system_reminder> 剥离测试（P5c：多段落支持）
+ *
+ * 合并批次一条消息可含多段 reminder（如多个 job 同回合完成），
+ * 全部剥出按序拼接；无标记原样返回（outline 等消费方依赖此行为）。
+ */
+describe("stripSystemReminder", () => {
+  it("单段 reminder 剥出内部文本", () => {
+    expect(
+      stripSystemReminder(
+        "<system_reminder>\nBackground job job-a finished.\n</system_reminder>",
+      ),
+    ).toBe("Background job job-a finished.");
+  });
+
+  it("多段 reminder 按序拼接（合并批次）", () => {
+    const text =
+      "<system_reminder>\njob-a finished\n</system_reminder>\n<system_reminder>\njob-b failed\n</system_reminder>";
+    expect(stripSystemReminder(text)).toBe("job-a finished\n\njob-b failed");
+  });
+
+  it("多段中空段被丢弃", () => {
+    const text =
+      "<system_reminder>first</system_reminder><system_reminder>   </system_reminder><system_reminder>second</system_reminder>";
+    expect(stripSystemReminder(text)).toBe("first\n\nsecond");
+  });
+
+  it("无标记原样返回", () => {
+    expect(stripSystemReminder("plain text")).toBe("plain text");
+    expect(stripSystemReminder("")).toBe("");
   });
 });

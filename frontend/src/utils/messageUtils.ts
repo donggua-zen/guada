@@ -299,14 +299,19 @@ export function isHiddenBlock(
 }
 
 /**
- * 剥离 <system_reminder> 标签，返回内部内容（P5b）
+ * 剥离 <system_reminder> 标签，返回内部内容（P5b/P5c）
  *
  * 通知类消息（process_monitor / sub_agent）的 text 块以
  * `<system_reminder>...</system_reminder>` 包裹（仅模型面语义），
  * 前端展示需解析出标签内文本，避免原样渲染标签。无标签时原样返回。
+ * 合并批次一条消息可含多段 reminder：全部剥出并按序拼接（空段丢弃）。
  */
 export function stripSystemReminder(text: string): string {
   if (!text) return text;
-  const match = text.match(/<system_reminder>([\s\S]*?)<\/system_reminder>/);
-  return match ? match[1].trim() : text;
+  const matches = [...text.matchAll(/<system_reminder>([\s\S]*?)<\/system_reminder>/g)];
+  if (matches.length === 0) return text;
+  return matches
+    .map((m) => m[1].trim())
+    .filter((t) => t.length > 0)
+    .join("\n\n");
 }
