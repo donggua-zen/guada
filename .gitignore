@@ -87,3 +87,5 @@ eval/**/__pycache__/
 backend-ts/work/
 backend-ts/workspace/**
 tmp/**
+# DSH 参考代码快照（第三方仓库拷贝，仅本地对照用，不入库）
+/refs/
