@@ -789,6 +789,16 @@ export class ChatRunnerService {
         // user_cancel 不自动重开；error/timeout/rate_limited 有界退避重试。
         this.scheduleQueueRetry(sessionId, finalReason);
       }
+
+      // 回合终结的单一内部信号：JobNotifier 据此在正常收尾时投递挂起的完成通知。
+      // 放在队列处理之后——若残留队列项已经开启了下一回合，其 running 事件会先清掉
+      // 挂起标记，这里自然不会再投。
+      this.eventBus.emit("chat.turn_finished", {
+        sessionId,
+        sessionType: sessionContext.sessionType,
+        reason: finalReason,
+        normalFinish: NORMAL_FINISH.has(finalReason),
+      });
     }
   }
 }

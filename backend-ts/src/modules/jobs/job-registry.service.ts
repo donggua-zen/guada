@@ -41,6 +41,11 @@ interface JobRecord {
    * 只挂模型路径；REST/前端继续显式传 offset，互不干扰。随 JobRecord 存灭。
    */
   modelReadOffset?: number;
+  /**
+   * 完成通知挂起标记：settle 时会话不空闲（运行中/队列非空）→ 不投递，
+   * 等回合正常收尾或下一次空闲边界再投。回合开始时统一清除。
+   */
+  noticePending?: boolean;
   /** 正在 wait 的调用者数量；结算时若有等待者，输出视为已交付 */
   waiters: number;
   settledPromise: Promise<void>;
@@ -420,6 +425,40 @@ export class JobRegistryService
     if (!record || record.reported) return;
     record.reported = true;
     this.invokeHook(record.spec.onReported, `onReported(${id})`);
+  }
+
+  /**
+   * 完成通知挂起：settle 时会话不空闲，本轮由 turn.stopping drain / 模型读取负责，
+   * 回合正常收尾或下一次空闲边界再决定是否投递。
+   */
+  markNoticePending(id: JobId): void {
+    const record = this.jobs.get(id);
+    if (!record || record.reported || !record.settled) return;
+    record.noticePending = true;
+  }
+
+  /** 回合开始：会话重新运行，挂起标记全部作废（模型可 job_list 自行发现）。 */
+  clearPendingNotices(sessionId: string): void {
+    for (const id of this.sessionJobs.get(sessionId) ?? []) {
+      const record = this.jobs.get(id);
+      if (record) record.noticePending = false;
+    }
+  }
+
+  /**
+   * 取出并清除该会话的挂起通知（只返回已结算且未被读取的记录）。
+   * 调用方负责投递；投递即 markReported。
+   */
+  takePendingNotices(sessionId: string): JobSnapshot[] {
+    const out: JobSnapshot[] = [];
+    for (const id of this.sessionJobs.get(sessionId) ?? []) {
+      const record = this.jobs.get(id);
+      if (!record || !record.noticePending) continue;
+      record.noticePending = false;
+      if (!record.settled || record.reported) continue;
+      out.push(this.toSnapshot(record));
+    }
+    return out;
   }
 
   hasActiveJobs(): boolean {

@@ -5,15 +5,36 @@ import type { QueueSource } from "../chat/chat-runner.service";
 import { JobRegistryService } from "./job-registry.service";
 import type { JobSettledEvent, JobSnapshot } from "./job.types";
 
+/** 回合收尾事件（ChatRunner finally 发出；normalFinish 与 processQueue 同一道门） */
+interface TurnFinishedEvent {
+  sessionId: string;
+  sessionType?: string;
+  reason?: string;
+  normalFinish: boolean;
+}
+
+/** 流状态事件（ChatRunner startStream/stop 路径发出） */
+interface StreamStatusEvent {
+  sessionId: string;
+  payload?: {
+    status?: string;
+    reason?: string;
+    sessionType?: string;
+  };
+}
+
 /**
  * 后台作业完成通知的唯一投递点。
  *
- * 执行器结算 job 后只发 `job.settled`；这里负责：
- * - 跳过执行器明确要求静默（notify:false）和已读（reported）的作业；
- * - 把通知映射回现有 source（shell/remote/pty → process_monitor，subagent → sub_agent），
- *   保证前端渲染不变；
- * - 用 Registry 快照存在性 + reported 做 isValid 去重。
+ * 投递时机（对齐 zcode 的"投递时判定"思路）：
+ * - 会话运行中 → 不投递，只置挂起标记；本轮由 turn.stopping drain 或模型 job_read 负责；
+ * - 会话空闲 → 立即投递（enqueue 后立即 processQueue，近似"投递即消费"）；
+ * - 回合正常收尾 → 把挂起通知一次投出（批量由队列的同 source.kind 合并承接）；
+ * - 回合开始 → 挂起标记作废（"会话再运行就不投递"，模型可 job_list 自行发现）；
+ * - user_cancel / error 收尾 → 不投递（与 processQueue 同一道 NORMAL_FINISH 门）。
  *
+ * 去重不再依赖 isValid/onConsumed 闭包：投递那一刻即 markReported——
+ * 完成通知的"已交付"语义在投递时成立，子 Agent 清理/冻结与 drain 跳过都以此为准。
  * 通知正文刻意只带状态和读取入口，不带完整输出——模型用 job_read 取输出。
  */
 @Injectable()
@@ -35,28 +56,58 @@ export class JobNotifierService {
       return;
     }
 
+    // 会话在跑：本轮自己会 drain/read，通知先挂起
+    if (this.chatRunner.hasActiveStream(event.job.sessionId)) {
+      this.registry.markNoticePending(event.job.id);
+      return;
+    }
+    await this.deliver(event.job);
+  }
+
+  /** 回合开始：挂起通知作废（"只要会话再运行就不投递"）。 */
+  @OnEvent("stream.status_changed")
+  handleStreamStatusChanged(event: StreamStatusEvent): void {
+    if (event.payload?.status !== "running") return;
+    this.registry.clearPendingNotices(event.sessionId);
+  }
+
+  /** 回合正常收尾：投出本轮挂起的通知（含 drain 未消费的）。 */
+  @OnEvent("chat.turn_finished")
+  async handleTurnFinished(event: TurnFinishedEvent): Promise<void> {
+    if (!event.normalFinish) return;
+    if (this.registry.isShuttingDown()) return;
+
+    const pending = this.registry.takePendingNotices(event.sessionId);
+    for (const job of pending) {
+      await this.deliver(job);
+    }
+  }
+
+  /**
+   * 投递一条完成通知。
+   *
+   * 先 markReported：通知发出即视为"结果已通告"——
+   * 子 Agent 的 onReported 据此清 completed/自动冻结；shell/remote 的
+   * turn.stopping drain 据此跳过已通告输出，避免同一份输出被注入两次。
+   * 不传 isValid/onConsumed：投递只在空闲（或回合正常收尾）发生，近似原子消费。
+   */
+  private async deliver(job: JobSnapshot): Promise<void> {
+    this.registry.markReported(job.id);
     try {
       await this.chatRunner.enqueueMessage({
-        sessionId: event.job.sessionId,
+        sessionId: job.sessionId,
         blocks: [
           {
             type: "text",
-            text: `<system_reminder>\n${this.buildNotice(event.job)}\n</system_reminder>`,
+            text: `<system_reminder>\n${this.buildNotice(job)}\n</system_reminder>`,
           },
         ],
-        source: this.buildSource(event.job),
-        isValid: () => {
-          const current = this.registry.get(event.job.id, event.job.sessionId);
-          return !!current && !current.reported;
-        },
-        onConsumed: () => {
-          this.registry.markReported(event.job.id);
-        },
+        source: this.buildSource(job),
       });
     } catch (error: any) {
       // 通知失败不能让执行器结算流程抛错；日志留证，job 仍可在 TTL 内读取。
       this.logger.error(
-        `投递作业完成通知失败 (${event.job.id}): ${error?.message ?? error}`,
+        `投递作业完成通知失败 (${job.id}): ${error?.message ?? error}`,
       );
     }
   }

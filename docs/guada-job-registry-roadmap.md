@@ -653,3 +653,48 @@ job 配额（每会话 10 个 running）的目的与实现自相矛盾：配额�
 - sub-agent.manager.spec：「配额满回退信箱」改写为「配额满直接报错、无会话无通知」；「满 10 个子代理拒绝创建」改写为预检已删（配额统一由 Registry）；其余 lifecycle 用例不变。
 - shell 侧 4 个 spec 补 stub registry（native/service/ui/completion），completion spec 从断言旧信箱通知改写为断言 job.settled 精确一次 + drain/poll 后 reported 置位。
 - 回归：**248 suites / 3294 passed / 4 skipped**（唯一失败 `test/scheduler/missed-window.spec.ts` 为已知长跑时序抖动，单独跑 5/5 通过）。
+
+---
+
+## 15. 通知投递时机化执行记录（2026-10-24）
+
+### 15.1 动机
+
+旧链路是 settle 时无条件 `enqueueMessage`，再用 `isValid`/`onConsumed` 闭包事后去重。它简单但有两个问题：一是同一结果可能同时存在于两条通道（回合内 turn.stopping drain 注入 + 队列通知），靠回调竞速保证不重复；二是回调把「队列项」与「Registry 状态」耦合在一起。改为**投递时判定**：运行中不产生通知，只挂起；空闲边界投递，投递即视为已通告。
+
+### 15.2 新机制
+
+| 时刻 | 行为 |
+|---|---|
+| job settle，会话**运行中** | 不投递，`noticePending=true`；本轮由 turn.stopping drain / 模型 job_read 负责 |
+| job settle，会话**空闲** | 立即投递：`markReported` → `enqueueMessage`（无 callbacks）；enqueue 后立刻 processQueue，近似"投递即消费" |
+| **回合开始**（`stream.status_changed` running） | `clearPendingNotices(sessionId)` —— 会话再运行就不投递，模型可 job_list 自行发现 |
+| **回合正常收尾**（新增内部事件 `chat.turn_finished`，normalFinish 与 processQueue 同一道门） | `takePendingNotices(sessionId)` → 逐个投递（批量由队列同 source.kind 合并承接） |
+| user_cancel / error / rate_limited 收尾 | 不投递；标记保留，下一次回合开始时被清除 |
+
+**去重**：
+- `markReported` 前移到投递时刻——"通知发出"即"结果已通告"；子 Agent 的 `onReported` 清理/冻结与 shell/remote 的 drain 跳过都以此为准；
+- `takePendingNotices` 只返回 `settled && !reported` 并清标记，天然不重复；
+- job 通知不再携带 `isValid`/`onConsumed` 闭包；ChatRunner 框架层的该机制保留给 scheduler / 子 Agent 旧信箱（Registry 未注入的测试场景）。
+
+### 15.3 zcode 对照
+
+zcode 同样是"投递时判定"：settle 只投一条中立命令，由活跃 turn 的 step 边界 inject 或 idle drain 竞争 claim（破坏性出队）；去重靠生产时 `notified` CAS；没有 wake budget、没有 idle sweep，靠入队即 drain + 批次结束二次检查补投。GuaDa 没有 step 边界注入，等价物是回合末 turn.stopping，因此用「挂起标记 + 正常收尾 sweep」替代其 re-entrant drain；「空闲且队列空」的严格条件经评估后放弃——它不带来额外正确性，反而引入"挂起永远等不到投递"的死角。
+
+### 15.4 改动
+
+- `job-registry.service.ts`：`JobRecord.noticePending` + `markNoticePending` / `clearPendingNotices` / `takePendingNotices`。
+- `chat-runner.service.ts`：finally 末尾 emit `chat.turn_finished { sessionId, sessionType, reason, normalFinish }`（放在队列处理之后，残留队列项先开下一回合时挂起已被其 running 事件清除）。
+- `job-notifier.service.ts`：settle 分支（运行中挂起 / 空闲投递）、`stream.status_changed` 清标记、`chat.turn_finished` sweep、`deliver()` 统一 markReported + 无回调投递。
+
+### 15.5 测试
+
+- notifier 6 例：空闲立即投递且置 reported（无闭包）、运行中只挂起 + 收尾恰好投一次、回合开始清标记后不投、user_cancel/error 不投、已读的挂起项收尾跳过、reported/notify:false/workflow/scheduler 过滤、subagent source 映射。
+- registry 1 例：挂起三态（running 不接受、settled 未读可取、已读跳过、clear 幂等）。
+- 回归：**248 suites / 3301 passed / 4 skipped，0 失败**；前端零改动。
+
+### 15.6 已知残留
+
+- 空闲投递后极小窗口内用户抢先发消息：通知在该回合结束后被消费，可能重复告知已读过的结果（窗口从"整个回合"缩到一次 enqueue→processQueue）。
+- 异常/取消收尾回合内完成的 job 不会被自动通告，模型下次可通过 job_list 发现——"运行中不投递"规则的直接后果。
+- 通知已投递但随后回合内部失败时不再重试；`reported` 已置位，结果仍可 job_read。

@@ -323,6 +323,40 @@ describe("JobRegistryService", () => {
     expect(read).toHaveBeenNthCalledWith(2, { maxBytes: 512 * 1024 });
   });
 
+  it("挂起通知：只在已结算且未读时生效，clear/take 语义正确", async () => {
+    const a = makeSpec();
+    const idA = registry.start(a.spec);
+    const b = makeSpec();
+    const idB = registry.start(b.spec);
+    b.done.resolve({ status: "completed" });
+    await flushAsync();
+    const c = makeSpec();
+    const idC = registry.start(c.spec);
+    c.done.resolve({ status: "completed" });
+    await flushAsync();
+    registry.markReported(idC); // 已读的终态 job
+
+    // running 的 job 不接受挂起
+    registry.markNoticePending(idA);
+    expect(registry.takePendingNotices("s1")).toEqual([]);
+
+    // 已结算且未读 → 可挂起、可取出
+    registry.markNoticePending(idB);
+    const taken = registry.takePendingNotices("s1");
+    expect(taken.map((j) => j.id)).toEqual([idB]);
+    // 取出后清标记：再取为空
+    expect(registry.takePendingNotices("s1")).toEqual([]);
+
+    // 已读的 job 即使标记也不投
+    registry.markNoticePending(idC);
+    expect(registry.takePendingNotices("s1")).toEqual([]);
+
+    // clear 幂等
+    registry.markNoticePending(idB);
+    registry.clearPendingNotices("s1");
+    expect(registry.takePendingNotices("s1")).toEqual([]);
+  });
+
   it("snapshot 带 logSize，ticker 推送全量 jobs 快照", async () => {
     jest.useFakeTimers();
     const getLogSize = jest.fn(async () => 42);

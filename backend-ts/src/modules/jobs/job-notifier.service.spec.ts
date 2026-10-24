@@ -47,12 +47,15 @@ async function flushAsync(times = 4): Promise<void> {
 
 describe("JobNotifierService", () => {
   let registry: JobRegistryService;
-  let chatRunner: { enqueueMessage: jest.Mock };
+  let chatRunner: { enqueueMessage: jest.Mock; hasActiveStream: jest.Mock };
   let notifier: JobNotifierService;
 
   beforeEach(() => {
     registry = new JobRegistryService({ emit: jest.fn() } as any);
-    chatRunner = { enqueueMessage: jest.fn().mockResolvedValue(undefined) };
+    chatRunner = {
+      enqueueMessage: jest.fn().mockResolvedValue(undefined),
+      hasActiveStream: jest.fn(() => false),
+    };
     notifier = new JobNotifierService(chatRunner as any, registry);
   });
 
@@ -60,7 +63,7 @@ describe("JobNotifierService", () => {
     registry.onModuleDestroy();
   });
 
-  it("shell 作业完成 → process_monitor 通知，带 jobId 且不含输出正文", async () => {
+  it("shell 作业空闲完成 → 立即投递 process_monitor 通知，投递即置 reported", async () => {
     const { spec, done } = makeSpec();
     const id = registry.start(spec);
     done.resolve({ status: "completed", exitCode: 0 });
@@ -87,15 +90,109 @@ describe("JobNotifierService", () => {
     expect(params.blocks[0].text).toContain("/tmp/guada.log");
     expect(params.blocks[0].text).not.toContain("hello");
 
-    // isValid 在标记已读后失效
-    expect(params.isValid()).toBe(true);
-    registry.markReported(id);
-    expect(params.isValid()).toBe(false);
-
-    // onConsumed 也会标记已读
-    registry.markReported(id);
-    params.onConsumed();
+    // 不再有 isValid/onConsumed 闭包；投递那一刻即视为已通告
+    expect(params.isValid).toBeUndefined();
+    expect(params.onConsumed).toBeUndefined();
     expect(registry.get(id, "s1")?.reported).toBe(true);
+  });
+
+  it("会话运行中完成 → 只挂起不投递；回合正常收尾后恰好投一次", async () => {
+    chatRunner.hasActiveStream.mockReturnValue(true);
+    const { spec, done } = makeSpec();
+    const id = registry.start(spec);
+    done.resolve({ status: "completed" });
+    await flushAsync();
+
+    await notifier.handleJobSettled({
+      sessionId: "s1",
+      job: registry.get(id, "s1")!,
+      notify: true,
+    });
+    expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
+
+    // 回合结束：先恢复空闲，再收正常收尾信号
+    chatRunner.hasActiveStream.mockReturnValue(false);
+    await notifier.handleTurnFinished({
+      sessionId: "s1",
+      normalFinish: true,
+    });
+
+    expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
+    expect(registry.get(id, "s1")?.reported).toBe(true);
+
+    // 再收一次收尾信号不会重复投递（挂起已取走）
+    await notifier.handleTurnFinished({ sessionId: "s1", normalFinish: true });
+    expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("回合开始清除挂起：再收尾不再投递", async () => {
+    chatRunner.hasActiveStream.mockReturnValue(true);
+    const { spec, done } = makeSpec();
+    registry.start(spec);
+    done.resolve({ status: "completed" });
+    await flushAsync();
+    await notifier.handleJobSettled({
+      sessionId: "s1",
+      job: registry.get(registry.list("s1")[0].id, "s1")!,
+      notify: true,
+    });
+
+    // 会话再次运行（新用户回合）→ 挂起作废
+    notifier.handleStreamStatusChanged({
+      sessionId: "s1",
+      payload: { status: "running" },
+    });
+    chatRunner.hasActiveStream.mockReturnValue(false);
+    await notifier.handleTurnFinished({ sessionId: "s1", normalFinish: true });
+
+    expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
+  });
+
+  it("user_cancel / 异常收尾不投递（挂起保留到下次回合开始被清除）", async () => {
+    chatRunner.hasActiveStream.mockReturnValue(true);
+    const { spec, done } = makeSpec();
+    const id = registry.start(spec);
+    done.resolve({ status: "completed" });
+    await flushAsync();
+    await notifier.handleJobSettled({
+      sessionId: "s1",
+      job: registry.get(id, "s1")!,
+      notify: true,
+    });
+
+    chatRunner.hasActiveStream.mockReturnValue(false);
+    await notifier.handleTurnFinished({
+      sessionId: "s1",
+      reason: "user_cancel",
+      normalFinish: false,
+    });
+    await notifier.handleTurnFinished({
+      sessionId: "s1",
+      reason: "error",
+      normalFinish: false,
+    });
+
+    expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
+    expect(registry.get(id, "s1")?.reported).toBe(false);
+  });
+
+  it("已 reported 的挂起项在收尾时被跳过（drain/job_read 已消费）", async () => {
+    chatRunner.hasActiveStream.mockReturnValue(true);
+    const { spec, done } = makeSpec();
+    const id = registry.start(spec);
+    done.resolve({ status: "completed" });
+    await flushAsync();
+    await notifier.handleJobSettled({
+      sessionId: "s1",
+      job: registry.get(id, "s1")!,
+      notify: true,
+    });
+
+    registry.markReported(id); // 模拟回合内 job_read / drain
+    chatRunner.hasActiveStream.mockReturnValue(false);
+    await notifier.handleTurnFinished({ sessionId: "s1", normalFinish: true });
+
+    expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
   });
 
   it("reported / notify:false / workflow / scheduler 均不通知", async () => {
