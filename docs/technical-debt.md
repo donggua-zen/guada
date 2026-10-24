@@ -138,6 +138,12 @@ backend-ts 现有 185 个 spec / 2770 个用例，但分布极不均衡：chat /
 > `healthCheck` 接入了设置页的「测试连接」（`POST /mcp-servers/:id/test-connection`）。
 > 另：原先记在此处的「MCP 每次调用新建连接」也已解决，故不再列入本清单。
 
+### 暂缓项 · 后台任务工具收敛（2026-10-24）
+
+| 问题 | 现状 | 关联文件 |
+|---|---|---|
+| 子 Agent 运行中不支持 steer | `job_send` 对正在执行的子 Agent 直接报错（只支持空闲时开新回合）。补齐方式是 DSH/zcode 式步边界注入：消息进收件箱，在子 Agent 两次工具调用之间注入上下文实现同轮转向（zcode `SendMessage` 返回的 `delivery: "queued"\|"steered"` 即此语义）。低频场景，暂不排期；实施时可参考 `docs/dsh-agent-teams-research.md` 的差距记录 | `sub-agent.manager.ts`（`sendMessage` 的 running 检查、`executeSubAgentStream`） |
+
 ### 暂缓项 · 防休眠与错过窗口（2026-10-15）
 
 本轮实现「保持电脑运行」（`keepAwakeMode`：关闭 / 仅执行任务时 / 始终）与定时任务错过窗口留痕时，明确不处理的边界。
