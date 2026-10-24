@@ -24,6 +24,8 @@ import type {
 } from "../../common/workspace/workspace-provider.interface";
 import { RemoteAgent } from "./remote-workspace-agent-manager";
 import { isUnknownMethodError } from "./rpc";
+import { MIN_REMOTE_JOB_AGENT_VERSION, versionAtLeast } from "./agent-version";
+import type { JobOutputRead, JobReadOptions } from "../jobs/job.types";
 
 type ProcessExecuteResult = import("../../modules/shell/process-manager.service").ExecuteResult;
 type PollResult = import("../../modules/shell/process-manager.service").PollResult;
@@ -49,6 +51,25 @@ export function parseRemoteProcessId(
   return { connectionName: rest.slice(0, idx), pid: rest.slice(idx + 1) };
 }
 
+/** 远程 job_read 读取结果（offset 为远端原始日志字节） */
+export interface RemoteJobRead extends JobOutputRead {
+  status: string;
+  exitCode: number | null;
+  jobId?: string;
+  uptimeMs: number;
+}
+
+/** 远端 agent 内存中的后台进程元数据 */
+export interface RemoteProcessInfo {
+  processId: string;
+  jobId?: string;
+  status: string;
+  exitCode: number | null;
+  logFile?: string;
+  startTime?: number;
+  uptimeMs: number;
+}
+
 export class AgentWorkspaceProvider implements WorkspaceProvider {
   readonly scheme: string;
 
@@ -64,6 +85,14 @@ export class AgentWorkspaceProvider implements WorkspaceProvider {
   // ── Lifecycle（连接由 RemoteAgentManager 管理，这里无操作）──
   async connect(): Promise<void> {}
   async disconnect(): Promise<void> {}
+
+  /** 0.7+ agent 才提供 process_done / readProcess / killAllProcesses。 */
+  get supportsRemoteJobs(): boolean {
+    return versionAtLeast(
+      this.agent.agentVersion,
+      MIN_REMOTE_JOB_AGENT_VERSION,
+    );
+  }
 
   /** 远程相对路径 → 远端绝对路径（posix 语义；绝对路径原样返回） */
   resolvePath(p: string): string {
@@ -248,6 +277,11 @@ export class AgentWorkspaceProvider implements WorkspaceProvider {
     _cwd: string,
     opts: ExecuteOptions,
   ): Promise<ProcessExecuteResult> {
+    if (opts.background && !this.supportsRemoteJobs) {
+      throw new Error(
+        `Remote agent is too old for background jobs (requires >= ${MIN_REMOTE_JOB_AGENT_VERSION}, got ${this.agent.agentVersion || "unknown"}). Reconnect/upgrade the agent and retry.`,
+      );
+    }
     const timeoutMs = opts.timeout ?? 60000;
     const r = await this.agent.executeRaw(command, {
       timeoutMs,
@@ -276,6 +310,7 @@ export class AgentWorkspaceProvider implements WorkspaceProvider {
       processId: r.processId
         ? buildRemoteProcessId(this.connectionName, r.processId)
         : undefined,
+      jobId: r.jobId as any,
       logFilePath: r.logFile,
       ...(r.truncated === true ? { truncated: true } : {}),
     };
@@ -300,6 +335,58 @@ export class AgentWorkspaceProvider implements WorkspaceProvider {
       uptimeMs: r.uptimeMs,
       ...(r.truncated === true ? { truncated: true, logFilePath: r.logFile } : {}),
     } as PollResult;
+  }
+
+  /** 非破坏性读取远端后台进程日志；offset=-1 表示尾部。 */
+  async readProcess(
+    processId: string,
+    opts: JobReadOptions = {},
+    encoding?: string,
+  ): Promise<RemoteJobRead> {
+    const parsed = parseRemoteProcessId(processId);
+    if (!parsed) throw new Error(`Not a remote process id: ${processId}`);
+    if (!this.supportsRemoteJobs) {
+      throw new Error(
+        `Remote agent is too old for job output (requires >= ${MIN_REMOTE_JOB_AGENT_VERSION}).`,
+      );
+    }
+    const r = await this.agent.readProcessRaw(
+      parsed.pid,
+      { offset: opts.offset ?? -1, maxBytes: opts.maxBytes },
+      encoding,
+    );
+    return {
+      text: r.output || "",
+      offset: r.offset,
+      nextOffset: r.nextOffset,
+      size: r.size,
+      truncated: !!r.truncated,
+      logFilePath: r.logFile,
+      status: r.status,
+      exitCode: r.exitCode,
+      jobId: r.jobId,
+      uptimeMs: r.uptimeMs,
+    };
+  }
+
+  async listProcesses(): Promise<RemoteProcessInfo[]> {
+    if (!this.supportsRemoteJobs) return [];
+    const rows = await this.agent.listProcessesRaw();
+    return rows.map((r) => ({
+      processId: buildRemoteProcessId(this.connectionName, String(r.processId)),
+      jobId: r.jobId,
+      status: r.status,
+      exitCode: r.exitCode ?? null,
+      logFile: r.logFile,
+      startTime: r.startTime,
+      uptimeMs: r.uptimeMs ?? 0,
+    }));
+  }
+
+  async killAllProcesses(): Promise<number> {
+    if (!this.supportsRemoteJobs) return 0;
+    const result = await this.agent.killAllProcessesRaw();
+    return result.killed ?? 0;
   }
 
   writeToStdin(processId: string, text: string): void {

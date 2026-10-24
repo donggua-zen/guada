@@ -7,7 +7,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnApplicationShutdown, Optional } from "@nestjs/common";
 import * as iconv from "iconv-lite";
 import { connectDockerAgent } from "./docker-agent-connect";
 import { connectSshAgent } from "./ssh-agent-connect";
@@ -15,10 +15,13 @@ import { connectWslAgent } from "./wsl-agent-connect";
 import { RpcClient, isUnknownMethodError, isTransportError } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 import { StreamingSanitizer } from "../shell/stream-sanitizer";
+import { EventBusService } from "../../common/events/event-bus.service";
 import type { FileStat, DirEntry } from "../../common/workspace/workspace-provider.interface";
 
 interface CachedAgent {
   rpc: RpcClient;
+  /** 远端 agent 版本（用于远程 Job 能力判定/诊断） */
+  version: string;
   /** 传输是否仍可用（SSH: ws OPEN；Docker: stdio 子进程存活） */
   isOpen: () => boolean;
   /** 释放底层资源（关闭 ws/ssh 连接或结束 stdio 子进程）；不触碰目标容器/远端 */
@@ -32,7 +35,9 @@ interface CachedAgent {
 const CHUNK_SIZE = 1024 * 1024;
 
 @Injectable()
-export class RemoteAgentManager implements OnModuleDestroy {
+export class RemoteAgentManager
+  implements OnModuleDestroy, OnApplicationShutdown
+{
   private cache = new Map<string, CachedAgent>();
 
   /** 空闲回收阈值:连接超过该时长未被使用则主动关闭(默认 2 小时) */
@@ -41,7 +46,10 @@ export class RemoteAgentManager implements OnModuleDestroy {
   private static readonly SCAN_INTERVAL_MS = 60 * 1000;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private readonly service: RemoteWorkspaceService) {
+  constructor(
+    private readonly service: RemoteWorkspaceService,
+    @Optional() private readonly eventBus?: EventBusService,
+  ) {
     // 启动空闲回收定时器:周期扫描缓存,关闭并清理长期未使用的连接
     this.scanTimer = setInterval(() => {
       this.reapIdleConnections();
@@ -114,9 +122,42 @@ export class RemoteAgentManager implements OnModuleDestroy {
     return out;
   }
 
-  /** 停止空闲扫描并关闭所有缓存连接（Nest 模块销毁时自动调用） */
-  onModuleDestroy(): void {
+  /**
+   * Nest 的 onModuleDestroy 早于 onApplicationShutdown；远端 killAllProcesses
+   * 必须在连接仍打开时执行，所以收尾放在这里，onApplicationShutdown 只兜底 dispose。
+   */
+  async onModuleDestroy(): Promise<void> {
+    await this.reapRemoteJobs();
     this.dispose();
+  }
+
+  onApplicationShutdown(): void {
+    this.dispose();
+  }
+
+  /**
+   * 尽力终止远端已跟踪的后台进程，避免 app 退出后远端孤儿。
+   * GUADA_KEEP_REMOTE_JOBS_ON_EXIT=1 时保留远端任务。
+   */
+  private async reapRemoteJobs(): Promise<void> {
+    if (process.env.GUADA_KEEP_REMOTE_JOBS_ON_EXIT === "1") return;
+    await Promise.all(
+      [...this.cache.values()].map(async (cached) => {
+        if (!cached.isOpen()) return;
+        try {
+          await cached.rpc.call(
+            "killAllProcesses",
+            {},
+            undefined,
+            1_000,
+          );
+        } catch (error: any) {
+          this.logger.warn(
+            `killAllProcesses on shutdown failed: ${error?.message || error}`,
+          );
+        }
+      }),
+    );
   }
 
   /** 停止空闲扫描并关闭所有缓存连接 */
@@ -200,7 +241,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
         this.cache.delete(cacheKey);
       } else {
         cached.lastActive = Date.now();
-        return new RemoteAgent(cached.rpc, conn.config);
+        return new RemoteAgent(cached.rpc, conn.config, cached.version);
       }
     }
 
@@ -208,12 +249,21 @@ export class RemoteAgentManager implements OnModuleDestroy {
     const connInfo = await this.deployAndConnect(conn);
     const cached2: CachedAgent = {
       rpc: connInfo.rpc,
+      version: connInfo.version || "",
       isOpen: connInfo.isOpen,
       dispose: connInfo.dispose,
       busy: false,
       lastActive: Date.now(),
     };
     this.cache.set(cacheKey, cached2);
+    // 后台进程完成推送：按 jobId 映射回 WorkspaceToolRouter 的 JobRegistry。
+    connInfo.rpc.onPush("process_done", (data) => {
+      this.eventBus?.emit("remote.process.done", {
+        sessionId,
+        connectionName,
+        ...(data && typeof data === "object" ? data : {}),
+      });
+    });
     // 断线时自动清理该缓存,使下次调用走重建路径(自动恢复)
     connInfo.rpc.onDisconnect(() => {
       if (this.cache.get(cacheKey) === cached2) {
@@ -222,8 +272,12 @@ export class RemoteAgentManager implements OnModuleDestroy {
         );
         this.cache.delete(cacheKey);
       }
+      this.eventBus?.emit("remote.process.disconnected", {
+        sessionId,
+        connectionName,
+      });
     });
-    return new RemoteAgent(cached2.rpc, conn.config);
+    return new RemoteAgent(cached2.rpc, conn.config, cached2.version);
   }
 
   /**
@@ -234,6 +288,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     rpc: RpcClient;
     isOpen: () => boolean;
     dispose: () => void;
+    version: string;
   }> {
     if (conn.config.kind === "docker") return this.connectDocker(conn);
     if (conn.config.kind === "wsl") return this.connectWsl(conn);
@@ -248,6 +303,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     rpc: RpcClient;
     isOpen: () => boolean;
     dispose: () => void;
+    version: string;
   }> {
     if (conn.config.kind !== "docker") throw new Error("connectDocker called with non-docker connection");
     const downloadUrl = await this.service.getAgentDownloadUrl();
@@ -258,6 +314,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     if (!conn.config.path) conn.config.path = result.rootPath;
     return {
       rpc: result.rpc,
+      version: result.version || "",
       isOpen: () => result.transport.isOpen(),
       dispose: () => {
         try {
@@ -276,6 +333,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     rpc: RpcClient;
     isOpen: () => boolean;
     dispose: () => void;
+    version: string;
   }> {
     if (conn.config.kind !== "wsl") throw new Error("connectWsl called with non-wsl connection");
     const downloadUrl = await this.service.getAgentDownloadUrl();
@@ -286,6 +344,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     if (!conn.config.path) conn.config.path = result.rootPath;
     return {
       rpc: result.rpc,
+      version: result.version || "",
       isOpen: () => result.transport.isOpen(),
       dispose: () => {
         try {
@@ -304,6 +363,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
     rpc: RpcClient;
     isOpen: () => boolean;
     dispose: () => void;
+    version: string;
   }> {
     if (conn.config.kind !== "ssh") throw new Error("connectSsh called with non-ssh connection");
     const config = conn.config;
@@ -338,6 +398,7 @@ export class RemoteAgentManager implements OnModuleDestroy {
 
     return {
       rpc: result.rpc,
+      version: result.version || "",
       isOpen: result.isOpen,
       dispose: result.dispose,
     };
@@ -381,6 +442,8 @@ export class RemoteAgent {
   constructor(
     private rpc: RpcClient,
     private config: any,
+    /** 远端 agent 版本（0.7 起支持远程后台 Job）；旧连接可能为空 */
+    readonly agentVersion = "",
   ) {}
 
   /** 连接的工作目录基准（相对路径解析用） */
@@ -550,6 +613,52 @@ export class RemoteAgent {
       output: string;
       uptimeMs: number;
     }[];
+  }
+
+  /** 非破坏性读取后台进程日志（offset=-1 表示尾部）；0.7+ agent 提供。 */
+  async readProcessRaw(
+    processId: string,
+    opts: { offset?: number; maxBytes?: number } = {},
+    encoding?: string,
+  ): Promise<{
+    processId: string;
+    jobId?: string;
+    status: string;
+    exitCode: number | null;
+    output: string;
+    offset: number;
+    nextOffset: number;
+    size: number;
+    truncated: boolean;
+    logFile?: string;
+    uptimeMs: number;
+  }> {
+    const result = await this.rpc.call<Record<string, any>>(
+      "readProcess",
+      {
+        processId,
+        offset: opts.offset ?? -1,
+        maxBytes: opts.maxBytes,
+        outputBase64: true,
+      },
+      undefined,
+      30_000,
+    );
+    return decodeAgentOutput(result, encoding) as any;
+  }
+
+  /** 列出 agent 内存中的后台进程（诊断/未来重连）；0.7+。 */
+  async listProcessesRaw(): Promise<Record<string, any>[]> {
+    const rows = await this.rpc.call<Record<string, any>[] | undefined>(
+      "listProcesses",
+      {},
+    );
+    return rows || [];
+  }
+
+  /** 终止 agent 当前跟踪的全部后台进程（后端退出收尾）；0.7+。 */
+  async killAllProcessesRaw(): Promise<{ killed: number }> {
+    return this.rpc.call<{ killed: number }>("killAllProcesses", {});
   }
 
   /** 读取远端文件字节区间（二进制安全）。主路径 readFileRange RPC；旧版 agent（< 0.5.0）降级 downloadChunk。 */
@@ -730,6 +839,8 @@ export class RemoteAgent {
     exitCode: number | null;
     uptimeMs: number;
     processId?: string;
+    /** 后端生成的稳定作业 id（0.7+ agent 原样回传） */
+    jobId?: string;
     logFile?: string;
     /** 输出超限被 head+tail 截断（完整内容在 logFile） */
     truncated?: boolean;

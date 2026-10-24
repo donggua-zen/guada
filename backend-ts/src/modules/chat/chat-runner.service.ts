@@ -54,11 +54,16 @@ export function toMessageSource(
         kind: "sub_agent",
         subSessionId: source.subSessionId,
         agentName: source.agentName ?? source.subAgentName,
+        ...(source.jobId ? { jobId: source.jobId } : {}),
       };
     case "scheduler":
       return { kind: "scheduler", schedulerId: source.schedulerId };
     case "process_monitor":
-      return { kind: "process_monitor", processId: source.processId };
+      return {
+        kind: "process_monitor",
+        processId: source.processId,
+        ...(source.jobId ? { jobId: source.jobId } : {}),
+      };
     default:
       return undefined;
   }
@@ -99,6 +104,10 @@ interface SessionQueueState {
 export class ChatRunnerService {
   private readonly logger = new Logger(ChatRunnerService.name);
   private readonly queues = new Map<string, SessionQueueState>();
+  /** 非正常收尾后的队列重试：每 session 一个 timer + 已用次数 */
+  private readonly queueRetryTimers = new Map<string, NodeJS.Timeout>();
+  private readonly queueRetryAttempts = new Map<string, number>();
+  private static readonly QUEUE_RETRY_DELAYS_MS = [1_000, 3_000, 9_000];
 
   constructor(
     private streamManager: SessionStreamManager,
@@ -218,6 +227,8 @@ export class ChatRunnerService {
         HttpStatus.CONFLICT,
       );
     }
+    // 新回合已拿到流：重置该会话的非正常收尾重试预算。
+    this.clearQueueRetry(sessionId);
 
     // startStream 成功之后、runAgentEngine 的错误兜底挂上之前：本段任何抛错
     // 都必须 stopStream 回收 ActiveStream，否则僵尸流把会话永久卡在 SESSION_BUSY
@@ -368,6 +379,7 @@ export class ChatRunnerService {
 
       if (state.items.length === 0 && !state.isProcessing) {
         this.queues.delete(sessionId);
+        this.clearQueueRetry(sessionId);
       }
     }
   }
@@ -385,6 +397,64 @@ export class ChatRunnerService {
       pendingCount: state.items.length,
       isProcessing: state.isProcessing,
     };
+  }
+
+  /**
+   * 非正常收尾后的队列重试。
+   *
+   * - 正常收尾（stop/plan_rejected）：调用方直接 processQueue，不经过这里；
+   * - user_cancel：不自动重开用户刚停止的回合，通知保留到下一次用户主动回合；
+   * - error/timeout/rate_limited：有界退避重试（1s/3s/9s，最多 3 次）。
+   */
+  private scheduleQueueRetry(
+    sessionId: string,
+    reason: string | undefined,
+  ): void {
+    const pending = this.queues.get(sessionId)?.items.length ?? 0;
+    if (pending === 0) return;
+
+    if (reason === "user_cancel") {
+      this.logger.log(
+        `回合被用户取消，保留 ${pending} 条队列消息等待下一次用户输入: ${sessionId}`,
+      );
+      return;
+    }
+
+    if (this.queueRetryTimers.has(sessionId)) return;
+
+    const attempt = this.queueRetryAttempts.get(sessionId) ?? 0;
+    const delays = ChatRunnerService.QUEUE_RETRY_DELAYS_MS;
+    if (attempt >= delays.length) {
+      this.logger.error(
+        `队列重试次数用尽: ${sessionId}, pending=${pending}`,
+      );
+      return;
+    }
+
+    const delay = delays[attempt];
+    const timer = setTimeout(() => {
+      this.queueRetryTimers.delete(sessionId);
+      this.queueRetryAttempts.set(sessionId, attempt + 1);
+      this.processQueue(sessionId).catch((error) => {
+        this.logger.error(
+          `队列重试失败: ${sessionId}, 错误: ${error?.message || error}`,
+        );
+      });
+    }, delay);
+    timer.unref?.();
+    this.queueRetryTimers.set(sessionId, timer);
+    this.logger.warn(
+      `回合收尾(${reason ?? "unknown"})有 ${pending} 条队列消息，` +
+        `${delay}ms 后重试 (${attempt + 1}/${delays.length}): ${sessionId}`,
+    );
+  }
+
+  /** 正常回合开始/队列清空时重置重试预算 */
+  private clearQueueRetry(sessionId: string): void {
+    const timer = this.queueRetryTimers.get(sessionId);
+    if (timer) clearTimeout(timer);
+    this.queueRetryTimers.delete(sessionId);
+    this.queueRetryAttempts.delete(sessionId);
   }
 
   /**
@@ -488,8 +558,51 @@ export class ChatRunnerService {
     // P4b：队列来源 → 三层消息 source（sub_agent/scheduler/process_monitor 显式写入）
     const messageSource = toMessageSource(mergedSource);
 
-    // 取第一个带回调的项作为执行回调（合并场景下只取一个，避免重复触发）
-    const callbacks = items.find((item) => item.callbacks)?.callbacks;
+    // 合并批次：所有入队方都可能是回调持有者（典型是多个 scheduler 任务）。
+    // 只取第一条会让其余日志永久 running / job 永不结算，这里 fan-out 到全部回调。
+    const callbacksList = items
+      .map((item) => item.callbacks)
+      .filter((cb): cb is StreamCallbacks => !!cb);
+    const callbacks: StreamCallbacks | undefined =
+      callbacksList.length === 0
+        ? undefined
+        : callbacksList.length === 1
+          ? callbacksList[0]
+          : {
+              onEvent: (event) => {
+                for (const cb of callbacksList) {
+                  try {
+                    cb.onEvent(event);
+                  } catch (error) {
+                    this.logger.warn(
+                      `队列合并回调 onEvent 失败: ${String(error)}`,
+                    );
+                  }
+                }
+              },
+              onComplete: (reason) => {
+                for (const cb of callbacksList) {
+                  try {
+                    cb.onComplete(reason);
+                  } catch (error) {
+                    this.logger.warn(
+                      `队列合并回调 onComplete 失败: ${String(error)}`,
+                    );
+                  }
+                }
+              },
+              onError: (error) => {
+                for (const cb of callbacksList) {
+                  try {
+                    cb.onError(error);
+                  } catch (callbackError) {
+                    this.logger.warn(
+                      `队列合并回调 onError 失败: ${String(callbackError)}`,
+                    );
+                  }
+                }
+              },
+            };
 
     try {
       await this.startStream(
@@ -518,11 +631,23 @@ export class ChatRunnerService {
           // 按原顺序塞回队列头部
           state.items.unshift(...items);
         }
+        this.scheduleQueueRetry(sessionId, "busy");
         throw error;
       }
 
       this.logger.error(`执行队列消息失败: ${firstItem.id}`, error);
-      // 非忙碌错误也视为已消费，避免消息卡死
+      // 非忙碌错误也视为已消费，避免消息卡死；先把错误交给每个回调，
+      // 否则合并批次里的 scheduler 日志会永远停在 running。
+      for (const item of items) {
+        if (!item.callbacks) continue;
+        try {
+          item.callbacks.onError(error);
+        } catch (callbackError) {
+          this.logger.warn(
+            `队列消息 onError 回调失败: ${String(callbackError)}`,
+          );
+        }
+      }
       for (const item of items) {
         item.onConsumed?.();
       }
@@ -554,7 +679,7 @@ export class ChatRunnerService {
     clientId?: string,
   ): Promise<void> {
     const sessionId = sessionContext.sessionId;
-    let lastFinishReason: string | undefined;
+    let finalReason: string | undefined;
     /** 工具转交的用户输入（计划审批反馈）：在 finally 入队开新轮（try 内 const 对 finally 不可见） */
     let followUpUserInput: string | undefined;
     try {
@@ -580,9 +705,8 @@ export class ChatRunnerService {
         abortController.signal,
         resumeData,
       );
-      lastFinishReason = result.finishReason;
+      finalReason = result.finishReason;
       followUpUserInput = result.followUpUserInput;
-
       // Agent 引擎内部已捕获 abort 并发布 finish/turn_end 事件，这里自然结束
       const reason = abortController.signal.aborted
         ? "user_cancel"
@@ -603,6 +727,7 @@ export class ChatRunnerService {
       this.eventBus.emit("stream.status_changed", statusEvent);
     } catch (error: any) {
       if (error.name === "AbortError") {
+        finalReason = "user_cancel";
         this.logger.log(`Stream ${sessionId} aborted`);
         this.streamManager.stopStream(sessionId, "user_cancel");
 
@@ -619,6 +744,7 @@ export class ChatRunnerService {
         };
         this.eventBus.emit("stream.status_changed", statusEvent);
       } else {
+        finalReason = "error";
         this.streamManager.stopStream(sessionId, "error");
 
         const statusEvent: StreamStatusChangedEvent = {
@@ -656,8 +782,12 @@ export class ChatRunnerService {
       }
 
       const NORMAL_FINISH = new Set(["stop", undefined, "plan_rejected"]);
-      if (NORMAL_FINISH.has(lastFinishReason)) {
+      if (NORMAL_FINISH.has(finalReason)) {
+        this.clearQueueRetry(sessionId);
         await this.processQueue(sessionId);
+      } else {
+        // user_cancel 不自动重开；error/timeout/rate_limited 有界退避重试。
+        this.scheduleQueueRetry(sessionId, finalReason);
       }
     }
   }

@@ -180,9 +180,9 @@ export type MessageSource =
   | { kind: 'plugin'; plugin: string } // 注入的用户消息（图片/拦截器/命令/压缩/待办）
   | { kind: 'model'; provider: string; model: string } // 模型产出
   | { kind: 'tool'; toolCallId: string } // 工具结果（role='tool'）
-  | { kind: 'sub_agent'; subSessionId: string; agentName?: string } // 子代理结果回传
+  | { kind: 'sub_agent'; subSessionId: string; agentName?: string; jobId?: string } // 子代理结果回传
   | { kind: 'scheduler'; schedulerId: string } // 定时任务投递
-  | { kind: 'process_monitor'; processId: string } // 后台进程结束通知
+  | { kind: 'process_monitor'; processId: string; jobId?: string } // 后台进程结束通知
   | { kind: 'coordinator'; senderSessionId?: string }; // 协调者中继（未来：专家团/多代理）
 
 /**

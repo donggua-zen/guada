@@ -10,7 +10,6 @@ import {
   SubAgentCreatedEvent,
   SubAgentClosedEvent,
   TodoUpdatedEvent,
-  ProcessChangedEvent,
   toSessionEvent,
 } from "../../common/events/stream.events";
 import {
@@ -22,6 +21,7 @@ import type { SessionStreamEvent } from "./types/event-chunk.types";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionMetaStore } from "./session-meta.store";
 import { HOOKS } from "./types/hooks.contract";
+import type { JobsSnapshotEvent } from "../jobs/job.types";
 /**
  * 会话事件类型
  */
@@ -36,7 +36,7 @@ export type SessionEventType =
   | "sub_agent_create"
   | "sub_agent_closed"
   | "todo_updated"
-  | "process_changed"
+  | "jobs_snapshot"
   | "plugins_changed";
 
 /**
@@ -327,14 +327,18 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /**
-   * 监听内部 process.changed 事件（后台进程转后台/结束/移除），转发给 SSE 客户端
-   */
-  @OnEvent("process.changed")
-  handleProcessChanged(event: ProcessChangedEvent) {
-    this.broadcastToAllClients(
-      toSessionEvent("process_changed", event),
-    );
+  /** 后台作业全量快照（含 shell/remote/subagent/workflow/scheduler）。 */
+  @OnEvent("jobs.changed")
+  handleJobsChanged(event: JobsSnapshotEvent) {
+    this.broadcastToAllClients({
+      type: "jobs_snapshot",
+      sessionId: event.sessionId,
+      timestamp: event.timestamp,
+      payload: {
+        revision: event.revision,
+        jobs: event.jobs,
+      },
+    });
   }
 
   /**

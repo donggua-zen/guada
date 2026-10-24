@@ -7,9 +7,10 @@ import { RemoteBindingStateService } from "./remote-binding-state.service";
 import { WorkspaceToolRouter } from "./workspace-router";
 import { AuthModule } from "../auth/auth.module";
 import { PluginManager } from "../plugins";
+import { JobsModule } from "../jobs/jobs.module";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, JobsModule],
   controllers: [RemoteWorkspaceController],
   providers: [
     RemoteWorkspaceService,

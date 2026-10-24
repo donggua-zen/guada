@@ -20,6 +20,8 @@ import { SkillsModule } from "../skills/skills.module";
 import { SettingsModule } from "../settings/settings.module";
 import { KnowledgeBaseModule } from "../knowledge-base/knowledge-base.module";
 import { RemoteWorkspaceModule } from "../remote-workspace/remote-workspace.module";
+import { JobsModule } from "../jobs/jobs.module";
+import { JobNotifierService } from "../jobs/job-notifier.service";
 
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionEventsService } from "./session-events.service";
@@ -42,7 +44,7 @@ import { PlanHistoryService } from "./plan-history.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Module({
-  imports: [AuthModule, ToolsModule, AgentsModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule],
+  imports: [AuthModule, ToolsModule, AgentsModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule, JobsModule],
   controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, ProjectGroupController, WorkspaceEventsController, SessionEventsController],
   providers: [
     // 会话元数据存储：`sessions/_meta.db`（SQLite），会话域公开仓储，跨域消费者
@@ -70,6 +72,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     WorkspaceWatcherService,
     SessionEventsService,
     ChatRunnerService,
+    JobNotifierService,
     SessionReplayService,
     // 计划历史（转录扫描：计划身份 = ExitPlanMode toolCallId，列表含状态）
     PlanHistoryService,

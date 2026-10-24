@@ -417,80 +417,11 @@ export class AgentEngine {
         ? ToolExecutor.toFlatToolDefs(resolved)
         : undefined;
 
-    // 回合开括号 turn_start / 用户消息 user_message 与入库(beginTurn / addUserMessage)
-    // 在本方法开头同位置发布,与末尾 turn_end 配对成对(同一方法内成对闭合)。
-    // v1.8：resume 分支已删除（审批等统一交互均为回合内原地阻塞），仅 overwrite 有效。
-    if (regenerationMode !== "overwrite") {
-      this.logger.warn(
-        `未知的 regenerationMode "${regenerationMode}"，回退为 overwrite`,
-      );
-    }
-    {
-      // ── 3. 开回合:turn/start 入库 + 发布 turn_start ──
-      turnId = await sessionContext.beginTurn({
-        preGenTurnId: preGenAssistantId,
-      });
-      // turn 事件纯净:只携带回合级信息(turnId/modelName),不携带任何 Message 字段。
-      // assistant 消息由后续 message 级事件(think/text,带 messageId)惰性创建。
-      await sessionContext.publishStream({
-        type: "turn_start",
-        turnId,
-        modelName: sessionContext.getModelConfig().modelName,
-      });
-
-      // ── 4. 用户消息:user/message 入库 + 发布 user_message(与入库同位置) ──
-      // 前端按 FileRef 契约内嵌完整附件元数据（self-contained），此处仅防御性归一：
-      // mediaType 非法时由扩展名兜底；refType 缺省按 'store'（历史客户端）；
-      // 字符串元素为旧客户端残留，按相对路径占位并告警。
-      const userFileRefs: FileRef[] = (userMessage?.files || []).map(
-        (f: any): FileRef =>
-          typeof f === "string"
-            ? { mediaType: "application/octet-stream", bytes: 0, url: f, refType: "store" }
-            : {
-                mediaType: normalizeMediaType(f.mediaType ?? f.fileType, f.fileExtension),
-                bytes: f.bytes ?? f.fileSize ?? 0,
-                name: f.name ?? f.displayName ?? f.fileName,
-                // 不拿 previewUrl 冒充实体锚点：缩略图只是展示用的小图，
-                // 当 url 用会让模型读到一张 256px 的图而不是原图。
-                url: f.url,
-                ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
-                ...(f.fileExtension ? { fileExtension: f.fileExtension } : {}),
-                refType: normalizeRefType(f.refType),
-              },
-      );
-      if (userMessage?.files?.some((f: any) => typeof f === "string")) {
-        this.logger.warn(
-          `会话 ${sessionContext.sessionId} 收到旧格式 files（string[]），请升级客户端到 FileRef 契约`,
-        );
-      }
-      const userMsgResult = await sessionContext.addUserMessage(
-        userMessage?.content,
-        userFileRefs,
-        {
-          replaceTurnId: userMessage?.replaceTurnId,
-          knowledgeBaseIds: userMessage?.knowledgeBaseIds,
-          metadata: userMessage?.metadata,
-          ...(userMessage?.blocks ? { blocks: userMessage.blocks } : {}),
-          ...(userMessage?.injectedBlocks
-            ? { injectedBlocks: userMessage.injectedBlocks }
-            : {}),
-          ...(userMessage?.source ? { source: userMessage.source } : {}),
-        },
-      );
-      if (userMsgResult?.userMessage) {
-        await sessionContext.publishStream({
-          type: "user_message",
-          messageId: userMsgResult.messageId,
-          turnId,
-          userMessage: userMsgResult.userMessage,
-        });
-      }
-    }
+    // 回合级状态（try/catch/finally 共享）：
+    // 落盘/运行时异常不能跳过收口——否则回合永远没有 turn/finish，前端也收不到 turn_end。
     let needToContinue = false;
-
-    // 记录 ReAct 循环开始时间，用于计算总耗时
-    const loopStartTime = Date.now();
-
+    // 记录 ReAct 循环开始时间，用于计算总耗时（用户消息落库后重置，保持原语义）
+    let loopStartTime = Date.now();
     // 工具调用轮次计数器
     let iterationCount = 0;
     // 回合拦截器触发次数（防止无限循环）
@@ -503,6 +434,82 @@ export class AgentEngine {
     let businessReason: string | undefined;
     /** 工具转交的用户输入（计划审批反馈）：终止回合时随返回值交回 chat-runner 开新轮 */
     let pendingFollowUpInput: string | undefined;
+    let finalFinishReason = "stop";
+    let loopError: unknown;
+
+    try {
+      // 回合开括号 turn_start / 用户消息 user_message 与入库(beginTurn / addUserMessage)
+      // 在本方法开头同位置发布,与末尾 turn_end 配对成对(同一方法内成对闭合)。
+      // v1.8：resume 分支已删除（审批等统一交互均为回合内原地阻塞），仅 overwrite 有效。
+      if (regenerationMode !== "overwrite") {
+        this.logger.warn(
+          `未知的 regenerationMode "${regenerationMode}"，回退为 overwrite`,
+        );
+      }
+      {
+        // ── 3. 开回合:turn/start 入库 + 发布 turn_start ──
+        turnId = await sessionContext.beginTurn({
+          preGenTurnId: preGenAssistantId,
+        });
+        // turn 事件纯净:只携带回合级信息(turnId/modelName),不携带任何 Message 字段。
+        // assistant 消息由后续 message 级事件(think/text,带 messageId)惰性创建。
+        await sessionContext.publishStream({
+          type: "turn_start",
+          turnId,
+          modelName: sessionContext.getModelConfig().modelName,
+        });
+
+        // ── 4. 用户消息:user/message 入库 + 发布 user_message(与入库同位置) ──
+        // 前端按 FileRef 契约内嵌完整附件元数据（self-contained），此处仅防御性归一：
+        // mediaType 非法时由扩展名兜底；refType 缺省按 'store'（历史客户端）；
+        // 字符串元素为旧客户端残留，按相对路径占位并告警。
+        const userFileRefs: FileRef[] = (userMessage?.files || []).map(
+          (f: any): FileRef =>
+            typeof f === "string"
+              ? { mediaType: "application/octet-stream", bytes: 0, url: f, refType: "store" }
+              : {
+                  mediaType: normalizeMediaType(f.mediaType ?? f.fileType, f.fileExtension),
+                  bytes: f.bytes ?? f.fileSize ?? 0,
+                  name: f.name ?? f.displayName ?? f.fileName,
+                  // 不拿 previewUrl 冒充实体锚点：缩略图只是展示用的小图，
+                  // 当 url 用会让模型读到一张 256px 的图而不是原图。
+                  url: f.url,
+                  ...(f.previewUrl ? { previewUrl: f.previewUrl } : {}),
+                  ...(f.fileExtension ? { fileExtension: f.fileExtension } : {}),
+                  refType: normalizeRefType(f.refType),
+                },
+        );
+        if (userMessage?.files?.some((f: any) => typeof f === "string")) {
+          this.logger.warn(
+            `会话 ${sessionContext.sessionId} 收到旧格式 files（string[]），请升级客户端到 FileRef 契约`,
+          );
+        }
+        const userMsgResult = await sessionContext.addUserMessage(
+          userMessage?.content,
+          userFileRefs,
+          {
+            replaceTurnId: userMessage?.replaceTurnId,
+            knowledgeBaseIds: userMessage?.knowledgeBaseIds,
+            metadata: userMessage?.metadata,
+            ...(userMessage?.blocks ? { blocks: userMessage.blocks } : {}),
+            ...(userMessage?.injectedBlocks
+              ? { injectedBlocks: userMessage.injectedBlocks }
+              : {}),
+            ...(userMessage?.source ? { source: userMessage.source } : {}),
+          },
+        );
+        if (userMsgResult?.userMessage) {
+          await sessionContext.publishStream({
+            type: "user_message",
+            messageId: userMsgResult.messageId,
+            turnId,
+            userMessage: userMsgResult.userMessage,
+          });
+        }
+      }
+
+      // 用户消息落库之后再开始计时（与原语义一致）
+      loopStartTime = Date.now();
     do {
       iterationCount++;
       needToContinue = false;
@@ -822,39 +829,104 @@ export class AgentEngine {
 
       finalUsage = assistantMessage?.metadata.usage;
     } while (needToContinue);
+    } catch (error) {
+      loopError = error;
+      const loopErrorMessage =
+        error instanceof Error ? error.message : String(error);
+      const isAbort =
+        abortSignal?.aborted === true ||
+        (error instanceof Error &&
+          (error.name === "AbortError" ||
+            error.message.toLowerCase().includes("abort")));
 
-    // 业务层结束原因：完全独立于上游适配器
-    // businessReason 在各业务决策点设置（用户中止/计划审批拒绝/超时/限流/异常）
-    // 未设置 → 模型正常结束 → "stop"
-    const finalFinishReason = businessReason || "stop";
+      if (isAbort) {
+        businessReason = businessReason ?? "user_cancel";
+      } else {
+        businessReason = businessReason ?? "error";
+        finalError = finalError ?? loopErrorMessage;
+      }
+      this.logger.error(
+        `Agent loop aborted (${businessReason}): ${loopErrorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    } finally {
+      // 业务层结束原因：完全独立于上游适配器
+      // businessReason 在各业务决策点设置（用户中止/计划审批拒绝/超时/限流/异常）
+      // 未设置且无异常 → 模型正常结束 → "stop"
+      finalFinishReason = businessReason || (loopError ? "error" : "stop");
 
-    // 保存结束信息到 Turn 级别 metadata
-    const loopDuration = Date.now() - loopStartTime;
-    const finishMeta: Record<string, any> = {
-      finishReason: finalFinishReason,
-      ...(finalError ? { errorDetail: finalError } : {}),
-      ...(finalUsage ? { usage: finalUsage } : {}),
-      ...(sessionContext.getModelConfig().modelName
-        ? { modelName: sessionContext.getModelConfig().modelName }
-        : {}),
-    };
-    await sessionContext.finalizeTurn(turnId, loopDuration, finishMeta as any);
+      if (turnId) {
+        // 保存结束信息到 Turn 级别 metadata
+        const loopDuration = Date.now() - loopStartTime;
+        const finishMeta: Record<string, any> = {
+          finishReason: finalFinishReason,
+          ...(finalError ? { errorDetail: finalError } : {}),
+          ...(finalUsage ? { usage: finalUsage } : {}),
+          ...(sessionContext.getModelConfig().modelName
+            ? { modelName: sessionContext.getModelConfig().modelName }
+            : {}),
+        };
 
-    await sessionContext.persist();
+        // 落盘失败不能阻止回合收口：存储层对 EMFILE/ENFILE 已有退避重试，
+        // 这里再兜底——finalize 失败只告警，turn_end 仍然发给前端复位工作态。
+        try {
+          await sessionContext.finalizeTurn(
+            turnId,
+            loopDuration,
+            finishMeta as any,
+          );
+        } catch (finalizeError: any) {
+          this.logger.error(
+            `finalizeTurn failed for ${turnId}: ${finalizeError?.message ?? finalizeError}`,
+            finalizeError?.stack,
+          );
+        }
 
-    // 发送 turn_end 事件:回合级收尾信号,只携带回合级信息(turnId/finishReason/usage/耗时/contextStats),
-    // 不携带 Message 内容(content/reasoningContent/messageId 已由 message 级事件承载)。
-    // totalDurationMs 与落库的 turn/finish 事件同值（finalizeTurn 的 loopDuration），
-    // 前端据此写 turn.metadata，使实时与刷新两条路径的耗时展示同源。
-    await sessionContext.publishStream({
-      type: "turn_end",
-      turnId,
-      finishReason: finalFinishReason,
-      error: finalError,
-      usage: finalUsage,
-      totalDurationMs: loopDuration,
-      contextStats: await sessionContext.getContextStats(),
-    });
+        try {
+          await sessionContext.persist();
+        } catch (persistError: any) {
+          this.logger.warn(
+            `persist failed after turn ${turnId}: ${persistError?.message ?? persistError}`,
+          );
+        }
+
+        // 上下文统计失败不能吞掉 turn_end：前端靠它复位 isWorking。
+        let contextStats:
+          | Awaited<ReturnType<ISessionContext["getContextStats"]>>
+          | undefined;
+        try {
+          contextStats = await sessionContext.getContextStats();
+        } catch (statsError: any) {
+          this.logger.warn(
+            `getContextStats failed for turn ${turnId}: ${statsError?.message ?? statsError}`,
+          );
+        }
+
+        // 发送 turn_end 事件:回合级收尾信号,只携带回合级信息(turnId/finishReason/usage/耗时/contextStats),
+        // 不携带 Message 内容(content/reasoningContent/messageId 已由 message 级事件承载)。
+        // totalDurationMs 与落库的 turn/finish 事件同值（finalizeTurn 的 loopDuration），
+        // 前端据此写 turn.metadata，使实时与刷新两条路径的耗时展示同源。
+        try {
+          await sessionContext.publishStream({
+            type: "turn_end",
+            turnId,
+            finishReason: finalFinishReason,
+            error: finalError,
+            usage: finalUsage,
+            totalDurationMs: loopDuration,
+            contextStats,
+          });
+        } catch (publishError: any) {
+          this.logger.warn(
+            `publish turn_end failed for ${turnId}: ${publishError?.message ?? publishError}`,
+          );
+        }
+      }
+    }
+
+    // 原始异常在收口完成后重新抛出：保留 chat-runner 的 error 事件与
+    // stopStream("error")；turn_end 已先于 error 到达前端，回合不会静默停住。
+    if (loopError) throw loopError;
 
     return {
       finishReason: finalFinishReason,

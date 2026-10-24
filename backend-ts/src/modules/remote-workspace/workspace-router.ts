@@ -9,7 +9,8 @@
  *
  * 连接名清单由 ssh-tools 工具包的 prompt 随会话绑定注入，AI 直接抄写连接名。
  */
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
+import { OnEvent } from "@nestjs/event-emitter";
 import { z } from "zod";
 import * as iconv from "iconv-lite";
 import { RemoteAgentManager } from "./remote-workspace-agent-manager";
@@ -17,6 +18,8 @@ import {
   AgentWorkspaceProvider,
   buildRemoteProcessId,
 } from "./agent-workspace-provider";
+import { JobRegistryService } from "../jobs/job-registry.service";
+import type { JobId, JobOutcome } from "../jobs/job.types";
 
 /**
  * workspace 参数 schema（file / shell 工具共用）：
@@ -42,7 +45,7 @@ export interface RemoteToolTarget {
 /** 主工作目录标识（本地）：这些取值不启用远程分支 */
 export const MAIN_WORKSPACE_VALUES = new Set(["", "main", "local"]);
 
-/** 远程后台进程登记（供 turn.stopping 续跑钩子检查运行状态与输出解码） */
+/** 远程后台进程登记（供 turn.stopping 续跑钩子 + JobRegistry 使用） */
 interface TrackedRemoteProcess {
   sessionId: string;
   connectionName: string;
@@ -50,6 +53,15 @@ interface TrackedRemoteProcess {
   pid: string;
   /** 输出编码（run_command 传入；outputB64 解码用，缺省 utf-8） */
   encoding?: string;
+  /** 通用后台作业 id（0.7+ agent / 注册成功时存在） */
+  jobId?: JobId;
+  /** 结算 deferred（push / drain / lost 三处 first-wins） */
+  resolve?: (outcome: JobOutcome) => void;
+  settled?: boolean;
+  /** 最后一次已知的远端日志大小（供快照，非实时） */
+  logSize?: number;
+  /** 命令文本（job label） */
+  label?: string;
 }
 
 @Injectable()
@@ -58,8 +70,16 @@ export class WorkspaceToolRouter {
 
   /** 会话 → 远程后台进程登记（key = 完整前缀 processId） */
   private readonly trackedProcesses = new Map<string, TrackedRemoteProcess>();
+  /** push 早于 job 注册时的短缓冲（key = jobId 或 full processId） */
+  private readonly pendingRemoteCompletions = new Map<
+    string,
+    { data: Record<string, any>; timer: NodeJS.Timeout }
+  >();
 
-  constructor(private readonly manager: RemoteAgentManager) {}
+  constructor(
+    private readonly manager: RemoteAgentManager,
+    @Optional() private readonly jobRegistry?: JobRegistryService,
+  ) {}
 
   /**
    * 解析工具的 workspace 参数。
@@ -95,19 +115,86 @@ export class WorkspaceToolRouter {
 
   // ── 远程后台进程登记（turn.stopping 续跑钩子用）──
 
-  /** run_command 远程分支转后台时登记进程（含输出编码，供 poll/drain 解码 outputB64） */
+  /** run_command 远程分支转后台时登记进程，并在 0.7+ agent 上注册通用 job。 */
   registerRemoteProcess(
     sessionId: string,
     prefixedProcessId: string,
     connectionName: string,
     encoding?: string,
-  ): void {
-    this.trackedProcesses.set(prefixedProcessId, {
+    options?: {
+      command?: string;
+      logFilePath?: string;
+      provider?: AgentWorkspaceProvider;
+    },
+  ): JobId | undefined {
+    const tracked: TrackedRemoteProcess = {
       sessionId,
       connectionName,
       pid: prefixedProcessId.split(":").pop() || "",
       encoding,
+      label: options?.command,
+    };
+    this.trackedProcesses.set(prefixedProcessId, tracked);
+
+    if (!this.jobRegistry || !options?.provider || !options.command) {
+      return undefined;
+    }
+
+    let resolveJob!: (outcome: JobOutcome) => void;
+    const done = new Promise<JobOutcome>((resolve) => {
+      resolveJob = resolve;
     });
+
+    try {
+      const jobId = this.jobRegistry.start({
+        kind: "remote-shell",
+        label: options.command,
+        sessionId,
+        handle: prefixedProcessId,
+        logFilePath: options.logFilePath,
+        notify: true,
+        getLogSize: async () => tracked.logSize,
+        read: async (opts) => {
+          const result = await options.provider!.readProcess(
+            prefixedProcessId,
+            { offset: opts.offset, maxBytes: opts.maxBytes },
+            encoding,
+          );
+          tracked.logSize = result.size;
+          return {
+            text: result.text,
+            offset: result.offset,
+            nextOffset: result.nextOffset,
+            size: result.size,
+            truncated: result.truncated,
+            logFilePath: result.logFilePath,
+          };
+        },
+        cancel: () => {
+          options.provider!.kill(prefixedProcessId);
+        },
+        send: async (input, appendNewline) => {
+          options.provider!.writeToStdin(
+            prefixedProcessId,
+            appendNewline === false ? input : `${input}\n`,
+          );
+        },
+        isAlive: () => !tracked.settled,
+        onDisposed: () => this.trackedProcesses.delete(prefixedProcessId),
+        done,
+      });
+      tracked.jobId = jobId;
+      tracked.resolve = resolveJob;
+      // push 可能早于注册：注册完成后立即消费短缓冲。
+      this.consumePendingRemoteCompletion(jobId, tracked);
+      this.consumePendingRemoteCompletion(prefixedProcessId, tracked);
+      return jobId;
+    } catch (error: any) {
+      this.logger.warn(
+        `注册远程后台作业失败 (${prefixedProcessId})，继续用 process/turn.stopping: ${error?.message ?? error}`,
+      );
+      return undefined;
+    }
   }
 
   /** 查询登记进程的输出编码（process 工具 poll 用） */
@@ -115,9 +202,107 @@ export class WorkspaceToolRouter {
     return this.trackedProcesses.get(prefixedProcessId)?.encoding;
   }
 
-  /** 进程结束后清理登记 */
+  /** 进程结束后清理登记；主动 kill 时同时抑制完成通知并结算为 killed。 */
   unregisterRemoteProcess(prefixedProcessId: string): void {
+    const tracked = this.trackedProcesses.get(prefixedProcessId);
+    if (tracked?.jobId) {
+      this.jobRegistry?.markReported(tracked.jobId);
+      this.settleTrackedRemote(tracked, {
+        status: "killed",
+        exitCode: null,
+      });
+    }
     this.trackedProcesses.delete(prefixedProcessId);
+  }
+
+  // ── 远程 job 结算 ──
+
+  /** agent 推送 process_done：按 jobId 优先、完整 processId 兜底。 */
+  @OnEvent("remote.process.done")
+  handleRemoteProcessDone(event: Record<string, any>): void {
+    const processId = String(event?.processId || "");
+    if (!processId) return;
+    const fullId = buildRemoteProcessId(
+      String(event.connectionName || ""),
+      processId,
+    );
+    let tracked: TrackedRemoteProcess | undefined;
+    if (event.jobId) {
+      tracked = [...this.trackedProcesses.values()].find(
+        (t) => t.jobId === event.jobId,
+      );
+    }
+    tracked ||= this.trackedProcesses.get(fullId);
+
+    if (!tracked) {
+      if (event.jobId) this.bufferRemoteCompletion(String(event.jobId), event);
+      this.bufferRemoteCompletion(fullId, event);
+      return;
+    }
+    this.settleTrackedRemote(tracked, event);
+  }
+
+  /** 连接断开：该连接下未结算的远程 job 统一标记 lost。 */
+  @OnEvent("remote.process.disconnected")
+  handleRemoteProcessDisconnected(event: Record<string, any>): void {
+    const sessionId = String(event?.sessionId || "");
+    const connectionName = String(event?.connectionName || "");
+    for (const [id, tracked] of this.trackedProcesses) {
+      if (
+        tracked.sessionId !== sessionId ||
+        tracked.connectionName !== connectionName ||
+        tracked.settled
+      ) {
+        continue;
+      }
+      this.settleTrackedRemote(tracked, {
+        status: "lost",
+        exitCode: null,
+        output:
+          "[connection lost; the remote process may still be running on the host]",
+        detail: "connection lost; remote process may still be running",
+      });
+      this.trackedProcesses.delete(id);
+    }
+  }
+
+  private settleTrackedRemote(
+    tracked: TrackedRemoteProcess,
+    event: Record<string, any>,
+  ): void {
+    if (tracked.settled) return;
+    tracked.settled = true;
+    tracked.resolve?.({
+      status: mapRemoteJobStatus(event.status, event.exitCode),
+      detail: event.detail,
+      exitCode: event.exitCode ?? null,
+      output: event.output,
+    });
+  }
+
+  private bufferRemoteCompletion(
+    key: string,
+    data: Record<string, any>,
+  ): void {
+    if (!key) return;
+    const existing = this.pendingRemoteCompletions.get(key);
+    if (existing) clearTimeout(existing.timer);
+    const timer = setTimeout(() => {
+      this.pendingRemoteCompletions.delete(key);
+    }, 10_000);
+    timer.unref?.();
+    this.pendingRemoteCompletions.set(key, { data, timer });
+  }
+
+  private consumePendingRemoteCompletion(
+    key: string,
+    tracked: TrackedRemoteProcess,
+  ): void {
+    const pending = this.pendingRemoteCompletions.get(key);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingRemoteCompletions.delete(key);
+    this.settleTrackedRemote(tracked, pending.data);
   }
 
   /** 查询某会话登记的远程后台进程 */
@@ -151,13 +336,23 @@ export class WorkspaceToolRouter {
     }[] = [];
     for (const r of rows) {
       const fullId = buildRemoteProcessId(r.connectionName, r.processId);
-      const encoding = this.trackedProcesses.get(fullId)?.encoding;
+      const tracked = this.trackedProcesses.get(fullId);
+      const output = decodeAgentOutputBytes(r.outputB64, tracked?.encoding);
+      if (tracked?.jobId) {
+        // 当前 turn 已交付输出：抑制完成通知，并给 job 一个终态。
+        this.jobRegistry?.markReported(tracked.jobId);
+        this.settleTrackedRemote(tracked, {
+          status: r.status,
+          exitCode: r.exitCode,
+          output,
+        });
+      }
       out.push({
         connectionName: r.connectionName,
         processId: fullId,
         status: r.status,
         exitCode: r.exitCode,
-        output: decodeAgentOutputBytes(r.outputB64, encoding),
+        output,
         truncated: r.truncated,
         logFilePath: r.logFile,
       });
@@ -166,6 +361,23 @@ export class WorkspaceToolRouter {
     }
     return out;
   }
+}
+
+/** 远端进程状态 → 通用 job 终态 */
+function mapRemoteJobStatus(
+  status: unknown,
+  exitCode: unknown,
+): "completed" | "failed" | "killed" | "lost" {
+  const value = String(status || "");
+  if (value === "killed") return "killed";
+  if (value === "lost") return "lost";
+  if (value === "failed") return "failed";
+  if (value === "completed") {
+    return typeof exitCode === "number" && exitCode !== 0
+      ? "failed"
+      : "completed";
+  }
+  return "failed";
 }
 
 /** outputB64 → 按编码解码为文本（无效编码降级 utf-8） */

@@ -147,14 +147,16 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
               ? `${valueText.slice(0, WORKFLOW_RESULT_MAX_CHARS)}\n...(truncated, ${valueText.length} chars total)`
               : valueText;
           const seconds = ((result.durationMs ?? 0) / 1000).toFixed(1);
-          return `Workflow "${meta.name}" completed (${result.agentCount} agents, ${seconds}s). Return value:\n${truncated}`;
+          const jobLine = result.jobId ? `\nJob ID: ${result.jobId}` : "";
+          return `Workflow "${meta.name}" completed (${result.agentCount} agents, ${seconds}s). Return value:\n${truncated}${jobLine}`;
         }
         if (result.status === "cancelled") {
-          return `Workflow "${meta.name}" was cancelled${result.errorMessage ? `: ${result.errorMessage}` : ""}.`;
+          const jobLine = result.jobId ? ` Job ID: ${result.jobId}` : "";
+          return `Workflow "${meta.name}" was cancelled${result.errorMessage ? `: ${result.errorMessage}` : ""}.${jobLine}`;
         }
         // 运行期失败：抛错 → 工具结果标记 error，模型可修正脚本重试
         throw new Error(
-          `Workflow "${meta.name}" failed [${result.errorCode}]: ${result.errorMessage}`,
+          `Workflow "${meta.name}" failed [${result.errorCode}]: ${result.errorMessage}${result.jobId ? ` (job: ${result.jobId})` : ""}`,
         );
       },
       display: {

@@ -144,6 +144,8 @@ export class WorkflowError extends Error {
 export interface WorkflowRunResult {
   /** runId */
   runId: string;
+  /** 通用后台作业 id（M2 起提供；用于后续 job_read/job_stop） */
+  jobId?: string;
   status: WorkflowRunStatus;
   /** 脚本 return 值（仅 completed；postMessage structured clone 已保证纯 JSON） */
   value?: unknown;

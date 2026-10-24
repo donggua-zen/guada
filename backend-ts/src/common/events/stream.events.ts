@@ -126,19 +126,6 @@ export interface TodoUpdatedEvent {
 }
 
 /**
- * 后台进程列表变化事件（内部模块间使用）
- *
- * 事件名：process.changed
- * 由 ProcessManagerService 在进程转后台/结束/移除时发射，
- * 前端 OverviewPanel 收到后重新拉取运行中进程列表。
- */
-export interface ProcessChangedEvent {
-  sessionId: string;
-  timestamp: string;
-  source?: string;
-}
-
-/**
  * 将内部事件转换为 SSE 事件格式
  */
 export function toSessionEvent(
@@ -150,8 +137,7 @@ export function toSessionEvent(
     | SessionDeletedEvent
     | SubAgentCreatedEvent
     | SubAgentClosedEvent
-    | TodoUpdatedEvent
-    | ProcessChangedEvent,
+    | TodoUpdatedEvent,
 ): SessionEvent {
   return {
     type,

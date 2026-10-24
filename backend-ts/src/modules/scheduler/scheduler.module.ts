@@ -11,9 +11,10 @@ import { SharedModule } from "../../common/services/shared.module";
 import { ToolsModule } from "../tools/tools.module";
 import { PluginManager } from "../plugins";
 import { SchedulerPlugin } from "./plugins/scheduler.plugin";
+import { JobsModule } from "../jobs/jobs.module";
 
 @Module({
-  imports: [ChatModule, AgentsModule, ToolsModule, AuthModule, SharedModule],
+  imports: [ChatModule, AgentsModule, ToolsModule, AuthModule, SharedModule, JobsModule],
   controllers: [SchedulerController],
   providers: [SchedulerService, TaskSchedulerService, TaskExecutorService, TaskStorageService],
   exports: [SchedulerService],

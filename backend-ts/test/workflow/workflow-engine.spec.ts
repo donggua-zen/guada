@@ -22,6 +22,8 @@ import { WorkflowError } from "../../src/modules/workflow/workflow.types";
 import type { WorkflowEventData } from "../../src/modules/workflow/workflow.types";
 import type { ISessionContext } from "../../src/modules/chat/session-context";
 import type { SubAgentManager, SubAgentResult } from "../../src/modules/sub-agent/sub-agent.manager";
+import { JobRegistryService } from "../../src/modules/jobs/job-registry.service";
+import type { JobId } from "../../src/modules/jobs/job.types";
 
 
 // ── Mocks ──
@@ -64,6 +66,7 @@ function createMockSubAgentManager(
 
 function createEngine(opts?: {
   spawnImpl?: (params: any, signal?: AbortSignal) => Promise<SubAgentResult>;
+  withRegistry?: boolean;
 }) {
   const subAgentManager = createMockSubAgentManager(opts?.spawnImpl);
   // publishStream 采集器：workflow_event 广播的观测点（进度不再落 JSONL）
@@ -75,8 +78,15 @@ function createEngine(opts?: {
   });
   // 真实文件 store（SESSION_DATA_DIR 指向 tmp，settle 落盘走真实路径）
   const fileStore = new WorkflowFileStore();
-  const engine = new WorkflowEngineService(subAgentManager as any, fileStore);
-  return { engine, subAgentManager, ctx, broadcasted, fileStore };
+  const registry = opts?.withRegistry
+    ? new JobRegistryService({ emit: jest.fn() } as any)
+    : undefined;
+  const engine = new WorkflowEngineService(
+    subAgentManager as any,
+    fileStore,
+    registry,
+  );
+  return { engine, subAgentManager, ctx, broadcasted, fileStore, registry };
 }
 
 /** 从广播流提取 run 内 seq 序列 */
@@ -640,4 +650,84 @@ describe("WorkflowError", () => {
     expect(e.fatal).toBe(true);
     expect(e.code).toBe("AGENT_CAP");
   });
+});
+
+// ── Job Registry 集成 ──
+
+describe("WorkflowEngineService × JobRegistry", () => {
+  it("startRun 注册 workflow job，返回 jobId 并结算/可读", async () => {
+    const { engine, ctx, registry } = createEngine({ withRegistry: true });
+    try {
+      const result = await engine.startRun(ctx, {
+        script: "return 42;",
+        meta: { name: "wf-job" },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.jobId).toMatch(/^job-/);
+      const jobId = result.jobId as JobId;
+
+      const settled = await registry!.wait(jobId, "s_parent", 2000);
+      expect(settled).toMatchObject({
+        kind: "workflow",
+        label: "wf-job",
+        status: "completed",
+        handle: result.runId,
+      });
+
+      const read = await registry!.read(jobId, "s_parent");
+      expect(read.output.text).toContain(result.runId);
+      expect(read.output.text).toContain("completed");
+
+      // job 移除时同步清掉 run 快照（onDisposed）
+      await registry!.disposeSession("s_parent");
+      expect(engine.getSessionRunStates("s_parent")).toEqual([]);
+    } finally {
+      registry!.onModuleDestroy();
+    }
+  });
+
+  it("job_kill 取消运行中的 workflow", async () => {
+    const { engine, ctx, registry } = createEngine({
+      withRegistry: true,
+      spawnImpl: (params, signal) =>
+        new Promise<SubAgentResult>((resolve) => {
+          params.onCreated?.("sub_abort");
+          const finish = () => {
+            resolve({
+              subSessionId: "sub_abort",
+              status: "error",
+              stopReason: "aborted",
+              content: "",
+            });
+          };
+          if (signal?.aborted) finish();
+          else signal?.addEventListener("abort", finish, { once: true });
+        }),
+    });
+
+    try {
+      const runPromise = engine.startRun(ctx, {
+        script: "const r = await agent('x'); return r;",
+        meta: { name: "wf-kill" },
+      });
+
+      let job;
+      for (let i = 0; i < 100 && !job; i++) {
+        job = registry!.list("s_parent").find((j) => j.kind === "workflow");
+        if (!job) await new Promise((r) => setTimeout(r, 10));
+      }
+      expect(job).toBeTruthy();
+      expect(job!.status).toBe("running");
+
+      expect(registry!.kill(job!.id, "s_parent", "test")).toBe("requested");
+      const result = await runPromise;
+      expect(result.status).toBe("cancelled");
+
+      const settled = await registry!.wait(job!.id, "s_parent", 2000);
+      expect(settled.status).toBe("killed");
+    } finally {
+      registry!.onModuleDestroy();
+    }
+  }, 10_000);
 });

@@ -1,6 +1,7 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 import { BridgeClient } from "../bridge/bridge-client";
 import { ChatRunnerService } from "../chat/chat-runner.service";
+import { JobRegistryService } from "../jobs/job-registry.service";
 
 /**
  * keep-awake 忙碌上报：告诉 Electron 主进程「后端现在有没有在执行任务」。
@@ -23,6 +24,8 @@ export class KeepAwakeService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly chatRunner: ChatRunnerService,
     private readonly bridgeClient: BridgeClient,
+    // 后台 shell/remote/subagent/workflow/scheduler job；测试可直接 new 两参。
+    @Optional() private readonly jobRegistry?: JobRegistryService,
   ) {}
 
   onModuleInit(): void {
@@ -41,7 +44,10 @@ export class KeepAwakeService implements OnModuleInit, OnModuleDestroy {
 
   /** 当前是否有任务在执行（供诊断与测试直接调用） */
   isBusy(): boolean {
-    return this.chatRunner.hasActiveWork();
+    return (
+      this.chatRunner.hasActiveWork() ||
+      (this.jobRegistry?.hasActiveJobs() ?? false)
+    );
   }
 
   private report(): void {

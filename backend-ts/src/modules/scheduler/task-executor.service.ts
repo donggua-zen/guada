@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { SessionService } from "../chat/session.service";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
@@ -10,6 +10,14 @@ import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { ScheduledTask, ScheduledTaskLog } from "./types/scheduler.types";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
 import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
+import { JobRegistryService } from "../jobs/job-registry.service";
+import { sliceJobText } from "../jobs/job-output.util";
+import type {
+  JobId,
+  JobOutcome,
+  JobOutputRead,
+  JobReadOptions,
+} from "../jobs/job.types";
 
 /**
  * 可重试的错误类型
@@ -47,6 +55,16 @@ function isRetryableError(error: any): boolean {
 @Injectable()
 export class TaskExecutorService {
   private readonly logger = new Logger(TaskExecutorService.name);
+  /** 执行日志 id → scheduler job 句柄（重试复用同一 job，避免重复注册） */
+  private readonly schedulerJobs = new Map<
+    string,
+    {
+      jobId: JobId;
+      sessionId: string;
+      taskId: string;
+      resolve: (outcome: JobOutcome) => void;
+    }
+  >();
 
   constructor(
     private sessionService: SessionService,
@@ -56,6 +74,8 @@ export class TaskExecutorService {
     private settingsStorage: SettingsStorage,
     private agentStore: AgentFileStore,
     private providerStore: ProviderFileStore,
+    // 允许直接 new 的测试/嵌入场景不挂 Registry；生产由 SchedulerModule imports JobsModule 注入。
+    @Optional() private readonly jobRegistry?: JobRegistryService,
   ) {}
 
   /**
@@ -115,6 +135,10 @@ export class TaskExecutorService {
             error: error.message || "未知错误",
             finishedAt: new Date().toISOString(),
           });
+          this.settleSchedulerJob(log.id, {
+            status: "failed",
+            detail: error.message || "未知错误",
+          });
           return;
         }
 
@@ -169,6 +193,7 @@ export class TaskExecutorService {
 
     // 更新日志中的会话 ID
     await this.storage.updateLog(log.id, { sessionId });
+    this.ensureSchedulerJob(task, log, sessionId);
 
     // 投递到 ChatRunnerService 队列（S2：结构化入站消息统一载体，文本即 text 块）
     // 回合的真实终态由 callbacks.onComplete/onError 异步回填（startStream 不阻塞到流结束），
@@ -193,6 +218,12 @@ export class TaskExecutorService {
               finishedAt: new Date().toISOString(),
             })
             .catch((e) => this.logger.error(`回填执行日志状态失败: ${log.id}`, e));
+          this.settleSchedulerJob(
+            log.id,
+            ok
+              ? { status: "completed", exitCode: 0 }
+              : { status: "failed", detail: `回合结束原因: ${reason}` },
+          );
         },
         onError: (err: any) => {
           this.storage
@@ -202,6 +233,10 @@ export class TaskExecutorService {
               finishedAt: new Date().toISOString(),
             })
             .catch((e) => this.logger.error(`回填执行日志状态失败: ${log.id}`, e));
+          this.settleSchedulerJob(log.id, {
+            status: "failed",
+            detail: err?.message || "未知错误",
+          });
         },
       },
     });
@@ -212,6 +247,114 @@ export class TaskExecutorService {
     await this.storage.updateTask(task.id, {
       lastRunAt: new Date().toISOString(),
     });
+  }
+
+  /**
+   * 为一次定时任务执行注册通用作业（同一 log 只注册一次，重试复用）。
+   * notify=false：任务结果已经由目标会话的回合承载，不再额外唤醒。
+   */
+  private ensureSchedulerJob(
+    task: ScheduledTask,
+    log: ScheduledTaskLog,
+    sessionId: string,
+  ): void {
+    if (!this.jobRegistry || this.schedulerJobs.has(log.id)) return;
+
+    let resolveJob!: (outcome: JobOutcome) => void;
+    const done = new Promise<JobOutcome>((resolve) => {
+      resolveJob = resolve;
+    });
+
+    try {
+      const jobId = this.jobRegistry.start({
+        kind: "scheduler",
+        label: task.name,
+        sessionId,
+        handle: log.id,
+        notify: false,
+        read: (opts) => this.readSchedulerJobOutput(log.id, task.id, opts),
+        cancel: (reason) => this.cancelSchedulerJob(log.id, reason),
+        onDisposed: () => this.schedulerJobs.delete(log.id),
+        done,
+      });
+      this.schedulerJobs.set(log.id, {
+        jobId,
+        sessionId,
+        taskId: task.id,
+        resolve: resolveJob,
+      });
+    } catch (error: any) {
+      this.logger.warn(
+        `注册定时任务作业失败 (${log.id})，继续执行: ${error?.message ?? error}`,
+      );
+    }
+  }
+
+  /** job_read 读取执行日志的当前状态。 */
+  private async readSchedulerJobOutput(
+    logId: string,
+    taskId: string,
+    opts: JobReadOptions,
+  ): Promise<JobOutputRead> {
+    const logs = await this.storage.getLogsByTaskId(taskId);
+    const log = logs.find((entry) => entry.id === logId);
+    const text = log
+      ? [
+          `Scheduled task execution ${log.id}`,
+          `status: ${log.status}`,
+          log.sessionId ? `session: ${log.sessionId}` : "",
+          `started: ${log.startedAt}`,
+          log.finishedAt ? `finished: ${log.finishedAt}` : "",
+          log.error ? `error: ${log.error}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : `(scheduler log ${logId} not found)`;
+    return sliceJobText(text, opts);
+  }
+
+  /** 首次结算生效；重复回调/重试终态不会覆盖。 */
+  private settleSchedulerJob(logId: string, outcome: JobOutcome): void {
+    const entry = this.schedulerJobs.get(logId);
+    if (!entry) return;
+    this.schedulerJobs.delete(logId);
+    entry.resolve(outcome);
+  }
+
+  /**
+   * job_stop：停当前流 + 移除仍在队列中的该任务消息，并落一条失败日志。
+   * 先结算 killed，避免 cancelStream 触发的 onComplete 把 job 先结算成 failed。
+   */
+  private async cancelSchedulerJob(
+    logId: string,
+    reason?: string,
+  ): Promise<void> {
+    const entry = this.schedulerJobs.get(logId);
+    if (!entry) return;
+
+    this.settleSchedulerJob(logId, {
+      status: "killed",
+      detail: reason ?? "cancelled",
+    });
+
+    this.chatRunner.cancelStream(entry.sessionId);
+    const removed = this.chatRunner.peekQueuedMessage(
+      entry.sessionId,
+      (item) =>
+        item.source.kind === "scheduler" &&
+        item.source.schedulerId === entry.taskId,
+    );
+    for (const item of removed) item.onConsumed?.();
+
+    await this.storage
+      .updateLog(logId, {
+        status: "failed",
+        error: reason ?? "cancelled",
+        finishedAt: new Date().toISOString(),
+      })
+      .catch((error) =>
+        this.logger.error(`回填取消日志状态失败: ${logId}`, error),
+      );
   }
 
   /**

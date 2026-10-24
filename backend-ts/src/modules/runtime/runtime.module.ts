@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ChatModule } from "../chat/chat.module";
+import { JobsModule } from "../jobs/jobs.module";
 import { KeepAwakeService } from "./keep-awake.service";
 
 /**
@@ -7,7 +8,7 @@ import { KeepAwakeService } from "./keep-awake.service";
  * BridgeModule 是全局模块，BridgeClient 无需在此 import。
  */
 @Module({
-  imports: [ChatModule],
+  imports: [ChatModule, JobsModule],
   providers: [KeepAwakeService],
   exports: [KeepAwakeService],
 })

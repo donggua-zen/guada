@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
+import { HttpException, HttpStatus, Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
 import { getSessionDir } from "../../common/utils/session-path.util";
@@ -45,6 +45,7 @@ import {
 import { SessionContextFactory } from "./session-context.factory";
 import { WorkspaceWatcherService } from "../../common/services/workspace-watcher.service";
 import { SessionStreamManager } from "./session-stream.manager";
+import { JobRegistryService } from "../jobs/job-registry.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { StreamStatusChangedEvent } from "../../common/events/stream.events";
 import { SessionReplayService } from "./session-replay.service";
@@ -73,6 +74,8 @@ export class SessionService {
     private sessionReplayService: SessionReplayService,
     private contentSearch: SessionContentSearchService,
     private sessionGroupService: SessionGroupService,
+    // 允许直接 new 的测试/嵌入场景不挂 Registry；生产由 ChatModule imports JobsModule 注入。
+    @Optional() private readonly jobRegistry?: JobRegistryService,
   ) {}
 
   /**
@@ -1019,6 +1022,21 @@ export class SessionService {
 
     // 子会话（子代理 / workflow 成员，含已冻结的）随主会话一并删除：
     // Prisma 自关联未配置 onDelete，若只删主会话，子会话会被 ON DELETE SET NULL 孤儿化
+    // 先取消并清理父/子会话的后台作业，避免删除后 job 仍尝试投递到不存在的会话。
+    if (this.jobRegistry) {
+      try {
+        await Promise.all(
+          [sessionId, ...children.map((child) => child.id)].map((id) =>
+            this.jobRegistry!.disposeSession(id),
+          ),
+        );
+      } catch (err: any) {
+        this.logger.warn(
+          `清理会话后台作业失败 (${sessionId}): ${err?.message ?? err}`,
+        );
+      }
+    }
+
     await this.sessionStore.deleteChildrenOf(sessionId);
 
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）

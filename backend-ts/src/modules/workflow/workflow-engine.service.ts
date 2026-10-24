@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject } from "@nestjs/common";
+import { Injectable, Logger, Inject, Optional } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import * as os from "os";
 import * as vm from "vm";
@@ -8,6 +8,9 @@ import { SubAgentManager } from "../sub-agent/sub-agent.manager";
 import type { SubAgentResult } from "../sub-agent/sub-agent.manager";
 import { WorkflowFileStore } from "./workflow-file-store.service";
 import { safeTruncate } from "../../common/utils/string.utils";
+import { JobRegistryService } from "../jobs/job-registry.service";
+import { sliceJobText } from "../jobs/job-output.util";
+import type { JobId, JobOutcome } from "../jobs/job.types";
 import {
   WorkflowError,
   WorkflowEventData,
@@ -635,6 +638,40 @@ function toMemberStatus(result: SubAgentResult): WorkflowMemberStatus {
   return "failed";
 }
 
+/** Workflow 终态 → 通用 job 终态（cancelled 映射为 killed） */
+function toWorkflowJobOutcome(result: WorkflowRunResult): JobOutcome {
+  const output = serializeWorkflowValue(result.value);
+  switch (result.status) {
+    case "completed":
+      return { status: "completed", output, exitCode: 0 };
+    case "cancelled":
+      return {
+        status: "killed",
+        detail: result.errorMessage ?? "cancelled",
+        output,
+        exitCode: null,
+      };
+    case "failed":
+    default:
+      return {
+        status: "failed",
+        detail: result.errorMessage ?? result.errorCode,
+        output,
+        exitCode: null,
+      };
+  }
+}
+
+function serializeWorkflowValue(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 // ─── 引擎服务 ───
 
 @Injectable()
@@ -647,6 +684,8 @@ export class WorkflowEngineService {
   constructor(
     private readonly subAgentManager: SubAgentManager,
     private readonly fileStore: WorkflowFileStore,
+    // 允许直接 new 的测试/嵌入场景不挂 Registry；生产由 WorkflowModule imports JobsModule 注入。
+    @Optional() private readonly jobRegistry?: JobRegistryService,
   ) {}
 
   /** 前端数据源：某会话的全部已知 run 快照（运行中 + 近期完成） */
@@ -672,6 +711,58 @@ export class WorkflowEngineService {
       if (oldest === undefined) break;
       byRun.delete(oldest);
     }
+  }
+
+  /**
+   * 为一次 workflow run 注册通用作业。
+   *
+   * workflow 仍是前台工具调用，结果由工具返回值交付；job 仅用于
+   * job_list/job_read/job_stop 与 UI 可观测，notify 固定 false。
+   */
+  private registerWorkflowJob(
+    run: WorkflowRun,
+    sessionId: string,
+    label: string,
+    done: Promise<JobOutcome>,
+  ): JobId | undefined {
+    if (!this.jobRegistry) return undefined;
+    try {
+      return this.jobRegistry.start({
+        kind: "workflow",
+        label,
+        sessionId,
+        handle: run.runId,
+        notify: false,
+        read: async (opts) => {
+          let text: string;
+          try {
+            text = JSON.stringify(run.getSnapshot(), null, 2);
+          } catch (error) {
+            text = `[workflow snapshot unavailable: ${String(error)}]`;
+          }
+          return sliceJobText(text, opts);
+        },
+        cancel: (reason) => {
+          run.cancel(reason ?? "job killed");
+        },
+        isAlive: () => run.getSnapshot().status === "running",
+        onDisposed: () => this.removeRunState(sessionId, run.runId),
+        done,
+      });
+    } catch (error: any) {
+      this.logger.warn(
+        `注册 workflow 作业失败 (${run.runId})，继续执行: ${error?.message ?? error}`,
+      );
+      return undefined;
+    }
+  }
+
+  /** 删除单个 run 的内存快照；onDisposed 与 TTL 清理共用。 */
+  private removeRunState(sessionId: string, runId: string): void {
+    const byRun = this.runStatesBySession.get(sessionId);
+    if (!byRun) return;
+    byRun.delete(runId);
+    if (byRun.size === 0) this.runStatesBySession.delete(sessionId);
   }
 
   /**
@@ -712,6 +803,25 @@ export class WorkflowEngineService {
     this.runs.set(runId, run);
     this.registerRunState(parentContext.sessionId, run.getSnapshot());
 
+    let resolveJobDone: ((outcome: JobOutcome) => void) | undefined;
+    const jobDone = new Promise<JobOutcome>((resolve) => {
+      resolveJobDone = resolve;
+    });
+    void run.done.then(
+      (result) => resolveJobDone?.(toWorkflowJobOutcome(result)),
+      (error) =>
+        resolveJobDone?.({
+          status: "failed",
+          detail: error instanceof Error ? error.message : String(error),
+        }),
+    );
+    const jobId = this.registerWorkflowJob(
+      run,
+      parentContext.sessionId,
+      meta.name,
+      jobDone,
+    );
+
     run.emit("run-start", {
       name: meta.name,
       ...(meta.description ? { description: meta.description } : {}),
@@ -721,7 +831,15 @@ export class WorkflowEngineService {
 
     try {
       run.start({ script: params.script, args: params.args }, abortSignal);
-      return await run.done;
+      const result = await run.done;
+      if (jobId) result.jobId = jobId;
+      return result;
+    } catch (error) {
+      resolveJobDone?.({
+        status: "failed",
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     } finally {
       this.runs.delete(runId);
     }

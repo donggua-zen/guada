@@ -10,6 +10,9 @@
 /** stdio 传输所需的最低 agent 版本（容器工作区与 SSH stdio 共用同一门槛） */
 export const MIN_STDIO_AGENT_VERSION = "0.6.0";
 
+/** 远程后台 Job（process_done / readProcess / killAllProcesses）所需的最低版本 */
+export const MIN_REMOTE_JOB_AGENT_VERSION = "0.7.0";
+
 /** 比较点分版本号：a >= b 返回 true（仅数字段，位数不同按 0 补齐；空/非法按 0） */
 export function versionAtLeast(a: string, b: string): boolean {
   const pa = String(a || "").trim().split(".").map((s) => parseInt(s, 10) || 0);

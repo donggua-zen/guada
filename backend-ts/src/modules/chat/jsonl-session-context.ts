@@ -709,13 +709,24 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     finish: TurnFinish,
   ): Promise<void> {
     // 上下文占用锚点：回合全部消息已 append（finalizeTurn 时序在流结束后）→ 统计即回合后占用
-    // （含视图消息数与细分，供前端重开会话时逆向扫描免 REST）
-    const anchor = await this.getContextStats();
+    // （含视图消息数与细分，供前端重开会话时逆向扫描免 REST）。
+    // 统计失败不能阻止 turn/finish 落盘：锚点字段可选，缺失时前端回退到
+    // 最后一次 context/stats 事件。
+    let anchor:
+      | Awaited<ReturnType<JsonlSessionContext["getContextStats"]>>
+      | undefined;
+    try {
+      anchor = await this.getContextStats();
+    } catch (error: any) {
+      this.logger.warn(
+        `getContextStats failed before finalizeTurn (${turnId}): ${error?.message ?? error}`,
+      );
+    }
     const revision = await this.messageStore.finalizeTurn(
       this.sessionId,
       turnId,
       durationMs,
-      { ...finish, ...anchor },
+      { ...finish, ...(anchor ?? {}) },
     );
     // turn/finish 不改变消息视图，仅版本号前进 → 续期快照 revision（写入方提供）
     this.refreshSnapshotRevision(revision);

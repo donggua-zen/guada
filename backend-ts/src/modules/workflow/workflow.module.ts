@@ -9,6 +9,7 @@ import { WorkflowEngineService } from "./workflow-engine.service";
 import { WorkflowFileStore } from "./workflow-file-store.service";
 import { WorkflowController } from "./workflow.controller";
 import { WorkflowPlugin } from "./workflow.plugin";
+import { JobsModule } from "../jobs/jobs.module";
 
 /**
  * Workflow 子代理编排模块
@@ -18,7 +19,7 @@ import { WorkflowPlugin } from "./workflow.plugin";
  * （前端 workflowRuns store 基线），实时增量走 workflow_event SSE 流通道。
  */
 @Module({
-  imports: [SubAgentModule, AuthModule, ChatModule, AgentsModule],
+  imports: [SubAgentModule, AuthModule, ChatModule, AgentsModule, JobsModule],
   controllers: [WorkflowController],
   providers: [WorkflowEngineService, WorkflowFileStore, WorkflowPlugin],
   exports: [WorkflowEngineService],

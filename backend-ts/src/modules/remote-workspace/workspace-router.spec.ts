@@ -1,4 +1,5 @@
 import { WorkspaceToolRouter } from "./workspace-router";
+import { JobRegistryService } from "../jobs/job-registry.service";
 
 /**
  * WorkspaceToolRouter — workspace 参数分流测试：
@@ -6,11 +7,16 @@ import { WorkspaceToolRouter } from "./workspace-router";
  * 连接名 → 经 RemoteAgentManager.getAgent（内含会话绑定校验）返回远程目标。
  */
 describe("WorkspaceToolRouter", () => {
-  const buildRouter = (getAgentImpl?: (...args: any[]) => Promise<any>) => {
+  const buildRouter = (
+    getAgentImpl?: (...args: any[]) => Promise<any>,
+    registry?: JobRegistryService,
+    drainImpl?: () => Promise<any[]>,
+  ) => {
     const manager: any = {
       getAgent: getAgentImpl || (async () => ({ basePath: "/remote/proj" })),
+      drainSessionProcesses: drainImpl || (async () => []),
     };
-    return new WorkspaceToolRouter(manager);
+    return new WorkspaceToolRouter(manager, registry);
   };
 
   it("缺省 / main / local → 返回 null（主工作目录）", async () => {
@@ -70,5 +76,118 @@ describe("WorkspaceToolRouter", () => {
     await expect(
       router.resolveRemoteTarget("x", "s1", { "ssh-connection": [] }),
     ).rejects.toThrow("not bound to this session");
+  });
+
+  describe("远程 Job", () => {
+    let registry: JobRegistryService;
+
+    beforeEach(() => {
+      registry = new JobRegistryService({ emit: jest.fn() } as any);
+    });
+
+    afterEach(() => {
+      registry.onModuleDestroy();
+    });
+
+    const provider = {
+      readProcess: jest.fn(async () => ({
+        text: "remote output",
+        offset: 0,
+        nextOffset: 13,
+        size: 13,
+        truncated: false,
+        logFilePath: "/tmp/remote.log",
+        status: "completed",
+        exitCode: 0,
+        uptimeMs: 10,
+      })),
+      kill: jest.fn(),
+    };
+
+    function register(router: WorkspaceToolRouter) {
+      return router.registerRemoteProcess(
+        "s1",
+        "r:conn:p1",
+        "conn",
+        "utf-8",
+        {
+          command: "sleep 10",
+          logFilePath: "/tmp/remote.log",
+          provider: provider as any,
+        },
+      );
+    }
+
+    it("后台登记注册 remote-shell job，push 完成后可读", async () => {
+      const router = buildRouter(undefined, registry);
+      const jobId = register(router)!;
+      expect(jobId).toMatch(/^job-/);
+      expect(registry.get(jobId, "s1")).toMatchObject({
+        kind: "remote-shell",
+        label: "sleep 10",
+        handle: "r:conn:p1",
+        status: "running",
+      });
+
+      router.handleRemoteProcessDone({
+        sessionId: "s1",
+        connectionName: "conn",
+        processId: "p1",
+        jobId,
+        status: "completed",
+        exitCode: 0,
+      });
+      const settled = await registry.wait(jobId, "s1", 1000);
+      expect(settled.status).toBe("completed");
+
+      const read = await registry.read(jobId, "s1");
+      expect(read.output.text).toBe("remote output");
+      expect(provider.readProcess).toHaveBeenCalledWith(
+        "r:conn:p1",
+        expect.objectContaining({ maxBytes: expect.any(Number) }),
+        "utf-8",
+      );
+    });
+
+    it("连接断开 → running job 置 lost，read 返回兜底说明", async () => {
+      const router = buildRouter(undefined, registry);
+      const jobId = register(router)!;
+      provider.readProcess.mockRejectedValueOnce(new Error("connection closed"));
+
+      router.handleRemoteProcessDisconnected({
+        sessionId: "s1",
+        connectionName: "conn",
+      });
+
+      const settled = await registry.wait(jobId, "s1", 1000);
+      expect(settled.status).toBe("lost");
+      const read = await registry.read(jobId, "s1");
+      expect(read.output.text).toContain("connection lost");
+    });
+
+    it("turn.stopping drain 结算并抑制通知", async () => {
+      const router = buildRouter(
+        undefined,
+        registry,
+        async () => [
+          {
+            connectionName: "conn",
+            processId: "p1",
+            status: "completed",
+            exitCode: 0,
+            outputB64: Buffer.from("drained output").toString("base64"),
+            truncated: false,
+            logFile: "/tmp/remote.log",
+          },
+        ],
+      );
+      const jobId = register(router)!;
+
+      const rows = await router.drainRemoteProcesses("s1");
+      expect(rows[0].output).toBe("drained output");
+      const settled = await registry.wait(jobId, "s1", 1000);
+      expect(settled.status).toBe("completed");
+      expect(settled.reported).toBe(true);
+    });
   });
 });
