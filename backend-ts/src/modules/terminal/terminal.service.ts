@@ -1,5 +1,11 @@
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnApplicationShutdown,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { PtyHandle } from "./types";
 import { ensureSpawnHelperExecutable, PtyHelperError } from "./pty-helper";
@@ -7,6 +13,24 @@ import { envValue, resolveWindowsShell } from "../shell/windows-shell-detect";
 
 /** transcript 保留上限（字节，超出丢弃头部） */
 const TRANSCRIPT_LIMIT = 1 << 20; // 1MB
+
+/** process.on("exit") 的 PTY 同步兜底（node-pty kill 在退出阶段可能来不及） */
+const ptyExitGuards = new Set<() => void>();
+let ptyExitHookInstalled = false;
+
+function installPtyExitHook(): void {
+  if (ptyExitHookInstalled) return;
+  ptyExitHookInstalled = true;
+  process.once("exit", () => {
+    for (const guard of ptyExitGuards) {
+      try {
+        guard();
+      } catch {
+        // best-effort
+      }
+    }
+  });
+}
 
 /**
  * 终端服务：node-pty 进程管理（PTY 注册表）
@@ -18,10 +42,12 @@ const TRANSCRIPT_LIMIT = 1 << 20; // 1MB
  *  - 会话归属/权限校验在 Gateway 层完成
  */
 @Injectable()
-export class TerminalService implements OnModuleDestroy {
+export class TerminalService implements OnModuleDestroy, OnApplicationShutdown {
   private readonly logger = new Logger(TerminalService.name);
   /** PTY 注册表 */
   private readonly sessions = new Map<string, PtyHandle>();
+  /** PTY 退出兜底（process.on("exit") 时同步杀进程树） */
+  private readonly exitGuards = new Map<string, () => void>();
   /** 每会话 UI 终端上限 */
   private readonly MAX_UI_TERMINALS = 3;
   /** orphan 回收定时器 */
@@ -35,6 +61,12 @@ export class TerminalService implements OnModuleDestroy {
   }
 
   onModuleDestroy(): void {
+    clearInterval(this.orphanTimer);
+    for (const id of this.sessions.keys()) this.dispose(id);
+  }
+
+  onApplicationShutdown(): void {
+    // onModuleDestroy 已执行时幂等；信号路径也可能只触发 onApplicationShutdown。
     clearInterval(this.orphanTimer);
     for (const id of this.sessions.keys()) this.dispose(id);
   }
@@ -132,8 +164,42 @@ export class TerminalService implements OnModuleDestroy {
     } catch {
       /* ignore */
     }
+    const guard = this.exitGuards.get(id);
+    if (guard) {
+      ptyExitGuards.delete(guard);
+      this.exitGuards.delete(id);
+    }
     this.sessions.delete(id);
     this.logger.log(`Terminal disposed: ${id}`);
+  }
+
+  /** process.exit 时同步杀 PTY 进程树（node-pty 的异步 kill 可能来不及）。 */
+  private installExitGuard(id: string, handle: PtyHandle): void {
+    const pid = handle.pty.pid;
+    if (!pid) return;
+    installPtyExitHook();
+    const guard =
+      process.platform === "win32"
+        ? () => {
+            try {
+              execFileSync(
+                "taskkill",
+                ["/F", "/T", "/PID", String(pid)],
+                { stdio: "ignore", timeout: 1_000 },
+              );
+            } catch {
+              // 已退出
+            }
+          }
+        : () => {
+            try {
+              process.kill(pid, "SIGKILL");
+            } catch {
+              // 已退出
+            }
+          };
+    this.exitGuards.set(id, guard);
+    ptyExitGuards.add(guard);
   }
 
   list(sessionId: string): PtyHandle[] {
@@ -179,6 +245,7 @@ export class TerminalService implements OnModuleDestroy {
     });
 
     this.sessions.set(id, handle);
+    this.installExitGuard(id, handle);
     this.logger.log(`Terminal created: ${id} cwd=${cwd}`);
     return handle;
   }

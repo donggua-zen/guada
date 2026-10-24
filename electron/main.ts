@@ -3106,10 +3106,10 @@ async function performShutdown(): Promise<void> {
     console.log("Sending graceful shutdown to backend...");
     bridgeServer.broadcast("shutdown", {});
 
-    // 等待后端优雅退出（最多 5 秒）
+    // 等待后端优雅退出（最多 7 秒：后端 shutdown reaper 自身有 5s 预算）
     let backendExited = false;
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 5000);
+      const timer = setTimeout(resolve, 7000);
       backendProcess?.once("exit", (code) => {
         clearTimeout(timer);
         backendExited = true;

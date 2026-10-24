@@ -17,6 +17,7 @@ import {
 import { CorruptSessionLogError } from './errors';
 // 会话数据根解析（sessions/ 的父级选择）见 common/utils/session-path.util.ts（单一真相）
 import { resolveSessionsBasePath } from '../utils/session-path.util';
+import { withTransientFsRetry } from '../utils/transient-fs-retry.util';
 
 interface ActiveSegment {
   file: string;
@@ -135,7 +136,9 @@ export class JsonlBackend implements PersistenceBackend {
         data: { sessionId, title: meta?.title ?? '新对话' },
       }) + '\n';
     try {
-      await fs.writeFile(segPath, initLine, { flag: 'wx', encoding: 'utf-8' });
+      await withTransientFsRetry(() =>
+        fs.writeFile(segPath, initLine, { flag: 'wx', encoding: 'utf-8' }),
+      );
       const seg = this.activeSegments.get(sessionId);
       if (seg) seg.bytes = Buffer.byteLength(initLine, 'utf-8');
     } catch (e: any) {
@@ -208,9 +211,10 @@ export class JsonlBackend implements PersistenceBackend {
     const file = seg ? seg.file : 'seg-0000.jsonl';
     const filePath = this.getSegmentPath(sessionId, file);
 
-    // append-only 写入
+    // append-only 写入。EMFILE/ENFILE 是 open 阶段失败（尚未写入字节），
+    // 退避重试可等结束进程的句柄释放后自愈，不会产生重复行。
     const line = JSON.stringify(event) + '\n';
-    await fs.appendFile(filePath, line, 'utf-8');
+    await withTransientFsRetry(() => fs.appendFile(filePath, line, 'utf-8'));
 
     // 更新活跃段
     if (seg) {
@@ -226,7 +230,7 @@ export class JsonlBackend implements PersistenceBackend {
     const filePath = this.getSegmentPath(sessionId, file);
 
     const lines = events.map(e => JSON.stringify(e) + '\n').join('');
-    await fs.appendFile(filePath, lines, 'utf-8');
+    await withTransientFsRetry(() => fs.appendFile(filePath, lines, 'utf-8'));
 
     if (seg) {
       seg.endSeq = events[events.length - 1].seq;
@@ -530,7 +534,9 @@ export class JsonlBackend implements PersistenceBackend {
     const tmpPath = filePath + '.tmp';
 
     // 原子写入：先写临时文件再 rename
-    await fs.writeFile(tmpPath, JSON.stringify(manifest, null, 2), 'utf-8');
+    await withTransientFsRetry(() =>
+      fs.writeFile(tmpPath, JSON.stringify(manifest, null, 2), 'utf-8'),
+    );
     await fs.rename(tmpPath, filePath);
   }
 
@@ -560,7 +566,9 @@ export class JsonlBackend implements PersistenceBackend {
     };
 
     // 1. 先写快照成功
-    await fs.writeFile(tmpPath, JSON.stringify(snapshot), 'utf-8');
+    await withTransientFsRetry(() =>
+      fs.writeFile(tmpPath, JSON.stringify(snapshot), 'utf-8'),
+    );
     await fs.rename(tmpPath, filePath);
 
     // 2. 再标记 manifest.snapshot(先快照成功,才允许后续分卷逻辑引用它)

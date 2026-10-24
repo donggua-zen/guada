@@ -3,12 +3,15 @@ import {
   Logger,
   OnModuleInit,
   OnModuleDestroy,
+  OnApplicationShutdown,
+  Optional,
 } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import {
   ChildProcess,
   SpawnOptions,
   exec,
+  execFileSync,
   execSync,
   spawn,
 } from "child_process";
@@ -26,12 +29,25 @@ import {
 } from "../../common/utils/node-shim.util";
 import { OutputTailer } from "./output-tailer";
 import {
+  closeNativeHandle,
+  getProcessExitCode,
+  isProcessExited as isNativeProcessExited,
+  peekOutputPipeSync,
+  readOutputPipeSync,
+  spawnSuspendedInJob,
+  terminateJob,
+  terminateProcess as terminateNativeProcess,
+  writeToProcessStdinSync,
+  type NativeHandle,
+} from "./win32-job-process";
+import {
   envValue,
   resolveWindowsShell,
   type ShellKind,
 } from "./windows-shell-detect";
 import { isShellSandboxSupported } from "../../common/services/sandbox-policy";
-import type { ProcessChangedEvent } from "../../common/events/stream.events";
+import { JobRegistryService } from "../jobs/job-registry.service";
+import type { JobId, JobOutcome } from "../jobs/job.types";
 
 // ============================================================================
 // UTF-8 边界修剪工具
@@ -64,6 +80,36 @@ function trimUtf8Tail(buf: Buffer): string {
   return buf.toString("utf-8", start);
 }
 
+/**
+ * 读取任意字节区间后的 UTF-8 修剪：
+ * - startMid：起点落在文件中间，跳过开头的 continuation bytes；
+ * - endMid：终点不在 EOF，回退到最后一个完整字符的起点。
+ */
+function trimUtf8Range(
+  buf: Buffer,
+  startMid: boolean,
+  endMid: boolean,
+): string {
+  if (buf.length === 0) return "";
+  let begin = 0;
+  if (startMid) {
+    while (begin < buf.length && (buf[begin] & 0xc0) === 0x80) begin++;
+  }
+  let end = buf.length;
+  if (endMid) {
+    for (let i = buf.length - 1; i >= begin && i >= buf.length - 4; i--) {
+      const byte = buf[i];
+      if ((byte & 0xc0) !== 0x80) {
+        const expectedLen =
+          byte < 0x80 ? 1 : byte < 0xe0 ? 2 : byte < 0xf0 ? 3 : 4;
+        if (i + expectedLen > buf.length) end = i;
+        break;
+      }
+    }
+  }
+  return buf.toString("utf-8", begin, end);
+}
+
 // ============================================================================
 // 日志文件名
 //
@@ -93,8 +139,19 @@ const LOG_FILE_EXT = ".log";
  */
 export const EXEC_TOKEN_ENV = "GUADA_EXEC_TOKEN";
 
+/**
+ * PowerShell 5.1 默认按 OEM code page 输出，而日志由 OutputTailer 按 UTF-8 解码。
+ * 与 DSH 的 ENCODING_PREAMBLE 对齐：在用户命令前固定 UTF-8 输出编码。
+ * 语句放在同一行并用 `; ` 分隔，避免改变用户命令的错误行号。
+ */
+const POWERSHELL_UTF8_PREAMBLE =
+  "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); " +
+  "$OutputEncoding = [System.Text.UTF8Encoding]::new($false); ";
+
 /** Windows：终止后迟迟收不到进程退出信号的兜底结算时限（对齐 zcode 的 FORCE_EXIT_AFTER_KILL_MS） */
 const KILL_FINALIZE_MS = 5_000;
+/** 已完成但未被通知消费的 entry 保留时长（给 read/list 留观察窗口，避免无限增长） */
+const COMPLETED_ENTRY_TTL_MS = 10 * 60 * 1000;
 /** Windows：MSYS 侧清扫的最大轮次与轮次间隔（首轮之外再复扫，收掉下刀期间新派生的漏网） */
 const WIN_SWEEP_MAX_ATTEMPTS = 3;
 const WIN_SWEEP_RETRY_MS = 300;
@@ -185,29 +242,18 @@ export function buildLogFileName(
   return `${LOG_FILE_PREFIX}-${sessionId}-${processId}${LOG_FILE_EXT}`;
 }
 
-/**
- * 构造原始输出（spool）文件名：guada-<sessionId>-<tailId>.raw.log
- *
- * spool 是子进程直写的原始字节，由 OutputTailer 转写成上面那份清洗日志。
- * 它与清洗日志的命名基准不同：spool 必须在 spawn 之前就有名字（fd 要进 stdio），
- * 而清洗日志仍用子进程 pid —— 那是 UI 在 entry 消失后按 (会话, pid) 定位日志的依据。
- * 两者都以 .log 结尾，日志目录 GC 一并覆盖。
- */
-export function buildRawLogFileName(tailId: string, sessionId: string): string {
-  return `${LOG_FILE_PREFIX}-${sessionId}-${tailId}.raw${LOG_FILE_EXT}`;
-}
-
 // ============================================================================
 // 类型定义
 // ============================================================================
 
 export type ProcessStatus = "running" | "completed" | "killed" | "error";
 
-interface ProcessEntry {
+interface ProcessEntryBase {
   id: string;
+  /** 直接子进程的 Windows/POSIX PID（native 路径也用它） */
+  pid: number;
   command: string;
   sessionId: string;
-  childProcess: ChildProcess;
   status: ProcessStatus;
   exitCode: number | null;
   cwd: string;
@@ -217,23 +263,75 @@ interface ProcessEntry {
   execToken: string;
   /** 终止兜底结算定时器：退出信号迟到时强制收尾（见 scheduleKillFinalize） */
   killFinalizeTimer?: NodeJS.Timeout;
-  /** 日志文件路径（系统临时目录）——清洗后的 UTF-8 转写，AI/UI 读的就是它 */
+  /** 日志文件路径（系统临时目录）——清洗后的 UTF-8 日志，AI/UI 读的就是它（唯一一份） */
   logFilePath: string;
   /** 字节偏移：下次 poll 读取的起始位置 */
   readOffset: number;
-  /** 输出转写器：子进程直写的 spool → 清洗后的 UTF-8 转写 */
+  /** 输出写入器：管道字节块 → 解码清洗 → 日志文件 */
   tailer: OutputTailer;
   /** 运行期间的空闲转写定时器（把滞留的未结束行交出去） */
   idleTimer?: NodeJS.Timeout;
   /** 无 poll 等待者时，进程结束后的异步投递 promise（poll 检测到则 await 后从队列取） */
   exitPromise?: Promise<void>;
+  /**
+   * 完成输出是否已被某个观察者消费/读取：
+   * - poll 读到终态、drainCompleted、kill、read 读到终态 → true；
+   * - 为 true 时不再投递完成通知，避免重复；
+   * - read 运行中进程不置位（模型仍在观察，完成通知仍需送达）。
+   */
+  reported?: boolean;
+  /** 完成通知已入队（诊断用；不代表一定被消费） */
+  noticeQueued?: boolean;
+  /** 通用后台作业 id（仅转后台的进程注册；前台命令不注册） */
+  jobId?: JobId;
+  /** 结算通用作业的 resolver（与 jobId 同时设置） */
+  jobDoneResolve?: (outcome: JobOutcome) => void;
+  /** 作业是否已结算（first-wins 防重复） */
+  jobSettled?: boolean;
+  /** shutdown reaper 的终止信号（handleProcessEnd / cleanupProcess 时 resolve） */
+  terminationPromise?: Promise<void>;
+  terminationResolve?: () => void;
+  /** process.on("exit") 同步兜底（legacy Windows/Unix） */
+  exitGuard?: () => void;
+  /** 已完成 entry 的 TTL 清理（防止 reported/notice 丢失后 entry 永驻内存） */
+  completedCleanupTimer?: NodeJS.Timeout;
   /** 元数据 */
   startedAt: Date;
   finishedAt?: Date;
 }
 
+/** 旧路径：Node child_process.spawn + taskkill/MSYS 清扫。 */
+interface NodeProcessEntry extends ProcessEntryBase {
+  kind: "node";
+  childProcess: ChildProcess;
+}
+
+/**
+ * 新路径：CreateProcessW(CREATE_SUSPENDED) + kill-on-close Job。
+ * 直接子进程退出后关闭 job，内核会回收仍在 Job 里的所有后代。
+ */
+interface NativeProcessEntry extends ProcessEntryBase {
+  kind: "native";
+  processHandle: NativeHandle;
+  jobHandle: NativeHandle;
+  stdinWriteHandle: NativeHandle | null;
+  /** 输出管道读端（父进程持有；写端在子进程树内） */
+  outputReadHandle: NativeHandle | null;
+  /** 输出泵定时器：PeekNamedPipe + ReadFile，非阻塞 */
+  outputDrainTimer?: NodeJS.Timeout;
+  /** 输出管道 EOF 已到达（写端全部关闭）；后续 drain 是空操作 */
+  outputEof?: boolean;
+  /** 直接子进程退出轮询（native 没有 ChildProcess 的 exit 事件） */
+  exitPollTimer?: NodeJS.Timeout;
+  exitCheckInFlight?: boolean;
+}
+
+type ProcessEntry = NodeProcessEntry | NativeProcessEntry;
+
 export interface PollResult {
   processId: string;
+  /** 通用后台作业 id（未转后台的进程没有） */
+  jobId?: JobId;
   status: ProcessStatus;
   exitCode: number | null;
   /** 自上次 poll 以来的新输出（已清洗+截断后的文本） */
@@ -262,6 +360,8 @@ export type ExecuteResult =
   | {
       kind: "backgrounded";
       processId: string;
+      /** 通用后台作业 id（稳定，跨进程 ID 复用） */
+      jobId?: JobId;
       output: string;
       uptimeMs: number;
       waitMs: number;
@@ -271,10 +371,15 @@ export type ExecuteResult =
 
 export interface ProcessListEntry {
   id: string;
+  /** 通用后台作业 id（未转后台的进程没有） */
+  jobId?: JobId;
   command: string;
   status: ProcessStatus;
   sessionId: string;
   isBackgrounded: boolean;
+  exitCode: number | null;
+  /** cleaned log 路径；entry 已清理后仍可用于 read 工具 */
+  logFilePath: string;
   startedAt: Date;
   finishedAt?: Date;
 }
@@ -302,6 +407,31 @@ export interface ProcessLogTail {
   content: string;
 }
 
+/**
+ * 模型侧非破坏性读取（process read）：
+ * 读 cleaned log 的尾部或任意字节区间，不推进 readOffset、不删除 entry。
+ */
+export interface ProcessLogRead {
+  processId: string;
+  command: string;
+  status: ProcessLogTailStatus;
+  exitCode: number | null;
+  startedAt?: Date;
+  finishedAt?: Date;
+  /** 日志文件总字节数 */
+  size: number;
+  /** 本次读取的起始字节 */
+  offset: number;
+  /** 下次增量读取的起点；无新内容时等于 offset */
+  nextOffset: number;
+  /** 本次是否未覆盖完整日志（起点非 0 或终点非 EOF） */
+  truncated: boolean;
+  /** 读取内容（UTF-8） */
+  content: string;
+  /** cleaned log 路径；entry 已清理时仍返回 */
+  logFilePath?: string;
+}
+
 export interface SandboxOptions {
   enabled: boolean;
   readOnly: boolean;
@@ -311,8 +441,28 @@ export interface SandboxOptions {
 // 服务
 // ============================================================================
 
+/** process.on("exit") 阶段可执行的同步兜底；native Job 由内核 KILL_ON_JOB_CLOSE 兜底。 */
+const exitKillGuards = new Set<() => void>();
+let exitHookInstalled = false;
+
+function installProcessExitHook(): void {
+  if (exitHookInstalled) return;
+  exitHookInstalled = true;
+  process.once("exit", () => {
+    for (const guard of exitKillGuards) {
+      try {
+        guard();
+      } catch {
+        // best-effort：退出阶段不能再抛错
+      }
+    }
+  });
+}
+
 @Injectable()
-export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
+export class ProcessManagerService
+  implements OnModuleInit, OnModuleDestroy, OnApplicationShutdown
+{
   private readonly logger = new Logger(ProcessManagerService.name);
   private readonly processes = new Map<string, ProcessEntry>();
   /** 会话 → 该会话的所有进程（用于 stream.finished 时直接按会话查找） */
@@ -355,9 +505,21 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     path: "" as string,
   };
 
+  /**
+   * Windows 原生 Job spawn 开关。
+   * 默认开启；GUADA_WIN32_JOB_SPAWN=0/false/off 可回退 Node spawn + taskkill/MSYS sweep。
+   */
+  private readonly nativeSpawnEnabled =
+    process.platform === "win32" &&
+    !["0", "false", "off"].includes(
+      (envValue(process.env, "GUADA_WIN32_JOB_SPAWN") ?? "").toLowerCase(),
+    );
+
   constructor(
     private readonly chatRunnerService: ChatRunnerService,
     private readonly eventEmitter: EventEmitter2,
+    // 允许直接 new 的测试/嵌入场景不挂 Registry；生产由 ShellModule imports JobsModule 注入。
+    @Optional() private readonly jobRegistry?: JobRegistryService,
   ) {}
 
   // ── 生命周期 ──
@@ -376,6 +538,42 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     if (this.gcTimer) {
       clearInterval(this.gcTimer);
       this.gcTimer = null;
+    }
+  }
+
+  /**
+   * 后端退出收尾：终止所有 running 进程，最多等 1.5s，再释放句柄。
+   * native Job 由 KILL_ON_JOB_CLOSE 兜底；legacy 走 taskkill / 进程组 KO。
+   */
+  async onApplicationShutdown(): Promise<void> {
+    const running = [...this.processes.values()].filter(
+      (entry) => entry.status === "running",
+    );
+    if (running.length === 0) return;
+
+    for (const entry of running) {
+      try {
+        this.terminateTree(entry);
+      } catch (error: any) {
+        this.logger.warn(
+          `shutdown 终止进程失败 (${entry.id}): ${error?.message ?? error}`,
+        );
+      }
+    }
+
+    await Promise.race([
+      Promise.all(
+        running.map((entry) => entry.terminationPromise ?? Promise.resolve()),
+      ),
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 1_500);
+        timer.unref?.();
+      }),
+    ]);
+
+    for (const entry of running) {
+      this.releaseProcessHandles(entry);
+      this.resolveTermination(entry);
     }
   }
 
@@ -472,68 +670,130 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   /**
    * 创建并管理进程（内部方法）。
    *
-   * 输出通道：子进程的 stdout/stderr 是**一个由父进程打开的 spool 文件 fd**（不是管道），
-   * 原始字节由子进程直写；父进程按偏移把它们转写成清洗后的 UTF-8 日志（OutputTailer）。
+   * 输出通道：子进程树的 stdout/stderr 合并写一个**匿名管道**（native：CreatePipe 的
+   * inheritable 写端；legacy：Node stdio pipe），父进程持续把字节块解码清洗后
+   * 追加进**单份**日志文件（OutputTailer）。
    *
-   * 为什么不用管道：管道的读端 EOF 取决于「最后一个持有写句柄的进程」——后代进程会继承它，
+   * 为什么管道是安全的（曾经不是）：旧实现把「命令是否结束」耦合在管道 EOF 上，
    * 而 Windows 上 Git Bash 的管道成员（find/sort/head…）的父链是断的、taskkill 够不到，
-   * 于是 EOF 可以被拖到命令自己跑完（实测卡 1–2 分钟）。文件 fd 让「输出通道」与
-   * 「命令是否结束」彻底解耦：结束只认子进程的 exit 事件。
+   * EOF 可以被拖到命令自己跑完（实测卡 1–2 分钟）。现在完成检测只认直接子进程的
+   * exit 事件/句柄轮询——EOF 只决定「还能不能读到后续字节」（孤儿后代继续写的话，
+   * 泵继续收），不影响完成判定。
    */
-  private createProcess(
+  private async createProcess(
     command: string,
     cwd: string,
     encoding: string,
     sessionId: string,
     options?: { sandbox?: SandboxOptions },
-  ): ProcessEntry {
+  ): Promise<ProcessEntry> {
     const execToken = mintId(ID_PREFIXES.execToken);
-    // spool 名必须先于 spawn 确定（fd 要进 stdio）；清洗日志仍用进程 pid（见 buildRawLogFileName）
-    const rawPath = path.join(
-      this.getLogDir(),
-      buildRawLogFileName(mintId(ID_PREFIXES.proc), sessionId),
+
+    if (this.canUseNativeSpawn(options?.sandbox)) {
+      try {
+        const nativeEntry = await this.createNativeProcess(
+          command,
+          cwd,
+          encoding,
+          sessionId,
+          execToken,
+        );
+        if (nativeEntry) return nativeEntry;
+      } catch (error: any) {
+        // native 不可用/失败：清理已在 createNativeProcess 内完成，回退 Node spawn。
+        this.logger.warn(
+          `原生 Win32 Job spawn 失败，回退 Node spawn: ${error?.message ?? error}`,
+        );
+      }
+    }
+
+    return this.createLegacyProcess(
+      command,
+      cwd,
+      encoding,
+      sessionId,
+      execToken,
+      options?.sandbox,
     );
-    const outFd = fsSync.openSync(rawPath, "w");
+  }
 
-    let childProcess: ChildProcess;
+  /** 灰度开关 + shell 能力判断：Git Bash / PowerShell 走 native；cmd 留 legacy。 */
+  private canUseNativeSpawn(sandbox?: SandboxOptions): boolean {
+    if (!this.nativeSpawnEnabled) return false;
+    // Windows 沙盒本身不可用；保留 legacy 路径的告警/降级行为
+    if (sandbox?.enabled) return false;
+    return (
+      (this.shellInfo.kind === "gitbash" ||
+        this.shellInfo.kind === "powershell") &&
+      !!this.shellInfo.path
+    );
+  }
+
+  /**
+   * 新路径：CreateProcessW(CREATE_SUSPENDED) + kill-on-close Job。
+   *
+   * 返回 null 表示 native 能力不可用（Koffi 未加载/非 Windows），调用方回退 legacy。
+   * 抛错表示 native 尝试失败（CreateProcess/Assign/Resume），调用方同样回退。
+   */
+  private async createNativeProcess(
+    command: string,
+    cwd: string,
+    encoding: string,
+    sessionId: string,
+    execToken: string,
+  ): Promise<NativeProcessEntry | null> {
+    const program = this.shellInfo.path;
+    let args: string[];
+    let extraEnv: Record<string, string>;
+
+    if (this.shellInfo.kind === "gitbash") {
+      args =
+        process.env.GUADA_GIT_BASH_NO_LOGIN === "1"
+          ? ["-c", command]
+          : ["-c", "-l", command];
+      extraEnv = {
+        SHELL: program,
+        GIT_EDITOR: "true",
+        [EXEC_TOKEN_ENV]: execToken,
+      };
+    } else if (this.shellInfo.kind === "powershell") {
+      // 默认/UTF-8 时固定输出编码；显式要求 GBK 等编码时不强加 preamble，
+      // 否则会和 OutputTailer 的解码口径冲突。
+      const normalizedEncoding = (encoding || "").toLowerCase().replace("_", "-");
+      const useUtf8Preamble =
+        !normalizedEncoding ||
+        normalizedEncoding === "utf-8" ||
+        normalizedEncoding === "utf8";
+      args = [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `${useUtf8Preamble ? POWERSHELL_UTF8_PREAMBLE : ""}${command}`,
+      ];
+      extraEnv = { [EXEC_TOKEN_ENV]: execToken };
+    } else {
+      return null;
+    }
+
+    let native;
     try {
-      childProcess = this.spawnProcess(
-        command,
+      native = await spawnSuspendedInJob({
+        program,
+        args,
         cwd,
-        execToken,
-        outFd,
-        options?.sandbox,
-      );
-    } catch (err) {
-      // spawn 直接抛错（沙盒缺失等）：先收回 spool 句柄与文件，不留垃圾
-      try {
-        fsSync.closeSync(outFd);
-      } catch {
-        // ignore
-      }
-      try {
-        fsSync.rmSync(rawPath, { force: true });
-      } catch {
-        // ignore
-      }
-      throw err;
+        env: this.buildChildEnv(extraEnv),
+      });
+    } finally {
+      // spawn 失败时 spawnSuspendedInJob 内部已完整回收（进程/线程/管道/Job）。
     }
-    // 父进程只留读侧身份：写句柄交给子进程树（spool 由它直写）。
-    // 即便如此，命令是否结束也不再取决于谁还攥着这个句柄 —— 那正是用文件替代管道的目的。
-    try {
-      fsSync.closeSync(outFd);
-    } catch {
-      // ignore
-    }
+    if (!native) return null;
 
-    const processId = childProcess.pid?.toString() || this.generateId();
-    const startedAt = new Date();
+    const processId = String(native.pid);
     const logFilePath = path.join(
       this.getLogDir(),
       buildLogFileName(processId, sessionId),
     );
-    // 清洗日志从一开始就存在（与旧的 createWriteStream 建空文件一致）：
-    // 否则命令还没输出时，UI 的日志面板会把它当成「已被清理」。
     try {
       fsSync.writeFileSync(logFilePath, "");
     } catch (err: any) {
@@ -542,12 +802,78 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    const tailer = new OutputTailer(rawPath, logFilePath, encoding, (message) =>
+    const tailer = new OutputTailer(logFilePath, encoding, (message) =>
       this.logger.warn(message),
     );
 
-    const entry: ProcessEntry = {
+    const entry: NativeProcessEntry = {
+      kind: "native",
       id: processId,
+      pid: native.pid,
+      command,
+      sessionId,
+      status: "running",
+      exitCode: null,
+      cwd,
+      encoding,
+      isBackgrounded: false,
+      execToken,
+      logFilePath,
+      readOffset: 0,
+      tailer,
+      startedAt: new Date(),
+      processHandle: native.process,
+      jobHandle: native.job,
+      stdinWriteHandle: native.stdinWrite,
+      outputReadHandle: native.outputRead,
+    };
+
+    this.registerProcess(entry);
+    this.startNativeExitPoll(entry);
+    this.startOutputDrain(entry);
+    return entry;
+  }
+
+  /** 旧路径：Node child_process.spawn + taskkill/MSYS 清扫。 */
+  private createLegacyProcess(
+    command: string,
+    cwd: string,
+    encoding: string,
+    sessionId: string,
+    execToken: string,
+    sandbox?: SandboxOptions,
+  ): NodeProcessEntry {
+    let childProcess: ChildProcess;
+    try {
+      childProcess = this.spawnProcess(command, cwd, execToken, sandbox);
+    } catch (err) {
+      // spawn 直接抛错（沙盒缺失等）：占位日志还没建，无需清理
+      throw err;
+    }
+
+    const processId = childProcess.pid?.toString() || this.generateId();
+    const startedAt = new Date();
+    const logFilePath = path.join(
+      this.getLogDir(),
+      buildLogFileName(processId, sessionId),
+    );
+    // 日志从一开始就存在：否则命令还没输出时，UI 的日志面板会把它当成「已被清理」。
+    try {
+      fsSync.writeFileSync(logFilePath, "");
+    } catch (err: any) {
+      this.logger.warn(
+        `创建日志文件失败 (${logFilePath}): ${err?.message ?? err}`,
+      );
+    }
+
+    const tailer = new OutputTailer(logFilePath, encoding, (message) =>
+      this.logger.warn(message),
+    );
+
+    const entry: NodeProcessEntry = {
+      kind: "node",
+      id: processId,
+      pid: childProcess.pid ?? 0,
       command,
       sessionId,
       childProcess,
@@ -564,14 +890,16 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       startedAt,
     };
 
-    this.logger.log(
-      `后台进程 ${processId} 开始，日志文件: ${logFilePath}: ${command.substring(0, 80)}`,
-    );
+    // stdout/stderr 的 data 事件实时喂 tailer：字节一到就解码清洗落盘，
+    // 读路径不再需要任何「读之前先转写」的动作（syncOutput 对 node 是空操作）。
+    // 两路喂同一个 OutputDecoder：到达顺序即进程真实写序。
+    childProcess.stdout?.on("data", (chunk: Buffer) => entry.tailer.feed(chunk));
+    childProcess.stderr?.on("data", (chunk: Buffer) => entry.tailer.feed(chunk));
 
     childProcess.on("exit", (code) => {
-      // 先把 spool 里剩余字节转写完（本地 IO，必定完成），再判定终态。
-      // 注意「完成」只认 exit：后代进程可能还攥着 spool 继续写，那部分输出属于后续读取
-      // （readLogTail / poll 会再 pull 到），但绝不允许它们把这次调用拖住。
+      // 交出解码器/行缓冲残留（本地 IO，必定完成），再判定终态。
+      // 注意「完成」只认 exit：后代进程可能还攥着管道写端继续写，那部分输出属于后续读取
+      // （readLogTail / poll 会再 sync 到），但绝不允许它们把这次调用拖住。
       entry.tailer.flushFinal();
 
       if (entry.status === "running") {
@@ -596,22 +924,136 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       this.handleProcessEnd(entry, "error", 1);
     });
 
-    this.processes.set(processId, entry);
-    if (!this.sessionProcesses.has(sessionId)) {
-      this.sessionProcesses.set(sessionId, new Map());
-    }
-    this.sessionProcesses.get(sessionId)!.set(processId, entry);
-    this.startIdleTicker(entry);
-
-    this.logger.log(
-      `进程已转入后台: ${processId}, 命令: ${command.substring(0, 80)}`,
-    );
-
+    this.registerProcess(entry);
     return entry;
   }
 
+  /** 注册到内存表 + 启动 idle ticker + 统一日志。 */
+  private registerProcess(entry: ProcessEntry): void {
+    if (!entry.terminationPromise) {
+      entry.terminationPromise = new Promise<void>((resolve) => {
+        entry.terminationResolve = resolve;
+      });
+    }
+    this.installExitGuard(entry);
+    this.processes.set(entry.id, entry);
+    if (!this.sessionProcesses.has(entry.sessionId)) {
+      this.sessionProcesses.set(entry.sessionId, new Map());
+    }
+    this.sessionProcesses.get(entry.sessionId)!.set(entry.id, entry);
+    this.startIdleTicker(entry);
+
+    this.logger.log(
+      `后台进程 ${entry.id} 开始，日志文件: ${entry.logFilePath}: ${entry.command.substring(0, 80)}`,
+    );
+  }
+
   /**
-   * 运行中的进程：每 OUTPUT_IDLE_TICKER_MS 追平 spool 一次，并交出滞留的未结束行。
+   * process.on("exit") 同步兜底：native 由 Job 句柄内核兜底；
+   * legacy 在这里直接 taskkill / 进程组 SIGKILL，覆盖 process.exit 无法走异步钩子的场景。
+   */
+  private installExitGuard(entry: ProcessEntry): void {
+    if (entry.kind === "native") return;
+    const pid = entry.childProcess.pid;
+    if (!pid) return;
+
+    installProcessExitHook();
+    const guard =
+      process.platform === "win32"
+        ? () => {
+            try {
+              execFileSync(
+                "taskkill",
+                ["/F", "/T", "/PID", String(pid)],
+                { stdio: "ignore", timeout: 1_000 },
+              );
+            } catch {
+              // 已退出
+            }
+          }
+        : () => {
+            try {
+              process.kill(-pid, "SIGKILL");
+            } catch {
+              // 已退出/非组长
+            }
+          };
+    entry.exitGuard = guard;
+    exitKillGuards.add(guard);
+  }
+
+  private resolveTermination(entry: ProcessEntry): void {
+    const resolve = entry.terminationResolve;
+    entry.terminationResolve = undefined;
+    if (resolve) resolve();
+    if (entry.exitGuard) {
+      exitKillGuards.delete(entry.exitGuard);
+      entry.exitGuard = undefined;
+    }
+  }
+
+  /** native：250ms 轮询直接子进程是否退出（没有 ChildProcess exit 事件）。 */
+  private startNativeExitPoll(entry: NativeProcessEntry): void {
+    if (entry.exitPollTimer) return;
+    entry.exitPollTimer = setInterval(() => {
+      void this.checkNativeExit(entry);
+    }, 250);
+    entry.exitPollTimer.unref?.();
+  }
+
+  private stopNativeExitPoll(entry: NativeProcessEntry): void {
+    if (!entry.exitPollTimer) return;
+    clearInterval(entry.exitPollTimer);
+    entry.exitPollTimer = undefined;
+  }
+
+  private async checkNativeExit(entry: NativeProcessEntry): Promise<void> {
+    if (entry.exitCheckInFlight || !entry.processHandle) return;
+    entry.exitCheckInFlight = true;
+    try {
+      if (!(await isNativeProcessExited(entry.processHandle))) return;
+      // 等待期间可能已被兜底结算/清理移除：不要对已删除的 entry 再收尾。
+      if (!this.processes.has(entry.id)) return;
+
+      const code = await getProcessExitCode(entry.processHandle);
+      this.stopNativeExitPoll(entry);
+      entry.exitCode = code;
+      // 直接子进程退出：先收干管道里已到达的字节，再交出解码器/行缓冲残留。
+      // 孤儿后代仍持有的写端不受影响——后续读取路径继续 drain。
+      this.syncOutput(entry);
+      entry.tailer.flushFinal();
+
+      if (entry.status === "killed") {
+        this.cleanupProcess(entry.id, entry.sessionId);
+        return;
+      }
+      this.handleProcessEnd(
+        entry,
+        code === 0 ? "completed" : "error",
+        code,
+      );
+    } catch (error: any) {
+      this.logger.warn(
+        `native 退出检测失败 (${entry.id}): ${error?.message ?? error}`,
+      );
+    } finally {
+      entry.exitCheckInFlight = false;
+    }
+  }
+
+  /**
+   * 读取路径进入前把输出收干净：
+   * - native：drain 管道当前缓冲（PeekNamedPipe 非阻塞）；
+   * - legacy：Node 的 data 事件已实时把字节交给 tailer，无需动作。
+   */
+  private syncOutput(entry: ProcessEntry): void {
+    if (entry.kind === "native") {
+      this.drainOutputPipe(entry);
+    }
+  }
+
+  /**
+   * 运行中的进程：每 OUTPUT_IDLE_TICKER_MS 收一次输出，并交出滞留的未结束行。
    *
    * 对齐旧管道实现里 SanitizerTransform 的 500ms 空闲冲刷：交互式命令的提示词不以 \n 结尾，
    * 不主动冲刷就永远进不了日志（AI 与 UI 都看不到）。
@@ -623,7 +1065,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
         this.stopIdleTicker(entry);
         return;
       }
-      entry.tailer.pull();
+      this.syncOutput(entry);
       entry.tailer.flushIdle();
     }, OUTPUT_IDLE_TICKER_MS);
     entry.idleTimer.unref?.();
@@ -633,6 +1075,64 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     if (!entry.idleTimer) return;
     clearInterval(entry.idleTimer);
     entry.idleTimer = undefined;
+  }
+
+  // ── native 输出泵 ──
+
+  /**
+   * native 输出泵：PeekNamedPipe 探到有字节才 ReadFile，两者都非阻塞，
+   * 可以安全跑在 JS 线程上（不需要 worker 线程的生命周期管理）。
+   *
+   * 频率与 idle ticker 同拍（500ms）之外，读事件密集时也没必要更快——
+   * 管道缓冲 4KB 起步，命令输出几乎不会在两拍之间溢出；真正的大输出靠
+   * 「有数据就循环读到空」一次清干。
+   */
+  private startOutputDrain(entry: NativeProcessEntry): void {
+    if (entry.outputDrainTimer) return;
+    entry.outputDrainTimer = setInterval(() => {
+      this.drainOutputPipe(entry);
+    }, OUTPUT_IDLE_TICKER_MS);
+    entry.outputDrainTimer.unref?.();
+  }
+
+  private stopOutputDrain(entry: NativeProcessEntry): void {
+    if (!entry.outputDrainTimer) return;
+    clearInterval(entry.outputDrainTimer);
+    entry.outputDrainTimer = undefined;
+  }
+
+  /** 把管道里当前缓冲的字节全部读出喂给 tailer；EOF 后停泵。 */
+  private drainOutputPipe(entry: NativeProcessEntry): void {
+    const handle = entry.outputReadHandle;
+    if (!handle || entry.outputEof) return;
+    try {
+      // 单次 drain 的预算：EOF 没到但数据持续涌入时，一拍最多收 8MB，
+      // 避免失控输出把事件循环按住。
+      let budget = 8 * 1024 * 1024;
+      const buffer = Buffer.allocUnsafe(1024 * 1024);
+      while (budget > 0) {
+        const available = peekOutputPipeSync(handle);
+        if (available === null) {
+          // 写端全部关闭 → EOF。最终冲刷交给退出路径的 flushFinal。
+          entry.outputEof = true;
+          this.stopOutputDrain(entry);
+          return;
+        }
+        if (available === 0) return;
+        const want = Math.min(available, buffer.length, budget);
+        const read = readOutputPipeSync(handle, buffer.subarray(0, want));
+        if (read <= 0) return;
+        budget -= read;
+        entry.tailer.feed(buffer.subarray(0, read));
+      }
+    } catch (error: any) {
+      // 泵异常：停泵保住主循环，已收字节已在文件里；下次读取路径仍能 stat 到。
+      this.logger.warn(
+        `输出泵异常 (${entry.id}): ${error?.message ?? error}`,
+      );
+      entry.outputEof = true;
+      this.stopOutputDrain(entry);
+    }
   }
 
   /**
@@ -657,7 +1157,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       background?: boolean;
     },
   ): Promise<ExecuteResult> {
-    const entry = this.createProcess(
+    const entry = await this.createProcess(
       command,
       cwd,
       encoding,
@@ -670,13 +1170,23 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     // 后台模式：跳过 poll，立即返回
     if (options.background) {
       entry.isBackgrounded = true;
-      this.emitProcessChanged(sessionId);
+      // 注册失败（配额满等）直接抛错：不注册 job 就不让转后台，
+      // 否则配额被回退路径架空，且模型管不到这个进程。
+      const jobId = this.registerJob(entry);
+      if (!jobId) {
+        this.kill(entry.id);
+        throw new Error(
+          "background jobs are unavailable in this context (no job registry); run the command in the foreground instead",
+        );
+      }
       return {
         kind: "backgrounded",
         processId,
+        jobId,
         output: "",
         uptimeMs: Date.now() - entry.startedAt.getTime(),
         waitMs: 0,
+        logFilePath,
       };
     }
 
@@ -704,8 +1214,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
       // 进程在 timeout 内结束
       if (pollResult.status !== "running") {
-        // 未截断的前台完成：清洗日志与 spool 都删掉（截断/后台则都保留给 AI 读）。
-        // 删除是 best-effort：Windows 上残留进程还攥着 spool 时会删不掉，交给日志目录 GC。
+        // 未截断的前台完成：日志删掉（截断/后台则保留给 AI 读）。
+        // 删除是 best-effort：Windows 上文件被占用时删不掉，交给日志目录 GC。
         if (!pollResult.truncated) {
           entry.tailer.removeFiles();
         }
@@ -723,15 +1233,22 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
       // 超时，进程仍在运行 → 转入后台
       entry.isBackgrounded = true;
-      this.emitProcessChanged(sessionId);
+      const jobId = this.registerJob(entry);
+      if (!jobId) {
+        this.kill(entry.id);
+        throw new Error(
+          "background jobs are unavailable in this context (no job registry); run the command in the foreground instead",
+        );
+      }
       return {
         kind: "backgrounded",
         processId,
+        jobId,
         output: pollResult.output,
         uptimeMs: pollResult.uptimeMs,
         waitMs: pollResult.waitMs,
         truncated: pollResult.truncated,
-        logFilePath: pollResult.truncated ? logFilePath : undefined,
+        logFilePath,
       };
     } finally {
       options.abortSignal?.removeEventListener("abort", onAbort);
@@ -759,19 +1276,24 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     this.terminateTree(entry);
 
+    // kill 是模型主动动作，不投递完成通知。
+    entry.reported = true;
     entry.status = "killed";
     entry.finishedAt = new Date();
+    if (entry.jobId && this.jobRegistry) {
+      this.jobRegistry.markReported(entry.jobId);
+    }
 
     this.pollNotifier.notify(entry.id);
 
     this.logger.log(`后台进程 ${processId} 已被手动终止`);
 
-    if (!entry.childProcess.pid) {
+    if (!entry.pid) {
       // 拿不到 pid（spawn 失败等）→ 没有退出信号可等，直接清理
       this.cleanupProcess(entry.id, entry.sessionId);
       return "killed";
     }
-    // 有 pid 时不在 kill() 里清理 entry：留给 createProcess 的 exit 事件收尾，
+    // 有 pid 时不在 kill() 里清理 entry：留给 exit 事件/native 退出轮询收尾，
     // 这样看门狗在进程真正退出前仍能补杀残留的进程组成员。
     // 同时武装兜底结算——退出信号可能一直不来（见 scheduleKillFinalize）。
     this.scheduleKillFinalize(entry);
@@ -783,15 +1305,42 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    * 按平台下刀（kill 与重复终止共用）。
    *
    * Unix：整组 SIGTERM → 2s → 整组 SIGKILL（见 killUnixProcess）。
-   * Windows：taskkill /F /T 可达父链 + MSYS 侧清扫（见 killWindowsProcess）。
+   * Windows legacy：taskkill /F /T + MSYS 侧清扫（见 killWindowsProcess）。
+   * Windows native：TerminateJobObject，整棵 Job 一起走。
    */
   private terminateTree(entry: ProcessEntry): void {
+    if (entry.kind === "native") {
+      void this.terminateNativeEntry(entry);
+      return;
+    }
     const pid = entry.childProcess.pid;
     if (!pid) return;
     if (process.platform === "win32") {
       this.killWindowsProcess(pid, entry);
     } else {
       this.killUnixProcess(pid, entry);
+    }
+  }
+
+  /** native：TerminateJobObject 优先；失败再 TerminateProcess 直接子进程。 */
+  private async terminateNativeEntry(entry: NativeProcessEntry): Promise<void> {
+    if (entry.jobHandle) {
+      try {
+        await terminateJob(entry.jobHandle, 1);
+        return;
+      } catch (error: any) {
+        this.logger.warn(
+          `TerminateJobObject 失败 (${entry.id})，回退 TerminateProcess: ${error?.message ?? error}`,
+        );
+      }
+    }
+    if (!entry.processHandle) return;
+    try {
+      await terminateNativeProcess(entry.processHandle, 1);
+    } catch (error: any) {
+      this.logger.error(
+        `TerminateProcess 失败 (${entry.id}): ${error?.message ?? error}`,
+      );
     }
   }
 
@@ -835,7 +1384,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    * 升级策略：SIGTERM 整组 → 2s 后（或组长退出时立即）SIGKILL 整组 + 直接 SIGKILL 兜底。
    * 组长退出时补一次组杀，是为了处理忽略 SIGTERM 的残留组员（组长退出不代表组内清空）。
    */
-  private killUnixProcess(pid: number, entry: ProcessEntry): void {
+  private killUnixProcess(pid: number, entry: NodeProcessEntry): void {
     const child = entry.childProcess;
 
     const killGroup = (signal: NodeJS.Signals) => {
@@ -882,13 +1431,13 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    *    本次执行派生的进程，按进程组整组下刀。
    *
    * 漏掉第 2 步的后果：命令看似"已终止"，find/sort 这类进程还在烧 CPU 与磁盘，并且继续往
-   * spool 里写。完成信号已经不受它们影响（输出走文件 fd、完成认 exit），所以这一步纯粹是
+   * 输出管道里写。完成信号已经不受它们影响（完成只认 exit），所以这一步纯粹是
    * 「让终止真的终止」，而不是为了让调用返回。
    *
    * 两把刀都是 fire-and-forget：terminate 的调用方（abort 监听、HTTP handler）不该被进程回收
    * 阻塞；清理结果由清扫自身的复核与 kill 后的兜底结算接手。
    */
-  private killWindowsProcess(pid: number, entry: ProcessEntry): void {
+  private killWindowsProcess(pid: number, entry: NodeProcessEntry): void {
     this.runWindowsTaskkill(pid, entry, 1);
     this.sweepMsysProcesses(entry, 1);
   }
@@ -896,7 +1445,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   /** taskkill /F /T 单次执行：失败重试一次，仍失败则兜底 SIGTERM 直接子进程 */
   private runWindowsTaskkill(
     pid: number,
-    entry: ProcessEntry,
+    entry: NodeProcessEntry,
     attempt: number,
   ): void {
     const child = spawn("taskkill", ["/F", "/T", "/PID", String(pid)], {
@@ -949,7 +1498,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    * remaining 为准；仍有残留就再扫一轮，用尽轮次后打 ERROR —— 残留进程会一直攥着 stdio
    * 句柄，不能静默吞掉。
    */
-  private sweepMsysProcesses(entry: ProcessEntry, attempt: number): void {
+  private sweepMsysProcesses(entry: NodeProcessEntry, attempt: number): void {
     // 只有 Git Bash 有 MSYS 进程表（PowerShell / cmd / 沙盒路径没有这一层）
     if (this.shellInfo.kind !== "gitbash" || !this.shellInfo.path) return;
     // 标记由 mintId 铸造，这里再兜一层：脚本会把它嵌进单引号字符串
@@ -1031,9 +1580,9 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       if (!this.processes.has(processId)) return null;
     }
 
-    // 进程已结束 → 先把 spool 里剩余字节转写完再读
+    // 进程已结束 → 先把管道里已到达的字节收完再读
     if (entry.status !== "running") {
-      entry.tailer.pull();
+      this.syncOutput(entry);
       return this.buildPollResult(entry, 0);
     }
 
@@ -1061,7 +1610,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     // 进程已结束但无 enqueue 在进行 → 转写完剩余字节
     if (entry.status !== "running") {
-      entry.tailer.pull();
+      this.syncOutput(entry);
     }
 
     return this.buildPollResult(entry, waitSeconds);
@@ -1076,10 +1625,13 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       if (entry.sessionId === sessionId) {
         result.push({
           id: entry.id,
+          jobId: entry.jobId,
           command: entry.command,
           status: entry.status,
           sessionId: entry.sessionId,
           isBackgrounded: entry.isBackgrounded,
+          exitCode: entry.exitCode,
+          logFilePath: entry.logFilePath,
           startedAt: entry.startedAt,
           finishedAt: entry.finishedAt,
         });
@@ -1105,10 +1657,13 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       ) {
         result.push({
           id: entry.id,
+          jobId: entry.jobId,
           command: entry.command,
           status: entry.status,
           sessionId: entry.sessionId,
           isBackgrounded: entry.isBackgrounded,
+          exitCode: entry.exitCode,
+          logFilePath: entry.logFilePath,
           startedAt: entry.startedAt,
           finishedAt: entry.finishedAt,
         });
@@ -1151,8 +1706,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   ): Promise<ProcessLogTail | null> {
     const entry = this.processes.get(processId);
     if (entry && entry.sessionId === sessionId) {
-      // 读之前先追平 spool：日志面板与 AI 的 poll 都读这份清洗后的转写
-      entry.tailer.pull();
+      // 读之前先收一次输出：日志面板与 AI 的 poll 都读这份日志
+      this.syncOutput(entry);
       const base = {
         processId: entry.id,
         command: entry.command,
@@ -1189,6 +1744,124 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       },
       maxBytes,
     );
+  }
+
+  /**
+   * 模型侧非破坏性读取：cleaned log 的尾部，或从指定 offset 读一段。
+   *
+   * 与 poll 的区别：
+   * - 不推进 entry.readOffset，不删除 entry；
+   * - 可重复调用；entry 已清理时回退磁盘日志；
+   * - 读到终态时设置 reported，抑制重复完成通知；读 running 不设置。
+   */
+  async readProcessLog(
+    processId: string,
+    sessionId: string,
+    options: { maxBytes?: number; offset?: number } = {},
+  ): Promise<ProcessLogRead | null> {
+    const rawMaxBytes = options.maxBytes;
+    const maxBytes = Number.isFinite(rawMaxBytes)
+      ? Math.min(512 * 1024, Math.max(1024, Math.floor(rawMaxBytes!)))
+      : 64 * 1024;
+    const requestedOffset =
+      options.offset === undefined || !Number.isFinite(options.offset)
+        ? undefined
+        : Math.max(0, Math.floor(options.offset));
+
+    const entry = this.processes.get(processId);
+    if (entry && entry.sessionId === sessionId) {
+      this.syncOutput(entry);
+      const base = {
+        processId: entry.id,
+        command: entry.command,
+        status: entry.status as ProcessLogTailStatus,
+        exitCode: entry.exitCode,
+        startedAt: entry.startedAt,
+        finishedAt: entry.finishedAt,
+      };
+      const stat = await fs.stat(entry.logFilePath).catch(() => null);
+      // 即使日志文件已被删除，读到终态也视为已观察，避免重复通知。
+      if (entry.status !== "running") {
+        this.markJobReported(entry);
+        this.settleJob(entry, entry.status);
+      }
+      if (!stat) {
+        return {
+          ...base,
+          size: 0,
+          offset: 0,
+          nextOffset: 0,
+          truncated: false,
+          content: "",
+          logFilePath: entry.logFilePath,
+        };
+      }
+      return this.readRangeFrom(
+        entry.logFilePath,
+        stat.size,
+        base,
+        maxBytes,
+        requestedOffset,
+        entry.logFilePath,
+      );
+    }
+
+    // entry 已清理 → 从磁盘 cleaned log 读；归属由文件名结构保证
+    const filePath = await this.resolveLogFileOnDisk(sessionId, processId);
+    if (!filePath) return null;
+    const stat = await fs.stat(filePath).catch(() => null);
+    if (!stat) return null;
+    return this.readRangeFrom(
+      filePath,
+      stat.size,
+      {
+        processId,
+        command: "",
+        status: "ended",
+        exitCode: null,
+      },
+      maxBytes,
+      requestedOffset,
+      filePath,
+    );
+  }
+
+  /** 读取 cleaned log 的 [start, start+len) 区间，两端 trim UTF-8 边界 */
+  private async readRangeFrom(
+    filePath: string,
+    fileSize: number,
+    base: Omit<
+      ProcessLogRead,
+      "size" | "offset" | "nextOffset" | "truncated" | "content" | "logFilePath"
+    >,
+    maxBytes: number,
+    requestedOffset: number | undefined,
+    logFilePath: string,
+  ): Promise<ProcessLogRead> {
+    const start =
+      requestedOffset === undefined
+        ? Math.max(0, fileSize - maxBytes)
+        : Math.min(requestedOffset, fileSize);
+    const len = Math.min(maxBytes, fileSize - start);
+    const buf = Buffer.alloc(len);
+    if (len > 0) {
+      const fd = await fs.open(filePath, "r");
+      try {
+        await fd.read(buf, 0, len, start);
+      } finally {
+        await fd.close();
+      }
+    }
+    const end = start + len;
+    return {
+      ...base,
+      size: fileSize,
+      offset: start,
+      nextOffset: end,
+      truncated: start > 0 || end < fileSize,
+      content: trimUtf8Range(buf, start > 0, end < fileSize),
+      logFilePath,
+    };
   }
 
   /** 按已知字节数读取日志文件尾部（entry 路径与磁盘路径共用） */
@@ -1230,13 +1903,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     return stat?.isFile() ? filePath : null;
   }
 
-  /** 通知前端后台进程列表变化（经 SSE process_changed 感知后重拉） */
-  private emitProcessChanged(sessionId: string): void {
-    this.eventEmitter.emit("process.changed", {
-      sessionId,
-      timestamp: new Date().toISOString(),
-    } satisfies ProcessChangedEvent);
-  }
 
   /**
   /**
@@ -1256,6 +1922,8 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       if (entry.status === "running") continue;
       // 被主动 kill 的进程不投递（kill 是 AI 自己的动作）；entry 由 exit 事件清理
       if (entry.status === "killed") continue;
+      // 已经通过 process read 拿到终态输出 → 不再在 turn.stopping 里重复注入。
+      if (entry.reported) continue;
 
       // 进程刚结束且 enqueue 路径在进行中 → 等它完成（与 poll 一致）。
       // 否则与 enqueue 的读取竞争可能读到空输出后又清掉 entry，
@@ -1265,8 +1933,10 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
         if (!this.processes.has(entry.id)) continue;
       }
 
-      // 已完成 → 先把 spool 剩余字节转写完再读
-      entry.tailer.pull();
+      // 已完成 → 先把管道里已到达的字节收完再读
+      this.syncOutput(entry);
+      // 这次 drain 会在当前 turn 内交付输出；队列里的重复通知应失效。
+      this.markJobReported(entry);
       const result = await this.buildPollResult(entry, 0);
       results.push(result);
     }
@@ -1282,10 +1952,13 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     if (!entry) return null;
     return {
       id: entry.id,
+      jobId: entry.jobId,
       command: entry.command,
       status: entry.status,
       sessionId: entry.sessionId,
       isBackgrounded: entry.isBackgrounded,
+      exitCode: entry.exitCode,
+      logFilePath: entry.logFilePath,
       startedAt: entry.startedAt,
       finishedAt: entry.finishedAt,
     };
@@ -1302,6 +1975,15 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     if (entry.status !== "running") {
       throw new Error(`Process ${processId} has ended, cannot write`);
     }
+
+    if (entry.kind === "native") {
+      if (!entry.stdinWriteHandle) {
+        throw new Error(`stdin for process ${processId} is not available`);
+      }
+      writeToProcessStdinSync(entry.stdinWriteHandle, text);
+      return;
+    }
+
     if (!entry.childProcess.stdin) {
       throw new Error(`stdin for process ${processId} is not available`);
     }
@@ -1310,6 +1992,62 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
   // ── 内部 cleanup ──
 
+  /**
+   * 释放进程级句柄（幂等）。
+   *
+   * stdin 是 spawn 时创建的 pipe（见 spawnOptions），父进程一直持有写端。进程结束后
+   * 这个句柄已经无用，但 Node 不会自动关闭它——要等 ChildProcess 对象被 GC 才回收。
+   * 长跑后端 spawn 上千个进程后，句柄会持续累积直到文件描述符表打满（EMFILE），
+   * 届时连会话 JSONL 的 append 都会失败。这里在进程结束/清理时显式 destroy。
+   *
+   * 注意：cleanupProcess 也可能在进程尚未真正退出时被兜底调用（kill 结算超时、
+   * 拿不到 pid），此时 stdin 同样没有继续保留的价值。
+   */
+  private releaseProcessHandles(entry: ProcessEntry): void {
+    this.stopIdleTicker(entry);
+
+    if (entry.kind === "native") {
+      this.stopNativeExitPoll(entry);
+      this.stopOutputDrain(entry);
+
+      // 先取本地引用再清零，保证重复调用幂等。
+      const stdinWrite = entry.stdinWriteHandle;
+      const job = entry.jobHandle;
+      const processHandle = entry.processHandle;
+      const outputRead = entry.outputReadHandle;
+      entry.stdinWriteHandle = null;
+      entry.jobHandle = 0n;
+      entry.processHandle = 0n;
+      entry.outputReadHandle = null;
+      entry.outputEof = true;
+
+      // 关闭 Job 会触发 KILL_ON_JOB_CLOSE：仍在 Job 里的后代一起回收。
+      // 顺序：stdin → job（杀后代）→ process → 输出管道读端（后代死绝后 EOF 必达，
+      // 但兜底路径可能提前走到这里，显式关掉不让句柄泄漏）。
+      void (async () => {
+        try {
+          if (stdinWrite) await closeNativeHandle(stdinWrite);
+          if (job) await closeNativeHandle(job);
+          if (processHandle) await closeNativeHandle(processHandle);
+          if (outputRead) await closeNativeHandle(outputRead);
+        } catch {
+          // best-effort：句柄释放失败不能影响进程收尾
+        }
+      })();
+      return;
+    }
+
+    const stdin = entry.childProcess.stdin;
+    if (!stdin || stdin.destroyed) return;
+    try {
+      // destroy 后可能异步 emit error（EPIPE / 已关闭），先挂监听避免 unhandled 'error'
+      stdin.on("error", () => {});
+      stdin.destroy();
+    } catch {
+      // ignore：句柄释放是 best-effort，不能影响进程收尾
+    }
+  }
+
   /** 从内存中移除进程的所有引用 */
   private cleanupProcess(processId: string, sessionId: string): void {
     const entry = this.processes.get(processId);
@@ -1317,7 +2055,19 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       clearTimeout(entry.killFinalizeTimer);
       entry.killFinalizeTimer = undefined;
     }
-    if (entry) this.stopIdleTicker(entry);
+    if (entry?.completedCleanupTimer) {
+      clearTimeout(entry.completedCleanupTimer);
+      entry.completedCleanupTimer = undefined;
+    }
+    if (entry) {
+      this.resolveTermination(entry);
+      // 没走 handleProcessEnd 的清理路径（kill 兜底/TTL/异常）也要给 job 一个终态，
+      // 否则 Registry 会把它永久留在 running。
+      if (!entry.jobSettled) {
+        this.settleJob(entry, entry.status === "running" ? "error" : entry.status);
+      }
+      this.releaseProcessHandles(entry);
+    }
     this.processes.delete(processId);
     const sessionProcs = this.sessionProcesses.get(sessionId);
     if (sessionProcs) {
@@ -1325,7 +2075,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       if (sessionProcs.size === 0) this.sessionProcesses.delete(sessionId);
     }
     // kill 等路径不经过 handleProcessEnd，统一在移除时通知 UI 刷新列表
-    if (entry) this.emitProcessChanged(entry.sessionId);
   }
 
   /**
@@ -1436,20 +2185,16 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    * 后端同组，负 PID 指向的是「不存在的组」，只能杀掉直接子进程，命令树会残留。
    * Windows 保持不 detached：终止走 taskkill /F /T（自带进程树），detached 还会额外弹控制台。
    *
-   * stdio：stdout/stderr 都指向同一个 spool fd（合并顺序即子进程真实写序），不再是管道——
-   * 这样「谁继承了写句柄」不再影响父进程判断命令是否结束（见 createProcess）。
+   * stdio：stdout/stderr 都是 pipe，父进程的 data 监听把字节实时喂进 OutputTailer
+   * 落单份日志（见 createLegacyProcess）。完成检测只认 child 的 exit 事件，与 EOF 无关。
    * stdin 保持 pipe：process 工具的 write 动作依赖它。
    */
-  private spawnOptions(
-    cwd: string,
-    env: NodeJS.ProcessEnv,
-    outFd: number,
-  ): SpawnOptions {
+  private spawnOptions(cwd: string, env: NodeJS.ProcessEnv): SpawnOptions {
     return {
       cwd,
       env,
       windowsHide: true,
-      stdio: ["pipe", outFd, outFd],
+      stdio: ["pipe", "pipe", "pipe"],
       ...(process.platform === "win32" ? {} : { detached: true }),
     };
   }
@@ -1460,13 +2205,11 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
    * 无 sandbox 时，Windows 使用启动时检测的 shell（Git Bash 优先 → PowerShell → cmd.exe），
    * Unix 使用默认 shell。
    * 调用前须确保 sandbox 二进制可用（isSandboxAvailable / resolveSandboxBin）。
-   * outFd 是 spool 文件的写句柄（stdout/stderr 共用），由调用方负责在 spawn 后关闭自己的副本。
    */
   private spawnProcess(
     command: string,
     cwd: string,
     execToken: string,
-    outFd: number,
     sandbox?: SandboxOptions,
   ): ChildProcess {
     // 平台门（纵深防御）：Windows 已停用 OS 沙盒，调用方即使传了 enabled 也不包装，
@@ -1495,7 +2238,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
         this.spawnOptions(
           cwd,
           this.buildChildEnv({ [EXEC_TOKEN_ENV]: execToken }),
-          outFd,
         ),
       );
     }
@@ -1518,7 +2260,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
             GIT_EDITOR: "true",
             [EXEC_TOKEN_ENV]: execToken,
           }),
-          outFd,
         ),
       );
     }
@@ -1532,7 +2273,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
         this.spawnOptions(
           cwd,
           this.buildChildEnv({ [EXEC_TOKEN_ENV]: execToken }),
-          outFd,
         ),
       );
     }
@@ -1541,7 +2281,6 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       ...this.spawnOptions(
         cwd,
         this.buildChildEnv({ [EXEC_TOKEN_ENV]: execToken }),
-        outFd,
       ),
       shell: true,
     });
@@ -1563,8 +2302,11 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       // 小增量 — 全读 + 行/字符截断
       const buf = Buffer.alloc(increment);
       const fd = await fs.open(logFilePath, "r");
-      await fd.read(buf, 0, increment, readOffset);
-      await fd.close();
+      try {
+        await fd.read(buf, 0, increment, readOffset);
+      } finally {
+        await fd.close();
+      }
       return this.truncateOutput(buf.toString("utf-8"));
     }
 
@@ -1576,9 +2318,12 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     const tailBuf = Buffer.alloc(tailLen);
 
     const fd = await fs.open(logFilePath, "r");
-    await fd.read(headBuf, 0, headLen, readOffset);
-    await fd.read(tailBuf, 0, tailLen, fileSize - tailLen);
-    await fd.close();
+    try {
+      await fd.read(headBuf, 0, headLen, readOffset);
+      await fd.read(tailBuf, 0, tailLen, fileSize - tailLen);
+    } finally {
+      await fd.close();
+    }
 
     const head = trimUtf8Head(headBuf);
     const tail = trimUtf8Tail(tailBuf);
@@ -1668,8 +2413,11 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   ): Promise<PollResult> {
     const { output, truncated } = await this.readIncrementalOutput(entry);
 
-    // 进程已结束 → 立即清理（消息留在队列中，isValid 会返回 false 被 processQueue 丢弃）
+    // 进程已结束 → 这次 poll 就是完成交付：标记已观察，结算 job，
+    // 抑制队列里的重复通知；消息留在队列中，isValid 会返回 false 被丢弃。
     if (entry.status !== "running") {
+      this.markJobReported(entry);
+      this.settleJob(entry, entry.status);
       this.cleanupProcess(entry.id, entry.sessionId);
     }
 
@@ -1678,6 +2426,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
 
     return {
       processId: entry.id,
+      jobId: entry.jobId,
       status: entry.status,
       exitCode: entry.exitCode,
       output,
@@ -1691,6 +2440,94 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
   // ── 进程结束处理 ──
 
   /**
+   * 为转后台的进程注册通用作业。
+   *
+   * 只登记一次；read/cancel/send 都委托回 ProcessManager，执行面不变。
+   * 若进程在登记前已经结束，登记后立即结算，由 Registry 统一投递通知。
+   * Registry 未注入（直接 new 的测试/嵌入场景）返回 undefined；注册抛错
+   * （配额满等）一律向上抛——不注册 job 就不让转后台，否则配额被回退路径
+   * 架空，且模型管不到这个进程（job_stop/job_list 都查不到）。
+   */
+  private registerJob(entry: ProcessEntry): JobId | undefined {
+    if (entry.jobId) return entry.jobId;
+    if (!this.jobRegistry) return undefined;
+
+    let resolveDone!: (outcome: JobOutcome) => void;
+    const done = new Promise<JobOutcome>((resolve) => {
+      resolveDone = resolve;
+    });
+    entry.jobDoneResolve = resolveDone;
+
+    entry.jobId = this.jobRegistry.start({
+      kind: "shell",
+      label: entry.command,
+      sessionId: entry.sessionId,
+      handle: entry.id,
+      logFilePath: entry.logFilePath,
+      notify: true,
+      getLogSize: async () => {
+        const stat = await fs.stat(entry.logFilePath).catch(() => null);
+        return stat?.size;
+      },
+      read: async (opts) => {
+        const result = await this.readProcessLog(entry.id, entry.sessionId, {
+          maxBytes: opts.maxBytes,
+          offset: opts.offset,
+        });
+        if (!result) {
+          throw new Error(
+            `process ${entry.id} does not exist or its log has been cleaned`,
+          );
+        }
+        return {
+          text: result.content,
+          offset: result.offset,
+          nextOffset: result.nextOffset,
+          size: result.size,
+          truncated: result.truncated,
+          logFilePath: result.logFilePath,
+        };
+      },
+      cancel: () => {
+        this.kill(entry.id);
+      },
+      send: async (input, appendNewline) => {
+        this.writeToStdin(entry.id, appendNewline === false ? input : `${input}\n`);
+      },
+      isAlive: () => entry.status === "running",
+      done,
+    });
+
+    if (entry.status !== "running") {
+      this.settleJob(entry, entry.status);
+    }
+    return entry.jobId;
+  }
+
+  /** 把进程终态结算给 Registry（幂等）。 */
+  private settleJob(entry: ProcessEntry, status: ProcessStatus): void {
+    if (!entry.jobId || !entry.jobDoneResolve || entry.jobSettled) return;
+    entry.jobSettled = true;
+    entry.jobDoneResolve({
+      status:
+        status === "completed"
+          ? "completed"
+          : status === "killed"
+            ? "killed"
+            : "failed",
+      exitCode: entry.exitCode,
+    });
+  }
+
+  /** 读取/终止路径已交付终态输出：同步抑制 Registry 的完成通知。 */
+  private markJobReported(entry: ProcessEntry): void {
+    entry.reported = true;
+    if (entry.jobId && this.jobRegistry) {
+      this.jobRegistry.markReported(entry.jobId);
+    }
+  }
+
+  /**
    * 进程结束的统一处理：通知 poll 等待者，或投递系统消息后清理
    */
   private handleProcessEnd(
@@ -1701,32 +2538,72 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     entry.status = status;
     entry.exitCode = exitCode;
     entry.finishedAt = new Date();
+    this.resolveTermination(entry);
+
+    // 进程已结束：立即释放 stdin 管道，不等 entry 被消息消费/清理。
+    // 否则结束的进程会一直攥着父进程的写端句柄，长跑后耗尽 fd 表（EMFILE）。
+    this.releaseProcessHandles(entry);
 
     this.logger.log(`后台进程 ${entry.id} 已结束, 退出码: ${exitCode}`);
-    this.emitProcessChanged(entry.sessionId);
+
+    // 已完成 entry 的兜底清理：无论走通知、poll 还是 read，最多保留 10 分钟。
+    this.scheduleCompletedEntryCleanup(entry);
 
     if (this.pollNotifier.hasWaiters(entry.id)) {
-      // 有 poll 等待者 → 通知，poll 会先转写 spool 剩余字节再读取
+      // 有 poll 等待者 → 通知，poll 会先收管道里已到达的字节再读取。
+      // 终态结算留给 poll 的 buildPollResult：它先把输出交付给调用方，
+      // 再置 reported + settle job，避免 Registry 抢在 poll 之前发完成通知。
       this.pollNotifier.notify(entry.id);
-    } else {
-      // 无 poll 等待者 → 异步读取剩余输出，投递系统消息，然后清理
-      // 设置 exitPromise 让并发 poll 等待完成后从队列取
-      entry.exitPromise = this.enqueueSystemMessageFromEntry(entry).catch(
-        (err) => {
-          this.logger.error(
-            `Error handling exit for ${entry.id}: ${err.message}`,
-          );
-        },
-      );
+      return;
     }
+
+    this.settleJob(entry, status);
+
+    if (entry.reported) {
+      // 观察者已经读到终态（read/poll/drain），不再重复投递完成通知
+      return;
+    }
+
+    if (entry.jobId) {
+      // 通知权归 JobRegistry：由 job.settled 的 notifier 统一投递
+      return;
+    }
+
+    // 无 job（Registry 未注入：测试/嵌入场景）且无 poll 等待者且未被读取
+    // → 异步读取剩余输出，投递系统消息，然后清理
+    // 设置 exitPromise 让并发 poll 等待完成后从队列取
+    entry.noticeQueued = true;
+    entry.exitPromise = this.enqueueSystemMessageFromEntry(entry).catch(
+      (err) => {
+        this.logger.error(
+          `Error handling exit for ${entry.id}: ${err.message}`,
+        );
+      },
+    );
+  }
+
+  /** 已完成 entry 的 TTL 清理（幂等；cleanupProcess 会清除） */
+  private scheduleCompletedEntryCleanup(entry: ProcessEntry): void {
+    if (entry.completedCleanupTimer) return;
+    entry.completedCleanupTimer = setTimeout(() => {
+      entry.completedCleanupTimer = undefined;
+      // 用对象身份而不是 id 判断：PID 可能被新进程复用，不能误删新 entry。
+      if (this.processes.get(entry.id) !== entry) return;
+      this.logger.debug(`已完成进程 ${entry.id} 超过 TTL，清理 entry`);
+      this.cleanupProcess(entry.id, entry.sessionId);
+    }, COMPLETED_ENTRY_TTL_MS);
+    entry.completedCleanupTimer.unref?.();
   }
 
   /** 读取剩余输出，投递系统消息，然后清理 entry */
   private async enqueueSystemMessageFromEntry(
     entry: ProcessEntry,
   ): Promise<void> {
-    // 先转写 spool 里剩余的原始输出（本地 IO，必定完成）
-    entry.tailer.pull();
+    // 读取路径可能在状态落定与 enqueue 之间先读到终态：不要再投递重复通知。
+    if (entry.reported) return;
+
+    // 先收一次输出（本地 IO，必定完成）
+    this.syncOutput(entry);
 
     // 只窥视不推进 readOffset：输出可能先被 poll / drainCompleted 消费，
     // 届时 entry 被清理、本消息经 isValid() 自动作废（不重复投递）。
@@ -1738,7 +2615,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
     );
 
     this.logger.debug(`投递进程完成通知: ${entry.id}`);
-    this.chatRunnerService.enqueueMessage({
+    await this.chatRunnerService.enqueueMessage({
       sessionId: entry.sessionId,
       // P5b：只保留 <system_reminder> 包裹的模型面内容（用户文案已移除——
       // 展示全靠前端解析 source.kind='process_monitor' 渲染为"进程完成"通知样式）。
@@ -1746,7 +2623,7 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
       blocks: [
         {
           type: "text",
-          text: `<system_reminder>\nBackground process \`${entry.id}\` (${entry.command}) finished with status ${entry.status}${entry.exitCode != null ? `, exit code ${entry.exitCode}` : ""}:\n${output}${truncated ? "\n(output truncated; see log file)" : ""}\nLog file: ${entry.logFilePath}\n</system_reminder>`,
+          text: `<system_reminder>\nBackground process \`${entry.id}\` (${entry.command}) finished with status ${entry.status}${entry.exitCode != null ? `, exit code ${entry.exitCode}` : ""}:\n${output}${truncated ? "\n(output truncated; see log file)" : ""}\nLog file: ${entry.logFilePath}\nUse process read ${entry.id} to read the log later.\n</system_reminder>`,
         },
       ],
       // 结构化标识进 source（merge-extensible；systemPayload 已移除）
@@ -1756,7 +2633,9 @@ export class ProcessManagerService implements OnModuleInit, OnModuleDestroy {
         event: entry.status,
         exitCode: entry.exitCode,
       },
-      isValid: () => this.processes.has(entry.id),
+      // 读取路径已经把最终输出交给模型 → 队列里的通知自动作废。
+      // 用对象身份校验，避免 PID 复用后旧通知误命中新 entry。
+      isValid: () => !entry.reported && this.processes.get(entry.id) === entry,
       onConsumed: () => this.cleanupProcess(entry.id, entry.sessionId),
     });
   }

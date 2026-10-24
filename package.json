@@ -94,7 +94,9 @@
       "backend-ts/node_modules_production/node_modules/@parcel/watcher-darwin-*/**",
       "backend-ts/node_modules_production/node_modules/@img/sharp-*/**",
       "backend-ts/node_modules_production/node_modules/@napi-rs/canvas-*/**",
-      "backend-ts/node_modules_production/node_modules/@node-rs/jieba-*/**"
+      "backend-ts/node_modules_production/node_modules/@node-rs/jieba-*/**",
+      "backend-ts/node_modules_production/node_modules/koffi/**",
+      "backend-ts/node_modules_production/node_modules/@koromix/koffi-*/**"
     ],
     "afterPack": "scripts/after-pack-handler.js",
     "directories": {

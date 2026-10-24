@@ -3,7 +3,9 @@ import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { PassThrough } from "stream";
 import { ChatRunnerService } from "../chat/chat-runner.service";
+import { JobRegistryService } from "../jobs/job-registry.service";
 import { ProcessManagerService } from "./process-manager.service";
 
 /**
@@ -103,6 +105,10 @@ function killProcesses(entries: string[]): void {
   }
 }
 
+function makeStubRegistry(): JobRegistryService {
+  return new JobRegistryService({ emit: () => {} } as any);
+}
+
 describeUnix("ProcessManagerService 手动终止进程树", () => {
   let service: ProcessManagerService;
   let tmpDir: string;
@@ -136,6 +142,7 @@ describeUnix("ProcessManagerService 手动终止进程树", () => {
     service = new ProcessManagerService(
       {} as unknown as ChatRunnerService,
       new EventEmitter2(),
+      makeStubRegistry(),
     );
     service.onModuleInit();
   });
@@ -223,6 +230,45 @@ describeUnix("ProcessManagerService 手动终止进程树", () => {
     expect(await waitFor(() => !isAlive(Number(processId)), 8_000)).toBe(true);
     expect(await waitFor(() => service.get(processId) === null, 8_000)).toBe(true);
   }, 30_000);
+
+  /** Unix legacy 路径：管道 + data 事件实时喂 tailer，单文件（无 .raw.log spool）。 */
+  it("legacy 路径单文件：管道输出实时落盘，且不产生 .raw.log", async () => {
+    const logDir = (service as any).getLogDir() as string;
+    const filesBefore = new Set(fs.readdirSync(logDir));
+
+    const started = await service.execute(
+      "echo legacy-pipe && echo legacy-err 1>&2",
+      tmpDir,
+      "utf8",
+      SESSION_ID,
+      { timeout: 60_000, background: true },
+    );
+    expect(started.kind).toBe("backgrounded");
+    const processId = (started as { processId: string }).processId;
+    const logPath = (started as { logFilePath?: string }).logFilePath;
+    expect(logPath).toBeTruthy();
+
+    let content = "";
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const log = await service.readLogTail(processId, SESSION_ID);
+      content = log?.content ?? "";
+      if (content.includes("legacy-pipe") && content.includes("legacy-err")) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(content).toContain("legacy-pipe");
+    expect(content).toContain("legacy-err");
+
+    // 新文件里没有 spool；stderr（legacy-err）与 stdout 落同一份日志
+    const newFiles = fs
+      .readdirSync(logDir)
+      .filter((f) => !filesBefore.has(f));
+    expect(newFiles).toEqual([path.basename(logPath!)]);
+
+    service.kill(processId);
+  }, 30_000);
 });
 
 // ============================================================================
@@ -253,6 +299,7 @@ describeWin("ProcessManagerService Windows 管道进程树终止", () => {
     service = new ProcessManagerService(
       {} as unknown as ChatRunnerService,
       new EventEmitter2(),
+      makeStubRegistry(),
     );
     service.onModuleInit();
   });
@@ -456,4 +503,48 @@ describeWin("ProcessManagerService Windows 管道进程树终止", () => {
       }
     }
   }, 30_000);
+});
+
+describe("ProcessManagerService 句柄释放", () => {
+  it("进程结束后立即销毁 stdin 管道，清理幂等", () => {
+    const service = new ProcessManagerService(
+      {} as ChatRunnerService,
+      new EventEmitter2(),
+    );
+
+    // 有 poll 等待者时 handleProcessEnd 不投递系统消息，避免测试触碰 chatRunner
+    const pollNotifier = (service as any).pollNotifier;
+    pollNotifier.hasWaiters = () => true;
+    pollNotifier.notify = () => {};
+
+    const stdin = new PassThrough();
+    const idleTimer = setInterval(() => {}, 1000);
+    const entry: any = {
+      id: "proc-handle-test",
+      sessionId: "session-handle-test",
+      command: "echo hi",
+      childProcess: { stdin },
+      status: "running",
+      exitCode: null,
+      idleTimer,
+      tailer: { flushFinal: () => {}, pull: () => {} },
+    };
+
+    (service as any).handleProcessEnd(entry, "completed", 0);
+
+    // 进程一结束就释放 stdin 写端，并停掉空闲 ticker
+    expect(stdin.destroyed).toBe(true);
+    expect(entry.idleTimer).toBeUndefined();
+
+    // 后续 cleanup 再释放一次：幂等、不抛错
+    (service as any).processes.set(entry.id, entry);
+    (service as any).sessionProcesses.set(
+      entry.sessionId,
+      new Map([[entry.id, entry]]),
+    );
+    expect(() =>
+      (service as any).cleanupProcess(entry.id, entry.sessionId),
+    ).not.toThrow();
+    expect(stdin.destroyed).toBe(true);
+  });
 });

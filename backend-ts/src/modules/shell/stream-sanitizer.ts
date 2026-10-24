@@ -262,7 +262,7 @@ export class OutputDecoder {
       const tail = this.decoder.end() ?? "";
       if (tail) remaining += this.sanitizer.feed(tail);
       // 结束后必须丢掉解码器：iconv 的解码器 end() 之后不能再 write，
-      // 后续还有字节（孤儿进程继续写 spool）时要重新开一个。
+      // 后续还有字节（孤儿进程继续写管道）时要重新开一个。
       this.decoder = null;
       this.decoderEncoding = null;
     }

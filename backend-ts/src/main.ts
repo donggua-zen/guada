@@ -1,7 +1,8 @@
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, INestApplication } from "@nestjs/common";
 import { WinstonModule } from 'nest-winston';
 import { AppModule } from "./app.module";
+import { JobRegistryService } from "./modules/jobs/job-registry.service";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { UrlService } from "./common/services/url.service";
 import { resolveAttachmentResponseHeaders } from "./common/utils/attachment-serving.util";
@@ -78,13 +79,42 @@ function lastBreath(why: string): void {
     // 临终记录不得改变退出语义
   }
 }
+let nestApp: INestApplication | null = null;
+let shuttingDown = false;
+
+/**
+ * 信号/宿主退出统一收尾：先 app.close() 触发 Nest shutdown 钩子（进程 reaper、
+ * PTY/远程 job 清理），最多等 5s；超时或重复信号才强制退出。
+ */
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) {
+    lastBreath(`signal ${signal} (forced)`);
+    process.exit(1);
+  }
+  shuttingDown = true;
+  lastBreath(`signal ${signal}`);
+  const timer = setTimeout(() => process.exit(1), 5_000);
+  timer.unref();
+  try {
+    // 先静默 Registry 通知，再跑各模块 reaper。
+    nestApp?.get(JobRegistryService, { strict: false }).beginShutdown();
+  } catch {
+    // 应用尚未初始化完成
+  }
+  try {
+    await nestApp?.close();
+  } catch (error) {
+    console.error("关闭应用时出错:", error);
+  }
+  clearTimeout(timer);
+  process.exit(0);
+}
+
 process.on("exit", (code) => lastBreath(`exit(${code})`));
 process.on("beforeExit", (code) => lastBreath(`beforeExit(${code}) 事件循环耗尽`));
 for (const sig of ["SIGTERM", "SIGINT", "SIGHUP", "SIGBREAK"] as const) {
   process.on(sig, () => {
-    lastBreath(`signal ${sig}`);
-    // 注册监听会覆盖默认「终止进程」行为，必须自己退回去，否则 SIGTERM 变成空操作
-    process.exit(1);
+    void shutdown(sig);
   });
 }
 
@@ -98,6 +128,7 @@ async function bootstrap() {
 
   // 创建应用实例并配置 Winston 日志
   const app = await NestFactory.create(AppModule, { logger });
+  nestApp = app;
 
   // 设置全局 API 前缀
   app.setGlobalPrefix("api/v1");
@@ -224,15 +255,19 @@ async function bootstrap() {
       bridgeClient.on("shutdown", async () => {
         console.log("收到 Bridge shutdown 信号，正在优雅关闭...");
         try {
+          // 先静默 Registry 通知，再跑各模块 reaper。
+          try {
+            app.get(JobRegistryService, { strict: false }).beginShutdown();
+          } catch {}
           // 强制关闭所有 HTTP 连接（包括 keep-alive），使 app.close() 不再挂起
           const server = app.getHttpServer();
           if (typeof (server as any).closeAllConnections === "function") {
             (server as any).closeAllConnections();
           }
-          // app.close() 可能因残留连接挂起，设 2s 超时兜底
+          // app.close() 可能因残留连接挂起，设 5s 超时兜底（留给 shutdown reaper）
           await Promise.race([
             app.close(),
-            new Promise((resolve) => setTimeout(resolve, 2000)),
+            new Promise((resolve) => setTimeout(resolve, 5000)),
           ]);
         } catch (e) {
           console.error("关闭应用时出错:", e);
