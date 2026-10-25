@@ -13,7 +13,9 @@ export type SessionEventType =
   | "sub_agent_closed"
   | "todo_updated"
   | "jobs_snapshot"
-  | "plugins_changed";
+  | "plugins_changed"
+  | "queue_updated"
+  | "queues_snapshot";
 
 /**
  * 会话事件

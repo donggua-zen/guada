@@ -44,12 +44,21 @@ describe("ChatRunnerService.startStream 流生命周期", () => {
     agentEngine = { run: jest.fn() };
     sessionContextFactory = { createFromSession: jest.fn() };
     eventBus = { emit: jest.fn() };
+    const userInputQueue = {
+      hasPending: jest.fn(() => false),
+      hasAnyPending: jest.fn(() => false),
+      getState: jest.fn(() => undefined),
+      consumePromotion: jest.fn(() => null),
+      resume: jest.fn(),
+      pause: jest.fn(),
+    };
     runner = new ChatRunnerService(
       streamManager,
       sessionService as any,
       agentEngine as any,
       sessionContextFactory as any,
       eventBus as any,
+      userInputQueue as any,
     );
   });
 

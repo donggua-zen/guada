@@ -72,18 +72,78 @@ export interface InputMessageState {
     isWaiting: boolean
 }
 
+/** 排队消息入队时冻结的发送设置（补发时作为回合级覆盖，不写回会话设置） */
+export interface QueuedMessageSettingsSnapshot {
+    /** 形如 {providerId}:{modelName} */
+    modelId?: string
+    thinkingEffort?: string
+    maxTokensLimit?: number | null
+    /** 安全档位（后端 settings.sandboxMode） */
+    mode?: string
+    planEnabled?: boolean
+}
+
 /**
- * 排队消息项（流式期间用户发送的消息进入队列）
+ * 排队消息项（UI 视图）。
+ *
+ * M3 起队列所有权在后端：本结构是 UserQueueSnapshotItem 的本地投影，
+ * 不再由前端增删改，只能通过 store.applyQueueSnapshot 整块替换。
  */
 export interface QueuedMessage {
-    id: string              // 前端生成的唯一 ID
-    content: string         // 消息文本
-    /** 已是发送契约形态：enqueue 前经 prepareNewMessage 上传并映射为 FileRef（唯一入队路径 ChatPanel.handleSendMessage） */
+    id: string
+    content: string
+    /** 发送契约形态（FileRef） */
     files: FileRef[]
     knowledgeBaseIds?: string[]
-    createdAt: number       // 创建时间戳
-    status: 'queued' | 'sending'  // 状态
+    createdAt: number
+    /** queued=排队中；running=正在启动/已进入回合；failed=启动失败等用户处理 */
+    status: 'queued' | 'running' | 'failed'
+    /** 启动失败原因（status=failed 时有值） */
+    error?: string
+    /** 入队时的编辑重发目标回合 */
+    replaceTurnId?: string
+    /** 入队时冻结的发送设置 */
+    settingsSnapshot?: QueuedMessageSettingsSnapshot
 }
+
+/** 后端回合级设置覆盖（与 backend TurnSettingsOverride 同构） */
+export interface UserQueueSettingsOverride {
+    modelId?: string
+    thinkingEffort?: string
+    maxTokensLimit?: number | null
+    sandboxMode?: string
+    planEnabled?: boolean
+}
+
+/** 服务端队列快照项（GET /sessions/:id/queue 与 queue_updated 事件） */
+export interface UserQueueSnapshotItem {
+    id: string
+    content: string
+    files: FileRef[]
+    knowledgeBaseIds?: string[]
+    replaceTurnId?: string
+    settingsOverride?: UserQueueSettingsOverride
+    status: 'queued' | 'running' | 'failed'
+    error?: string
+    createdAt: string
+}
+
+/** 服务端队列全量快照（epoch 变化 = 后端重启，revision 用于乱序丢弃） */
+export interface UserQueueSnapshot {
+    sessionId: string
+    epoch: string
+    revision: number
+    paused: { reason: QueuePauseReason; at: string } | null
+    promotionId: string | null
+    isProcessing: boolean
+    items: UserQueueSnapshotItem[]
+}
+
+/**
+ * 队列暂停原因：用户停止/出错/手动暂停后保留队列但不再自动补发，等用户显式继续。
+ * 与 ZCode 的 pauseReason、本项目后端 ChatRunner 的"user_cancel 不自动重开"对齐。
+ */
+export type QueuePauseReason = 'stopped' | 'error' | 'manual'
 
 /**
  * 会话状态（用于 Store）
@@ -181,6 +241,16 @@ export interface SessionState {
     lastUpdated: number
     settings: SessionSettings
     messageQueue: QueuedMessage[]  // 排队消息列表
+    /**
+     * 队列暂停原因：停止/出错/手动后队列保留但不自动补发（避免"一按停止就自动发下一条"）。
+     * null/undefined = 正常自动消费。
+     */
+    queuePaused?: QueuePauseReason | null
+    /** 服务端"立即发送"目标（快照投影；UI 显示"即将发送"） */
+    queuePromotionId?: string | null
+    /** 队列快照 epoch（后端进程标识）与 revision（乱序丢弃） */
+    queueEpoch?: string
+    queueRevision?: number
 }
 
 /**

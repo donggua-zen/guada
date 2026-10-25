@@ -12,7 +12,10 @@ import { ChatRunnerService } from '../../src/modules/chat/chat-runner.service';
 
 /// <reference types="jest" />
 
-function buildRunner(overrides?: { runImpl?: () => Promise<any> }) {
+function buildRunner(overrides?: {
+  runImpl?: () => Promise<any>;
+  session?: any;
+}) {
   const streamManager = {
     hasActiveStream: jest.fn(() => false),
     startStream: jest.fn(() => true),
@@ -22,7 +25,7 @@ function buildRunner(overrides?: { runImpl?: () => Promise<any> }) {
     abortStream: jest.fn(),
   };
   const sessionService = {
-    getSessionById: jest.fn(async () => ({ id: 's1' })),
+    getSessionById: jest.fn(async () => overrides?.session ?? { id: 's1' }),
     updateLastActiveAt: jest.fn(async () => {}),
   };
   const sessionContext = {
@@ -31,22 +34,37 @@ function buildRunner(overrides?: { runImpl?: () => Promise<any> }) {
     workspacePath: '/tmp/ws',
   };
   const sessionContextFactory = {
-    createFromSession: jest.fn(async () => sessionContext),
+    createFromSession: jest.fn(async (_session: any) => sessionContext),
   };
   const agentEngine = {
     run: jest.fn(overrides?.runImpl ?? (async () => ({ finishReason: 'stop' }))),
   };
   const eventBus = { emit: jest.fn() };
+  const userInputQueue = {
+    hasPending: jest.fn(() => false),
+    hasAnyPending: jest.fn(() => false),
+    getState: jest.fn(() => undefined),
+    consumePromotion: jest.fn(() => null),
+    resume: jest.fn(),
+    pause: jest.fn(),
+  };
   const service = new ChatRunnerService(
     streamManager as any,
     sessionService as any,
     agentEngine as any,
     sessionContextFactory as any,
     eventBus as any,
+    userInputQueue as any,
   );
   // processQueue 为私有方法，测试只关心是否被触发（空队列实现无外部副作用）
   (service as any).processQueue = jest.fn(async () => {});
-  return { service, streamManager, agentEngine, eventBus };
+  return {
+    service,
+    streamManager,
+    agentEngine,
+    eventBus,
+    sessionContextFactory,
+  };
 }
 
 const startParams = {
@@ -267,6 +285,83 @@ describe('ChatRunnerService（supervisor：直发模式下的流生命周期收�
       }
       expect(items[0].onConsumed).toHaveBeenCalledTimes(1);
       expect(items[1].onConsumed).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('回合级设置覆盖（排队消息补发）', () => {
+    const baseSession = () => ({
+      id: 's1',
+      modelId: 'prov-a:model-a',
+      model: { id: 'prov-a:model-a', modelName: 'model-a' },
+      settings: {
+        sandboxMode: 'workspace-write',
+        thinkingEffort: 'medium',
+        maxTokensLimit: 1000,
+        planEnabled: false,
+      },
+    });
+
+    it('覆盖合并到克隆对象：原会话不被修改，model 挂载被清空', async () => {
+      const session = baseSession();
+      const { service, sessionContextFactory } = buildRunner({ session });
+
+      await service.startStream({
+        ...startParams,
+        settingsOverride: {
+          modelId: 'prov-b:model-b',
+          thinkingEffort: 'high',
+          maxTokensLimit: 2000,
+          sandboxMode: 'read-only',
+        },
+      });
+
+      const effective = sessionContextFactory.createFromSession.mock.calls[0][0];
+      expect(effective).not.toBe(session);
+      expect(effective.modelId).toBe('prov-b:model-b');
+      // resolveModel 优先 session.model，覆盖时必须清掉
+      expect(effective.model).toBeUndefined();
+      expect(effective.settings).toMatchObject({
+        thinkingEffort: 'high',
+        maxTokensLimit: 2000,
+        sandboxMode: 'read-only',
+      });
+
+      // 原对象保持原值（覆盖不得落回会话）
+      expect(session.modelId).toBe('prov-a:model-a');
+      expect(session.model).toEqual({ id: 'prov-a:model-a', modelName: 'model-a' });
+      expect(session.settings).toEqual({
+        sandboxMode: 'workspace-write',
+        thinkingEffort: 'medium',
+        maxTokensLimit: 1000,
+        planEnabled: false,
+      });
+    });
+
+    it('planEnabled 覆盖时预置临时 epoch，避免 initialize() 把覆盖写回会话', async () => {
+      const session = baseSession();
+      const { service, sessionContextFactory } = buildRunner({ session });
+
+      await service.startStream({
+        ...startParams,
+        settingsOverride: { planEnabled: true },
+      });
+
+      const effective = sessionContextFactory.createFromSession.mock.calls[0][0];
+      expect(effective.settings.planEnabled).toBe(true);
+      expect(typeof effective.settings.planModeEpoch).toBe('string');
+      expect(effective.settings.planModeEpoch.length).toBeGreaterThan(0);
+      // 原会话仍无 epoch、plan 仍关闭
+      expect(session.settings.planEnabled).toBe(false);
+      expect((session.settings as any).planModeEpoch).toBeUndefined();
+    });
+
+    it('未传覆盖时直接使用原会话对象', async () => {
+      const session = baseSession();
+      const { service, sessionContextFactory } = buildRunner({ session });
+
+      await service.startStream(startParams);
+
+      expect(sessionContextFactory.createFromSession.mock.calls[0][0]).toBe(session);
     });
   });
 });

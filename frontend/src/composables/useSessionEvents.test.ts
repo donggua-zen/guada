@@ -38,8 +38,29 @@ vi.mock("@/services/ApiService", () => ({
       return () => {};
     },
     fetchPendingAsks: vi.fn(async () => ({ pending: [] })),
+    fetchSessionQueue: vi.fn(async () => ({
+      sessionId: "s1",
+      epoch: "epoch-1",
+      revision: 0,
+      paused: null,
+      promotionId: null,
+      isProcessing: false,
+      items: [],
+    })),
+    getStreamStatus: vi.fn(async () => ({
+      isRunning: false,
+      subscriberCount: 0,
+      bufferedEventCount: 0,
+    })),
     chat: vi.fn(),
   },
+}));
+
+vi.mock("@/composables/usePopup", () => ({
+  usePopup: () => ({
+    toast: { info: vi.fn(), error: vi.fn(), loading: vi.fn() },
+    notify: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
+  }),
 }));
 
 vi.mock("vue-router", () => ({
@@ -49,7 +70,39 @@ vi.mock("vue-router", () => ({
 
 import { useSessionEvents } from "./useSessionEvents";
 import { apiService } from "@/services/ApiService";
+import type { UserQueueSnapshot } from "@/types/session";
+
+/** 服务端队列快照工厂 */
+function queueSnapshot(
+  sessionId: string,
+  overrides: Partial<UserQueueSnapshot> = {},
+): UserQueueSnapshot {
+  return {
+    sessionId,
+    epoch: "epoch-1",
+    revision: 1,
+    paused: null,
+    promotionId: null,
+    isProcessing: false,
+    items: [
+      {
+        id: "a",
+        content: "A",
+        files: [],
+        status: "queued" as const,
+        createdAt: "2026-10-25T00:00:00.000Z",
+      },
+    ],
+    ...overrides,
+  };
+}
 import { streamEventHub } from "@/services/modules/StreamEventHub";
+
+function emitSessionEvent(type: string, event: Record<string, any>) {
+  const handler = registeredHandlers.get(type);
+  expect(handler).toBeDefined();
+  handler!(event);
+}
 
 function emitStreamStatus(payload: Record<string, any>, source?: string) {
   const handler = registeredHandlers.get("stream_status_changed");
@@ -62,7 +115,17 @@ describe("useSessionEvents 统一订阅器", () => {
     setActivePinia(createPinia());
     registeredHandlers.clear();
     connectHandlers.length = 0;
+    vi.clearAllMocks();
     vi.mocked(apiService.fetchPendingAsks).mockResolvedValue({ pending: [] });
+    vi.mocked(apiService.fetchSessionQueue).mockResolvedValue(
+      queueSnapshot("s1", { items: [], revision: 0 }),
+    );
+    vi.mocked(apiService.getStreamStatus).mockResolvedValue({
+      isRunning: false,
+      subscriberCount: 0,
+      bufferedEventCount: 0,
+    });
+    vi.mocked(apiService.chat).mockResolvedValue({ ok: true });
   });
 
   it("init 注册 stream_status_changed 唯一订阅", () => {
@@ -283,24 +346,136 @@ describe("useSessionEvents 统一订阅器", () => {
     expect(store.getSession("s-old")!.lastActiveAt).toBe("2026-08-01T00:00:00Z");
   });
 
-  it("流结束后自动消费队列(有排队消息时调用 chat)", () => {
+  it("queue_updated：应用服务端快照（条目/暂停/计数）", () => {
     useSessionEvents().init();
     const store = useSessionStore();
 
-    // 预置排队消息
-    store.enqueueMessage("s1", {
-      content: "排队内容",
-      files: [],
-      knowledgeBaseIds: undefined,
+    emitSessionEvent("queue_updated", {
+      sessionId: "s1",
+      timestamp: "2026-10-25T00:00:00Z",
+      source: "client-other",
+      payload: queueSnapshot("s1", {
+        revision: 3,
+        paused: { reason: "manual", at: "2026-10-25T00:00:00Z" },
+        items: [
+          {
+            id: "a",
+            content: "A",
+            files: [],
+            status: "queued",
+            createdAt: "2026-10-25T00:00:00.000Z",
+          },
+          {
+            id: "b",
+            content: "B",
+            files: [],
+            status: "running",
+            createdAt: "2026-10-25T00:00:01.000Z",
+          },
+        ],
+      }),
     });
-    (apiService.chat as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
-    emitStreamStatus({ sessionId: "s1", status: "completed" });
+    expect(store.getMessageQueue("s1").map((m) => m.content)).toEqual(["A", "B"]);
+    expect(store.queuePauseReason("s1")).toBe("manual");
+    expect(store.peekQueueCount("s1")).toBe(2);
+  });
 
-    expect(apiService.chat).toHaveBeenCalledTimes(1);
-    const callArg = (apiService.chat as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(callArg.sessionId).toBe("s1");
-    expect(callArg.regenerationMode).toBe("overwrite");
-    expect(callArg.userMessage.content).toBe("排队内容");
+  it("queue_updated：旧 revision 丢弃", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    emitSessionEvent("queue_updated", {
+      sessionId: "s1",
+      timestamp: "2026-10-25T00:00:00Z",
+      payload: queueSnapshot("s1", { revision: 5 }),
+    });
+    emitSessionEvent("queue_updated", {
+      sessionId: "s1",
+      timestamp: "2026-10-25T00:00:00Z",
+      payload: queueSnapshot("s1", {
+        revision: 4,
+        items: [
+          {
+            id: "old",
+            content: "OLD",
+            files: [],
+            status: "queued",
+            createdAt: "2026-10-25T00:00:00.000Z",
+          },
+        ],
+      }),
+    });
+
+    expect(store.getMessageQueue("s1")[0].content).toBe("A");
+  });
+
+  it("queues_snapshot：整体恢复各会话计数", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    emitSessionEvent("queues_snapshot", {
+      sessionId: "*",
+      timestamp: "2026-10-25T00:00:00Z",
+      payload: { epoch: "epoch-1", counts: { s1: 2, s2: 1 } },
+    });
+
+    expect(store.peekQueueCount("s1")).toBe(2);
+    expect(store.peekQueueCount("s2")).toBe(1);
+  });
+
+  it("session_deleted：清理队列投影与计数", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    emitSessionEvent("queue_updated", {
+      sessionId: "s1",
+      timestamp: "2026-10-25T00:00:00Z",
+      payload: queueSnapshot("s1"),
+    });
+    expect(store.peekQueueCount("s1")).toBe(1);
+
+    emitSessionEvent("session_deleted", {
+      sessionId: "s1",
+      timestamp: "2026-10-25T00:00:00Z",
+      source: "client-other",
+    });
+
+    expect(store.getMessageQueue("s1")).toEqual([]);
+    expect(store.peekQueueCount("s1")).toBe(0);
+  });
+
+  it("（重）建连：补拉当前会话队列", async () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    vi.mocked(apiService.fetchSessionQueue).mockResolvedValueOnce(
+      queueSnapshot("s1", { revision: 7 }),
+    );
+
+    for (const cb of connectHandlers) cb();
+    await flushMicrotasks();
+
+    expect(apiService.fetchSessionQueue).toHaveBeenCalledWith("s1");
+    expect(store.getMessageQueue("s1").map((m) => m.content)).toEqual(["A"]);
+  });
+
+  it("refreshQueue：手动补拉并应用快照", async () => {
+    const { refreshQueue } = useSessionEvents();
+    const store = useSessionStore();
+    vi.mocked(apiService.fetchSessionQueue).mockResolvedValueOnce(
+      queueSnapshot("s2", { revision: 2 }),
+    );
+
+    await refreshQueue("s2");
+
+    expect(apiService.fetchSessionQueue).toHaveBeenCalledWith("s2");
+    expect(store.getMessageQueue("s2").map((m) => m.content)).toEqual(["A"]);
   });
 });
+
+/** 等 drain 内部的 await 链跑完 */
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}

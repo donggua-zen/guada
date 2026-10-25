@@ -1,4 +1,5 @@
 import { SessionEvent } from "../../modules/chat/session-events.service";
+import type { UserQueueSnapshot } from "../../modules/chat/user-input-queue.service";
 
 /**
  * 会话流状态改变事件（内部模块间使用）
@@ -115,6 +116,19 @@ export interface EnqueueMessageEvent {
 }
 
 /**
+ * 用户输入队列快照变化（内部模块间使用）
+ *
+ * 事件名：chat.user_queue_changed
+ * payload 为全量快照；前端整块替换，不做增量。
+ */
+export interface UserQueueChangedEvent {
+  sessionId: string;
+  timestamp: string;
+  source?: string;
+  payload: UserQueueSnapshot;
+}
+
+/**
  * 待办更新事件（内部模块间使用）
  *
  * 事件名：todo.updated
@@ -137,7 +151,8 @@ export function toSessionEvent(
     | SessionDeletedEvent
     | SubAgentCreatedEvent
     | SubAgentClosedEvent
-    | TodoUpdatedEvent,
+    | TodoUpdatedEvent
+    | UserQueueChangedEvent,
 ): SessionEvent {
   return {
     type,

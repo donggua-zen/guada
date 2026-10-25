@@ -10,6 +10,7 @@ import {
   SubAgentCreatedEvent,
   SubAgentClosedEvent,
   TodoUpdatedEvent,
+  UserQueueChangedEvent,
   toSessionEvent,
 } from "../../common/events/stream.events";
 import {
@@ -22,6 +23,7 @@ import { SessionStreamManager } from "./session-stream.manager";
 import { SessionMetaStore } from "./session-meta.store";
 import { HOOKS } from "./types/hooks.contract";
 import type { JobsSnapshotEvent } from "../jobs/job.types";
+import { UserInputQueueService } from "./user-input-queue.service";
 /**
  * 会话事件类型
  */
@@ -37,7 +39,9 @@ export type SessionEventType =
   | "sub_agent_closed"
   | "todo_updated"
   | "jobs_snapshot"
-  | "plugins_changed";
+  | "plugins_changed"
+  | "queue_updated"
+  | "queues_snapshot";
 
 /**
  * 会话事件
@@ -91,6 +95,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly streamManager: SessionStreamManager,
     private readonly sessionStore: SessionMetaStore,
+    private readonly userInputQueue: UserInputQueueService,
   ) {}
 
   /**
@@ -181,6 +186,20 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       data: JSON.stringify({
         type: "connected",
         timestamp: new Date().toISOString(),
+      }),
+    } as MessageEvent);
+
+    // 用户队列计数快照：侧边栏角标在首次连接/刷新后即可恢复；
+    // 具体条目按会话打开时 GET /sessions/:id/queue 拉取。
+    events.push({
+      data: JSON.stringify({
+        type: "queues_snapshot",
+        sessionId: "*",
+        timestamp: new Date().toISOString(),
+        payload: {
+          epoch: this.userInputQueue.epoch,
+          counts: this.userInputQueue.getAllCounts(),
+        },
       }),
     } as MessageEvent);
 
@@ -339,6 +358,16 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
         jobs: event.jobs,
       },
     });
+  }
+
+  /**
+   * 用户输入队列快照变化：广播给所有在线客户端（多窗口共享同一份服务端队列）
+   */
+  @OnEvent("chat.user_queue_changed")
+  handleUserQueueChanged(event: UserQueueChangedEvent) {
+    this.broadcastToAllClients(
+      toSessionEvent("queue_updated", event),
+    );
   }
 
   /**

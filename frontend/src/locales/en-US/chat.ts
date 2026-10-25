@@ -587,9 +587,23 @@
 
   // ── 队列 ──
   queue: {
+    title: 'Queued ({n})',
     sending: 'Sending',
     queued: 'Queued',
+    failed: 'Send failed',
+    promoting: 'Sending next',
     edit: 'Edit',
     withdraw: 'Withdraw',
+    retry: 'Retry',
+    continue: 'Send remaining',
+    pause: 'Pause queue',
+    sendNow: 'Send now',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    pausedStopped: 'Stopped — queue paused',
+    pausedError: 'Turn failed — queue paused',
+    pausedManual: 'Queue paused',
+    sendFailed: 'Failed to send queued message',
+    operationFailed: 'Queue operation failed',
   },
 }

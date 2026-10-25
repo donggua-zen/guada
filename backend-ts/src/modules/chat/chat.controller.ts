@@ -25,6 +25,8 @@ import { ChatRunnerService } from "./chat-runner.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 import { InteractionWaitService } from "../../common/services/interaction-wait.service";
 import { parseLocalSlashCommand } from "./commands/local-slash-command";
+import { normalizeTurnSettingsOverride } from "./types/turn-settings-override";
+import { UserInputQueueService } from "./user-input-queue.service";
 
 @Controller("chat")
 @UseGuards(AuthGuard)
@@ -37,6 +39,7 @@ export class ChatController {
     private chatRunner: ChatRunnerService,
     private tagParserPipeline: TagParserPipeline,
     private interactionWait: InteractionWaitService,
+    private userInputQueue: UserInputQueueService,
   ) {}
 
   /**
@@ -61,6 +64,11 @@ export class ChatController {
         replaceTurnId?: string;
         knowledgeBaseIds?: string[];
       };
+      /**
+       * 排队消息补发的回合级设置覆盖（只影响本回合，不写回会话设置）。
+       * 白名单校验见 types/turn-settings-override.ts。
+       */
+      settingsOverride?: Record<string, unknown>;
     },
     @Res() res: Response,
     @Req() req: Request,
@@ -71,7 +79,11 @@ export class ChatController {
       regenerationMode = "overwrite",
       resumeData,
       userMessage,
+      settingsOverride: rawSettingsOverride,
     } = body;
+
+    // 白名单归一化：非法字段/类型直接 400，坏值不进入回合上下文。
+    const settingsOverride = normalizeTurnSettingsOverride(rawSettingsOverride);
 
     // 本地斜杠命令（/compact、/compress）：控制指令，**不写用户消息、不进 LLM 上下文**。
     // 必须在标签解析与 chatRunner.startStream 之前拦截——一旦进入 startStream，
@@ -126,6 +138,43 @@ export class ChatController {
       }
     }
 
+    // 可入队判定：resume/regenerate 等无用户正文的请求保持原行为（忙碌时 409）。
+    const canQueueUserInput = !!(
+      userMessage?.content?.trim() || userMessage?.files?.length
+    );
+    const enqueueUserInput = () =>
+      this.userInputQueue.enqueue({
+        sessionId,
+        content: userMessage?.content ?? "",
+        ...(userMessage?.files?.length ? { files: userMessage.files } : {}),
+        ...(source.injectedBlocks?.length
+          ? { injectedBlocks: source.injectedBlocks }
+          : {}),
+        ...(userMessage?.knowledgeBaseIds?.length
+          ? { knowledgeBaseIds: userMessage.knowledgeBaseIds }
+          : {}),
+        ...(userMessage?.replaceTurnId
+          ? { replaceTurnId: userMessage.replaceTurnId }
+          : {}),
+        ...(settingsOverride ? { settingsOverride } : {}),
+        ...(clientId ? { clientId } : {}),
+      });
+
+    // M3：会话忙碌时用户消息不再 409，而是进入后端用户队列（多窗口共用一条 FIFO）。
+    if (canQueueUserInput && this.streamManager.hasActiveStream(sessionId)) {
+      const { item, snapshot } = enqueueUserInput();
+      if (!res.writableEnded) {
+        res.status(200).json({
+          ok: true,
+          queued: true,
+          itemId: item.id,
+          revision: snapshot.revision,
+          epoch: snapshot.epoch,
+        });
+      }
+      return;
+    }
+
     // 合并后:/chat/stream 降级为 RPC,不再持有 SSE 长连接。
     // 流式事件经 chat-runner 单点发布 streamManager.publish(eventBuffer 补发 + SSE 直投合一)。
     try {
@@ -136,15 +185,35 @@ export class ChatController {
           regenerationMode: regenerationMode || "overwrite",
           resumeData,
           source,
+          // 直发不应用快照：保持现状（会话持久化设置）；快照只随入队保存，
+          // 由队列补发时以回合级覆盖执行。
         },
         undefined, // 不再通过 HTTP 长连接接收事件,事件走全局 SSE
       );
 
       // 立即返回,不再阻塞到流结束
       if (!res.writableEnded) {
-        res.status(200).json({ ok: true });
+        res.status(200).json({ ok: true, started: true });
       }
     } catch (error: any) {
+      // 竞态：预检空闲但 startStream 时已被另一窗口抢占 → 入队而不是把 409 抛给用户。
+      const code = error?.response?.code || error?.code;
+      if (
+        canQueueUserInput &&
+        (code === "SESSION_BUSY" || code === "STREAM_START_FAILED")
+      ) {
+        const { item, snapshot } = enqueueUserInput();
+        if (!res.writableEnded) {
+          res.status(200).json({
+            ok: true,
+            queued: true,
+            itemId: item.id,
+            revision: snapshot.revision,
+            epoch: snapshot.epoch,
+          });
+        }
+        return;
+      }
       this.respondStartError(res, error, "启动流失败");
     }
   }
@@ -163,6 +232,15 @@ export class ChatController {
     if (error instanceof HttpException) {
       const response = error.getResponse() as any;
       res.status(error.getStatus()).json(response);
+      return;
+    }
+    // 模型引用不可解析（含排队消息冻结的 modelId 已被删除/改名）：按客户端错误返回，
+    // 便于前端提示"模型不可用"而不是笼统的启动失败。
+    if (error?.code === "MODEL_NOT_RESOLVED") {
+      res.status(400).json({
+        error: error.message || "模型不可用",
+        code: "MODEL_NOT_RESOLVED",
+      });
       return;
     }
     this.logger.error(

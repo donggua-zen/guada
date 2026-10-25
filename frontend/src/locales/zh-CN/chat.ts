@@ -587,9 +587,23 @@ export default {
 
   // ── 队列 ──
   queue: {
+    title: '排队中（{n}）',
     sending: '发送中',
     queued: '排队中',
+    failed: '发送失败',
+    promoting: '即将发送',
     edit: '编辑',
     withdraw: '撤回',
+    retry: '重试',
+    continue: '继续发送',
+    pause: '暂停队列',
+    sendNow: '立即发送',
+    moveUp: '上移',
+    moveDown: '下移',
+    pausedStopped: '已停止，队列已暂停',
+    pausedError: '回合出错，队列已暂停',
+    pausedManual: '队列已暂停',
+    sendFailed: '排队消息发送失败',
+    operationFailed: '队列操作失败',
   },
 }

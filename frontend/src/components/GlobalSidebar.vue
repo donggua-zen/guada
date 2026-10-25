@@ -171,17 +171,26 @@
                     :actions-visible="session.id === currentSessionId || hoveredSessionId === session.id"
                     :scroll-active="hoveredSessionId === session.id" />
                 </div>
-                <!-- 待批胶囊：会话级交互卡（审批/询问/计划）未应答。
-                     当前会话且窗口可见时卡片已在输入区上方，不重复提醒（沿用 unread 规则）；
+                <!-- 状态胶囊：排队数 + 待批。当前会话且窗口可见时卡片/抽屉已在输入区，不重复提醒。
                      mr-6 为右侧「更多」按钮预留（icon 16px + padding 8px + right 2px）→ hover 无跳动 -->
-                <GdTooltip
-                  v-if="getSessionAwaiting(session.id) && (session.id !== currentSessionId || windowHidden)"
-                  class="shrink-0 mr-6" :content="getSessionAwaitingTooltip(session.id)" placement="right">
-                  <span
-                    class="inline-flex items-center rounded-full border border-amber-500/35 bg-amber-500/15 px-1.5 text-[11px] leading-4 text-amber-600 dark:text-amber-400">
-                    {{ getSessionAwaitingLabel(session.id) }}
-                  </span>
-                </GdTooltip>
+                <div
+                  v-if="(getSessionQueuedCount(session.id) > 0 || getSessionAwaiting(session.id)) && (session.id !== currentSessionId || windowHidden)"
+                  class="shrink-0 mr-6 flex items-center gap-1">
+                  <GdTooltip v-if="getSessionQueuedCount(session.id) > 0"
+                    :content="t('ui.sidebar.queuedTooltip', { n: getSessionQueuedCount(session.id) })" placement="right">
+                    <span
+                      class="inline-flex items-center rounded-full border border-blue-500/35 bg-blue-500/15 px-1.5 text-[11px] leading-4 text-blue-600 dark:text-blue-400">
+                      {{ t('ui.sidebar.queuedCount', { n: getSessionQueuedCount(session.id) }) }}
+                    </span>
+                  </GdTooltip>
+                  <GdTooltip v-if="getSessionAwaiting(session.id)" :content="getSessionAwaitingTooltip(session.id)"
+                    placement="right">
+                    <span
+                      class="inline-flex items-center rounded-full border border-amber-500/35 bg-amber-500/15 px-1.5 text-[11px] leading-4 text-amber-600 dark:text-amber-400">
+                      {{ getSessionAwaitingLabel(session.id) }}
+                    </span>
+                  </GdTooltip>
+                </div>
                 <!-- 操作菜单：绝对定位悬浮于右缘，不占 flex 空间，标题可占满整行 -->
                 <div class="session-actions absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center"
                   :class="session.id === currentSessionId
@@ -929,6 +938,11 @@ const getSessionWorking = (sessionId: string): boolean => {
 /** 该会话是否有未应答的交互卡（审批/询问）。渲染路径必须走 peek（不建缓存，见 store 注释） */
 const getSessionAwaiting = (sessionId: string): boolean => {
   return sessionStore.peekSessionPendingAskQueue(sessionId).length > 0
+}
+
+/** 排队消息数（渲染路径走 peek，不创建缓存） */
+const getSessionQueuedCount = (sessionId: string): number => {
+  return sessionStore.peekQueueCount(sessionId)
 }
 
 /** 待答数量（>1 时胶囊提示还有几个在排队） */

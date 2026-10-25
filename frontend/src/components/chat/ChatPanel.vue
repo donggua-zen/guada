@@ -79,7 +79,11 @@
               <Transition name="queue-drawer">
                 <div v-if="queueLength > 0"
                   class="queue-drawer bg-(--gd-color-surface)/80 backdrop-blur-xl rounded-(--gd-size-dialog-rounded-radius) w-[calc(100%-48px)] margin-auto px-0.5 py-0.5 border-radius-6px mx-auto mb-2">
-                  <QueuedMessages :queue="messageQueue" @edit="handleEditQueued" @remove="handleRemoveQueued" />
+                  <QueuedMessages :queue="messageQueue" :paused-reason="queuePausedReason"
+                    :promoting-id="queuePromotionId" :can-move-up="canMoveQueuedUp"
+                    :can-move-down="canMoveQueuedDown" @edit="handleEditQueued" @remove="handleRemoveQueued"
+                    @retry="handleRetryQueued" @continue="handleContinueQueue" @pause="handlePauseQueue"
+                    @send-now="handleSendNow" @move="handleMoveQueued" />
                 </div>
               </Transition>
 
@@ -206,12 +210,14 @@ import {
   foldEvents,
   takeStash as takeProjectorStash,
 } from "@/services/modules/streamProjector"
-import type { InputMessageState, Session, QueuedMessage } from '@/types/session';
+import type { InputMessageState, Session, QueuedMessage, QueuePauseReason } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { Turn, TurnContent, MessageBundle } from '@/types/message';
 
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
+import { useSessionEvents } from '@/composables/useSessionEvents'
+import type { ChatSettingsOverride } from '@/services/modules/ChatStreamService'
 import {
   buildChatSessionScrollMemoryKey,
   clampScrollTop,
@@ -248,6 +254,8 @@ import GdPopover from '@/components/ui/GdPopover.vue'
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
+// 队列补发：打开会话时若后端已空闲但队列非空（错过终态事件）则补一次消费
+const { refreshQueue } = useSessionEvents();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
 const layoutStore = useLayoutStore();
@@ -484,6 +492,54 @@ const messageQueue = computed(() => {
   return currentSessionId.value ? sessionStore.getMessageQueue(currentSessionId.value) : [];
 });
 const queueLength = computed(() => messageQueue.value.length);
+/** 队列暂停原因：停止/出错/手动后保留队列但不自动补发，横幅提示用户继续 */
+const queuePausedReason = computed<QueuePauseReason | null>(() => {
+  return currentSessionId.value ? sessionStore.queuePauseReason(currentSessionId.value) : null;
+});
+/** 已请求"立即发送"、等待当前回合结束的队列项 */
+const queuePromotionId = computed<string | null>(() => {
+  return currentSessionId.value ? sessionStore.queuePromotionId(currentSessionId.value) : null;
+});
+
+/**
+ * 上/下移可用态：与服务端规则一致（running 前缀之后、第一个 failed 之前）。
+ * 仅用于按钮禁用态；真正校验在服务端。
+ */
+function canMoveQueued(id: string, direction: -1 | 1): boolean {
+  const queue = messageQueue.value;
+  const idx = queue.findIndex(m => m.id === id);
+  if (idx < 0 || queue[idx].status !== 'queued') return false;
+  let lower = 0;
+  while (lower < queue.length && queue[lower].status === 'running') lower++;
+  const failedIdx = queue.findIndex(m => m.status === 'failed');
+  const upper = failedIdx < 0 ? queue.length : failedIdx;
+  const target = idx + direction;
+  return (
+    idx >= lower &&
+    target >= lower &&
+    target < upper &&
+    queue[target]?.status === 'queued'
+  );
+}
+function canMoveQueuedUp(id: string): boolean {
+  return canMoveQueued(id, -1);
+}
+function canMoveQueuedDown(id: string): boolean {
+  return canMoveQueued(id, 1);
+}
+
+// 补发开始时复用直接发送的入场动画与滚底；失败则撤销，避免下一个无关回合误触发
+watch(
+  () => messageQueue.value[0]?.status,
+  (status) => {
+    if (status === 'running') {
+      expectingNewMessage = true;
+    } else if (status === 'failed') {
+      expectingNewMessage = false;
+    }
+  },
+  { immediate: true },
+);
 
 // 滚动管理相关状态和方法（按钮显隐的展示态定义在 visibleTurns 之后）
 
@@ -1115,6 +1171,10 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
     await loadSession(newSessionId);
     if (token !== sessionChangeToken) return;
 
+    // 队列补拉：后端队列在会话打开时可能与本地投影不同步（后台消费/刷新），
+    // 以服务端快照为准；不再由前端触发发送。
+    void refreshQueue(newSessionId);
+
     nextTick(() => {
       if (token !== sessionChangeToken) return;
       if (!currentSession.value)
@@ -1331,18 +1391,6 @@ async function handleSendMessage(payload?: InputMessageState) {
       return;
     }
 
-    // 流式进行中：消息入队，等 stream_finished 后自动消费
-    if (currentSessionId.value && isStreaming.value) {
-      const sid = currentSessionId.value;
-      const prepared = await prepareNewMessage(content, files, null, knowledgeBaseIds);
-      sessionStore.enqueueMessage(sid, {
-        content: prepared.content,
-        files: prepared.files,
-        knowledgeBaseIds: prepared.knowledgeBaseIds,
-      });
-      return;
-    }
-
     // 准备消息数据（上传文件等）
     const prepared = await prepareNewMessage(content, files, null, knowledgeBaseIds);
 
@@ -1361,17 +1409,60 @@ async function handleSendMessage(payload?: InputMessageState) {
     // 发送链路独立:只调 apiService.chat 发起,不订阅、不处理事件;
     // 发送后的事件由常驻接收链路(唯一 receiver)消费。
     if (currentSessionId.value) {
-      expectingNewMessage = true;
-      sessionStore.setStreamStatus(currentSessionId.value, "pending");
-      await apiService.chat({
-        sessionId: currentSessionId.value,
+      const sid = currentSessionId.value;
+      // 入队/直发都带冻结快照：后端忙碌时随队列项保存，空闲时只影响本回合。
+      const sandboxMode = currentSession.value?.settings?.sandboxMode;
+      const thinkingEffort = currentSession.value?.settings?.thinkingEffort;
+      const maxTokensLimit = currentSession.value?.settings?.maxTokensLimit;
+      const settingsOverride: ChatSettingsOverride = {
+        ...(currentSession.value?.modelId
+          ? { modelId: currentSession.value.modelId }
+          : {}),
+        ...(typeof thinkingEffort === 'string'
+          ? { thinkingEffort }
+          : {}),
+        ...(typeof maxTokensLimit === 'number'
+          ? { maxTokensLimit }
+          : {}),
+        ...(sandboxMode === 'read-only' ||
+        sandboxMode === 'workspace-write' ||
+        sandboxMode === 'danger-full-access'
+          ? { sandboxMode }
+          : {}),
+        planEnabled: sessionStore.sessionPlanEnabled(sid),
+      };
+
+      // 已知本会话在流式中：不要用 pending 覆盖 running，也不触发"新消息"动画
+      const alreadyStreaming = sessionStore.sessionIsStreaming(sid);
+      expectingNewMessage = !alreadyStreaming;
+      if (!alreadyStreaming) {
+        sessionStore.setStreamStatus(sid, "pending");
+      }
+      const response = await apiService.chat({
+        sessionId: sid,
         userMessage: {
           content: prepared.content,
           files: prepared.files,
           replaceTurnId,
           knowledgeBaseIds: prepared.knowledgeBaseIds,
         },
+        ...(Object.keys(settingsOverride).length > 0
+          ? { settingsOverride }
+          : {}),
       });
+
+      // 后端判定忙碌：已进入服务端队列，本窗口撤销 pending/入场动画，
+      // 并以快照为准（queue_updated 可能晚于 HTTP 响应到达）。
+      if (response?.queued) {
+        expectingNewMessage = false;
+        if (
+          !alreadyStreaming &&
+          sessionStore.peekStreamStatus(sid) === "pending"
+        ) {
+          sessionStore.setStreamStatus(sid, "idle");
+        }
+        void refreshQueue(sid);
+      }
     }
   } catch (error) {
     notify.error(t('chat.panel.sendMessageFailed'), getErrorMessage(error));
@@ -1379,27 +1470,113 @@ async function handleSendMessage(payload?: InputMessageState) {
   }
 }
 
+/** 队列操作统一错误提示（409/404 时以服务端快照为准） */
+function reportQueueError(error: unknown) {
+  notify.error(t('chat.queue.operationFailed'), getErrorMessage(error));
+}
+
 /**
- * 处理队列消息撤回
+ * 撤回排队消息。
+ * 409 = 已被其他窗口/回合启动：刷新快照，提示用户。
  */
-function handleRemoveQueued(id: string) {
-  if (currentSessionId.value) {
-    sessionStore.removeQueuedMessage(currentSessionId.value, id);
+async function handleRemoveQueued(id: string) {
+  if (!currentSessionId.value) return;
+  const sid = currentSessionId.value;
+  try {
+    const snapshot = await apiService.removeSessionQueueItem(sid, id);
+    sessionStore.applyQueueSnapshot(sid, snapshot);
+  } catch (error) {
+    void refreshQueue(sid);
+    reportQueueError(error);
   }
 }
 
 /**
- * 处理队列消息编辑
+ * 编辑排队消息：先服务端撤回，再回填输入框。
+ * 撤回失败（已开始发送）时不回填，避免同一内容被发两次。
  */
-function handleEditQueued(item: QueuedMessage) {
+async function handleEditQueued(item: QueuedMessage) {
   if (!currentSessionId.value) return;
-  inputMessage.value = {
+  const sid = currentSessionId.value;
+  try {
+    const snapshot = await apiService.removeSessionQueueItem(sid, item.id);
+    sessionStore.applyQueueSnapshot(sid, snapshot);
+  } catch (error) {
+    void refreshQueue(sid);
+    reportQueueError(error);
+    return;
+  }
+
+  const inputMsg = {
     content: item.content,
     files: item.files,
     knowledgeBaseIds: item.knowledgeBaseIds,
     isWaiting: false,
   };
-  sessionStore.removeQueuedMessage(currentSessionId.value, item.id);
+  // 排队时正在编辑上一轮：回填时一并恢复编辑模式，否则重发会退化成新回合
+  if (item.replaceTurnId) {
+    editMode.value = { turnId: item.replaceTurnId, inputMessage: inputMsg };
+  }
+  inputMessage.value = inputMsg;
+}
+
+/** 失败项重试 = 立即发送（后端把 failed 恢复为 queued 并提升到队首） */
+async function handleRetryQueued(id: string) {
+  await handleSendNow(id);
+}
+
+/** 用户显式继续：解除服务端暂停并恢复消费 */
+async function handleContinueQueue() {
+  if (!currentSessionId.value) return;
+  const sid = currentSessionId.value;
+  try {
+    const snapshot = await apiService.resumeSessionQueue(sid);
+    sessionStore.applyQueueSnapshot(sid, snapshot);
+  } catch (error) {
+    reportQueueError(error);
+  }
+}
+
+/** 手动暂停：只影响后续自动消费，不打断当前回合 */
+async function handlePauseQueue() {
+  if (!currentSessionId.value) return;
+  const sid = currentSessionId.value;
+  try {
+    const snapshot = await apiService.pauseSessionQueue(sid);
+    sessionStore.applyQueueSnapshot(sid, snapshot);
+  } catch (error) {
+    reportQueueError(error);
+  }
+}
+
+/** 队列排序：可移动区间由服务端校验（running 之后、failed 之前） */
+async function handleMoveQueued(id: string, direction: -1 | 1) {
+  if (!currentSessionId.value) return;
+  const sid = currentSessionId.value;
+  try {
+    const snapshot = await apiService.reorderSessionQueue(sid, id, direction);
+    sessionStore.applyQueueSnapshot(sid, snapshot);
+  } catch (error) {
+    reportQueueError(error);
+  }
+}
+
+/**
+ * 立即发送：服务端负责提升目标；当前回合运行时会先停止，
+ * 终态后优先发送该条（前端不再维护 promotion 状态）。
+ */
+async function handleSendNow(id: string) {
+  if (!currentSessionId.value) return;
+  const sid = currentSessionId.value;
+  const item = messageQueue.value.find(m => m.id === id);
+  if (!item || item.status === 'running') return;
+  try {
+    const snapshot = await apiService.sendSessionQueueItemNow(sid, id);
+    sessionStore.applyQueueSnapshot(sid, snapshot);
+  } catch (error) {
+    void refreshQueue(sid);
+    reportQueueError(error);
+  }
 }
 
 /**

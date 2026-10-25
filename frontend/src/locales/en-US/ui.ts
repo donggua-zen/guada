@@ -229,6 +229,8 @@
     awaitingTooltip: 'This session is waiting for your input',
     awaitingTooltipWithTitle: '{title} (click to handle)',
     awaitingTooltipCount: '{n} requests are queued for you (click to handle)',
+    queuedCount: '{n} queued',
+    queuedTooltip: '{n} message(s) queued and will be sent after the current turn',
     taskList: 'Task List',
     rename: 'Rename',
     moveToGroup: 'Move to Group',

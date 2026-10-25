@@ -22,6 +22,7 @@ function buildController(overrides?: { resolveAnswers?: boolean }) {
     {} as any, // chatRunner
     {} as any, // tagParserPipeline
     interactionWait,
+    { enqueue: jest.fn() } as any, // userInputQueue
   );
   // 挂起一个等待者（模拟 AskService.ask 原地阻塞中）
   const delivered = { value: false };
@@ -140,6 +141,7 @@ describe('ChatController - streamMessage 本地斜杠命令', () => {
       chatRunner as any,
       tagParserPipeline as any,
       new InteractionWaitService(),
+      { enqueue: jest.fn() } as any, // userInputQueue
     );
     return { controller, res, sessionService, chatRunner, tagParserPipeline };
   }

@@ -24,7 +24,15 @@ describe("SessionEventsService 连接补发", () => {
   beforeEach(() => {
     streamManager = new SessionStreamManager();
     const sessionStore = { getSessionType: jest.fn().mockReturnValue("web") };
-    service = new SessionEventsService(streamManager, sessionStore as any);
+    const userInputQueue = {
+      epoch: "test-epoch",
+      getAllCounts: jest.fn(() => ({})),
+    };
+    service = new SessionEventsService(
+      streamManager,
+      sessionStore as any,
+      userInputQueue as any,
+    );
     service.onModuleInit(); // 注册 SSE 直投 relay（publish → pushStreamEvent）
   });
 
@@ -65,19 +73,25 @@ describe("SessionEventsService 连接补发", () => {
     observable.subscribe((e) => received.push(parse(e)));
 
     expect(received[0].type).toBe("connected");
-    expect(received[1].method).toBe("stream/turn_start");
-    expect(received[2].method).toBe("stream/text_delta");
-    expect(received[2].payload.text).toBe("你");
-    expect(received[3].payload.text).toBe("好");
-    expect(received[4].type).toBe("stream_status_changed");
-    expect(received[4].payload).toMatchObject({
+    // 连接补发的用户队列计数快照（侧边栏角标恢复）
+    expect(received[1].type).toBe("queues_snapshot");
+    expect(received[1].payload).toEqual({
+      epoch: "test-epoch",
+      counts: {},
+    });
+    expect(received[2].method).toBe("stream/turn_start");
+    expect(received[3].method).toBe("stream/text_delta");
+    expect(received[3].payload.text).toBe("你");
+    expect(received[4].payload.text).toBe("好");
+    expect(received[5].type).toBe("stream_status_changed");
+    expect(received[5].payload).toMatchObject({
       status: "running",
       kind: "chat",
       sessionType: "web",
     });
     // 重放事件携带 publish 盖戳（前端入口幂等的游标依据）
-    expect(received[2].payload.streamSeq).toBe(2);
-    expect(received[2].payload.streamBootId).toBeTruthy();
+    expect(received[3].payload.streamSeq).toBe(2);
+    expect(received[3].payload.streamBootId).toBeTruthy();
   });
 
   it("context_stats 映射为 stream/context_stats 并随连接补发重放", () => {
@@ -129,11 +143,12 @@ describe("SessionEventsService 连接补发", () => {
 
     expect(received.map((e) => e.method ?? e.type)).toEqual([
       "connected",
+      "queues_snapshot",
       "stream/turn_start",
       "stream_status_changed",
       "stream/text_delta",
     ]);
-    expect(received[3].payload.streamSeq).toBe(2);
+    expect(received[4].payload.streamSeq).toBe(2);
   });
 
   it("连接窗口内（订阅前）到达的 chunk 经补发快照送达，不丢失", () => {

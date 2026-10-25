@@ -124,15 +124,15 @@
           </GdTooltip>
           <MaxTokensPopover v-model:visible="settingsPopoverVisible" :anchor-el="settingsButtonRef"
             :current-value="props.config?.maxTokensLimit ?? null" @change="handleMaxTokensChange" />
-          <!-- 发送/停止按钮（流式时：无输入=停止，有输入=入队） -->
-          <GdTooltip v-if="streaming && !inputContent.trim()" :content="t('chat.input.stopGenerating')" placement="top">
+          <!-- 停止/发送按钮：流式中停止常驻（不再要求清空输入才能停止），发送按钮独立显示 -->
+          <GdTooltip v-if="streaming" :content="t('chat.input.stopGenerating')" placement="top">
             <button class="send-btn stop-btn" @click="abortResponse">
               <el-icon size="18">
                 <Stop24Filled />
               </el-icon>
             </button>
           </GdTooltip>
-          <GdTooltip v-else :content="streaming ? t('chat.input.enqueue') : t('chat.input.send')" placement="top">
+          <GdTooltip :content="streaming ? t('chat.input.enqueue') : t('chat.input.send')" placement="top">
             <button class="send-btn" :class="{ 'queue-btn': streaming }" @click="sendMessage"
               :disabled="props.readonly || (!inputContent.trim() && uploadFiles.length === 0) || !props.config?.modelId || sending">
               <el-icon size="18">

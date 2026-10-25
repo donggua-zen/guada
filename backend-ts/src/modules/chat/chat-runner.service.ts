@@ -6,11 +6,20 @@ import { SessionService } from "./session.service";
 import { SessionContextFactory } from "./session-context.factory";
 import { WireStreamEvent } from "./types/event-chunk.types";
 import {
+  applyTurnSettingsOverride,
+  type TurnSettingsOverride,
+} from "./types/turn-settings-override";
+import {
   StreamStatusChangedEvent,
 } from "../../common/events/stream.events";
 import { ISessionContext } from "./session-context";
 import type { ContentBlock } from "../../common/types/conversation.types";
 import { EventBusService } from "../../common/events/event-bus.service";
+import { OnEvent } from "@nestjs/event-emitter";
+import {
+  UserInputQueueService,
+  type UserQueueSnapshot,
+} from "./user-input-queue.service";
 
 /**
  * 流订阅回调
@@ -115,6 +124,7 @@ export class ChatRunnerService {
     private agentEngine: AgentEngine,
     private sessionContextFactory: SessionContextFactory,
     private eventBus: EventBusService,
+    private userInputQueue: UserInputQueueService,
   ) {}
 
   /**
@@ -158,6 +168,11 @@ export class ChatRunnerService {
       source?: Record<string, any>;
       /** 预解析的会话对象（跳过 DB 重查，保留内存挂载的 model/agent） */
       preloadedSession?: any;
+      /**
+       * 回合级设置覆盖（排队消息补发）：只影响本回合上下文，不写回会话设置。
+       * 见 types/turn-settings-override.ts。
+       */
+      settingsOverride?: TurnSettingsOverride;
     },
     callbacks?: StreamCallbacks,
   ): Promise<() => void> {
@@ -168,6 +183,7 @@ export class ChatRunnerService {
       resumeData,
       source,
       preloadedSession,
+      settingsOverride,
     } = params;
 
     // 提取前端传入的 clientId，用于广播事件的 source 字段
@@ -214,8 +230,10 @@ export class ChatRunnerService {
     // 不发布流事件。失败（如 MODEL_NOT_RESOLVED）发生在 ActiveStream 创建之前，
     // 不会留下僵尸流把会话永久卡在 SESSION_BUSY（与维护流路径同序，
     // 见 session.service.ts 手动压缩段）。
+    // 回合级覆盖只作用于克隆副本：排队消息按入队时冻结的设置执行，不改会话持久化设置。
+    const effectiveSession = applyTurnSettingsOverride(session, settingsOverride);
     const sessionContext =
-      await this.sessionContextFactory.createFromSession(session);
+      await this.sessionContextFactory.createFromSession(effectiveSession);
 
     // 启动新流
     const abortController = new AbortController();
@@ -337,6 +355,10 @@ export class ChatRunnerService {
    * 剩余消息留给 startStream 的 finally 再次触发消费。
    */
   async processQueue(sessionId: string): Promise<void> {
+    // 用户输入优先：用户队列非空（含暂停/失败阻塞）时系统通知让路。
+    // 暂停时系统通知等待下一次用户回合，与 user_cancel 的既有策略一致。
+    if (this.userInputQueue.hasPending(sessionId)) return;
+
     const state = this.queues.get(sessionId);
     if (!state || state.isProcessing || state.items.length === 0) {
       return;
@@ -397,6 +419,112 @@ export class ChatRunnerService {
       pendingCount: state.items.length,
       isProcessing: state.isProcessing,
     };
+  }
+
+  /**
+   * 用户输入队列消费：每次只取队首一条，启动成功后出队。
+   *
+   * 与系统队列一样受 streamManager 互斥约束；失败项保留并暂停队列，
+   * 由前端重试/删除（不静默丢弃）。
+   */
+  async drainUserQueue(sessionId: string): Promise<void> {
+    const state = this.userInputQueue.getState(sessionId);
+    if (!state || state.isProcessing || state.paused) return;
+    if (this.streamManager.hasActiveStream(sessionId)) return;
+
+    const head = this.userInputQueue.peekHead(sessionId);
+    if (!head || head.status !== "queued") return;
+
+    this.userInputQueue.setProcessing(sessionId, true);
+    this.userInputQueue.markRunning(sessionId, head.id);
+    try {
+      await this.startStream({
+        sessionId,
+        userMessage: {
+          content: head.content,
+          ...(head.files?.length ? { files: head.files } : {}),
+          ...(head.injectedBlocks?.length
+            ? { injectedBlocks: head.injectedBlocks }
+            : {}),
+          ...(head.knowledgeBaseIds?.length
+            ? { knowledgeBaseIds: head.knowledgeBaseIds }
+            : {}),
+          ...(head.replaceTurnId
+            ? { replaceTurnId: head.replaceTurnId }
+            : {}),
+        },
+        settingsOverride: head.settingsOverride,
+        source: {
+          kind: "user",
+          clientId: head.clientId,
+          queueItemId: head.id,
+          queueItemIds: [head.id],
+          queuedAt: head.createdAt.toISOString(),
+        },
+      });
+      // 启动成功（回合已在后台运行）：出队，等 turn_finished 再发下一条
+      this.userInputQueue.completeHead(sessionId);
+    } catch (error: any) {
+      const code = error?.response?.code || error?.code;
+      if (code === "SESSION_BUSY" || code === "STREAM_START_FAILED") {
+        this.userInputQueue.resetToQueued(sessionId, head.id);
+        return; // 等下一次 turn_finished
+      }
+      this.logger.error(`用户排队消息启动失败: ${head.id}`, error);
+      this.userInputQueue.markFailed(
+        sessionId,
+        head.id,
+        error?.message || String(error),
+      );
+      this.userInputQueue.pause(sessionId, "error");
+    } finally {
+      this.userInputQueue.setProcessing(sessionId, false);
+    }
+  }
+
+  /**
+   * 立即发送：把目标提升到队首；有活跃流时先停当前回合，
+   * 终态结算里消费 promotion 后恢复消费（不再因 user_cancel 暂停）。
+   */
+  async sendQueuedNow(
+    sessionId: string,
+    itemId: string,
+  ): Promise<UserQueueSnapshot> {
+    const snapshot = this.userInputQueue.requestSendNow(sessionId, itemId);
+    if (this.streamManager.hasActiveStream(sessionId)) {
+      this.streamManager.abortStream(sessionId);
+      return snapshot;
+    }
+    // 空闲：没有需要抢断的回合，提升后直接消费；清掉 promotion 标记
+    this.userInputQueue.consumePromotion(sessionId);
+    this.userInputQueue.resume(sessionId);
+    void this.drainUserQueue(sessionId);
+    return this.userInputQueue.getSnapshot(sessionId);
+  }
+
+  /** 队列状态变化（入队/删除/排序/暂停/提升）后尝试消费 */
+  @OnEvent("chat.user_queue_changed")
+  handleUserQueueChanged(event: { sessionId?: string }): void {
+    if (event?.sessionId) {
+      void this.drainUserQueue(event.sessionId);
+    }
+  }
+
+  private settleUserQueueAfterTurn(
+    sessionId: string,
+    finalReason: string | undefined,
+    normalFinish: boolean,
+  ): void {
+    const promotedId = this.userInputQueue.consumePromotion(sessionId);
+    if (promotedId) {
+      this.userInputQueue.resume(sessionId);
+    } else if (!normalFinish && this.userInputQueue.hasPending(sessionId)) {
+      this.userInputQueue.pause(
+        sessionId,
+        finalReason === "user_cancel" ? "stopped" : "error",
+      );
+    }
+    void this.drainUserQueue(sessionId);
   }
 
   /**
@@ -464,6 +592,7 @@ export class ChatRunnerService {
    * 子 Agent/工作流、Bot 入站消息都经本队列，故这一处即可覆盖。
    */
   hasActiveWork(): boolean {
+    if (this.userInputQueue.hasAnyPending()) return true;
     for (const state of this.queues.values()) {
       if (state.isProcessing || state.items.length > 0) return true;
     }
@@ -782,7 +911,13 @@ export class ChatRunnerService {
       }
 
       const NORMAL_FINISH = new Set(["stop", undefined, "plan_rejected"]);
-      if (NORMAL_FINISH.has(finalReason)) {
+      const normalFinish = NORMAL_FINISH.has(finalReason);
+
+      // 用户队列先结算：正常收尾自动发下一条；停止/出错则暂停等用户操作；
+      // 有"立即发送"意图时优先恢复消费（覆盖暂停）。
+      this.settleUserQueueAfterTurn(sessionId, finalReason, normalFinish);
+
+      if (normalFinish) {
         this.clearQueueRetry(sessionId);
         await this.processQueue(sessionId);
       } else {

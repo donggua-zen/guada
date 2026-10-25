@@ -18,6 +18,7 @@ import { apiService } from "@/services/ApiService";
 import { streamReceiver } from "@/services/modules/StreamReceiver";
 import { projectChunk, resetSessionTurnsTransientState } from "@/services/modules/streamProjector";
 import { usePopup } from "@/composables/usePopup";
+import type { UserQueueSnapshot } from "@/types/session";
 
 export function useSessionEvents() {
   const sessionStore = useSessionStore();
@@ -120,6 +121,12 @@ export function useSessionEvents() {
           .catch(() => {
             /* 补拉失败静默：不影响主流程，下一次建连再试 */
           });
+
+        // 队列补偿：断线期间可能错过 queue_updated；重连后补拉当前会话。
+        // 各会话计数由连接补发的 queues_snapshot 恢复。
+        if (currentSessionId.value) {
+          void refreshQueue(currentSessionId.value);
+        }
       }) ?? (() => {}),
     );
 
@@ -199,6 +206,23 @@ export function useSessionEvents() {
       }),
     );
 
+    // === 用户输入队列事件（M3：服务端权威） ===
+    unsubscribers.push(
+      apiService.onSessionEvent("queue_updated", (event) => {
+        const snapshot = event.payload as unknown as UserQueueSnapshot;
+        if (snapshot?.items) {
+          sessionStore.applyQueueSnapshot(event.sessionId, snapshot);
+        }
+      }),
+    );
+
+    unsubscribers.push(
+      apiService.onSessionEvent("queues_snapshot", (event) => {
+        const counts = (event.payload?.counts ?? {}) as Record<string, number>;
+        sessionStore.setQueueCounts(counts);
+      }),
+    );
+
     // === 流式状态事件 ===
 
     unsubscribers.push(
@@ -252,14 +276,6 @@ export function useSessionEvents() {
           sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
         }
 
-        // 流结束后自动消费队列——放在 source 过滤之前：
-        // 队列是本窗口 store 的本地状态,任何本窗可见的流完成都应尝试消费
-        // (自身流完成触发单窗口排队补发;他窗流完成触发多窗口补发)。
-        // 修复:原先在 source 过滤之后,自身流完成时被跳过 → 单窗口排队卡死。
-        if (status !== "running" && sessionStore.getQueueLength(sessionId) > 0) {
-          drainQueue(sessionId);
-        }
-
         // 忽略自身发起的流(不更新会话对象/未读标记)
         if (event.source === apiService.getClientId()) return;
 
@@ -290,49 +306,19 @@ export function useSessionEvents() {
   }
 
   /**
-   * 消费指定会话的队列
+   * 补拉指定会话的队列快照。
    *
-   * 统一用 fire-and-forget (POST /chat/stream) 发送。
-   * 活动会话：流完成事件触发 drainQueue（排在 source 过滤前,自身流完成也会消费队列）；
-   * 非活动会话：后台运行，用户切回时从后端重新读取消息
+   * 用于打开会话 / SSE 重连：后端不重放历史 queue_updated，
+   * 错过时以本次全量快照为准（revision/epoch 会丢弃更旧的响应）。
    */
-  async function drainQueue(targetSessionId: string) {
-    while (sessionStore.getQueueLength(targetSessionId) > 0) {
-      const item = sessionStore.peekQueue(targetSessionId);
-      if (!item) break;
-
-      sessionStore.updateQueuedMessage(targetSessionId, item.id, {
-        status: "sending",
-      });
-
-      try {
-        await apiService.chat({
-          sessionId: targetSessionId,
-          regenerationMode: "overwrite",
-          userMessage: {
-            content: item.content,
-            files: item.files,
-            knowledgeBaseIds: item.knowledgeBaseIds,
-          },
-        });
-        // 成功：出队
-        sessionStore.dequeueMessage(targetSessionId);
-        return; // 等下一次 stream_finished 触发
-      } catch (error) {
-        const errMsg = (error as Error).message || "";
-        if (
-          errMsg.includes("SessionBusyError") ||
-          errMsg.includes("SESSION_BUSY")
-        ) {
-          sessionStore.updateQueuedMessage(targetSessionId, item.id, {
-            status: "queued",
-          });
-          return; // 等下一次 stream_finished
-        }
-        // 其他错误：出队避免死循环
-        sessionStore.dequeueMessage(targetSessionId);
-        console.error("[useSessionEvents] 队列消息发送失败:", errMsg);
+  async function refreshQueue(sessionId: string): Promise<void> {
+    try {
+      const snapshot = await apiService.fetchSessionQueue(sessionId);
+      if (snapshot) {
+        sessionStore.applyQueueSnapshot(sessionId, snapshot);
       }
+    } catch {
+      /* 补拉失败静默：队列事件/下一次重连会再同步 */
     }
   }
 
@@ -348,5 +334,5 @@ export function useSessionEvents() {
     unsubscribers.length = 0;
   }
 
-  return { init, cleanup, drainQueue };
+  return { init, cleanup, refreshQueue };
 }

@@ -29,6 +29,8 @@ import { SessionEventsController } from "./session-events.controller";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { WorkspaceWatcherService } from "../../common/services/workspace-watcher.service";
 import { ChatRunnerService } from "./chat-runner.service";
+import { UserInputQueueService } from "./user-input-queue.service";
+import { SessionQueueController } from "./session-queue.controller";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { JsonlSessionContextFactory } from "./jsonl-session-context.factory";
 import { CompressionEngine } from "./compaction/compression-engine";
@@ -45,7 +47,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Module({
   imports: [AuthModule, ToolsModule, AgentsModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule, JobsModule],
-  controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, ProjectGroupController, WorkspaceEventsController, SessionEventsController],
+  controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, ProjectGroupController, WorkspaceEventsController, SessionEventsController, SessionQueueController],
   providers: [
     // 会话元数据存储：`sessions/_meta.db`（SQLite），会话域公开仓储，跨域消费者
     // （files/bot-gateway/sub-agent）经 import ChatModule 获取。
@@ -71,6 +73,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     UploadPathService,
     WorkspaceWatcherService,
     SessionEventsService,
+    UserInputQueueService,
     ChatRunnerService,
     JobNotifierService,
     SessionReplayService,
@@ -80,7 +83,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     // 标签解析器管道
     TagParserPipeline,
   ],
-  exports: [SessionMetaStore, AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory],
+  exports: [SessionMetaStore, AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory, UserInputQueueService],
 })
 export class ChatModule implements OnModuleInit {
   // 会话 store 索引预热：本模块在 PersistenceModule（迁移脚手架）之后初始化，

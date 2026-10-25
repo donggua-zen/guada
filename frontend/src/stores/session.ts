@@ -1,7 +1,7 @@
 // stores/session.ts
 import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
-import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings, SessionPlanItem, PendingAsk, ProjectGroup } from '@/types/session'
+import type { Session, SessionState, QueuedMessage, StreamStatus, InputMessageState, SessionSettings, SessionPlanItem, PendingAsk, ProjectGroup, QueuePauseReason, UserQueueSnapshot, UserQueueSnapshotItem } from '@/types/session'
 import type { Turn } from '@/types/message'
 import { resolveProjectBucketId } from '@/utils/projectGroupBucket'
 
@@ -36,6 +36,12 @@ export const useSessionStore = defineStore('session', () => {
 
     const sessions: Ref<Map<string, SessionState>> = ref(new Map())
 
+    /**
+     * 各会话排队消息数（服务端权威计数投影）。
+     * 侧边栏需要为未打开的会话显示角标，不能依赖 SessionState 是否已缓存。
+     */
+    const sessionQueueCounts: Ref<Map<string, number>> = ref(new Map())
+
     /** 非响应式 LRU 访问时间戳(按会话记录最近访问,淘汰时用;不触发 Vue 响应式) */
     const sessionLastAccess = new Map<string, number>()
 
@@ -67,6 +73,9 @@ export const useSessionStore = defineStore('session', () => {
     }
     const hasPendingAsks = (state: SessionState): boolean =>
         !!state.pendingAsks && Object.keys(state.pendingAsks).length > 0
+    /** 持有排队消息的会话不淘汰：队列只在内存里，淘汰即用户输入永久丢失 */
+    const hasQueuedMessages = (state: SessionState): boolean =>
+        state.messageQueue.length > 0
 
     const evictSessionStates = (exceptId?: string, now: number = Date.now()): void => {
         for (const [sid, state] of sessions.value) {
@@ -74,6 +83,8 @@ export const useSessionStore = defineStore('session', () => {
             if (state.streamStatus === 'running') continue
             // 待批（审批/询问等待中）的会话同样不淘汰：卡片状态丢了无法从补发重建
             if (hasPendingAsks(state)) continue
+            // 排队消息尚未补发完：淘汰会静默丢掉用户输入（且无任何持久化可恢复）
+            if (hasQueuedMessages(state)) continue
             if (now - (sessionLastAccess.get(sid) ?? 0) > SESSION_STATE_TTL_MS) {
                 sessions.value.delete(sid)
                 sessionLastAccess.delete(sid)
@@ -86,6 +97,7 @@ export const useSessionStore = defineStore('session', () => {
                 if (sid === exceptId) continue
                 if (sessions.value.get(sid)!.streamStatus === 'running') continue
                 if (hasPendingAsks(sessions.value.get(sid)!)) continue
+                if (hasQueuedMessages(sessions.value.get(sid)!)) continue
                 const t = sessionLastAccess.get(sid) ?? 0
                 if (t < oldestTime) {
                     oldestTime = t
@@ -124,6 +136,9 @@ export const useSessionStore = defineStore('session', () => {
                 settings: {
                 },
                 messageQueue: [],
+                queuePaused: null,
+                queuePromotionId: null,
+                queueRevision: 0,
             })
             sessionLastAccess.set(sessionId, Date.now())
             // 新建缓存后清扫过期/超限（写路径；读路径 peekStreamStatus 零写入）
@@ -206,6 +221,10 @@ export const useSessionStore = defineStore('session', () => {
      */
     const removeSession = (sessionId: string): void => {
         sessionsMap.value.delete(sessionId)
+        // 会话已删除：内容缓存（含排队消息）一并清理，否则残留到 LRU/TTL 才消失
+        sessions.value.delete(sessionId)
+        sessionLastAccess.delete(sessionId)
+        clearQueueCount(sessionId)
     }
 
     /**
@@ -496,54 +515,100 @@ export const useSessionStore = defineStore('session', () => {
         state.streamStatus = status
     }
 
-    // === 消息队列操作 ===
+    // === 消息队列（M3：服务端快照投影） ===
+    //
+    // 队列所有权在后端：本文件只保存快照，所有增删改/排序/暂停都走 REST，
+    // 并通过 applyQueueSnapshot 整块替换。revision + epoch 用于丢弃乱序/跨进程旧快照。
 
-    const enqueueMessage = (sessionId: string, msg: Omit<QueuedMessage, 'id' | 'createdAt' | 'status'>): string => {
-        const state = getSessionState(sessionId)
-        const item: QueuedMessage = {
-            ...msg,
-            id: crypto.randomUUID(),
-            createdAt: Date.now(),
-            status: 'queued',
+    /** 把服务端快照项映射为 UI 视图 */
+    function toQueuedMessage(item: UserQueueSnapshotItem): QueuedMessage {
+        return {
+            id: item.id,
+            content: item.content,
+            files: item.files ?? [],
+            ...(item.knowledgeBaseIds?.length
+                ? { knowledgeBaseIds: item.knowledgeBaseIds }
+                : {}),
+            createdAt: Date.parse(item.createdAt) || Date.now(),
+            status: item.status,
+            ...(item.error ? { error: item.error } : {}),
+            ...(item.replaceTurnId ? { replaceTurnId: item.replaceTurnId } : {}),
+            ...(item.settingsOverride
+                ? {
+                      settingsSnapshot: {
+                          modelId: item.settingsOverride.modelId,
+                          thinkingEffort: item.settingsOverride.thinkingEffort,
+                          maxTokensLimit: item.settingsOverride.maxTokensLimit,
+                          mode: item.settingsOverride.sandboxMode,
+                          planEnabled: item.settingsOverride.planEnabled,
+                      },
+                  }
+                : {}),
         }
-        state.messageQueue.push(item)
-        return item.id
     }
 
-    const dequeueMessage = (sessionId: string): QueuedMessage | null => {
+    /** 应用服务端全量快照；旧 revision 直接丢弃（返回 false） */
+    const applyQueueSnapshot = (sessionId: string, snapshot: UserQueueSnapshot): boolean => {
         const state = getSessionState(sessionId)
-        if (state.messageQueue.length === 0) return null
-        const item = state.messageQueue.shift()!
-        return item
+        const sameEpoch = state.queueEpoch === snapshot.epoch
+        if (sameEpoch && snapshot.revision < (state.queueRevision ?? 0)) {
+            return false
+        }
+        state.queueEpoch = snapshot.epoch
+        state.queueRevision = snapshot.revision
+        state.messageQueue = snapshot.items.map(toQueuedMessage)
+        state.queuePaused = snapshot.paused?.reason ?? null
+        state.queuePromotionId = snapshot.promotionId
+        setQueueCount(sessionId, state.messageQueue.length)
+        return true
     }
 
-    const peekQueue = (sessionId: string): QueuedMessage | null => {
-        const queue = getSessionState(sessionId).messageQueue
-        return queue.length > 0 ? queue[0] : null
-    }
-
+    /** 当前会话队列（渲染路径纯读：不创建缓存） */
     const getMessageQueue = (sessionId: string): QueuedMessage[] => {
-        return getSessionState(sessionId).messageQueue
+        return sessions.value.get(sessionId)?.messageQueue ?? []
     }
 
-    const removeQueuedMessage = (sessionId: string, msgId: string): void => {
-        const state = getSessionState(sessionId)
-        const idx = state.messageQueue.findIndex(m => m.id === msgId)
-        if (idx !== -1) {
-            state.messageQueue.splice(idx, 1)
+    /** 纯读队列长度（渲染路径专用：不创建缓存、不续期） */
+    const peekQueueLength = (sessionId: string): number => {
+        return sessions.value.get(sessionId)?.messageQueue.length ?? 0
+    }
+
+    /** 纯读暂停原因（不创建缓存、不续期） */
+    const queuePauseReason = (sessionId: string): QueuePauseReason | null => {
+        return sessions.value.get(sessionId)?.queuePaused ?? null
+    }
+
+    /** 纯读"即将发送"项 id（UI 标记用） */
+    const queuePromotionId = (sessionId: string): string | null => {
+        return sessions.value.get(sessionId)?.queuePromotionId ?? null
+    }
+
+    /** 单会话计数（侧边栏角标；服务端 queues_snapshot / queue_updated 维护） */
+    const setQueueCount = (sessionId: string, count: number): void => {
+        const next = new Map(sessionQueueCounts.value)
+        if (count > 0) next.set(sessionId, count)
+        else next.delete(sessionId)
+        sessionQueueCounts.value = next
+    }
+
+    /** 连接补发的全量计数快照：整体替换（未列出的会话即无排队） */
+    const setQueueCounts = (counts: Record<string, number>): void => {
+        const next = new Map<string, number>()
+        for (const [sid, count] of Object.entries(counts ?? {})) {
+            if (count > 0) next.set(sid, count)
         }
+        sessionQueueCounts.value = next
     }
 
-    const updateQueuedMessage = (sessionId: string, msgId: string, updates: Partial<QueuedMessage>): void => {
-        const state = getSessionState(sessionId)
-        const idx = state.messageQueue.findIndex(m => m.id === msgId)
-        if (idx !== -1) {
-            state.messageQueue[idx] = { ...state.messageQueue[idx], ...updates }
-        }
+    const peekQueueCount = (sessionId: string): number => {
+        return sessionQueueCounts.value.get(sessionId) ?? 0
     }
 
-    const getQueueLength = (sessionId: string): number => {
-        return getSessionState(sessionId).messageQueue.length
+    const clearQueueCount = (sessionId: string): void => {
+        if (!sessionQueueCounts.value.has(sessionId)) return
+        const next = new Map(sessionQueueCounts.value)
+        next.delete(sessionId)
+        sessionQueueCounts.value = next
     }
 
     /**
@@ -810,7 +875,8 @@ export const useSessionStore = defineStore('session', () => {
                 isWaiting: false,
             }
             state.lastUpdated = Date.now()
-            state.messageQueue = []
+            // 队列由后端持有：清空聊天记录不删除排队消息，
+            // 保留本地投影，等下一次 queue_updated / refreshQueue 对齐。
         }
         clearSidebarState(sessionId)
     }
@@ -851,13 +917,15 @@ export const useSessionStore = defineStore('session', () => {
         sessionPlans,
         setSessionPlans,
         refreshPlans,
-        enqueueMessage,
-        dequeueMessage,
-        peekQueue,
+        applyQueueSnapshot,
         getMessageQueue,
-        removeQueuedMessage,
-        updateQueuedMessage,
-        getQueueLength,
+        peekQueueLength,
+        queuePauseReason,
+        queuePromotionId,
+        setQueueCount,
+        setQueueCounts,
+        peekQueueCount,
+        clearQueueCount,
         getInputMessage,
         setInputMessage,
         updateSessionTitle,

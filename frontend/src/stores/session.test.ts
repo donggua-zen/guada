@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 import { useSessionStore, UNGROUPED_ID } from "./session";
+import type { UserQueueSnapshot } from "@/types/session";
 
 /**
  * sessionStore 流状态机测试
@@ -487,5 +488,145 @@ describe("sessionStore 目录分组视图", () => {
     expect(store.getVisibleSessionsByProjectGroup("pg-a", groups).map((s) => s.id)).toEqual([
       "a1",
     ]);
+  });
+});
+
+/** 队列快照投影（M3：服务端权威） */
+describe("sessionStore 队列快照投影", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  function snapshot(overrides: Partial<UserQueueSnapshot> = {}): UserQueueSnapshot {
+    return {
+      sessionId: "s1",
+      epoch: "epoch-1",
+      revision: 1,
+      paused: null,
+      promotionId: null,
+      isProcessing: false,
+      items: [
+        {
+          id: "a",
+          content: "A",
+          files: [],
+          status: "queued",
+          createdAt: "2026-10-25T00:00:00.000Z",
+        },
+        {
+          id: "b",
+          content: "B",
+          files: [],
+          status: "running",
+          createdAt: "2026-10-25T00:00:01.000Z",
+        },
+      ],
+      ...overrides,
+    };
+  }
+
+  it("应用快照：整块替换并映射 UI 视图（createdAt → 毫秒）", () => {
+    const store = useSessionStore();
+    expect(store.applyQueueSnapshot("s1", snapshot())).toBe(true);
+
+    const queue = store.getMessageQueue("s1");
+    expect(queue.map((m) => m.content)).toEqual(["A", "B"]);
+    expect(queue.map((m) => m.status)).toEqual(["queued", "running"]);
+    expect(queue[0].createdAt).toBe(Date.parse("2026-10-25T00:00:00.000Z"));
+    expect(store.peekQueueLength("s1")).toBe(2);
+    expect(store.peekQueueCount("s1")).toBe(2);
+  });
+
+  it("revision 旧快照丢弃；epoch 变化后重新接受", () => {
+    const store = useSessionStore();
+    expect(store.applyQueueSnapshot("s1", snapshot({ revision: 5 }))).toBe(true);
+    // 旧 revision 丢弃
+    expect(
+      store.applyQueueSnapshot(
+        "s1",
+        snapshot({
+          revision: 4,
+          items: [
+            {
+              id: "old",
+              content: "OLD",
+              files: [],
+              status: "queued",
+              createdAt: "2026-10-25T00:00:00.000Z",
+            },
+          ],
+        }),
+      ),
+    ).toBe(false);
+    expect(store.getMessageQueue("s1")[0].content).toBe("A");
+
+    // 后端重启（epoch 变化）：revision 归零也要接受
+    expect(
+      store.applyQueueSnapshot(
+        "s1",
+        snapshot({
+          epoch: "epoch-2",
+          revision: 1,
+          items: [
+            {
+              id: "c",
+              content: "C",
+              files: [],
+              status: "queued",
+              createdAt: "2026-10-25T00:00:02.000Z",
+            },
+          ],
+        }),
+      ),
+    ).toBe(true);
+    expect(store.getMessageQueue("s1").map((m) => m.content)).toEqual(["C"]);
+  });
+
+  it("暂停原因、promotion、失败原因透传", () => {
+    const store = useSessionStore();
+    store.applyQueueSnapshot(
+      "s1",
+      snapshot({
+        paused: { reason: "stopped", at: "2026-10-25T00:00:00.000Z" },
+        promotionId: "b",
+        items: [
+          {
+            id: "b",
+            content: "B",
+            files: [],
+            status: "failed",
+            error: "boom",
+            createdAt: "2026-10-25T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    expect(store.queuePauseReason("s1")).toBe("stopped");
+    expect(store.queuePromotionId("s1")).toBe("b");
+    expect(store.getMessageQueue("s1")[0]).toMatchObject({
+      status: "failed",
+      error: "boom",
+    });
+  });
+
+  it("计数快照整体替换；removeSession 清理计数", () => {
+    const store = useSessionStore();
+    store.setQueueCounts({ s1: 2, s2: 1 });
+    expect(store.peekQueueCount("s1")).toBe(2);
+    expect(store.peekQueueCount("s2")).toBe(1);
+
+    // 未列出的会话即无排队
+    store.setQueueCounts({ s1: 3 });
+    expect(store.peekQueueCount("s2")).toBe(0);
+
+    store.removeSession("s1");
+    expect(store.peekQueueCount("s1")).toBe(0);
+  });
+
+  it("getMessageQueue 对未缓存会话返回空数组且不创建缓存", () => {
+    const store = useSessionStore();
+    expect(store.getMessageQueue("missing")).toEqual([]);
+    expect(store.peekStreamStatus("missing")).toBeUndefined();
   });
 });

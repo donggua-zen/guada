@@ -36,6 +36,10 @@ import { createMockMethods, shouldEnableMock } from "./mock/MockApiService";
 import { modelApi, type ModelApi } from "./modules/model.api";
 import { agentApi, type AgentApi } from "./modules/agent.api";
 import { sessionApi, type SessionApi } from "./modules/session.api";
+import {
+  sessionQueueApi,
+  type SessionQueueApi,
+} from "./modules/session-queue.api";
 import { workspaceApi, type WorkspaceApi } from "./modules/workspace.api";
 import { messageApi, type MessageApi } from "./modules/message.api";
 import { fileUploadApi, type FileUploadApi } from "./modules/file-upload.api";
@@ -63,6 +67,7 @@ interface ApiService
   extends ModelApi,
     AgentApi,
     SessionApi,
+    SessionQueueApi,
     WorkspaceApi,
     MessageApi,
     FileUploadApi,
@@ -350,6 +355,7 @@ Object.assign(
   modelApi,
   agentApi,
   sessionApi,
+  sessionQueueApi,
   workspaceApi,
   messageApi,
   fileUploadApi,

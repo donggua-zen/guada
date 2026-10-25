@@ -12,6 +12,18 @@ import { t } from "@/locales";
 import type { FileRef } from "@/types/stream/content-block.types";
 
 /**
+ * 回合级设置覆盖（排队消息补发用）：只影响本回合，不写回会话设置。
+ * 后端按白名单校验，非法值返回 400 INVALID_SETTINGS_OVERRIDE。
+ */
+export interface ChatSettingsOverride {
+  modelId?: string;
+  thinkingEffort?: string;
+  maxTokensLimit?: number | null;
+  sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
+  planEnabled?: boolean;
+}
+
+/**
  * 流式对话参数
  */
 export interface ChatStreamParams {
@@ -19,6 +31,8 @@ export interface ChatStreamParams {
   regenerationMode?: string | null;
   assistantMessageId?: string | null;
   resumeData?: unknown;
+  /** 仅排队消息补发时传入 */
+  settingsOverride?: ChatSettingsOverride;
   // 用户消息参数
   // overwrite 模式：按需设置 content/files/replaceTurnId/knowledgeBaseIds，不设置 id
   // resume 模式：只需设置 id;resume 复用既有回合,另带 turnId(回合外壳 id,与消息 id 解耦)
@@ -41,6 +55,14 @@ export interface ChatStreamParams {
  */
 export interface ChatStreamResponse {
   ok?: boolean;
+  /** true = 后端判定会话忙碌，已进入用户输入队列 */
+  queued?: boolean;
+  /** true = 已直接启动回合 */
+  started?: boolean;
+  /** queued 时的队列项 id / 快照版本 */
+  itemId?: string;
+  revision?: number;
+  epoch?: string;
   localCommand?: {
     name: string;
     instructions?: string;
@@ -85,6 +107,7 @@ export class ChatStreamService {
       assistantMessageId = null,
       resumeData,
       userMessage,
+      settingsOverride,
     } = params;
 
     const isSubscribeMode = regenerationMode === "subscribe";
@@ -114,6 +137,7 @@ export class ChatStreamService {
           stream: true,
           resumeData,
           userMessage,
+          ...(settingsOverride ? { settingsOverride } : {}),
         }),
         signal: controller.signal,
       });
