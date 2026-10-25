@@ -1,7 +1,8 @@
 <template>
-  <div class="flex relative overflow-hidden">
-    <!-- 遮罩层：仅在移动端悬浮抽屉启用时显示 -->
-    <div v-if="isMobileDrawer && sidebarVisible" class="absolute inset-0 bg-black opacity-40 z-19"
+  <div class="flex relative overflow-hidden" :class="{ 'mobile-drawer-mode': isMobileDrawer }">
+    <!-- 遮罩层：仅移动端悬浮抽屉启用时显示（与抽屉容器同级 1500，低于 GdDialog 遮罩 2000） -->
+    <div v-if="isMobileDrawer && sidebarVisible" class="absolute inset-0 bg-black opacity-40"
+      style="z-index: 1500"
       @click="$emit('update:sidebarVisible', false)"></div>
     <!-- 侧边栏容器 -->
     <!-- 并排布局（桌面与小窗统一）：容器不带 z-index——内容卡片的左侧外阴影要绘制在侧栏右缘之上；
@@ -14,7 +15,7 @@
           width: sidebarContainerWidth,
           maxWidth: sidebarContainerWidth,
           minWidth: sidebarContainerWidth,
-          zIndex: isMobileDrawer ? zIndex : undefined
+          zIndex: isMobileDrawer ? 1500 : undefined
         }">
       <div class="absolute right-0 h-full"
         :style="{ width: (sidebarWidth ?? 278) < 0 ? '100vw' : `${sidebarWidth ?? 278}px` }">
@@ -62,25 +63,20 @@ import {
   ArrowBackIosNewTwotone as ArrowLeftTwotone,
   ArrowForwardIosTwotone as ArrowRightTwotone
 } from "@vicons/material";
-import { useWindowSize } from '@vueuse/core'
-import { SIDEBAR_AUTO_COLLAPSE_WIDTH } from '@/constants'
+import { isMobileDevice } from '@/composables/useDevice'
 
-const { width: windowWidth } = useWindowSize()
-/** 小窗 = 侧栏自动收起的同一阈值（Tailwind 默认 lg 断点），也是悬浮抽屉的启用条件 */
-const isSmallWindow = computed(() => windowWidth.value > 0 && windowWidth.value < SIDEBAR_AUTO_COLLAPSE_WIDTH)
-
-/** 小窗下侧栏改为覆盖内容区的悬浮抽屉（class 上的 max-lg:absolute 与之一致）。
- *  当前停用——悬浮抽屉层受制于自身 z-index：它低于弹窗浮层（GdDialog 遮罩 2000），
- *  于是内容区弹窗的层级会随抽屉开合而变（弹窗被抽屉连同其遮罩一起压住）。
- *  待移动端专项适配时重新启用，并一并处理层级与「抽屉 / 弹窗共存」策略。 */
-const MOBILE_DRAWER_ENABLED: boolean = false
-const isMobileDrawer = computed(() => MOBILE_DRAWER_ENABLED && isSmallWindow.value)
+/** 移动设备（手机/平板浏览器）：侧栏改为覆盖内容区的悬浮抽屉。
+ *  判定基准是设备类型而非窗口宽度——Electron 小窗（700-800px）绝不触发抽屉。
+ *  抽屉层 z-index=1500：低于 GdDialog 遮罩（2000），弹窗在抽屉打开时仍正常置顶；
+ *  实现方式给抽屉容器与遮罩统一挂 CSS 变量 --sidebar-drawer-z，模板不再写死。 */
+const isMobileDrawer = computed(() => isMobileDevice)
 // Props 类型化
 const props = withDefaults(defineProps<{
   sidebarVisible?: boolean;
   sidebarWidth?: number;
   showToggleButton?: boolean;
   sidebarPosition?: 'left' | 'right';
+  /** @deprecated 抽屉态 z-index 已固定为 1500（低于 GdDialog 遮罩 2000），保留参数避免外部调用报错 */
   zIndex?: number;
   /** 是否启用桌面端拖拽调宽把手 */
   resizable?: boolean;
@@ -223,5 +219,21 @@ onUnmounted(() => {
   inset: 0;
   z-index: 99999;
   cursor: col-resize;
+}
+
+/* 移动端抽屉：覆盖内容区而非并排挤压。模板里 max-lg:absolute 只在小窗（<1024）命中，
+   移动平板 ≥1024 或细窄屏兜底为恒 absolute；遮罩与容器同层级（1500），
+   低于 GdDialog 遮罩 2000，弹窗浮层不受抽屉开合影响。
+   选择器用 .h-full.relative（抽屉容器），不用 nth-child——遮罩按需渲染会改变子序 */
+.mobile-drawer-mode>div.h-full.relative {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+}
+
+/* 触屏：抽屉里禁用拖宽把手与 hover 高亮（无鼠标，把手无意义） */
+.mobile-drawer-mode .sidebar-resize-handle {
+  display: none;
 }
 </style>

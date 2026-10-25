@@ -941,3 +941,136 @@ html.dark .avatar-auto {
   background: hsl(var(--avatar-hue, 0), 30%, 22%);
   color: hsl(var(--avatar-hue, 0), 45%, 68%);
 }
+
+/* ==================== 移动端适配（html.mobile 门控，Electron 永不命中） ==================== */
+
+/* 页面头部行（标题 + 按钮组）：flex-row + shrink-0 按钮组在窄屏会把标题列挤成"一字一行"。
+   目标结构（知识库/Skills/机器人管理页通用）：
+   <div class="... md:max-w-260 ...">          ← 容器本身也是头部行（justify-between 直接写在它身上）
+     <div class="min-w-0">标题+副标题</div>
+     <div class="flex items-center gap-2 shrink-0">按钮组</div>
+   移动端：容器改为纵向堆叠；按钮组换行铺满 */
+html.mobile .md\:max-w-260.flex.items-center.justify-between {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+html.mobile .md\:max-w-260.flex.items-center.justify-between > .shrink-0 {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+html.mobile .md\:max-w-260.flex.items-center.justify-between .el-input {
+  width: 100% !important;
+  flex: 1 1 120px;
+}
+
+/* 子级头部行（头部行嵌在内容容器里，而非容器本身）：同样堆叠 */
+html.mobile .md\:max-w-260 .flex.items-center.justify-between.gap-4,
+html.mobile .skills-page .flex.items-center.justify-between.gap-4 {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+html.mobile .md\:max-w-260 .flex.items-center.justify-between.gap-4 > .shrink-0,
+html.mobile .skills-page .flex.items-center.justify-between.gap-4 > .shrink-0 {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+html.mobile .md\:max-w-260 .flex.items-center.justify-between.gap-4 .el-input {
+  width: 100% !important;
+  flex: 1 1 120px;
+}
+
+/* 网格卡片（知识库/机器人 300px、技能 420px 最小列宽）：移动端强制单列 */
+html.mobile .md\:max-w-260 .grid {
+  grid-template-columns: 1fr !important;
+}
+
+/* 分组/工作目录选择按钮行（聊天输入区上方）：允许换行，不再溢出裁剪 */
+html.mobile .flex.items-center.gap-1\.5.flex-wrap,
+html.mobile .flex.items-center.flex-wrap {
+  flex-wrap: wrap;
+}
+
+/* 设置页左侧分类导航列：移动端改为顶部横向滚动条 */
+html.mobile .settings-nav-vertical {
+  flex-direction: row;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* 触屏命中区：header-icon-btn 与工具按钮扩到 ≥40px（伪元素外扩） */
+html.mobile.touch .header-icon-btn {
+  position: relative;
+}
+
+html.mobile.touch .header-icon-btn::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+/* el-tabs 移动端：tab 可横向滚动不换行挤压 */
+html.mobile .el-tabs__nav-wrap:not(.is-scrollable) .el-tabs__nav-scroll {
+  overflow-x: auto;
+}
+
+/* 设置页表单卡片行（标签列 + 控件）：移动端纵向堆叠，控件占满行宽 */
+html.mobile .md\:max-w-220 .flex.items-center.justify-between,
+html.mobile .md\:max-w-220 .px-4.py-3\.5.flex.items-center.justify-between {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+html.mobile .md\:max-w-220 .flex.items-center.justify-between > .shrink-0 {
+  width: 100%;
+  max-width: none;
+}
+
+/* ChatInputToolbar（工作目录/远程目录/分组按钮行）：3 按钮 nowrap 的 min-content
+   会把整个内容区顶到 440px+ 溢出视口。移动端允许换行，按钮文案可截断 */
+html.mobile .content-card .-mb-4.pb-5 {
+  flex-wrap: wrap;
+  row-gap: 0.25rem;
+}
+
+html.mobile .workspace-btn {
+  max-width: 9.5rem;
+}
+
+html.mobile .workspace-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 会话/分组操作按钮：桌面 hover 才显示（opacity-0 + group-hover），
+   触屏没有 hover——移动端常显（降低透明度不抢标题） */
+html.mobile .opacity-0.pointer-events-none.group-hover\:opacity-100,
+html.mobile .opacity-0.group-hover\:opacity-100,
+html.mobile .opacity-0.group-hover\/mode-row\:opacity-100 {
+  opacity: 0.55;
+  pointer-events: auto;
+}
+
+/* 会话操作触发按钮命中区扩大（桌面 28px 偏小） */
+html.mobile.touch .session-action-trigger {
+  position: relative;
+  padding: 0.5rem;
+}
+
+/* ChatInput 工具按钮（28px）：触屏伪元素外扩命中区到 ≥44px */
+html.mobile.touch .tool-btn {
+  position: relative;
+}
+
+html.mobile.touch .tool-btn::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}

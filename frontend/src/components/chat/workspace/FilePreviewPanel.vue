@@ -1000,7 +1000,8 @@ watch(() => props.tab.path, (newPath, oldPath) => {
     white-space: pre-wrap;
     word-break: break-all;
     padding-left: 1em;
-    min-width: 800px;
+    /* 桌面下保持 800px（换行对齐列）；移动端窄容器按 100% 收缩，文字自然折行 */
+    min-width: min(800px, 100%);
 }
 </style>
 

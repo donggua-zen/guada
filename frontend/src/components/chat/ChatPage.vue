@@ -4,8 +4,62 @@
     <!-- 守卫必须同时看路由：首帧 activeSessionId 还是 null（路由在 onMounted 才处理，晚于子组件挂载），
          只看它会让 ChatPanel/工作目录条拿着哨兵 id "new-session" 挂载并发出 workspace-path 请求 -->
     <template v-if="sessionStore.activeSessionId !== NEW_SESSION_ID && routeSessionId !== NEW_SESSION_ID">
-      <!-- 可拖拽分割区域 -->
-      <div ref="splitContainerRef" class="flex-1 overflow-hidden">
+      <!-- 移动端：Splitpanes 的 min-pane2=320 在窄屏必然挤死（390px - 320px 只剩 70px），
+           改为两态切换——聊天列全宽；工作区打开时全屏覆盖（同一 WorkspaceSidebar 实例与数据流） -->
+      <div v-if="isMobileDevice" class="flex-1 overflow-hidden relative">
+        <div v-show="!layoutStore.workspaceVisible" class="absolute inset-0 flex flex-col">
+          <PageHeader :title="mainSession?.title || ''">
+            <template #title-actions>
+              <DropdownMenu @command="handleMoreSelect">
+                <div class="header-icon-btn">
+                  <MoreHorizontal24Regular class="w-5 h-5" />
+                </div>
+                <template #dropdown>
+                  <DropdownMenuItem command="copy-session-id">
+                    <span class="flex items-center gap-2">
+                      <ContentCopyOutlined class="w-4 h-4" />
+                      <span>{{ t('chat.header.copySessionId') }}</span>
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem command="clear">
+                    <span class="flex items-center gap-2">
+                      <DeleteTwotone class="w-4 h-4" />
+                      <span>{{ t('chat.header.clearRecords') }}</span>
+                    </span>
+                  </DropdownMenuItem>
+                </template>
+              </DropdownMenu>
+            </template>
+          </PageHeader>
+          <Teleport :disabled="true" to="#floating-chat">
+            <ChatPanel ref="chatPanelRef" :session="mainSession" :session-id="routeSessionId ?? undefined"
+              :sub-sessions="subSessions"
+              :aside-width="0" :aside-reserve="0"
+              @container-resize="onChatContainerResize"
+              @save-settings="handleSaveSessionSettings"
+              @select-agent="handleSelectAgent" />
+          </Teleport>
+        </div>
+        <!-- 移动端工作区：全屏覆盖，关闭即回聊天列 -->
+        <div v-if="layoutStore.workspaceVisible && mainSession && mainSession.id === routeSessionId"
+          class="absolute inset-0 z-20 flex flex-col bg-(--gd-color-bg)">
+          <PageHeader :title="mainSession?.title || ''">
+            <template #actions>
+              <div class="header-icon-btn" @click="layoutStore.setWorkspaceVisible(false)">
+                <Dismiss24Regular class="w-5 h-5" />
+              </div>
+            </template>
+          </PageHeader>
+          <div class="flex-1 min-h-0">
+            <WorkspaceSidebar :session-id="mainSession.id"
+              :sub-sessions="subSessions"
+              @insert-to-input="handleInsertToInput" @insert-snip="handleInsertSnip" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 桌面：可拖拽分割区域 -->
+      <div v-else ref="splitContainerRef" class="flex-1 overflow-hidden">
         <GdSplitpanes :split-size="layoutStore.workspaceFullscreen ? 0 : (layoutStore.workspaceVisible ? workspaceSize : 100)"
           :min-size="layoutStore.workspaceFullscreen ? 0 : 30" :max-size="85" :min-pane2-size="320" @resize="onPaneResize" @resized="onPaneResized">
           <template #pane1>
@@ -151,6 +205,7 @@ import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import { useTabStore } from "@/stores/tab";
 import { useWorkflowRunsStore } from "@/stores/workflowRuns";
 import { useTitle } from '@/composables/useTitle';
+import { isMobileDevice } from '@/composables/useDevice';
 import type { Session, CreateSessionRequest, InputMessageState } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { SessionEvent } from '@/services/modules/SessionEventsService';
@@ -169,7 +224,7 @@ import {
   // FileDownloadOutlined,
   // FileUploadOutlined
 } from "@vicons/material";
-import { PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular, MoreHorizontal24Regular } from "@vicons/fluent";
+import { PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular, MoreHorizontal24Regular, Dismiss24Regular } from "@vicons/fluent";
 import { VsCode, WindowsExplorer, Finder } from "@/components/icons";
 import { TerminalOutlined } from "@vicons/material";
 import { ElMessage } from "element-plus";

@@ -6,6 +6,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ai_chat_web</title>
     <script>
+      // 移动设备标记：html.mobile / html.mobile.touch。
+      // 判定基准是设备类型而非窗口宽度——Electron（preload 注入 electronAPI）永不进入移动模式，
+      // 避免 700-800px 小窗被宽度媒体查询误判。与 composables/useDevice.ts 保持同一逻辑。
+      (function () {
+        try {
+          var isElectron = window.electronAPI !== undefined;
+          var params = new URLSearchParams(location.search);
+          var devOverride = params.get('mobile') === '1';
+          var ua = navigator.userAgent;
+          var mobileUA = /Android|iPhone|iPad|iPod|Mobile|Silk/i.test(ua) ||
+            (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+          var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+          if (!isElectron && (mobileUA || coarse || devOverride)) {
+            document.documentElement.classList.add('mobile');
+            if (coarse) document.documentElement.classList.add('touch');
+          }
+        } catch (e) { /* 检测失败按桌面处理 */ }
+      })();
+    </script>
+    <script>
       // 首帧防闪烁：在 bundle 加载前同步应用暗色 class 与持久化主题 data-theme，
       // 使 style.css 的暗色 CSS 变量首帧即生效（避免白底→主题/暗色的闪变）。
       // 主题 CSS（内置 public/ 或插件 assets）由 useTheme 顶层 applyThemePreset 补 link；

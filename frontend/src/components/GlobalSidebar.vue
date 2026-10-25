@@ -370,11 +370,13 @@ import { ref, computed, watch, onMounted, markRaw } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useLayoutStore } from '../stores/layout'
 import { useSessionStore } from '../stores/session'
 import { useWorkflowRunsStore } from '../stores/workflowRuns'
 import { useSessionGroupStore, GENERAL_PROJECT_GROUP_ID } from '../stores/sessionGroup'
 import { UNGROUPED_ID } from '../stores/session'
 import { useTheme, type ThemeMode } from '../composables/useTheme'
+import { isMobileDevice } from '../composables/useDevice'
 import { usePopup } from '../composables/usePopup'
 import { useFullscreen } from '../composables/useFullscreen'
 import { Avatar, ScrollContainer, SegmentedToggle } from './ui'
@@ -431,6 +433,7 @@ const { isFullscreen } = useFullscreen()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const layoutStore = useLayoutStore()
 const sessionStore = useSessionStore()
 const sessionGroupStore = useSessionGroupStore()
 // 工作流 run 缓存（内联卡片/审阅标签共用）：会话删除时按会话释放
@@ -986,10 +989,14 @@ const selectSession = (session: Session) => {
   // 进入会话时标记为已读
   sessionStore.setSidebarFlag(session.id, 'unread', false)
   router.replace({ name: 'Chat', params: { sessionId: session.id } })
+  // 移动端抽屉：选择会话后自动收起侧栏（桌面并排布局不受影响）
+  if (isMobileDevice) layoutStore.setSidebarVisible(false)
 }
 
 // 处理导航点击
 const handleNavClick = (tab: string) => {
+  // 移动端抽屉：导航跳转后自动收起侧栏
+  if (isMobileDevice) layoutStore.setSidebarVisible(false)
   if (tab === 'chat') {
     router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
   } else if (tab === 'agents') {

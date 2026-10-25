@@ -45,6 +45,8 @@ export default defineConfig({
     },
   },
   server: {
+    // 允许局域网真机访问（手机联调移动端适配）；不影响桌面 localhost 访问
+    host: true,
     proxy: {
       '/api/v1': {
         target: 'http://localhost:3000',

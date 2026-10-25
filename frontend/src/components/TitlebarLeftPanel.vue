@@ -1,11 +1,12 @@
 <template>
   <div class="flex items-center px-2 h-10 select-none drag-region shrink-0">
     <div class="flex items-center h-full no-drag">
-      <!-- macOS 下红绿灯占用左上角，隐藏 logo 与文案为侧边栏腾出空间 -->
+      <!-- macOS 下红绿灯占用左上角，隐藏 logo 与文案为侧边栏腾出空间；
+           移动端省掉 logo/文案/更新胶囊的宽度，保证搜索等按钮不被挤出视口 -->
       <!-- 尺寸取整数盒：只写 h-6 时宽度由图片固有比例算出（实测 22.31px），
            会把后面的文案与搜索/调试按钮整体推到小数 x 上（实测 46.31 / 114.56） -->
-      <img v-if="!isMac" :src="logoPath" class="h-6 w-6 object-contain ml-2 mr-2" />
-      <span v-if="!isMac" class="text-xs font-normal text-(--gd-titlebar-text-color) opacity-80 mr-3">GuaDa AI</span>
+      <img v-if="!isMac && !isMobileDevice" :src="logoPath" class="h-6 w-6 object-contain ml-2 mr-2" />
+      <span v-if="!isMac && !isMobileDevice" class="text-xs font-normal text-(--gd-titlebar-text-color) opacity-80 mr-3">GuaDa AI</span>
 
       <!-- 搜索按钮 -->
       <GdTooltip v-if="authStore.isAuthenticated" :content="t('ui.titlebar.searchSession')" placement="bottom">
@@ -91,6 +92,7 @@ import UpdateDialog from './UpdateDialog.vue'
 import SessionSearchDialog from './SessionSearchDialog.vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import { isMobileDevice } from '@/composables/useDevice'
 import { useAuthStore } from '@/stores/auth'
 import { useUpdateStore } from '@/stores/update'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
