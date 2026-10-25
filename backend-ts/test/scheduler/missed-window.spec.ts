@@ -183,7 +183,11 @@ describe("TaskSchedulerService 错过窗口留痕", () => {
     await job.__callback();
 
     const fresh = await storage.getTaskById(task.id);
-    expect(new Date(fresh!.nextRunAt!).getTime()).toBeGreaterThan(Date.now() + 60_000);
+    // 断言相对「派发前的旧水位」推进（旧值即 now，过期水位）。不用 now+60s：
+    // 5 分钟 cron 的下一槽位可能距当前不足 60 秒，断言会随运行时刻随机失败。
+    expect(new Date(fresh!.nextRunAt!).getTime()).toBeGreaterThan(
+      new Date(task.nextRunAt!).getTime(),
+    );
     // 失败由执行日志负责呈现，不应该再被记成「错过」
     await expect(storage.getAllLogs()).resolves.toHaveLength(0);
   });

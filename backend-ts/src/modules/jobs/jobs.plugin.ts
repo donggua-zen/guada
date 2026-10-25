@@ -38,6 +38,9 @@ export class JobsPlugin extends PluginBase {
       description: "Manage long-running background work by job id.",
       activator:
         "Track and interact with background jobs started by tools such as run_command or subagent_spawn.",
+      // 消费方跟随生产者：模型可发起的后台作业生产者（shell / subagent / workflow）
+      // 全部被关闭时，job 工具族成为空壳——依赖缺失整包隐藏（scheduler 无 AI 入口不计入）。
+      requiresAnyKits: ["shell:shell", "sub_agent:subagent", "workflow:workflow"],
     });
 
     kit.registerTool({

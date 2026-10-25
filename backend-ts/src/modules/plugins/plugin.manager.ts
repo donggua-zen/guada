@@ -21,6 +21,7 @@ import { ISessionContext } from "../chat/session-context";
 import { CommandProviderRegistry } from "../commands/command-provider-registry.service";
 import { NlsService } from "./i18n/nls.service";
 import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
+import { isToolkitAllowedByRoleConfig } from "./utils/role-toolkit-filter";
 
 // ──
 
@@ -354,14 +355,51 @@ export class PluginManager {
     // 全局层 → 智能体层：两个配置各自独立解析，互不耦合
     const stateMap = await this.resolveGlobalLayer();
     this.applyRoleLayer(stateMap, roleCfg);
+    const kitAvailability = this.buildKitAvailability(stateMap, roleCfg);
 
     const result: ResolvedPluginInfo[] = [];
     for (const [, state] of stateMap) {
       result.push(
-        await this.buildPluginResult(state, skipHandler, session, roleCfg),
+        await this.buildPluginResult(
+          state,
+          skipHandler,
+          session,
+          roleCfg,
+          kitAvailability,
+        ),
       );
     }
     return result;
+  }
+
+  /**
+   * 构建全量工具包可用性快照（"pluginId:kitId" → 是否可用），
+   * 供 requiresAnyKits 依赖判定消费。
+   *
+   * 可用 = ① 所属插件全局启用（两层状态此时已对全部插件算完）
+   *      + ② 工具包未被智能体层拒；自治理（governance:"self"）工具包
+   *        不参与 applyRoleLayer，改按其自有条目用 isToolkitAllowedByRoleConfig 裁决
+   *        （与各自 handler 的判定语义一致）。
+   * 刻意静态：不执行依赖包的 handler，预览/无 session 路径同样可判定。
+   */
+  private buildKitAvailability(
+    stateMap: Map<string, PluginResolutionState>,
+    roleCfg: RolePluginConfig | undefined,
+  ): Map<string, boolean> {
+    const availability = new Map<string, boolean>();
+    for (const [id, state] of stateMap) {
+      for (const kitReg of PluginRegistry.getToolKits(id)) {
+        const allowed =
+          kitReg.def.governance === "self"
+            ? isToolkitAllowedByRoleConfig(
+                roleCfg?.[id],
+                kitReg.def.id,
+              )
+            : !state.deniedToolkits.has(kitReg.def.id);
+        availability.set(`${id}:${kitReg.def.id}`, state.enabled && allowed);
+      }
+    }
+    return availability;
   }
 
   /**
@@ -488,6 +526,7 @@ export class PluginManager {
     skipHandler: boolean,
     session?: ISessionContext,
     roleCfg?: RolePluginConfig,
+    kitAvailability?: Map<string, boolean>,
   ): Promise<ResolvedPluginInfo> {
     const manifest = state.manifest;
     const allTools = [
@@ -530,10 +569,18 @@ export class PluginManager {
       const isSelfGoverned = kitReg.def.governance === "self";
       const denied =
         !isSelfGoverned && state.deniedToolkits.has(kitReg.def.id);
+      // requiresAnyKits 依赖判定（OR 语义）：声明的生产者工具包全部不可用时整包隐藏。
+      // enabled 保持 true——配置层并未拒绝本包，只是"依赖缺失"；loadMode=none
+      // 让工具不进 enabledTools、提示词不进 PromptCollector，等价于"从未注册"。
+      const depsUnmet =
+        !!kitReg.def.requiresAnyKits?.length &&
+        !kitReg.def.requiresAnyKits.some((dep) => kitAvailability?.get(dep));
       let loadMode: ToolKitLoadMode = kitReg.def.loadMode || "eager";
       let activator = kitReg.def.activator;
 
-      if (!denied) {
+      if (depsUnmet) {
+        loadMode = "none";
+      } else if (!denied) {
         try {
           if (kitReg.def.handler && !skipHandler && session) {
             const runtime = await kitReg.def.handler({

@@ -254,4 +254,45 @@ describe("JobNotifierService", () => {
       }),
     );
   });
+
+  it("job 工具族对该会话隐藏时，通知正文不带 Use job_read 指引", async () => {
+    const pluginManager = {
+      resolvePlugins: jest.fn(async () => [
+        {
+          plugin: { id: "jobs" },
+          enabledToolKits: [{ id: "jobs", loadMode: "none" }],
+        },
+      ]),
+    };
+    const sessionService = {
+      getSessionById: jest.fn(async () => ({ settings: {} })),
+    };
+    notifier = new JobNotifierService(
+      chatRunner as any,
+      registry,
+      pluginManager as any,
+      sessionService as any,
+    );
+
+    const { spec, done } = makeSpec();
+    const id = registry.start(spec);
+    done.resolve({ status: "completed", exitCode: 0 });
+    await flushAsync();
+
+    await notifier.handleJobSettled({
+      sessionId: "s1",
+      job: registry.get(id, "s1")!,
+      notify: true,
+    });
+
+    expect(pluginManager.resolvePlugins).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      true,
+    );
+    const text = chatRunner.enqueueMessage.mock.calls[0][0].blocks[0].text;
+    expect(text).not.toContain("Use job_read");
+    // 状态正文照常保留（工具隐藏只影响指引，不影响通知本身）
+    expect(text).toContain(`Background job ${id}`);
+  });
 });

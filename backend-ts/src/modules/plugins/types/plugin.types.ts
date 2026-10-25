@@ -257,6 +257,15 @@ export interface ToolKitDef {
    * 运行时过滤机制不变，只是过滤输入由自有界面写入、裁决权在该工具包自己手里。
    */
   governance?: "self";
+  /**
+   * 依赖的生产者工具包（"pluginId:kitId"）。OR 语义：任一可用则本包可用，
+   * 全部不可用 → loadMode:"none"（工具与提示词均不进入运行时，等价于"从未注册"）。
+   *
+   * 判定刻意只基于配置层（插件全局启停 + 智能体层裁剪/自治理条目），
+   * 不递归执行依赖工具包的 handler——依赖包的运行时动态条件（如 agents 白名单）
+   * 不参与，避免预览/无 session 路径（/plugins/query）无法判定。
+   */
+  requiresAnyKits?: string[];
   /** 激活词/触发说明：告诉 AI 何时加载本工具包 */
   activator?: string;
   /** 运行时解析器：返回此工具包的动态属性 */

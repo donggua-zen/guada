@@ -143,6 +143,7 @@ backend-ts 现有 185 个 spec / 2770 个用例，但分布极不均衡：chat /
 | 问题 | 现状 | 关联文件 |
 |---|---|---|
 | 子 Agent 运行中不支持 steer | `job_send` 对正在执行的子 Agent 直接报错（只支持空闲时开新回合）。补齐方式是 DSH/zcode 式步边界注入：消息进收件箱，在子 Agent 两次工具调用之间注入上下文实现同轮转向（zcode `SendMessage` 返回的 `delivery: "queued"\|"steered"` 即此语义）。低频场景，暂不排期；实施时可参考 `docs/dsh-agent-teams-research.md` 的差距记录 | `sub-agent.manager.ts`（`sendMessage` 的 running 检查、`executeSubAgentStream`） |
+| 生产方工具描述反向耦合 job 工具族 | `run_command`/`subagent_spawn` 的描述文本硬编码 job 工具用法；jobs 插件被全局关闭（或依赖全灭隐藏）后描述仍引导模型调用不存在的 job_read。反向已解决（job 工具族经 `requiresAnyKits` 跟随生产者隐藏、通知正文按可见性去指引）；正向需要工具描述动态化（按决议结果拼文案），收益低暂不做 | `shell.plugin.ts`（run_command 描述）、`sub-agent.plugin.ts`（subagent_spawn 描述） |
 
 ### 暂缓项 · 防休眠与错过窗口（2026-10-15）
 

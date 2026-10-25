@@ -1,9 +1,10 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import type { QueueSource } from "../chat/chat-runner.service";
 import { JobRegistryService } from "./job-registry.service";
 import type { JobSettledEvent, JobSnapshot } from "./job.types";
+import type { RolePluginConfig } from "../plugins/types/plugin.types";
 
 /** 回合收尾事件（ChatRunner finally 发出；normalFinish 与 processQueue 同一道门） */
 interface TurnFinishedEvent {
@@ -44,6 +45,30 @@ export class JobNotifierService {
   constructor(
     private readonly chatRunner: ChatRunnerService,
     private readonly registry: JobRegistryService,
+    /**
+     * 通知正文里的 "Use job_read" 指引依赖 job 工具族可见。
+     * 决议用静态路径（无 session），@Optional 兼容未注入 PluginManager 的测试场景。
+     */
+    @Optional()
+    private readonly pluginManager?: {
+      resolvePlugins: (
+        session?: unknown,
+        roleCfg?: RolePluginConfig,
+        skipHandler?: boolean,
+      ) => Promise<
+        Array<{
+          plugin: { id: string };
+          enabledToolKits: Array<{ id: string; loadMode: string }>;
+        }>
+      >;
+    },
+    /** 取会话/智能体的 plugins 配置（loadRolePluginConfig 用）；@Optional 兼容纯单测 */
+    @Optional()
+    private readonly sessionService?: {
+      getSessionById: (
+        sessionId: string,
+      ) => Promise<{ settings?: any; agent?: { settings?: any } } | null>;
+    },
   ) {}
 
   @OnEvent("job.settled")
@@ -99,7 +124,7 @@ export class JobNotifierService {
         blocks: [
           {
             type: "text",
-            text: `<system_reminder>\n${this.buildNotice(job)}\n</system_reminder>`,
+            text: `<system_reminder>\n${await this.buildNotice(job)}\n</system_reminder>`,
           },
         ],
         source: this.buildSource(job),
@@ -112,7 +137,38 @@ export class JobNotifierService {
     }
   }
 
-  private buildNotice(job: JobSnapshot): string {
+  /**
+   * job 工具族是否对该会话可见（决定通知正文要不要带 "Use job_read" 指引）。
+   * 与会话初始化同一决议入口，skipHandler 走静态路径；任何失败按可见处理
+   * （正文多一句指引无害，漏掉读取入口才有害）。
+   */
+  private async isJobsToolkitVisible(sessionId: string): Promise<boolean> {
+    if (!this.pluginManager) return true;
+    try {
+      const roleCfg = await this.loadRolePluginConfig(sessionId);
+      const resolved = await this.pluginManager.resolvePlugins(
+        undefined,
+        roleCfg,
+        true,
+      );
+      const jobs = resolved.find((r) => r.plugin.id === "jobs");
+      const kit = jobs?.enabledToolKits.find((k) => k.id === "jobs");
+      return !kit || kit.loadMode !== "none";
+    } catch {
+      return true;
+    }
+  }
+
+  /** 会话 plugins 配置优先，回退智能体配置（与 JsonlSessionContext.buildEffectiveSettings 同语义） */
+  private async loadRolePluginConfig(
+    sessionId: string,
+  ): Promise<RolePluginConfig | undefined> {
+    const session = await this.sessionService?.getSessionById(sessionId);
+    const sessionPlugins = (session as any)?.settings?.plugins;
+    return (
+      sessionPlugins ?? (session as any)?.agent?.settings?.plugins ?? undefined
+    );
+  }  private async buildNotice(job: JobSnapshot): Promise<string> {
     const exit =
       job.exitCode !== undefined && job.exitCode !== null
         ? `, exit code ${job.exitCode}`
@@ -120,7 +176,10 @@ export class JobNotifierService {
     const detail = job.detail ? ` (${job.detail})` : "";
     const handle = job.handle ? `, handle: ${job.handle}` : "";
     const log = job.logFilePath ? `\nLog file: ${job.logFilePath}` : "";
-    return `Background job ${job.id} (${job.kind}: ${job.label}${handle}) finished [status: ${job.status}${exit}]${detail}.\nUse job_read ${job.id} to read the output.${log}`;
+    const readHint = (await this.isJobsToolkitVisible(job.sessionId))
+      ? `\nUse job_read ${job.id} to read the output.`
+      : "";
+    return `Background job ${job.id} (${job.kind}: ${job.label}${handle}) finished [status: ${job.status}${exit}]${detail}.${readHint}${log}`;
   }
 
   private buildSource(job: JobSnapshot): QueueSource {

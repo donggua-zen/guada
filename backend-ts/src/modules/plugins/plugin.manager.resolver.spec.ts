@@ -440,4 +440,135 @@ describe("PluginManager.resolvePlugins (V3 工具包粒度)", () => {
     expect(p.enabledToolKits.every((k) => !k.enabled)).toBe(true);
     expect(p.enabledTools).toHaveLength(0);
   });
+
+  // ── 工具包依赖（requiresAnyKits，OR 语义）──
+  // 语义：声明的生产者工具包（"pluginId:kitId"）全部不可用 → 本包 loadMode=none
+  // 整包隐藏（enabled 仍 true，表示"配置未拒、依赖缺失"）。
+  // 可用性 = 全局启用 + 智能体层未拒（自治理包按自有条目裁决）；刻意静态，
+  // skipHandler 预览路径（/plugins/query）同样生效。
+
+  it("任一依赖可用 → 工具包照常（OR 语义）", async () => {
+    registerPlugin("t_dep_p1", "core", [{ id: "p1_k", tool: "p1_tool" }]);
+    registerPlugin("t_dep_p2", "core", [{ id: "p2_k", tool: "p2_tool" }]);
+    registerDependent("t_dep_a");
+
+    const res = await manager.resolvePlugins(
+      fakeSession,
+      { t_dep_p2: { toolkits_deny: ["p2_k"] } } as any,
+      false,
+    );
+    const kit = find(res, "t_dep_a").enabledToolKits.find(
+      (k) => k.id === "dep_k",
+    )!;
+    expect(kit.loadMode).toBe("eager");
+    expect(kit.enabled).toBe(true);
+    expect(
+      find(res, "t_dep_a").enabledTools.map((t) => t.name),
+    ).toContain("dep_tool");
+  });
+
+  it("全部依赖不可用 → loadMode=none、工具不进启用列表、handler 被跳过", async () => {
+    const handler = jest.fn(async () => ({ loadMode: "eager" as const }));
+    registerPlugin("t_dep_q1", "core", [{ id: "q1_k", tool: "q1_tool" }]);
+    registerDependent("t_dep_b", handler);
+
+    const res = await manager.resolvePlugins(
+      fakeSession,
+      { t_dep_q1: { toolkits_deny: ["q1_k"] } } as any,
+      false,
+    );
+    const p = find(res, "t_dep_b");
+    const kit = p.enabledToolKits.find((k) => k.id === "dep_k")!;
+    expect(kit.loadMode).toBe("none");
+    // 配置层未拒绝本包：enabled=true 表示"依赖缺失"而非被裁剪
+    expect(kit.enabled).toBe(true);
+    expect(p.enabledTools.map((t) => t.name)).not.toContain("dep_tool");
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("依赖的生产者插件被全局禁用同样触发隐藏，且预览（skipHandler）路径一致", async () => {
+    registerPlugin("t_dep_g1", "extended", [{ id: "g1_k", tool: "g1_tool" }]);
+    registerDependent("t_dep_c");
+    settingsStorage.getSettings.mockResolvedValue({ t_dep_g1: { enabled: false } });
+
+    // skipHandler=true：/plugins/query 预览路径，依赖判定是静态的，同样生效
+    const res = await manager.resolvePlugins(undefined, {}, true);
+    const kit = find(res, "t_dep_c").enabledToolKits.find(
+      (k) => k.id === "dep_k",
+    )!;
+    expect(kit.loadMode).toBe("none");
+    expect(
+      find(res, "t_dep_c").enabledTools.map((t) => t.name),
+    ).not.toContain("dep_tool");
+  });
+
+  it("依赖自治理工具包时按其自有条目裁决（deny_all 条目 = 不可用）", async () => {
+    registerPlugin("t_dep_s1", "system", [
+      { id: "s1_k", tool: "s1_tool", governance: "self" },
+    ]);
+    registerDependent("t_dep_d", undefined, ["t_dep_s1:s1_k"]);
+
+    const res = await manager.resolvePlugins(
+      fakeSession,
+      { t_dep_s1: { toolkits_filter: "deny_all" } } as any,
+      false,
+    );
+    const kit = find(res, "t_dep_d").enabledToolKits.find(
+      (k) => k.id === "dep_k",
+    )!;
+    expect(kit.loadMode).toBe("none");
+
+    // 同一配置下解除条目 → 恢复
+    settingsStorage.getSettings.mockResolvedValue({});
+    const res2 = await manager.resolvePlugins(fakeSession, {}, false);
+    const kit2 = find(res2, "t_dep_d").enabledToolKits.find(
+      (k) => k.id === "dep_k",
+    )!;
+    expect(kit2.loadMode).toBe("eager");
+  });
+
+  /** 注册一个声明 requiresAnyKits 的消费方插件（默认依赖 t_dep_p1:p1_k / t_dep_p2:p2_k） */
+  function registerDependent(
+    id: string,
+    handler?: (ctx: any) => any,
+    requires: string[] = ["t_dep_p1:p1_k", "t_dep_p2:p2_k"],
+  ) {
+    PluginRegistry.registerManifest({ id, name: id, version: "1.0.0", description: "", category: "core" });
+    PluginRegistry.registerToolKit(id, {
+      def: {
+        id: "dep_k",
+        name: "dep_k",
+        loadMode: "eager",
+        requiresAnyKits: requires,
+        ...(handler ? { handler } : {}),
+      },
+      tools: [
+        {
+          name: "dep_tool",
+          description: "",
+          parameters: { type: "object", properties: {} },
+          handler: async () => ({ content: "" }),
+          toolSet: "dep_k",
+        },
+      ],
+      prompts: [],
+    } as any);
+    (manager as any).instances.set(id, {
+      plugin: { manifest: { id } },
+      manifest: { id, name: id, version: "1.0.0", description: "", category: "core" },
+      enabled: true,
+    });
+    createdIds.push(id);
+  }
+
+  it("无 requiresAnyKits 声明的工具包不受依赖机制影响（回归）", async () => {
+    registerPlugin("t_dep_e", "core", [{ id: "free_k", tool: "free_tool" }]);
+
+    const res = await manager.resolvePlugins(undefined, {}, true);
+    const kit = find(res, "t_dep_e").enabledToolKits.find(
+      (k) => k.id === "free_k",
+    )!;
+    expect(kit.loadMode).toBe("eager");
+    expect(kit.enabled).toBe(true);
+  });
 });
