@@ -52,6 +52,8 @@ declare module '*.svg' {
 interface ImportMetaEnv {
   readonly VITE_APP_TITLE: string
   readonly VITE_API_BASE_URL: string
+  /** 技能市场 API 地址（联调时可指向本地市场服务，如 http://127.0.0.1:3001） */
+  readonly VITE_MARKET_BASE_URL?: string
   // 更多环境变量...
 }
 
