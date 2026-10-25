@@ -127,6 +127,11 @@
       </div>
     </div>
   </div>
+
+  <!-- Web 模式：服务端目录浏览器（Electron 走原生对话框，不渲染） -->
+  <DirectoryBrowserDialog v-if="!isElectronEnv" v-model="browserVisible"
+    :initial-path="browserTarget === 'kbStorageRoot' ? (settingsForm.kbStorageRoot || '') : (settingsForm.workspaceBaseDir || '')"
+    @select="handleBrowserSelect" />
 </template>
 
 <script setup lang="ts">
@@ -139,6 +144,7 @@ import type { SystemGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import { useLanguage } from '@/composables/useLanguage'
+import DirectoryBrowserDialog from '@/components/DirectoryBrowserDialog.vue'
 
 const { notify } = usePopup()
 const { t } = useI18n()
@@ -213,9 +219,13 @@ const loadSettings = async () => {
 }
 
 // 选择文件夹（target 决定写入哪个设置项）
+// Electron 走原生对话框；Web 打开服务端目录浏览器（后端 fs/browse 列目录）
+const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI
+const browserVisible = ref(false)
+const browserTarget = ref<'workspaceBaseDir' | 'kbStorageRoot'>('workspaceBaseDir')
+
 const selectFolder = async (target: 'workspaceBaseDir' | 'kbStorageRoot' = 'workspaceBaseDir') => {
-  const isElectron = typeof window !== 'undefined' && !!window.electronAPI
-  if (isElectron && window.electronAPI?.selectFolder) {
+  if (isElectronEnv && window.electronAPI?.selectFolder) {
     try {
       const selectedPath = await window.electronAPI.selectFolder()
       if (selectedPath) {
@@ -225,9 +235,15 @@ const selectFolder = async (target: 'workspaceBaseDir' | 'kbStorageRoot' = 'work
     } catch (error) {
       ElMessage.error(t('settings.general.selectFolderFailed'))
     }
-  } else {
-    ElMessage.warning(t('settings.general.folderSelectNotSupported'))
+    return
   }
+  browserTarget.value = target
+  browserVisible.value = true
+}
+
+function handleBrowserSelect(path: string) {
+  settingsForm[browserTarget.value] = path
+  ElMessage.success(t('settings.general.folderSelected'))
 }
 
 // 保存设置

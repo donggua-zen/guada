@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { SessionMetaStore } from "../chat/session-meta.store";
 import { WorkspaceService } from "../../common/services/workspace.service";
@@ -16,6 +17,20 @@ import {
 } from "../../common/utils/image-transcode.util";
 import { getChatUploadMaxBytes, getChatUploadMaxMb } from "./upload-limits";
 
+export interface LocalDirEntry {
+  name: string;
+  isDirectory: boolean;
+  size: number;
+}
+
+export interface LocalBrowseResult {
+  /** 实际浏览的目录(空路径由服务端解析为主目录后回传) */
+  path: string;
+  /** 该路径是否为存在的目录 */
+  exists: boolean;
+  entries: LocalDirEntry[];
+}
+
 @Injectable()
 export class FileService {
   private readonly logger = new Logger(FileService.name);
@@ -25,6 +40,64 @@ export class FileService {
     private sessionStore: SessionMetaStore,
     private workspaceService: WorkspaceService,
   ) { }
+
+  /**
+   * 浏览本机目录（Web 模式目录选择器的数据源）。
+   *
+   * 返回形状与 remote-workspace 的 BrowseResult 对齐（path/exists/entries），
+   * 前端两套浏览器共用同一套类型。dirPath 为空时回退用户主目录；非绝对路径
+   * 直接拒绝——这里只做「列举目录名」，路径校验的兜底在 validateCustomWorkspacePath。
+   * ENOENT/ENOTDIR 归为 exists:false（前端区分「目录不存在」与「无权限」两种提示），
+   * EACCES 等其余错误照常抛出。
+   */
+  async browseLocalPath(dirPath: string): Promise<LocalBrowseResult> {
+    const resolved = dirPath?.trim()
+      ? path.resolve(dirPath.trim())
+      : os.homedir();
+    if (!path.isAbsolute(resolved)) {
+      throw new Error("目录路径必须是绝对路径");
+    }
+
+    let dirents: fs.Dirent[];
+    try {
+      dirents = await fs.promises.readdir(resolved, { withFileTypes: true });
+    } catch (error: any) {
+      if (error?.code === "ENOENT" || error?.code === "ENOTDIR") {
+        return { path: resolved, exists: false, entries: [] };
+      }
+      throw error;
+    }
+
+    const entries: LocalDirEntry[] = [];
+    for (const dirent of dirents) {
+      // 符号链接按 stat 结果归类（readdir 的 Dirent 对 symlink 一律报 false）
+      let isDirectory = dirent.isDirectory();
+      if (dirent.isSymbolicLink()) {
+        try {
+          isDirectory = (await fs.promises.stat(path.join(resolved, dirent.name))).isDirectory();
+        } catch {
+          isDirectory = false; // 断链/无权限跟随：按非目录展示
+        }
+      }
+      let size = 0;
+      if (!isDirectory) {
+        try {
+          size = (await fs.promises.stat(path.join(resolved, dirent.name))).size;
+        } catch {
+          size = 0;
+        }
+      }
+      entries.push({ name: dirent.name, isDirectory, size });
+    }
+    entries.sort((a, b) =>
+      a.isDirectory === b.isDirectory
+        ? a.name.localeCompare(b.name)
+        : a.isDirectory
+          ? -1
+          : 1,
+    );
+    return { path: resolved, exists: true, entries };
+  }
 
   /** 会话存在性校验（单账户：无归属校验） */
   private async assertSessionExists(sessionId: string) {

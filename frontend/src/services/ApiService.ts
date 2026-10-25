@@ -53,6 +53,7 @@ import { botApi, type BotApi } from "./modules/bot.api";
 import { schedulerApi, type SchedulerApi } from "./modules/scheduler.api";
 import { pluginApi, type PluginApi } from "./modules/plugin.api";
 import { remoteWorkspaceApi, type RemoteWorkspaceApi } from "./modules/remote-workspace.api";
+import { fsApi, type FsApi } from "./modules/fs.api";
 import { gitApi, type GitApi } from "./modules/git.api";
 import { usageApi, type UsageApi } from "./modules/usage.api";
 
@@ -81,6 +82,7 @@ interface ApiService
     SchedulerApi,
     PluginApi,
     RemoteWorkspaceApi,
+    FsApi,
     GitApi,
     UsageApi {}
 
@@ -369,6 +371,7 @@ Object.assign(
   schedulerApi,
   pluginApi,
   remoteWorkspaceApi,
+  fsApi,
   gitApi,
   usageApi,
 );

@@ -1,7 +1,9 @@
 import {
   Controller,
+  Get,
   Post,
   Param,
+  Query,
   UseInterceptors,
   UploadedFile,
   UseGuards,
@@ -14,6 +16,17 @@ import { FileService } from "./file.service";
 @UseGuards(AuthGuard)
 export class FilesController {
   constructor(private readonly fileService: FileService) {}
+
+  /**
+   * 浏览本机目录（Web 模式目录选择器）。
+   *
+   * 只返回目录项名称/类型/大小，不暴露文件内容；path 为空时由服务端回退
+   * 用户主目录。鉴权与其余业务端点同级（AuthGuard）。
+   */
+  @Get("fs/browse")
+  async browseLocalPath(@Query("path") dirPath?: string) {
+    return this.fileService.browseLocalPath(dirPath ?? "");
+  }
 
   /**
    * 上传会话文件

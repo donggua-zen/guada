@@ -99,12 +99,12 @@
               </el-button>
             </GdTooltip>
           </div>
-          <div class="flex items-center gap-0.5">
-            <GdTooltip v-if="streaming" content="停止生成" placement="top">
+          <div>
+            <GdTooltip v-if="streaming && !rawText.trim()" content="停止生成" placement="top">
               <el-button class="send-btn stop-btn" @click="abortResponse" circle type="danger"
                 :icon="Stop24Filled" />
             </GdTooltip>
-            <GdTooltip content="发送" placement="top">
+            <GdTooltip v-else content="发送" placement="top">
               <el-button class="send-btn" type="primary" @click="sendMessage" circle
                 :disabled="!rawText.trim()" :icon="Send24Filled" />
             </GdTooltip>

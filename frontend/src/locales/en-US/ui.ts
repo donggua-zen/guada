@@ -301,7 +301,20 @@
 
   // ── 文件项 ──
   fileItem: {
-    waitingUpload: 'Waiting to upload...',
+    waitingUpload: 'Waiting for upload...',
     uploading: 'Uploading {progress}%',
+  },
+
+  // ── Directory browser (web-mode directory picker dialog) ──
+  directoryBrowser: {
+    title: 'Select Directory',
+    jump: 'Go',
+    goUp: 'Go up',
+    confirm: 'Select this directory',
+    loading: 'Loading...',
+    empty: 'Empty directory',
+    notExist: 'Directory does not exist. Check the path and try again.',
+    loadFailed: 'Failed to load directory',
+    pathPlaceholder: 'Enter an absolute path and press Enter',
   },
 }

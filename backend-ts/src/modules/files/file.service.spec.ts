@@ -303,3 +303,109 @@ describe("FileService upload routing", () => {
     expect(ref.name).toBe("季度报告.pdf");
   });
 });
+
+describe("FileService browseLocalPath", () => {
+  let tmpRoot: string;
+  let service: FileService;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fs-browse-spec-"));
+    service = new FileService({} as any, {} as any, {} as any);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("falls back to the user's home dir when path is empty", async () => {
+    const result = await service.browseLocalPath("");
+    expect(result.path).toBe(os.homedir());
+    expect(result.exists).toBe(true);
+    expect(Array.isArray(result.entries)).toBe(true);
+  });
+
+  it("resolves the path and normalizes it (含尾部斜杠与 .. 段)", async () => {
+    const target = path.join(tmpRoot, "a", "b");
+    fs.mkdirSync(target, { recursive: true });
+    const result = await service.browseLocalPath(
+      path.join(tmpRoot, "a", "..", "a", "b") + path.sep,
+    );
+    expect(result.path).toBe(target);
+    expect(result.exists).toBe(true);
+  });
+
+  it("returns exists:false for a missing path instead of throwing", async () => {
+    const result = await service.browseLocalPath(path.join(tmpRoot, "nope"));
+    expect(result.exists).toBe(false);
+    expect(result.entries).toEqual([]);
+    // path 回传解析后的值，前端据此展示「目录不存在」并可手改
+    expect(result.path).toBe(path.join(tmpRoot, "nope"));
+  });
+
+  it("lists directories first with names locale-sorted, files carry size", async () => {
+    fs.mkdirSync(path.join(tmpRoot, "zdir"));
+    fs.mkdirSync(path.join(tmpRoot, "adir"));
+    fs.writeFileSync(path.join(tmpRoot, "mfile.txt"), "hello");
+
+    const result = await service.browseLocalPath(tmpRoot);
+
+    expect(result.exists).toBe(true);
+    expect(result.entries.map((e) => e.name)).toEqual([
+      "adir",
+      "zdir",
+      "mfile.txt",
+    ]);
+    const file = result.entries.find((e) => e.name === "mfile.txt")!;
+    expect(file.isDirectory).toBe(false);
+    expect(file.size).toBe(5);
+  });
+
+  // Windows 无开发者模式/管理员权限时 symlink 会 EPERM，探测一次决定是否跳过
+  const canSymlink = (() => {
+    try {
+      const probe = path.join(tmpRoot, ".symlink-probe");
+      fs.symlinkSync(probe, probe + ".link", "file");
+      fs.rmSync(probe + ".link");
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  it("classifies symlinked directories as directories (Dirent 对 symlink 报 false)", async () => {
+    if (!canSymlink) return;
+
+    const realDir = path.join(tmpRoot, "real");
+    fs.mkdirSync(realDir);
+    fs.symlinkSync(realDir, path.join(tmpRoot, "link-dir"), "dir");
+    fs.writeFileSync(path.join(tmpRoot, "file.txt"), "x");
+    fs.symlinkSync(
+      path.join(tmpRoot, "file.txt"),
+      path.join(tmpRoot, "link-file"),
+      "file",
+    );
+
+    const result = await service.browseLocalPath(tmpRoot);
+
+    const linkDir = result.entries.find((e) => e.name === "link-dir")!;
+    expect(linkDir.isDirectory).toBe(true);
+    const linkFile = result.entries.find((e) => e.name === "link-file")!;
+    expect(linkFile.isDirectory).toBe(false);
+    expect(linkFile.size).toBe(1);
+  });
+
+  it("treats a broken symlink as a non-directory entry without throwing", async () => {
+    if (!canSymlink) return;
+
+    fs.symlinkSync(
+      path.join(tmpRoot, "gone"),
+      path.join(tmpRoot, "broken"),
+      "file",
+    );
+
+    const result = await service.browseLocalPath(tmpRoot);
+
+    const broken = result.entries.find((e) => e.name === "broken")!;
+    expect(broken.isDirectory).toBe(false);
+  });
+});

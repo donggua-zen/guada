@@ -304,4 +304,17 @@ export default {
     waitingUpload: '等待上传...',
     uploading: '上传中 {progress}%',
   },
+
+  // ── 目录浏览器（Web 模式目录选择对话框）──
+  directoryBrowser: {
+    title: '选择目录',
+    jump: '跳转',
+    goUp: '返回上级',
+    confirm: '选择此目录',
+    loading: '加载中...',
+    empty: '空目录',
+    notExist: '目录不存在，请检查路径后重试',
+    loadFailed: '加载目录失败',
+    pathPlaceholder: '输入绝对路径，回车跳转',
+  },
 }

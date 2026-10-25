@@ -357,6 +357,10 @@
   <!-- 分组 / 项目编辑弹窗（名称 + 图标；项目额外展示只读工作目录） -->
   <GroupEditDialog v-model="groupEditDialogVisible" :kind="groupEditKind" :group="groupEditGroup"
     @saved="handleGroupSaved" />
+
+  <!-- Web 模式：新建项目的目录浏览器（Electron 走原生对话框，不渲染） -->
+  <DirectoryBrowserDialog v-if="!isElectronEnv" v-model="projectBrowserVisible"
+    :title="t('ui.sidebar.createProjectTitle')" @select="handleProjectBrowserSelect" />
 </template>
 
 <script setup lang="ts">
@@ -382,6 +386,7 @@ import GdTooltip from './ui/GdTooltip.vue'
 import GroupEditDialog from './session/GroupEditDialog.vue'
 import GroupIcon from './session/GroupIcon.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import DirectoryBrowserDialog from '@/components/DirectoryBrowserDialog.vue'
 import { apiService } from '@/services/ApiService'
 import type { Session, SessionGroup, ProjectGroup, SidebarSessionsResponse, SidebarProjectSessionsResponse } from '@/types/session'
 
@@ -506,7 +511,7 @@ const toggleAllGroups = (): void => {
 /**
  * 新建分组/项目快捷入口：
  * - 普通分组模式 → 输入名称后创建手工分组
- * - 目录模式 → 选择目录并注册为项目（非 Electron 回退为输入绝对路径）
+ * - 目录模式 → 选择目录并注册为项目（Web 用目录浏览器对话框，Electron 用原生选择框）
  */
 const handleCreateGroupShortcut = async () => {
   if (sessionGroupStore.groupingMode === 'workspace') {
@@ -520,23 +525,32 @@ const handleCreateManualGroup = async () => {
   openGroupEditDialog('group', null)
 }
 
+const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI
+const projectBrowserVisible = ref(false)
+
 const handleCreateProject = async () => {
+  if (!(isElectronEnv && window.electronAPI?.selectFolder)) {
+    // Web 模式：打开目录浏览器，选择结果经 handleProjectBrowserSelect 完成注册
+    projectBrowserVisible.value = true
+    return
+  }
   let selectedPath: string | null = null
   try {
-    if (window.electronAPI?.selectFolder) {
-      selectedPath = await window.electronAPI.selectFolder()
-    } else {
-      selectedPath = await prompt(t('ui.sidebar.createProjectTitle'), {
-        placeholder: t('ui.sidebar.projectPathPlaceholder'),
-      })
-    }
+    selectedPath = await window.electronAPI.selectFolder()
   } catch (error) {
     console.error('选择目录失败:', error)
     toast.error(t('ui.sidebar.createProjectFailed'))
     return
   }
   if (!selectedPath) return
+  await registerProjectGroup(selectedPath)
+}
 
+async function handleProjectBrowserSelect(path: string) {
+  await registerProjectGroup(path)
+}
+
+async function registerProjectGroup(selectedPath: string) {
   const result = await sessionGroupStore.createProjectGroup(selectedPath)
   if (!result.success) {
     toast.error(getErrorMessage(result.error) || t('ui.sidebar.createProjectFailed'))

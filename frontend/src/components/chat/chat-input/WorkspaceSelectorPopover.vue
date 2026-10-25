@@ -62,28 +62,33 @@
         </el-icon>
       </div>
 
-      <!-- 打开文件夹（仅 Electron） -->
-      <template v-if="isElectron">
-        <div class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
-          @click="handleOpenFolder">
-          <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-            <Desktop16Regular />
-          </el-icon>
-          <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-            <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap">{{ t('chat.input.selectLocalFolder') }}</span>
-          </div>
+      <!-- 选择本地文件夹：Electron 走原生对话框，Web 打开服务端目录浏览器 -->
+      <div class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
+        @click="handleOpenFolder">
+        <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
+          <Desktop16Regular />
+        </el-icon>
+        <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
+          <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb]">{{ t('chat.input.selectLocalFolder') }}</span>
         </div>
-      </template>
+      </div>
     </div>
   </GdPopover>
+
+  <!-- Web 模式：服务端目录浏览器对话框（Electron 走原生 selectFolder，不渲染） -->
+  <DirectoryBrowserDialog v-if="!isElectron" v-model="browserVisible"
+    :initial-path="currentWorkspacePath || ''"
+    :title="t('chat.input.selectLocalFolder')"
+    @select="handleBrowserSelect" />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElIcon, ElMessage } from 'element-plus'
 import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
+import DirectoryBrowserDialog from '../../DirectoryBrowserDialog.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const props = defineProps<{
@@ -110,6 +115,8 @@ const filteredRecentList = computed(() => {
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 
+const browserVisible = ref(false)
+
 const publicPath = computed(() => props.publicPath || null)
 
 function getFolderName(path: string): string {
@@ -124,17 +131,26 @@ function handleSelect(path: string | null) {
 }
 
 async function handleOpenFolder() {
-  if (!isElectron || !window.electronAPI?.selectFolder) return
-  try {
-    const selectedPath = await window.electronAPI.selectFolder()
-    if (selectedPath) {
-      emit('select', selectedPath)
+  if (isElectron && window.electronAPI?.selectFolder) {
+    try {
+      const selectedPath = await window.electronAPI.selectFolder()
+      if (selectedPath) {
+        emit('select', selectedPath)
+      }
+    } catch (error) {
+      console.error('选择文件夹失败:', error)
+      ElMessage.error(t('chat.input.selectFolderFailed'))
+    } finally {
+      emit('update:visible', false)
     }
-  } catch (error) {
-    console.error('选择文件夹失败:', error)
-    ElMessage.error(t('chat.input.selectFolderFailed'))
-  } finally {
-    emit('update:visible', false)
+    return
   }
+  // Web 模式：交给目录浏览器对话框，选择结果经 handleBrowserSelect 回流
+  browserVisible.value = true
+  emit('update:visible', false)
+}
+
+function handleBrowserSelect(path: string) {
+  emit('select', path)
 }
 </script>
