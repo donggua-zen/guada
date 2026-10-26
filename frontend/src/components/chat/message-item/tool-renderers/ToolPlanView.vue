@@ -60,6 +60,7 @@ import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
 import { usePopup } from '@/composables/usePopup'
 import { useThrottledValue } from '@/composables/useThrottledValue'
 import { openSessionPlanPanel } from '@/utils/sessionPlan'
+import { writeTextToClipboard } from '@/utils/clipboard'
 import type { PlanCardStatus } from '@/utils/toolDisplay'
 
 const props = defineProps<{
@@ -89,12 +90,9 @@ function openPanel(): void {
 
 async function copyPlan(): Promise<void> {
     if (!props.content) return
-    try {
-        await navigator.clipboard.writeText(props.content)
-        toast.success(t('common.copySuccess'))
-    } catch {
-        toast.error(t('common.copyFailed'))
-    }
+    const ok = await writeTextToClipboard(props.content)
+    if (ok) toast.success(t('common.copySuccess'))
+    else toast.error(t('common.copyFailed'))
 }
 
 // ── 遮罩只在内容真溢出时应用 ──

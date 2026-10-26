@@ -23,6 +23,7 @@
  * 事件类型字面量(turn_start/text_delta/finish 等)与后端规范强制一致,协议改动双端同时报错。
  */
 import type { WireStreamEvent } from "@/types/stream";
+import { generateUuid } from "@/utils/uuid";
 
 export type HubStreamEvent = WireStreamEvent;
 
@@ -121,7 +122,7 @@ export class StreamEventHub {
    */
   subscribeAll(onEvent: (chunk: HubStreamEvent) => void): () => void {
     const sub: SessionSubscriber = {
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       onEvent,
     };
     this.globalSubscribers.push(sub);
@@ -154,7 +155,7 @@ export class StreamEventHub {
     });
 
     const sub: SessionSubscriber = {
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       onEvent,
     };
     state.subscribers.push(sub);

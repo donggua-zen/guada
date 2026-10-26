@@ -5,6 +5,7 @@ import type { AxiosError } from 'axios'
 import type { KBFile } from './knowledgeBase'
 import { t } from '@/locales'
 import { ElMessage } from 'element-plus'
+import { generateUuid } from '@/utils/uuid'
 
 /**
  * 文件上传任务(仅负责上传阶段)
@@ -275,7 +276,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
             // 创建初始任务(queued 状态)
             const task = addUploadTask({
-                id: crypto.randomUUID(),
+                id: generateUuid(),
                 fileId: 'pending',
                 fileName: fileName,
                 fileSize: file.size,
@@ -316,7 +317,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
             // 创建初始任务(queued 状态),将 relativePath 绑定到任务上
             const task = addUploadTask({
-                id: crypto.randomUUID(),
+                id: generateUuid(),
                 fileId: 'pending',
                 fileName: fileName,
                 fileSize: file.size,
@@ -380,7 +381,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
             // 创建初始任务(queued 状态)
             const task = addUploadTask({
-                id: crypto.randomUUID(),
+                id: generateUuid(),
                 fileId: 'pending',
                 fileName: fileName,
                 fileSize: file.size,

@@ -206,6 +206,7 @@ import { useTabStore } from "@/stores/tab";
 import { useWorkflowRunsStore } from "@/stores/workflowRuns";
 import { useTitle } from '@/composables/useTitle';
 import { isMobileDevice } from '@/composables/useDevice';
+import { writeTextToClipboard } from '@/utils/clipboard';
 import type { Session, CreateSessionRequest, InputMessageState } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { SessionEvent } from '@/services/modules/SessionEventsService';
@@ -768,43 +769,12 @@ async function copySessionId() {
 }
 
 /**
- * 写入剪贴板：Electron 下 navigator.clipboard 依赖窗口焦点与权限，
- * 故优先走主进程 IPC，再退到 preload 直连，最后回退 Web API。
+ * 写入剪贴板：统一走 utils/clipboard（Electron IPC → preload → Web API →
+ * 非安全上下文 execCommand 兜底）。
  * @returns 是否写入成功
  */
 async function writeToClipboard(text: string): Promise<boolean> {
-  if (!text) return false;
-
-  const electronAPI = window.electronAPI;
-
-  if (electronAPI?.clipboardIPC?.writeText) {
-    try {
-      const result = await electronAPI.clipboardIPC.writeText(text);
-      if (result.success) return true;
-    } catch (error) {
-      console.warn('[ChatPage] IPC 写入剪贴板失败，尝试其他方式:', error);
-    }
-  }
-
-  if (electronAPI?.clipboard?.writeText) {
-    try {
-      electronAPI.clipboard.writeText(text);
-      return true;
-    } catch (error) {
-      console.warn('[ChatPage] preload 剪贴板写入失败:', error);
-    }
-  }
-
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (error) {
-      console.error('[ChatPage] Web Clipboard API 写入失败:', error);
-    }
-  }
-
-  return false;
+  return writeTextToClipboard(text);
 }
 
 /**

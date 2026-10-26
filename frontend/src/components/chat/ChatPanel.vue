@@ -205,6 +205,7 @@ import { useSessionStore } from "../../stores/session";
 import { useAuthStore } from "../../stores/auth"
 import { useLayoutStore } from "@/stores/layout"
 import { streamReceiver } from "@/services/modules/StreamReceiver"
+import { writeTextToClipboard } from "@/utils/clipboard"
 import {
   applyLiveChunk,
   foldEvents,
@@ -1291,13 +1292,14 @@ async function copyMessage(block: MessageActionTarget) {
   try {
     // 无 assistant 块（如立即报错无任何产出）→ 复制空内容
     if (!block) {
-      await navigator.clipboard.writeText("");
+      await writeTextToClipboard("");
       return;
     }
 
     if (block.content) {
-      await navigator.clipboard.writeText(block.content);
-      toast.success(t('common.copySuccess'));
+      const ok = await writeTextToClipboard(block.content);
+      if (ok) toast.success(t('common.copySuccess'));
+      else toast.error(t('common.copyFailed'));
     }
   } catch (error) {
     console.error("复制消息失败:", error);
