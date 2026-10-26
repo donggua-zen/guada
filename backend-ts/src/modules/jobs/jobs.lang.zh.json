@@ -1,0 +1,13 @@
+{
+  "jobs.name": "后台作业",
+  "jobs.description": "按 job id 查看、读取、输入与停止后台作业",
+  "jobs.toolkitDescription": "按 job id 管理长时间运行的后台作业",
+  "job_read.executing": "正在读取作业输出",
+  "job_read.completed": "已读取作业输出",
+  "job_list.executing": "正在列出后台作业",
+  "job_list.completed": "已列出后台作业",
+  "job_stop.executing": "正在停止后台作业",
+  "job_stop.completed": "已请求停止后台作业",
+  "job_send.executing": "正在向作业写入输入",
+  "job_send.completed": "已向作业写入输入"
+}

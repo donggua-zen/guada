@@ -2494,7 +2494,6 @@ export class ProcessManagerService
       send: async (input, appendNewline) => {
         this.writeToStdin(entry.id, appendNewline === false ? input : `${input}\n`);
       },
-      isAlive: () => entry.status === "running",
       done,
     });
 
@@ -2623,7 +2622,7 @@ export class ProcessManagerService
       blocks: [
         {
           type: "text",
-          text: `<system_reminder>\nBackground process \`${entry.id}\` (${entry.command}) finished with status ${entry.status}${entry.exitCode != null ? `, exit code ${entry.exitCode}` : ""}:\n${output}${truncated ? "\n(output truncated; see log file)" : ""}\nLog file: ${entry.logFilePath}\nUse process read ${entry.id} to read the log later.\n</system_reminder>`,
+          text: `<system_reminder>\nBackground process \`${entry.id}\` (${entry.command}) finished with status ${entry.status}${entry.exitCode != null ? `, exit code ${entry.exitCode}` : ""}:\n${output}${truncated ? "\n(output truncated; see log file)" : ""}\nLog file: ${entry.logFilePath}\nRead the log file for the full output.\n</system_reminder>`,
         },
       ],
       // 结构化标识进 source（merge-extensible；systemPayload 已移除）

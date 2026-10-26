@@ -27,6 +27,10 @@ export type WatchScope = "file" | "git";
 const RECONNECT_DELAY_MS = 3000;
 /** EventSource.CLOSED */
 const READY_STATE_CLOSED = 2;
+/** 页面隐藏超过该时长后恢复可见，主动重建连接（手机息屏后连接可能已半开） */
+const RESUME_RECONNECT_AFTER_HIDDEN_MS = 15_000;
+/** 超过该时长没有任何消息判定连接假死（后端心跳 90s） */
+const STALE_ACTIVITY_MS = 150_000;
 
 export class WorkspaceWatcherService {
   private eventSource: EventSourcePolyfill | null = null;
@@ -41,6 +45,37 @@ export class WorkspaceWatcherService {
    */
   private desiredScopes: Map<string, Set<WatchScope>> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 最后一次收到消息的时间（含 heartbeat） */
+  private lastActivityAt = 0;
+  private hiddenAt: number | null = null;
+  private lifecycleInstalled = false;
+  /** 最近一次 connect 传入的 onConnected 回调（恢复重连时复用） */
+  private connectCallback: (() => void) | undefined;
+
+  private readonly handleVisibilityChange = (): void => {
+    if (typeof document === "undefined") return;
+    if (document.hidden) {
+      this.hiddenAt = Date.now();
+      return;
+    }
+    const hiddenFor = this.hiddenAt ? Date.now() - this.hiddenAt : 0;
+    this.hiddenAt = null;
+    if (hiddenFor > RESUME_RECONNECT_AFTER_HIDDEN_MS || this.isConnectionDown()) {
+      this.reconnectCurrent("visibility resume");
+    }
+  };
+
+  private readonly handleOnline = (): void => {
+    if (this.isConnectionDown() || this.isStale()) {
+      this.reconnectCurrent("network online");
+    }
+  };
+
+  private readonly handlePageShow = (event: PageTransitionEvent): void => {
+    if (event.persisted || this.isConnectionDown()) {
+      this.reconnectCurrent("pageshow");
+    }
+  };
 
   constructor(private getBaseURL: () => string) {
     // 使用页面级客户端标识，同一页面内的 SSE 和普通请求保持一致
@@ -67,6 +102,8 @@ export class WorkspaceWatcherService {
     this.teardown(this.currentSessionId !== sessionId);
 
     this.currentSessionId = sessionId;
+    this.connectCallback = onConnected;
+    this.installLifecycleHandlers();
 
     const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
     const url = `${this.getBaseURL()}/sessions/${sessionId}/workspace/events`;
@@ -83,16 +120,18 @@ export class WorkspaceWatcherService {
       if (this.eventSource !== eventSource) {
         return;
       }
+      this.lastActivityAt = Date.now();
       console.log("[WorkspaceWatcher] SSE 连接已建立");
       // 重连同样会走到这里：后端已清掉该 clientId 的 scope，必须重放
       void this.replayScopes(sessionId);
-      onConnected?.();
+      this.connectCallback?.();
     };
 
     eventSource.onmessage = (event) => {
       if (this.eventSource !== eventSource) {
         return;
       }
+      this.lastActivityAt = Date.now();
       try {
         const data = JSON.parse(event.data) as FileChangeEvent;
         if (data.sessionId && data.sessionId !== this.currentSessionId) {
@@ -134,6 +173,9 @@ export class WorkspaceWatcherService {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.removeLifecycleHandlers();
+    this.lastActivityAt = 0;
+    this.hiddenAt = null;
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -142,6 +184,48 @@ export class WorkspaceWatcherService {
       this.desiredScopes.delete(this.currentSessionId);
     }
     this.currentSessionId = null;
+    this.connectCallback = undefined;
+  }
+
+  /** 恢复前台/网络恢复时主动重建当前会话连接（onopen 会重放 scope） */
+  private reconnectCurrent(reason: string): void {
+    const sessionId = this.currentSessionId;
+    if (!sessionId || !this.eventSource) return;
+    console.log(`[WorkspaceWatcher] 重建 SSE 连接: ${reason}`);
+    const callback = this.connectCallback;
+    this.eventSource.close();
+    this.eventSource = null;
+    this.connect(sessionId, callback);
+  }
+
+  private isConnectionDown(): boolean {
+    if (!this.eventSource) return true;
+    return this.eventSource.readyState === READY_STATE_CLOSED;
+  }
+
+  private isStale(): boolean {
+    return (
+      this.lastActivityAt > 0 &&
+      Date.now() - this.lastActivityAt > STALE_ACTIVITY_MS
+    );
+  }
+
+  private installLifecycleHandlers(): void {
+    if (this.lifecycleInstalled || typeof window === "undefined") return;
+    this.lifecycleInstalled = true;
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    window.addEventListener("online", this.handleOnline);
+    window.addEventListener("pageshow", this.handlePageShow);
+  }
+
+  private removeLifecycleHandlers(): void {
+    if (!this.lifecycleInstalled) return;
+    this.lifecycleInstalled = false;
+    if (typeof window !== "undefined") {
+      document.removeEventListener("visibilitychange", this.handleVisibilityChange);
+      window.removeEventListener("online", this.handleOnline);
+      window.removeEventListener("pageshow", this.handlePageShow);
+    }
   }
 
   /**

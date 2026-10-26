@@ -37,6 +37,11 @@ vi.mock("@/services/ApiService", () => ({
       connectHandlers.push(cb);
       return () => {};
     },
+    onSessionEventsFatal: () => () => {},
+    fetchSession: vi.fn(async (sessionId: string) => ({
+      id: sessionId,
+      isStreaming: false,
+    })),
     fetchPendingAsks: vi.fn(async () => ({ pending: [] })),
     fetchSessionQueue: vi.fn(async () => ({
       sessionId: "s1",

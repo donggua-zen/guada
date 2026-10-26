@@ -3,7 +3,7 @@ import { OnEvent } from "@nestjs/event-emitter";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import type { QueueSource } from "../chat/chat-runner.service";
 import { JobRegistryService } from "./job-registry.service";
-import type { JobSettledEvent, JobSnapshot } from "./job.types";
+import type { JobId, JobSettledEvent, JobSnapshot } from "./job.types";
 import type { RolePluginConfig } from "../plugins/types/plugin.types";
 
 /** 回合收尾事件（ChatRunner finally 发出；normalFinish 与 processQueue 同一道门） */
@@ -28,19 +28,25 @@ interface StreamStatusEvent {
  * 后台作业完成通知的唯一投递点。
  *
  * 投递时机（对齐 zcode 的"投递时判定"思路）：
- * - 会话运行中 → 不投递，只置挂起标记；本轮由 turn.stopping drain 或模型 job_read 负责；
+ * - 会话运行中 → 不投递，只置挂起标记（不在回合中间插用户消息）；
  * - 会话空闲 → 立即投递（enqueue 后立即 processQueue，近似"投递即消费"）；
  * - 回合正常收尾 → 把挂起通知一次投出（批量由队列的同 source.kind 合并承接）；
  * - 回合开始 → 挂起标记作废（"会话再运行就不投递"，模型可 job_list 自行发现）；
  * - user_cancel / error 收尾 → 不投递（与 processQueue 同一道 NORMAL_FINISH 门）。
  *
- * 去重不再依赖 isValid/onConsumed 闭包：投递那一刻即 markReported——
- * 完成通知的"已交付"语义在投递时成立，子 Agent 清理/冻结与 drain 跳过都以此为准。
- * 通知正文刻意只带状态和读取入口，不带完整输出——模型用 job_read 取输出。
+ * 注意 shell / remote-shell 的回合内完成通常走不到这里：它们的输出由 turn.stopping
+ * 续跑钩子（shell.plugin.handleTurnStopping）在进程层收割，收割时已 markReported。
+ * 本服务覆盖的是 subagent 等没有进程层收割路径的 kind（详见 job.types.ts 头注释）。
+ *
+ * 去重：投递成功（enqueueMessage 返回）那一刻才 markReported，且用 inFlight 防并发双投。
+ * 入队失败时保持 reported=false 并挂回待投递队列，下一回合正常收尾会重试——
+ * 通知正文刻意只带状态和读取入口，不带完整输出，模型用 job_read 取输出。
  */
 @Injectable()
 export class JobNotifierService {
   private readonly logger = new Logger(JobNotifierService.name);
+  /** 正在投递中的 job：settle 直投与回合收尾 drain 可能同时命中同一条 */
+  private readonly inFlight = new Set<JobId>();
 
   constructor(
     private readonly chatRunner: ChatRunnerService,
@@ -74,12 +80,11 @@ export class JobNotifierService {
   @OnEvent("job.settled")
   async handleJobSettled(event: JobSettledEvent): Promise<void> {
     if (this.registry.isShuttingDown()) return;
+    // notify 的默认值已在 JobRegistryService.start 按 kind 归一化
+    // （workflow / scheduler 默认静默，其余默认通知，显式传入优先）。
+    // 这里只信事件里的布尔值，不再按 kind 二次判断——避免"哪些 kind 不通知"两处维护。
     if (!event.notify) return;
     if (event.job.reported) return;
-    if (event.job.kind === "workflow" || event.job.kind === "scheduler") {
-      // 这两类的结果已经由工具返回值/会话回合交付，不再额外唤醒一回合。
-      return;
-    }
 
     // 会话在跑：本轮自己会 drain/read，通知先挂起
     if (this.chatRunner.hasActiveStream(event.job.sessionId)) {
@@ -111,29 +116,37 @@ export class JobNotifierService {
   /**
    * 投递一条完成通知。
    *
-   * 先 markReported：通知发出即视为"结果已通告"——
-   * 子 Agent 的 onReported 据此清 completed/自动冻结；shell/remote 的
-   * turn.stopping drain 据此跳过已通告输出，避免同一份输出被注入两次。
-   * 不传 isValid/onConsumed：投递只在空闲（或回合正常收尾）发生，近似原子消费。
+   * 顺序：判重（reported / inFlight）→ 构建正文 → enqueueMessage **成功后**才 markReported。
+   * 旧实现是"先 markReported 再入队"，入队抛错就永久丢失通知（reported 已置位，
+   * 任何后续 drain/重连都不会再投）。现在失败保持 reported=false 并挂回待投递队列，
+   * 下一次回合正常收尾（handleTurnFinished）会重试。
+   * markReported 仍是"结果已通告"的唯一真相：子 Agent 的 onReported 据此清 completed/自动冻结。
    */
   private async deliver(job: JobSnapshot): Promise<void> {
-    this.registry.markReported(job.id);
+    if (job.reported || this.inFlight.has(job.id)) return;
+    this.inFlight.add(job.id);
     try {
+      // 先构建正文（内部要 await 判定 job 工具族可见性），避免拿着半成品入队
+      const notice = await this.buildNotice(job);
       await this.chatRunner.enqueueMessage({
         sessionId: job.sessionId,
         blocks: [
           {
             type: "text",
-            text: `<system_reminder>\n${await this.buildNotice(job)}\n</system_reminder>`,
+            text: `<system_reminder>\n${notice}\n</system_reminder>`,
           },
         ],
         source: this.buildSource(job),
       });
+      this.registry.markReported(job.id);
     } catch (error: any) {
-      // 通知失败不能让执行器结算流程抛错；日志留证，job 仍可在 TTL 内读取。
+      // 通知失败不能让执行器结算流程抛错；挂回待投递队列，正常收尾时重试。
       this.logger.error(
         `投递作业完成通知失败 (${job.id}): ${error?.message ?? error}`,
       );
+      this.registry.markNoticePending(job.id);
+    } finally {
+      this.inFlight.delete(job.id);
     }
   }
 

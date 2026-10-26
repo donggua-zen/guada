@@ -85,7 +85,11 @@ describe("UserService", () => {
       getStoragePath: (sub: string, name: string) => `/uploads/${sub}/${name}`,
       toPhysicalPath: (stored: string) => path.join(tmpRoot, stored.replace("/uploads/", "")),
     };
-    service = new UserService(uploadPathService, accountStore as any, urlService);
+    service = new UserService(uploadPathService, accountStore as any, urlService, {
+      // 密码门禁/强度要求：测试环境默认无外部入口开启（基础强度策略仍生效）
+      isAnyAccessEnabled: async () => false,
+      isPublicAccessEnabled: async () => false,
+    } as any);
     sharpMock.mockClear();
     sharpMock.__chain.resize.mockClear();
     sharpMock.__chain.jpeg.mockClear();
@@ -148,29 +152,33 @@ describe("UserService", () => {
   });
 
   describe("setPassword", () => {
-    it("新密码短于 6 位 → 抛错", async () => {
-      await expect(service.setPassword(undefined, "12345")).rejects.toThrow(/至少 6 位/);
+    it("新密码短于 8 位 → 抛错", async () => {
+      await expect(service.setPassword(undefined, "12345")).rejects.toThrow(/至少 8 位/);
       expect(accountStore.setPasswordCalls).toHaveLength(0);
     });
 
     it("新密码为空 → 抛错", async () => {
-      await expect(service.setPassword(undefined, "")).rejects.toThrow(/至少 6 位/);
+      await expect(service.setPassword(undefined, "")).rejects.toThrow(/至少 8 位/);
+    });
+
+    it("只有单一字符类别 → 抛错（基础强度策略）", async () => {
+      await expect(service.setPassword(undefined, "abcdefgh")).rejects.toThrow(/至少 2 类/);
     });
 
     it("未设密码时（免登录模式）可直接设置", async () => {
       accountStore.account = {};
 
-      await expect(service.setPassword(undefined, "newpass")).resolves.toEqual({
+      await expect(service.setPassword(undefined, "newpass123")).resolves.toEqual({
         success: true,
         passwordSet: true,
       });
-      expect(accountStore.setPasswordCalls).toEqual(["newpass"]);
+      expect(accountStore.setPasswordCalls).toEqual(["newpass123"]);
     });
 
     it("已设密码但未提供旧密码 → 抛错", async () => {
       accountStore.account = { passwordHash: "h" };
 
-      await expect(service.setPassword(undefined, "newpass")).rejects.toThrow(/请输入当前密码/);
+      await expect(service.setPassword(undefined, "newpass123")).rejects.toThrow(/请输入当前密码/);
       expect(accountStore.setPasswordCalls).toHaveLength(0);
     });
 
@@ -178,7 +186,7 @@ describe("UserService", () => {
       accountStore.account = { passwordHash: "h" };
       accountStore.verifyPasswordImpl = async () => false;
 
-      await expect(service.setPassword("wrong", "newpass")).rejects.toThrow(/当前密码不正确/);
+      await expect(service.setPassword("wrong", "newpass123")).rejects.toThrow(/当前密码不正确/);
       expect(accountStore.setPasswordCalls).toHaveLength(0);
     });
 
@@ -186,11 +194,11 @@ describe("UserService", () => {
       accountStore.account = { passwordHash: "h" };
       accountStore.verifyPasswordImpl = async () => true;
 
-      await expect(service.setPassword("old", "newpass")).resolves.toEqual({
+      await expect(service.setPassword("old", "newpass123")).resolves.toEqual({
         success: true,
         passwordSet: true,
       });
-      expect(accountStore.setPasswordCalls).toEqual(["newpass"]);
+      expect(accountStore.setPasswordCalls).toEqual(["newpass123"]);
     });
   });
 

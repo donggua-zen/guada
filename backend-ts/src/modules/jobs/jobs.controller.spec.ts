@@ -90,4 +90,42 @@ describe("JobsController", () => {
       controller.readJobOutput("s1", "job-missing"),
     ).rejects.toBeInstanceOf(HttpException);
   });
+
+  it("错误分层：参数非法 400、未知/跨会话 404、读取失败 500", async () => {
+    const { spec } = makeSpec();
+    const id = registry.start(spec);
+
+    // 参数非法
+    await expect(
+      controller.readJobOutput("s1", id, "abc"),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // 未知作业（kill 与 output 两条路径）
+    await expect(controller.readJobOutput("s1", "job-missing")).rejects.toMatchObject({
+      status: 404,
+    });
+    let killError: any;
+    try {
+      controller.killJob("s1", "job-missing");
+    } catch (error) {
+      killError = error;
+    }
+    expect(killError?.status).toBe(404);
+
+    // 跨会话访问按"不可见"处理
+    await expect(controller.readJobOutput("s2", id)).rejects.toMatchObject({
+      status: 404,
+    });
+
+    // 执行器读取失败不能谎报 404
+    const broken = makeSpec({
+      read: jest.fn(async () => {
+        throw new Error("disk on fire");
+      }),
+    });
+    const brokenId = registry.start(broken.spec);
+    await expect(
+      controller.readJobOutput("s1", brokenId),
+    ).rejects.toMatchObject({ status: 500 });
+  });
 });

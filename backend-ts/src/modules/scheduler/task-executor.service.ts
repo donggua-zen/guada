@@ -268,7 +268,8 @@ export class TaskExecutorService {
         label: task.name,
         sessionId,
         handle: log.id,
-        notify: false,
+        // 不传 notify：scheduler 默认静默（registry.start 按 kind 归一化）——
+        // 结果由目标会话那一轮承载，job 仅供 job_list/job_read/job_stop 与 UI 可观测。
         read: (opts) => this.readSchedulerJobOutput(log.id, task.id, opts),
         cancel: (reason) => this.cancelSchedulerJob(log.id, reason),
         onDisposed: () => this.schedulerJobs.delete(log.id),

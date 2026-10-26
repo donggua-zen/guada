@@ -49,6 +49,8 @@ async function loadPlugin() {
   };
   const api = {
     registerToolKit: jest.fn(() => kit),
+    // 插件声明 NLS 语言包（jobs.lang.zh/en.json）；假宿主只需吞掉
+    registerNls: jest.fn(),
   };
   const registry = new JobRegistryService({ emit: jest.fn() } as any);
   const plugin = new JobsPlugin(registry);
@@ -197,7 +199,7 @@ describe("JobsPlugin", () => {
     done.resolve({ status: "killed" });
   });
 
-  it("job_send 调用 spec.send 并透传 appendNewline", async () => {
+  it("job_send 调用 spec.send 并透传 appendNewline（回执按真实字节数）", async () => {
     const send = jest.fn(async () => {});
     const { spec } = makeSpec({ send });
     const id = registry.start(spec) as JobId;
@@ -207,8 +209,24 @@ describe("JobsPlugin", () => {
       ctx,
     );
 
-    expect(text).toContain(`sent 1 bytes to job ${id}`);
+    // "y" + 追加的换行 = 2 字节
+    expect(text).toContain(`sent 2 bytes to job ${id}`);
     expect(send).toHaveBeenCalledWith("y", true);
+  });
+
+  it("job_send 回执按 UTF-8 字节数（中文/emoji 不再是字符数）", async () => {
+    const send = jest.fn(async () => {});
+    const { spec } = makeSpec({ send });
+    const id = registry.start(spec) as JobId;
+
+    const text = await tools.get("job_send").execute(
+      { job_id: id, input: "你好🙂", append_newline: false },
+      ctx,
+    );
+
+    // "你好" = 6 字节，🙂 = 4 字节；append_newline=false 不追加
+    expect(text).toContain(`sent 10 bytes to job ${id}`);
+    expect(send).toHaveBeenCalledWith("你好🙂", false);
   });
 
   it("job_send append_newline=false 原样透传", async () => {

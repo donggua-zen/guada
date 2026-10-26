@@ -14,6 +14,7 @@ jest.mock("./session-meta.store", () => ({ SessionMetaStore: class {} }));
 
 import { SessionEventsService } from "./session-events.service";
 import { SessionStreamManager } from "./session-stream.manager";
+import type { JobSnapshot } from "../jobs/job.types";
 
 describe("SessionEventsService 连接补发", () => {
   let streamManager: SessionStreamManager;
@@ -259,5 +260,63 @@ describe("SessionStreamManager 事件盖戳", () => {
       ["s1", 2],
       ["s2", 1],
     ]);
+  });
+});
+
+/**
+ * jobs 快照广播契约：前端 jobs store 的唯一上游。
+ * 这条映射此前零测试——事件名/payload 层级写错（例如漏 bootId、把 jobs 套一层）
+ * 前端只会静默丢快照，UI 停在过期状态且没有任何报错。
+ */
+describe("SessionEventsService jobs 快照广播", () => {
+  let service: SessionEventsService;
+
+  beforeEach(() => {
+    const streamManager = new SessionStreamManager();
+    const sessionStore = { getSessionType: jest.fn().mockReturnValue("web") };
+    const userInputQueue = {
+      epoch: "test-epoch",
+      getAllCounts: jest.fn(() => ({})),
+    };
+    service = new SessionEventsService(
+      streamManager,
+      sessionStore as any,
+      userInputQueue as any,
+    );
+  });
+
+  afterEach(() => {
+    service.onModuleDestroy();
+  });
+
+  it("jobs.changed → jobs_snapshot，payload 带 bootId/revision/jobs", () => {
+    const broadcast = jest.spyOn(service as any, "broadcastToAllClients");
+    const jobs: JobSnapshot[] = [
+      {
+        id: "job-1",
+        kind: "shell",
+        label: "sleep 60",
+        sessionId: "s1",
+        status: "running",
+        startedAt: 1,
+        reported: false,
+      },
+    ];
+
+    service.handleJobsChanged({
+      sessionId: "s1",
+      bootId: "boot-1",
+      revision: 7,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      jobs,
+    });
+
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith({
+      type: "jobs_snapshot",
+      sessionId: "s1",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      payload: { bootId: "boot-1", revision: 7, jobs },
+    });
   });
 });

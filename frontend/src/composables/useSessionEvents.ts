@@ -14,10 +14,12 @@ import { useRouter, useRoute } from "vue-router";
 import { NEW_SESSION_ID } from "@/constants";
 import { t } from "@/locales";
 import { useSessionStore } from "@/stores/session";
+import { useAuthStore } from "@/stores/auth";
 import { apiService } from "@/services/ApiService";
 import { streamReceiver } from "@/services/modules/StreamReceiver";
 import { projectChunk, resetSessionTurnsTransientState } from "@/services/modules/streamProjector";
 import { usePopup } from "@/composables/usePopup";
+import { emitSessionResync } from "@/utils/sessionResync";
 import type { UserQueueSnapshot } from "@/types/session";
 
 export function useSessionEvents() {
@@ -35,6 +37,30 @@ export function useSessionEvents() {
   function updateCurrentSessionId() {
     const sid = route.params.sessionId;
     currentSessionId.value = Array.isArray(sid) ? sid[0] : sid;
+  }
+
+  /**
+   * SSE 重连后校准当前会话：
+   * 息屏/断网期间回合可能已经结束（stopStream 删了缓冲，重连补发不会包含终态），
+   * 此时本地仍标记 isStreaming=true → 复位流状态并请求聊天区重载历史。
+   * 仍在前台运行的流由服务端补发缓冲 + hub 去重接管，不触发重载。
+   */
+  async function resyncCurrentSessionIfNeeded() {
+    const sessionId = currentSessionId.value;
+    if (!sessionId) return;
+    const state = sessionStore.getSessionState(sessionId);
+    if (!state?.isStreaming) return;
+    try {
+      const server = await apiService.fetchSession(sessionId);
+      if (server && server.isStreaming === false) {
+        sessionStore.syncStreamingState(sessionId, false);
+        resetSessionTurnsTransientState(sessionStore, sessionId);
+        sessionStore.clearSessionPendingAsks(sessionId);
+        emitSessionResync(sessionId);
+      }
+    } catch {
+      /* 补拉失败静默：下一次重连再试 */
+    }
   }
 
   function handleVisibilityChange() {
@@ -127,7 +153,19 @@ export function useSessionEvents() {
         if (currentSessionId.value) {
           void refreshQueue(currentSessionId.value);
         }
+
+        // 状态校准：息屏期间回合可能已结束，补发不会包含终态 → 主动核对并重载历史
+        void resyncCurrentSessionIfNeeded();
       }) ?? (() => {}),
+    );
+
+    // === 连接被判死（polyfill CLOSED，常见于 token 过期 401）===
+    // 交给既有鉴权流程：401 → logout/跳登录；网络错误则保留登录态。
+    // 延迟到回调里再取 store：node 单测环境没有 localStorage，避免初始化即崩。
+    unsubscribers.push(
+      apiService.onSessionEventsFatal(() => {
+        void useAuthStore().checkAuth();
+      }),
     );
 
     // === 会话 CRUD 事件 ===

@@ -4,6 +4,8 @@ import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { JobRegistryService } from "./job-registry.service";
 import type { JobId, JobSnapshot } from "./job.types";
+import langZh from "./jobs.lang.zh.json";
+import langEn from "./jobs.lang.en.json";
 
 const WAIT_DEFAULT_MS = 30_000;
 const WAIT_MAX_MS = 10 * 60_000;
@@ -21,8 +23,8 @@ export class JobsPlugin extends PluginBase {
 
   manifest = {
     id: "jobs",
-    name: "Background Jobs",
-    description: "List, read, feed input to, and cancel background jobs by stable job id.",
+    name: "%jobs.name%",
+    description: "%jobs.description%",
     version: "1.1.0",
     category: "core" as const,
   };
@@ -32,10 +34,12 @@ export class JobsPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi): Promise<void> {
+    api.registerNls("zh", langZh);
+    api.registerNls("en", langEn);
     const kit = api.registerToolKit({
       id: "jobs",
-      name: "Background Jobs",
-      description: "Manage long-running background work by job id.",
+      name: "%jobs.name%",
+      description: "%jobs.toolkitDescription%",
       activator:
         "Track and interact with background jobs started by tools such as run_command or subagent_spawn.",
       // 消费方跟随生产者：模型可发起的后台作业生产者（shell / subagent / workflow）
@@ -81,6 +85,7 @@ export class JobsPlugin extends PluginBase {
       },
       display: {
         actionType: "process",
+        text: { executing: "%job_read.executing%", completed: "%job_read.completed%" },
         argsKey: "job_id",
         icon: "terminal",
       },
@@ -102,6 +107,7 @@ export class JobsPlugin extends PluginBase {
       },
       display: {
         actionType: "process",
+        text: { executing: "%job_list.executing%", completed: "%job_list.completed%" },
         icon: "terminal",
       },
       readOnly: true,
@@ -131,6 +137,7 @@ export class JobsPlugin extends PluginBase {
       },
       display: {
         actionType: "process",
+        text: { executing: "%job_stop.executing%", completed: "%job_stop.completed%" },
         argsKey: "job_id",
         icon: "terminal",
       },
@@ -164,11 +171,16 @@ export class JobsPlugin extends PluginBase {
         if (!job) {
           return `job ${args.job_id} is no longer available`;
         }
-        await this.registry.send(jobId, sessionId, args.input, args.append_newline !== false);
-        return `sent ${args.input.length} bytes to job ${job.id}`;
+        const appendNewline = args.append_newline !== false;
+        await this.registry.send(jobId, sessionId, args.input, appendNewline);
+        // 回执按真实写入字节数（UTF-8）：中文/emoji 的字符数与字节数不等，
+        // 旧实现用 input.length（UTF-16 码元）会明显偏小。
+        const bytes = Buffer.byteLength(args.input, "utf8") + (appendNewline ? 1 : 0);
+        return `sent ${bytes} bytes to job ${job.id}`;
       },
       display: {
         actionType: "process",
+        text: { executing: "%job_send.executing%", completed: "%job_send.completed%" },
         argsKey: "job_id",
         icon: "terminal",
       },

@@ -376,6 +376,11 @@ class ApiService {
     return this.sessionEventsService.onConnected(callback);
   }
 
+  /** SSE 连接被判死（polyfill 放弃重试，常见于 401）时通知，用于触发鉴权校验 */
+  onSessionEventsFatal(callback: () => void): () => void {
+    return this.sessionEventsService.onConnectionFatal(callback);
+  }
+
   getClientId(): string {
     return getClientId();
   }

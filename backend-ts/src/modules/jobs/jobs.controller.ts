@@ -46,11 +46,7 @@ export class JobsController {
         status: job.status,
       };
     } catch (error: any) {
-      if (error instanceof HttpException) throw error;
-      throw new HttpException(
-        error?.message || "Job not found",
-        HttpStatus.NOT_FOUND,
-      );
+      throw this.toHttpException(error, "Job not found");
     }
   }
 
@@ -95,10 +91,32 @@ export class JobsController {
         logFilePath: result.job.logFilePath ?? result.output.logFilePath,
       };
     } catch (error: any) {
-      throw new HttpException(
-        error?.message || "Job output not found",
-        HttpStatus.NOT_FOUND,
-      );
+      throw this.toHttpException(error, "Failed to read job output");
     }
   }
+
+  /**
+   * 错误分层（旧实现一律 404，会把"读日志失败"谎报成"作业不存在"）：
+   * - unknown job / belongs to another session → 404（资源不存在或不可见）
+   * - 参数校验（offset / maxBytes 非数字）已在调用前抛 400，这里原样透传
+   * - 其余（执行器读取失败、日志损坏等）→ 500
+   */
+  private toHttpException(error: unknown, fallback: string): HttpException {
+    if (error instanceof HttpException) return error;
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : String(error ?? fallback);
+    return new HttpException(
+      message || fallback,
+      isJobNotFoundMessage(message)
+        ? HttpStatus.NOT_FOUND
+        : HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+}
+
+/** registry 侧的两类"作业不可见"错误（见 JobRegistryService.getRecord） */
+function isJobNotFoundMessage(message: string): boolean {
+  return /^unknown job /.test(message) || /belongs to another session/.test(message);
 }

@@ -5,13 +5,18 @@ import {
   OnApplicationShutdown,
 } from "@nestjs/common";
 import { EventBusService } from "../../common/events/event-bus.service";
+import { APP_BOOT_ID } from "../../common/utils/boot-id.util";
 import { mintId } from "../../common/utils/id.util";
 import {
+  JOB_CANCEL_WATCHDOG_MS,
   JOB_MAX_CONCURRENT_PER_SESSION,
   JOB_READ_DEFAULT_MAX_BYTES,
   JOB_READ_MAX_MAX_BYTES,
   JOB_READ_MIN_MAX_BYTES,
   JOB_TERMINAL_TTL_MS,
+  defaultJobNotify,
+  isByteLogJobKind,
+  isJobTerminalStatus,
   type JobId,
   type JobListSnapshot,
   type JobOutcome,
@@ -51,13 +56,17 @@ interface JobRecord {
   settledPromise: Promise<void>;
   settledResolve: () => void;
   cleanupTimer?: NodeJS.Timeout;
+  /** 取消看门狗：kill() 后等执行器 done；到期未结算则兜底 killed（见 JOB_CANCEL_WATCHDOG_MS） */
+  cancelTimer?: NodeJS.Timeout;
 }
 
 /**
  * 进程内后台作业注册表。
  *
  * 设计边界：
- * - 不执行实际工作，不持有输出；read/cancel/isAlive 都由执行器通过 start 时传入的钩子提供。
+ * - 不执行实际工作，不持有输出；read/cancel/send 都由执行器通过 start 时传入的钩子提供。
+ * - 不做存活探测：进程存活由执行器自己负责（shell 的 exit/看门狗、remote 的 agent push
+ *   与断线 lost）。将来若要让 registry 主动判定 lost，再引入 isAlive 钩子并按语义设计。
  * - 只做控制面：稳定 jobId、状态机、归属校验、每会话配额、TTL、通知事件。
  * - 不持久化：重启后 job 丢失，但执行器自己的日志文件仍可读。
  */
@@ -66,6 +75,11 @@ export class JobRegistryService
   implements OnModuleDestroy, OnApplicationShutdown
 {
   private readonly logger = new Logger(JobRegistryService.name);
+  /**
+   * 进程启动标识（全局 APP_BOOT_ID）：revision 只在同一 bootId 内单调，重启归零。
+   * 随快照一起下发，前端据此重置（否则重启后的低 revision 会被当成过期快照丢弃）。
+   */
+  private readonly bootId = APP_BOOT_ID;
   private readonly jobs = new Map<JobId, JobRecord>();
   private readonly sessionJobs = new Map<string, Set<JobId>>();
   private readonly revisions = new Map<string, number>();
@@ -96,23 +110,32 @@ export class JobRegistryService
         clearTimeout(record.cleanupTimer);
         record.cleanupTimer = undefined;
       }
+      this.clearCancelTimer(record);
     }
   }
 
   /**
    * 注册一个后台作业。调用方必须在工作真正开始后、返回 jobId 前调用，
    * 这样完成事件不会早于登记。
+   *
+   * notify 在这里归一化（唯一默认值来源）：workflow / scheduler 默认静默，其余默认通知；
+   * 显式传入优先。投递侧只信归一化后的 boolean，不再按 kind 二次判断。
    */
-  start(spec: JobStartSpec): JobId {
-    if (!spec.sessionId) {
+  start(input: JobStartSpec): JobId {
+    if (!input.sessionId) {
       throw new Error("job sessionId is required");
     }
-    if (!spec.kind) {
+    if (!input.kind) {
       throw new Error("job kind is required");
     }
-    if (!spec.label) {
+    if (!input.label) {
       throw new Error("job label is required");
     }
+
+    const spec: JobStartSpec = {
+      ...input,
+      notify: input.notify ?? defaultJobNotify(input.kind),
+    };
 
     const active = this.activeCount(spec.sessionId);
     if (active >= JOB_MAX_CONCURRENT_PER_SESSION) {
@@ -167,12 +190,28 @@ export class JobRegistryService
     const record = this.jobs.get(id);
     if (!record || record.settled) return;
 
+    // 运行时守卫：outcome 来自异步执行器（done 通道），非终态会让记录"已结算却仍算 running"，
+    // 后果是永久占用每会话配额、1s 快照 ticker 停不下来、job_list 永不消失。统一按 failed 收敛。
+    let status = outcome.status;
+    let detail = outcome.detail;
+    if (!isJobTerminalStatus(status)) {
+      const invalid = String(outcome.status);
+      this.logger.warn(
+        `job ${id} settled with non-terminal status "${invalid}"; coerced to failed`,
+      );
+      status = "failed";
+      detail = detail
+        ? `${detail} (invalid terminal status: ${invalid})`
+        : `invalid terminal status: ${invalid}`;
+    }
+
     record.settled = true;
-    record.status = outcome.status;
-    record.detail = outcome.detail;
+    record.status = status;
+    record.detail = detail;
     record.exitCode = outcome.exitCode;
     record.output = outcome.output;
     record.finishedAt = Date.now();
+    this.clearCancelTimer(record);
     // 有等待者时，结算后的输出由等待者读取；先置 reported，避免同时再发通知。
     if (record.waiters > 0) this.markReported(id);
     record.settledResolve();
@@ -219,7 +258,9 @@ export class JobRegistryService
     }
 
     if (output.logFilePath) record.logFilePath = output.logFilePath;
-    record.logSize = output.size;
+    // logSize 只对字节日志类有意义：subagent/workflow/scheduler 是内存文本，
+    // 每次整体重生成，写进去只会让前端出现假的"日志大小"。
+    if (isByteLogJobKind(record.spec.kind)) record.logSize = output.size;
     if (record.settled && readOptions.markReported !== false) {
       this.markReported(id);
     }
@@ -245,10 +286,7 @@ export class JobRegistryService
     readOptions: { markReported?: boolean } = {},
   ): Promise<{ output: JobOutputRead; job: JobSnapshot }> {
     const record = this.getRecord(id, sessionId);
-    const isByteLogKind =
-      record.spec.kind === "shell" ||
-      record.spec.kind === "remote-shell" ||
-      record.spec.kind === "pty";
+    const isByteLogKind = isByteLogJobKind(record.spec.kind);
 
     if (isByteLogKind && record.modelReadOffset !== undefined) {
       const result = await this.read(
@@ -320,6 +358,7 @@ export class JobRegistryService
     record.status = "stopping";
     this.markReported(id);
     void this.emitSnapshot(record.spec.sessionId);
+    this.armCancelWatchdog(record);
 
     try {
       const result = record.spec.cancel(reason);
@@ -378,7 +417,7 @@ export class JobRegistryService
   async snapshot(sessionId: string): Promise<JobListSnapshot> {
     const ids = this.sessionJobs.get(sessionId);
     if (!ids || ids.size === 0) {
-      return { revision: this.revisions.get(sessionId) ?? 0, jobs: [] };
+      return { bootId: this.bootId, revision: this.revisions.get(sessionId) ?? 0, jobs: [] };
     }
     const records = [...ids]
       .map((id) => this.jobs.get(id))
@@ -402,6 +441,7 @@ export class JobRegistryService
       }),
     );
     return {
+      bootId: this.bootId,
       revision: this.revisions.get(sessionId) ?? 0,
       jobs,
     };
@@ -428,8 +468,12 @@ export class JobRegistryService
   }
 
   /**
-   * 完成通知挂起：settle 时会话不空闲，本轮由 turn.stopping drain / 模型读取负责，
-   * 回合正常收尾或下一次空闲边界再决定是否投递。
+   * 完成通知挂起：settle 时会话不空闲（有活跃流）→ 不在回合中间插一条用户消息。
+   * 之后的交付有两条路：
+   * ① 回合正常收尾时 JobNotifier 批量投出（takePendingNotices）；
+   * ② shell/remote-shell 的完成输出会先被 turn.stopping 续跑钩子在进程层收割，
+   *    收割时已 markReported —— 于是本标记在取出时因 reported 被跳过，不会重复投递。
+   * 回合以 user_cancel / error 收尾则不投（与 processQueue 同一道门），记录随 TTL 清理。
    */
   markNoticePending(id: JobId): void {
     const record = this.jobs.get(id);
@@ -579,6 +623,34 @@ export class JobRegistryService
     record.cleanupTimer.unref?.();
   }
 
+  /**
+   * 取消看门狗：kill() 只负责"下刀"，终态由执行器的 done 结算。
+   * 执行器漏掉 done（cancel 成功但进程/流永不收尾）时记录会永久停在 stopping，
+   * 既占每会话配额，又让 1s 快照 ticker 常驻。到期仍未结算则兜底按 killed 收尾，
+   * detail 留证便于排查是哪个执行器没有兑现 done 契约。
+   */
+  private armCancelWatchdog(record: JobRecord): void {
+    this.clearCancelTimer(record);
+    record.cancelTimer = setTimeout(() => {
+      record.cancelTimer = undefined;
+      if (record.settled) return;
+      this.logger.warn(
+        `job ${record.id} (kind: ${record.spec.kind}) did not settle within ${JOB_CANCEL_WATCHDOG_MS}ms after cancel; forcing killed`,
+      );
+      this.settle(record.id, {
+        status: "killed",
+        detail: "cancel watchdog: executor did not settle",
+      });
+    }, JOB_CANCEL_WATCHDOG_MS);
+    record.cancelTimer.unref?.();
+  }
+
+  private clearCancelTimer(record: JobRecord): void {
+    if (!record.cancelTimer) return;
+    clearTimeout(record.cancelTimer);
+    record.cancelTimer = undefined;
+  }
+
   private removeRecord(record: JobRecord): void {
     // TTL timer 与 disposeSession 可能同时移除同一个 record：只处理第一次。
     if (this.jobs.get(record.id) !== record) return;
@@ -586,6 +658,7 @@ export class JobRegistryService
       clearTimeout(record.cleanupTimer);
       record.cleanupTimer = undefined;
     }
+    this.clearCancelTimer(record);
     this.jobs.delete(record.id);
     const ids = this.sessionJobs.get(record.spec.sessionId);
     if (ids) {
@@ -639,6 +712,7 @@ export class JobRegistryService
     const revision = this.bumpRevision(sessionId);
     this.eventBus.emit<JobsSnapshotEvent>("jobs.changed", {
       sessionId,
+      bootId: this.bootId,
       revision,
       timestamp: new Date().toISOString(),
       jobs,

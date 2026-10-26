@@ -717,7 +717,8 @@ export class WorkflowEngineService {
    * 为一次 workflow run 注册通用作业。
    *
    * workflow 仍是前台工具调用，结果由工具返回值交付；job 仅用于
-   * job_list/job_read/job_stop 与 UI 可观测，notify 固定 false。
+   * job_list/job_read/job_stop 与 UI 可观测——不传 notify，workflow 默认静默
+   * （默认值由 JobRegistryService.start 按 kind 归一化）。
    */
   private registerWorkflowJob(
     run: WorkflowRun,
@@ -732,7 +733,8 @@ export class WorkflowEngineService {
         label,
         sessionId,
         handle: run.runId,
-        notify: false,
+        // 不传 notify：workflow 默认静默（registry.start 按 kind 归一化）——
+        // 结果由工具返回值交付，job 仅用于 job_list/job_read/job_stop 与 UI 可观测。
         read: async (opts) => {
           let text: string;
           try {
@@ -745,7 +747,6 @@ export class WorkflowEngineService {
         cancel: (reason) => {
           run.cancel(reason ?? "job killed");
         },
-        isAlive: () => run.getSnapshot().status === "running",
         onDisposed: () => this.removeRunState(sessionId, run.runId),
         done,
       });

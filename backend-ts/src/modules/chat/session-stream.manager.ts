@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Subject } from "rxjs";
 import { WireStreamEvent } from "./types/event-chunk.types";
+import { APP_BOOT_ID } from "../../common/utils/boot-id.util";
 
 /**
  * 流式事件
@@ -52,10 +53,9 @@ export class SessionStreamManager {
   /**
    * 进程启动标识：随每条事件下发（streamBootId）。进程重启后计数器归零，
    * 前端幂等游标据此识别"序号已重置"，避免把新流的首批事件误判为重复。
+   * 取值来自全局 APP_BOOT_ID（与 jobs 快照的 bootId 同一真相）。
    */
-  private readonly bootId = `${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
+  private readonly bootId = APP_BOOT_ID;
   /**
    * 每会话单调流序号（publish 唯一盖戳点）。不随 ActiveStream 销毁重置——
    * 回合结束 stopStream 后下一回合序号继续递增，否则前端会把新回合事件误判为已消费。

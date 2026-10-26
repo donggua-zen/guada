@@ -71,7 +71,10 @@ export function useRunningProcesses(sessionId: MaybeRefOrGetter<string | undefin
   watch(
     () => toValue(sessionId),
     () => {
-      void load();
+      // 强制基线：快照只应用给当前会话（见下方 jobs_snapshot 过滤），而"切走→作业在后台完成
+      // →切回"期间后端不再推快照（active job 归零后 1s ticker 自停）。非 force 会在已有桶时
+      // 直接早退，胶囊就会一直显示一个其实已经结束的进程。
+      void load(true);
     },
     { immediate: true },
   );

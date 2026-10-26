@@ -195,7 +195,7 @@ describe("JobNotifierService", () => {
     expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
   });
 
-  it("reported / notify:false / workflow / scheduler 均不通知", async () => {
+  it("reported / notify:false 均不通知", async () => {
     const reported = makeSpec();
     const reportedId = registry.start(reported.spec);
     reported.done.resolve({ status: "completed" });
@@ -216,17 +216,35 @@ describe("JobNotifierService", () => {
       notify: false,
     });
 
+    expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
+  });
+
+  it("workflow / scheduler 的静默由 registry 的 notify 默认值承担（投递侧不再按 kind 判断）", async () => {
+    // registry 侧：不传 notify 的 workflow 归一化为 false（默认值唯一来源在 start）
     const workflow = makeSpec({ kind: "workflow" });
     const workflowId = registry.start(workflow.spec);
     workflow.done.resolve({ status: "completed" });
     await flushAsync();
+
     await notifier.handleJobSettled({
       sessionId: "s1",
       job: registry.get(workflowId, "s1")!,
+      notify: false,
+    });
+    expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
+
+    // 显式 notify:true 覆盖默认 → 投递侧照常通知（不再有 kind 二次门）
+    const forced = makeSpec({ kind: "workflow", notify: true });
+    const forcedId = registry.start(forced.spec);
+    forced.done.resolve({ status: "completed" });
+    await flushAsync();
+
+    await notifier.handleJobSettled({
+      sessionId: "s1",
+      job: registry.get(forcedId, "s1")!,
       notify: true,
     });
-
-    expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
+    expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
   });
 
   it("subagent 作业映射到 sub_agent source", async () => {
@@ -294,5 +312,78 @@ describe("JobNotifierService", () => {
     expect(text).not.toContain("Use job_read");
     // 状态正文照常保留（工具隐藏只影响指引，不影响通知本身）
     expect(text).toContain(`Background job ${id}`);
+  });
+
+  it("入队失败不吞通知：reported 保持 false", async () => {
+    chatRunner.enqueueMessage.mockRejectedValueOnce(new Error("queue down"));
+    const { spec, done } = makeSpec();
+    const id = registry.start(spec);
+    done.resolve({ status: "completed", exitCode: 0 });
+    await flushAsync();
+
+    await notifier.handleJobSettled({
+      sessionId: "s1",
+      job: registry.get(id, "s1")!,
+      notify: true,
+    });
+
+    expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
+    // 旧实现"先 markReported 再入队"，失败即永久丢通知；现在必须保持未通告
+    expect(registry.get(id, "s1")?.reported).toBe(false);
+  });
+
+  it("投递失败后下一次回合正常收尾补投，且只投一次", async () => {
+    chatRunner.enqueueMessage.mockRejectedValueOnce(new Error("queue down"));
+    const { spec, done } = makeSpec();
+    const id = registry.start(spec);
+    done.resolve({ status: "completed", exitCode: 0 });
+    await flushAsync();
+
+    await notifier.handleJobSettled({
+      sessionId: "s1",
+      job: registry.get(id, "s1")!,
+      notify: true,
+    });
+    expect(registry.get(id, "s1")?.reported).toBe(false);
+
+    await notifier.handleTurnFinished({ sessionId: "s1", normalFinish: true });
+    expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(2);
+    expect(registry.get(id, "s1")?.reported).toBe(true);
+
+    // 已通告后再收尾不重复投递
+    await notifier.handleTurnFinished({ sessionId: "s1", normalFinish: true });
+    expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("同一 job 并发投递只入队一次（inFlight 去重）", async () => {
+    let release: (() => void) | undefined;
+    chatRunner.enqueueMessage.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const { spec, done } = makeSpec();
+    const id = registry.start(spec);
+    done.resolve({ status: "completed", exitCode: 0 });
+    await flushAsync();
+
+    const job = registry.get(id, "s1")!;
+    const first = notifier.handleJobSettled({
+      sessionId: "s1",
+      job,
+      notify: true,
+    });
+    const second = notifier.handleJobSettled({
+      sessionId: "s1",
+      job,
+      notify: true,
+    });
+    await flushAsync();
+    release?.();
+    await Promise.all([first, second]);
+
+    expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
+    expect(registry.get(id, "s1")?.reported).toBe(true);
   });
 });

@@ -125,6 +125,37 @@ describe("useRunningProcesses", () => {
     scope.stop();
   });
 
+  it("会话切回时强制刷新基线（避免幽灵 running 进程）", async () => {
+    apiMocks.getSessionJobs.mockResolvedValue({
+      epoch: "b1",
+      revision: 5,
+      jobs: [job("job-1", "npm run dev")],
+    });
+    const sid = ref<string | undefined>("s1");
+    const scope = effectScope();
+    const api = scope.run(() => useRunningProcesses(sid))!;
+    await flush();
+    expect(apiMocks.getSessionJobs).toHaveBeenCalledTimes(1);
+    expect(api.processes.value.map((p) => p.id)).toEqual(["job-1"]);
+
+    // 切走期间作业在后台结束：后端 1s ticker 已停，不会再有快照推下来
+    apiMocks.getSessionJobs.mockResolvedValue({
+      epoch: "b1",
+      revision: 9,
+      jobs: [],
+    });
+    sid.value = "s2";
+    await flush();
+    sid.value = "s1";
+    await flush();
+
+    // 已有桶也必须重新拉基线，否则胶囊会一直显示已结束的进程
+    expect(apiMocks.getSessionJobs).toHaveBeenCalledTimes(3);
+    expect(api.processes.value).toEqual([]);
+
+    scope.stop();
+  });
+
   it("jobs_snapshot 直接应用快照，不再 REST 重拉；revision 旧快照被丢弃", async () => {
     apiMocks.getSessionJobs.mockResolvedValue({ revision: 1, jobs: [] });
     const sid = ref<string | undefined>("s1");

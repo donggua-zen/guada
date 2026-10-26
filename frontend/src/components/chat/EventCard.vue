@@ -134,6 +134,7 @@ import {
 } from "@vicons/fluent";
 import GdTooltip from "@/components/ui/GdTooltip.vue";
 import { stripSystemReminder } from "@/utils/messageUtils";
+import { resolveNoticeEventType } from "@/utils/jobNotice";
 import type { Turn, MessageBundle } from "@/types/message";
 
 const props = defineProps<{
@@ -158,15 +159,14 @@ const sourceKind = computed(() => {
 /**
  * 事件类型：metadata.eventType 优先（event 外壳/束）；
  * 通知类消息数据保持 role='user' 不动，以 source.kind 作为渲染分流的兜底判定。
+ * 判定统一走 utils/jobNotice（与后端 buildSource 的词表一一对应，有单测兜住）。
  */
-const eventType = computed(() => {
-  const declared = props.event?.metadata?.eventType;
-  if (declared) return String(declared);
-  if (sourceKind.value === "process_monitor" || sourceKind.value === "sub_agent") {
-    return "job-notice";
-  }
-  return "";
-});
+const eventType = computed(() =>
+  resolveNoticeEventType({
+    declared: props.event?.metadata?.eventType,
+    sourceKind: sourceKind.value,
+  }),
+);
 
 const isSubagentNotice = computed(() => sourceKind.value === "sub_agent");
 const subSessionId = computed(() => {

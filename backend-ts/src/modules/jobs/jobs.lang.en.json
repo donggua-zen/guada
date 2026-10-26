@@ -1,0 +1,13 @@
+{
+  "jobs.name": "Background Jobs",
+  "jobs.description": "Inspect, read, feed input to, and stop background jobs by job id",
+  "jobs.toolkitDescription": "Manage long-running background work by job id",
+  "job_read.executing": "Reading job output",
+  "job_read.completed": "Read job output",
+  "job_list.executing": "Listing background jobs",
+  "job_list.completed": "Listed background jobs",
+  "job_stop.executing": "Stopping background job",
+  "job_stop.completed": "Requested job cancellation",
+  "job_send.executing": "Writing input to job",
+  "job_send.completed": "Wrote input to job"
+}

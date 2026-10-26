@@ -1038,7 +1038,6 @@ export class SubAgentManager implements OnModuleInit {
           message: input,
         });
       },
-      isAlive: () => this.isSubAgentRunning(subSessionId),
       onReported: () =>
         this.handleSubAgentJobReported(subSessionId, parentSessionId),
       onDisposed: () =>

@@ -205,6 +205,7 @@ import { useAuthStore } from "../../stores/auth"
 import { useLayoutStore } from "@/stores/layout"
 import { streamReceiver } from "@/services/modules/StreamReceiver"
 import { writeTextToClipboard } from "@/utils/clipboard"
+import { SESSION_RESYNC_EVENT } from "@/utils/sessionResync"
 import {
   applyLiveChunk,
   foldEvents,
@@ -839,11 +840,27 @@ const chatInputConfig = computed(() => {
   };
 });
 
+/**
+ * SSE 重连后的状态重同步：本地认为仍在流式、但服务端已结束（息屏期间回合跑完）
+ * 时，useSessionEvents 会派发该事件，这里强制重载当前会话历史。
+ */
+function handleSessionResync(event: Event) {
+  const sessionId = (event as CustomEvent<{ sessionId?: string }>).detail?.sessionId
+  if (!sessionId || sessionId !== effectiveSessionId.value) return
+  const state = sessionStore.getSessionState(sessionId)
+  if (!state) return
+  // 绕过 loadMessages 的 loaded 缓存门禁，按服务端最新事件重建消息树
+  state.loaded = false
+  void loadSession(sessionId)
+}
+
 onMounted(() => {
   // 附加连接类型由 ChatInput 内部自行加载渲染标签,此处不再维护
+  window.addEventListener(SESSION_RESYNC_EVENT, handleSessionResync)
 });
 
 onUnmounted(() => {
+  window.removeEventListener(SESSION_RESYNC_EVENT, handleSessionResync)
   clearSkeletonTimers();
   chatResizeObserver?.disconnect();
   chatResizeObserver = null;

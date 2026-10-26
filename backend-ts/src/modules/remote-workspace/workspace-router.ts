@@ -53,8 +53,13 @@ interface TrackedRemoteProcess {
   pid: string;
   /** 输出编码（run_command 传入；outputB64 解码用，缺省 utf-8） */
   encoding?: string;
-  /** 通用后台作业 id（0.7+ agent / 注册成功时存在） */
+  /** 通用后台作业 id（0.7+ agent / 注册成功时存在）——本地 job-*，与 agent 侧不同源 */
   jobId?: JobId;
+  /**
+   * 远端 agent 侧的作业 id（execute 回传）。**与本地 jobId 不是同一个 id 空间**，
+   * 只用于匹配 agent 的 process_done 推送（push 可能早于本地注册）。
+   */
+  agentJobId?: string;
   /** 结算 deferred（push / drain / lost 三处 first-wins） */
   resolve?: (outcome: JobOutcome) => void;
   settled?: boolean;
@@ -70,7 +75,7 @@ export class WorkspaceToolRouter {
 
   /** 会话 → 远程后台进程登记（key = 完整前缀 processId） */
   private readonly trackedProcesses = new Map<string, TrackedRemoteProcess>();
-  /** push 早于 job 注册时的短缓冲（key = jobId 或 full processId） */
+  /** push 早于 job 注册时的短缓冲（key = agent 侧 jobId 或完整 processId） */
   private readonly pendingRemoteCompletions = new Map<
     string,
     { data: Record<string, any>; timer: NodeJS.Timeout }
@@ -125,6 +130,8 @@ export class WorkspaceToolRouter {
       command?: string;
       logFilePath?: string;
       provider?: AgentWorkspaceProvider;
+      /** agent 侧作业 id（execute 回传），仅用于匹配 process_done 推送 */
+      agentJobId?: string;
     },
   ): JobId | undefined {
     const tracked: TrackedRemoteProcess = {
@@ -133,6 +140,7 @@ export class WorkspaceToolRouter {
       pid: prefixedProcessId.split(":").pop() || "",
       encoding,
       label: options?.command,
+      agentJobId: options?.agentJobId,
     };
     this.trackedProcesses.set(prefixedProcessId, tracked);
 
@@ -179,14 +187,16 @@ export class WorkspaceToolRouter {
             appendNewline === false ? input : `${input}\n`,
           );
         },
-        isAlive: () => !tracked.settled,
         onDisposed: () => this.trackedProcesses.delete(prefixedProcessId),
         done,
       });
       tracked.jobId = jobId;
       tracked.resolve = resolveJob;
       // push 可能早于注册：注册完成后立即消费短缓冲。
-      this.consumePendingRemoteCompletion(jobId, tracked);
+      // key 用 agent 侧 jobId（不是本地 jobId）与完整 processId——两端 id 不同源。
+      if (options.agentJobId) {
+        this.consumePendingRemoteCompletion(options.agentJobId, tracked);
+      }
       this.consumePendingRemoteCompletion(prefixedProcessId, tracked);
       return jobId;
     } catch (error: any) {
@@ -217,7 +227,13 @@ export class WorkspaceToolRouter {
 
   // ── 远程 job 结算 ──
 
-  /** agent 推送 process_done：按 jobId 优先、完整 processId 兜底。 */
+  /**
+   * agent 推送 process_done：按 **agent 侧 jobId**（execute 回传的那个）优先匹配，
+   * 完整 processId 兜底。
+   *
+   * 注意不能用本地 `tracked.jobId`（job-*）去比 `event.jobId`：两端是不同 id 空间，
+   * 本地从未把 job-* 发给 agent，那样比较永远不命中（历史实现的死快路径）。
+   */
   @OnEvent("remote.process.done")
   handleRemoteProcessDone(event: Record<string, any>): void {
     const processId = String(event?.processId || "");
@@ -226,16 +242,17 @@ export class WorkspaceToolRouter {
       String(event.connectionName || ""),
       processId,
     );
+    const agentJobId = event.jobId ? String(event.jobId) : "";
     let tracked: TrackedRemoteProcess | undefined;
-    if (event.jobId) {
+    if (agentJobId) {
       tracked = [...this.trackedProcesses.values()].find(
-        (t) => t.jobId === event.jobId,
+        (t) => t.agentJobId === agentJobId,
       );
     }
     tracked ||= this.trackedProcesses.get(fullId);
 
     if (!tracked) {
-      if (event.jobId) this.bufferRemoteCompletion(String(event.jobId), event);
+      if (agentJobId) this.bufferRemoteCompletion(agentJobId, event);
       this.bufferRemoteCompletion(fullId, event);
       return;
     }

@@ -308,7 +308,10 @@ export interface SessionApi {
   ): Promise<{ items: SessionSummaryItem[]; total: number }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
   getSessionTodo(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
-  getSessionJobs(sessionId: string): Promise<{ revision: number; jobs: UiJobInfo[] }>;
+  /** bootId = 后端进程启动标识：变化即 revision 语义重置（后端重启后 revision 归零） */
+  getSessionJobs(
+    sessionId: string,
+  ): Promise<{ bootId: string; revision: number; jobs: UiJobInfo[] }>;
   killSessionJob(
     sessionId: string,
     jobId: string,

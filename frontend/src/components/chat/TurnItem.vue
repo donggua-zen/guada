@@ -225,6 +225,7 @@ import { useElapsedTicker } from '@/composables/useElapsedTicker';
 import { useTabStore } from '@/stores/tab';
 import { useLayoutStore } from '@/stores/layout';
 import { isHiddenBlock, getThinkingPreview } from '@/utils/messageUtils';
+import { isJobNoticeSource } from '@/utils/jobNotice';
 import { previewFile } from '@/utils/workspacePreview';
 
 const { t } = useI18n();
@@ -483,10 +484,10 @@ const userView = computed(() => toUserMessageView(user.value));
 
 // P5c：通知类回合（process_monitor/sub_agent）——数据保持 role='user' 不动，
 // 渲染分流到 EventCard 时间卡片（压缩卡同款分隔线样式），不占用用户气泡容器。
-const isNotificationTurn = computed(() => {
-  const kind = user.value?.source?.kind;
-  return kind === 'process_monitor' || kind === 'sub_agent';
-});
+// 判定统一走 utils/jobNotice（与后端 buildSource 的词表一一对应，有单测兜住）。
+const isNotificationTurn = computed(() =>
+  isJobNoticeSource(user.value?.source?.kind),
+);
 
 const userTime = computed(() => {
   return {

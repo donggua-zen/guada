@@ -286,7 +286,8 @@ onMounted(() => {
     offConnected = apiService.onConnected(() => {
         void jobsStore.ensureLoaded(props.sessionId, true);
     });
-    void jobsStore.ensureLoaded(props.sessionId);
+    // 强制基线：面板可能在"离开该会话期间作业已结束"之后才打开，非 force 会在已有桶时早退
+    void jobsStore.ensureLoaded(props.sessionId, true);
     void fetchLog('initial');
     syncRemoteFallback();
 });

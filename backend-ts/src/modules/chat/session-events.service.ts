@@ -354,6 +354,8 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       sessionId: event.sessionId,
       timestamp: event.timestamp,
       payload: {
+        // bootId = 后端进程启动标识：前端看到它变化就重置 revision 语义（重启后 revision 归零）
+        bootId: event.bootId,
         revision: event.revision,
         jobs: event.jobs,
       },

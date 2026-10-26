@@ -589,6 +589,8 @@ export class ShellPlugin extends PluginBase {
               command: args.command,
               logFilePath: execResult.logFilePath,
               provider: target.provider,
+              // agent 侧 jobId：process_done 推送按它匹配（与本地 job-* 不同源）
+              agentJobId: execResult.jobId,
             }
           : undefined,
       );
@@ -719,7 +721,7 @@ const truncNote = r.truncated && r.logFilePath
 
     return {
       kind: "continue",
-      messages: [`<system-reminder>\n${parts.join("\n\n")}\n</system-reminder>`],
+      messages: [`<system_reminder>\n${parts.join("\n\n")}\n</system_reminder>`],
     };
   }
 

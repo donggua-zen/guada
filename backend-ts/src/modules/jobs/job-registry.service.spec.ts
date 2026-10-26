@@ -1,8 +1,10 @@
 import { JobRegistryService } from "./job-registry.service";
 import {
+  JOB_CANCEL_WATCHDOG_MS,
   JOB_MAX_CONCURRENT_PER_SESSION,
   JOB_TERMINAL_TTL_MS,
   type JobOutcome,
+  type JobSettledEvent,
   type JobStartSpec,
 } from "./job.types";
 
@@ -405,5 +407,113 @@ describe("JobRegistryService", () => {
     const { spec } = makeSpec();
     const id = registry.start(spec);
     expect(() => registry.get(id, "s2")).toThrow(/another session/);
+  });
+
+  it("snapshot 与 jobs.changed 都带稳定 bootId（后端重启识别）", async () => {
+    const { spec } = makeSpec();
+    registry.start(spec);
+    await flushAsync();
+
+    const first = await registry.snapshot("s1");
+    const second = await registry.snapshot("s1");
+    expect(typeof first.bootId).toBe("string");
+    expect(first.bootId.length).toBeGreaterThan(0);
+    expect(second.bootId).toBe(first.bootId);
+
+    // 空会话分支也要带 bootId（前端基线走这条）
+    const empty = await registry.snapshot("s2");
+    expect(empty.bootId).toBe(first.bootId);
+    expect(empty.jobs).toEqual([]);
+
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      "jobs.changed",
+      expect.objectContaining({ sessionId: "s1", bootId: first.bootId }),
+    );
+  });
+
+  it("settle 收到非终态 status → 收敛为 failed，不再占配额", async () => {
+    const { spec } = makeSpec();
+    const id = registry.start(spec);
+
+    // 模拟执行器异步通道传错状态（类型守卫只在编译期生效）
+    registry.settle(id, { status: "running" } as unknown as JobOutcome);
+
+    const snap = registry.get(id, "s1")!;
+    expect(snap.status).toBe("failed");
+    expect(snap.detail).toContain("invalid terminal status");
+    expect(registry.hasActiveJobs()).toBe(false);
+  });
+
+  it("kill 后执行器不结算 → 看门狗兜底 killed，配额释放", async () => {
+    jest.useFakeTimers();
+    // done 永不 resolve：模拟执行器漏掉结算
+    const { spec } = makeSpec({ cancel: jest.fn() });
+    const id = registry.start(spec);
+
+    expect(registry.kill(id, "s1", "test")).toBe("requested");
+    expect(registry.get(id, "s1")!.status).toBe("stopping");
+
+    jest.advanceTimersByTime(JOB_CANCEL_WATCHDOG_MS);
+    await flushAsync();
+
+    const snap = registry.get(id, "s1")!;
+    expect(snap.status).toBe("killed");
+    expect(snap.detail).toContain("cancel watchdog");
+    expect(registry.hasActiveJobs()).toBe(false);
+  });
+
+  it("onModuleDestroy 清掉取消看门狗（不阻塞进程退出）", () => {
+    jest.useFakeTimers();
+    const { spec } = makeSpec({ cancel: jest.fn() });
+    const id = registry.start(spec);
+    registry.kill(id, "s1");
+
+    expect(jest.getTimerCount()).toBeGreaterThan(0);
+    registry.onModuleDestroy();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it("notify 默认值按 kind 归一化：workflow/scheduler 静默、显式优先生效", async () => {
+    const captured: JobSettledEvent[] = [];
+    eventBus.emit.mockImplementation((name: string, payload: unknown) => {
+      if (name === "job.settled") captured.push(payload as JobSettledEvent);
+    });
+
+    const notifyOf = async (
+      overrides: Partial<JobStartSpec>,
+    ): Promise<boolean | undefined> => {
+      captured.length = 0;
+      const { spec, done } = makeSpec(overrides);
+      registry.start(spec);
+      done.resolve({ status: "completed" });
+      await flushAsync();
+      return captured[0]?.notify;
+    };
+
+    expect(await notifyOf({ kind: "workflow" })).toBe(false);
+    expect(await notifyOf({ kind: "scheduler" })).toBe(false);
+    expect(await notifyOf({ kind: "shell" })).toBe(true);
+    expect(await notifyOf({ kind: "subagent" })).toBe(true);
+    // 显式传入优先于 kind 默认值
+    expect(await notifyOf({ kind: "workflow", notify: true })).toBe(true);
+    expect(await notifyOf({ kind: "shell", notify: false })).toBe(false);
+  });
+
+  it("只有字节日志类写 logSize（内存文本类不产生假日志大小）", async () => {
+    const read = jest.fn(async () => ({
+      text: "x",
+      offset: 0,
+      nextOffset: 1,
+      size: 999,
+      truncated: false,
+    }));
+
+    const shellId = registry.start(makeSpec({ read }).spec);
+    const shellRead = await registry.read(shellId, "s1");
+    expect(shellRead.job.logSize).toBe(999);
+
+    const subagentId = registry.start(makeSpec({ kind: "subagent", read }).spec);
+    const subagentRead = await registry.read(subagentId, "s1");
+    expect(subagentRead.job.logSize).toBeUndefined();
   });
 });
