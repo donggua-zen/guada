@@ -25,6 +25,7 @@ import { ChatRunnerService } from "./chat-runner.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 import { InteractionWaitService } from "../../common/services/interaction-wait.service";
 import { parseLocalSlashCommand } from "./commands/local-slash-command";
+import { normalizeWorkflowCommandInput } from "../workflow/workflow.command";
 import { normalizeTurnSettingsOverride } from "./types/turn-settings-override";
 import { UserInputQueueService } from "./user-input-queue.service";
 
@@ -74,13 +75,23 @@ export class ChatController {
     @Req() req: Request,
     @Headers("x-client-id") clientId: string,
   ) {
-    const {
+    let {
       sessionId,
       regenerationMode = "overwrite",
       resumeData,
       userMessage,
       settingsOverride: rawSettingsOverride,
     } = body;
+
+    // `/workflow [任务]` 统一规范化为标签，交给 TagParserPipeline 注入显式请求说明。
+    // 与本地控制命令（/compact）不同：这里不拦截回合，只改写标记后继续正常建流，
+    // 因此面板选中与直接输入两条路径共用同一套注入逻辑。
+    if (userMessage?.content) {
+      const normalized = normalizeWorkflowCommandInput(userMessage.content);
+      if (normalized !== userMessage.content) {
+        userMessage = { ...userMessage, content: normalized };
+      }
+    }
 
     // 白名单归一化：非法字段/类型直接 400，坏值不进入回合上下文。
     const settingsOverride = normalizeTurnSettingsOverride(rawSettingsOverride);

@@ -90,6 +90,7 @@ Whether you're a **content creator** writing scripts and chasing trends, a **pro
 |------|---------|------|
 | **🤖 Agent** | ReAct multi-turn autonomous loop + Sub-Agent hierarchical delegation, session locks, streaming, interruption handling, and three regeneration modes | [→ Details](docs/agent-engine.md) |
 | **👥 Sub-Agent System** | Full independent configuration (character/model/tools/knowledge base), complex tasks auto-decompose → delegate → collect results | [→ Details](docs/sub-agent.md) |
+| **🧭 Workflow Orchestration** | Type `/workflow` to explicitly start multi-sub-agent orchestration: the model writes a script that schedules sub-agents in parallel/stages and summarizes results | [→ Details](docs/workflow-subagent-plan.md) |
 | **🔌 Plugin System** | All core features are pluginized (browser/file/search/memory/scheduled tasks/characters), PluginBase lifecycle + hot-swap with instant effect, toolkit-level permission filtering | — |
 | **📚 Knowledge Base (RAG)** | Semantic + keyword hybrid retrieval, Agent self-service multi-round search and write, supports **40+ file formats** (incl. OCR) | [→ Details](docs/knowledge-base.md) |
 | **🧠 Long-Term Memory** | Two-level compression (trim → semantic), editable, reversible, with history — non-destructive compression | [→ Details](docs/memory.md) |

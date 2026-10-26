@@ -175,3 +175,31 @@ WorkflowEngineService.startRun (宿主)
 - agent() 无超时（受用户停止约束）；如需单 agent 超时可在 opts 加 timeoutMs
 - 后台模式：现有信箱基建（enqueueMessage + system_reminder）可支撑"超时转后台"或显式后台参数（DSH 亦为 deferred 项）
 - outputSchema 结构化输出、跨 run 持久化工作流模板（workflow 复用/分享）
+
+## 九、用户入口：`/workflow` 斜杠命令
+
+工作流原先只有模型侧 `workflow_run` 工具，界面没有任何启动入口；`workflow` 工具包的
+activator 又要求"用户显式要求"才可使用，导致用户不知道如何触发。现在由
+`WorkflowPlugin.onLoad` 注册一个 `workflow` 命令提供者（与技能命令同一套
+`ICommandProvider` 机制），提供显式入口：
+
+- 输入 `/` 打开命令面板，选择 `workflow:工作流`，在徽标后描述任务后发送。
+- 也可以直接输入 `/workflow 审查整个仓库的异常处理`。`ChatController` 在落库/建流前
+  把整段命令规范化为 `[/workflow:workflow label="工作流"] 任务`，与面板选中走同一条链路。
+- `TagParserPipeline` 解析标签后调用 `WorkflowPlugin` 的 `parse`，把一段 `origin=system`
+  注入块随消息冻结：用户已显式要求工作流，模型应 `tool_learn("workflow")` 后经
+  `tool_use` 调用 `workflow_run`。正文不改写，徽标与注入块随消息冻结，历史稳定。
+- 命令不新增执行通道，也不绕过现有门控；它只是把"显式要求"送到模型。
+
+可用性门控（`resolveWorkflowAvailability`）：
+
+| 状态 | `/` 面板 | 发送后注入 |
+|---|---|---|
+| workflow 插件全局关闭 | 不出现 | 不注入 |
+| 子代理会话 | 编辑器只读，实际不可用 | 说明不能嵌套 |
+| 智能体禁用 workflow 工具包 | 出现 | 引导去"智能体设置 → 工具包"启用 |
+| 未启用任何子代理（默认） | 出现 | 引导去"智能体设置 → 子代理"启用至少一个 |
+| 有子代理 | 出现 | 显式请求说明 + `tool_learn` + `workflow_run` |
+
+测试：`backend-ts/test/workflow/workflow-command.spec.ts`（provider 注册、输入规范化、
+四种可用性分支、fail-open）以及 `chat.controller.spec.ts` 的 `/workflow` 规范化断言。

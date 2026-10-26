@@ -4,8 +4,14 @@ import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { PluginContext } from "../plugins/types/plugin.types";
 import { AgentFileStore } from "../agents/agent-file.store";
+import { SessionService } from "../chat/session.service";
+import { isToolkitAllowedByRoleConfig } from "../plugins/utils/role-toolkit-filter";
 import { WorkflowEngineService, WORKFLOW_RESULT_MAX_CHARS } from "./workflow-engine.service";
 import type { WorkflowMeta } from "./workflow.types";
+import {
+  createWorkflowCommandProvider,
+  type WorkflowAvailability,
+} from "./workflow.command";
 import langZh from "./workflow.lang.zh.json";
 import langEn from "./workflow.lang.en.json";
 
@@ -25,6 +31,7 @@ export class WorkflowPlugin extends PluginBase {
   constructor(
     private workflowEngine: WorkflowEngineService,
     private agentStore: AgentFileStore,
+    private sessionService: SessionService,
   ) {
     super();
   }
@@ -32,6 +39,17 @@ export class WorkflowPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
+
+    // ── 斜杠命令 /workflow：用户显式发起工作流的入口 ──
+    // 只做意图标记与可用性引导，不新增执行通道：标签由 TagParserPipeline 冻结为
+    // origin=system 注入块，模型仍走 tool_learn("workflow") → workflow_run。
+    api.registerCommandProvider(
+      createWorkflowCommandProvider({
+        isEnabled: () => this._enabled,
+        resolveAvailability: (sessionId) =>
+          this.resolveWorkflowAvailability(sessionId),
+      }),
+    );
 
     const kit = api.registerToolKit({
       id: "workflow",
@@ -41,7 +59,7 @@ export class WorkflowPlugin extends PluginBase {
       // 目录行是本工具包唯一常驻的模型面文本，承担使用门槛：
       // 低频重型编排按需学习（tool_learn），API 规格收敛在工具描述里一次性下发
       activator:
-        "Use ONLY when the user explicitly asks for a workflow or for large multi-agent orchestration: learn this toolkit to write a JavaScript script that fans work out across many sub-agents with phases and structured results. For one or two delegations, prefer plain subagent calls.",
+        "Use ONLY when the user explicitly asks for a workflow (for example by invoking the /workflow command) or for large multi-agent orchestration: learn this toolkit to write a JavaScript script that fans work out across many sub-agents with phases and structured results. For one or two delegations, prefer plain subagent calls.",
       handler: async (ctx) => {
         // 子代理会话禁止递归编排（与 sub_agent 工具同一防线）
         if (ctx.session.sessionType === "sub_agent") {
@@ -202,7 +220,7 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
         const sections: string[] = [
           "# Workflow Orchestration",
           "",
-          "Use the workflow_run tool ONLY when the user explicitly asks for a workflow or for large multi-agent orchestration; for one or two delegations, prefer plain subagent_spawn calls. The tool description documents the exact script format and hooks.",
+          "Use the workflow_run tool ONLY when the user explicitly asks for a workflow (including invoking the /workflow command) or for large multi-agent orchestration; for one or two delegations, prefer plain subagent_spawn calls. The tool description documents the exact script format and hooks.",
           "",
           "Rules:",
           "   - Write self-contained prompts: sub-agents cannot see this conversation or each other; pass all needed context in the prompt text.",
@@ -227,5 +245,44 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
         return sections.join("\n");
       },
     });
+  }
+
+  /**
+   * 解析工作流在当前会话是否可用。
+   *
+   * 工作流工具有两层门控：workflow 插件/toolkit 的启用态，以及会话/智能体的
+   * settings.agents 白名单。这里只决定 /workflow 的注入文案，不改变门控本身；
+   * 查不到会话时返回 unknown（fail-open），避免元数据暂缺时吞掉显式请求。
+   */
+  private async resolveWorkflowAvailability(
+    sessionId?: string,
+  ): Promise<WorkflowAvailability> {
+    if (!sessionId) return "unknown";
+    try {
+      const session = await this.sessionService.getSessionById(sessionId);
+      if (!session) return "unknown";
+      if (session.sessionType === "sub_agent") return "sub_agent";
+
+      const pluginsCfg =
+        session.settings?.plugins ?? session.agent?.settings?.plugins;
+      if (!isToolkitAllowedByRoleConfig(pluginsCfg?.workflow, "workflow")) {
+        return "toolkit_disabled";
+      }
+
+      const agentsCfg =
+        session.settings?.agents ?? session.agent?.settings?.agents;
+      const hasEnabledAgent =
+        typeof agentsCfg === "object" &&
+        agentsCfg !== null &&
+        Object.entries(agentsCfg).some(
+          ([key, enabled]) => !key.startsWith("__") && enabled === true,
+        );
+      return hasEnabledAgent ? "available" : "no_agents";
+    } catch (error) {
+      this.logger.warn(
+        `解析工作流可用性失败，按 unknown 处理: ${(error as Error)?.message || error}`,
+      );
+      return "unknown";
+    }
   }
 }

@@ -151,6 +151,46 @@ describe("ChatController", () => {
     expect(res.json).toHaveBeenCalledWith({ ok: true, started: true });
   });
 
+  it("normalizes a raw /workflow command into the tag form before starting the stream", async () => {
+    chatRunner.startStream.mockResolvedValue(jest.fn());
+    tagParserPipeline.parse.mockResolvedValue({
+      originalText: "",
+      injectionBlocks: [],
+    });
+    const res = {
+      setHeader: jest.fn(),
+      on: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+      writableEnded: false,
+    };
+
+    await controller.streamMessage(
+      {
+        sessionId: "session-1",
+        userMessage: { content: "/workflow 审查整个仓库" },
+      } as any,
+      res as any,
+      { on: jest.fn() } as any,
+      "",
+    );
+
+    expect(tagParserPipeline.parse).toHaveBeenCalledWith(
+      '[/workflow:workflow label="工作流"] 审查整个仓库',
+      { sessionId: "session-1" },
+    );
+    expect(chatRunner.startStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userMessage: {
+          content: '[/workflow:workflow label="工作流"] 审查整个仓库',
+        },
+      }),
+      undefined,
+    );
+  });
+
   it("normalizes settingsOverride before saving it on a queued item", async () => {
     streamManager.hasActiveStream.mockReturnValue(true);
     const res = {
