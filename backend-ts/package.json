@@ -1,6 +1,6 @@
 {
   "name": "backend-ts",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "",
   "main": "index.js",
   "packageManager": "pnpm@11.7.0",
