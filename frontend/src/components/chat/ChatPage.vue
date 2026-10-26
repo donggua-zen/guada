@@ -456,6 +456,25 @@ const title = useTitle();
 
 // 删除会话确认对话框状态
 
+// 布局/会话 store 必须在 mainSession 及其 watch 之前初始化：
+// mainSession 是 store 派生 computed，watch 在 setup 阶段会立即求值一次。
+const layoutStore = useLayoutStore();
+// 浏览器 webview store（会话切换时同步当前会话 ID）
+const browserWebviewStore = useBrowserWebviewStore();
+const tabStore = useTabStore();
+// 登录信息
+const authStore = useAuthStore();
+const sessionStore = useSessionStore();
+// 新建页暂存草稿（切换走再切回时恢复输入内容；创建成功即清空）
+const newSessionDraftStore = useNewSessionDraftStore();
+
+// 路由会话 ID：刷新时同步可用（mainSession 异步就位前的过渡），供 ChatPanel 立即挂载。
+// 输入区/工作目录条等按 ID 依赖，故 new-session 时 ChatPanel 整体不挂载（守卫见模板首行）
+const routeSessionId = computed<string | null>(() => {
+  const p = route.params.sessionId;
+  return Array.isArray(p) ? (p[0] ?? null) : (p ?? null);
+});
+
 // 主会话对象（侧边栏选中的根会话）直接派生自 sessionStore.sessionsMap。
 // 单一事实源：输入区配置写入 store 后本地立即生效；其他客户端 session_updated
 // 更新 store 后本端输入区自动跟随，不再维护第二份副本。
@@ -463,13 +482,6 @@ const mainSession = computed<Session | null>(() => {
   const id = routeSessionId.value;
   if (!id || id === NEW_SESSION_ID) return null;
   return sessionStore.getSession(id) ?? null;
-});
-
-// 路由会话 ID：刷新时同步可用（mainSession 异步就位前的过渡），供 ChatPanel 立即挂载。
-// 输入区/工作目录条等按 ID 依赖，故 new-session 时 ChatPanel 整体不挂载（守卫见模板首行）
-const routeSessionId = computed<string | null>(() => {
-  const p = route.params.sessionId;
-  return Array.isArray(p) ? (p[0] ?? null) : (p ?? null);
 });
 
 // 会话切换时同步浏览器 webview store（隐藏活跃预览，webview 不销毁）
@@ -489,18 +501,6 @@ const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
 // 工作目录分割比例（目录树 / 预览 / Git 统一使用单一宽度）
 const workspaceSize = computed(() => layoutStore.workspaceSplitSize);
-// 控制设置模态框的显示与隐藏
-// 布局状态
-const layoutStore = useLayoutStore();
-// 浏览器 webview store（会话切换时同步当前会话 ID）
-const browserWebviewStore = useBrowserWebviewStore();
-const tabStore = useTabStore();
-
-// 登录信息
-const authStore = useAuthStore();
-const sessionStore = useSessionStore();
-// 新建页暂存草稿（切换走再切回时恢复输入内容；创建成功即清空）
-const newSessionDraftStore = useNewSessionDraftStore();
 
 // 流状态消费说明:stream_status_changed 已由 useSessionEvents(MainLayout 常驻)统一订阅并写入
 // sessionStore.streamStatus,消费方(概览"子代理"区/侧边栏标签等)直接读 store 派生,
