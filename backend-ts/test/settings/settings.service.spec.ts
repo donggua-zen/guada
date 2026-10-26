@@ -21,7 +21,8 @@ import {
   SG_OCR,
   SG_PLUGINS,
   SG_SYSTEM,
-  SK_MOD_CHAT,
+  LEGACY_SK_MOD_CHAT,
+  SK_MOD_TITLE_MODEL,
   SK_SYS_CHAT_UPLOAD_SUBDIR,
   SK_SYS_KB_STORAGE_ROOT,
   SK_SYS_KEEP_AWAKE_MODE,
@@ -59,21 +60,21 @@ describe("SettingsService", () => {
 
   describe("updateGroupSettings：模型引用校验", () => {
     it("引用已知模型 → 写盘成功", async () => {
-      await service.updateGroupSettings(SG_MODELS, { [SK_MOD_CHAT]: "model-a" });
+      await service.updateGroupSettings(SG_MODELS, { [SK_MOD_TITLE_MODEL]: "model-a" });
 
-      await expect(service.getSettingValue(SG_MODELS, SK_MOD_CHAT)).resolves.toBe("model-a");
+      await expect(service.getSettingValue(SG_MODELS, SK_MOD_TITLE_MODEL)).resolves.toBe("model-a");
     });
 
     it("引用不存在的模型 → 抛 BadRequestException 且不落盘", async () => {
       await expect(
-        service.updateGroupSettings(SG_MODELS, { [SK_MOD_CHAT]: "ghost-model" }),
+        service.updateGroupSettings(SG_MODELS, { [SK_MOD_TITLE_MODEL]: "ghost-model" }),
       ).rejects.toThrow(BadRequestException);
 
-      await expect(service.getSettingValue(SG_MODELS, SK_MOD_CHAT)).resolves.toBeNull();
+      await expect(service.getSettingValue(SG_MODELS, SK_MOD_TITLE_MODEL)).resolves.toBeNull();
     });
 
     it("置空模型引用（清选择）→ 允许", async () => {
-      await expect(service.updateGroupSettings(SG_MODELS, { [SK_MOD_CHAT]: null })).resolves.toBeUndefined();
+      await expect(service.updateGroupSettings(SG_MODELS, { [SK_MOD_TITLE_MODEL]: null })).resolves.toBeUndefined();
     });
 
     it("非模型键（如上下文长度）不做模型解析", async () => {
@@ -193,10 +194,28 @@ describe("SettingsService", () => {
     });
   });
 
+  describe("启动清理已移除的默认对话模型配置", () => {
+    it("删除 models.json 中的旧键", async () => {
+      await storage.updateSettings(SG_MODELS, {
+        [LEGACY_SK_MOD_CHAT]: "legacy-model",
+      });
+
+      await service.onModuleInit();
+
+      const settings = await service.getGroupSettings(SG_MODELS);
+      expect(settings[LEGACY_SK_MOD_CHAT]).toBeUndefined();
+      expect(settings[SK_MOD_TITLE_MODEL]).toBeUndefined();
+    });
+
+    it("键不存在时静默 no-op", async () => {
+      await expect(service.onModuleInit()).resolves.toBeUndefined();
+    });
+  });
+
   describe("getSettings 分组映射", () => {
     it("plugins_config/ocr/appearance 归入独立键，system 与 models 平铺", async () => {
       await storage.updateSettings(SG_SYSTEM, { [SK_SYS_WORKSPACE_BASE_DIR]: "/ws" });
-      await storage.updateSettings(SG_MODELS, { [SK_MOD_CHAT]: "model-a" });
+      await storage.updateSettings(SG_MODELS, { [SK_MOD_TITLE_MODEL]: "model-a" });
       await storage.updateSettings(SG_PLUGINS, { plugins: ["p1"] });
       await storage.updateSettings(SG_OCR, { provider: "umi" });
       await storage.updateSettings(SG_APPEARANCE, { blurRadius: 8 });
@@ -207,7 +226,7 @@ describe("SettingsService", () => {
       expect(all.ocr).toEqual({ provider: "umi" });
       expect(all.appearance).toEqual({ blurRadius: 8 });
       expect(all[SK_SYS_WORKSPACE_BASE_DIR]).toBe("/ws");
-      expect(all[SK_MOD_CHAT]).toBe("model-a");
+      expect(all[SK_MOD_TITLE_MODEL]).toBe("model-a");
       // 注意：ocr / appearance 的结果键与分组名恰好同名，属有意为之；
       // 只有 plugins_config 才是「分组名 ≠ 结果键」的那个，不能把分组名泄漏出去。
       expect(all).not.toHaveProperty(SG_PLUGINS);

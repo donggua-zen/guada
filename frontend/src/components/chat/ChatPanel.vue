@@ -200,7 +200,6 @@ import { useRouter } from "vue-router";
 const { t } = useI18n()
 import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
-import { useDebounceFn } from "@vueuse/core";
 import { useSessionStore } from "../../stores/session";
 import { useAuthStore } from "../../stores/auth"
 import { useLayoutStore } from "@/stores/layout"
@@ -228,6 +227,7 @@ import {
   type ChatSessionScrollMemoryState,
 } from '@/composables/chatSessionScrollMemory'
 import { useMessageOperations, toPayloadFileRefs } from '@/composables/useMessageOperations'
+import { useSessionSettingsSync } from '@/composables/useSessionSettingsSync'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 import { getErrorMessage, getApiErrorStatus } from '@/utils/errorMessage'
@@ -259,6 +259,7 @@ const { confirm, editText, toast, notify } = usePopup();
 const { refreshQueue } = useSessionEvents();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
+const { scheduleSave, flushSession } = useSessionSettingsSync();
 const layoutStore = useLayoutStore();
 const router = useRouter();
 
@@ -329,9 +330,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  'update:session': [session: Session]
   openSettings: []
-  'save-settings': []
   'select-agent': [agent: Agent]  // 切换智能体
   /** 滚动容器可用内容宽变化（决策 aside 显隐用），单位 px（已扣除 padding） */
   'container-resize': [contentWidth: number]
@@ -343,10 +342,9 @@ defineSlots<{
 }>();
 
 // 计算属性 - 类型化
-const currentSession = computed({
-  get: () => props.session,
-  set: (session: Session | null) => emit("update:session", session!)
-});
+// 只读视图：配置写入统一走 sessionStore.patchSession/patchSessionSettings，
+// 让输入区调整立即进入唯一数据源（而不是隐式修改父组件传入的对象）。
+const currentSession = computed(() => props.session);
 
 const userAvater = computed(() => authStore.user?.avatarUrl);
 const currentSessionId = ref<string | null>(null);
@@ -785,14 +783,14 @@ watch(() => visibleTurns.value.length, (newLen, oldLen) => {
 
 const currentModelId = computed({
   get() {
-    return currentSession.value?.modelId ?? null;
+    // 会话未绑定时显示智能体默认模型：与后端运行时回退链保持一致
+    return currentSession.value?.modelId || currentSession.value?.agent?.modelId || null;
   },
   set(value: string | null) {
-    if (currentSession.value) {
-      currentSession.value.modelId = value || '';
-      currentSession.value.updatedAt = new Date().toISOString();
-      debouncedSaveSession();
-    }
+    const session = currentSession.value;
+    if (!session) return;
+    sessionStore.patchSession(session.id, { modelId: value });
+    scheduleSave(session.id, { modelId: value });
   }
 });
 
@@ -853,13 +851,14 @@ onUnmounted(() => {
 
 /**
  * 工作目录条（输入框下方）的附加远程目录绑定变更：与 handleConfigChange 的
- * attachments 分支同构——写 currentSession.settings.attachments 后防抖保存
- * （两条绑定写回路径统一，均经 debouncedSaveSession → save-settings）
+ * attachments 分支同构——先写 store（本地立即生效），再把最新 settings 交给保存队列。
  */
 const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
-  if (!currentSession.value) return;
-  currentSession.value.settings.attachments = attachments;
-  debouncedSaveSession();
+  const session = currentSession.value;
+  if (!session) return;
+  sessionStore.patchSessionSettings(session.id, { attachments });
+  const settings = sessionStore.getSession(session.id)?.settings;
+  if (settings) scheduleSave(session.id, { settings });
 };
 
 /**
@@ -870,7 +869,7 @@ const handleAttachmentsChange = (attachments: Record<string, string[]>) => {
 interface ChatInputConfigChange {
   modelId?: string | null
   thinkingEffort?: string
-  maxTokensLimit?: number
+  maxTokensLimit?: number | null
   knowledgeBaseIds?: string[]
   workspacePath?: string | null
   sandboxMode?: string
@@ -878,61 +877,79 @@ interface ChatInputConfigChange {
   [key: string]: unknown
 }
 
+/**
+ * 输入区配置变更的唯一写入口：
+ * 1. 立即写 sessionStore（本地发布，所有读同一 store 的视图同步更新）；
+ * 2. 把“调用时刻”的字段快照交给保存队列（按 sessionId 隔离、在途合并）。
+ *
+ * 不再隐式修改父组件传入的 props 对象，也不依赖防抖定时器。
+ */
 const handleConfigChange = (config: ChatInputConfigChange) => {
-  if (!currentSession.value) return;
+  const session = currentSession.value;
+  if (!session) return;
+  const sessionId = session.id;
+  let modelIdChanged = false;
+  let settingsChanged = false;
 
   // 处理模型 ID 变更
   if (typeof config.modelId !== 'undefined') {
-    currentSession.value.modelId = config.modelId;
+    sessionStore.patchSession(sessionId, { modelId: config.modelId });
+    modelIdChanged = true;
   }
 
-  // 处理 Token 上限（会话级别独立配置）
+  // 处理 Token 上限（会话级别独立配置；null = 恢复不限）
   if (typeof config.maxTokensLimit !== 'undefined') {
-    currentSession.value.settings.maxTokensLimit = config.maxTokensLimit;
+    sessionStore.patchSessionSettings(sessionId, { maxTokensLimit: config.maxTokensLimit });
+    settingsChanged = true;
   }
 
   // 处理思考强度变更
   if (typeof config.thinkingEffort !== 'undefined') {
-    currentSession.value.settings.thinkingEffort = config.thinkingEffort;
+    sessionStore.patchSessionSettings(sessionId, { thinkingEffort: config.thinkingEffort });
+    settingsChanged = true;
   }
 
-  // 处理知识库选择
+  // 处理知识库选择：inputMessage 是每设备草稿态，settings.referencedKbs 才是跨端同步字段
   if (typeof config.knowledgeBaseIds !== 'undefined') {
     inputMessage.value.knowledgeBaseIds = config.knowledgeBaseIds;
     if (!editMode.value) {
-      currentSession.value.settings.referencedKbs = config.knowledgeBaseIds;
+      sessionStore.patchSessionSettings(sessionId, { referencedKbs: config.knowledgeBaseIds });
+      settingsChanged = true;
     }
   }
 
-  // 处理工作目录路径
+  // 工作目录路径不在 updateSession 白名单内，只做本地展示（与旧行为一致）
   if (typeof config.workspacePath !== 'undefined') {
-    currentSession.value.workspacePath = config.workspacePath;
-    console.log('保存 workspacePath 到会话:', config.workspacePath);
+    sessionStore.patchSession(sessionId, { workspacePath: config.workspacePath });
   }
 
   // 处理安全模式
   if (typeof config.sandboxMode !== 'undefined') {
-    currentSession.value.settings.sandboxMode = config.sandboxMode;
+    sessionStore.patchSessionSettings(sessionId, { sandboxMode: config.sandboxMode });
+    settingsChanged = true;
   }
 
   // 处理计划模式（协作状态）：设置是事实源，同时写投影让指示器立即生效
   if (typeof config.planEnabled !== 'undefined') {
-    currentSession.value.settings.planEnabled = config.planEnabled;
-    sessionStore.setSessionPlanEnabled(currentSession.value.id, config.planEnabled);
+    sessionStore.patchSessionSettings(sessionId, { planEnabled: config.planEnabled });
+    sessionStore.setSessionPlanEnabled(sessionId, config.planEnabled);
+    settingsChanged = true;
   }
 
   // 处理附加连接
   if (typeof config.attachments !== 'undefined') {
-    currentSession.value.settings.attachments = config.attachments;
+    sessionStore.patchSessionSettings(sessionId, { attachments: config.attachments });
+    settingsChanged = true;
   }
 
-  debouncedSaveSession();
-};
+  if (!modelIdChanged && !settingsChanged) return;
 
-// 防抖函数
-const debouncedSaveSession = useDebounceFn(() => {
-  emit("save-settings");
-}, 100);
+  const latest = sessionStore.getSession(sessionId);
+  scheduleSave(sessionId, {
+    ...(modelIdChanged ? { modelId: latest?.modelId ?? config.modelId ?? null } : {}),
+    ...(settingsChanged && latest?.settings ? { settings: latest.settings } : {}),
+  });
+};
 
 // 监听器
 watch(() => props.session?.id || props.sessionId, async (newSessionId: string | undefined, oldSessionId: string | undefined) => {
@@ -1181,7 +1198,9 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
       if (!currentSession.value)
         return;
       if (inputMessage.value?.isWaiting) {
-        currentSession.value.settings.referencedKbs = inputMessage.value.knowledgeBaseIds;
+        sessionStore.patchSessionSettings(currentSession.value.id, {
+          referencedKbs: inputMessage.value.knowledgeBaseIds,
+        });
         handleSendMessage(inputMessage.value);
       }
     });
@@ -1372,6 +1391,37 @@ async function sendLocalSlashCommand(
 }
 
 /**
+ * 输入区当前配置的回合级快照（发送/重答共用）。
+ *
+ * 后端 normalizeTurnSettingsOverride 会再校验一次；这里只负责“把 UI 当前值带过去”，
+ * 保证改完设置立刻发送时本回合一定按输入区显示值执行。
+ */
+function buildSettingsOverride(sid: string): ChatSettingsOverride {
+  const session = currentSession.value;
+  const settings = session?.settings as SessionSettingsView | undefined;
+  const sandboxMode = settings?.sandboxMode;
+  const thinkingEffort = session?.settings?.thinkingEffort;
+  const maxTokensLimit = settings?.maxTokensLimit;
+  // 会话未绑定时带智能体默认模型，保证本回合与输入区显示一致
+  const modelId = session?.modelId || session?.agent?.modelId;
+
+  return {
+    ...(modelId ? { modelId } : {}),
+    ...(typeof thinkingEffort === 'string' ? { thinkingEffort } : {}),
+    // null = 用户显式恢复“不限”，必须进入覆盖，否则后端会沿用旧的持久化上限
+    ...(typeof maxTokensLimit === 'number' || maxTokensLimit === null
+      ? { maxTokensLimit }
+      : {}),
+    ...(sandboxMode === 'read-only' ||
+    sandboxMode === 'workspace-write' ||
+    sandboxMode === 'danger-full-access'
+      ? { sandboxMode }
+      : {}),
+    planEnabled: sessionStore.sessionPlanEnabled(sid),
+  };
+}
+
+/**
  * 处理发送消息
  * 合并消息创建和流式启动为一个原子操作
  */
@@ -1390,6 +1440,14 @@ async function handleSendMessage(payload?: InputMessageState) {
     const localCommand = parseLocalSlashCommand(content);
     if (localCommand) {
       await sendLocalSlashCommand(localCommand, files.length, content);
+      return;
+    }
+
+    // 全局默认对话模型已移除：会话已加载且会话/智能体都无模型时，先让用户选择；
+    // session 仍为 null 表示详情未就绪，不拦（后端会按持久化会话解析）。
+    const session = currentSession.value;
+    if (session && !session.modelId && !session.agent?.modelId) {
+      toast.warning(t('chat.panel.modelRequired'));
       return;
     }
 
@@ -1413,26 +1471,11 @@ async function handleSendMessage(payload?: InputMessageState) {
     if (currentSessionId.value) {
       const sid = currentSessionId.value;
       // 入队/直发都带冻结快照：后端忙碌时随队列项保存，空闲时只影响本回合。
-      const sandboxMode = currentSession.value?.settings?.sandboxMode;
-      const thinkingEffort = currentSession.value?.settings?.thinkingEffort;
-      const maxTokensLimit = currentSession.value?.settings?.maxTokensLimit;
-      const settingsOverride: ChatSettingsOverride = {
-        ...(currentSession.value?.modelId
-          ? { modelId: currentSession.value.modelId }
-          : {}),
-        ...(typeof thinkingEffort === 'string'
-          ? { thinkingEffort }
-          : {}),
-        ...(typeof maxTokensLimit === 'number'
-          ? { maxTokensLimit }
-          : {}),
-        ...(sandboxMode === 'read-only' ||
-        sandboxMode === 'workspace-write' ||
-        sandboxMode === 'danger-full-access'
-          ? { sandboxMode }
-          : {}),
-        planEnabled: sessionStore.sessionPlanEnabled(sid),
-      };
+      const settingsOverride = buildSettingsOverride(sid);
+
+      // 发送前先等配置落盘：避免“改完模型立刻发送”仍读到旧持久化值。
+      // 保存失败不阻塞发送——本回合有 settingsOverride 兜底。
+      await flushSession(sid);
 
       // 已知本会话在流式中：不要用 pending 覆盖 running，也不触发"新消息"动画
       const alreadyStreaming = sessionStore.sessionIsStreaming(sid);
@@ -1601,6 +1644,11 @@ function generateResponse(turn: Turn) {
  * replaceTurnId = turn.id 触发后端 turn/delete 旧轮次 + 新建回合。
  */
 function regenerateResponse(turn: Turn) {
+  const session = currentSession.value;
+  if (session && !session.modelId && !session.agent?.modelId) {
+    toast.warning(t('chat.panel.modelRequired'));
+    return;
+  }
   const user = (turn?.messages || []).find(
     (m) => m.role === "user" && !isHiddenBlock(m),
   );
@@ -1616,24 +1664,29 @@ function regenerateResponse(turn: Turn) {
 
   const replaceTurnId = turn.id;
 
-  nextTick(() => {
+  nextTick(async () => {
     // 重答同「发消息」：取回跟随并贴底（新回合从底部重新长起）
     scrollContainerRef.value?.setFollowing(true);
     immediateScrollToBottom();
-    if (currentSessionId.value) {
-      // 发送链路独立:只调 apiService.chat 发起(重答=replaceTurnId 触发 turn/delete+新建),
-      // 不订阅、不处理事件;事件由常驻接收链路(唯一 receiver)消费。
-      sessionStore.setStreamStatus(currentSessionId.value, "pending");
-      apiService.chat({
-        sessionId: currentSessionId.value,
-        userMessage: {
-          content: userContent,
-          files,
-          replaceTurnId,
-          knowledgeBaseIds,
-        },
-      });
-    }
+    const sid = currentSessionId.value;
+    if (!sid) return;
+
+    // 发送链路独立:只调 apiService.chat 发起(重答=replaceTurnId 触发 turn/delete+新建),
+    // 不订阅、不处理事件;事件由常驻接收链路(唯一 receiver)消费。
+    // 与普通发送一致：先 flush 配置，再带回合级快照，避免“改完模型马上重答”仍用旧值。
+    const settingsOverride = buildSettingsOverride(sid);
+    sessionStore.setStreamStatus(sid, "pending");
+    await flushSession(sid);
+    await apiService.chat({
+      sessionId: sid,
+      userMessage: {
+        content: userContent,
+        files,
+        replaceTurnId,
+        knowledgeBaseIds,
+      },
+      ...(Object.keys(settingsOverride).length > 0 ? { settingsOverride } : {}),
+    });
   });
 }
 

@@ -208,6 +208,54 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
+     * 合并完整会话快照（GET/PUT /sessions/:id 响应回写）。
+     *
+     * 用 Object.assign 而非整对象替换：保留 store 上已有的前端注入字段
+     * （典型如侧栏 working 用的 session.isStreaming），与 session_updated 的处理一致。
+     */
+    const mergeSession = (session: Session): void => {
+        const existing = sessionsMap.value.get(session.id)
+        if (existing) {
+            Object.assign(existing, session)
+        } else {
+            setSession(session)
+        }
+    }
+
+    /**
+     * 按字段增量更新会话（输入区配置的本地发布入口）。
+     *
+     * 只写入显式出现的键：`null` 是合法值（如清空 modelId），不能被 `!== undefined`
+     * 之外的默认值逻辑吞掉。settings 走 patchSessionSettings（浅合并）。
+     */
+    const patchSession = (
+        sessionId: string,
+        patch: Partial<Pick<Session, 'modelId' | 'agentId' | 'title' | 'groupId' | 'pinned' | 'workspacePath'>>,
+    ): void => {
+        const session = sessionsMap.value.get(sessionId)
+        if (!session) return
+        for (const key of Object.keys(patch) as Array<keyof typeof patch>) {
+            if (patch[key] !== undefined) {
+                (session as unknown as Record<string, unknown>)[key] = patch[key]
+            }
+        }
+    }
+
+    /**
+     * 浅合并会话 settings（输入区配置的本地发布入口）。
+     *
+     * 嵌套对象（attachments 等）整体替换：调用方传完整新对象，才能表达“删除某项”。
+     */
+    const patchSessionSettings = (
+        sessionId: string,
+        patch: Partial<SessionSettings>,
+    ): void => {
+        const session = sessionsMap.value.get(sessionId)
+        if (!session) return
+        session.settings = { ...(session.settings || {}), ...patch }
+    }
+
+    /**
      * 根据 ID 获取会话
      * @param sessionId - 会话 ID
      */
@@ -933,7 +981,10 @@ export const useSessionStore = defineStore('session', () => {
         clearSessionMessages,
         setChatSidebar,
         setSession,
+        mergeSession,
         getSession,
+        patchSession,
+        patchSessionSettings,
         removeSession,
         getSessionsByGroup,
         getVisibleSessionsByGroup,

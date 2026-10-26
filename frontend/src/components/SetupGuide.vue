@@ -42,7 +42,7 @@
         </div>
       </div>
 
-      <!-- Step 3: 添加模型供应商（点击"去添加"即推进，从设置页回来已显示下一步） -->
+      <!-- Step 3: 添加模型供应商（配置完成返回后，引导检测到模型即自动结束） -->
       <div v-if="currentStep === 3" class="step-panel">
         <h3>{{ t('ui.setupGuide.step3Title') }}</h3>
         <p class="desc">{{ t('ui.setupGuide.step3Desc') }}</p>
@@ -51,14 +51,6 @@
         </div>
       </div>
 
-      <!-- Step 4: 设置默认模型 -->
-      <div v-if="currentStep === 4" class="step-panel">
-        <h3>{{ t('ui.setupGuide.step4Title') }}</h3>
-        <p class="desc">{{ t('ui.setupGuide.step4Desc') }}</p>
-        <div class="action-area">
-          <el-button type="primary" @click="goToDefaultModelSettings">{{ t('ui.setupGuide.step4Action') }}</el-button>
-        </div>
-      </div>
     </div>
 
     <div class="guide-footer no-drag">
@@ -86,7 +78,7 @@ import { useAuthStore } from '@/stores/auth'
 import { isElectron } from '@/composables/useDevice'
 import { apiService } from '@/services/ApiService'
 
-const TOTAL_STEPS = 4
+const TOTAL_STEPS = 3
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -99,14 +91,12 @@ const guidePosition = ref({ x: window.innerWidth - 350, y: 60 })
 const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 
-// 完成状态感知：仅第 3 步（已配置供应商）与第 4 步（已设默认模型）前端可检测；
+// 完成状态感知：仅第 3 步（已配置供应商/模型）前端可检测；
 // 第 1 步是说明页、第 2 步密码状态前端不可检测，均保持手动推进
 const providerConfigured = ref(false)
-const defaultModelSet = ref(false)
 
 const isStepDone = (stepNo: number): boolean => {
   if (stepNo === 3) return providerConfigured.value
-  if (stepNo === 4) return defaultModelSet.value
   return stepNo < currentStep.value
 }
 
@@ -118,26 +108,25 @@ const dotClass = (stepNo: number) => ({
 
 async function refreshCompletion(): Promise<void> {
   if (hasCompleted.value) return
-  const [modelsRes, settingsRes] = await Promise.allSettled([
-    apiService.fetchAllModels(),
-    apiService.fetchGroupSettings('models'),
-  ])
-  if (modelsRes.status === 'fulfilled') {
-    providerConfigured.value = (modelsRes.value.items?.length ?? 0) > 0
-  }
-  if (settingsRes.status === 'fulfilled') {
-    defaultModelSet.value = !!settingsRes.value?.defaultChatModelId
+  try {
+    const modelsRes = await apiService.fetchAllModels()
+    // 必须存在可用的文本模型（仅有 embedding/图像模型不算完成）
+    providerConfigured.value = (modelsRes.items ?? []).some(
+      (provider) =>
+        provider.isActive !== false &&
+        (provider.models ?? []).some(
+          (model) => model.isActive !== false && model.modelType === 'text'
+        )
+    )
+  } catch {
+    /* 静默：下次路由变化再刷新 */
   }
 }
 
-// 当前停留在已检测完成的步骤时向前推进；3、4 步均完成则直接结束引导
+// 停留在最后一步且已配置模型 → 直接结束引导（不再有第 4 步）
 function advancePastCompleted(): void {
-  if (providerConfigured.value && defaultModelSet.value) {
+  if (providerConfigured.value && currentStep.value === TOTAL_STEPS) {
     finishGuide()
-    return
-  }
-  if (currentStep.value === 3 && providerConfigured.value) {
-    currentStep.value = 4
   }
 }
 
@@ -146,14 +135,20 @@ async function refreshAndAdvance(): Promise<void> {
   if (visible.value) advancePastCompleted()
 }
 
+/** 恢复上次步骤：旧版本可能存了已移除的第 4 步，夹到当前总步数内 */
+function restoreSavedStep(): void {
+  const parsed = parseInt(localStorage.getItem('setupGuideStep') || '1', 10)
+  const step = Number.isFinite(parsed) ? parsed : 1
+  currentStep.value = Math.min(Math.max(step, 1), TOTAL_STEPS)
+}
+
 onMounted(() => {
   restorePosition()
   // 引导只在 Electron 首次启动时自动弹出。Web 部署是多人/多浏览器访问，
   // 新浏览器（新 localStorage）没有完成标记会反复弹，改为仅保留右下角手动入口
   if (isElectron && !hasCompleted.value) {
     visible.value = true
-    const savedStep = localStorage.getItem('setupGuideStep')
-    if (savedStep) currentStep.value = parseInt(savedStep)
+    restoreSavedStep()
   }
   refreshAndAdvance()
 })
@@ -246,8 +241,7 @@ const closeGuide = () => {
 
 const openGuide = () => {
   visible.value = true
-  const savedStep = localStorage.getItem('setupGuideStep')
-  if (savedStep) currentStep.value = parseInt(savedStep)
+  restoreSavedStep()
   refreshAndAdvance()
 }
 
@@ -286,13 +280,7 @@ const goToSecuritySettings = () => {
 }
 
 const goToProviderSettings = () => {
-  advanceFromStep(3)
   router.replace('/setting/providers')
-}
-
-const goToDefaultModelSettings = () => {
-  advanceFromStep(4)
-  router.replace('/setting/default-models')
 }
 
 // navigate=false 用于"跳过引导"：留在当前页面，仅标记完成

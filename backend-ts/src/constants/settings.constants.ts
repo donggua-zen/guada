@@ -29,7 +29,11 @@ export const KEEP_AWAKE_MODE_DEFAULT: KeepAwakeMode = 'busy';
 /**
  * 模型偏好设置键名 (SK_MOD = Setting Key Model)
  */
-export const SK_MOD_CHAT = 'defaultChatModelId';
+/**
+ * @deprecated 已移除的全局默认对话模型配置键。
+ * 仅用于启动期清理旧 `models.json` 中的残留；业务代码不得再读取。
+ */
+export const LEGACY_SK_MOD_CHAT = 'defaultChatModelId';
 export const SK_MOD_SEARCH = 'defaultSearchModelId';
 export const SK_MOD_SUMMARY = 'defaultSummaryModelId';
 export const SK_MOD_CONTEXT_LEN = 'searchPromptContextLength';

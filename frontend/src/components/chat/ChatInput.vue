@@ -675,7 +675,7 @@ const emit = defineEmits([
   'update:files',
   'send', 'abort',
   'focus', 'blur',
-  'update:modelId', 'config-change', 'update:knowledgeBaseIds'
+  'config-change'
 ]);
 
 // 工具函数
@@ -920,8 +920,6 @@ const removeKnowledgeBase = (kbId: string) => {
   const currentKbIds = props.config?.knowledgeBaseIds || [];
   const newKbIds = currentKbIds.filter(id => id !== kbId);
 
-  //  修复：同时触发两个事件
-  emit('update:knowledgeBaseIds', newKbIds);  // 更新本地状态
   emit('config-change', { knowledgeBaseIds: newKbIds });  // 通知父组件保存配置
 };
 
@@ -939,10 +937,6 @@ const loadModels = async () => {
         providers.value.push(provider);
       }
     });
-    if (models.value.length > 0 && !props.config?.modelId) {
-      // 如果没有传入 modelId，默认选择第一个
-      emit('update:modelId', models.value[0].id);
-    }
   } catch (error) {
     console.error('获取模型列表失败:', error);
   }
@@ -1445,9 +1439,15 @@ watch(editorContent, () => {
   });
 });
 
-// 监听思考强度配置变化，同步到本地状态（undefined = 会话从未选过 → 走菜单默认中间档）
+// 监听思考强度配置变化，同步到本地状态
 watch(() => props.config?.thinkingEffort, (newEffort) => {
-  if (newEffort === undefined) return;
+  if (newEffort === undefined) {
+    // 会话切换 / 远端清空：回到“跟随当前模型默认档位”，
+    // 不能把上一个会话的显式选择残留到新会话（否则显示值与实际执行档位不一致）。
+    thinkingEffortChosen.value = false;
+    syncThinkingEffort();
+    return;
+  }
   thinkingEffortChosen.value = true;
   if (newEffort !== localThinkingEffort.value) {
     localThinkingEffort.value = newEffort;

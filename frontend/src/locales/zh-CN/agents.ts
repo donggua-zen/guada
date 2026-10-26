@@ -67,9 +67,9 @@ export default {
     descPlaceholder: '请输入智能体描述',
     modelLabel: '模型选择',
     modelOptional: '(可选)',
-    modelHint: '为此智能体指定专用的 AI 模型，留空则使用默认模型。修改模型配置不会同步修改已经创建的会话。',
+    modelHint: '为此智能体指定专用的 AI 模型；留空则新建会话时再选择模型。修改模型配置不会同步修改已经创建的会话。',
     modelPlaceholder: '请选择模型',
-    modelUseDefault: '使用默认模型',
+    modelUseDefault: '不指定（新建会话时选择）',
     // 记忆与压缩
     compressionTier: '压缩策略',
     compressionTierHint: '内置档位，同时决定触发阈值、保留比例与是否摘要',

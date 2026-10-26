@@ -5,35 +5,6 @@
             <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.defaultModel.chat') }}</h3>
                 <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
-                    <!-- 默认对话模型 -->
-                    <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
-                        <div class="flex flex-col gap-1 min-w-0">
-                            <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.defaultChatModel') }}</span>
-                            <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.defaultChatModelDesc') }}</span>
-                        </div>
-                        <!-- 只读触发器：选择在 GdDialog 里完成，这里不能用 el-select ——
-                             它的下拉会跟着一起弹出来，和对话框叠成两个弹层。
-                             点击/键盘监听必须挂在包裹层：ElInput 是 inheritAttrs:false，
-                             $attrs 只落到内部 <input>，点前缀或后缀箭头区域不会触发 -->
-                        <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('chat')"
-                            @keydown="(e) => onTriggerKeydown(e, 'chat')">
-                            <el-input :model-value="chatModelName" :placeholder="t('settings.defaultModel.selectModel')"
-                                readonly class="w-full">
-                                <template #prefix>
-                                    <OpenAI class="w-4 h-4" />
-                                </template>
-                                <template #suffix>
-                                    <el-icon v-if="settingsForm.defaultChatModelId" class="model-select-trigger__clear"
-                                        @click.stop="clearModelSelection('chat')">
-                                        <DismissCircle16Regular />
-                                    </el-icon>
-                                    <el-icon class="model-select-trigger__caret">
-                                        <ChevronDown20Regular />
-                                    </el-icon>
-                                </template>
-                            </el-input>
-                        </div>
-                    </div>
                     <!-- 标题总结模型 -->
                     <div class="px-4 py-3.5 flex items-center justify-between gap-4">
                         <div class="flex flex-col gap-1 min-w-0">
@@ -265,7 +236,7 @@ const historyCompressionFormRef = ref(null)
 const models = ref([])
 const providers = ref([])
 
-// 当前打开的对话框类型 ('chat' | 'title' | 'translation' | 'compression')
+// 当前打开的对话框类型 ('title' | 'translation' | 'compression' | 'visual')
 const currentDialogType = ref('')
 
 // 模型选择对话框相关
@@ -275,7 +246,6 @@ const tempModelId = ref(null) // 临时选中的模型 ID
 
 // 表单数据
 const settingsForm = reactive({
-    defaultChatModelId: null,
     defaultTitleSummaryModelId: null,
     // defaultTitleSummaryPrompt: '', // 已暂时移除，后端使用固定提示词
     defaultTranslationModelId: null,
@@ -305,10 +275,6 @@ const getModelNameById = (modelId) => {
 }
 
 // 计算各个模型输入框的显示值
-const chatModelName = computed(() =>
-    getModelNameById(settingsForm.defaultChatModelId)
-)
-
 const titleSummaryModelName = computed(() =>
     getModelNameById(settingsForm.defaultTitleSummaryModelId)
 )
@@ -333,9 +299,6 @@ const openModelDialog = (type) => {
 
     // 根据类型设置当前选中的模型
     switch (type) {
-        case 'chat':
-            tempModelId.value = settingsForm.defaultChatModelId
-            break
         case 'title':
             tempModelId.value = settingsForm.defaultTitleSummaryModelId
             break
@@ -370,9 +333,6 @@ const selectAndClose = (modelId) => {
 
     // 根据类型更新对应的模型 ID
     switch (currentDialogType.value) {
-        case 'chat':
-            settingsForm.defaultChatModelId = modelId
-            break
         case 'title':
             settingsForm.defaultTitleSummaryModelId = modelId
             break
@@ -393,9 +353,6 @@ const selectAndClose = (modelId) => {
 // 清除模型选择
 const clearModelSelection = (type) => {
     switch (type) {
-        case 'chat':
-            settingsForm.defaultChatModelId = null
-            break
         case 'title':
             settingsForm.defaultTitleSummaryModelId = null
             break
@@ -495,7 +452,6 @@ const debouncedSave = useDebounceFn(async () => {
 
 // 监听设置变化自动保存
 watch(() => ({
-    defaultChatModelId: settingsForm.defaultChatModelId,
     defaultTitleSummaryModelId: settingsForm.defaultTitleSummaryModelId,
     defaultVisualAssistantModelId: settingsForm.defaultVisualAssistantModelId,
     defaultHistoryCompressionModelId: settingsForm.defaultHistoryCompressionModelId,
@@ -510,7 +466,6 @@ const loadGlobalSettings = async () => {
         const response = await apiService.fetchGroupSettings('models')
 
         // 填充表单：使用 ?? 运算符确保 undefined 被转换为 null
-        settingsForm.defaultChatModelId = response.defaultChatModelId ?? null
         settingsForm.defaultTitleSummaryModelId = response.defaultTitleSummaryModelId ?? null
         // settingsForm.defaultTitleSummaryPrompt = response.defaultTitleSummaryPrompt // 已暂时移除，后端使用固定提示词
         settingsForm.defaultTranslationModelId = response.defaultTranslationModelId ?? null
@@ -554,7 +509,6 @@ const handleSave = async () => {
 
         // 规范化数据：将 undefined 转换为 null，确保 JSON 序列化时不会丢失字段
         const dataToSave = {
-            defaultChatModelId: settingsForm.defaultChatModelId ?? null,
             defaultTitleSummaryModelId: settingsForm.defaultTitleSummaryModelId ?? null,
             defaultTranslationModelId: settingsForm.defaultTranslationModelId ?? null,
             defaultTranslationPrompt: settingsForm.defaultTranslationPrompt || '',

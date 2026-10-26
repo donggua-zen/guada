@@ -477,9 +477,7 @@
   },
 
   defaultModel: {
-    chat: 'Chat',
-    defaultChatModel: 'Default Chat Model',
-    defaultChatModelDesc: 'Default AI model used for daily conversation generation',
+    chat: 'Chat Helpers',
     titleSummaryModel: 'Title Summary Model',
     titleSummaryModelDesc: 'AI model used for auto-generating session titles',
     selectModel: 'Please select a model',

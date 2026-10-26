@@ -82,8 +82,7 @@ function createContext(overrides: any = {}) {
   const ctx = new JsonlSessionContext(
     makeSession(overrides.session),
     messageStore as any,
-    { getSettingValue: jest.fn(async () => true) } as any, // 模型解析兜底（SK_MOD_CHAT）
-    { findById: jest.fn() } as any,
+    { findModel: jest.fn() } as any,
     { resolvePlugins: jest.fn(async () => []) } as any,
     {
       collectPrompts: jest.fn(async () => []),

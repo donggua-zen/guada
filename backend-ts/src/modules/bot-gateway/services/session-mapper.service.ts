@@ -2,8 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
 import { SessionMetaStore } from '../../chat/session-meta.store';
 import { AgentFileStore } from '../../agents/agent-file.store';
-import { SettingsStorage } from '../../../common/utils/settings-storage.util';
-import { SG_MODELS, SK_MOD_CHAT } from '../../../constants/settings.constants';
 import { WorkspaceService } from '../../../common/services/workspace.service';
 import { BotFileStore } from '../bot-file.store';
 
@@ -21,7 +19,6 @@ export class SessionMapperService {
     private providerStore: ProviderFileStore,
     private sessionStore: SessionMetaStore,
     private agentStore: AgentFileStore,
-    private settingsStorage: SettingsStorage,
     private workspaceService: WorkspaceService,
     private botStore: BotFileStore,
   ) { }
@@ -139,18 +136,9 @@ export class SessionMapperService {
       modelId = session.agent.modelId;
     }
 
-    // 3. 最后使用全局默认对话模型
+    // 全局默认对话模型已移除：Bot 和智能体都没有配置时直接报错
     if (!modelId) {
-      modelId = await this.settingsStorage.getSettingValue(
-        SG_MODELS,
-        SK_MOD_CHAT,
-        null
-      );
-    }
-
-    // 如果无法解析模型ID，抛出错误
-    if (!modelId) {
-      throw new Error('我还没有配置模型作为大脑，请先在设置中配置默认对话模型');
+      throw new Error('我还没有配置模型作为大脑，请先在 Bot 配置或智能体设置中选择模型');
     }
 
     // 查询并验证模型是否存在

@@ -36,7 +36,6 @@
               :sub-sessions="subSessions"
               :aside-width="0" :aside-reserve="0"
               @container-resize="onChatContainerResize"
-              @save-settings="handleSaveSessionSettings"
               @select-agent="handleSelectAgent" />
           </Teleport>
         </div>
@@ -146,7 +145,6 @@
                   :sub-sessions="subSessions"
                   :aside-width="asideWidth" :aside-reserve="asideReserveWidth"
                   @container-resize="onChatContainerResize"
-                  @save-settings="handleSaveSessionSettings"
                   @select-agent="handleSelectAgent">
                   <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
                        overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
@@ -190,7 +188,7 @@
 
 </template>
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed, nextTick, defineAsyncComponent, provide, type Ref } from "vue";
+import { ref, onMounted, onUnmounted, watch, computed, nextTick, defineAsyncComponent, provide } from "vue";
 import { useI18n } from "vue-i18n";
 const { t } = useI18n()
 import { apiService } from "@/services/ApiService";
@@ -458,8 +456,14 @@ const title = useTitle();
 
 // 删除会话确认对话框状态
 
-// 主会话对象（侧边栏选中的根会话），包含会话的基本信息和设置
-const mainSession: Ref<Session | null> = ref(null);
+// 主会话对象（侧边栏选中的根会话）直接派生自 sessionStore.sessionsMap。
+// 单一事实源：输入区配置写入 store 后本地立即生效；其他客户端 session_updated
+// 更新 store 后本端输入区自动跟随，不再维护第二份副本。
+const mainSession = computed<Session | null>(() => {
+  const id = routeSessionId.value;
+  if (!id || id === NEW_SESSION_ID) return null;
+  return sessionStore.getSession(id) ?? null;
+});
 
 // 路由会话 ID：刷新时同步可用（mainSession 异步就位前的过渡），供 ChatPanel 立即挂载。
 // 输入区/工作目录条等按 ID 依赖，故 new-session 时 ChatPanel 整体不挂载（守卫见模板首行）
@@ -511,6 +515,8 @@ let unsubscribeSubAgentClosed: (() => void) | null = null;
 
 /** 会话详情请求代际：快速连切时丢弃过期响应，保证 mainSession 不落后于路由 */
 let sessionFetchGeneration = 0;
+/** 最近一次成功拉取详情的会话 ID（store 里可能已有侧栏列表项，不能据此跳过详情请求） */
+let lastFetchedSessionId: string | null = null;
 
 /**
  * 根据会话 ID 从 API 获取会话详情
@@ -521,7 +527,11 @@ const fetchSession = async (sessionId: string) => {
     const session = await apiService.fetchSession(sessionId);
     // 期间路由已再次变化 → 丢弃，避免旧会话覆盖新会话
     if (generation !== sessionFetchGeneration || routeSessionId.value !== sessionId) return;
-    mainSession.value = session;
+
+    // 写入唯一数据源：mainSession 是它的派生视图，SSE/本端保存都更新同一对象。
+    // 用 merge 保留侧栏已注入的 isStreaming 等前端字段。
+    sessionStore.mergeSession(session);
+    lastFetchedSessionId = sessionId;
 
     // 子会话列表（含已冻结的，供概览"子代理"区与侧边栏标签解析元数据；
     // isStreaming 由后端注入）
@@ -543,7 +553,7 @@ const goChatRoute = async (sessionId: string | null) => {
     router.replace({ name: 'Chat', params: { sessionId: sessionId } });
   } else {
     router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } });
-    mainSession.value = null;
+    sessionStore.activeSessionId = NEW_SESSION_ID;
   }
 };
 
@@ -570,27 +580,6 @@ function onPaneResized(size: number) {
     layoutStore.setWorkspaceSplitSize(size);
   }
 }
-
-/**
- * 根据会话 ID 更新会话信息
- * 直接更新 sessionStore 中的统一数据源
- */
-const updateSessionById = async (sessionId: string, data: Session) => {
-  const session = sessionStore.getSession(sessionId);
-  if (session) {
-    // 定义需要更新的字段
-    const allowedFields = ['title', 'avatar_url', 'last_message', 'created_at', 'updated_at'];
-
-    // 兼容历史 snake_case 字段（不在 Session 类型上）→ 断言为可索引读法，仍只复制 allowedFields
-    const source = data as unknown as Record<string, unknown>;
-    // 只复制允许的字段并批量更新
-    for (const field of allowedFields) {
-      if (field in source) {
-        (session as unknown as Record<string, unknown>)[field] = source[field];
-      }
-    }
-  }
-};
 
 // ── 工作目录打开方式（Header 主按钮 + 下拉箭头） ──
 // 下拉选过就记住（持久化），主按钮图标/点击行为跟随上次选择。
@@ -658,12 +647,14 @@ async function handleSelectOpenWith(mode: OpenWithMode) {
 
 const updateSelectedSession = async (sessionId: string) => {
   if (sessionId == null || sessionId === NEW_SESSION_ID) {
-    mainSession.value = null;
+    lastFetchedSessionId = null;
     sessionStore.activeSessionId = NEW_SESSION_ID;
     return;
   }
   sessionStore.activeSessionId = sessionId;
-  if (sessionId !== mainSession.value?.id) {
+  // 用「最近一次成功拉取详情的会话」判断，而不是 mainSession：
+  // store 里可能已有侧栏列表项，但缺少 subSessions / 最新设置，仍需拉一次详情。
+  if (sessionId !== lastFetchedSessionId) {
     // 切换会话时重置子会话列表（侧边栏 subagent 标签由 WorkspaceSidebar 的会话切换 watch 统一清空）
     subSessions.value = [];
     await fetchSession(sessionId);
@@ -697,34 +688,14 @@ const handleCreateSessionWithMessage = async (session: CreateSessionRequest, inp
   }
 };
 /**
- * 保存会话设置
- * 将当前会话的设置保存到服务器
- */
-const handleSaveSessionSettings = async () => {
-  try {
-    const targetSession = mainSession.value;
-    if (targetSession) {
-      // workspacePath 不在后端 updateSession 白名单内（服务端会丢弃），此处不再发送
-      await apiService.updateSession(targetSession.id, {
-        modelId: targetSession.modelId,
-        settings: targetSession.settings,
-      });
-    }
-  } catch (error) {
-    console.error('保存对话设置失败:', error);
-  }
-};
-
-/**
  * 切换智能体
  * 更新会话的 agentId 并刷新本地智能体信息
  */
 const handleSelectAgent = async (agent: Agent) => {
   if (!mainSession.value) return;
   try {
-    await apiService.updateSession(mainSession.value.id, { agentId: agent.id });
-    mainSession.value.agent = agent;
-    mainSession.value.agentId = agent.id;
+    const updated = await apiService.updateSession(mainSession.value.id, { agentId: agent.id });
+    if (updated) sessionStore.mergeSession(updated);
   } catch (error) {
     console.error('切换智能体失败:', error);
     toast.error(t('common.error.operationFailed'));
@@ -839,16 +810,15 @@ function handleInsertSnip(data: SnipData) {
 
 // 监听器
 
-// 监听当前会话的变化，更新页面标题
+// 监听当前会话标题的变化，更新页面标题
 watch(
-  () => mainSession,
-  (session) => {
-    if (session.value) {
-      title.value = `${session.value.title}-${t('chat.panel.mainSession')}`;
-      updateSessionById(session.value.id, session.value);
+  () => mainSession.value?.title,
+  (sessionTitle) => {
+    if (sessionTitle) {
+      title.value = `${sessionTitle}-${t('chat.panel.mainSession')}`;
     }
   },
-  { deep: true }
+  { immediate: true }
 );
 
 // 监听路由参数中会话 ID 的变化，更新选中的会话
@@ -856,7 +826,6 @@ watch(
   () => route.params.sessionId,
   async (newSessionId) => {
     if (!newSessionId) {
-      mainSession.value = null;
       goChatRoute(null);
       return;
     }

@@ -92,7 +92,8 @@
     agentPlaceholder: 'Select an agent',
     agentRequired: 'Please select an agent',
     modelLabel: 'Model',
-    modelPlaceholder: 'Optional, specify a model',
+    modelPlaceholder: 'Optional; falls back to the agent model',
+    modelRequired: 'Select a model, or set a default model for the selected agent',
     // 高级配置
     advanced: 'Advanced Settings',
     subtitle: 'Set the schedule, work content, and how tasks are organized.',

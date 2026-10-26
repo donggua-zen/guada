@@ -67,9 +67,9 @@
     descPlaceholder: 'Enter agent description',
     modelLabel: 'Model Selection',
     modelOptional: '(Optional)',
-    modelHint: 'Specify a dedicated AI model for this agent. Leave empty to use the default model. Changing the model will not affect already created sessions.',
+    modelHint: 'Specify a dedicated AI model for this agent. Leave empty to select a model when creating a new session. Changing the model will not affect already created sessions.',
     modelPlaceholder: 'Select a model',
-    modelUseDefault: 'Use Default Model',
+    modelUseDefault: 'Not specified (choose when creating a session)',
     // 记忆与压缩
     compressionTier: 'Compression Strategy',
     compressionTierHint: 'Built-in presets that decide the trigger threshold, retention, and whether summarization runs',

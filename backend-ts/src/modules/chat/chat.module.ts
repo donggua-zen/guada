@@ -41,6 +41,7 @@ import { CompactionCoordinatorService } from "./compaction/compaction-coordinato
 import { CompactionService } from "./compaction/compaction.service";
 import { SessionReplayService } from "./session-replay.service";
 import { PlanHistoryService } from "./plan-history.service";
+import { SessionModelBackfillService } from "./session-model-backfill.service";
 
 // 标签解析器
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
@@ -77,6 +78,8 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     ChatRunnerService,
     JobNotifierService,
     SessionReplayService,
+    // 老会话模型回填（全局默认对话模型移除后的一次性数据收敛）
+    SessionModelBackfillService,
     // 计划历史（转录扫描：计划身份 = ExitPlanMode toolCallId，列表含状态）
     PlanHistoryService,
 

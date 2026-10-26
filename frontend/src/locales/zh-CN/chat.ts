@@ -135,6 +135,7 @@ export default {
     sessionBusy: '会话忙碌',
     sessionBusyDesc: '当前会话正在回复中，请稍后再试',
     sendMessageFailed: '消息发送失败',
+    modelRequired: '该会话未绑定模型，请先在输入区选择模型',
     maxVersionsExceeded: '已达到最大回答版本数',
     mainSession: '主会话',
     subTask: '子任务',
@@ -195,6 +196,7 @@ export default {
     pageTitle: '你今天想聊些什么',
     newSession: '新建对话',
     createFailedNoAgent: '请先选择一个智能体模板',
+    createFailedNoModel: '请先配置并选择一个模型',
   },
 
   // ── 消息项 ──

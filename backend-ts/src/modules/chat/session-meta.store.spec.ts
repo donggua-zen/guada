@@ -213,6 +213,38 @@ describe("SessionMetaStore", () => {
       expect(store.getMeta(String(child.id))!.rootId).toBe(String(parent.id));
     });
 
+    it("listWebSessionsWithMissingModel 只列 web 会话；backfillModelId 不触碰时间戳", async () => {
+      await store.create({
+        id: "w1",
+        title: "w1",
+        sessionType: "web",
+        modelId: null,
+      });
+      await store.create({
+        id: "b1",
+        title: "b1",
+        sessionType: "bot",
+        modelId: null,
+      });
+      await store.create({
+        id: "w2",
+        title: "w2",
+        sessionType: "web",
+        modelId: "p:m",
+      });
+
+      expect(store.listWebSessionsWithMissingModel()).toEqual([
+        { id: "w1", agentId: null },
+      ]);
+
+      const before = store.getMeta("w1")!;
+      await store.backfillModelId("w1", "p:first");
+      const after = store.getMeta("w1")!;
+      expect(after.modelId).toBe("p:first");
+      expect(after.updatedAt).toBe(before.updatedAt);
+      expect(store.listWebSessionsWithMissingModel()).toEqual([]);
+    });
+
     it("update：undefined 保持原值，null 显式置空", async () => {
       const row = (await store.create({
         title: "原题",

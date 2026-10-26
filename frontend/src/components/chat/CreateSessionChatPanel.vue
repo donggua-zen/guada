@@ -729,6 +729,11 @@ const sendMessage = async (payload?: { content?: string; files?: ChatFileView[];
     notify.error(t('common.createFailed'), t('chat.welcome.createFailedNoAgent'));
     return;
   }
+  // 全局默认对话模型已移除：没有任何可用模型时不允许创建（后端会 400）
+  if (!currentModelId.value) {
+    notify.error(t('common.createFailed'), t('chat.welcome.createFailedNoModel'));
+    return;
+  }
   const content = payload?.content ?? draftContent.value;
   const files = payload?.files ?? draftFiles.value ?? [];
   // 记录提交快照：ChatInput 紧接着会自清空编辑器与附件列表，

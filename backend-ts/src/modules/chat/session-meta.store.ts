@@ -899,6 +899,41 @@ export class SessionMetaStore implements OnModuleDestroy {
   }
 
   /**
+   * 列出未绑定模型的主会话（启动回填用）。
+   *
+   * 只处理 `session_type='web'`：bot 会话的模型由 Bot/智能体运行期解析，
+   * 回填会错误覆盖 Bot 配置；子代理会话也不在此处兜底。
+   */
+  listWebSessionsWithMissingModel(): Array<{ id: string; agentId: string | null }> {
+    if (!this.db) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT id, agent_id FROM sessions
+         WHERE session_type = 'web' AND (model_id IS NULL OR model_id = '')`,
+      )
+      .all() as Array<{ id: string; agent_id: string | null }>;
+    return rows.map((row) => ({
+      id: row.id,
+      agentId: row.agent_id ?? null,
+    }));
+  }
+
+  /**
+   * 仅回填模型引用（启动迁移用）：不触碰 updated_at / last_active_at，
+   * 避免历史会话因迁移被顶到最近排序。
+   */
+  async backfillModelId(id: string, modelId: string): Promise<void> {
+    await this.initialize();
+    if (!this.db) return;
+    const result = this.db
+      .prepare(`UPDATE sessions SET model_id = ? WHERE id = ?`)
+      .run(modelId, id);
+    if (result.changes === 0) {
+      throw new Error(`session not found: ${id}`);
+    }
+  }
+
+  /**
    * 结构化过滤查询（SQL 直译，返回按 `sort` 排序的全量结果——
    * 无界场景请改用 queryPaged；本方法留给 childrenOf / listWebSessionIds 等
    * 天然有界或需要完整清单的调用方）。

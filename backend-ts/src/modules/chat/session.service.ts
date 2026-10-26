@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Inject, Injectable, Logger, Optional } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
 import { getSessionDir } from "../../common/utils/session-path.util";
@@ -39,7 +39,6 @@ import { UrlService } from "../../common/services/url.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import {
   SG_MODELS,
-  SK_MOD_CHAT,
   SK_MOD_TITLE_MODEL,
 } from "../../constants/settings.constants";
 import { SessionContextFactory } from "./session-context.factory";
@@ -641,23 +640,20 @@ export class SessionService {
       agent.settings,
     );
 
-    // 确定使用的模型 ID：优先使用传入的 modelId，其次使用智能体的 modelId，最后使用默认对话模型
-    let finalModelId = modelId || agent.modelId;
-
-    // 如果智能体和会话均未设置模型，尝试使用默认对话模型
+    // 确定使用的模型 ID：优先使用传入的 modelId，其次使用智能体的 modelId。
+    // 全局默认对话模型已移除：两者都没有时直接拒绝创建，避免落一个无法对话的会话。
+    const finalModelId = modelId || agent.modelId;
     if (!finalModelId) {
-      finalModelId = await this.settingsStorage.getSettingValue(
-        SG_MODELS,
-        SK_MOD_CHAT,
-      );
+      throw new BadRequestException({
+        error: "未指定模型：请先为会话或智能体选择模型",
+        code: "MODEL_REQUIRED",
+      });
     }
 
     // 验证模型是否存在（isActive 只影响前端展示，不影响实际使用）
-    if (finalModelId) {
-      const model = await this.modelStore.findModel(finalModelId);
-      if (!model) {
-        throw new Error(`模型不存在：${finalModelId}，请检查模型配置`);
-      }
+    const model = await this.modelStore.findModel(finalModelId);
+    if (!model) {
+      throw new Error(`模型不存在：${finalModelId}，请检查模型配置`);
     }
 
     // 确定工作目录路径：客户端未传值时生成新的默认工作目录
@@ -763,7 +759,8 @@ export class SessionService {
       title: options.title || (source.title ? `${source.title} (fork)` : "Fork"),
       avatarUrl: source.avatarUrl,
       description: source.description,
-      modelId: source.modelId,
+      // 老会话未绑定模型时继承智能体模型；全局默认已移除
+      modelId: source.modelId || source.agent?.modelId || null,
       settings: source.settings
         ? JSON.parse(JSON.stringify(source.settings))
         : null,
@@ -986,7 +983,9 @@ export class SessionService {
       }
     }
 
-    return updatedSession;
+    // 返回与 GET /sessions/:id 同形的完整会话：PUT 响应会被客户端直接写回
+    // store 作为权威快照，裸 meta 缺少 agent/subSessions，会丢展示字段。
+    return (await this.getSessionById(sessionId)) ?? updatedSession;
   }
 
   /**
@@ -1246,7 +1245,7 @@ export class SessionService {
 
   /**
    * 解析提交信息生成所用模型：标题总结模型优先，无则回退当前对话模型
-   * （会话自选 modelId → 全局默认对话模型，对齐 JsonlSessionContext.resolveModel 的两级回退）。
+   * （会话自选 modelId → 智能体 modelId，与 JsonlSessionContext.resolveModel 同链）。
    * 配置了但解析不到（模型已删除等）→ model_not_found，不静默换用其它模型。
    */
   private async resolveCommitMessageModel(
@@ -1261,30 +1260,27 @@ export class SessionService {
       return model ? { model, source: "title" } : { reason: "model_not_found" };
     }
 
-    // 会话自选模型即用户当前对话所用模型（会话创建时已回填智能体模型/全局默认）
-    const sessionModelId = this.sessionStore.get(sessionId)?.modelId as
-      | string
-      | undefined;
+    // 会话自选模型即用户当前对话所用模型；老会话未绑定时回退智能体模型。
+    const session = await this.getSessionById(sessionId);
+    const sessionModelId = session?.modelId as string | undefined;
     if (sessionModelId) {
       const model = this.modelStore.findModel(sessionModelId);
       return model ? { model, source: "chat" } : { reason: "model_not_found" };
     }
 
-    const defaultModelId = await this.settingsStorage.getSettingValue(
-      SG_MODELS,
-      SK_MOD_CHAT,
-    );
-    if (!defaultModelId) return { reason: "no_model_configured" };
-    const fallback = this.modelStore.findModel(defaultModelId);
-    return fallback
-      ? { model: fallback, source: "chat" }
-      : { reason: "model_not_found" };
+    const agentModelId = session?.agent?.modelId as string | undefined;
+    if (agentModelId) {
+      const model = this.modelStore.findModel(agentModelId);
+      return model ? { model, source: "chat" } : { reason: "model_not_found" };
+    }
+
+    return { reason: "no_model_configured" };
   }
 
   /**
    * 根据 git diff 流式生成提交信息（SSE）
    * 模型选择：优先标题总结模型（SK_MOD_TITLE_MODEL），无则回退当前对话模型
-   * （会话自选 modelId → 全局默认对话模型 SK_MOD_CHAT）
+   * （会话自选 modelId → 智能体 modelId）
    * 事件序列：{ type: "text", content } 增量 / { type: "done", message, modelId, modelName, modelSource } /
    *          { type: "skipped", reason }
    * @param sessionId 会话 ID（用于解析当前对话模型）

@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from "@nestjs/common";
+import { Injectable, Logger, BadRequestException, OnModuleInit } from "@nestjs/common";
 import { SettingsStorage } from '../../common/utils/settings-storage.util';
 import { isValidChatUploadSubdir, normalizeChatUploadSubdir } from '../../common/utils/attachment-subdir.util';
 import { ProviderFileStore } from '../llm-core/provider-file.store';
@@ -17,16 +17,29 @@ import {
   SK_SYS_KB_STORAGE_ROOT,
   SK_SYS_KEEP_AWAKE_MODE,
   KEEP_AWAKE_MODES,
+  LEGACY_SK_MOD_CHAT,
 } from '../../constants/settings.constants';
 
 @Injectable()
-export class SettingsService {
+export class SettingsService implements OnModuleInit {
   private readonly logger = new Logger(SettingsService.name);
 
   constructor(
     private readonly storage: SettingsStorage,
     private readonly modelStore: ProviderFileStore,
   ) {}
+
+  /** 启动清理：全局默认对话模型已移除，删掉 models.json 里的历史残留键 */
+  async onModuleInit(): Promise<void> {
+    try {
+      const settings = await this.storage.getSettings(SG_MODELS);
+      if (settings && Object.prototype.hasOwnProperty.call(settings, LEGACY_SK_MOD_CHAT)) {
+        await this.storage.deleteSettingValue(SG_MODELS, LEGACY_SK_MOD_CHAT);
+      }
+    } catch (error) {
+      this.logger.warn(`清理历史默认对话模型配置失败: ${(error as Error)?.message ?? error}`);
+    }
+  }
 
   /**
    * 获取分组内所有设置

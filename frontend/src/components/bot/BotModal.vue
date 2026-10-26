@@ -229,6 +229,11 @@ const selectedModel = computed(() => {
   return availableModels.value.find(m => m.id === formData.value.defaultModelId) || null
 })
 
+// 当前选中的智能体：Bot 未显式选模型时，用它校验是否有智能体默认模型兜底
+const selectedAgent = computed(() =>
+  agents.value.find(agent => agent.id === formData.value.defaultAgentId) || null
+)
+
 // 选中模型的思考强度选项
 const thinkingEffortOptions = computed(() => {
   if (!selectedModel.value) return []
@@ -265,7 +270,7 @@ const formData = ref({
   platform: '',
   name: '',
   defaultAgentId: '',
-  defaultModelId: '' as string | null, // null 表示继承自智能体/全局设置
+  defaultModelId: '' as string | null, // null 表示继承自智能体
   defaultThinkingEffort: null as string | null,
   knowledgeBaseIds: [] as string[],
   // 动态边界：键由后端平台元数据定义，同一键多态绑定 el-input/el-input-number/el-select/el-switch，
@@ -356,7 +361,7 @@ watch(dialogVisible, (visible) => {
         platform: bot.platform,
         name: bot.name,
         defaultAgentId: bot.defaultAgentId || '',
-        defaultModelId: bot.defaultModelId || null, // null 表示继承自智能体/全局设置
+        defaultModelId: bot.defaultModelId || null, // null 表示继承自智能体
         defaultThinkingEffort: bot.defaultThinkingEffort || null,
         knowledgeBaseIds: bot.additionalKwargs?.knowledgeBaseIds || [],
         platformConfig: platformConfig,
@@ -403,7 +408,7 @@ const resetForm = () => {
     platform: '',
     name: '',
     defaultAgentId: '',
-    defaultModelId: null, // null 表示继承自智能体/全局设置
+    defaultModelId: null, // null 表示继承自智能体
     defaultThinkingEffort: null,
     knowledgeBaseIds: [],
     platformConfig: {},
@@ -475,6 +480,12 @@ const handleSubmit = async () => {
 
   await formRef.value.validate(async (valid) => {
     if (!valid) return
+
+    // 全局默认模型已移除：Bot 未选模型时必须能继承到智能体模型
+    if (!formData.value.defaultModelId && !selectedAgent.value?.modelId) {
+      ElMessage.error(t('bot.modal.modelRequired'))
+      return
+    }
 
     submitting.value = true
     try {

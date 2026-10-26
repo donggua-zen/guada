@@ -2,8 +2,8 @@
  * 会话模型解析（单一数据源 = providers/*.yaml）
  *
  * 覆盖三点：
- * - 三级顺序：内存挂载（bot enrich）→ 会话自选 modelId → 全局默认
- * - 会话自选 modelId 必须被真正使用（此前被 session.model 掩盖，只在为空时才看全局默认）
+ * - 三级顺序：内存挂载（bot enrich）→ 会话自选 modelId → 智能体 modelId
+ * - 会话自选 modelId 必须被真正使用（此前被 session.model 掩盖）
  * - 全部解析不到 → fail-loud（ModelNotResolvedError），不再静默换模型
  */
 import { JsonlSessionContext } from '../../src/modules/chat/jsonl-session-context';
@@ -20,28 +20,12 @@ const FILE_MODEL = {
   config: { contextWindow: 8000, features: ['tools'], inputCapabilities: [] },
 };
 
-const GLOBAL_MODEL = {
-  ...FILE_MODEL,
-  id: 'inst-default:m9',
-  modelName: 'm9',
-  provider: { id: 'inst-default', type: 'custom', protocol: 'openai' },
-};
-
 function createContext(opts: {
   session?: any;
   findModel?: (id: string) => any;
-  defaultModelId?: string | null;
 }) {
   const modelStore = {
     findModel: jest.fn((id: string) => (opts.findModel ? opts.findModel(id) : undefined)),
-  };
-  const settingsStorage = {
-    getSettingValue: jest.fn(async (group: string, key: string) => {
-      if (group === 'models' && key === 'defaultChatModelId') {
-        return opts.defaultModelId ?? null;
-      }
-      return true;
-    }),
   };
   const messageStore = {
     loadContext: jest.fn(async () => []),
@@ -57,7 +41,6 @@ function createContext(opts: {
       ...(opts.session || {}),
     },
     messageStore as any,
-    settingsStorage as any,
     modelStore as any,
     { resolvePlugins: jest.fn(async () => []) } as any,
     { collectPrompts: jest.fn(async () => []) } as any,
@@ -75,7 +58,7 @@ function createContext(opts: {
       buildChangeReminder: jest.fn(async () => null),
     } as any,
   );
-  return { ctx, modelStore, settingsStorage };
+  return { ctx, modelStore };
 }
 
 describe('会话模型解析', () => {
@@ -89,37 +72,37 @@ describe('会话模型解析', () => {
     expect(modelStore.findModel).not.toHaveBeenCalled();
   });
 
-  it('无挂载时使用会话自选 modelId（不再被全局默认顶替）', async () => {
-    const { ctx, modelStore, settingsStorage } = createContext({
+  it('无挂载时使用会话自选 modelId', async () => {
+    const { ctx, modelStore } = createContext({
       session: { modelId: 'inst1:m1' },
       findModel: (id) => (id === 'inst1:m1' ? FILE_MODEL : undefined),
-      defaultModelId: 'inst-default:m9',
     });
     await ctx.initialize();
 
     expect(modelStore.findModel).toHaveBeenCalledWith('inst1:m1');
     expect(ctx.getModelConfig().modelName).toBe('m1');
-    // 自选模型解析成功就不应再读全局默认（存储还承载压缩开关等其它键）
-    const readKeys = settingsStorage.getSettingValue.mock.calls.map((c: any[]) => c[1]);
-    expect(readKeys).not.toContain('defaultChatModelId');
   });
 
-  it('会话未配置模型 → 回退全局默认对话模型', async () => {
+  it('会话未配置模型 → 回退智能体默认模型', async () => {
+    const agentModel = {
+      ...FILE_MODEL,
+      id: 'inst-agent:m2',
+      modelName: 'm2',
+      provider: { id: 'inst-agent', type: 'custom', protocol: 'openai' },
+    };
     const { ctx } = createContext({
-      session: { modelId: null },
-      findModel: (id) => (id === 'inst-default:m9' ? GLOBAL_MODEL : undefined),
-      defaultModelId: 'inst-default:m9',
+      session: { modelId: null, agent: { modelId: 'inst-agent:m2' } },
+      findModel: (id) => (id === 'inst-agent:m2' ? agentModel : undefined),
     });
     await ctx.initialize();
 
-    expect(ctx.getModelConfig().modelName).toBe('m9');
+    expect(ctx.getModelConfig().modelName).toBe('m2');
   });
 
   it('自选模型解析不到 → fail-loud（不静默换模型）', async () => {
     const { ctx } = createContext({
       session: { modelId: 'inst-deleted:gone' },
-      findModel: (id) => (id === 'inst-default:m9' ? GLOBAL_MODEL : undefined),
-      defaultModelId: 'inst-default:m9',
+      findModel: () => undefined,
     });
 
     await expect(ctx.initialize()).rejects.toThrow(ModelNotResolvedError);
@@ -131,10 +114,24 @@ describe('会话模型解析', () => {
     }
   });
 
-  it('未配置模型且无全局默认 → fail-loud 提示去配置', async () => {
-    const { ctx } = createContext({ session: { modelId: null }, defaultModelId: null });
+  it('会话和智能体都没有模型 → fail-loud 提示去配置', async () => {
+    const { ctx } = createContext({ session: { modelId: null, agent: null } });
 
     await expect(ctx.initialize()).rejects.toThrow(ModelNotResolvedError);
+  });
+
+  it('智能体模型也解析不到 → fail-loud 并带上模型 id', async () => {
+    const { ctx } = createContext({
+      session: { modelId: null, agent: { modelId: 'inst-agent:gone' } },
+      findModel: () => undefined,
+    });
+
+    await expect(ctx.initialize()).rejects.toThrow(ModelNotResolvedError);
+    try {
+      await ctx.initialize();
+    } catch (e: any) {
+      expect(e.message).toContain('inst-agent:gone');
+    }
   });
 });
 

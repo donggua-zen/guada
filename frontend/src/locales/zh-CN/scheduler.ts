@@ -92,7 +92,8 @@ export default {
     agentPlaceholder: '请选择智能体',
     agentRequired: '请选择智能体',
     modelLabel: '模型',
-    modelPlaceholder: '可选，指定模型',
+    modelPlaceholder: '可选，留空使用智能体模型',
+    modelRequired: '请选择模型，或为所选智能体设置默认模型',
     // 高级配置
     advanced: '高级配置',
     subtitle: '设置执行时间、工作内容和任务组织方式。',

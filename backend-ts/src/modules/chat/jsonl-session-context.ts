@@ -22,7 +22,6 @@ import {
 } from '../../common/persistence/message-store.interface';
 import type { Message, FileRef, ContentBlock } from '../../common/types/conversation.types';
 import { TokenBreakdown, TurnFinish } from './interfaces';
-import { SettingsStorage } from '../../common/utils/settings-storage.util';
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { PluginManager } from '../plugins/plugin.manager';
 import { SessionStreamManager } from './session-stream.manager';
@@ -64,10 +63,6 @@ import {
   pickBaselineUserMessage,
   resolveBindingBaseline,
 } from './injection-baseline.util';
-import {
-  SG_MODELS,
-  SK_MOD_CHAT,
-} from '../../constants/settings.constants';
 import {
   TransformContext,
   isFullReasoningRelayModel,
@@ -193,7 +188,6 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   constructor(
     private readonly session: any,
     @Inject(MESSAGE_STORE_TOKEN) private readonly messageStore: IMessageStore,
-    private readonly settingsStorage: SettingsStorage,
     private readonly modelStore: ProviderFileStore,
     private readonly pluginManager: PluginManager,
     private readonly promptCollector: PromptCollector,
@@ -1473,9 +1467,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   }
 
   /**
-   * 解析会话使用的模型：内存挂载（bot 路径已 enrich）→ 会话自选 modelId → 全局默认。
+   * 解析会话使用的模型：内存挂载（bot 路径已 enrich）→ 会话自选 modelId → 智能体 modelId。
    *
-   * 三级都解析不到即抛 ModelNotResolvedError（fail-loud）——静默换用另一个模型
+   * 全部解析不到即抛 ModelNotResolvedError（fail-loud）——静默换用另一个模型
    * 会让模型、成本与行为在用户不知情时改变，比直接报错危险得多。
    */
   private async resolveModel(): Promise<any> {
@@ -1488,16 +1482,15 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       throw new ModelNotResolvedError(this.sessionId, sessionModelId);
     }
 
-    const defaultModelId = await this.settingsStorage.getSettingValue(
-      SG_MODELS,
-      SK_MOD_CHAT,
-    );
-    const fallback = defaultModelId
-      ? this.modelStore.findModel(defaultModelId)
-      : undefined;
-    if (fallback) return fallback;
+    // 老会话未绑定模型时回退智能体默认模型（角色级），不再有全局默认。
+    const agentModelId = this.session.agent?.modelId as string | undefined;
+    if (agentModelId) {
+      const model = this.modelStore.findModel(agentModelId);
+      if (model) return model;
+      throw new ModelNotResolvedError(this.sessionId, agentModelId);
+    }
 
-    throw new ModelNotResolvedError(this.sessionId, defaultModelId || null);
+    throw new ModelNotResolvedError(this.sessionId, null);
   }
 
   /**

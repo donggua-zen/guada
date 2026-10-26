@@ -472,9 +472,7 @@ export default {
   },
 
   defaultModel: {
-    chat: '对话',
-    defaultChatModel: '默认对话模型',
-    defaultChatModelDesc: '用于日常对话生成的默认 AI 模型',
+    chat: '对话辅助',
     titleSummaryModel: '标题总结模型',
     titleSummaryModelDesc: '用于自动生成会话标题的 AI 模型',
     selectModel: '请选择模型',

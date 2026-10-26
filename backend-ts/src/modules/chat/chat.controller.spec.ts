@@ -103,6 +103,54 @@ describe("ChatController", () => {
     expect(res.end).not.toHaveBeenCalled();
   });
 
+  it("applies normalized settingsOverride to a direct stream", async () => {
+    chatRunner.startStream.mockResolvedValue(jest.fn());
+    const res = {
+      setHeader: jest.fn(),
+      on: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+      writableEnded: false,
+    };
+
+    await controller.streamMessage(
+      {
+        sessionId: "session-1",
+        userMessage: { content: "hello" },
+        settingsOverride: {
+          modelId: "prov:m",
+          thinkingEffort: "high",
+          maxTokensLimit: null,
+          sandboxMode: "read-only",
+          planEnabled: true,
+          // 非白名单键必须被丢弃
+          plugins: ["evil"],
+        },
+      } as any,
+      res as any,
+      { on: jest.fn() } as any,
+      "client-1",
+    );
+
+    expect(chatRunner.startStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-1",
+        settingsOverride: {
+          modelId: "prov:m",
+          thinkingEffort: "high",
+          maxTokensLimit: null,
+          sandboxMode: "read-only",
+          planEnabled: true,
+        },
+        source: expect.objectContaining({ clientId: "client-1" }),
+      }),
+      undefined,
+    );
+    expect(res.json).toHaveBeenCalledWith({ ok: true, started: true });
+  });
+
   it("normalizes settingsOverride before saving it on a queued item", async () => {
     streamManager.hasActiveStream.mockReturnValue(true);
     const res = {

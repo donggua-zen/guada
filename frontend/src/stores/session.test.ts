@@ -630,3 +630,92 @@ describe("sessionStore 队列快照投影", () => {
     expect(store.peekStreamStatus("missing")).toBeUndefined();
   });
 });
+
+/**
+ * 输入区配置的本地发布入口：patchSession / patchSessionSettings。
+ *
+ * 约束：
+ * - patchSession 只写显式出现的键，null 是合法值（清空 modelId）；
+ * - patchSessionSettings 浅合并，嵌套对象（attachments）整体替换以表达删除；
+ * - 未缓存会话静默 no-op（父组件可能在详情加载完成前调用）。
+ */
+describe("sessionStore 会话配置 patch", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  const makeSession = (patch: Record<string, unknown> = {}): any => ({
+    id: "s1",
+    title: "t",
+    agent: { id: "a1" },
+    agentId: "a1",
+    modelId: "m1",
+    settings: {
+      thinkingEffort: "high",
+      attachments: { remote: ["r1", "r2"] },
+    },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...patch,
+  });
+
+  it("patchSession 增量写入模型/智能体等顶层字段", () => {
+    const store = useSessionStore();
+    store.setSession(makeSession());
+
+    store.patchSession("s1", { modelId: "m2", agentId: "a2" });
+
+    expect(store.getSession("s1")!.modelId).toBe("m2");
+    expect(store.getSession("s1")!.agentId).toBe("a2");
+  });
+
+  it("patchSession 允许用 null 清空 modelId，忽略 undefined", () => {
+    const store = useSessionStore();
+    store.setSession(makeSession());
+
+    store.patchSession("s1", { modelId: null, title: undefined });
+
+    expect(store.getSession("s1")!.modelId).toBeNull();
+    expect(store.getSession("s1")!.title).toBe("t");
+  });
+
+  it("patchSessionSettings 浅合并，嵌套对象整体替换", () => {
+    const store = useSessionStore();
+    store.setSession(makeSession());
+
+    store.patchSessionSettings("s1", {
+      thinkingEffort: "low",
+      attachments: { remote: ["r2"] },
+    });
+
+    const settings = store.getSession("s1")!.settings;
+    expect(settings.thinkingEffort).toBe("low");
+    expect(settings.attachments).toEqual({ remote: ["r2"] });
+  });
+
+  it("mergeSession 合并服务端快照并保留前端注入字段", () => {
+    const store = useSessionStore();
+    store.setSession(makeSession({ isStreaming: true }));
+
+    store.mergeSession(makeSession({ modelId: "m2", title: "remote" }));
+
+    expect(store.getSession("s1")!.isStreaming).toBe(true);
+    expect(store.getSession("s1")!.modelId).toBe("m2");
+    expect(store.getSession("s1")!.title).toBe("remote");
+  });
+
+  it("mergeSession 对未缓存会话回退为插入", () => {
+    const store = useSessionStore();
+    store.mergeSession(makeSession({ id: "s9" }));
+    expect(store.getSession("s9")!.id).toBe("s9");
+  });
+
+  it("未缓存会话调用 patch 为静默 no-op", () => {
+    const store = useSessionStore();
+    expect(() => {
+      store.patchSession("missing", { modelId: "m2" });
+      store.patchSessionSettings("missing", { thinkingEffort: "low" });
+    }).not.toThrow();
+    expect(store.getSession("missing")).toBeUndefined();
+  });
+});

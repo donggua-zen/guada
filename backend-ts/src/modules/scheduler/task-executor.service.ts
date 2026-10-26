@@ -3,12 +3,10 @@ import { SessionService } from "../chat/session.service";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { TaskStorageService } from "./task-storage.service";
-import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { AgentFileStore } from "../agents/agent-file.store";
 import { DEFAULT_AGENT_ID } from "../agents/agent-file.mapper";
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { ScheduledTask, ScheduledTaskLog } from "./types/scheduler.types";
-import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
 import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 import { JobRegistryService } from "../jobs/job-registry.service";
 import { sliceJobText } from "../jobs/job-output.util";
@@ -71,7 +69,6 @@ export class TaskExecutorService {
     private chatRunner: ChatRunnerService,
     private eventBus: EventBusService,
     private storage: TaskStorageService,
-    private settingsStorage: SettingsStorage,
     private agentStore: AgentFileStore,
     private providerStore: ProviderFileStore,
     // 允许直接 new 的测试/嵌入场景不挂 Registry；生产由 SchedulerModule imports JobsModule 注入。
@@ -422,11 +419,10 @@ export class TaskExecutorService {
   }
 
   /**
-   * 解析任务模型ID（三级回退）
+   * 解析任务模型ID（两级回退）
    *
    * 1. 任务显式指定的 modelId
    * 2. 智能体的 modelId
-   * 3. 全局默认对话模型
    *
    * 最终必须验证模型存在，否则抛出错误。
    */
@@ -446,19 +442,10 @@ export class TaskExecutorService {
       }
     }
 
-    // 第三优先级：全局默认对话模型
-    if (!modelId) {
-      modelId = await this.settingsStorage.getSettingValue(
-        SG_MODELS,
-        SK_MOD_CHAT,
-        null,
-      );
-    }
-
-    // 最终必须有效
+    // 全局默认对话模型已移除：任务和智能体都未配置时直接报错
     if (!modelId) {
       throw new Error(
-        "无法解析模型ID：任务未指定模型，智能体未配置模型，且全局默认对话模型未设置",
+        "无法解析模型ID：任务未指定模型，且智能体未配置模型。请为任务或智能体选择模型。",
       );
     }
 

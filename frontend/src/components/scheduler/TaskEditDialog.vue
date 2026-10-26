@@ -486,8 +486,13 @@ function parseCron(cron: string) {
 function validateForm(): string | null {
   if (!form.value.name.trim()) return t('scheduler.edit.nameRequired')
   if (!form.value.prompt.trim()) return t('scheduler.edit.promptRequired')
-  if (form.value.targetMode === 'new_session' && !form.value.agentId) {
-    return t('scheduler.edit.agentRequired')
+  if (form.value.targetMode === 'new_session') {
+    if (!form.value.agentId) return t('scheduler.edit.agentRequired')
+    // 全局默认对话模型已移除：任务未指定模型时必须能继承智能体模型
+    const agent = agents.value.find((item) => item.id === form.value.agentId)
+    if (!form.value.modelId && !agent?.modelId) {
+      return t('scheduler.edit.modelRequired')
+    }
   }
   if (form.value.targetMode === 'existing_session' && !form.value.targetSessionId.trim()) {
     return t('scheduler.edit.targetSessionRequired')

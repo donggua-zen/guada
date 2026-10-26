@@ -135,6 +135,7 @@
     sessionBusy: 'Session Busy',
     sessionBusyDesc: 'The current session is responding, please try again later',
     sendMessageFailed: 'Failed to send message',
+    modelRequired: 'This session has no model bound. Select a model in the composer first.',
     maxVersionsExceeded: 'Maximum number of answer versions reached',
     mainSession: 'Main Session',
     subTask: 'Sub Task',
@@ -195,6 +196,7 @@
     pageTitle: 'What would you like to chat about today',
     newSession: 'New Chat',
     createFailedNoAgent: 'Please select a agent template first',
+    createFailedNoModel: 'Please configure and select a model first',
   },
 
   // ── 消息项 ──

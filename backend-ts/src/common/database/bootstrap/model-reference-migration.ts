@@ -9,7 +9,6 @@
  * 这里只做纯决策（可单测），IO 由调用方（ProviderBootstrapService）负责。
  */
 import {
-  SK_MOD_CHAT,
   SK_MOD_COMPRESS_MODEL,
   SK_MOD_SEARCH,
   SK_MOD_SUMMARY,
@@ -20,7 +19,6 @@ import {
 
 /** models 设置组里语义为「模型引用」的键（写入时校验、迁移时改写） */
 export const MODEL_ID_KEYS: ReadonlySet<string> = new Set([
-  SK_MOD_CHAT,
   SK_MOD_TITLE_MODEL,
   SK_MOD_TRANS_MODEL,
   SK_MOD_COMPRESS_MODEL,

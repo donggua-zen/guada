@@ -55,7 +55,6 @@ describe("TaskExecutorService × JobRegistry", () => {
       storage,
       {} as any,
       {} as any,
-      {} as any,
       registry,
     );
     jest

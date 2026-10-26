@@ -1,10 +1,10 @@
 /**
  * 提交信息生成模型解析（SessionService.generateCommitMessageStream）
  *
- * 覆盖回退链：标题总结模型 → 当前对话模型（会话自选 modelId → 全局默认对话模型）；
- * 三者皆未配置 → no_model_configured；配置了但解析不到 → model_not_found（fail-loud）。
+ * 覆盖回退链：标题总结模型 → 当前对话模型（会话自选 modelId → 智能体 modelId）；
+ * 都未配置 → no_model_configured；配置了但解析不到 → model_not_found（fail-loud）。
  *
- * 回归：用户只给会话选了模型、未设置全局默认对话模型/标题模型时，对话正常可用，
+ * 回归：用户只给会话选了模型、未设置标题模型时，对话正常可用，
  * 但生成提交信息曾报「未配置模型」——回退必须落到会话自选模型。
  */
 import { SessionService } from "../../src/modules/chat/session.service";
@@ -25,26 +25,23 @@ const SESSION_MODEL = {
   provider: { id: "inst-a", type: "custom", protocol: "openai" },
 };
 
-const GLOBAL_MODEL = {
-  id: "inst-default:m9",
-  modelName: "m9",
-  name: "M9",
-  provider: { id: "inst-default", type: "custom", protocol: "openai" },
+const AGENT_MODEL = {
+  id: "inst-agent:m2",
+  modelName: "m2",
+  name: "M2",
+  provider: { id: "inst-agent", type: "custom", protocol: "openai" },
 };
 
 function buildService(opts: {
   titleModelId?: string | null;
-  defaultModelId?: string | null;
   /** undefined = 会话不存在；null = 会话存在但未选模型 */
   sessionModelId?: string | null;
+  /** 会话未绑定模型时的智能体兜底模型 */
+  agentModelId?: string | null;
   findModel?: (id: string) => any;
 }) {
   const sessionStore = {
-    get: jest.fn((id: string) =>
-      opts.sessionModelId === undefined
-        ? undefined
-        : { id, modelId: opts.sessionModelId },
-    ),
+    get: jest.fn(),
   };
   const modelStore = {
     findModel: jest.fn((id: string) =>
@@ -55,7 +52,6 @@ function buildService(opts: {
     getSettingValue: jest.fn(async (group: string, key: string) => {
       if (group !== "models") return null;
       if (key === "defaultTitleSummaryModelId") return opts.titleModelId ?? null;
-      if (key === "defaultChatModelId") return opts.defaultModelId ?? null;
       return null;
     }),
   };
@@ -94,7 +90,25 @@ function buildService(opts: {
     {} as any, // 15 contentSearch
     {} as any, // 16 sessionGroupService
   );
-  return { service, sessionStore, modelStore, settingsStorage, llmService };
+  const getSessionById = jest.spyOn(service, "getSessionById").mockImplementation(
+    async (id: string) =>
+      (opts.sessionModelId === undefined
+        ? null
+        : {
+            id,
+            modelId: opts.sessionModelId,
+            agent: opts.agentModelId ? { modelId: opts.agentModelId } : null,
+          }) as any,
+  );
+
+  return {
+    service,
+    sessionStore,
+    getSessionById,
+    modelStore,
+    settingsStorage,
+    llmService,
+  };
 }
 
 async function collect(gen: AsyncIterable<any>): Promise<any[]> {
@@ -105,7 +119,7 @@ async function collect(gen: AsyncIterable<any>): Promise<any[]> {
 
 describe("提交信息生成模型解析", () => {
   it("标题总结模型已配置 → 优先使用，不查会话模型", async () => {
-    const { service, sessionStore, llmService } = buildService({
+    const { service, getSessionById, llmService } = buildService({
       titleModelId: TITLE_MODEL.id,
       sessionModelId: SESSION_MODEL.id,
       findModel: (id) => (id === TITLE_MODEL.id ? TITLE_MODEL : undefined),
@@ -120,14 +134,14 @@ describe("提交信息生成模型解析", () => {
       modelId: TITLE_MODEL.id,
       modelSource: "title",
     });
-    expect(sessionStore.get).not.toHaveBeenCalled();
+    expect(getSessionById).not.toHaveBeenCalled();
     expect(llmService.completions).toHaveBeenCalledWith(
       expect.objectContaining({ model: TITLE_MODEL.modelName }),
     );
   });
 
-  it("无标题模型 + 会话自选模型（全局默认未配置）→ 回退会话当前模型", async () => {
-    const { service, settingsStorage, llmService } = buildService({
+  it("无标题模型 + 会话自选模型 → 回退会话当前模型", async () => {
+    const { service, getSessionById, llmService } = buildService({
       sessionModelId: SESSION_MODEL.id,
       findModel: (id) => (id === SESSION_MODEL.id ? SESSION_MODEL : undefined),
     });
@@ -141,21 +155,17 @@ describe("提交信息生成模型解析", () => {
       modelId: SESSION_MODEL.id,
       modelSource: "chat",
     });
+    expect(getSessionById).toHaveBeenCalledWith("s1");
     expect(llmService.completions).toHaveBeenCalledWith(
       expect.objectContaining({ model: SESSION_MODEL.modelName }),
     );
-    // 会话自选模型解析成功就不应再读全局默认（不静默换模型）
-    const readKeys = settingsStorage.getSettingValue.mock.calls.map(
-      (c: any[]) => c[1],
-    );
-    expect(readKeys).not.toContain("defaultChatModelId");
   });
 
-  it("无标题模型 + 会话未选模型 → 回退全局默认对话模型", async () => {
+  it("无标题模型 + 会话未选模型 → 回退智能体模型", async () => {
     const { service, llmService } = buildService({
       sessionModelId: null,
-      defaultModelId: GLOBAL_MODEL.id,
-      findModel: (id) => (id === GLOBAL_MODEL.id ? GLOBAL_MODEL : undefined),
+      agentModelId: AGENT_MODEL.id,
+      findModel: (id) => (id === AGENT_MODEL.id ? AGENT_MODEL : undefined),
     });
 
     const events = await collect(
@@ -164,16 +174,19 @@ describe("提交信息生成模型解析", () => {
 
     expect(events[events.length - 1]).toMatchObject({
       type: "done",
-      modelId: GLOBAL_MODEL.id,
+      modelId: AGENT_MODEL.id,
       modelSource: "chat",
     });
     expect(llmService.completions).toHaveBeenCalledWith(
-      expect.objectContaining({ model: GLOBAL_MODEL.modelName }),
+      expect.objectContaining({ model: AGENT_MODEL.modelName }),
     );
   });
 
-  it("三者皆未配置 → skipped no_model_configured", async () => {
-    const { service, llmService } = buildService({ sessionModelId: null });
+  it("会话和智能体都未配置模型 → skipped no_model_configured", async () => {
+    const { service, llmService } = buildService({
+      sessionModelId: null,
+      agentModelId: null,
+    });
 
     const events = await collect(
       service.generateCommitMessageStream("s1", "diff"),
@@ -227,11 +240,11 @@ describe("提交信息生成模型解析", () => {
     expect(events).toEqual([{ type: "skipped", reason: "generation_failed" }]);
   });
 
-  it("会话自选模型解析不到 → fail-loud model_not_found（不静默换全局默认）", async () => {
-    const { service, settingsStorage, llmService } = buildService({
+  it("会话自选模型解析不到 → fail-loud model_not_found（不静默换模型）", async () => {
+    const { service, llmService } = buildService({
       sessionModelId: "inst-deleted:gone",
-      defaultModelId: GLOBAL_MODEL.id,
-      findModel: (id) => (id === GLOBAL_MODEL.id ? GLOBAL_MODEL : undefined),
+      agentModelId: AGENT_MODEL.id,
+      findModel: (id) => (id === AGENT_MODEL.id ? AGENT_MODEL : undefined),
     });
 
     const events = await collect(
@@ -240,10 +253,21 @@ describe("提交信息生成模型解析", () => {
 
     expect(events).toEqual([{ type: "skipped", reason: "model_not_found" }]);
     expect(llmService.completions).not.toHaveBeenCalled();
-    const readKeys = settingsStorage.getSettingValue.mock.calls.map(
-      (c: any[]) => c[1],
+  });
+
+  it("会话未绑定且智能体模型解析不到 → model_not_found", async () => {
+    const { service, llmService } = buildService({
+      sessionModelId: null,
+      agentModelId: "inst-agent:gone",
+      findModel: () => undefined,
+    });
+
+    const events = await collect(
+      service.generateCommitMessageStream("s1", "diff"),
     );
-    expect(readKeys).not.toContain("defaultChatModelId");
+
+    expect(events).toEqual([{ type: "skipped", reason: "model_not_found" }]);
+    expect(llmService.completions).not.toHaveBeenCalled();
   });
 
   it("标题模型解析不到 → skipped model_not_found", async () => {

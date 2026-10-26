@@ -185,8 +185,9 @@ export class ChatController {
           regenerationMode: regenerationMode || "overwrite",
           resumeData,
           source,
-          // 直发不应用快照：保持现状（会话持久化设置）；快照只随入队保存，
-          // 由队列补发时以回合级覆盖执行。
+          // 直发与入队使用同一份回合级快照：客户端改完设置立即发送时，
+          // 不依赖此前 PUT 是否已经落盘，本回合仍按输入区当前值执行。
+          ...(settingsOverride ? { settingsOverride } : {}),
         },
         undefined, // 不再通过 HTTP 长连接接收事件,事件走全局 SSE
       );
