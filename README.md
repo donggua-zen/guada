@@ -19,13 +19,15 @@
   <a href="#-核心能力"><b>🧠 核心能力</b></a> ·
   <a href="#-远程工作区本地大脑远程手脚"><b>🖥️ 远程工作区</b></a> ·
   <a href="#-快速开始5分钟上手"><b>🚀 快速开始</b></a> ·
+  <a href="#-部署文档索引"><b>📚 部署文档</b></a> ·
+  <a href="#-常见问题"><b>❓ 常见问题</b></a> ·
   <a href="https://gitee.com/zhendongdong/guada_ai/issues"><b>💬 反馈</b></a> ·
   <a href="#-社区"><b>🤝 加入社区</b></a>
 </p>
 
 <p align="center">
   <a href="README.en.md">English</a> · 
-  <b>Gitee</b> ·
+  <a href="https://gitee.com/zhendongdong/guada_ai">Gitee</a> ·
   <a href="https://github.com/donggua-zen/guada">GitHub</a> ·
   <a href="https://atomgit.com/donggua_sherlock/GuaDaAI">GitCode</a>
 </p>
@@ -150,7 +152,7 @@ docker compose up -d --build
 
 ### 方式二：Electron 桌面端
 
-下载预编译安装包（见 [QQ 群 1047993501](#-社区)），或从源码构建：
+下载预编译安装包：[GitHub Releases](https://github.com/donggua-zen/guada/releases) · [Gitee 发行版](https://gitee.com/zhendongdong/guada_ai/releases)（也可在 [QQ 群](#-社区) 获取），或从源码构建：
 
 ```bash
 pnpm install
@@ -192,7 +194,19 @@ pnpm run dev
 # 访问 http://localhost:5173
 ```
 
-> 更多部署细节：[Docker 部署](docs/DOCKER_DEPLOYMENT.md) · [Electron 部署](docs/ELECTRON_DEPLOYMENT.md) · [生产环境部署](docs/PRODUCTION_DEPLOYMENT.md) · [快速上手](QUICK_START.md)
+---
+
+## 📚 部署文档索引
+
+按场景挑一份看即可：
+
+| 场景 | 文档 |
+|------|------|
+| Docker 快速上手 | [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) |
+| Docker 完整部署（端口、数据卷、环境变量） | [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) |
+| Electron 桌面端打包与安装 | [docs/ELECTRON_DEPLOYMENT.md](docs/ELECTRON_DEPLOYMENT.md) |
+| 生产环境部署（反向代理、HTTPS、备份） | [docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md) |
+| 快速上手（源码 / Docker 对照） | [QUICK_START.md](QUICK_START.md) |
 
 ---
 
@@ -246,6 +260,32 @@ ai_chat/
 ├── docs/                        # 文档
 └── LICENSE
 ```
+
+---
+
+## ❓ 常见问题
+
+**Docker 部署后 8787 端口被占用怎么办？**
+改 `docker-compose.yml` 里的端口映射（形如 `"8787:8787"` 左侧改成别的端口），再 `docker compose up -d` 重启。
+
+**macOS 提示「已损坏，无法打开」？**
+这是 Gatekeeper 对未公证应用的拦截，不是文件损坏。处理办法见
+[方式二：Electron 桌面端](#方式二electron-桌面端) 里的 `xattr -cr` 与 ad-hoc 重签步骤。
+
+**该选 Docker 还是 Electron 桌面端？**
+想跑在服务器 / NAS 上、多人用浏览器访问，选 Docker；想在本机用完整桌面能力
+（浏览器自动化、沙箱 Shell、本地文件），选 Electron 桌面端。
+
+---
+
+## 🛠️ 参与贡献
+
+欢迎提交 Issue 和 Pull Request。动手之前建议先读一遍 [CONTRIBUTING.md](CONTRIBUTING.md)，
+里面有分支约定、提交信息格式和本地开发流程。
+
+- 🐛 **发现问题**：[提交 Issue](https://github.com/donggua-zen/guada/issues)
+- 🔧 **想改代码**：Fork 仓库 → 从 `develop` 切出功能分支 → 提交 PR
+- 📝 **提交信息**：建议使用 `feat:` / `fix:` / `docs:` / `chore:` 前缀，便于整理更新日志
 
 ---
 
