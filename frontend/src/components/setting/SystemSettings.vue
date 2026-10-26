@@ -167,10 +167,13 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { usePluginSlots, type ResolvedSlotItem } from '../../stores/pluginSlots'
 import { PuzzleCube20Regular } from '@vicons/fluent'
+import { useLayoutStore } from '@/stores/layout'
+import { isMobileDevice } from '@/composables/useDevice'
 
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
+const layoutStore = useLayoutStore()
 
 // 设置项分组映射
 const groupMap = computed<Record<string, string>>(() => ({
@@ -356,12 +359,16 @@ const currentTabLabel = computed(() => {
 const handleItemClick = (path: string) => {
     currentTabValue.value = path
     router.replace({ name: 'SystemSettings', params: { tab: path } })
+    // 移动端抽屉：选中分类后自动收起（与侧栏会话/导航点击一致）
+    if (isMobileDevice) layoutStore.setSidebarVisible(false)
 }
 
 // 返回应用：回到进入设置前所在页面；无记录时才回新建会话
 const goBack = () => {
     const returnPath = getSettingsReturnPath()
     router.replace(returnPath || { name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
+    // 移动端抽屉：返回应用同样收起
+    if (isMobileDevice) layoutStore.setSidebarVisible(false)
 }
 
 // 监听路由参数变化

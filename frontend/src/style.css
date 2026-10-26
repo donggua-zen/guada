@@ -1058,6 +1058,20 @@ html.mobile .opacity-0.group-hover\/mode-row\:opacity-100 {
   pointer-events: auto;
 }
 
+/* 分组标题的"图标 ↔ 箭头"是 absolute inset-0 叠放互换（图标常显、hover 淡出，
+   箭头仅 hover 显示），侧栏分组与消息工具分组共用同一结构。触屏没有 hover，
+   且上面的常显规则会把箭头也点亮，两者同时可见就叠在一起——在图标盒
+   （span.relative，全项目仅这两处使用）内禁用互换：图标常显、箭头隐藏。
+   作用域限定图标盒，不影响分组行右侧的"…"操作按钮 */
+html.mobile .group span.relative .group-hover\:opacity-0 {
+  opacity: 1;
+}
+
+html.mobile .group span.relative .opacity-0.group-hover\:opacity-100 {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* 会话操作触发按钮命中区扩大（桌面 28px 偏小） */
 html.mobile.touch .session-action-trigger {
   position: relative;
@@ -1073,4 +1087,18 @@ html.mobile.touch .tool-btn::after {
   content: '';
   position: absolute;
   inset: -8px;
+}
+
+/* 移动端内容卡片满铺（对齐 macOS 的处理）：Web 桌面版的 4px 卡片缝隙在手机上
+   只是一圈无用留白，去掉外边距/圆角/外阴影/描边，内容铺满视口。
+   必须排在 html:not(.platform-win) / html.platform-mac 之后（同特异度靠顺序取胜） */
+html.mobile .content-card {
+  margin: 0;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html.mobile .content-card::after {
+  border: none;
 }
