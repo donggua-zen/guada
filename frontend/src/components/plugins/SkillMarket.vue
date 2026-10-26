@@ -44,7 +44,7 @@
 
         <!-- 错误提示 -->
         <div v-if="error"
-            class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-6 text-center">
+            class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-6 text-center">
             <el-icon size="32" class="mb-2 opacity-50 text-gray-400">
                 <InboxOutlined />
             </el-icon>
@@ -55,21 +55,40 @@
 
         <!-- 空结果（浏览模式） -->
         <div v-else-if="!loading && items.length === 0"
-            class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-8 text-center text-sm text-gray-500 dark:text-[#8b8d95]">
+            class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-8 text-center text-sm text-gray-500 dark:text-[#8b8d95]">
             {{ t('plugins.skills.marketEmptyResult') }}
         </div>
 
-        <!-- 竖版卡片网格 -->
-        <div v-else-if="items.length > 0" class="grid gap-4"
-            style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
-            <MarketSkillCard
+        <!-- 无界两列行列表 -->
+        <div v-else-if="items.length > 0" class="-mx-2 grid grid-cols-1 gap-x-6 lg:grid-cols-2">
+            <PluginListRow
                 v-for="skill in items"
                 :key="skill.id"
-                :skill="skill"
-                :installing="installingFromMarket.has(skill.id)"
+                :name="skill.name"
+                :description="skill.description || t('plugins.skills.noDescription')"
+                :icon-src="skill.icon"
                 @click="handleShowMarketInstallDialog(skill)"
-                @install="handleInstallFromMarketUrl(skill)"
-            />
+            >
+                <template #badges>
+                    <el-tag v-if="skill.localStatus === 'installed'" type="success" size="small" effect="plain">{{ t('plugins.skills.marketInstalled') }}</el-tag>
+                    <el-tag v-else-if="skill.localStatus === 'updatable'" type="warning" size="small" effect="plain">{{ t('plugins.skills.marketUpdatable') }}</el-tag>
+                    <el-tag v-if="skill.lang !== skill.requestedLang" type="info" size="small" effect="plain">{{ t('plugins.skills.marketFallbackHint') }}</el-tag>
+                    <el-tag v-for="(label, index) in (skill.labels || []).slice(0, 2)" :key="`${label.id}-${index}`" size="small" effect="light">
+                        {{ label.name }}
+                    </el-tag>
+                </template>
+                <template #actions>
+                    <el-button
+                        size="small"
+                        round
+                        :type="skill.localStatus === 'updatable' ? 'warning' : 'primary'"
+                        :loading="installingFromMarket.has(skill.id)"
+                        @click.stop="handleInstallFromMarketUrl(skill)"
+                    >
+                        {{ getMarketButtonLabel(skill) }}
+                    </el-button>
+                </template>
+            </PluginListRow>
         </div>
 
         <!-- 分页（仅浏览模式且有多页时显示） -->
@@ -202,7 +221,7 @@ import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
-import MarketSkillCard from './MarketSkillCard.vue'
+import PluginListRow from './PluginListRow.vue'
 import type { Skill } from '@/types/skills'
 
 const props = defineProps<{
@@ -356,10 +375,13 @@ function getMarketButtonLabel(skill: MarketSkillWithStatus): string {
 
 // ── 数据加载 ──
 
+/** 请求序号：快速切换搜索/标签时丢弃过期响应 */
+let loadSeq = 0
+
 /**
  * 推荐模式：随机推荐列表（带缓存，无分页）
  */
-async function loadRecommend(forceRefresh: boolean = false) {
+async function loadRecommend(forceRefresh: boolean = false): Promise<MarketSkillWithStatus[]> {
     const startTime = Date.now()
     const lang = localeToMarketLang(getLocale())
     const remoteSkills = await SkillMarketService.fetchMarketSkills(lang, !forceRefresh)
@@ -372,17 +394,16 @@ async function loadRecommend(forceRefresh: boolean = false) {
         }
     }
 
-    items.value = remoteSkills.map(skill => ({
+    return remoteSkills.map(skill => ({
         ...skill,
         localStatus: 'not_installed' as const,
     }))
-    pagination.value = null
 }
 
 /**
  * 浏览模式：关键词/标签过滤的分页列表
  */
-async function loadBrowse() {
+async function loadBrowse(): Promise<{ items: MarketSkillWithStatus[]; pagination: MarketPagination }> {
     const lang = localeToMarketLang(getLocale())
     const response = await SkillMarketService.fetchMarketList({
         page: currentPage.value,
@@ -392,37 +413,50 @@ async function loadBrowse() {
         lang,
     })
 
-    items.value = response.items.map(skill => ({
-        ...skill,
-        localStatus: 'not_installed' as const,
-    }))
-    pagination.value = response.pagination
+    return {
+        items: response.items.map(skill => ({
+            ...skill,
+            localStatus: 'not_installed' as const,
+        })),
+        pagination: response.pagination,
+    }
 }
 
 /**
- * 按当前模式加载市场列表
+ * 按当前模式加载市场列表；forceRefresh 仅作用于推荐模式（绕过缓存）
  */
-async function loadMarket() {
-    if (loading.value) return
-
+async function loadMarket(forceRefresh: boolean = false) {
+    const seq = ++loadSeq
     loading.value = true
     error.value = null
 
     try {
+        let nextItems: MarketSkillWithStatus[]
+        let nextPagination: MarketPagination | null
         if (isBrowseMode.value) {
-            await loadBrowse()
+            const result = await loadBrowse()
+            nextItems = result.items
+            nextPagination = result.pagination
         } else {
-            await loadRecommend()
+            nextItems = await loadRecommend(forceRefresh)
+            nextPagination = null
         }
+
+        // 过期响应（用户已切换搜索/标签）直接丢弃
+        if (seq !== loadSeq) return
+
+        items.value = nextItems
+        pagination.value = nextPagination
         // 与本地技能做名字匹配，更新状态
         refreshStatus()
     } catch (err) {
+        if (seq !== loadSeq) return
         console.error('加载市场技能失败:', err)
         error.value = getErrorMessage(err) || t('plugins.skills.marketError')
         items.value = []
         pagination.value = null
     } finally {
-        loading.value = false
+        if (seq === loadSeq) loading.value = false
     }
 }
 
@@ -440,14 +474,10 @@ async function loadLabels() {
 }
 
 /**
- * 「换一批」：强制绕过缓存重新拉推荐列表；浏览模式下则重新请求当前页
+ * 「换一批」：推荐模式强制绕过缓存；浏览模式下重新请求当前页
  */
 function handleRefresh() {
-    if (isBrowseMode.value) {
-        void loadMarket()
-    } else {
-        void loadMarket().then(() => {}) // 推荐模式同样走 loadMarket，loadRecommend 内部处理动画
-    }
+    void loadMarket(!isBrowseMode.value)
 }
 
 /**
@@ -512,27 +542,27 @@ onMounted(async () => {
     width: 280px;
 }
 
-/* ── 标签筛选 chips（单选）──
+/* ── 标签筛选 chips（单选，无界：无描边，仅填充态区分）──
    颜色取自 CSS 变量，暗色下变量值本身会翻转 */
 .market-chip {
     padding: 4px 12px;
     font-size: 13px;
     line-height: 1.4;
-    border: 1px solid var(--gd-color-surface-border);
+    border: none;
     border-radius: 999px;
-    background: var(--gd-color-surface);
-    color: var(--gd-color-text);
+    background: transparent;
+    color: var(--gd-color-text-gray);
     cursor: pointer;
-    transition: background-color 0.15s, border-color 0.15s;
+    transition: background-color 0.15s, color 0.15s;
 }
 
 .market-chip:hover {
     background: var(--gd-color-surface-subtle-hover);
+    color: var(--gd-color-text);
 }
 
 .market-chip--active {
     background: var(--gd-color-sidebar-bg-active);
-    border-color: transparent;
     color: var(--gd-color-sidebar-text-active);
 }
 
@@ -594,14 +624,14 @@ onMounted(async () => {
     color: var(--gd-md-text-secondary);
 }
 
-/* 决策信息：从哪来、装到哪 */
+/* 决策信息：从哪来、装到哪（无界：浅底块，无描边） */
 .market-install__facts {
     display: flex;
     flex-direction: column;
     gap: 6px;
     padding: 10px 12px;
-    border: 1px solid var(--gd-md-border);
     border-radius: var(--gd-md-radius);
+    background: var(--gd-color-surface-subtle);
 }
 
 .market-install__fact {
@@ -626,14 +656,13 @@ onMounted(async () => {
     margin: 0;
 }
 
-/* 操作区：左侧外链文字动作，右侧取消 + 唯一主按钮 */
+/* 操作区：左侧外链文字动作，右侧取消 + 唯一主按钮（无界：仅留间距） */
 .market-install__actions {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     padding-top: 12px;
-    border-top: 1px solid var(--gd-md-divider);
 }
 
 .market-install__links {

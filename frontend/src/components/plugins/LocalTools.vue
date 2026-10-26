@@ -1,24 +1,20 @@
 <template>
-  <div class="flex-1 overflow-hidden">
-    <div class="flex items-center justify-between gap-4 mb-6 mt-2">
-      <div class="min-w-0">
-          <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('plugins.localTools.title') }}</h1>
-        <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('plugins.localTools.subtitle') }}</p>
-      </div>
-      <el-button 
-        v-if="loading" 
-        :loading="true" 
-        size="small"
-      >
-        {{ t('common.loading') }}
-      </el-button>
-      <el-button type="primary" size="small" @click="startInstallDialog">安装插件</el-button>
-    </div>
+  <div class="flex-1">
+    <PluginTabHeader :title="t('plugins.localTools.title')" :subtitle="t('plugins.localTools.subtitle')">
+      <template #actions>
+        <el-button circle :loading="loading" :title="t('common.refresh')" @click="loadGlobalTools">
+          <template #icon>
+            <RefreshOutlined />
+          </template>
+        </el-button>
+        <el-button type="primary" @click="startInstallDialog">{{ t('plugins.localTools.installPlugin') }}</el-button>
+      </template>
+    </PluginTabHeader>
 
     <!-- 安装进度弹窗（输入 source → 假终端进度） -->
     <GdDialog v-model="installDialogVisible" size="md" :close-on-click-modal="false" destroy-on-close @closed="handleInstallClosed">
       <template #header>
-        <span>安装插件</span>
+        <span>{{ t('plugins.localTools.installTitle') }}</span>
       </template>
       <!-- 输入 + 安装按钮（并排） -->
       <div class="install-row">
@@ -28,49 +24,52 @@
           clearable
           @keyup.enter="beginInstall"
         />
-        <el-button type="primary" :loading="installing" @click="beginInstall">安装</el-button>
+        <el-button type="primary" :loading="installing" @click="beginInstall">{{ t('plugins.localTools.installBtn') }}</el-button>
       </div>
       <!-- 假终端（常驻） -->
       <div ref="installLogBox" class="install-terminal">
-        <pre class="install-log">{{ installLog || '等待安装…' }}</pre>
+        <pre class="install-log">{{ installLog || t('plugins.localTools.installWaiting') }}</pre>
         <span v-if="installing" class="terminal-cursor"></span>
       </div>
       <template #footer>
-        <el-button v-if="installing" @click="cancelInstallDialog">取消</el-button>
-        <el-button v-else @click="installDialogVisible = false">关闭</el-button>
+        <el-button v-if="installing" @click="cancelInstallDialog">{{ t('common.cancel') }}</el-button>
+        <el-button v-else @click="installDialogVisible = false">{{ t('common.close') }}</el-button>
       </template>
     </GdDialog>
 
-    <div
-      v-if="globalTools.length > 0"
-      class="grid gap-4"
-      style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));"
-    >
-      <PluginListRow
-        v-for="tool in globalTools"
-        :key="tool.pluginId"
-        :name="tool.displayName || tool.name || tool.pluginId"
-        :description="tool.description || t('plugins.localTools.noDescription')"
-        :icon-src="tool.icon ? `/api/v1/plugins/${tool.pluginId}/icon` : null"
-        :menu-items="getPluginMenuItems(tool)"
-        @click="showDetail(tool)"
-        @command="(command) => handlePluginCommand(command, tool)"
+    <!-- 分区行列表 -->
+    <template v-if="pluginGroups.length > 0">
+      <PluginSection
+        v-for="group in pluginGroups"
+        :key="group.key"
+        :title="t(`plugins.localTools.groups.${group.key}`)"
       >
-        <template #badges>
-          <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
-          <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
-        </template>
-        <template #actions>
-          <el-switch
-            :model-value="tool.enabled"
-            :loading="updatingTools.has(tool.pluginId)"
-            @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
-            @click.stop
-            size="small"
-          />
-        </template>
-      </PluginListRow>
-    </div>
+        <PluginListRow
+          v-for="tool in group.items"
+          :key="tool.pluginId"
+          :name="tool.displayName || tool.name || tool.pluginId"
+          :description="tool.description || t('plugins.localTools.noDescription')"
+          :icon-src="tool.icon ? `/api/v1/plugins/${tool.pluginId}/icon` : null"
+          :menu-items="getPluginMenuItems(tool)"
+          @click="showDetail(tool)"
+          @command="(command) => handlePluginCommand(command, tool)"
+        >
+          <template #badges>
+            <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
+            <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
+          </template>
+          <template #actions>
+            <el-switch
+              :model-value="tool.enabled"
+              :loading="updatingTools.has(tool.pluginId)"
+              @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
+              @click.stop
+              size="small"
+            />
+          </template>
+        </PluginListRow>
+      </PluginSection>
+    </template>
 
     <div
       v-else-if="!loading"
@@ -122,15 +121,19 @@
 
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { RefreshOutlined } from '@vicons/material'
 import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
 import { usePopup } from '@/composables/usePopup'
+import { groupPlugins } from '@/utils/pluginGroups'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
+import PluginSection from './PluginSection.vue'
+import PluginTabHeader from './PluginTabHeader.vue'
 import type { PluginRowMenuItem } from './pluginList.types'
 import type { PluginQueryPlugin } from '@/services/modules/settings.api'
 
@@ -144,6 +147,7 @@ const installSource = ref('')
 const installing = ref(false)
 
 const globalTools = ref<PluginQueryPlugin[]>([])
+const pluginGroups = computed(() => groupPlugins(globalTools.value))
 
 // Detail dialog
 const detailVisible = ref(false)
@@ -197,11 +201,11 @@ async function startInstall() {
         activeInstallJobId = null
         installing.value = false
         if (state.result?.success) {
-          installLog.value += '\n\n✅ 安装成功'
+          installLog.value += `\n\n✅ ${t('plugins.localTools.installSuccessLog')}`
           installSource.value = ''
           await loadGlobalTools()
         } else {
-          installLog.value += '\n\n❌ 安装失败'
+          installLog.value += `\n\n❌ ${t('plugins.localTools.installFailedLog')}`
         }
         break
       }
@@ -264,22 +268,22 @@ async function updateGlobalToolStatus(pluginId: string, enabled: boolean) {
   } catch (err) {
     console.error('更新全局工具状态失败:', err)
     ElMessage.error(getErrorMessage(err) || t('plugins.localTools.updateFailed'))
+    throw err
   }
 }
 
-function handleToggleTool(pluginId: string, enabled: boolean) {
+async function handleToggleTool(pluginId: string, enabled: boolean) {
   const tool = globalTools.value.find(t => t.pluginId === pluginId)
   if (!tool) return
-  
+
   const previousState = tool.enabled
-  
+  tool.enabled = enabled // 乐观更新
+  updatingTools.value.add(pluginId)
+
   try {
-    updatingTools.value.add(pluginId)
-    updateGlobalToolStatus(pluginId, enabled)
-  } catch (err) {
-    console.error('更新工具状态失败:', err)
+    await updateGlobalToolStatus(pluginId, enabled)
+  } catch {
     tool.enabled = previousState
-    ElMessage.error(getErrorMessage(err) || t('plugins.localTools.toggleFailed'))
   } finally {
     updatingTools.value.delete(pluginId)
   }

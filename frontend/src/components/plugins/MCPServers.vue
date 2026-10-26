@@ -1,11 +1,12 @@
 <template>
-    <div class="flex-1 overflow-hidden">
-        <div class="flex items-center justify-between gap-4 mb-6 mt-2">
-            <div class="min-w-0">
-                <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('plugins.mcp.title') }}</h1>
-                <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('plugins.mcp.subtitle') }}</p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
+    <div class="flex-1">
+        <PluginTabHeader :title="t('plugins.mcp.title')" :subtitle="t('plugins.mcp.subtitle')">
+            <template #actions>
+                <el-button circle :loading="loading" :title="t('common.refresh')" @click="loadServers">
+                    <template #icon>
+                        <RefreshOutlined />
+                    </template>
+                </el-button>
                 <el-button @click="handleImport">
                     <template #icon>
                         <UploadOutlined />
@@ -18,12 +19,11 @@
                     </template>
                     {{ t('plugins.mcp.addServer') }}
                 </el-button>
-            </div>
-        </div>
+            </template>
+        </PluginTabHeader>
 
-        <!-- MCP 服务器列表 -->
-        <div v-if="servers.length > 0" class="grid gap-4"
-            style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));">
+        <!-- MCP 服务器列表（无界两列行） -->
+        <div v-if="servers.length > 0" class="-mx-2 grid grid-cols-1 gap-x-6 lg:grid-cols-2">
             <PluginListRow
                 v-for="server in servers"
                 :key="server.id"
@@ -40,7 +40,7 @@
             </PluginListRow>
         </div>
         <div v-else
-            class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
+            class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-12 text-center">
             <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
                 <InboxOutlined />
             </el-icon>
@@ -232,20 +232,6 @@
             </div>
 
             <el-input v-model="importJsonText" type="textarea" :rows="15" :placeholder="t('plugins.mcp.importPlaceholder')" />
-{
-  "mcpServers": {
-    "WebSearch": {
-      "type": "streamableHttp",
-      "description": "描述信息",
-      "isActive": true,
-      "name": "阿里云百炼_联网搜索",
-      "baseUrl": "https://dashscope.aliyuncs.com/api/v1/mcps/WebSearch/mcp",
-      "headers": {
-        "Authorization": "Bearer sk-xxx"
-      }
-    }
-  }
-}' />
 
             <template #footer>
                 <span class="dialog-footer">
@@ -269,13 +255,14 @@ import {
     InboxOutlined,
     UploadOutlined,
     InfoOutlined,
-    CableOutlined
+    CableOutlined,
+    RefreshOutlined
 } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
-import ScrollContainer from '../ui/ScrollContainer.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
+import PluginTabHeader from './PluginTabHeader.vue'
 
 const { toast } = usePopup()
 const { t } = useI18n()
@@ -359,7 +346,9 @@ const formRules = computed(() => ({
 }))
 
 // 加载 MCP 服务器列表
+const loading = ref(false)
 const loadServers = async () => {
+    loading.value = true
     try {
         const response = await apiService.fetchMcpServers()
         // 后端返回的数据格式：{ items: [...], total: null, page: null, size: N }
@@ -374,6 +363,8 @@ const loadServers = async () => {
         console.error('加载 MCP 服务器失败:', error)
         toast.error(error.message || t('common.error.loadFailed'))
         servers.value = []
+    } finally {
+        loading.value = false
     }
 }
 

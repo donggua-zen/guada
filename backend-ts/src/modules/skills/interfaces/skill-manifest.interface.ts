@@ -1,5 +1,9 @@
 /**
  * SKILL.md YAML frontmatter 解析结构（L1 元数据）
+ *
+ * display_* / description_* / default_lang 为技能包携带的「展示扩展字段」：
+ * 只允许用于 UI 展示（前端按界面语言选取），绝不参与 AI 上下文注入、
+ * 关键词匹配或任何模型可见输出——AI 侧始终只读 name / description。
  */
 export interface SkillManifest {
   name: string;               // 技能名称（≤64字符，小写+数字+连字符）
@@ -8,6 +12,15 @@ export interface SkillManifest {
   dependencies?: string[];    // 依赖的其他 Skill 名称
   author?: string;            // 作者
   tags?: string[];            // 分类标签
+
+  // ── 展示扩展字段（display-only，见上方说明）──
+  /** 默认展示名；常与 name 相同（slug），前端会忽略 slug 值 */
+  display_name?: string;
+  display_name_zh?: string;   // 中文展示名
+  display_name_en?: string;   // 英文展示名
+  description_zh?: string;    // 中文展示描述（AI 仍使用 description）
+  description_en?: string;    // 英文展示描述（AI 仍使用 description）
+  default_lang?: string;      // 技能包声明的默认语言（zh / en）
 }
 
 /**

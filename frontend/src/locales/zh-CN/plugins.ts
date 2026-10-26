@@ -123,6 +123,14 @@ export default {
     pluginManaged: '该技能由插件提供，请在「插件」页面控制启停',
     sourceBuiltin: '内置',
     sourceShared: '共享',
+    // 分区标题
+    groups: {
+      builtin: '内置技能',
+      plugin: '插件提供',
+      user: '用户安装',
+      shared: '共享目录',
+      workspace: '工作区',
+    },
     // 空状态
     empty: '暂无 Skills',
     emptyHint: '点击"刷新"按钮扫描本地 Skills 目录',
@@ -190,6 +198,20 @@ export default {
     disable: '禁用',
     empty: '暂无插件',
     emptyHint: '点击右上角「安装插件」添加',
+    // 分区标题
+    groups: {
+      core: '核心插件',
+      extended: '扩展插件',
+      user: '用户安装',
+      other: '其他',
+    },
+    // 安装
+    installPlugin: '安装插件',
+    installTitle: '安装插件',
+    installBtn: '安装',
+    installWaiting: '等待安装…',
+    installSuccessLog: '安装成功',
+    installFailedLog: '安装失败',
     // 详情弹窗
     descLabel: '描述',
     toolsLabel: '工具列表 ({count})',

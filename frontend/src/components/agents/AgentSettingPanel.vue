@@ -320,7 +320,7 @@
                     class="skill-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
                     :class="{ 'opacity-50 pointer-events-none': allSkillsDisabled }">
                     <div class="flex items-start justify-between gap-2 mb-2">
-                      <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ skill.manifest?.name || skill.id }}</div>
+                      <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ getSkillDisplayName(skill.manifest, skill.id) }}</div>
                       <div class="flex items-center gap-1.5 shrink-0">
                         <el-switch :model-value="getSkillEffectiveEnabled(skill)"
                           :loading="updatingSkills.has(skill.id)"
@@ -331,7 +331,7 @@
                           skill.manifest.version }}</el-tag>
                       </div>
                     </div>
-                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ skill.manifest?.description || t('agents.setting.noDescription')
+                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ getSkillDisplayDescription(skill.manifest) || t('agents.setting.noDescription')
                       }}</p>
                   </div>
                 </div>
@@ -427,6 +427,7 @@ import type { FormInstance } from 'element-plus'
 import type { CompressionTier } from '@/constants'
 
 import { usePopup } from '../../composables/usePopup'
+import { getSkillDisplayName, getSkillDisplayDescription } from '@/utils/skillDisplay'
 import AvatarPreview from '../ui/AvatarPreview.vue'
 import SegmentedToggle from '../ui/SegmentedToggle.vue'
 import { DEFAULT_COMPRESSION_TIER, COMPRESSION_TIER_OPTIONS } from '@/constants'

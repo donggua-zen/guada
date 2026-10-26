@@ -1,26 +1,18 @@
 <template>
     <div class="flex-1 skills-page">
         <!-- 头部区域 -->
-        <div class="flex items-center justify-between gap-4 mb-6 mt-2">
-            <div class="min-w-0">
-                <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('plugins.skills.title') }}</h1>
-                <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('plugins.skills.subtitle') }}</p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-                <el-button @click="handleShowInstallDialog">
+        <PluginTabHeader :title="t('plugins.skills.title')" :subtitle="t('plugins.skills.subtitle')">
+            <template #actions>
+                <el-button circle :loading="scanning" :title="t('plugins.skills.scan')" @click="handleScan">
+                    <template #icon>
+                        <RefreshOutlined />
+                    </template>
+                </el-button>
+                <el-button type="primary" @click="handleShowInstallDialog">
                     <template #icon>
                         <UploadOutlined />
                     </template>
                     {{ t('plugins.skills.install') }}
-                </el-button>
-                <el-button v-if="loading" :loading="true" size="small">
-                    {{ t('common.loading') }}
-                </el-button>
-                <el-button @click="handleScan" :loading="scanning">
-                    <template #icon>
-                        <RefreshOutlined />
-                    </template>
-                    {{ t('plugins.skills.scan') }}
                 </el-button>
                 <el-button @click="handleOpenSkillsDocs">
                     <template #icon>
@@ -28,19 +20,21 @@
                     </template>
                     {{ t('plugins.skills.docs') }}
                 </el-button>
-            </div>
-        </div>
+            </template>
+        </PluginTabHeader>
 
-        <!-- Skills 列表 -->
-        <div class="space-y-4">
-            <!-- 技能列表 -->
-            <div v-if="skills.length > 0" class="grid gap-4"
-                style="grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));">
+        <!-- 已安装 Skills（按来源分区） -->
+        <template v-if="skillGroups.length > 0">
+            <PluginSection
+                v-for="group in skillGroups"
+                :key="group.key"
+                :title="t(`plugins.skills.groups.${group.key}`)"
+            >
                 <PluginListRow
-                    v-for="skill in skills"
+                    v-for="skill in group.items"
                     :key="skill.id"
-                    :name="skill.manifest.name || skill.id"
-                    :description="skill.manifest.description || t('plugins.skills.noDescription')"
+                    :name="getSkillDisplayName(skill.manifest, skill.id)"
+                    :description="getSkillDisplayDescription(skill.manifest) || t('plugins.skills.noDescription')"
                     :muted="skill.enabled === false"
                     :menu-items="getSkillMenuItems(skill)"
                     @click="handleViewDocumentation(skill.id)"
@@ -66,28 +60,28 @@
                         />
                     </template>
                 </PluginListRow>
-            </div>
+            </PluginSection>
+        </template>
 
-            <!-- 空状态 -->
-            <div v-if="!loading && skills.length === 0"
-                class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) overflow-hidden bg-(--gd-color-surface)">
-                <div class="p-12 text-center">
-                    <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
-                        <InboxOutlined />
-                    </el-icon>
-                    <div class="text-xl font-medium text-gray-600 dark:text-[#e8e9ed] mb-2">
-                        {{ t('plugins.skills.empty') }}
-                    </div>
-                    <div class="text-sm text-gray-500 dark:text-[#8b8d95] mb-4">
-                        {{ t('plugins.skills.emptyHint') }}
-                    </div>
-                    <el-button type="primary" @click="handleScan" :loading="scanning">
-                        <template #icon>
-                            <RefreshOutlined />
-                        </template>
-                        {{ t('plugins.skills.scanNow') }}
-                    </el-button>
+        <!-- 空状态 -->
+        <div v-else-if="!loading"
+            class="rounded-[var(--gd-size-surface-radius)] overflow-hidden bg-(--gd-color-surface-subtle)">
+            <div class="p-12 text-center">
+                <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
+                    <InboxOutlined />
+                </el-icon>
+                <div class="text-xl font-medium text-gray-600 dark:text-[#e8e9ed] mb-2">
+                    {{ t('plugins.skills.empty') }}
                 </div>
+                <div class="text-sm text-gray-500 dark:text-[#8b8d95] mb-4">
+                    {{ t('plugins.skills.emptyHint') }}
+                </div>
+                <el-button type="primary" @click="handleScan" :loading="scanning">
+                    <template #icon>
+                        <RefreshOutlined />
+                    </template>
+                    {{ t('plugins.skills.scanNow') }}
+                </el-button>
             </div>
         </div>
 
@@ -195,11 +189,15 @@ import { RefreshOutlined, InboxOutlined, UploadOutlined } from '@vicons/material
 import { Loading, UploadFilled, Document, Close } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
+import { getSkillDisplayName, getSkillDisplayDescription } from '@/utils/skillDisplay'
+import { groupSkills } from '@/utils/pluginGroups'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
+import PluginSection from './PluginSection.vue'
+import PluginTabHeader from './PluginTabHeader.vue'
 import SkillMarket from './SkillMarket.vue'
 import type { PluginRowMenuItem } from './pluginList.types'
 import type { Skill } from '@/types/skills'
@@ -208,6 +206,8 @@ const loading = ref(false)
 const scanning = ref(false)
 const reloadingSkills = ref<Set<string>>(new Set())
 const skills = ref<Skill[]>([])
+/** 已安装技能按来源分区（插件提供/内置/用户安装/共享/工作区） */
+const skillGroups = computed(() => groupSkills(skills.value))
 const { t } = useI18n()
 const { confirm } = usePopup()
 
@@ -466,9 +466,9 @@ async function handleViewDocumentation(skillId: string) {
     docError.value = null
     documentation.value = ''
 
-    // 获取 skill 名称用于标题
+    // 获取 skill 名称用于标题（优先展示扩展字段）
     const skill = skills.value.find(s => s.id === skillId)
-    currentSkillName.value = skill?.manifest.name || skillId
+    currentSkillName.value = skill ? getSkillDisplayName(skill.manifest, skill.id) : skillId
     currentSkillId.value = skillId
 
     try {

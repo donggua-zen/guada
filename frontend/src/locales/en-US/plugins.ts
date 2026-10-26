@@ -123,6 +123,14 @@
     sourceShared: 'Shared',
     fromPlugin: 'Plugin',
     pluginManaged: 'Provided by a plugin; control it from the Plugins page',
+    // 分区标题
+    groups: {
+      builtin: 'Built-in Skills',
+      plugin: 'Plugin-provided',
+      user: 'User Installed',
+      shared: 'Shared Directory',
+      workspace: 'Workspace',
+    },
     // 空状态
     empty: 'No Skills',
     emptyHint: 'Click "Refresh" to scan the local Skills directory',
@@ -190,6 +198,20 @@
     disable: 'Disable',
     empty: 'No plugins',
     emptyHint: 'Click "Install Plugin" in the top right to add one',
+    // 分区标题
+    groups: {
+      core: 'Core Plugins',
+      extended: 'Extended Plugins',
+      user: 'User Installed',
+      other: 'Other',
+    },
+    // 安装
+    installPlugin: 'Install Plugin',
+    installTitle: 'Install Plugin',
+    installBtn: 'Install',
+    installWaiting: 'Waiting for installation…',
+    installSuccessLog: 'Installation succeeded',
+    installFailedLog: 'Installation failed',
     // 详情弹窗
     descLabel: 'Description',
     toolsLabel: 'Tools ({count})',

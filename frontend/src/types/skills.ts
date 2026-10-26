@@ -11,12 +11,19 @@
 export interface SkillManifest {
     /** 技能名称（≤64 字符，小写+数字+连字符；id 即由它派生） */
     name: string
-    /** 技能描述（≤1024 字符，第三人称） */
+    /** 技能描述（≤1024 字符，第三人称；AI 上下文使用此字段） */
     description: string
     version?: string
     dependencies?: string[]
     author?: string
     tags?: string[]
+    // ── 展示扩展字段（display-only：仅 UI 展示，不参与 AI 上下文）──
+    display_name?: string
+    display_name_zh?: string
+    display_name_en?: string
+    description_zh?: string
+    description_en?: string
+    default_lang?: string
 }
 
 /** 技能来源：global=用户安装, system=系统内置, agents=共享目录, workspace=工作目录 */

@@ -1,6 +1,6 @@
 <template>
   <div
-    class="group flex cursor-pointer items-center gap-3 rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) px-3 py-3 transition-colors hover:bg-(--gd-color-surface-subtle-hover)"
+    class="group flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-(--gd-color-surface-subtle-hover)"
     @click="emit('click')"
   >
     <div class="shrink-0" :class="{ 'opacity-60': muted }">
