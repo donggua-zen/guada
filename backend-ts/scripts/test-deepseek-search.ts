@@ -18,6 +18,7 @@ import { WebSearchPlugin } from "../src/modules/plugins/builtins/web-search.plug
 import { BochaProvider } from "../src/modules/plugins/builtins/search-providers/bocha.provider";
 import { MetasoProvider } from "../src/modules/plugins/builtins/search-providers/metaso.provider";
 import { TavilyProvider } from "../src/modules/plugins/builtins/search-providers/tavily.provider";
+import { AgentHomeProvider } from "../src/modules/plugins/builtins/search-providers/agenthome.provider";
 
 const QUERY = process.argv[2] || "DeepSeek 最新模型 发布";
 const FETCH_URL = process.argv[3] || "https://api-docs.deepseek.com/zh-cn/guides/search";
@@ -115,6 +116,7 @@ async function main() {
     new MetasoProvider(),
     new TavilyProvider(),
     provider,
+    new AgentHomeProvider({} as any),
     providerStore,
   );
 

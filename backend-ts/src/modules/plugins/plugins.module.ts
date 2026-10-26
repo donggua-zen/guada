@@ -19,6 +19,7 @@ import { MetasoProvider } from "./builtins/search-providers/metaso.provider";
 import { TavilyProvider } from "./builtins/search-providers/tavily.provider";
 import { BochaProvider } from "./builtins/search-providers/bocha.provider";
 import { DeepSeekProvider } from "./builtins/search-providers/deepseek.provider";
+import { AgentHomeProvider } from "./builtins/search-providers/agenthome.provider";
 import { PromptCollector } from "./prompt-collector.service";
 import { NlsService } from "./i18n/nls.service";
 import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
@@ -48,6 +49,7 @@ import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
     TavilyProvider,
     BochaProvider,
     DeepSeekProvider,
+    AgentHomeProvider,
   ],
   exports: [PluginManager, PromptCollector, ExternalPluginLoader, NlsService, TurnReminderRegistry],
 })

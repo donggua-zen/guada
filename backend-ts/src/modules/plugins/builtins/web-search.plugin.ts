@@ -5,6 +5,7 @@ import { SettingsStorage } from "../../../common/utils/settings-storage.util";
 import { ProviderFileStore } from "../../llm-core/provider-file.store";
 import { BochaProvider } from "./search-providers/bocha.provider";
 import { DeepSeekProvider } from "./search-providers/deepseek.provider";
+import { AgentHomeProvider } from "./search-providers/agenthome.provider";
 import { MetasoProvider } from "./search-providers/metaso.provider";
 import { TavilyProvider } from "./search-providers/tavily.provider";
 import { SearchProvider } from "./search-providers/search-provider.interface";
@@ -32,6 +33,7 @@ export class WebSearchPlugin extends PluginBase {
     private readonly metasoProvider: MetasoProvider,
     private readonly tavilyProvider: TavilyProvider,
     private readonly deepSeekProvider: DeepSeekProvider,
+    private readonly agentHomeProvider: AgentHomeProvider,
     private readonly providerStore: ProviderFileStore,
   ) {
     super();
@@ -45,6 +47,7 @@ export class WebSearchPlugin extends PluginBase {
       this.tavilyProvider,
       this.metasoProvider,
       this.deepSeekProvider,
+      this.agentHomeProvider,
     ];
 
     // 读取当前供应商，动态决定注册哪些参数

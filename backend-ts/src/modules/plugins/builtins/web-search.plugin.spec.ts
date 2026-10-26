@@ -3,6 +3,7 @@ import { BochaProvider } from "./search-providers/bocha.provider";
 import { TavilyProvider } from "./search-providers/tavily.provider";
 import { MetasoProvider } from "./search-providers/metaso.provider";
 import { DeepSeekProvider } from "./search-providers/deepseek.provider";
+import { AgentHomeProvider } from "./search-providers/agenthome.provider";
 
 const originalFetch = global.fetch;
 
@@ -28,12 +29,17 @@ function stubFetch(impl: (url: string | URL, init: any) => Promise<Response>): j
 async function createSearchTool(options: {
   searchSettings: Record<string, any>;
   modelProviders?: Array<{ type: string; enabled?: boolean; apiKey?: string }>;
+  mcpClient?: any;
 }) {
   const settingsStorage: any = {
     getSettings: jest.fn(async () => options.searchSettings),
   };
   const providerStore: any = {
     listProviders: jest.fn(() => options.modelProviders ?? []),
+  };
+  const mcpClient = options.mcpClient ?? {
+    listTools: jest.fn(async () => ({})),
+    callTool: jest.fn(async () => ({ success: false, error: "not used" })),
   };
 
   const plugin = new WebSearchPlugin(
@@ -42,6 +48,7 @@ async function createSearchTool(options: {
     new MetasoProvider(),
     new TavilyProvider(),
     new DeepSeekProvider(),
+    new AgentHomeProvider(mcpClient),
     providerStore,
   );
 
@@ -145,5 +152,51 @@ describe("WebSearchPlugin × DeepSeek 模型侧 Key 复用", () => {
     });
 
     expect(Object.keys(tools)).toEqual(["web_search", "web_parser"]);
+  });
+});
+
+describe("WebSearchPlugin × AgentHome（MCP 上游）", () => {
+  const searchText =
+    "Found 1 result(s) · provider 0 · 10ms\n\n1. [Example](https://example.com)\n   snippet\n";
+
+  function agentHomeMcp() {
+    return {
+      listTools: jest.fn(async () => ({})),
+      callTool: jest.fn(async () => ({ success: true, content: searchText })),
+    };
+  }
+
+  it("注册 web_search 与 web_parser，并通过 MCP 调用上游工具", async () => {
+    const mcpClient = agentHomeMcp();
+    const tools = await createSearchTool({
+      searchSettings: { provider: "agenthome", agenthome: { apiKey: "sk-agent" } },
+      mcpClient,
+    });
+
+    expect(Object.keys(tools)).toEqual(["web_search", "web_parser"]);
+
+    const output = await tools.web_search.execute({ q: "hello", size: 3 });
+
+    expect(output).toContain("https://example.com");
+    expect(mcpClient.callTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://token.agenthome.cc/mcp/web-search",
+        headers: { Authorization: "Bearer sk-agent" },
+      }),
+      "web_search",
+      { query: "hello", max_results: 3 },
+      { serverId: "builtin-search:agenthome" },
+    );
+  });
+
+  it("未配置 Key 时提示到搜索设置里填写", async () => {
+    const tools = await createSearchTool({
+      searchSettings: { provider: "agenthome", agenthome: { apiKey: "" } },
+      mcpClient: agentHomeMcp(),
+    });
+
+    await expect(tools.web_search.execute({ q: "hello" })).rejects.toThrow(
+      /Please configure the AgentHome API Key/,
+    );
   });
 });

@@ -251,6 +251,7 @@ export interface SearchGroupSettings {
     tavily?: { apiKey?: string }
     metaso?: { apiKey?: string }
     deepseek?: { apiKey?: string; useProviderKey?: boolean }
+    agenthome?: { apiKey?: string }
 }
 
 // ========== 文件上传类型 ==========

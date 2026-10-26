@@ -29,6 +29,7 @@
               <el-option label="Tavily" value="tavily" />
               <el-option :label="t('settings.search.metaso')" value="metaso" />
               <el-option :label="t('settings.search.deepseek')" value="deepseek" />
+              <el-option :label="t('settings.search.agenthome')" value="agenthome" />
             </el-select>
           </div>
 
@@ -87,6 +88,17 @@
             </div>
           </div>
 
+          <!-- AgentHome API Key -->
+          <div v-if="selectedProvider === 'agenthome'"
+            class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
+            <div class="flex flex-col gap-1 min-w-0 flex-1">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.search.agenthomeApiKey') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.agenthomeApiKeyDesc') }}</span>
+            </div>
+            <el-input v-model="providerKeys.agenthome" type="password" show-password placeholder="sk-..."
+              style="width: 360px;" class="shrink-0" clearable />
+          </div>
+
           <!-- 提示信息 -->
           <div class="px-4 py-3.5 bg-gray-50 dark:bg-[#1e1f23]">
             <div class="text-xs text-gray-500 dark:[#8b8d95] space-y-1">
@@ -98,6 +110,9 @@
               </template>
               <template v-else-if="selectedProvider === 'metaso'">
                 <div>{{ t('settings.search.metasoTip') }}</div>
+              </template>
+              <template v-else-if="selectedProvider === 'agenthome'">
+                <div>{{ t('settings.search.agenthomeTip') }}</div>
               </template>
               <template v-else>
                 <div>{{ t('settings.search.deepseekTip') }}</div>
@@ -134,6 +149,7 @@ const providerKeys = reactive({
   tavily: '',
   metaso: '',
   deepseek: '',
+  agenthome: '',
 })
 
 // DeepSeek：复用「模型服务」中同类型供应商的 Key
@@ -152,7 +168,7 @@ const debouncedSave = useDebounceFn(async () => {
 }, 500)
 
 // 监听 API Key 变化自动保存
-watch(() => [providerKeys.bocha, providerKeys.tavily, providerKeys.metaso, providerKeys.deepseek, deepseekUseProviderKey.value], () => {
+watch(() => [providerKeys.bocha, providerKeys.tavily, providerKeys.metaso, providerKeys.deepseek, providerKeys.agenthome, deepseekUseProviderKey.value], () => {
   debouncedSave()
 })
 
@@ -182,6 +198,7 @@ const loadSettings = async () => {
     providerKeys.tavily = response.tavily?.apiKey || ''
     providerKeys.metaso = response.metaso?.apiKey || ''
     providerKeys.deepseek = response.deepseek?.apiKey || ''
+    providerKeys.agenthome = response.agenthome?.apiKey || ''
     // 未显式保存过开关时：没填 Key 默认勾选复用模型服务 Key
     deepseekUseProviderKey.value =
       response.deepseek?.useProviderKey ?? !providerKeys.deepseek
@@ -191,6 +208,7 @@ const loadSettings = async () => {
       tavily: { apiKey: providerKeys.tavily },
       metaso: { apiKey: providerKeys.metaso },
       deepseek: { apiKey: providerKeys.deepseek, useProviderKey: deepseekUseProviderKey.value },
+      agenthome: { apiKey: providerKeys.agenthome },
     }))
   } catch (error) {
     console.error('获取搜索设置失败:', error)
@@ -200,6 +218,7 @@ const loadSettings = async () => {
       tavily: { apiKey: '' },
       metaso: { apiKey: '' },
       deepseek: { apiKey: '' },
+      agenthome: { apiKey: '' },
     }))
   }
 
@@ -224,6 +243,7 @@ const handleSave = async () => {
       tavily: { apiKey: providerKeys.tavily || '' },
       metaso: { apiKey: providerKeys.metaso || '' },
       deepseek: { apiKey: providerKeys.deepseek || '', useProviderKey: deepseekUseProviderKey.value },
+      agenthome: { apiKey: providerKeys.agenthome || '' },
     }
 
     await apiService.updateGroupSettings('search', { ...dataToSave })
@@ -233,6 +253,7 @@ const handleSave = async () => {
       tavily: { apiKey: providerKeys.tavily },
       metaso: { apiKey: providerKeys.metaso },
       deepseek: { apiKey: providerKeys.deepseek, useProviderKey: deepseekUseProviderKey.value },
+      agenthome: { apiKey: providerKeys.agenthome },
     }))
   } catch (error) {
     console.error('保存搜索设置失败:', error)
