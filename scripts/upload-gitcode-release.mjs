@@ -130,6 +130,20 @@ async function main() {
     process.exit(1);
   }
 
+  // 先传元数据再传大文件：latest.yml / blockmap 就绪后，差量 feed 才能工作；
+  // 否则在串行上传期间更新官网配置，客户端会因 latest.yml 404 回退整包。
+  const assetPriority = (name) => {
+    if (name.endsWith('.yml')) return 0;
+    if (name.endsWith('.blockmap')) return 1;
+    if (name.endsWith('.exe')) return 2;
+    return 3; // dmg 等大文件放最后
+  };
+  ghAssets.sort(
+    (a, b) =>
+      assetPriority(a.name) - assetPriority(b.name) ||
+      a.name.localeCompare(b.name),
+  );
+
   const workDir = dirArg ? path.resolve(dirArg) : path.join(os.tmpdir(), `guada-${tag}`);
   fs.mkdirSync(workDir, { recursive: true });
   console.log(`本地目录: ${workDir}`);

@@ -715,13 +715,21 @@ node scripts/sync-official-update-config.mjs
 
 脚本会从 GitCode 的 `latest.yml` 读取文件名、sha512、大小，写入
 `../ai_web/backend/config.json` 的 `downloads.win`（含 `blockmapUrl`），并更新版本号与
-发布日期；同时校验安装包和 blockmap 是否都可达。随后部署 ai_web 后端使 `check_update`
-返回新数据：
+发布日期。写入前会等待并校验安装包、`.blockmap`、`latest.yml` 三者都可达（最多约 2 分钟），
+任何一项缺失都会中止，避免客户端读不到 feed 回退整包。随后部署 ai_web 后端使
+`check_update` 返回新数据：
 
 ```powershell
 cd ../ai_web
 .\deploy-backend.ps1
 ```
+
+> 上传脚本会先传 `latest.yml` / `.blockmap`，再传安装包和 dmg。不要在上传未完成时
+> 更新官网配置；`--file` 只是用本地 yml 生成配置，仍会校验 GitCode 上的 `latest.yml`。
+
+> ⚠️ 1.0.8 及更早的客户端会在 `latest.yml` 后拼 `?noCache=...`，GitCode 对该查询参数
+> 返回 404，因此它们更新到新版本时仍会整包下载；1.0.9 起客户端已关闭该参数，之后才会
+> 真正差量。也就是说 1.0.8 → 1.0.9 需要一次整包安装，1.0.9 → 1.0.10 才能看到差量。
 
 > 注意：1.0.6 是第一个带应用内更新能力的版本，用户仍需手动安装一次；之后的版本才能
 > 在应用内直接升级（1.0.6 的 blockmap 会在本次发版时一并上传，作为首次差量的基线）。

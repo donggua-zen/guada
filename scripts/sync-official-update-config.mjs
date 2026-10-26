@@ -100,12 +100,27 @@ async function verifyDownloadUrl(url) {
   }
 }
 
+async function waitForAsset(url, label, attempts = 12, delayMs = 10_000) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (await verifyDownloadUrl(url)) {
+      console.log(`  ✓ ${label} 已就绪`);
+      return true;
+    }
+    console.log(`  … ${label} 尚未就绪（${attempt}/${attempts}）：${url}`);
+    if (attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return false;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const pkg = JSON.parse(
     fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
   );
   const version = String(args.version || pkg.version).replace(/^v/, "");
+  const latestYmlUrl = `${GITCODE_REPO}/releases/download/v${version}/latest.yml`;
   const configPath = path.resolve(
     repoRoot,
     args.config || path.join("..", "ai_web", "backend", "config.json"),
@@ -123,10 +138,10 @@ async function main() {
     }
     ymlContent = fs.readFileSync(ymlPath, "utf8");
     console.log(`读取本地 latest.yml：${ymlPath}`);
+    console.log("（仍会校验 GitCode 上的 latest.yml，避免客户端差量 feed 404）");
   } else {
-    const ymlUrl = `${GITCODE_REPO}/releases/download/v${version}/latest.yml`;
-    console.log(`拉取 GitCode latest.yml：${ymlUrl}`);
-    ymlContent = await fetchText(ymlUrl);
+    console.log(`拉取 GitCode latest.yml：${latestYmlUrl}`);
+    ymlContent = await fetchText(latestYmlUrl);
   }
 
   const meta = yaml.load(ymlContent);
@@ -172,6 +187,7 @@ async function main() {
   console.log(`  安装包：${fileName}（${(size / 1024 / 1024).toFixed(1)} MB）`);
   console.log(`  下载地址：${downloadUrl}`);
   console.log(`  blockmap：${blockmapUrl}`);
+  console.log(`  latest.yml：${latestYmlUrl}`);
   console.log(`  sha512：${String(file.sha512).slice(0, 24)}...`);
   console.log(`  GitHub 备用：https://github.com/${GITHUB_REPO}/releases/download/v${version}/${fileName}`);
   console.log("");
@@ -182,19 +198,26 @@ async function main() {
   }
 
   if (!args["skip-verify"]) {
-    console.log("校验下载地址与 blockmap 可达性...");
-    const ok = await verifyDownloadUrl(downloadUrl);
-    if (!ok) {
-      throw new Error(`下载地址不可达，请先确认 GitCode 附件已上传：${downloadUrl}`);
-    }
-    const blockmapOk = await verifyDownloadUrl(blockmapUrl);
-    if (!blockmapOk) {
+    // 差量下载需要三件套同时就绪：安装包、blockmap、latest.yml。
+    // 上传脚本是串行的，实测在只传完安装包时就更新官网配置，会让客户端
+    // 读 latest.yml 404 并回退整包，因此这里轮询等待（最多约 2 分钟）。
+    console.log("等待安装包、blockmap 与 latest.yml 在 GitCode 就绪（最多约 2 分钟）...");
+    const checks = [
+      { label: "安装包", url: downloadUrl },
+      { label: "blockmap", url: blockmapUrl },
+      { label: "latest.yml", url: latestYmlUrl },
+    ];
+    const results = await Promise.all(
+      checks.map((check) => waitForAsset(check.url, check.label)),
+    );
+    if (results.some((ok) => !ok)) {
       throw new Error(
-        `blockmap 不可达，差量更新会退化为整包下载：${blockmapUrl}\n` +
-          "请确认 upload-gitcode-release.mjs 已包含 .blockmap 并重新补传。",
+        "GitCode 附件尚未全部就绪，已停止写入官网配置。\n" +
+          "请确认 upload-gitcode-release.mjs 已上传安装包、.blockmap 和 latest.yml 后重试；" +
+          "紧急情况下可显式加 --skip-verify，但客户端可能回退整包下载。",
       );
     }
-    console.log("下载地址与 blockmap 均可达。");
+    console.log("安装包、blockmap、latest.yml 均已就绪。");
   }
 
   fs.writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");

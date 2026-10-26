@@ -435,6 +435,13 @@ export class UpdateManager {
   private getDifferentialUpdater(feedUrl: string): NsisUpdater {
     if (!this.differentialUpdater) {
       const updater = new NsisUpdater();
+      // electron-updater 默认给 latest.yml 拼 ?noCache=xxx，GitCode 的 release
+      // 资源地址带查询参数会直接 404（实测 1.0.7/1.0.8 两次都因此回退整包）。
+      // release 目录按版本不可变，不需要缓存穿透，这里强制关闭该参数。
+      Object.defineProperty(updater, "isAddNoCacheQuery", {
+        configurable: true,
+        get: () => false,
+      });
       updater.autoDownload = false;
       updater.autoInstallOnAppQuit = false;
       updater.allowPrerelease = false;
