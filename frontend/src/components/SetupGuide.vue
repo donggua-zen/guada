@@ -83,6 +83,7 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { Close, QuestionFilled, Check } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { isElectron } from '@/composables/useDevice'
 import { apiService } from '@/services/ApiService'
 
 const TOTAL_STEPS = 4
@@ -147,7 +148,9 @@ async function refreshAndAdvance(): Promise<void> {
 
 onMounted(() => {
   restorePosition()
-  if (!hasCompleted.value) {
+  // 引导只在 Electron 首次启动时自动弹出。Web 部署是多人/多浏览器访问，
+  // 新浏览器（新 localStorage）没有完成标记会反复弹，改为仅保留右下角手动入口
+  if (isElectron && !hasCompleted.value) {
     visible.value = true
     const savedStep = localStorage.getItem('setupGuideStep')
     if (savedStep) currentStep.value = parseInt(savedStep)
@@ -155,9 +158,9 @@ onMounted(() => {
   refreshAndAdvance()
 })
 
-// 监听认证状态：一旦登录成功且未完成设置，则跳转第二步
+// 监听认证状态：一旦登录成功且未完成设置，则跳转第二步（同样仅 Electron 自动弹出）
 watch(() => authStore.isAuthenticated, (isAuth) => {
-  if (isAuth && !hasCompleted.value) {
+  if (isElectron && isAuth && !hasCompleted.value) {
     currentStep.value = 2
     localStorage.setItem('setupGuideStep', '2')
     visible.value = true
