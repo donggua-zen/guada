@@ -1020,6 +1020,16 @@ html.mobile .plugin-row-desc {
   overflow: hidden;
 }
 
+/* 对话区两侧留白：ChatPanel 的 ScrollContainer 用 px-5（左右各 20px），消息正文与输入框
+   都从它继承同一份水平内缩。手机上 40px 的横向留白接近 10% 屏宽，正文/输入区被挤窄，
+   移动端收到 10px（约等于输入框自身左右内边距的量级，视觉上贴边但不顶屏）。
+   纵向留白不动——末回合 25px 尾距与 .chat-messages 的 20px 下内边距是状态胶囊的避让位，
+   收掉会压住最后一条消息 */
+html.mobile .chat-scroll-container {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
 /* 触屏命中区：header-icon-btn 与工具按钮扩到 ≥40px（伪元素外扩） */
 html.mobile.touch .header-icon-btn {
   position: relative;
