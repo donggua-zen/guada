@@ -47,6 +47,11 @@ export default defineConfig({
   server: {
     // 允许局域网真机访问（手机联调移动端适配）；不影响桌面 localhost 访问
     host: true,
+    // 端口固定 5173：dev 下移动访问（局域网/公网隧道）直接指向该端口，
+    // 端口漂移会让设置页展示的地址失效；被占用时直接报错而不是静默换端口
+    strictPort: true,
+    // 公网隧道/域名反代过来时 Host 不是 IP，放行以免被 Vite 的 host 校验拦截
+    allowedHosts: true,
     proxy: {
       '/api/v1': {
         target: 'http://localhost:3000',

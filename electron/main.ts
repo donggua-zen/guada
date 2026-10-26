@@ -12,6 +12,7 @@ import {
   crashReporter,
   nativeImage,
   powerSaveBlocker,
+  Notification,
 } from "electron";
 import * as path from "path";
 import * as os from "os";
@@ -109,6 +110,93 @@ function readKeepAwakeModeFromSettings(): KeepAwakeMode {
     // 文件不存在/不可读/非法 JSON：按缺省走，不打断启动
   }
   return "busy";
+}
+
+// —— 移动访问（默认关闭）——
+// 配置的权威来源是后端 SettingsStorage 组 mobile-access（<dataHome>/mobile-access.json）。
+// Electron 只做启动期两件事：
+//   1. 读配置决定后端监听地址（LAN 开启 → 0.0.0.0）与是否 serve 前端 SPA
+//      （LAN 或公网开启都需要）——绑定地址在进程启动期决定，所以局域网开关重启生效；
+//   2. 密码兜底：开启任一入口但账户未设密码时自动关闭，避免外部入口无门禁。
+// 旧版 lan-access.json（只有 { enabled }）在首次读取时迁移。
+const MOBILE_ACCESS_FILE = "mobile-access.json";
+const LEGACY_LAN_ACCESS_FILE = "lan-access.json";
+const ACCOUNT_FILE = "account.json";
+
+interface MobileAccessBootConfig {
+  lanEnabled: boolean;
+  publicEnabled: boolean;
+}
+
+function readMobileAccessConfig(): MobileAccessBootConfig {
+  const dataHome = detectDataPath();
+  try {
+    const raw = JSON.parse(
+      fs.readFileSync(path.join(dataHome, MOBILE_ACCESS_FILE), "utf8"),
+    );
+    return {
+      lanEnabled: raw?.lanEnabled === true,
+      publicEnabled: raw?.publicEnabled === true,
+    };
+  } catch {
+    // 新文件不存在：尝试迁移旧版开关
+  }
+  try {
+    const legacy = JSON.parse(
+      fs.readFileSync(path.join(dataHome, LEGACY_LAN_ACCESS_FILE), "utf8"),
+    );
+    if (typeof legacy?.enabled === "boolean") {
+      const migrated: MobileAccessBootConfig = {
+        lanEnabled: legacy.enabled,
+        publicEnabled: false,
+      };
+      fs.writeFileSync(
+        path.join(dataHome, MOBILE_ACCESS_FILE),
+        JSON.stringify(migrated, null, 2),
+        "utf8",
+      );
+      log.info("已将 lan-access.json 迁移为 mobile-access.json");
+      return migrated;
+    }
+  } catch {
+    // 旧文件也不存在：按缺省（关闭）走
+  }
+  return { lanEnabled: false, publicEnabled: false };
+}
+
+/** 读取账户是否已设密码（account.json 的 passwordHash 非空） */
+function isAccessPasswordSet(): boolean {
+  try {
+    const raw = JSON.parse(
+      fs.readFileSync(path.join(detectDataPath(), ACCOUNT_FILE), "utf8"),
+    );
+    return typeof raw?.passwordHash === "string" && raw.passwordHash.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 启动期密码兜底：配置开启但未设密码时写回全关闭（并告知调用方用于提示用户）。
+ * 返回 true 表示发生了自动关闭。
+ */
+function enforceMobileAccessPasswordGate(): boolean {
+  const config = readMobileAccessConfig();
+  if ((!config.lanEnabled && !config.publicEnabled) || isAccessPasswordSet()) {
+    return false;
+  }
+  const disabled: MobileAccessBootConfig = { lanEnabled: false, publicEnabled: false };
+  try {
+    fs.writeFileSync(
+      path.join(detectDataPath(), MOBILE_ACCESS_FILE),
+      JSON.stringify(disabled, null, 2),
+      "utf8",
+    );
+  } catch (err) {
+    log.error("自动关闭移动访问配置失败:", err);
+  }
+  log.warn("移动访问已自动关闭：账户未设置访问密码");
+  return true;
 }
 
 // —— 后端健康看门狗状态（仅记录日志，不自动重启）——
@@ -1077,10 +1165,20 @@ async function startBackend(): Promise<void> {
     const backendPath = getBackendPath();
 
     if (isDev) {
-      // 开发模式：端口可通过 PORT 环境变量配置（0 = 系统自动分配，默认 3000）
+      // 开发模式：端口可通过 PORT 环境变量配置（0 = 系统自动分配，默认 3000）。
+      // 移动访问开关**不改变** dev 端口：Vite dev server 的 /api 代理写死指向 3000，
+      // 改端口会让浏览器直接访问 5173 时全部 500。开关只影响绑定地址（127.0.0.1
+      // vs 0.0.0.0）与是否由后端 serve SPA，见下面的 env 注入。
+      const mobileAccess = readMobileAccessConfig();
       backendPort = parseInt(process.env.PORT || "3000", 10);
       // 生产调试模式禁用热重载（改代码不触发后端重启，用于自举开发）
       const noWatch = GUADA_PROD_DEBUG;
+      // 与 createWindow 的加载方式保持一致：USE_STATIC_FRONTEND=true 时窗口加载
+      // dist，移动访问也应回落 dist；否则窗口走 Vite，移动访问同样指向 5173
+      const useViteDevServer = process.env.USE_STATIC_FRONTEND !== "true";
+      if (mobileAccess.lanEnabled && useViteDevServer) {
+        console.log("开发模式：移动访问由 Vite dev server (http://127.0.0.1:5173) 提供，支持热重载");
+      }
       const portDesc = backendPort === 0 ? "自动分配（随机）" : String(backendPort);
       console.log(
         `开发模式：使用端口 ${portDesc}${noWatch ? "（生产调试，无热重载）" : "（热重载）"}`,
@@ -1158,6 +1256,31 @@ async function startBackend(): Promise<void> {
           PLUGINS_USER_DIR: paths.pluginsDir, // 用户安装的插件目录
           PLUGINS_DEV_DIR: devPluginsDir, // 开发模式外部插件目录
           ELECTRON_APP: "true", // 标识这是 Electron 环境
+          // 移动访问：LAN 开启时绑 0.0.0.0，否则只绑回环（公网隧道走 127.0.0.1，
+          // 不需要对外监听）。
+          // dev + Vite：移动端入口指向 Vite dev server（5173，host:true），
+          // 局域网/公网访问都能享受热重载；后端不再 serve 编译产物。
+          // dev + USE_STATIC_FRONTEND：退回 dist 模式。
+          LISTEN_HOST: mobileAccess.lanEnabled ? "0.0.0.0" : "127.0.0.1",
+          ...(useViteDevServer
+            ? ({
+                MOBILE_WEB_HOST: "127.0.0.1",
+                MOBILE_WEB_PORT: "5173",
+              } as Record<string, string>)
+            : {}),
+          ...(mobileAccess.lanEnabled || mobileAccess.publicEnabled
+            ? useViteDevServer
+              ? {}
+              : ({
+                  FRONTEND_DIST_DIR: path.join(
+                    __dirname,
+                    "..",
+                    "..",
+                    "frontend",
+                    "dist",
+                  ),
+                } as Record<string, string>)
+            : {}),
           GUADA_BRIDGE_PATH: process.env.GUADA_BRIDGE_PATH,
           GUADA_BRIDGE_TOKEN: process.env.GUADA_BRIDGE_TOKEN,
         },
@@ -1172,6 +1295,8 @@ async function startBackend(): Promise<void> {
       backendStartedAt = Date.now();
     } else {
       // 生产模式：使用 0 让系统自动分配端口，通过 IPC 获取
+      // 移动访问开启时仅额外传前端目录让后端 serve SPA（端口不变）
+      const mobileAccess = readMobileAccessConfig();
       backendPort = 0;
       const { spawn } = await import("child_process");
       const nodePath = process.execPath;
@@ -1248,6 +1373,21 @@ async function startBackend(): Promise<void> {
           PLUGINS_USER_DIR: paths.pluginsDir, // 用户安装的插件目录
           PLUGINS_BUILTIN_DIR: builtinPluginsDir, // 随包分发的内置插件目录（只读）
           ELECTRON_APP: "true", // 标识这是 Electron 环境
+          // 移动访问：LAN 开启时绑 0.0.0.0，否则只绑回环；LAN/公网任一开启都由
+          // 后端 serve 打包前端（asar 内路径，后端已从 asar 读 node_modules，
+          // 读静态文件同样可行）。公网模式走 127.0.0.1 + SSH 反向隧道，不对外监听。
+          LISTEN_HOST: mobileAccess.lanEnabled ? "0.0.0.0" : "127.0.0.1",
+          ...(mobileAccess.lanEnabled || mobileAccess.publicEnabled
+            ? ({
+                FRONTEND_DIST_DIR: path.join(
+                  __dirname,
+                  "..",
+                  "..",
+                  "frontend",
+                  "dist",
+                ),
+              } as Record<string, string>)
+            : {}),
           GUADA_BRIDGE_PATH: process.env.GUADA_BRIDGE_PATH,
           GUADA_BRIDGE_TOKEN: process.env.GUADA_BRIDGE_TOKEN,
         },
@@ -2020,6 +2160,13 @@ function setupIpcHandlers() {
       await backendReadyPromise;
     }
     return { port: backendPort, error: null };
+  });
+
+  // 重启应用：移动访问的监听地址变更需要重启进程，设置页提供一键触发
+  ipcMain.handle("app:relaunch", () => {
+    log.info("用户从设置页请求重启应用");
+    app.relaunch();
+    app.exit(0);
   });
 
   // 桌面 Computer Use：状态查询与设置页测试按钮
@@ -2949,11 +3096,22 @@ app.whenReady().then(async () => {
     keepAwakeMode = readKeepAwakeModeFromSettings();
     reconcileKeepAwakeBlocker();
 
+    // 移动访问密码兜底：配置开启但账户没有密码时自动关闭（必须在 startBackend
+    // 之前，环境变量决定后端监听地址；此时写回后 spawn 读到的是关闭状态）
+    const mobileAccessAutoDisabled = enforceMobileAccessPasswordGate();
+
     // 立即创建窗口，不用等后端启动
     createWindow();
 
     // 创建系统托盘图标
     createTray();
+
+    if (mobileAccessAutoDisabled && Notification.isSupported()) {
+      new Notification({
+        title: "移动访问已关闭",
+        body: "账户未设置访问密码，局域网/公网入口已自动关闭。",
+      }).show();
+    }
 
     // 创建托盘悬浮小窗
     createFloatWindow();

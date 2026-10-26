@@ -244,8 +244,9 @@
     themeDark: 'Dark',
     themeSystem: 'System',
     settingsCenter: 'Settings Center',
-    logout: 'Log Out',
+    logout: 'Log out',
     settings: 'Settings',
+    mobileAccess: 'Mobile access',
     deleteSessionTitle: 'Delete Session',
     deleteSessionConfirm: 'Are you sure you want to delete session "{title}"?',
     deleteWarning: 'Warning: This action cannot be undone. All messages in this session will be permanently deleted.',
@@ -286,6 +287,34 @@
   },
 
   // ── 子账户管理 ──
+
+  // ── 移动端远程控制弹窗 ──
+  mobileAccess: {
+    title: 'Mobile Remote Control',
+    desc: 'Scan the QR code or open the link on your phone to control this workspace.',
+    emptyTitle: 'Mobile access is off',
+    emptyDesc: 'Enable LAN or public access to control this workspace from your phone.',
+    goEnable: 'Enable',
+    lanTab: 'LAN',
+    publicTab: 'Public',
+    statusWaiting: 'Waiting for a device',
+    statusStopped: 'Disconnected',
+    statusPublicConnecting: 'Connecting tunnel…',
+    statusPublicError: 'Public tunnel failed',
+    lanActive: 'LAN reachable',
+    lanInactive: 'Configured; restart the app to apply',
+    lanPendingRestart: 'Configured; restart the app to apply',
+    publicConnected: 'Public tunnel connected',
+    stop: 'Stop',
+    stopped: 'Mobile access disabled',
+    cannotScan: "Can't scan? Open the link on your phone.",
+    copyLink: 'Copy link',
+    copied: 'Link copied',
+    copyFailed: 'Copy failed',
+    qrUnavailable: 'Waiting for an address…',
+    needPassword: 'No access password set — external devices cannot sign in.',
+    setPassword: 'Set password',
+  },
 
   // ── 嵌入模型选择器 ──
   embeddingModel: {

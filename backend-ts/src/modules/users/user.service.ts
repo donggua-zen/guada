@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
 import sharp from "sharp";
@@ -6,6 +6,11 @@ import * as crypto from "crypto";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { UrlService } from "../../common/services/url.service";
 import { AccountFileStore } from "../auth/account-file.store";
+import { MobileAccessService } from "../mobile-access/mobile-access.service";
+import {
+  PASSWORD_VALIDATION_MESSAGES,
+  validatePasswordStrength,
+} from "../../common/utils/password-strength.util";
 
 /**
  * 账户服务（单账户）
@@ -26,6 +31,7 @@ export class UserService {
     private uploadPathService: UploadPathService,
     private accountStore: AccountFileStore,
     private urlService: UrlService,
+    private mobileAccess: MobileAccessService,
   ) {}
 
   getProfile() {
@@ -65,10 +71,18 @@ export class UserService {
   /**
    * 设置/修改密码。
    * 已设密码时需提供正确的旧密码；未设密码时（免登录模式）可直接设置。
+   * 强度要求：基础策略始终生效；公网访问开启时要求高强度密码。
    */
+  /** 设定密码（调用方负责在已设密码时先校验旧密码） */
   async setPassword(oldPassword: string | undefined, newPassword: string) {
-    if (!newPassword || newPassword.length < 6) {
-      throw new Error("新密码长度至少 6 位");
+    const requireStrong = await this.mobileAccess.isPublicAccessEnabled();
+    const username = this.accountStore.get()?.username ?? "guada";
+    const errorCode = validatePasswordStrength(newPassword, {
+      requireStrong,
+      username,
+    });
+    if (errorCode) {
+      throw new BadRequestException(PASSWORD_VALIDATION_MESSAGES[errorCode]);
     }
     if (this.accountStore.isPasswordSet()) {
       if (!oldPassword) throw new Error("请输入当前密码");
@@ -79,8 +93,11 @@ export class UserService {
     return { success: true, passwordSet: true };
   }
 
-  /** 清除密码 → 回到免登录模式 */
+  /** 清除密码 → 回到免登录模式（移动访问开启时禁止，避免外部入口失去唯一门禁） */
   async clearPassword() {
+    if (await this.mobileAccess.isAnyAccessEnabled()) {
+      throw new BadRequestException("请先关闭局域网/公网访问，再取消访问密码");
+    }
     await this.accountStore.clearPassword();
     return { success: true, passwordSet: false };
   }

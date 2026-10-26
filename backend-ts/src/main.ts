@@ -222,9 +222,52 @@ async function bootstrap() {
     credentials: true,     // 允许跨域请求携带 cookie（Markdown 预览图片走 html-preview 鉴权）
   });
 
+  // 局域网访问（可选）：把打包的前端 SPA 也交给后端 serve，手机等局域网设备
+  // 直接访问 http://<主机IP>:<端口>/ 即可使用，无需 nginx。必须挂在所有
+  // API/静态路由之后，避免吞掉 /api、/uploads 等前缀。
+  // Electron 端默认不传此变量，行为不变。
+  const frontendDistDir = process.env.FRONTEND_DIST_DIR;
+  if (frontendDistDir) {
+    const indexHtml = path.join(frontendDistDir, "index.html");
+    if (fs.existsSync(indexHtml)) {
+      app.use(express.static(frontendDistDir, { index: false }));
+      // 路由兜底：无扩展名的 GET 一律返回 index.html。这里不能 sendFile 了事 ——
+      // Electron 构建产物是 base './'（loadFile 需要相对路径），而浏览器端是
+      // history 路由，刷新 /setting/general 时相对资源会被解析成
+      // /setting/assets/... 导致白屏。注入 <base href="/"> 把资源锚回根路径。
+      // 每次读盘不缓存：dev 下前端重新 build 后不用重启后端。
+      app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+        if (req.method !== "GET" || /^\/(api|static|uploads|agents)\//.test(req.path)) {
+          return next();
+        }
+        if (path.extname(req.path)) {
+          return next(); // 不存在的资产文件保持 404，不拿 HTML 顶替
+        }
+        let html: string;
+        try {
+          html = fs.readFileSync(indexHtml, "utf8");
+        } catch (err) {
+          console.error("读取前端 index.html 失败:", err);
+          return res.status(500).send("frontend index.html unavailable");
+        }
+        if (!/<base\s/i.test(html)) {
+          html = html.replace(/<head>/i, '<head><base href="/">');
+        }
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.send(html);
+      });
+      console.log(`前端 SPA 目录: ${frontendDistDir}`);
+    } else {
+      console.warn(`⚠️  FRONTEND_DIST_DIR 配置了但找不到 index.html，跳过 SPA 挂载: ${frontendDistDir}`);
+    }
+  }
+
+  // 监听地址：由宿主（Electron）通过 LISTEN_HOST 显式指定（局域网开启时 0.0.0.0，
+  // 否则 127.0.0.1）。未指定时保持历史行为绑所有网卡（docker 等 Web 部署依赖）。
+  const listenHost = process.env.LISTEN_HOST || "0.0.0.0";
   // 支持通过环境变量 PORT 指定端口，若未指定则使用 0 让系统自动分配可用端口
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
-  await app.listen(port);
+  await app.listen(port, listenHost);
   const address = app.getHttpServer().address();
   const actualPort = typeof address === 'string' ? address.split(':').pop() : address.port;
 
@@ -236,7 +279,10 @@ async function bootstrap() {
     console.log(`BASE_URL 已动态设置为: ${baseUrl}`);
   }
 
-  console.log(`Application is running on: http://localhost:${actualPort}`);
+  console.log(`Application is running on: http://localhost:${actualPort} (host: ${listenHost})`);
+  if (listenHost === "0.0.0.0") {
+    console.log(`局域网访问已开启: http://<本机IP>:${actualPort}/`);
+  }
 
   // 通过 Bridge 通道向 Electron 上报端口
   const bridgePipePath = process.env.GUADA_BRIDGE_PATH;
@@ -248,7 +294,8 @@ async function bootstrap() {
       await bridgeClient.ready;
       // pid：dev 模式下 Electron 持有的是 cmd/npx 包装进程，真实后端是孙进程，
       // 上报自身 pid 让 Electron 能为真正的进程挂上退出码监视
-      bridgeClient.emit("port_ready", { port: actualPort, pid: process.pid });
+      // host：实际绑定地址，Electron 据此判断局域网访问是否真正生效（设置页 URL 展示）
+      bridgeClient.emit("port_ready", { port: actualPort, pid: process.pid, host: listenHost });
       console.log(`已通过 Bridge 上报端口: ${actualPort}`);
 
       // 监听 Electron 退出信号，优雅关闭

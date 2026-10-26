@@ -56,6 +56,7 @@ import { remoteWorkspaceApi, type RemoteWorkspaceApi } from "./modules/remote-wo
 import { fsApi, type FsApi } from "./modules/fs.api";
 import { gitApi, type GitApi } from "./modules/git.api";
 import { usageApi, type UsageApi } from "./modules/usage.api";
+import { mobileAccessApi, type MobileAccessApi } from "./modules/mobile-access.api";
 
 export type { FileChangeEvent };
 export type { SessionEvent, SessionEventType };
@@ -84,7 +85,37 @@ interface ApiService
     RemoteWorkspaceApi,
     FsApi,
     GitApi,
-    UsageApi {}
+    UsageApi,
+    MobileAccessApi {}
+
+/**
+ * 把数据里的 http://localhost:<port>/ 前缀资源 URL 改写为相对路径。
+ * 仅用于 Web（局域网访问）模式：后端 auto BASE_URL 下发的绝对资源 URL 指向
+ * 后端本机的 localhost，手机等局域网客户端无法解析。改写为相对路径后由浏览器
+ * 按当前页面 origin 解析（局域网模式下前端就由后端 serve，同源即后端）。
+ * 浅递归遍历字符串字段，只命中 http://localhost: 开头的值，其余原样保留。
+ */
+function rewriteLocalhostUrls(data: unknown, depth = 0): void {
+  if (!data || depth > 4) return;
+  if (Array.isArray(data)) {
+    for (const item of data) rewriteLocalhostUrls(item, depth + 1);
+    return;
+  }
+  if (typeof data !== "object") return;
+  for (const key of Object.keys(data as Record<string, unknown>)) {
+    const value = (data as Record<string, unknown>)[key];
+    if (typeof value === "string" && value.startsWith("http://localhost:")) {
+      try {
+        const url = new URL(value);
+        (data as Record<string, unknown>)[key] = url.pathname + url.search + url.hash;
+      } catch {
+        // 非法 URL 原样保留
+      }
+    } else if (value && typeof value === "object") {
+      rewriteLocalhostUrls(value, depth + 1);
+    }
+  }
+}
 
 class ApiService {
   baseURL: string;
@@ -124,6 +155,16 @@ class ApiService {
     // 添加响应拦截器处理通用错误
     this.axiosInstance.interceptors.response.use(
       (response: AxiosResponse) => {
+        // Web（局域网访问）模式：后端 auto BASE_URL 把资源 URL 定格成
+        // http://localhost:<port>/uploads/...，手机浏览器解析不了 localhost，
+        // 改写为相对路径
+        if (
+          typeof window !== "undefined" &&
+          window.electronAPI === undefined &&
+          response.data
+        ) {
+          rewriteLocalhostUrls(response.data);
+        }
         return response.data ? response.data : response;
       },
       (error) => {
@@ -374,6 +415,7 @@ Object.assign(
   fsApi,
   gitApi,
   usageApi,
+  mobileAccessApi,
 );
 
 /**

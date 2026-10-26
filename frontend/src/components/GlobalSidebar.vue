@@ -294,6 +294,15 @@
         </template>
       </el-dropdown>
 
+      <!-- 移动访问：手机端远程控制入口（仅桌面端） -->
+      <GdTooltip v-if="isElectron" :content="t('ui.sidebar.mobileAccess')" placement="bottom">
+        <div @click="mobileAccessDialogVisible = true"
+          class="relative flex items-center justify-center px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200 shrink-0 text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)">
+          <component :is="SmartphoneOutlined" class="w-4 h-4" />
+          <span v-if="mobileAccessActive" class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        </div>
+      </GdTooltip>
+
       <!-- 设置 -->
       <GdTooltip :content="t('ui.sidebar.settings')" placement="bottom">
         <div @click="handleNavClick('setting')"
@@ -306,6 +315,9 @@
       </GdTooltip>
     </div>
   </div>
+
+  <!-- 移动端远程控制弹窗 -->
+  <MobileAccessDialog v-model="mobileAccessDialogVisible" />
 
   <!-- 删除会话确认对话框 -->
   <GdDialog v-model="deleteDialogVisible" :title="t('ui.sidebar.deleteSessionTitle')" size="sm" :close-on-click-modal="false">
@@ -388,6 +400,7 @@ import GdTooltip from './ui/GdTooltip.vue'
 import GroupEditDialog from './session/GroupEditDialog.vue'
 import GroupIcon from './session/GroupIcon.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import MobileAccessDialog from '@/components/MobileAccessDialog.vue'
 import DirectoryBrowserDialog from '@/components/DirectoryBrowserDialog.vue'
 import { apiService } from '@/services/ApiService'
 import type { Session, SessionGroup, ProjectGroup, SidebarSessionsResponse, SidebarProjectSessionsResponse } from '@/types/session'
@@ -395,6 +408,7 @@ import type { Session, SessionGroup, ProjectGroup, SidebarSessionsResponse, Side
 import {
   PersonOutlined,
   LogOutOutlined,
+  SmartphoneOutlined,
 } from '@vicons/material'
 
 import {
@@ -586,6 +600,25 @@ const deleteDialogVisible = ref(false)
 const deleteSessionData = ref<Session | null>(null)
 const deleteWorkspaceChecked = ref(false)
 
+// 移动访问：弹窗开关与「有任一入口开启」的小绿点状态
+const mobileAccessDialogVisible = ref(false)
+const mobileAccessActive = ref(false)
+
+async function refreshMobileAccessActive() {
+  if (!isElectron) return
+  try {
+    const status = await apiService.getMobileAccessStatus()
+    mobileAccessActive.value = status.lan.enabled || status.public.enabled
+  } catch {
+    // 后端未就绪：保持原状态
+  }
+}
+
+// 弹窗关闭后刷新小绿点（用户可能在弹窗里停止/开启了访问）
+watch(mobileAccessDialogVisible, (open) => {
+  if (!open) void refreshMobileAccessActive()
+})
+
 // 移动会话到分组弹窗状态
 const moveGroupDialogVisible = ref(false)
 const moveGroupOptions = ref<{ label: string; value: string; icon: string | null }[]>([])
@@ -701,6 +734,7 @@ onMounted(() => {
   document.addEventListener('visibilitychange', () => {
     windowHidden.value = document.hidden
   })
+  void refreshMobileAccessActive()
 })
 
 

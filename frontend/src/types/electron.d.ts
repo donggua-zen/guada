@@ -244,6 +244,9 @@ export interface ElectronAPI {
 
   // 后端就绪等待：单次 IPC invoke，后端就绪后返回 { port, error }
   waitBackendReady: () => Promise<{ port: number | null; error?: string | null }>
+
+  // 重启应用（移动访问的监听地址变更需要重启进程才生效）
+  relaunchApp: () => Promise<void>
 }
 
 declare global {

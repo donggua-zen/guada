@@ -104,6 +104,9 @@
                             <template v-else-if="currentTabValue === 'connections'">
                                 <ConnectionSettings />
                             </template>
+                            <template v-else-if="currentTabValue === 'mobile-access'">
+                                <MobileAccessSettings />
+                            </template>
                             <template v-else-if="isPluginTab">
                                 <component
                                     :is="activePluginItem?._item.component"
@@ -140,6 +143,7 @@ import UserSecurity from './UserSecurity.vue'
 import ConnectionSettings from './ConnectionSettings.vue'
 import CommandPolicySettings from './CommandPolicySettings.vue'
 import CommunityPanel from './CommunityPanel.vue'
+import MobileAccessSettings from './MobileAccessSettings.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
 
 import {
@@ -158,6 +162,7 @@ import {
     ShieldCheckmark16Regular,
     ChartMultiple24Regular,
     Desktop24Regular,
+    Phone20Regular,
 } from '@vicons/fluent'
 
 import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } from '@vicons/material'
@@ -185,6 +190,7 @@ const groupMap = computed<Record<string, string>>(() => ({
     'computer-use': t('settings.system.groups.system'),
     policy: t('settings.system.groups.system'),
     connections: t('settings.system.groups.general'),
+    'mobile-access': t('settings.system.groups.system'),
     appearance: t('settings.system.groups.personalization'),
     search: t('settings.system.groups.personalization'),
     about: t('settings.system.groups.system'),
@@ -274,6 +280,11 @@ const sidebarItems = computed(() => [
         label: t('settings.system.tabs.connections'),
         path: 'connections',
         icon: Cloud24Regular,
+    },
+    {
+        label: t('settings.system.tabs.mobileAccess'),
+        path: 'mobile-access',
+        icon: Phone20Regular,
     },
     {
         label: t('settings.system.tabs.sessionGroups'),

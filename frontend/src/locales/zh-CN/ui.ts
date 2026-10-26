@@ -246,6 +246,7 @@ export default {
     settingsCenter: '设置中心',
     logout: '退出登录',
     settings: '设置',
+    mobileAccess: '移动访问',
     deleteSessionTitle: '删除会话',
     deleteSessionConfirm: '确定要删除会话 "{title}" 吗？',
     deleteWarning: '注意：此操作不可撤销，会话中的所有消息将被永久删除。',
@@ -286,6 +287,34 @@ export default {
   },
 
   // ── 子账户管理 ──
+
+  // ── 移动端远程控制弹窗 ──
+  mobileAccess: {
+    title: '移动端远程控制',
+    desc: '扫码或在手机上打开链接，即可远程控制当前工作区。',
+    emptyTitle: '移动访问未开启',
+    emptyDesc: '开启局域网或公网访问后，即可在手机上控制当前工作区。',
+    goEnable: '去开启',
+    lanTab: '局域网',
+    publicTab: '公网',
+    statusWaiting: '等待手机连接',
+    statusStopped: '未连接',
+    statusPublicConnecting: '公网隧道连接中…',
+    statusPublicError: '公网隧道连接失败',
+    lanActive: '局域网可访问',
+    lanInactive: '局域网已配置，重启应用后生效',
+    lanPendingRestart: '已配置，重启应用后生效',
+    publicConnected: '公网已连接',
+    stop: '停止',
+    stopped: '移动访问已关闭',
+    cannotScan: '无法扫码？可以在手机上打开链接。',
+    copyLink: '复制链接',
+    copied: '链接已复制',
+    copyFailed: '复制失败',
+    qrUnavailable: '等待可用地址…',
+    needPassword: '未设置访问密码，外部设备将无法登录。',
+    setPassword: '去设置密码',
+  },
 
   // ── 嵌入模型选择器 ──
   embeddingModel: {

@@ -163,4 +163,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateKeepAwakeMode: (mode: 'off' | 'busy' | 'always') =>
     ipcRenderer.send('power:update-keep-awake-mode', mode),
 
+  // 重启应用（移动访问的监听地址变更需要重启进程才生效）
+  relaunchApp: () => ipcRenderer.invoke('app:relaunch'),
+
 })

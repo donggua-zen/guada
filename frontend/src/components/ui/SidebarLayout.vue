@@ -22,8 +22,9 @@
         <slot name="sidebar" :sidebar-visible="sidebarVisible" />
       </div>
 
-      <!-- 折叠展开按钮 -->
-      <button v-if="showToggleButton || isMobileDrawer" @click="$emit('update:sidebarVisible', !sidebarVisible)"
+      <!-- 折叠展开按钮：仅显式开启时渲染。移动端抽屉不显示——标题栏左上角按钮
+           已实现同一功能，边缘把手悬浮在内容左缘碍事；关闭抽屉可点遮罩或选中条目 -->
+      <button v-if="showToggleButton" @click="$emit('update:sidebarVisible', !sidebarVisible)"
         class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-(--gd-color-surface) dark:bg-gray-800 shadow-sm hover:bg-(--gd-color-surface-hover) focus:outline-none z-10  border-(--gd-color-surface-border) dark:border-gray-800 dark:hover:bg-gray-600"
         :title="sidebarVisible ? '折叠侧边栏' : '展开侧边栏'"
         :class="sidebarVisible ? 'translate-x-1/2 rounded-lg border' : 'translate-x-full rounded-lg border'">

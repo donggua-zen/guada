@@ -32,6 +32,7 @@ import { TerminalModule } from './modules/terminal/terminal.module';
 import { PersistenceModule } from './common/persistence/persistence.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsageModule } from './modules/usage/usage.module';
+import { MobileAccessModule } from './modules/mobile-access/mobile-access.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -80,6 +81,7 @@ import { UsageModule } from './modules/usage/usage.module';
     GitModule,        // Git 源码管理模块
     TerminalModule,   // 终端模块（后端 PTY + WebSocket）
     HealthModule,      // 健康检查端点（Electron 看门狗探测用）
+    MobileAccessModule, // 移动访问：局域网 + 公网 SSH 隧道
   ],
 })
 export class AppModule {}

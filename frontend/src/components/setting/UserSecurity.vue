@@ -29,6 +29,17 @@
               <el-form-item :label="t('settings.userSecurity.newPassword')" prop="newPassword">
                 <el-input v-model="passwordForm.newPassword" type="password" show-password
                   :placeholder="t('settings.userSecurity.newPasswordPlaceholder')" />
+                <!-- 实时强度指示条：3 段对应 弱/中/强 -->
+                <div v-if="passwordForm.newPassword" class="flex items-center gap-2 mt-2 w-full">
+                  <div class="flex gap-1 flex-1 max-w-40">
+                    <span v-for="i in 3" :key="i" class="h-1 flex-1 rounded-full transition-colors duration-200"
+                      :class="i <= strengthSegments ? strengthActiveClass : 'bg-gray-200 dark:bg-[#3a3b3f]'" />
+                  </div>
+                  <span class="text-xs" :class="strengthTextClass">{{ strengthLabel }}</span>
+                </div>
+                <div class="text-xs text-gray-500 dark:text-[#8b8d95] leading-5 mt-1">
+                  {{ requireStrongPassword ? t('settings.userSecurity.passwordPolicyHintPublic') : t('settings.userSecurity.passwordPolicyHint') }}
+                </div>
               </el-form-item>
               <el-form-item :label="t('settings.userSecurity.confirmPassword')" prop="confirmPassword">
                 <el-input v-model="passwordForm.confirmPassword" type="password" show-password
@@ -52,6 +63,7 @@ import { usePopup } from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils/errorMessage'
+import { getPasswordErrorCode, evaluatePasswordStrength } from '@/utils/passwordStrength'
 // Element Plus 组件导入
 import {
   ElForm,
@@ -67,11 +79,70 @@ const authStore = useAuthStore()
 
 const passwordFormRef = ref(null)
 
+// 公网访问开启时要求高强度密码（后端同样会校验，这里用于即时反馈与提示文案）
+const requireStrongPassword = ref(false)
+
+const PASSWORD_ERROR_KEYS = {
+  tooShort: 'settings.userSecurity.pwdErrorTooShort',
+  tooFewClasses: 'settings.userSecurity.pwdErrorTooFewClasses',
+  tooShortForPublic: 'settings.userSecurity.pwdErrorTooShortForPublic',
+  tooFewClassesForPublic: 'settings.userSecurity.pwdErrorTooFewClassesForPublic',
+  common: 'settings.userSecurity.pwdErrorCommon',
+  containsUsername: 'settings.userSecurity.pwdErrorContainsUsername',
+}
+
+function validatePasswordInput(password) {
+  const code = getPasswordErrorCode(password, {
+    requireStrong: requireStrongPassword.value,
+    username: authStore.user?.username,
+  })
+  return code ? t(PASSWORD_ERROR_KEYS[code]) : true
+}
+
+async function loadMobileAccessRequirement() {
+  try {
+    const config = await apiService.getMobileAccessConfig()
+    requireStrongPassword.value = config.publicEnabled
+  } catch {
+    // 取不到配置时按基础策略提示；后端仍会按真实配置强校验
+    requireStrongPassword.value = false
+  }
+}
+
 const passwordForm = ref({
   oldPassword: '',
   newPassword: '',
   confirmPassword: ''
 })
+
+// 实时强度指示条：3 段对应 弱 / 中 / 强（与校验策略同源）
+const passwordStrength = computed(() =>
+  evaluatePasswordStrength(passwordForm.value.newPassword || '', authStore.user?.username)
+)
+const strengthSegments = computed(() =>
+  ({ weak: 1, medium: 2, strong: 3 })[passwordStrength.value.level]
+)
+const strengthLabel = computed(() =>
+  t({
+    weak: 'settings.userSecurity.strengthWeak',
+    medium: 'settings.userSecurity.strengthMedium',
+    strong: 'settings.userSecurity.strengthStrong',
+  }[passwordStrength.value.level])
+)
+const strengthActiveClass = computed(() =>
+  ({
+    weak: 'bg-red-500',
+    medium: 'bg-amber-500',
+    strong: 'bg-emerald-500',
+  })[passwordStrength.value.level]
+)
+const strengthTextClass = computed(() =>
+  ({
+    weak: 'text-red-600 dark:text-red-400',
+    medium: 'text-amber-600 dark:text-amber-500',
+    strong: 'text-emerald-600 dark:text-emerald-400',
+  })[passwordStrength.value.level]
+)
 
 // 添加密码表单验证规则
 const passwordRules = computed(() => ({
@@ -89,8 +160,11 @@ const passwordRules = computed(() => ({
       trigger: 'blur'
     },
     {
-      min: 6,
-      message: t('settings.userSecurity.passwordMinLength'),
+      validator: (rule, value, callback) => {
+        const result = validatePasswordInput(value ?? '')
+        if (result === true) callback()
+        else callback(new Error(result))
+      },
       trigger: 'blur'
     }
   ],
@@ -126,7 +200,7 @@ const handlePasswordToggle = async (enabled) => {
       placeholder: t('settings.userSecurity.setPasswordPrompt'),
       inputType: 'password',
       required: true,
-      validation: (input) => input.length >= 6 ? true : t('settings.userSecurity.passwordTooShort'),
+      validation: (input) => validatePasswordInput(input),
       confirmText: t('common.ok'),
       cancelText: t('common.cancel'),
     })
@@ -186,6 +260,7 @@ const handleChangePassword = (e) => {
 onMounted(() => {
   // 登录流程通常会写入该状态，这里再查一次兜底，避免直接进入设置页时开关显示过期值
   authStore.fetchPasswordSet()
+  void loadMobileAccessRequirement()
 })
 
 defineExpose({
