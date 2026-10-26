@@ -1,6 +1,6 @@
 <template>
   <div
-    class="group flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-(--gd-color-surface-subtle-hover)"
+    class="group flex min-w-0 cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-(--gd-color-surface-subtle-hover)"
     @click="emit('click')"
   >
     <div class="shrink-0" :class="{ 'opacity-60': muted }">
@@ -17,7 +17,7 @@
       </div>
       <p
         v-if="description"
-        class="mt-1 truncate leading-4 text-(--gd-color-text-gray)"
+        class="plugin-row-desc mt-1 truncate leading-4 text-(--gd-color-text-gray)"
         style="font-size: var(--gd-size-text-xs);"
         :title="description"
       >

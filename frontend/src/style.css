@@ -985,9 +985,14 @@ html.mobile .md\:max-w-260 .flex.items-center.justify-between.gap-4 .el-input {
   flex: 1 1 120px;
 }
 
-/* 网格卡片（知识库/机器人 300px、技能 420px 最小列宽）：移动端强制单列 */
+/* 网格（知识库/定时任务 300px 最小列宽卡片、插件/Skills/MCP 行列表）：移动端强制单列。
+   这里必须写 minmax(0, 1fr) 而不是 1fr：
+   1fr == minmax(auto, 1fr)，轨道最小值 = 网格项的 min-content。插件/Skills 行里的
+   名称与描述是 truncate（white-space: nowrap），min-content 就是整句宽度（400px+），
+   轨道会被撑到 600px 以上 → 内容区冒出横向滚动条，文案既不换行也不省略。
+   Tailwind 的 grid-cols-1 本来就是 minmax(0, 1fr)，覆盖时不要退回 1fr。 */
 html.mobile .md\:max-w-260 .grid {
-  grid-template-columns: 1fr !important;
+  grid-template-columns: minmax(0, 1fr) !important;
 }
 
 /* 分组/工作目录选择按钮行（聊天输入区上方）：允许换行，不再溢出裁剪 */
@@ -1001,6 +1006,18 @@ html.mobile .settings-nav-vertical {
   flex-direction: row;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+/* 插件/Skills/MCP 行列表的描述（PluginListRow）：桌面单行省略，移动端最多折行 2 行。
+   窄屏下把整段描述压成一行省略号几乎读不到信息，折两行更实用；名称仍保持单行省略，
+   避免行高跳动。行根节点已带 min-w-0，轨道可压缩，这里换行不会再把列顶宽 */
+html.mobile .plugin-row-desc {
+  white-space: normal;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 /* 触屏命中区：header-icon-btn 与工具按钮扩到 ≥40px（伪元素外扩） */
