@@ -49,10 +49,66 @@
 
 1. 确认 sshd 允许 TCP 转发（默认 `AllowTcpForwarding yes`）。
 2. 若「远端监听地址」选择 `0.0.0.0`（公网直接访问端口），sshd 需配置
-   `GatewayPorts yes`（或 `clientspecified`），并在服务器防火墙放行该端口。
-   若选择 `127.0.0.1`（推荐），请在该服务器上用 nginx 等反向代理到
-   `127.0.0.1:<远端端口>`，由代理负责 HTTPS/域名。
+   `GatewayPorts yes`（或 `clientspecified`），并在服务器防火墙/安全组放行该端口。
+   若选择 `127.0.0.1`（推荐，配合服务器反代），则无需改 GatewayPorts，请在该服务器上
+   用 nginx 等反向代理到 `127.0.0.1:<远端端口>`，由代理负责 HTTPS/域名。
 3. 为 GuaDa 准备一个 SSH 账户，使用私钥或密码认证。
+
+#### 为什么多数服务器默认不能公网转发？
+
+OpenSSH 上游默认 `GatewayPorts no`，主流发行版（Debian/Ubuntu/CentOS/RHEL 等）出厂配置
+也只保留注释行，所以生效值就是 `no`：`ssh -R 0.0.0.0:8787:...` 会被 sshd 拒绝或
+静默退化为只绑 `127.0.0.1`。这是安全默认值，避免任意 SSH 用户把内网服务暴露到公网。
+
+#### 快速启用（推荐 `clientspecified`）
+
+`clientspecified` 允许客户端自己决定绑 `127.0.0.1` 还是 `0.0.0.0`，比无条件 `yes`
+更可控。SSH 登录服务器后用 root（或 sudo）：
+
+```bash
+# 方式 A：直接追加到主配置（适用大多数发行版）
+echo 'GatewayPorts clientspecified' >> /etc/ssh/sshd_config
+
+# 方式 B：用 drop-in（Debian/Ubuntu、RHEL/CentOS 8+ 自带 Include，优先级更高）
+printf 'GatewayPorts clientspecified\n' > /etc/ssh/sshd_config.d/10-gatewayports.conf
+
+# 校验并重启（Ubuntu/Debian 服务名可能是 ssh）
+sshd -t && systemctl restart sshd   # 或: service ssh restart
+```
+
+> sshd_config 是「首个有效值生效」：追加在文件末尾即可，注释行（`#GatewayPorts no`）
+> 不参与匹配。已有 SSH 会话不会因重启 sshd 断开。
+
+验证生效：
+
+```bash
+sshd -T | grep -i gatewayports          # 期望: gatewayports clientspecified
+# 客户端重连后（应用里选 0.0.0.0）：
+ss -lntp | grep 8787                    # 期望: 0.0.0.0:8787（而不是 127.0.0.1:8787）
+```
+
+同时确认：`AllowTcpForwarding` 未被改成 `no`（`sshd -T | grep -i allowtcpforwarding`），
+云厂商安全组与服务器本机防火墙（firewalld/ufw/iptables）都已放行该端口。
+
+#### 不想改 sshd 的方案
+
+保持应用里「远端监听地址 = 127.0.0.1」，在服务器上装一个本机反代把公网端口转到
+回环端口即可，例如 socat：
+
+```bash
+# 把公网 8787 转到隧道监听的 127.0.0.1:8787
+socat TCP-LISTEN:8787,fork,reuseaddr TCP:127.0.0.1:8787
+# 长期运行可写 systemd unit；nginx 则用 stream 模块做四层转发
+```
+
+socat 需要自行安装（`apt install socat` / `yum install socat`），并同样放行安全组。
+
+#### 安全建议
+
+- 优先用 `clientspecified` 而不是 `yes`（后者强制所有远端转发都绑所有网卡）。
+- 为隧道单独建低权限 SSH 用户，配合 `PermitOpen 127.0.0.1:*` 限制可转发目标。
+- `0.0.0.0` 意味着端口对公网开放，务必使用高强度访问密码（见上文密码策略）。
+
 
 ### 客户端配置
 

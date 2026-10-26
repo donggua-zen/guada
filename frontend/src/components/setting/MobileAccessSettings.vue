@@ -78,6 +78,11 @@
             </div>
             <div v-if="status?.public.lastError" class="text-xs text-red-600 dark:text-red-400 break-all">
               {{ t('settings.mobileAccess.lastError') }}: {{ status.public.lastError }}
+              <button v-if="gatewayPortsError" type="button"
+                class="text-blue-600 dark:text-blue-400 hover:underline ml-1"
+                @click="gatewayPortsDialogVisible = true">
+                {{ t('settings.mobileAccess.gatewayPortsHowTo') }}
+              </button>
             </div>
             <div class="flex items-center gap-2 pt-1">
               <el-button size="small" :loading="reconnecting" @click="reconnectTunnel">{{ t('settings.mobileAccess.reconnect') }}</el-button>
@@ -122,11 +127,16 @@
 
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.remoteBind') }}</span>
-                <el-select v-model="sshForm.remoteBindAddress">
+                <el-select v-model="sshForm.remoteBindAddress" @change="handleRemoteBindChange">
                   <el-option value="127.0.0.1" :label="t('settings.mobileAccess.remoteBindLoopback')" />
                   <el-option value="0.0.0.0" :label="t('settings.mobileAccess.remoteBindAll')" />
                 </el-select>
-                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.mobileAccess.remoteBindHint') }}</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
+                  {{ t('settings.mobileAccess.remoteBindHint') }}
+                  <button type="button" class="text-blue-600 dark:text-blue-400 hover:underline ml-1" @click="gatewayPortsDialogVisible = true">
+                    {{ t('settings.mobileAccess.gatewayPortsHowTo') }}
+                  </button>
+                </span>
               </div>
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.remotePort') }}</span>
@@ -154,6 +164,38 @@
         </div>
       </div>
     </div>
+
+    <!-- GatewayPorts 配置说明：安装包用户没有 docs，直接给出可复制的命令 -->
+    <GdDialog v-model="gatewayPortsDialogVisible" :title="t('settings.mobileAccess.gatewayPortsTitle')" size="md">
+      <div class="space-y-4 text-sm text-gray-700 dark:text-[#c0c1c5]">
+        <p>{{ t('settings.mobileAccess.gatewayPortsIntro') }}</p>
+
+        <div class="space-y-2">
+          <p class="font-medium text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.gatewayPortsEnableTitle') }}</p>
+          <div class="relative">
+            <pre class="bg-gray-900 text-gray-100 rounded-lg p-3 pr-20 text-xs overflow-x-auto"><code>{{ gatewayPortsEnableCommand }}</code></pre>
+            <el-button class="!absolute right-2 top-2" size="small" @click="copyUrl(gatewayPortsEnableCommand)">{{ t('settings.mobileAccess.copy') }}</el-button>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.mobileAccess.gatewayPortsEnableNote') }}</p>
+        </div>
+
+        <div class="space-y-2">
+          <p class="font-medium text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.gatewayPortsVerifyTitle') }}</p>
+          <div class="relative">
+            <pre class="bg-gray-900 text-gray-100 rounded-lg p-3 pr-20 text-xs overflow-x-auto"><code>{{ gatewayPortsVerifyCommand }}</code></pre>
+            <el-button class="!absolute right-2 top-2" size="small" @click="copyUrl(gatewayPortsVerifyCommand)">{{ t('settings.mobileAccess.copy') }}</el-button>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 text-xs text-amber-700 dark:text-amber-400 space-y-1.5">
+          <p>{{ t('settings.mobileAccess.gatewayPortsSecurity') }}</p>
+          <p>{{ t('settings.mobileAccess.gatewayPortsAlternative') }}</p>
+        </div>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="gatewayPortsDialogVisible = false">{{ t('settings.mobileAccess.gatewayPortsGotIt') }}</el-button>
+      </template>
+    </GdDialog>
   </div>
 </template>
 
@@ -164,6 +206,7 @@ import { useRouter } from 'vue-router'
 import { usePopup } from '@/composables/usePopup'
 import { getErrorMessage } from '@/utils/errorMessage'
 import { writeTextToClipboard } from '@/utils/clipboard'
+import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'
 import type {
   MobileAccessConfigView,
@@ -214,10 +257,34 @@ const savingLan = ref(false)
 const savingPublic = ref(false)
 const savingSsh = ref(false)
 const reconnecting = ref(false)
+const gatewayPortsDialogVisible = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
+
+/** 选择 0.0.0.0 时提醒服务器需开启 GatewayPorts（多数服务器默认关闭） */
+function handleRemoteBindChange(val: string | number | boolean | undefined) {
+  if (val === '0.0.0.0') {
+    gatewayPortsDialogVisible.value = true
+  }
+}
+
+const gatewayPortsEnableCommand = [
+  "echo 'GatewayPorts clientspecified' | sudo tee -a /etc/ssh/sshd_config",
+  "sudo sshd -t && sudo systemctl restart sshd",
+].join('\n')
+
+const gatewayPortsVerifyCommand = computed(() =>
+  [
+    'sudo sshd -T | grep -i gatewayports',
+    `ss -lntp | grep ${sshForm.remotePort || 8787}`,
+  ].join('\n'),
+)
 
 const lanUrls = computed(() => status.value?.lan.urls ?? [])
 const publicUrl = computed(() => status.value?.public.url ?? null)
+const gatewayPortsError = computed(() => {
+  const err = status.value?.public.lastError ?? ''
+  return /GatewayPorts|端口转发失败|administratively prohibited/i.test(err)
+})
 
 const publicStatusLabel = computed(() => {
   const state: MobileAccessTunnelState = status.value?.public.status ?? 'stopped'

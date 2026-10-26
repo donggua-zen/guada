@@ -1,7 +1,10 @@
 <template>
-  <GdDialog :model-value="modelValue" size="lg" :title="t('ui.mobileAccess.title')" @update:model-value="close">
+  <GdDialog :model-value="modelValue" size="sm" :title="t('ui.mobileAccess.title')" @update:model-value="close">
     <div class="space-y-4">
-      <p class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('ui.mobileAccess.desc') }}</p>
+      <div class="flex items-start justify-between gap-3">
+        <p class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('ui.mobileAccess.desc') }}</p>
+        <el-button size="small" class="shrink-0" @click="goSettings">{{ t('ui.mobileAccess.openSettings') }}</el-button>
+      </div>
 
       <!-- 未开启 / 未设密码：空态 -->
       <div v-if="!anyEnabled" class="rounded-xl border border-dashed border-gray-300 dark:border-[#3a3b3f] px-6 py-10 flex flex-col items-center text-center gap-3">

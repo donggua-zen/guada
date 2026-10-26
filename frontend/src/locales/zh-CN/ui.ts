@@ -295,6 +295,7 @@ export default {
     emptyTitle: '移动访问未开启',
     emptyDesc: '开启局域网或公网访问后，即可在手机上控制当前工作区。',
     goEnable: '去开启',
+    openSettings: '设置',
     lanTab: '局域网',
     publicTab: '公网',
     statusWaiting: '等待手机连接',

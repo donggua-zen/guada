@@ -295,6 +295,7 @@
     emptyTitle: 'Mobile access is off',
     emptyDesc: 'Enable LAN or public access to control this workspace from your phone.',
     goEnable: 'Enable',
+    openSettings: 'Settings',
     lanTab: 'LAN',
     publicTab: 'Public',
     statusWaiting: 'Waiting for a device',
