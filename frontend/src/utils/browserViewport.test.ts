@@ -26,10 +26,13 @@ import { extractBrowserSettings } from "./browserViewport";
  *   失败不留缓存以便下次重试
  */
 describe("extractBrowserSettings", () => {
-  it("合法视口：取整后产出", () => {
+  it("合法视口：取整后产出（老配置无 mode 时视为固定）", () => {
     expect(
       extractBrowserSettings({ viewportWidth: 1366, viewportHeight: 768.4 }),
-    ).toEqual({ viewport: { width: 1366, height: 768 } });
+    ).toEqual({
+      viewport: { width: 1366, height: 768 },
+      viewportMode: "fixed",
+    });
   });
 
   it("越界 / 非数值视口：不产出 viewport", () => {
@@ -37,6 +40,38 @@ describe("extractBrowserSettings", () => {
     expect(extractBrowserSettings({ viewportWidth: 5000, viewportHeight: 768 })).toEqual({});
     expect(extractBrowserSettings({ viewportWidth: "wide", viewportHeight: null })).toEqual({});
     expect(extractBrowserSettings({ viewportWidth: 1280 })).toEqual({});
+  });
+
+  it("viewportMode：仅接受 adaptive / fixed，非法值忽略", () => {
+    expect(extractBrowserSettings({ viewportMode: "adaptive" })).toEqual({
+      viewportMode: "adaptive",
+    });
+    expect(extractBrowserSettings({ viewportMode: "fixed" })).toEqual({
+      viewportMode: "fixed",
+    });
+    expect(extractBrowserSettings({ viewportMode: "auto" })).toEqual({});
+    // 有合法固定尺寸时，非法 mode 回退为 fixed（老配置兼容）
+    expect(
+      extractBrowserSettings({
+        viewportWidth: 1280,
+        viewportHeight: 720,
+        viewportMode: "auto",
+      }),
+    ).toEqual({
+      viewport: { width: 1280, height: 720 },
+      viewportMode: "fixed",
+    });
+    // 自适应不要求固定尺寸同时存在
+    expect(
+      extractBrowserSettings({
+        viewportWidth: 1280,
+        viewportHeight: 720,
+        viewportMode: "adaptive",
+      }),
+    ).toEqual({
+      viewport: { width: 1280, height: 720 },
+      viewportMode: "adaptive",
+    });
   });
 
   it("链接打开方式：仅接受三个枚举值", () => {
@@ -61,16 +96,18 @@ describe("extractBrowserSettings", () => {
     expect(extractBrowserSettings({ autoShowSidebar: "true" })).toEqual({});
   });
 
-  it("三项同时存在：一次产出；空/缺失响应：产出空对象", () => {
+  it("四项同时存在：一次产出；空/缺失响应：产出空对象", () => {
     expect(
       extractBrowserSettings({
         viewportWidth: 1920,
         viewportHeight: 1080,
+        viewportMode: "adaptive",
         linkOpenMode: "internal",
         autoShowSidebar: true,
       }),
     ).toEqual({
       viewport: { width: 1920, height: 1080 },
+      viewportMode: "adaptive",
       linkOpenMode: "internal",
       autoShowSidebar: true,
     });
@@ -104,6 +141,7 @@ describe("loadBrowserSettings", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(first).toEqual({
       viewport: { width: 1600, height: 900 },
+      viewportMode: "fixed",
       linkOpenMode: "internal",
     });
     expect(second).toEqual(first);

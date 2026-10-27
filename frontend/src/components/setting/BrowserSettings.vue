@@ -39,6 +39,7 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.browser.viewportSizeDesc') }}</span>
             </div>
             <el-select v-model="selectedPreset" @change="onPresetChange" style="width: 150px">
+              <el-option :label="t('settings.browser.viewportAdaptive')" value="adaptive" />
               <el-option
                 v-for="p in VIEWPORT_PRESETS"
                 :key="`${p.width}x${p.height}`"
@@ -113,7 +114,7 @@ import { usePopup } from '@/composables/usePopup'
 import { setLinkOpenMode, setAutoShowSidebar, type LinkOpenMode } from '@/utils/workspacePreview'
 import {
   VIEWPORT_PRESETS, VIEWPORT_MIN, VIEWPORT_MAX,
-  saveDefaultViewport, isValidViewportSize, loadBrowserSettings,
+  saveDefaultViewport, saveDefaultViewportMode, isValidViewportSize, loadBrowserSettings,
 } from '@/utils/browserViewport'
 import { useBrowserWebviewStore } from '@/stores/browserWebview'
 
@@ -130,10 +131,14 @@ const selectedPreset = ref('custom')
 const customWidth = ref(1280)
 const customHeight = ref(720)
 
-/** 依据尺寸同步下拉选中项与输入框 */
-function syncViewportControls(width: number, height: number): void {
-  const matched = VIEWPORT_PRESETS.some(p => p.width === width && p.height === height)
-  selectedPreset.value = matched ? `${width}x${height}` : 'custom'
+/** 依据模式与尺寸同步下拉选中项与输入框 */
+function syncViewportControls(width: number, height: number, adaptive = false): void {
+  if (adaptive) {
+    selectedPreset.value = 'adaptive'
+  } else {
+    const matched = VIEWPORT_PRESETS.some(p => p.width === width && p.height === height)
+    selectedPreset.value = matched ? `${width}x${height}` : 'custom'
+  }
   customWidth.value = width
   customHeight.value = height
 }
@@ -150,7 +155,21 @@ async function persistViewport(width: number, height: number): Promise<void> {
 async function onPresetChange(val: string | number | boolean | undefined): Promise<void> {
   const key = String(val ?? '')
   if (key === 'custom') {
-    // 切到"自定义"：保持当前尺寸不变，等用户在输入框调整
+    // 切到"自定义"：固定模式下保持当前尺寸不变，等用户在输入框调整；
+    // 自适应模式下则立即用输入框里的尺寸切回固定，避免下拉显示与生效模式不一致
+    if (browserStore.viewportAdaptive) {
+      const w = Math.round(Number(customWidth.value) || 0)
+      const h = Math.round(Number(customHeight.value) || 0)
+      if (isValidViewportSize(w, h)) await persistViewport(w, h)
+    }
+    return
+  }
+  if (key === 'adaptive') {
+    try {
+      await saveDefaultViewportMode('adaptive')
+    } catch {
+      ElMessage.error(t('common.error.saveFailed'))
+    }
     return
   }
   const [w, h] = key.split('x').map(Number)
@@ -181,11 +200,15 @@ async function loadSettings(): Promise<void> {
       setAutoShowSidebar(settings.autoShowSidebar)
     }
     // 渲染视口：后端值为准，同步下拉/输入框显示（不回写）；后端未给时显示 store 现值
-    if (settings.viewport) {
-      syncViewportControls(settings.viewport.width, settings.viewport.height)
-    } else {
-      syncViewportControls(browserStore.viewportWidth, browserStore.viewportHeight)
+    const viewport = settings.viewport ?? {
+      width: browserStore.viewportWidth,
+      height: browserStore.viewportHeight,
     }
+    syncViewportControls(
+      viewport.width,
+      viewport.height,
+      settings.viewportMode === 'adaptive',
+    )
   } catch {
     // 后端不可用时使用默认值
   }

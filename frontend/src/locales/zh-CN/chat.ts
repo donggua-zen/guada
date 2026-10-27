@@ -385,6 +385,7 @@ export default {
     unmute: '取消静音',
     mute: '静音',
     viewportSize: '渲染视口（仅当前网页生效）',
+    viewportAdaptive: '自适应',
     viewportCustom: '自定义',
     pointerLocked: '鼠标已锁定',
     releasePointer: '释放鼠标',

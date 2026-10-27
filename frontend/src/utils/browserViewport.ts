@@ -1,20 +1,28 @@
 /**
  * 浏览器默认渲染视口（设置中心"默认渲染视口"）
  *
- * 所有 webview 恒定使用固定渲染视口渲染（默认 1280×720）：后台渲染、截图、
+ * 默认所有 webview 使用固定渲染视口渲染（默认 1280×720）：后台渲染、截图、
  * CDP 坐标均基于该视口，不随预览面板尺寸/可见性跳变；前台预览区显示时由
  * BrowserWebviewLayer 做合成器层面的等比缩放（留白居中），不影响真实页面。
  *
+ * 也可选择「自适应」：布局盒直接跟随预览面板实测尺寸，页面随面板实时重排
+ * （面板隐藏时使用最后一次有效尺寸）。自适应可设为全局默认，也可在预览
+ * 工具栏按网页临时覆盖。
+ *
  * 职责划分：
- * - 全局默认视口：此处管理，后端 `browser` 设置分组持久化，作用于所有未覆盖的网页
+ * - 全局默认视口/模式：此处管理，后端 `browser` 设置分组持久化，作用于所有未覆盖的网页
  * - 单个网页覆盖：browserWebview store 的 viewportOverrides（预览工具栏入口），
  *   仅内存保存、按网页隔离、不持久化，关闭标签即失效
  *
  * 本模块同时承载 `browser` 分组的启动期唯一读取入口 `loadBrowserSettings()`
- * （视口 + 链接打开方式 + 侧边栏自动展开三项同组下发，只发一次请求）。
+ * （视口/模式 + 链接打开方式 + 侧边栏自动展开同组下发，只发一次请求）。
  */
 
-import { useBrowserWebviewStore, type ViewportSize } from '@/stores/browserWebview'
+import {
+  useBrowserWebviewStore,
+  type ViewportMode,
+  type ViewportSize,
+} from '@/stores/browserWebview'
 import {
   setAutoShowSidebar,
   setLinkOpenMode,
@@ -55,6 +63,7 @@ export function isValidViewportSize(width: number, height: number): boolean {
 /** 归一化后的 browser 分组设置（缺省 = 后端未给或值非法，保持调用方现状） */
 export interface BrowserGroupSettings {
   viewport?: ViewportSize
+  viewportMode?: ViewportMode
   linkOpenMode?: LinkOpenMode
   autoShowSidebar?: boolean
 }
@@ -63,7 +72,7 @@ export interface BrowserGroupSettings {
 const LINK_OPEN_MODES: readonly string[] = ['internal', 'external', 'ask']
 
 /**
- * 纯函数：把 browser 分组响应归一化为可应用的三项。
+ * 纯函数：把 browser 分组响应归一化为可应用的分组。
  * 非法/缺失的值一律不产出，避免把脏值写进 store 与 localStorage 缓存。
  */
 export function extractBrowserSettings(
@@ -75,6 +84,14 @@ export function extractBrowserSettings(
   const height = Number(response?.viewportHeight)
   if (isValidViewportSize(width, height)) {
     result.viewport = { width: Math.round(width), height: Math.round(height) }
+  }
+
+  const viewportMode = response?.viewportMode
+  if (viewportMode === 'adaptive' || viewportMode === 'fixed') {
+    result.viewportMode = viewportMode
+  } else if (result.viewport) {
+    // 老配置没有 viewportMode 字段：存在合法固定尺寸即视为固定模式
+    result.viewportMode = 'fixed'
   }
 
   const mode = response?.linkOpenMode
@@ -89,10 +106,13 @@ export function extractBrowserSettings(
   return result
 }
 
-/** 应用归一化结果（视口 → store，其余两项 → localStorage 缓存） */
+/** 应用归一化结果（视口/模式 → store，其余两项 → localStorage 缓存） */
 export function applyBrowserSettings(settings: BrowserGroupSettings): void {
   if (settings.viewport) {
     useBrowserWebviewStore().setViewportSize(settings.viewport.width, settings.viewport.height)
+  }
+  if (settings.viewportMode) {
+    useBrowserWebviewStore().setViewportAdaptive(settings.viewportMode === 'adaptive')
   }
   if (settings.linkOpenMode) {
     setLinkOpenMode(settings.linkOpenMode)
@@ -144,20 +164,34 @@ async function fetchBrowserSettings(): Promise<BrowserGroupSettings | null> {
   }
 }
 
-/** 设置中心保存默认渲染视口：立即生效（store），并异步落盘后端 */
+/** 设置中心保存默认渲染视口：立即生效（store），并异步落盘后端（同时切回固定模式） */
 export async function saveDefaultViewport(width: number, height: number): Promise<void> {
   if (!isValidViewportSize(width, height)) {
     throw new Error(`invalid viewport size: ${width}x${height}`)
   }
   useBrowserWebviewStore().setViewportSize(Math.round(width), Math.round(height))
+  useBrowserWebviewStore().setViewportAdaptive(false)
   try {
     const { apiService } = await import('@/services/ApiService')
     await apiService.updateGroupSettings(SETTINGS_GROUP, {
       viewportWidth: Math.round(width),
       viewportHeight: Math.round(height),
+      viewportMode: 'fixed',
     })
   } catch (error) {
     console.error('[browserViewport] 保存默认渲染视口失败:', error)
+    throw error
+  }
+}
+
+/** 设置中心切换默认渲染视口模式：立即生效（store），并异步落盘后端 */
+export async function saveDefaultViewportMode(mode: ViewportMode): Promise<void> {
+  useBrowserWebviewStore().setViewportAdaptive(mode === 'adaptive')
+  try {
+    const { apiService } = await import('@/services/ApiService')
+    await apiService.updateGroupSettings(SETTINGS_GROUP, { viewportMode: mode })
+  } catch (error) {
+    console.error('[browserViewport] 保存默认渲染视口模式失败:', error)
     throw error
   }
 }

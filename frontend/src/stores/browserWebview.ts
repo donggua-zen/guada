@@ -34,6 +34,12 @@ export interface ViewportSize {
   height: number
 }
 
+/** 渲染视口模式：固定尺寸 / 自适应预览面板 */
+export type ViewportMode = 'fixed' | 'adaptive'
+
+/** 单个网页的视口覆盖：固定尺寸或自适应 */
+export type ViewportOverride = ViewportSize | 'adaptive'
+
 /**
  * 浏览器 Webview 全局状态 Store
  *
@@ -65,19 +71,36 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
 
   /**
    * 全局默认渲染视口（默认 1280×720，来源：设置中心，utils/browserViewport.ts）。
-   * 所有 webview 恒定使用固定视口渲染，保证 window.innerWidth/innerHeight
+   * 默认所有 webview 恒定使用固定视口渲染，保证 window.innerWidth/innerHeight
    * 与截图输出不随预览面板尺寸、可见性跳变；前台显示由 BrowserWebviewLayer
    * 做合成器层面的等比缩放。
    */
   const viewportWidth = ref(1280)
   const viewportHeight = ref(720)
 
+  /** 全局默认是否自适应预览面板（设置中心「默认渲染视口」，持久化到 browser 分组） */
+  const viewportAdaptive = ref(false)
+
+  /**
+   * 预览面板最近一次有效尺寸（自适应视口的来源）。
+   * 面板隐藏（v-show）时 ResizeObserver 会报 0×0，此时保留最后一次有效值，
+   * 保证后台渲染、截图与 AI 操作仍基于一个稳定尺寸。
+   */
+  const lastAdaptiveSize = ref<ViewportSize | null>(null)
+
+  /**
+   * 自适应网页最后一次处于前台时的视口尺寸（windowId → size）。
+   * 后台页面保持该尺寸，重新激活时才跟随当前面板尺寸，
+   * 避免面板拖拽/窗口缩放导致所有后台页面反复重排。
+   */
+  const frozenAdaptiveSizes = ref<Map<string, ViewportSize>>(new Map())
+
   /**
    * 按网页（windowId）单独覆盖的渲染视口（预览工具栏入口，DevTools 风格）。
    * 仅内存保存、按网页隔离：关闭标签即失效，不持久化；
-   * 未覆盖的网页跟随全局默认（viewportWidth/Height）。
+   * 未覆盖的网页跟随全局默认（viewportAdaptive / viewportWidth/Height）。
    */
-  const viewportOverrides = ref<Map<string, ViewportSize>>(new Map())
+  const viewportOverrides = ref<Map<string, ViewportOverride>>(new Map())
 
   /** 活跃 webview 的导航状态（由 BrowserWebviewLayer 从 webview 事件同步） */
   const canGoBack = ref(false)
@@ -104,6 +127,12 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
       next.delete(windowId)
       viewportOverrides.value = next
     }
+    // 清理该网页的自适应冻结尺寸
+    if (frozenAdaptiveSizes.value.has(windowId)) {
+      const next = new Map(frozenAdaptiveSizes.value)
+      next.delete(windowId)
+      frozenAdaptiveSizes.value = next
+    }
     // 清理该网页的指针锁状态
     if (pointerLockedWindows.value.has(windowId)) {
       const next = new Set(pointerLockedWindows.value)
@@ -124,11 +153,26 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     }
   }
 
+  /** 记录当前前台网页的最新尺寸，供它转后台时冻结 */
+  function rememberActiveAdaptiveSize(size: ViewportSize): void {
+    const activeId = activeWindowId.value
+    if (!activeId) return
+    const frozen = frozenAdaptiveSizes.value.get(activeId)
+    if (frozen && frozen.width === size.width && frozen.height === size.height) return
+    const next = new Map(frozenAdaptiveSizes.value)
+    next.set(activeId, { ...size })
+    frozenAdaptiveSizes.value = next
+  }
+
   function setActive(windowId: string | null): void {
     activeWindowId.value = windowId
     // 同步更新 isVisible 状态
     for (const [id, wv] of webviews.value.entries()) {
       wv.isVisible = id === windowId
+    }
+    // 新前台网页先按最近面板尺寸记录，避免切回后面板未变化时沿用更早的冻结值
+    if (windowId && lastAdaptiveSize.value) {
+      rememberActiveAdaptiveSize(lastAdaptiveSize.value)
     }
     // 清空活跃 webview 元素引用（BrowserWebviewLayer 会重新设置）
     if (!windowId) {
@@ -141,6 +185,16 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
 
   function setPreviewRect(rect: PreviewRect | null): void {
     previewRect.value = rect
+    // 面板隐藏时 ResizeObserver 会报 0×0：忽略无效尺寸，保留最后一次有效值
+    if (rect && rect.width >= 1 && rect.height >= 1) {
+      const width = Math.round(rect.width)
+      const height = Math.round(rect.height)
+      const last = lastAdaptiveSize.value
+      if (!last || last.width !== width || last.height !== height) {
+        lastAdaptiveSize.value = { width, height }
+      }
+      rememberActiveAdaptiveSize({ width, height })
+    }
   }
 
   function setCurrentSession(sessionId: string | null): void {
@@ -185,10 +239,46 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     viewportHeight.value = height
   }
 
+  /** 设置全局默认是否自适应预览面板（来源：设置中心） */
+  function setViewportAdaptive(adaptive: boolean): void {
+    viewportAdaptive.value = adaptive
+  }
+
+  /**
+   * 自适应视口：
+   * - 前台网页：跟随最近一次有效面板尺寸
+   * - 后台网页：保持最后一次处于前台时的尺寸
+   * - 从未测量/从未激活：退回全局固定尺寸
+   */
+  function getAdaptiveViewportSize(windowId: string): ViewportSize {
+    const fixedFallback = (): ViewportSize => ({
+      width: viewportWidth.value,
+      height: viewportHeight.value,
+    })
+
+    if (windowId === activeWindowId.value) {
+      return lastAdaptiveSize.value ? { ...lastAdaptiveSize.value } : fixedFallback()
+    }
+
+    const frozen = frozenAdaptiveSizes.value.get(windowId)
+    if (frozen) return { ...frozen }
+    return lastAdaptiveSize.value ? { ...lastAdaptiveSize.value } : fixedFallback()
+  }
+
+  /** 获取某网页的生效视口模式：优先按网页覆盖，否则用全局默认 */
+  function getViewportMode(windowId: string): ViewportMode {
+    const override = viewportOverrides.value.get(windowId)
+    if (override === 'adaptive') return 'adaptive'
+    if (override) return 'fixed'
+    return viewportAdaptive.value ? 'adaptive' : 'fixed'
+  }
+
   /** 获取某网页的生效渲染视口：优先按网页覆盖，否则用全局默认 */
   function getViewportSize(windowId: string): ViewportSize {
     const override = viewportOverrides.value.get(windowId)
+    if (override === 'adaptive') return getAdaptiveViewportSize(windowId)
     if (override) return { ...override }
+    if (viewportAdaptive.value) return getAdaptiveViewportSize(windowId)
     return { width: viewportWidth.value, height: viewportHeight.value }
   }
 
@@ -198,10 +288,33 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
    */
   function setWebviewViewport(windowId: string, width: number, height: number): void {
     const next = new Map(viewportOverrides.value)
-    if (width === viewportWidth.value && height === viewportHeight.value) {
+    // 只有全局默认是固定尺寸时才可能"跟随默认"；全局自适应时，
+    // 即使尺寸碰巧相同也必须落成固定覆盖，否则会退回自适应。
+    if (
+      !viewportAdaptive.value &&
+      width === viewportWidth.value &&
+      height === viewportHeight.value
+    ) {
       next.delete(windowId)
     } else {
       next.set(windowId, { width, height })
+    }
+    viewportOverrides.value = next
+  }
+
+  /**
+   * 设置某网页是否自适应预览面板（预览工具栏入口，仅当前网页生效、不持久化）。
+   * 与全局默认一致时不落覆盖项，保持"跟随默认"语义。
+   */
+  function setWebviewAdaptive(windowId: string, adaptive: boolean): void {
+    const next = new Map(viewportOverrides.value)
+    if (adaptive === viewportAdaptive.value) {
+      next.delete(windowId)
+    } else {
+      next.set(
+        windowId,
+        adaptive ? 'adaptive' : { width: viewportWidth.value, height: viewportHeight.value },
+      )
     }
     viewportOverrides.value = next
   }
@@ -233,6 +346,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     renderableOverrides.value.clear()
     renderableOverrides.value = new Set()
     viewportOverrides.value = new Map()
+    frozenAdaptiveSizes.value = new Map()
     pointerLockedWindows.value = new Set()
   }
 
@@ -284,6 +398,9 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     pointerLockedWindows,
     viewportWidth,
     viewportHeight,
+    viewportAdaptive,
+    lastAdaptiveSize,
+    frozenAdaptiveSizes,
     viewportOverrides,
     canGoBack,
     canGoForward,
@@ -307,8 +424,11 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     setRenderableOverride,
     setPointerLocked,
     setViewportSize,
+    setViewportAdaptive,
+    getViewportMode,
     getViewportSize,
     setWebviewViewport,
+    setWebviewAdaptive,
     setActiveWebviewEl,
     setNavState,
     toggleMuted,

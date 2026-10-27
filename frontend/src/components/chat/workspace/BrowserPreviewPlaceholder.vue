@@ -80,6 +80,20 @@
         <GdPopover v-model:show="viewportMenuVisible" :anchor-el="viewportBtnRef" :width="210">
           <div class="viewport-menu">
             <button
+              class="viewport-option"
+              :class="{ active: isAdaptiveActive }"
+              @click="applyAdaptive"
+            >
+              <span>{{ t('chat.workspace.viewportAdaptive') }}</span>
+              <span class="viewport-option-right">
+                <span v-if="adaptiveSizeLabel" class="viewport-option-size">{{ adaptiveSizeLabel }}</span>
+                <svg v-if="isAdaptiveActive" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </span>
+            </button>
+            <div class="viewport-divider"></div>
+            <button
               v-for="p in VIEWPORT_PRESETS"
               :key="`${p.width}x${p.height}`"
               class="viewport-option"
@@ -170,10 +184,27 @@ const viewportBtnRef = ref<HTMLElement>()
 const customWidth = ref(1280)
 const customHeight = ref(720)
 
-/** 当前网页的生效渲染视口（按钮上的尺寸标签） */
+/** 当前网页是否自适应预览面板 */
+const isAdaptiveActive = computed(() => {
+  const windowId = store.activeWindowId
+  return !!windowId && store.getViewportMode(windowId) === 'adaptive'
+})
+
+/** 自适应模式下菜单里显示的实时尺寸（非自适应时为空） */
+const adaptiveSizeLabel = computed(() => {
+  const windowId = store.activeWindowId
+  if (!windowId || store.getViewportMode(windowId) !== 'adaptive') return ''
+  const { width, height } = store.getViewportSize(windowId)
+  return `${width} × ${height}`
+})
+
+/** 当前网页的生效渲染视口（按钮上的标签） */
 const viewportLabel = computed(() => {
   const windowId = store.activeWindowId
   if (!windowId) return ''
+  if (store.getViewportMode(windowId) === 'adaptive') {
+    return t('chat.workspace.viewportAdaptive')
+  }
   const { width, height } = store.getViewportSize(windowId)
   return `${width} × ${height}`
 })
@@ -189,6 +220,8 @@ watch(viewportMenuVisible, (visible) => {
 function isViewportActive(preset: { width: number; height: number }): boolean {
   const windowId = store.activeWindowId
   if (!windowId) return false
+  // 自适应模式下列表项一律不高亮：实时尺寸可能碰巧等于某个预设
+  if (store.getViewportMode(windowId) !== 'fixed') return false
   const current = store.getViewportSize(windowId)
   return current.width === preset.width && current.height === preset.height
 }
@@ -199,6 +232,14 @@ function applyViewport(width: number, height: number, closeMenu: boolean): void 
   if (!windowId || !isValidViewportSize(width, height)) return
   store.setWebviewViewport(windowId, width, height)
   if (closeMenu) viewportMenuVisible.value = false
+}
+
+/** 当前网页切换为自适应（布局盒跟随预览面板尺寸） */
+function applyAdaptive(): void {
+  const windowId = store.activeWindowId
+  if (!windowId) return
+  store.setWebviewAdaptive(windowId, true)
+  viewportMenuVisible.value = false
 }
 
 function applyCustomViewport(): void {
@@ -552,6 +593,30 @@ onUnmounted(() => {
 .viewport-option.active {
   color: var(--gd-color-primary, #4a90d9);
   font-weight: 600;
+}
+
+/* 自适应行右侧：实时尺寸 + 勾选 */
+.viewport-option-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viewport-option-size {
+  font-size: 11px;
+  color: var(--gd-color-text-secondary, #888);
+  font-variant-numeric: tabular-nums;
+}
+
+.viewport-option.active .viewport-option-size {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.viewport-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--gd-color-border, #d0d0d0);
 }
 
 .viewport-custom {

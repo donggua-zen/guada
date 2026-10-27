@@ -385,6 +385,7 @@
     unmute: 'Unmute',
     mute: 'Mute',
     viewportSize: 'Render viewport (current page only)',
+    viewportAdaptive: 'Responsive',
     viewportCustom: 'Custom',
     pointerLocked: 'Mouse locked',
     releasePointer: 'Release mouse',

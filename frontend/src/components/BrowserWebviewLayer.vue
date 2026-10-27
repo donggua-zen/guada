@@ -129,11 +129,13 @@ function syncNavState(el: HTMLElement): void {
 /**
  * 计算 webview wrapper 的样式
  *
- * 所有 webview 恒定使用固定渲染视口（按网页覆盖，否则全局默认，见
- * store.getViewportSize），前台/后台/截图三态的 webview 布局盒尺寸完全一致：
- * - 活跃 webview：按预览占位区域等比缩放显示（留白居中），transform 是
- *   合成器层面的显示变换，不改变 webview 布局盒——页面 innerWidth/innerHeight、
- *   截图尺寸、CDP 坐标均不随面板拖拽/可见性跳变
+ * 视口来源见 store.getViewportSize：
+ * - 固定视口（默认）：前台/后台/截图三态的 webview 布局盒尺寸完全一致，
+ *   前台按预览占位区域等比缩放（留白居中），transform 不改变布局盒——
+ *   页面 innerWidth/innerHeight、截图尺寸、CDP 坐标均不随面板拖拽/可见性跳变
+ * - 自适应（逐网页或全局显式选择）：前台布局盒取预览面板实测尺寸，scale≈1，
+ *   页面随面板实时重排；转后台后保持最后一次前台尺寸，重新激活时再跟随面板；
+ *   面板隐藏时同样保留最后一次有效尺寸，避免被压成 0
  * - 非活跃 webview：visibility: hidden, z-index: -1（保留渲染进度）
  * - 拖拽中：pointer-events: none（防止 webview 截获鼠标事件导致拖拽中断）
  */
