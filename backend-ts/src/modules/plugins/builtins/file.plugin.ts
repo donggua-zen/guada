@@ -325,7 +325,7 @@ export class FilePlugin extends PluginBase {
     fileKit.registerTool({
       name: "write",
       description:
-        "Write content to the specified file in full, automatically creating directories. Writes are limited to the workspace (plus a few registered system paths); a path outside them needs the user's approval in workspace-write mode and is denied in read-only mode.",
+        "Write content to the specified file in full, automatically creating directories.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -402,7 +402,7 @@ export class FilePlugin extends PluginBase {
     fileKit.registerTool({
       name: "edit",
       description:
-        "Find and replace specified text in a file. old_text must exactly match a contiguous segment in the original file. Prefer this tool for partial edits. Edits are limited to the workspace (plus a few registered system paths); a path outside them needs the user's approval in workspace-write mode and is denied in read-only mode.",
+        "Find and replace specified text in a file. old_text must exactly match a contiguous segment in the original file. Prefer this tool for partial edits. ",
       inputSchema: z.object({
         file_path: z
           .string()
