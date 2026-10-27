@@ -23,7 +23,7 @@
         </PluginTabHeader>
 
         <!-- MCP 服务器列表（无界两列行） -->
-        <div v-if="servers.length > 0" class="-mx-2 grid grid-cols-1 gap-x-6 lg:grid-cols-2">
+        <div v-if="servers.length > 0" class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
             <PluginListRow
                 v-for="server in servers"
                 :key="server.id"

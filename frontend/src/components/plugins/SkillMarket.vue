@@ -60,7 +60,7 @@
         </div>
 
         <!-- 无界两列行列表 -->
-        <div v-else-if="items.length > 0" class="-mx-2 grid grid-cols-1 gap-x-6 lg:grid-cols-2">
+        <div v-else-if="items.length > 0" class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
             <PluginListRow
                 v-for="skill in items"
                 :key="skill.id"
@@ -219,6 +219,7 @@ import {
 import { getLocale } from '@/locales'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import { isVersionNewer } from '@/utils/version'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
@@ -350,10 +351,11 @@ function refreshStatus() {
             return { ...marketSkill, localStatus: 'not_installed' as const }
         }
 
-        // 名字匹配成功，比较版本
+        // 名字匹配成功，比较版本：只有市场版本更高才可更新；
+        // 本地版本更高或相同都视为已安装（避免把降级误判为升级）。
         const localVer = match.manifest.version
         const marketVer = marketSkill.version
-        if (marketVer && localVer && marketVer !== localVer) {
+        if (marketVer && localVer && isVersionNewer(marketVer, localVer)) {
             return { ...marketSkill, localStatus: 'updatable' as const, localVersion: localVer }
         }
         return { ...marketSkill, localStatus: 'installed' as const, localVersion: localVer }

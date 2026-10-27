@@ -1,7 +1,7 @@
 <template>
     <section class="mb-6">
         <h2 class="mb-2 text-sm font-semibold text-gray-900 dark:text-[#e8e9ed]">{{ title }}</h2>
-        <div v-show="expanded" class="-mx-2 grid grid-cols-1 gap-x-6 lg:grid-cols-2">
+        <div v-show="expanded" class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
             <slot />
         </div>
         <button
