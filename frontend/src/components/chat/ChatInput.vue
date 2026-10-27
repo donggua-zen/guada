@@ -1915,13 +1915,21 @@ defineExpose({ insertText, insertBadge });
   color: var(--gd-color-text, #303133);
 }
 
-/* 窄容器（窄窗口 / 悬浮窗 / 侧栏）：只保留「+、权限（图标）、发送/停止」。
-   模型、Token 上限、上下文用量环整体退场；权限与计划模式收起文字，仅留图标。
-   放在样式末尾：display:none 需要压过下方各按钮的 display:flex 声明。 */
+/* 窄容器（窄窗口 / 悬浮窗 / 侧栏）：模型按钮改为缩短显示（省略号截断）而非隐藏，
+   小窗下仍可点击换模型；上下文用量环（16px）与 Token 上限（文字很短）保留。
+   权限与计划模式收起文字，仅留图标。
+   模型按钮基样式的 min-width:80px 由此处的 min-width:0 覆盖，让 truncate 生效。 */
 @container composer (max-width: 380px) {
-  .right-actions .model-selector-btn,
-  .right-actions .token-limit-control,
-  .right-actions .right-actions-before-slot,
+  .right-actions .model-selector-btn {
+    min-width: 0;
+    max-width: 96px;
+  }
+
+  .right-actions .model-selector-btn.is-open {
+    /* 展开宽度同样受容器钳制：过渡目标 200px 被压回容器内，显示更多模型名 */
+    max-width: 40vw;
+  }
+
   .left-tools .run-mode-label,
   .left-tools .plan-mode-label {
     display: none;
