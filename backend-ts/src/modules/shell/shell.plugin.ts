@@ -147,6 +147,7 @@ export class ShellPlugin extends PluginBase {
 - Commands run in the foreground by default; the tool waits for completion and returns the output
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - Prefer single-line commands when possible; for multi-line or long commands, write them to a script file first, then execute the script
+- **File edits**: use \`edit\`/\`write\` for source files; do not use \`sed -i\`, Python/Node heredocs, or shell redirection to rewrite them. Shell scripts are for builds, tests, and tooling.
 - Background mode (explicit or after the 60s foreground timeout) returns a stable **job id**. Manage everything with the job tools: job_read to read output (pass wait_ms only when genuinely blocked), job_send to write stdin, job_list to list, job_stop to cancel. You will be notified when a background job finishes.
 - **Remote workspaces**: with workspace="<connection name>" the command runs via POSIX sh on that remote server (\`encoding\` decodes raw output bytes agent-side). Foreground timeout (60s) switches to background there too; the background job is managed with the same job tools.`,
       inputSchema: z.object({

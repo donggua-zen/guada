@@ -313,6 +313,69 @@ describe("FilePlugin", () => {
       // CRLF preserved
       expect(written).toContain("\r\n");
     });
+
+    it("should reject multiple matches unless replace_all is true", async () => {
+      const fp = await writeFile("test.txt", "foo\nfoo\n");
+      await expect(
+        getTool("edit").execute(
+          { file_path: fp, old_text: "foo", new_text: "bar" },
+          ctx(),
+        ),
+      ).rejects.toThrow("Found 2 matches");
+      // 未产生部分写入
+      expect(await fs.readFile(fp, "utf-8")).toBe("foo\nfoo\n");
+    });
+
+    it("should replace all occurrences when replace_all is true", async () => {
+      const fp = await writeFile("test.txt", "foo\nfoo\nfoo\n");
+      const result = await getTool("edit").execute(
+        {
+          file_path: fp,
+          old_text: "foo",
+          new_text: "bar",
+          replace_all: true,
+        },
+        ctx(),
+      );
+      expect(result).toContain("3 replacements");
+      expect(await fs.readFile(fp, "utf-8")).toBe("bar\nbar\nbar\n");
+    });
+
+    it("should strip read-style line-number prefixes from old_text", async () => {
+      const fp = await writeFile("test.txt", "line1\nline2\nline3\n");
+      // read 输出形如 "  2\tline2"；edit 应能自动去掉前缀
+      const result = await getTool("edit").execute(
+        { file_path: fp, old_text: "  2\tline2", new_text: "edited" },
+        ctx(),
+      );
+      expect(result).toContain("modified");
+      expect(await fs.readFile(fp, "utf-8")).toBe("line1\nedited\nline3\n");
+    });
+
+    it("should prefer an exact match over stripping line-number-like content", async () => {
+      const fp = await writeFile("test.txt", "  2\tline2\n");
+      await getTool("edit").execute(
+        { file_path: fp, old_text: "  2\tline2", new_text: "exact" },
+        ctx(),
+      );
+      // 精确匹配优先：整行被替换，而不是只替换 "line2" 子串
+      expect(await fs.readFile(fp, "utf-8")).toBe("exact\n");
+    });
+
+    it("should treat $ replacement tokens in new_text literally", async () => {
+      const fp = await writeFile("test.txt", "const a = 1;");
+      await getTool("edit").execute(
+        {
+          file_path: fp,
+          old_text: "const a = 1;",
+          new_text: "const a = $& + $' + $` + $$;",
+        },
+        ctx(),
+      );
+      expect(await fs.readFile(fp, "utf-8")).toBe(
+        "const a = $& + $' + $` + $$;",
+      );
+    });
   });
 
   // ── delete ──

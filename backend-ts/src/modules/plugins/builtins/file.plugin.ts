@@ -30,6 +30,38 @@ import { z } from "zod";
 import langZh from "./file.lang.zh.json";
 import langEn from "./file.lang.en.json";
 
+/** edit 匹配结果：成功 / 未找到 / 多处匹配 */
+type EditTransformResult =
+  | { kind: "ok"; content: string; replacements: number; firstLine: number }
+  | { kind: "not_found" }
+  | { kind: "multiple"; count: number };
+
+/**
+ * 去掉 read 输出每行的行号前缀（`  12\t`）。
+ * 只用于精确匹配失败后的 fallback；没有行号前缀时原样返回。
+ */
+function stripReadLinePrefixes(text: string): string {
+  let changed = false;
+  const stripped = text.split("\n").map((line) => {
+    const next = line.replace(/^[ \t]*\d+\t/, "");
+    if (next !== line) changed = true;
+    return next;
+  });
+  return changed ? stripped.join("\n") : text;
+}
+
+/** 统计非重叠出现次数（与 replace/replaceAll 的语义一致） */
+function countOccurrences(haystack: string, needle: string): number {
+  if (!needle) return 0;
+  let count = 0;
+  let index = haystack.indexOf(needle);
+  while (index !== -1) {
+    count++;
+    index = haystack.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
 @Injectable()
 export class FilePlugin extends PluginBase {
   private readonly logger = new Logger(FilePlugin.name);
@@ -110,7 +142,7 @@ export class FilePlugin extends PluginBase {
     fileKit.registerTool({
       name: "read",
       description:
-        "Read the content of a text file at the specified path, supports pagination by line or by agent. Automatically truncates at a hard limit (20KB) and appends continuation parameters when truncated. NOTE: line numbers are prepended by the tool (e.g. '     1\\t') and are NOT part of the original file content.",
+        "Read the content of a text file at the specified path, supports pagination by line or by character. Automatically truncates at a hard limit (20KB) and appends a plain-text continuation hint when truncated. NOTE: each output line is prefixed with a line number and a tab (N<TAB>); that prefix is NOT part of the original file content. When copying text into `edit.old_text`, strip the prefix.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -121,20 +153,20 @@ export class FilePlugin extends PluginBase {
           .string()
           .optional()
           .describe(
-            "File encoding, e.g., utf-8, gbk; auto-detected by default",
+            "File encoding, e.g., utf-8, gbk; defaults to utf-8",
           ),
         unit: z
           .enum(["line", "char"])
           .optional()
           .describe(
-            "Offset unit: line=read by line (default), char=read by agent. When truncated=true, use the returned next.unit to continue",
+            "Offset unit: line=read by line (default), char=read by character",
           ),
         offset: z
           .number()
           .int()
           .optional()
           .describe(
-            "Starting position (line number or agent offset); negative values count from the end (e.g., -10 = last 10 lines), default 0",
+            "Starting position (line number or character offset); negative values count from the end (e.g., -10 = last 10 lines), default 0",
           ),
         limit: z
           .number()
@@ -142,7 +174,7 @@ export class FilePlugin extends PluginBase {
           .min(1)
           .optional()
           .describe(
-            "Number to read: when unit=line, max lines to read (default 200); when unit=char, max agents to read (default 20000)",
+            "Number to read: when unit=line, max lines to read (default 200); when unit=char, max characters to read (default 20000)",
           ),
         workspace: workspaceParamField,
       }),
@@ -325,7 +357,7 @@ export class FilePlugin extends PluginBase {
     fileKit.registerTool({
       name: "write",
       description:
-        "Write content to the specified file in full, automatically creating directories.",
+        "Write content to the specified file in full, automatically creating directories. Overwrites existing content. Use edit for partial changes; use write only for new files or full rewrites.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -401,8 +433,14 @@ export class FilePlugin extends PluginBase {
 
     fileKit.registerTool({
       name: "edit",
-      description:
-        "Find and replace specified text in a file. old_text must exactly match a contiguous segment in the original file. Prefer this tool for partial edits. ",
+      description: [
+        "Find and replace an exact text segment in a file.",
+        "",
+        "- `old_text` must exactly match a contiguous segment. Copy it from `read` output WITHOUT the line-number prefix (N<TAB>).",
+        "- If `old_text` occurs multiple times the edit fails: include more surrounding context, or set `replace_all: true`.",
+        "- Prefer this tool for partial edits. Do not use `run_command`, Python, `sed -i`, `node -e`, or heredocs to modify project files.",
+        "- If no match is found, re-read the relevant range and retry with more context; do not fall back to a script.",
+      ].join("\n"),
       inputSchema: z.object({
         file_path: z
           .string()
@@ -412,9 +450,16 @@ export class FilePlugin extends PluginBase {
         old_text: z
           .string()
           .describe(
-            "The old text to be replaced; must exactly match a contiguous segment in the original file",
+            "The exact text to replace; copy it from read output without the line-number prefix. Must match a contiguous segment in the original file",
           ),
         new_text: z.string().describe("The new text to replace with"),
+        replace_all: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe(
+            "Replace every occurrence of old_text. When false, old_text must be unique",
+          ),
         encoding: z
           .string()
           .optional()
@@ -422,7 +467,13 @@ export class FilePlugin extends PluginBase {
         workspace: workspaceParamField,
       }),
       execute: async (args, ctx, abortSignal) => {
-        const { file_path, old_text, new_text, encoding = "utf-8" } = args;
+        const {
+          file_path,
+          old_text,
+          new_text,
+          replace_all = false,
+          encoding = "utf-8",
+        } = args;
         if (!file_path) throw new Error("file_path is required");
         if (!old_text) throw new Error("old_text is required");
         if (new_text === undefined) throw new Error("new_text is required");
@@ -440,12 +491,14 @@ export class FilePlugin extends PluginBase {
           const content = String(
             await target.provider.readFile(absPath, { encoding }),
           );
-          const modified = FilePlugin.transformEdit(content, old_text, new_text);
-          if (modified === null) {
-            throw new Error(`No match text found: ${old_text}`);
-          }
+          const { content: modified, message } = FilePlugin.applyEditTransform(
+            content,
+            old_text,
+            new_text,
+            replace_all,
+          );
           await target.provider.writeFile(absPath, modified, { encoding });
-          return `File ${absPath} modified (1 replacement)`;
+          return `File ${absPath} ${message}`;
         }
 
         const resolvedPath = this.resolvePath(file_path, ctx);
@@ -470,10 +523,12 @@ export class FilePlugin extends PluginBase {
             return `File ${resolvedPath} unchanged`;
           }
 
-          const modified = FilePlugin.transformEdit(content, old_text, new_text);
-          if (modified === null) {
-            throw new Error(`No match text found: ${old_text}`);
-          }
+          const { content: modified, message } = FilePlugin.applyEditTransform(
+            content,
+            old_text,
+            new_text,
+            replace_all,
+          );
 
           // 记忆索引上限守卫：改写后文本已在手，与当前内容比较是否变长（缩小/持平永远放行）
           const indexCap = await this.evaluateMemoryIndexCap(
@@ -488,7 +543,7 @@ export class FilePlugin extends PluginBase {
             encoding: encoding as BufferEncoding,
           });
           return (
-            `File ${resolvedPath} modified (1 replacement)` +
+            `File ${resolvedPath} ${message}` +
             (indexCap.notice ? `\n${indexCap.notice}` : "")
           );
         });
@@ -670,6 +725,12 @@ export class FilePlugin extends PluginBase {
         // 注入块提供），避免绑定变更打破提示词前缀缓存
         lines.push(
           "4. Additional remote workspaces may be bound to this session. To operate on one, pass workspace=\"<connection name>\" to the file tools; paths then resolve inside that remote workspace. Omit the parameter for the local working directory above.",
+          "",
+          "**File Editing Policy**:",
+          "1. Use `edit` for partial changes; use `write` only for new files or full rewrites.",
+          "2. `old_text` must be copied from `read` output without the line-number prefix (N<TAB>). It must be unique unless `replace_all: true`.",
+          "3. Do not use `run_command`, Python, `sed -i`, `node -e`, or heredocs to modify project files. If `edit` fails, re-read the relevant range and retry with more context.",
+          "4. After a successful `edit`, do not re-read the file just to verify; the tool would have errored if the replacement failed.",
         );
         return lines.join("\n");
       },
@@ -816,21 +877,81 @@ export class FilePlugin extends PluginBase {
   }
 
   /**
-   * edit 替换变换（本地/远程共用）：统一换行后匹配、首次替换、还原原文件行尾风格。
-   * 返回 null = 未匹配。
+   * edit 替换变换（本地/远程共用）：
+   * - 先精确匹配；失败后再尝试剥离 read 输出的行号前缀
+   * - 多处匹配且未 replace_all 时返回 multiple，由调用方给出可操作提示
+   * - 用函数式 replacement 做字面替换，避免 new_text 里的 $& / $' 被展开
+   * - 保留原文件行尾风格
    */
   private static transformEdit(
     content: string,
     oldText: string,
     newText: string,
-  ): string | null {
+    replaceAll: boolean,
+  ): EditTransformResult {
     const normContent = content.replace(/\r\n/g, "\n");
     const normOld = oldText.replace(/\r\n/g, "\n");
-    const idx = normContent.indexOf(normOld);
-    if (idx === -1) return null;
-    const hasCRLF = content.includes("\r\n");
-    const normResult = normContent.replace(normOld, newText);
-    return hasCRLF ? normResult.replace(/\n/g, "\r\n") : normResult;
+
+    // 精确匹配优先；仅当精确匹配失败时才尝试去掉 read 输出的行号前缀，
+    // 避免把内容本身就形如 "12\t..." 的文件误判。
+    const candidates = [normOld];
+    const stripped = stripReadLinePrefixes(normOld);
+    if (stripped !== normOld) candidates.push(stripped);
+
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const count = countOccurrences(normContent, candidate);
+      if (count === 0) continue;
+      if (count > 1 && !replaceAll) {
+        return { kind: "multiple", count };
+      }
+      const firstIdx = normContent.indexOf(candidate);
+      const firstLine = normContent.slice(0, firstIdx).split("\n").length;
+      const replaced = replaceAll
+        ? normContent.split(candidate).join(newText)
+        : normContent.replace(candidate, () => newText);
+      const hasCRLF = content.includes("\r\n");
+      return {
+        kind: "ok",
+        content: hasCRLF ? replaced.replace(/\n/g, "\r\n") : replaced,
+        replacements: replaceAll ? count : 1,
+        firstLine,
+      };
+    }
+
+    return { kind: "not_found" };
+  }
+
+  /** 统一把 transformEdit 的结构化结果翻译成成功文案或可操作错误 */
+  private static applyEditTransform(
+    content: string,
+    oldText: string,
+    newText: string,
+    replaceAll: boolean,
+  ): { content: string; message: string } {
+    const result = FilePlugin.transformEdit(
+      content,
+      oldText,
+      newText,
+      replaceAll,
+    );
+    if (result.kind === "not_found") {
+      throw new Error(
+        `No match text found: ${safeTruncate(oldText, 120)}. old_text must exactly match a contiguous segment; copy it from read output without the line-number prefix, then retry with more context.`,
+      );
+    }
+    if (result.kind === "multiple") {
+      throw new Error(
+        `Found ${result.count} matches for old_text. Include more surrounding context to make it unique, or set replace_all: true.`,
+      );
+    }
+    return {
+      content: result.content,
+      message:
+        result.replacements === 1
+          ? `modified (1 replacement at line ${result.firstLine})`
+          : `modified (${result.replacements} replacements)`,
+    };
   }
 
   /**
