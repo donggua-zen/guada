@@ -385,22 +385,18 @@ export class JobRegistryService
   }
 
   /**
-   * 向运行中的作业投递输入（shell 写 stdin / 子 Agent 继续对话）。
+   * 向运行中的作业投递**原始输入**（字节流类写 stdin / 子 Agent 继续对话）。
+   * 换行与控制字符由调用方自带：registry 不做任何协议层加工，保持通用。
    * 作业未声明 send 时明确报错，让模型换用对应的能力，而不是静默丢弃。
    */
-  async send(
-    id: JobId,
-    sessionId: string,
-    input: string,
-    appendNewline = true,
-  ): Promise<void> {
+  async send(id: JobId, sessionId: string, input: string): Promise<void> {
     const record = this.getRecord(id, sessionId);
     if (!record.spec.send) {
       throw new Error(
         `job ${id} (kind: ${record.spec.kind}) does not support send`,
       );
     }
-    await record.spec.send(input, appendNewline);
+    await record.spec.send(input);
   }
 
   list(sessionId: string): JobSnapshot[] {

@@ -142,10 +142,11 @@ export interface JobStartSpec {
   read: (opts: JobReadOptions) => Promise<JobOutputRead>;
   cancel: (reason?: string) => void | Promise<void>;
   /**
-   * 可选：向运行中的作业投递输入。shell/remote-shell 写 stdin 字节流；
+   * 可选：向运行中的作业投递**原始输入**。字节流类（shell / remote-shell / pty）直接写
+   * stdin——换行与控制字符由调用方自带，执行器不做协议层加工；子代理类作为追加消息。
    * 缺省表示该类作业不支持 send（registry 会明确报错，而不是静默丢弃）。
    */
-  send?: (input: string, appendNewline?: boolean) => Promise<void>;
+  send?: (input: string) => Promise<void>;
   /** 结果已被 read/wait/consume 交付，或 kill 主动抑制通知；只调用一次 */
   onReported?: () => void;
   /** 终态 job 被 TTL 清理或 disposeSession 移除；只调用一次 */

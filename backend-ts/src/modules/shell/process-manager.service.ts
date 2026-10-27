@@ -2491,8 +2491,9 @@ export class ProcessManagerService
       cancel: () => {
         this.kill(entry.id);
       },
-      send: async (input, appendNewline) => {
-        this.writeToStdin(entry.id, appendNewline === false ? input : `${input}\n`);
+      send: async (input) => {
+        // 纯透传：换行/控制字符由调用方自带（job_send 的 input 原样写到 stdin）
+        this.writeToStdin(entry.id, input);
       },
       done,
     });

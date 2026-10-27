@@ -133,12 +133,12 @@ describe("JobsPlugin", () => {
     expect(second.content).toContain("hello world appended");
   });
 
-  it("job_read wait=true 在终态后返回并置 reported", async () => {
+  it("job_read wait_ms 在终态后返回并置 reported", async () => {
     const { spec, done } = makeSpec();
     const id = registry.start(spec) as JobId;
 
     const pending = tools.get("job_read").execute(
-      { job_id: id, wait: true, timeout_ms: 1_000 },
+      { job_id: id, wait_ms: 1_000 },
       ctx,
     );
     done.resolve({ status: "completed", exitCode: 0 });
@@ -146,6 +146,39 @@ describe("JobsPlugin", () => {
 
     expect(result.content).toContain("[status: completed, exit code: 0]");
     expect(registry.get(id, "s1")?.reported).toBe(true);
+  });
+
+  it("job_read 不传 wait_ms 时立即返回（不进入阻塞等待）", async () => {
+    const { spec } = makeSpec();
+    const id = registry.start(spec) as JobId;
+    const waitSpy = jest.spyOn(registry, "wait");
+
+    const result = (await tools.get("job_read").execute(
+      { job_id: id },
+      ctx,
+    )) as { content: string };
+
+    expect(waitSpy).not.toHaveBeenCalled();
+    expect(result.content).toContain("[status: running]");
+    // wait_ms: 0 与缺省等价，同样不阻塞
+    await tools.get("job_read").execute({ job_id: id, wait_ms: 0 }, ctx);
+    expect(waitSpy).not.toHaveBeenCalled();
+  });
+
+  it("job_read wait_ms 为负数/小数被 schema 拒绝", async () => {
+    // 假插件宿主只保存原始 def（不经 toolkit 的 zodSchema.parse），
+    // 所以这里直接校验 schema 本身：真实链路上 handler 入口会先 parse。
+    const schema = tools.get("job_read").inputSchema;
+
+    await expect(
+      schema.parseAsync({ job_id: "job-1", wait_ms: -1 }),
+    ).rejects.toBeTruthy();
+    await expect(
+      schema.parseAsync({ job_id: "job-1", wait_ms: 1.5 }),
+    ).rejects.toBeTruthy();
+    await expect(
+      schema.parseAsync({ job_id: "job-1", wait_ms: 0 }),
+    ).resolves.toMatchObject({ wait_ms: 0 });
   });
 
   it("job_read 截断时指引用 read 工具读日志文件", async () => {
@@ -199,7 +232,22 @@ describe("JobsPlugin", () => {
     done.resolve({ status: "killed" });
   });
 
-  it("job_send 调用 spec.send 并透传 appendNewline（回执按真实字节数）", async () => {
+  it("job_send 原样透传输入，回执按真实字节数", async () => {
+    const send = jest.fn(async () => {});
+    const { spec } = makeSpec({ send });
+    const id = registry.start(spec) as JobId;
+
+    const text = await tools.get("job_send").execute(
+      { job_id: id, input: "y\n" },
+      ctx,
+    );
+
+    expect(text).toContain(`sent 2 bytes to job ${id}`);
+    expect(text).not.toContain("no trailing newline");
+    expect(send).toHaveBeenCalledWith("y\n");
+  });
+
+  it("job_send 不带换行时回执给出提示（纯透传下最容易静默失败）", async () => {
     const send = jest.fn(async () => {});
     const { spec } = makeSpec({ send });
     const id = registry.start(spec) as JobId;
@@ -209,9 +257,24 @@ describe("JobsPlugin", () => {
       ctx,
     );
 
-    // "y" + 追加的换行 = 2 字节
-    expect(text).toContain(`sent 2 bytes to job ${id}`);
-    expect(send).toHaveBeenCalledWith("y", true);
+    expect(text).toContain(`sent 1 bytes to job ${id}`);
+    expect(text).toContain("no trailing newline");
+    expect(send).toHaveBeenCalledWith("y");
+  });
+
+  it("job_send 控制字符不触发换行提示（ESC / Ctrl-D 本身就是故意的）", async () => {
+    const send = jest.fn(async () => {});
+    const { spec } = makeSpec({ send });
+    const id = registry.start(spec) as JobId;
+
+    const text = await tools.get("job_send").execute(
+      { job_id: id, input: "\x1b[A" },
+      ctx,
+    );
+
+    expect(text).toContain(`sent 3 bytes to job ${id}`);
+    expect(text).not.toContain("no trailing newline");
+    expect(send).toHaveBeenCalledWith("\x1b[A");
   });
 
   it("job_send 回执按 UTF-8 字节数（中文/emoji 不再是字符数）", async () => {
@@ -220,26 +283,27 @@ describe("JobsPlugin", () => {
     const id = registry.start(spec) as JobId;
 
     const text = await tools.get("job_send").execute(
-      { job_id: id, input: "你好🙂", append_newline: false },
+      { job_id: id, input: "你好🙂\n" },
       ctx,
     );
 
-    // "你好" = 6 字节，🙂 = 4 字节；append_newline=false 不追加
-    expect(text).toContain(`sent 10 bytes to job ${id}`);
-    expect(send).toHaveBeenCalledWith("你好🙂", false);
+    // "你好" = 6 字节，🙂 = 4 字节，换行 1 字节
+    expect(text).toContain(`sent 11 bytes to job ${id}`);
+    expect(send).toHaveBeenCalledWith("你好🙂\n");
   });
 
-  it("job_send append_newline=false 原样透传", async () => {
+  it("job_send 对子代理不追加换行提示（消息投递无 stdin 概念）", async () => {
     const send = jest.fn(async () => {});
-    const { spec } = makeSpec({ send });
+    const { spec } = makeSpec({ kind: "subagent", handle: "sub-1", send });
     const id = registry.start(spec) as JobId;
 
-    await tools.get("job_send").execute(
-      { job_id: id, input: "\x04", append_newline: false },
+    const text = await tools.get("job_send").execute(
+      { job_id: id, input: "继续" },
       ctx,
     );
 
-    expect(send).toHaveBeenCalledWith("\x04", false);
+    expect(text).toContain(`sent 6 bytes to job ${id}`);
+    expect(text).not.toContain("no trailing newline");
   });
 
   it("job_send 对不支持的作业明确报错", async () => {

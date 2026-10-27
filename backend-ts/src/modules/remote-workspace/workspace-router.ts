@@ -181,11 +181,9 @@ export class WorkspaceToolRouter {
         cancel: () => {
           options.provider!.kill(prefixedProcessId);
         },
-        send: async (input, appendNewline) => {
-          options.provider!.writeToStdin(
-            prefixedProcessId,
-            appendNewline === false ? input : `${input}\n`,
-          );
+        send: async (input) => {
+          // 纯透传：换行/控制字符由调用方自带（与本地 shell 同一契约）
+          options.provider!.writeToStdin(prefixedProcessId, input);
         },
         onDisposed: () => this.trackedProcesses.delete(prefixedProcessId),
         done,

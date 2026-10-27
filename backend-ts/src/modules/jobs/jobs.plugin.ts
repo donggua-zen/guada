@@ -4,10 +4,11 @@ import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
 import { JobRegistryService } from "./job-registry.service";
 import type { JobId, JobSnapshot } from "./job.types";
+import { isByteLogJobKind } from "./job.types";
 import langZh from "./jobs.lang.zh.json";
 import langEn from "./jobs.lang.en.json";
 
-const WAIT_DEFAULT_MS = 30_000;
+/** job_read 的 wait_ms 上限（缺省/0 = 不阻塞，由调用方显式给出等待时长） */
 const WAIT_MAX_MS = 10 * 60_000;
 
 /**
@@ -53,21 +54,19 @@ export class JobsPlugin extends PluginBase {
 
 - Each call returns the output that arrived since your last read (the first call returns the tail). No parameters needed for paging.
 - If the output is truncated, read the log file (path is included) with the read tool for the full content.
-- wait=true blocks until terminal status or timeout_ms (default 30s, max 10min). A timed-out wait returns [status: running] and leaves the job alive.
+- wait_ms blocks up to that many milliseconds for a terminal status (omit or 0 = return immediately; max 10min). A timed-out wait returns [status: running] and leaves the job alive.
 - Reading a terminal job marks it observed and suppresses the completion notice; reading a running job is only a snapshot.
 - Every response ends with [status: ...].`,
       inputSchema: z.object({
         job_id: z.string().describe("Job id returned by the tool that started the background work."),
-        wait: z
-          .boolean()
-          .optional()
-          .describe("Block until the job reaches a terminal status or timeout_ms expires."),
-        timeout_ms: z
+        wait_ms: z
           .number()
           .int()
-          .positive()
+          .nonnegative()
           .optional()
-          .describe("Max wait in milliseconds (only meaningful with wait=true). Default 30s, max 10min."),
+          .describe(
+            "Block up to this many milliseconds for a terminal status (omit or 0 = return immediately; max 10min).",
+          ),
       }),
       execute: async (args, ctx, signal) => {
         const sessionId = ctx?.session.sessionId || "";
@@ -75,9 +74,9 @@ export class JobsPlugin extends PluginBase {
         if (!args.job_id) throw new Error("job_id is required");
         const jobId = args.job_id as JobId;
 
-        if (args.wait === true) {
-          const timeout = Math.min(args.timeout_ms ?? WAIT_DEFAULT_MS, WAIT_MAX_MS);
-          await this.registry.wait(jobId, sessionId, timeout, signal);
+        const waitMs = Math.min(args.wait_ms ?? 0, WAIT_MAX_MS);
+        if (waitMs > 0) {
+          await this.registry.wait(jobId, sessionId, waitMs, signal);
         }
 
         const result = await this.registry.readIncremental(jobId, sessionId);
@@ -148,16 +147,15 @@ export class JobsPlugin extends PluginBase {
       name: "job_send",
       description: `Send input to a running background job.
 
-- Shell / remote-shell jobs: the input is written to the process's stdin (a trailing newline is appended unless append_newline=false).
+- Shell / remote-shell / pty jobs: \`input\` is written to the process's stdin **verbatim** — include a trailing "\\n" yourself when the program expects a line (most interactive prompts wait for Enter).
+- stdin here is a pipe, not a terminal: "\\x04" (Ctrl-D) does not produce EOF and "\\x03" (Ctrl-C) does not raise SIGINT — use job_stop to end an interactive program.
 - Sub-agent jobs: the input is delivered as a follow-up message; a finished sub-agent resumes automatically. Blocks until the sub-agent's reply for this turn is ready.
 - Other job kinds do not accept input and fail with a clear error.`,
       inputSchema: z.object({
         job_id: z.string().describe("Job id returned by the tool that started the background work."),
-        input: z.string().describe("Input to deliver to the job."),
-        append_newline: z
-          .boolean()
-          .optional()
-          .describe("Shell jobs only: append a trailing newline (default true). Set false to write raw bytes."),
+        input: z
+          .string()
+          .describe('Exact text to deliver (add "\\n" yourself for keyboard-style input).'),
       }),
       execute: async (args, ctx) => {
         const sessionId = ctx?.session.sessionId || "";
@@ -171,12 +169,13 @@ export class JobsPlugin extends PluginBase {
         if (!job) {
           return `job ${args.job_id} is no longer available`;
         }
-        const appendNewline = args.append_newline !== false;
-        await this.registry.send(jobId, sessionId, args.input, appendNewline);
-        // 回执按真实写入字节数（UTF-8）：中文/emoji 的字符数与字节数不等，
-        // 旧实现用 input.length（UTF-16 码元）会明显偏小。
-        const bytes = Buffer.byteLength(args.input, "utf8") + (appendNewline ? 1 : 0);
-        return `sent ${bytes} bytes to job ${job.id}`;
+        await this.registry.send(jobId, sessionId, args.input);
+        // 回执按真实写入字节数（UTF-8）：中文/emoji 的字符数与字节数不等。
+        const bytes = Buffer.byteLength(args.input, "utf8");
+        const hint = this.needsNewlineHint(job, args.input)
+          ? `\n[note: no trailing newline was sent — most interactive programs wait for Enter; include "\\n" in input if it should run]`
+          : "";
+        return `sent ${bytes} bytes to job ${job.id}${hint}`;
       },
       display: {
         actionType: "process",
@@ -193,9 +192,22 @@ export class JobsPlugin extends PluginBase {
 
 - Tools that start background work return a stable **job id**. Track it.
 - The system notifies you in-session when a job finishes; do not busy-poll or sleep on it.
-- job_list shows this session's jobs; job_read returns the output since your last read (wait=true only when genuinely blocked); job_send feeds input (shell stdin, or a follow-up message that resumes a sub-agent); job_stop cancels work that no longer matters. Truncated output: read the log file with the read tool.
+- job_list shows this session's jobs; job_read returns the output since your last read (pass wait_ms only when genuinely blocked); job_send feeds input verbatim — include "\n" yourself for keyboard-style input (shell stdin, or a follow-up message that resumes a sub-agent); job_stop cancels work that no longer matters. Truncated output: read the log file with the read tool.
 - Before giving a final answer, collect every still-relevant job with job_read, and job_stop the ones that are no longer needed.`,
     });
+  }
+
+  /**
+   * 回执里的"没带换行"提醒。
+   *
+   * job_send 现在纯透传（不再替你补换行），最容易踩的坑是"输入进了管道、程序在等回车，
+   * 工具却只回 sent N bytes"——静默失败。这里把该情形在回执里点出来，模型下一步能自纠。
+   * 控制字符（ESC / Ctrl-D 等）本身就是"故意不带换行"的信号，不提醒。
+   */
+  private needsNewlineHint(job: JobSnapshot, input: string): boolean {
+    if (!isByteLogJobKind(job.kind)) return false;
+    if (input.endsWith("\n")) return false;
+    return !/[\x00-\x08\x0b-\x1f]/.test(input);
   }
 
   private renderOutput(

@@ -147,7 +147,7 @@ export class ShellPlugin extends PluginBase {
 - Commands run in the foreground by default; the tool waits for completion and returns the output
 - Foreground commands that exceed **1 minute** will automatically switch to background mode
 - Prefer single-line commands when possible; for multi-line or long commands, write them to a script file first, then execute the script
-- Background mode (explicit or after the 60s foreground timeout) returns a stable **job id**. Manage everything with the job tools: job_read to read output (wait=true only when genuinely blocked), job_send to write stdin, job_list to list, job_stop to cancel. You will be notified when a background job finishes.
+- Background mode (explicit or after the 60s foreground timeout) returns a stable **job id**. Manage everything with the job tools: job_read to read output (pass wait_ms only when genuinely blocked), job_send to write stdin, job_list to list, job_stop to cancel. You will be notified when a background job finishes.
 - **Remote workspaces**: with workspace="<connection name>" the command runs via POSIX sh on that remote server (\`encoding\` decodes raw output bytes agent-side). Foreground timeout (60s) switches to background there too; the background job is managed with the same job tools.`,
       inputSchema: z.object({
         command: z
@@ -344,7 +344,7 @@ export class ShellPlugin extends PluginBase {
      ? `
 - After switching to background, you can work on other tasks in parallel, or end the current turn and wait for system notifications
 - The system will automatically notify you when a background job finishes — no need for continuous polling
-- Background commands return a stable **job id** (job-...). Manage everything through the job tools: job_read reads the log tail or an offset increment without consuming it (wait=true only when genuinely blocked), job_send writes stdin (shell) or continues a sub-agent conversation, job_list lists this session's jobs, job_stop cancels
+- Background commands return a stable **job id** (job-...). Manage everything through the job tools: job_read reads the log tail or an offset increment without consuming it (pass wait_ms only when genuinely blocked), job_send writes stdin (shell) or continues a sub-agent conversation, job_list lists this session's jobs, job_stop cancels
 - Reading a terminal job (or job_stop) marks the output as observed and suppresses the completion notification; reading a running job is only a snapshot`
      : ``
  }`;
@@ -704,7 +704,7 @@ const truncNote = r.truncated && r.logFilePath
         .map((p) => `- \`${p.jobId ?? p.id}\` (${p.command})`)
         .join("\n");
       parts.push(
-        `You have ${stillRunning.length} unfinished background jobs:\n${list}\n\nYou must use job_read to check their output (wait=true to block until finished) or job_stop to terminate them before ending the current task.`,
+        `You have ${stillRunning.length} unfinished background jobs:\n${list}\n\nYou must use job_read to check their output (pass wait_ms to block until finished) or job_stop to terminate them before ending the current task.`,
       );
     }
 
