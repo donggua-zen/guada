@@ -22,6 +22,7 @@ async function loadTodoExecute(): Promise<
   let captured: any;
   const api: any = {
     registerNls: () => {},
+    registerTurnReminderProvider: () => {},
     registerToolKit: () => ({
       registerTool: (def: any) => {
         captured = def;

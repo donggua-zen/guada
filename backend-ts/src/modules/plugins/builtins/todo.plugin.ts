@@ -15,7 +15,15 @@ import {
   type TodoItem,
   type TodoStore,
 } from "../../../common/utils/todo-store.util";
-import { wrapSystemReminder } from "../../../common/utils/system-reminder.util";
+import {
+  createTodoReminderMessage,
+  createTodoReminderProvider,
+  formatTodoListForReminder,
+  hasTodoToolCall,
+  hasUnfinishedTodos,
+  isTodoToolAvailable,
+  readTodoStore,
+} from "./todo-reminder";
 import langZh from "./todo.lang.zh.json";
 import langEn from "./todo.lang.en.json";
 
@@ -63,39 +71,29 @@ export class TodoPlugin extends PluginBase {
     await this.maybeInjectTodoReminder(payload.sessionContext);
   }
 
-  /** 注入条件：store 有待办 && 历史（压缩后视图）无 todo 工具调用 */
+  /**
+   * 注入条件：todo 工具可用 && store 有未完成项 && 历史（压缩后视图）无 todo 工具调用。
+   * 复用周期性提醒的消息构造，确保这条快照也带 todoReminder marker，
+   * 避免压缩后 cadence provider 立刻重复注入。
+   */
   private async maybeInjectTodoReminder(
     sessionContext: import("../../chat/session-context").ISessionContext,
   ): Promise<void> {
     try {
-      const workspaceDir = sessionContext.getWorkspacePath();
-      const filePath = resolveTodoFilePath(
-        workspaceDir,
-        sessionContext.sessionId,
-      );
-      let store: TodoStore;
-      try {
-        store = JSON.parse(await fs.readFile(filePath, "utf-8")) as TodoStore;
-      } catch (e: any) {
-        if (e.code === "ENOENT") return; // 无 todo 存储 → 无需提醒
-        throw e;
-      }
-      if (store.items.length === 0) return;
-      if (store.items.every((t) => t.status === "completed")) return;
+      // 插件 onLoad 在禁用时也会执行，必须按实际解析出的工具面自门控
+      if (!isTodoToolAvailable(sessionContext.getResolvedPlugins())) return;
+
+      const store = await readTodoStore(sessionContext);
+      if (!store || !hasUnfinishedTodos(store)) return;
 
       // 压缩后视图扫描：已有 todo 工具调用 → 模型知道待办，不注入
       const history = await sessionContext.getHistory();
-      const hasTodoCall = history?.some(
-        (msg) =>
-          msg.role === "assistant" &&
-          msg.content.some(
-            (b) => b.type === "tool-call" && b.name === "todo",
-          ),
-      );
-      if (hasTodoCall) return;
+      if (history?.some(hasTodoToolCall)) return;
 
-      const text = `[Current todo]\n${this.formatTodoList(store)}\n[Current todo — end]`;
-      await sessionContext.injectUserPrompt(wrapSystemReminder(text), "todo");
+      const text = `[Current todo]\n${formatTodoListForReminder(store)}\n[Current todo — end]`;
+      await sessionContext.appendMessages([
+        createTodoReminderMessage(sessionContext, text),
+      ]);
       this.logger.debug(
         `[todo] injected todo reminder for session ${sessionContext.sessionId}`,
       );
@@ -181,7 +179,8 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
       // 计划阶段维护待办有助于计划成型；只写会话状态，不触碰工作区
     });
 
-    // ── 待办状态提醒：由 MEMORY_COMPACTED 处理器在压缩后落库注入隐藏消息（见 handleCompacted）──
+    // ── 待办状态提醒：压缩后落库快照 + 周期性 cadence 提醒 ──
+    api.registerTurnReminderProvider(createTodoReminderProvider());
   }
 
   private async handleTodo(
