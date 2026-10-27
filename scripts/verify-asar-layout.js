@@ -339,7 +339,7 @@ function runRuntimeSmoke(layout) {
   fs.writeFileSync(
     probePath,
     `const Database = require('better-sqlite3');
-const specs = ['@nestjs/core','better-sqlite3','sharp','@napi-rs/canvas','@node-rs/jieba','@parcel/watcher','node-pty','pdfjs-dist','@prisma/client','sqlite-vec','tiktoken'];
+const specs = ['@nestjs/core','better-sqlite3','sharp','@napi-rs/canvas','@node-rs/jieba','@parcel/watcher','node-pty','pdfjs-dist','sqlite-vec','tiktoken'];
 for (const s of specs) {
   const r = require.resolve(s);
   if (!r.includes('app.asar')) throw new Error(s + ' 解析到了 asar 之外：' + r);

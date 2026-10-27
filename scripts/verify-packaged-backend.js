@@ -2,7 +2,7 @@
  * 用【临时数据根】启动打包后的后端，验证启动期全链路（`pnpm run verify:packaged`）。
  *
  * 为什么需要它：verify:asar 只证明"文件都在、模块能 require"。真正会炸的地方是启动期——
- * NestJS DI 装配、Prisma 客户端从 asar 内加载、启动迁移与各 bootstrap 服务读写真实文件。
+ * NestJS DI 装配、文件化 store 读写真实文件、健康检查与路由可用。
  * 这些只有把打包后的后端真跑起来才看得见。
  *
  * 安全性：数据根指向新建的临时目录（os.tmpdir），**不碰** `~/.guada` 正式数据，
@@ -73,8 +73,6 @@ async function main() {
     NODE_PATH: path.join(layout.resourcesDir, 'app.asar', 'backend-ts', 'node_modules'),
     PORT: String(port),
     BASE_URL: `http://127.0.0.1:${port}`,
-    DATABASE_URL: `file:${path.join(dataRoot, 'data', 'ai_chat.db')}`,
-    VECTOR_DB_PATH: path.join(dataRoot, 'data', 'vector_db.sqlite'),
     STATIC_DIR: path.join(layout.backendDir, 'static'),
     UPLOAD_ROOT_DIR: path.join(dataRoot, 'file_stores'),
     UPLOAD_URL_PREFIX: '/uploads',
@@ -124,11 +122,11 @@ async function main() {
     const agents = await fetch(`http://127.0.0.1:${port}/api/v1/agents`);
     console.log(`✓ GET /api/v1/agents -> ${agents.status}（NestJS 路由 + 文件化 store 可用）`);
 
-    const dbFile = path.join(dataRoot, 'data', 'ai_chat.db');
-    if (!fs.existsSync(dbFile)) {
-      throw new Error(`启动迁移没有建库：${dbFile} 不存在`);
+    const metaDb = path.join(dataRoot, 'sessions', '_meta.db');
+    if (!fs.existsSync(metaDb)) {
+      throw new Error(`文件化存储没有初始化：${metaDb} 不存在`);
     }
-    console.log(`✓ 启动迁移已建库 ${dbFile}（${fs.statSync(dbFile).size} bytes）`);
+    console.log(`✓ 会话元数据库已创建 ${metaDb}（${fs.statSync(metaDb).size} bytes）`);
 
     if (/打开知识库数据库失败|no such module: vec0/.test(log)) {
       throw new Error('日志里出现 sqlite-vec 加载失败——asar 路径重写没生效');

@@ -18,8 +18,6 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=file:/app/data/ai_chat.db
-      - VECTOR_DB_PATH=/app/data/vector_db.sqlite
       - JWT_SECRET=${JWT_SECRET:-change-this-to-a-strong-secret-key-in-production}
       - JWT_EXPIRES_IN=7d
       - BASE_URL=

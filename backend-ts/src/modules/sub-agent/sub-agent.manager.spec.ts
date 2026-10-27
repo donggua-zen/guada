@@ -1,10 +1,6 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import {
-  META_DOMAIN_SESSIONS,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
 import { SessionMetaStore } from "../chat/session-meta.store";
 import { SubAgentManager, SubAgentResult } from "./sub-agent.manager";
 
@@ -18,7 +14,6 @@ import { SubAgentManager, SubAgentResult } from "./sub-agent.manager";
  */
 describe("SubAgentManager workflow 子代理生命周期", () => {
   let tmpRoot: string;
-  let gate: MetadataBootstrapGate;
   let store: SessionMetaStore;
   let manager: SubAgentManager;
   let emitted: { event: string; evt: any }[];
@@ -57,9 +52,7 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sub-agent-manager-spec-"));
     fs.mkdirSync(path.join(tmpRoot, "sessions"), { recursive: true });
     process.env.SESSION_DATA_DIR = tmpRoot;
-    gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_SESSIONS);
-    store = new SessionMetaStore(gate);
+    store = new SessionMetaStore();
     await store.initialize();
     await store.create({ id: PARENT, title: "parent", sessionType: "web" });
 

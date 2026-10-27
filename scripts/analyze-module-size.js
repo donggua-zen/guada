@@ -105,7 +105,7 @@ console.log('Category Breakdown:')
 console.log('-'.repeat(80))
 
 const categories = {
-  'Prisma & Database': ['@prisma', 'prisma', '.prisma', 'better-sqlite3', '@electric-sql'],
+  'SQLite & Database': ['better-sqlite3', '@electric-sql'],
   'AI & NLP': ['tiktoken', '@huggingface', '@node-rs', 'natural', 'wordnet-db'],
   'PDF Processing': ['pdf-parse', 'pdfjs-dist', 'mammoth'],
   'NestJS Core': ['@nestjs', 'reflect-metadata', 'rxjs'],
@@ -139,18 +139,15 @@ console.log('========================================')
 console.log('Optimization Suggestions:')
 console.log('========================================')
 console.log()
-console.log('1. Prisma 相关模块占用最大 (约 200MB+)')
-console.log('   - 考虑使用更轻量的 ORM 或查询构建器')
-console.log()
-console.log('2. better-sqlite3 原生模块 (约 70MB)')
+console.log('1. better-sqlite3 原生模块 (约 70MB)')
 console.log('   - 这是必需的，无法优化')
 console.log()
-console.log('3. wordnet-db 自然语言数据库 (约 34MB)')
+console.log('2. wordnet-db 自然语言数据库 (约 34MB)')
 console.log('   - 如果不需要 natural 的词网功能，可以考虑移除')
 console.log()
-console.log('4. tiktoken Tokenizer (约 22MB)')
+console.log('3. tiktoken Tokenizer (约 22MB)')
 console.log('   - AI 对话必需，无法优化')
 console.log()
-console.log('5. pdfjs-dist PDF 渲染库 (约 16MB)')
+console.log('4. pdfjs-dist PDF 渲染库 (约 16MB)')
 console.log('   - 如果只是提取文本，可以使用更轻量的方案')
 console.log()

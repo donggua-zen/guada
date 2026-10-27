@@ -8,10 +8,6 @@ import {
   resolveSessionsBasePath,
   assertValidId,
 } from "../../common/utils/session-path.util";
-import {
-  META_DOMAIN_SESSIONS,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
 import { mintId } from "../../common/persistence/file-store-kit";
 import { ID_PREFIXES } from "../../common/utils/id.util";
 import {
@@ -28,11 +24,9 @@ import {
  *
  * ## 无文件兼容层（刻意为之）
  *
- * 文件版会话元数据（meta.json / _groups.json）**从未上线**：客户侧只有主库
- * （`data/ai_chat.db`）数据，本地出现过的文件形态只是迁移中间产物。因此本存储
- * 不读也不写 meta.json —— 一次性转换直接走「冻结主库 → _meta.db」
- * （见 `common/database/bootstrap/metadata-file-bootstrap.service.ts` 的会话步）。
- * 删掉 `_meta.db` 即可从主库重转（转换标记随之消失）。
+ * 文件版会话元数据（meta.json / _groups.json）**从未上线**。本存储只认
+ * `_meta.db`；删掉 `_meta.db` 后，有 `seg-0000.jsonl` 的会话目录会在启动自愈时
+ * 重建骨架行（见下方「自愈」）。
  *
  * ## 自愈（启动收敛）
  *
@@ -50,8 +44,6 @@ import {
 export const META_DB_FILE = "_meta.db";
 /** 当前 schema 版本；结构调整 +1 并在 migrate() 追加一步 */
 export const SESSION_META_DB_VERSION = 7;
-/** _bootstrap 表内的一次性转换完成标记键（真值在库内：库删则自动从主库重转） */
-export const META_DB_MIGRATED_KEY = "migrated_from_db_at";
 /**
  * 目录分组一次性注册标记（库内键）。删库即视为未注册，下次启动自动重扫历史
  * `workspace_key`；已改名的分组不会被覆盖（INSERT OR IGNORE）。
@@ -63,7 +55,7 @@ export const GENERAL_PROJECT_GROUP_ID = "__general__";
 /**
  * 会话元信息（= 原 session 表行，字段名保持一致便于调用方零改动）
  *
- * 时间字段用 ISO 字符串（JSON 可读、可手改；读取时按需转 Date 供旧 Prisma 形状兼容）。
+ * 时间字段用 ISO 字符串（JSON 可读、可手改；读取时按需转 Date 兼容既有调用方）。
  */
 export interface SessionMeta {
   id: string;
@@ -313,7 +305,7 @@ CREATE TABLE IF NOT EXISTS project_groups (
 CREATE INDEX IF NOT EXISTS idx_project_groups_position ON project_groups(position);
 `;
 
-// ============ 行 ↔ 领域对象 ============/** 外层用 Date 形状（对齐旧 Prisma 返回，避免调用方处理字符串） */
+// ============ 行 ↔ 领域对象 ============/** 外层用 Date 形状（兼容既有调用方，避免调用方处理字符串） */
 export function toRow(meta: SessionMeta): Record<string, any> {
   return {
     ...meta,
@@ -680,18 +672,9 @@ export function backfillRootIds(db: Database.Database): void {
   }
 }
 
-/** 一次性转换是否已完成（标记在库内：库文件被删即视为未转换，下次启动自动重转） */
-export function isMetaDbMigrated(db: Database.Database): boolean {
-  const row = db
-    .prepare(`SELECT value FROM _bootstrap WHERE key = ?`)
-    .get(META_DB_MIGRATED_KEY) as { value: string | null } | undefined;
-  return !!row?.value;
-}
-
 /**
- * 一次性转换（单一入口）：主库行 + 分组 → 本库，单事务完成
- * 「写行 → 回填 root_id → 覆盖分组」三步，避免调用方漏步。
- * 调用方负责 markMetaDbMigrated 与关库。
+ * 批量写入（单一事务）：写行 → 回填 root_id → 覆盖分组。
+ * 供测试与导入工具使用，避免调用方漏步。
  */
 export function importSessionMetaRows(
   db: Database.Database,
@@ -706,13 +689,6 @@ export function importSessionMetaRows(
   tx();
 }
 
-export function markMetaDbMigrated(db: Database.Database): void {
-  db.prepare(`INSERT OR REPLACE INTO _bootstrap (key, value) VALUES (?, ?)`).run(
-    META_DB_MIGRATED_KEY,
-    new Date().toISOString(),
-  );
-}
-
 // ============ 存储实现 ============
 
 @Injectable()
@@ -720,7 +696,6 @@ export class SessionMetaStore implements OnModuleDestroy {
   private readonly log = new Logger(SessionMetaStore.name);
   private readonly sessionsRoot = resolveSessionsBasePath();
 
-  private readonly bootstrapGate: MetadataBootstrapGate;
   private db: Database.Database | null = null;
   private initReady: Promise<void> | null = null;
 
@@ -728,21 +703,15 @@ export class SessionMetaStore implements OnModuleDestroy {
   private deleteRowStmt!: Database.Statement;
   private touchStmt!: Database.Statement;
 
-  constructor(gate: MetadataBootstrapGate) {
-    this.bootstrapGate = gate;
-  }
-
   // ============ 生命周期 ============
 
-  /** 幂等初始化：等主库转换放行 → 开库建表 → 孤儿/幽灵收敛 */
+  /** 幂等初始化：开库建表 → 孤儿/幽灵收敛 */
   async initialize(): Promise<void> {
     this.initReady ??= this.runInitialize();
     return this.initReady;
   }
 
   private async runInitialize(): Promise<void> {
-    // 转换未完成时不得建索引（否则读到空库会把会话"变没"）
-    await this.bootstrapGate.wait(META_DOMAIN_SESSIONS);
     await fsp.mkdir(this.sessionsRoot, { recursive: true });
     this.open();
     await this.healOrphanRows();
@@ -892,7 +861,7 @@ export class SessionMetaStore implements OnModuleDestroy {
     return readMetaRow(this.db, id) ?? undefined;
   }
 
-  /** 行视图（Date 形状，对齐旧 Prisma 返回） */
+  /** 行视图（Date 形状，兼容既有调用方） */
   get(id: string): Record<string, any> | undefined {
     const meta = this.getMeta(id);
     return meta ? toRow(meta) : undefined;

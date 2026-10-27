@@ -4,10 +4,6 @@ import * as path from "path";
 import { Injectable, Logger } from "@nestjs/common";
 import * as yaml from "js-yaml";
 import {
-  META_DOMAIN_BOTS,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
-import {
   atomicWriteFile,
   iso,
   mintId,
@@ -29,8 +25,6 @@ import { ID_PREFIXES } from "../../common/utils/id.util";
  * - 运行中的真实状态（CONNECTING/CONNECTED/重连计数）在 BotInstanceManager 内存中，不落盘
  * - 重启自启只读 enabled=true 的实例
  */
-
-export const BOTS_MIGRATED_MARKER = ".migrated-bots";
 
 /** 机器人实例（= 原 bot_instance 表行，字段名保持一致） */
 export interface BotFileInstance {
@@ -81,7 +75,7 @@ export class BotFileStore {
   /** 每实例写互斥（YAML 是整文件重写） */
   private writeChains = new Map<string, Promise<unknown>>();
 
-  constructor(private readonly gate: MetadataBootstrapGate) {
+  constructor() {
     this.botsDir = resolveBotsDir();
   }
 
@@ -95,8 +89,6 @@ export class BotFileStore {
   }
 
   private async doInitialize(): Promise<void> {
-    // 迁移导出未完成时不得读索引
-    await this.gate.wait(META_DOMAIN_BOTS);
     await fsp.mkdir(this.botsDir, { recursive: true });
     await this.loadAll();
     this.logger.log(
@@ -105,8 +97,8 @@ export class BotFileStore {
   }
 
   /**
-   * 外部批量写入（迁移导出）后强制重载。
-   * 不经过 initialize()：导出引导在门控放行前调用，等待门控会自锁。
+   * 外部批量写入后强制重载。
+   * 不经过 initialize()（保留给导入/修复工具使用）。
    */
   async reload(): Promise<void> {
     await this.loadAll();
@@ -194,7 +186,7 @@ export class BotFileStore {
     return true;
   }
 
-  /** 由外部（迁移导出）直接写入并刷新缓存 */
+  /** 由外部（导入/修复工具）直接写入并刷新缓存 */
   async writeInstanceDirect(instance: BotFileInstance): Promise<void> {
     await this.withLock(instance.id, async () => {
       await this.writeInstance(instance);

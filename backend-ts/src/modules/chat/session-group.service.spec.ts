@@ -3,10 +3,6 @@ import * as os from "os";
 import * as path from "path";
 import { SessionGroupService } from "./session-group.service";
 import { SessionMetaStore } from "./session-meta.store";
-import {
-  META_DOMAIN_SESSIONS,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
 
 /**
  * 手工分组「归档本分组」契约：
@@ -41,10 +37,7 @@ describe("SessionGroupService 归档本分组", () => {
   beforeEach(async () => {
     fs.rmSync(sessionsBase, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     fs.mkdirSync(sessionsBase, { recursive: true });
-
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_SESSIONS);
-    store = new SessionMetaStore(gate);
+    store = new SessionMetaStore();
     await store.initialize();
     streaming.clear();
 

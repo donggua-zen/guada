@@ -1,12 +1,9 @@
+import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PasswordHashUtil } from "../../common/utils/password-hash.util";
-import {
-  META_DOMAIN_ACCOUNT,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
 import { atomicWriteFile, iso } from "../../common/persistence/file-store-kit";
 
 /**
@@ -56,15 +53,12 @@ export class AccountFileStore implements OnModuleDestroy {
   private readonly logger = new Logger(AccountFileStore.name);
   private readonly accountPath: string;
 
-  /** 内存缓存（认证是每请求热路径，内存读比原 DB 查询更快） */
+  /** 内存缓存（认证是每请求热路径，内存读比每次解析文件更快） */
   private account: AccountData | null = null;
   private ready: Promise<void> | null = null;
   private writeChain: Promise<unknown> = Promise.resolve();
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly gate: MetadataBootstrapGate,
-  ) {
+  constructor(private readonly configService: ConfigService) {
     const settingsDir =
       this.configService.get<string>("SETTINGS_DIR") ||
       path.join(process.cwd(), ".config");
@@ -75,19 +69,26 @@ export class AccountFileStore implements OnModuleDestroy {
     return this.accountPath;
   }
 
-  /** 幂等初始化：等启动期导入放行 → 读入内存 */
+  /** 幂等初始化：读入内存；文件缺失时落默认账户（无密码 → 免登录） */
   async initialize(): Promise<void> {
     this.ready ??= this.doInitialize();
     return this.ready;
   }
 
   private async doInitialize(): Promise<void> {
-    // 启动期账户导入（含从 DB 迁移密码）未完成前不得读，否则会读到空账户
-    await this.gate.wait(META_DOMAIN_ACCOUNT);
     this.account = await this.readFromDisk();
     if (!this.account) {
-      this.logger.warn(
-        `账户文件缺失: ${this.accountPath}（将由引导写入默认账户）`,
+      // 文件存在但解析失败：保留原文件，避免覆盖可能仍可人工恢复的密码
+      if (fs.existsSync(this.accountPath)) {
+        this.logger.warn(
+          `账户文件无法解析，保留原文件不覆盖: ${this.accountPath}`,
+        );
+        return;
+      }
+      this.account = this.defaultAccount();
+      await this.write(this.account);
+      this.logger.log(
+        `账户文件已创建（默认账户，未设密码 → 免登录）: ${this.accountPath}`,
       );
     }
   }

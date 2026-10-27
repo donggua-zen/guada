@@ -7,12 +7,8 @@ import {
   META_DB_FILE,
   PROJECT_GROUPS_BOOTSTRAPPED_KEY,
   SessionMetaStore,
-} from "../../../modules/chat/session-meta.store";
-import {
-  META_DOMAIN_SESSIONS,
-  MetadataBootstrapGate,
-} from "../metadata-bootstrap.gate";
-import { normalizeWorkspaceKey } from "../../utils/workspace-key.util";
+} from "./session-meta.store";
+import { normalizeWorkspaceKey } from "../../common/utils/workspace-key.util";
 
 /**
  * 目录分组一次性注册契约：
@@ -30,11 +26,7 @@ describe("ProjectGroupBootstrapService", () => {
   const projectB = path.resolve("/proj/beta");
   const autoDir = path.resolve("/work/WORK-2026-07-28-XvZL");
 
-  const newStore = () => {
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_SESSIONS);
-    return new SessionMetaStore(gate);
-  };
+  const newStore = () => new SessionMetaStore();
 
   beforeAll(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "project-group-bootstrap-"));
@@ -109,7 +101,8 @@ describe("ProjectGroupBootstrapService", () => {
     store.onModuleDestroy();
   });
 
-  it("重复执行（marker 被删）不覆盖用户改名，也不重复建组", async () => {    await seedSessions();
+  it("重复执行（marker 被删）不覆盖用户改名，也不重复建组", async () => {
+    await seedSessions();
     await bootstrap.run();
 
     const store = newStore();

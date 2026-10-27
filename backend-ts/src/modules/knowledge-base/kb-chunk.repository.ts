@@ -101,7 +101,7 @@ export class KBChunkRepository {
     return rows.map((r) => this.toRow(r, kbId));
   }
 
-  /** 兼容旧方法名（Prisma 版为 findByFileId） */
+  /** 兼容旧方法名（历史调用方使用 findByFileId） */
   async findByFileId(
     kbId: string,
     itemId: string,

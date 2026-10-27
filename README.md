@@ -9,7 +9,6 @@
   <img src="https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vue.js&logoColor=white" alt="Vue">
   <img src="https://img.shields.io/badge/TypeScript-6.x-blue.svg" alt="TypeScript">
   <img src="https://img.shields.io/badge/Electron-41-47848F?logo=electron&logoColor=white" alt="Electron">
-  <img src="https://img.shields.io/badge/Prisma-7.x-2D3748?logo=prisma&logoColor=white" alt="Prisma">
   <img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="MIT">
 </p>
 
@@ -208,10 +207,9 @@ codesign --force --deep --sign - /Applications/GuaDa.app
 ### 方式三：源码开发
 
 ```bash
-# 终端 1：启动后端（首次需初始化数据库）
+# 终端 1：启动后端（首次启动自动创建文件化存储）
 cd backend-ts
 pnpm install
-pnpm run db:seed:force
 pnpm run start:dev
 
 # 终端 2：启动前端
@@ -254,7 +252,7 @@ pnpm run dev
 | **前端入口** | 用户交互 | Vue 3、Electron（内嵌 Chromium）、手机/平板浏览器（移动端 Web）、QQ/企微/飞书/Discord/微信 Bot |
 | **入口层** | 路由与协议转换 | REST + SSE API、Bot Gateway、Bridge（命名管道 ↔ Electron）、移动访问（局域网 / SSH 反向隧道）、SPA 托管 |
 | **核心服务层** | Agent 引擎 + 子 Agent + 插件 + RAG + Skills + LLM 适配 | Agent Engine（ReAct 循环）、Sub-Agent Manager、Workflow、插件系统、Skills 框架、上下文压缩、RAG、MCP、定时任务、Shell 沙箱/命令策略、Computer Use、远程工作区（SSH / Docker 容器 / WSL 发行版）、LLM 适配器 |
-| **数据层** | 持久化存储 | SQLite（Prisma 7 + better-sqlite3）、sqlite-vec + FTS5、文件系统 |
+| **数据层** | 持久化存储 | JSONL 事件日志 + 本地 SQLite（`_meta.db` / `kb.db`）、sqlite-vec + FTS5、文件系统 |
 
 **浏览器自动化链路**：Agent 决策（后端）→ 命名管道 Bridge → Electron 操控内嵌 Chromium → AX 语义快照压缩回传 → Agent 继续推理。入口为 `browser_run` 脚本。
 
@@ -265,10 +263,9 @@ pnpm run dev
 ```
 ai_chat/
 ├── backend-ts/                  # NestJS 后端
-│   ├── prisma/schema.prisma     # 数据库 Schema（SQLite）
 │   ├── bundled-providers/       # 内置供应商模板
 │   ├── src/
-│   │   ├── common/              # 基础设施（数据库、向量库、MCP、日志、命令策略）
+│   │   ├── common/              # 基础设施（持久化、向量库、MCP、日志、命令策略）
 │   │   ├── modules/
 │   │   │   ├── chat/            # ⭐ 核心对话（Agent 引擎、压缩、上下文、审批）
 │   │   │   ├── sub-agent/       # ⭐ 子 Agent 系统（分层委派、前台/后台）

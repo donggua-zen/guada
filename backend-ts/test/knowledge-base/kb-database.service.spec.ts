@@ -12,10 +12,6 @@ import {
   KB_SCHEMA_VERSION,
   migrateKbDatabase,
 } from '../../src/modules/knowledge-base/kb-schema';
-import {
-  META_DOMAIN_KB,
-  MetadataBootstrapGate,
-} from '../../src/common/database/metadata-bootstrap.gate';
 import Database from 'better-sqlite3';
 
 /**
@@ -26,7 +22,6 @@ import Database from 'better-sqlite3';
  */
 describe('KbDatabaseService', () => {
   let root: string;
-  let gate: MetadataBootstrapGate;
   let service: KbDatabaseService;
 
   function mkKb(kbId: string): void {
@@ -41,9 +36,7 @@ describe('KbDatabaseService', () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-db-'));
     process.env.KB_DATA_DIR = root;
     setConfiguredKbRoot(null);
-    gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_KB);
-    service = new KbDatabaseService(gate);
+    service = new KbDatabaseService();
   });
 
   afterEach(async () => {

@@ -3,10 +3,6 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import * as path from "path";
 import Database from "better-sqlite3";
-import {
-  META_DOMAIN_KB,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
 import { loadSqliteVec } from "../../common/utils/asar-path.util";
 import { KB_DB_FILE, migrateKbDatabase } from "./kb-schema";
 
@@ -25,10 +21,9 @@ const KB_STORAGE_ROOT_KEY = "kbStorageRoot";
  *
  * **设置是直接读文件得到的，不依赖 SettingsService 的初始化时机。**
  *
- * 为什么不靠注入：SettingsService 在 AppModule 的导入序里排在持久化模块
- * （PersistenceModule，迁移脚手架所在）之后，而知识库迁移（MigrationBootstrapService.onModuleInit）
- * 先跑——实测结果是迁移按**默认根**执行、随后设置才注入，用户设了根却"知识库不见了"。
- * 存储根这种被启动期迁移依赖的东西必须自给自足，不能依赖另一个模块的 hook 顺序。
+ * 为什么不靠注入：SettingsService 在 AppModule 的导入序里排在持久化模块之后，
+ * 而存储根是启动期就要用到的值。实测过依赖 hook 顺序会让「用户设了根却知识库
+ * 不见了」。存储根这种被启动期读取的东西必须自给自足。
  */
 let configuredRoot: string | null = null;
 let settingsRootCache: { value: string | null } | null = null;
@@ -163,7 +158,7 @@ export class KbDatabaseService implements OnModuleDestroy {
   /** listKbIds 短缓存（启动期对账会循环调用） */
   private kbIdCache: { at: number; ids: string[] } | null = null;
 
-  constructor(private readonly gate: MetadataBootstrapGate) {}
+  constructor() {}
 
   getRootDir(): string {
     return this.rootDir;
@@ -199,7 +194,7 @@ export class KbDatabaseService implements OnModuleDestroy {
   /**
    * 取某库的连接（懒开 + LRU）。
    *
-   * 读路径也应先 await ready()，以保证迁移导出已完成再读。
+   * 读路径也应先 await ready()，以保持入口统一。
    */
   async getDb(kbId: string): Promise<Database.Database> {
     assertValidKbId(kbId);
@@ -218,12 +213,10 @@ export class KbDatabaseService implements OnModuleDestroy {
   }
 
   /**
-   * 等迁移门控放行（导出/导入完成前不得读写库）。
-   * 所有公开读写的入口都应先 await 它。
+   * 读路径入口统一 await 的兼容钩子。
+   * 文件化后不再有启动期迁移门控，保留为 no-op 以维持调用方结构。
    */
-  async ready(): Promise<void> {
-    await this.gate.wait(META_DOMAIN_KB);
-  }
+  async ready(): Promise<void> {}
 
   /** 打开并迁移（内部） */
   private async openDatabase(kbId: string): Promise<Database.Database> {

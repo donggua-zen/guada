@@ -117,46 +117,30 @@ deploy.bat
 
 ---
 
-## 四、数据库迁移
+## 四、数据存储与升级
 
-### 自动迁移机制
+### 自动初始化 / schema 升级
 
-数据库迁移在 **NestJS 后端启动时自动执行**，无需手动操作。迁移运行器 (`MigrationRunner`) 基于 `better-sqlite3` 直接执行 DDL，不依赖 Prisma CLI。
+后端启动时自动完成文件化存储初始化，无需手动迁移命令：
 
-**启动时行为**：
+- `sessions/_meta.db`：会话元数据与分组（`SessionMetaStore`，基于 `user_version` 幂等升级）
+- `data/kb/<kbId>/kb.db`：知识库（`KbDatabaseService`）
+- `sessions/<id>/seg-*.jsonl`：消息事件日志
 
-| 场景 | 检测条件 | 行为 |
-|------|---------|------|
-| 全新安装 | 无业务表 | 执行 baseline SQL 创建全部表结构 + 导入默认数据 |
-| 版本升级 | `_app_migrations` 表有记录 | 仅执行新增的 pending 迁移 |
-| 首次升级旧版 | 有业务表但无迁移记录 | 标记当前迁移为已应用，仅执行后续迁移 |
+旧 `ai_chat.db` 不再被读取；从 Prisma 时代（≤ v0.5.6）升级的用户需先安装 v1.0.8
+完成迁移，再升级到当前版本。
 
 ### 备份策略
 
-- 执行迁移前自动 WAL checkpoint + 备份数据库
-- 保留最近 3 份备份，自动清理更旧的
-- 备份文件位于 `/app/data/` 目录，命名格式：`ai_chat.db.bak.<timestamp>`
+数据都在挂载卷内，直接备份整个数据目录即可（见「七、数据管理」）。
+不再有“迁移前自动备份数据库”的步骤。
 
-### 迁移日志
-
-```bash
-# 查看迁移日志
-docker-compose logs backend | grep MigrationRunner
-
-# 预期输出（首次部署）：
-# [MigrationRunner] 检测到全新安装，执行基线迁移...
-# [MigrationRunner] 全新安装完成，已标记 1 个迁移为已应用
-```
-
-### 查看已应用的迁移
+### 升级日志
 
 ```bash
-# 容器内查询迁移记录
-docker-compose exec backend sqlite3 /app/data/ai_chat.db \
-  "SELECT * FROM _app_migrations ORDER BY id;"
+# 查看启动日志（含 _meta.db / kb.db schema 升级）
+docker-compose logs backend | grep -E "SessionMetaStore|KbDatabaseService|schema"
 ```
-
-> ⚠️ **注意**：生产容器中**不包含 Prisma CLI**（已移至 devDependencies 以减小镜像体积）。不要在容器内执行 `npx prisma db push` 或 `npx prisma migrate` 等命令——这些命令在容器中不可用且不需要。
 
 ---
 
@@ -201,11 +185,6 @@ JWT_SECRET=your-strong-secret-key
 # 后端配置
 PORT=3000
 NODE_ENV=production
-
-# 数据库路径（容器内路径）
-DATABASE_URL=file:/app/data/ai_chat.db
-# 旧的全局向量库路径（已退役，仅迁移期需要）
-VECTOR_DB_PATH=/app/data/vector_db.sqlite
 
 # 基础 URL（部署时留空，使用相对路径）
 # 留空表示前端通过 Nginx 反代访问后端，避免外部域名解析问题
@@ -301,37 +280,33 @@ docker image prune -f
 
 ---
 
-## 七、数据库管理
+## 七、数据管理
 
-### 备份数据库
+### 备份数据
+
+数据全部在挂载卷 `/app/data`（会话、知识库、上传文件）与 `/app/.config`
+（`account.json` 等设置）内。直接打包整个目录：
 
 ```bash
-# 方法 1: 使用 docker cp
-docker cp guada-backend:/app/data/ai_chat.db ./backup-$(date +%Y%m%d).db
-
-# 方法 2: 使用容器内临时文件
-docker-compose exec -T backend cp /app/data/ai_chat.db /tmp/backup.db
-docker cp guada-backend:/tmp/backup.db ./backup.db
-
-# 同时备份向量数据库
-docker cp guada-backend:/app/data/vector_db.sqlite ./vector_backup.sqlite
+# 从运行中的容器导出（tar 流，无需停服务；SQLite 为 WAL 模式，建议低峰执行）
+docker-compose exec -T backend tar -czf - -C /app data .config \
+  > "./guada-data-$(date +%Y%m%d).tar.gz"
 ```
 
-### 恢复数据库
+### 恢复数据
 
 ```bash
-# 停止服务
 docker-compose down
 
-# 恢复数据库文件
-docker cp ./backup.db guada-backend:/app/data/ai_chat.db
+# 把备份解回容器卷（借助临时容器挂载同一个卷）
+docker run --rm -v ai_chat_backend-data:/data -v "$PWD":/backup alpine \
+  sh -c "rm -rf /data/* && tar -xzf /backup/guada-data-YYYYMMDD.tar.gz -C /data"
 
-# 删除 WAL/SHM 文件（避免冲突）
-docker-compose run --rm --entrypoint sh backend -c "rm -f /app/data/ai_chat.db-wal /app/data/ai_chat.db-shm"
-
-# 重新启动服务
 docker-compose up -d
 ```
+
+> 卷名取决于仓库目录名（`docker volume ls` 查看，通常为 `<目录名>_backend-data`）。
+> 如果账户文件在 `/app/.config` 而不是数据卷里，请同时备份/恢复它。
 
 ### 自动备份脚本
 
@@ -342,19 +317,16 @@ docker-compose up -d
 BACKUP_DIR="./backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-mkdir -p $BACKUP_DIR
+mkdir -p "$BACKUP_DIR"
 
-# 备份数据库
-docker-compose exec -T backend cp /app/data/ai_chat.db /tmp/backup.db
-docker cp guada-backend:/tmp/backup.db "$BACKUP_DIR/ai_chat_$TIMESTAMP.db"
-
-# 压缩备份
-gzip "$BACKUP_DIR/ai_chat_$TIMESTAMP.db"
+# 备份数据卷（会话 / 知识库 / 上传文件）+ 账户设置
+docker-compose exec -T backend tar -czf - -C /app data .config \
+  > "$BACKUP_DIR/guada-data_$TIMESTAMP.tar.gz"
 
 # 删除 30 天前的备份
-find $BACKUP_DIR -name "ai_chat_*.db.gz" -mtime +30 -delete
+find "$BACKUP_DIR" -name "guada-data_*.tar.gz" -mtime +30 -delete
 
-echo "Backup completed: ai_chat_$TIMESTAMP.db.gz"
+echo "Backup completed: guada-data_$TIMESTAMP.tar.gz"
 ```
 
 设置定时任务：
@@ -495,28 +467,26 @@ docker-compose exec backend sh
 docker-compose exec backend ls -lh /app/data/
 ```
 
-### 2. 数据库迁移失败
+### 2. `_meta.db` / `kb.db` 升级失败
 
 ```bash
-# 查看迁移运行器日志
-docker-compose logs backend | grep -i migration
+# 查看启动日志里的 schema 升级错误
+docker-compose logs backend | grep -E "SessionMetaStore|KbDatabaseService|schema"
 
-# 检查迁移追踪表
-docker-compose exec backend sqlite3 /app/data/ai_chat.db \
-  "SELECT * FROM _app_migrations ORDER BY id;"
+# 检查数据目录与权限
+docker-compose exec backend ls -la /app/data/sessions
+docker-compose exec backend ls -la /app/data/kb
 
-# 检查是否有备份文件
-docker-compose exec backend ls -lh /app/data/ai_chat.db.bak.*
-
-# 手动恢复备份（如迁移导致问题）
+# 恢复备份（如升级导致问题）
 docker-compose down
-docker cp ./backup.db guada-backend:/app/data/ai_chat.db
-# 删除 WAL/SHM
-docker-compose run --rm --entrypoint sh backend -c "rm -f /app/data/ai_chat.db-wal /app/data/ai_chat.db-shm"
+docker cp ./guada-data-backup.tar.gz guada-backend:/tmp/
+docker-compose run --rm --entrypoint sh backend -c \
+  "rm -rf /app/data/* && tar -xzf /tmp/guada-data-backup.tar.gz -C /app"
 docker-compose up -d
 ```
 
-> ⚠️ **不要在容器内执行 prisma 命令**。生产容器不含 Prisma CLI。数据库迁移由 MigrationRunner 在 NestJS 启动时自动处理。
+> 文件化存储没有独立的迁移命令；schema 升级由后端启动时自动完成。
+> 旧 `ai_chat.db` 不再被读取，从 Prisma 时代升级请先安装 v1.0.8。
 
 ### 3. 端口冲突
 
@@ -604,27 +574,25 @@ sudo ufw enable
 
 **解决方案**：使用 `http://127.0.0.1:8787`
 
-### Q2: 如何重置数据库？
+### Q2: 如何重置数据？
 
 ```bash
-# 停止并删除数据卷
+# 停止并删除数据卷（会清空会话、知识库、账户）
 docker-compose down -v
 
-# 重新启动，MigrationRunner 会自动执行全新安装
+# 重新启动，后端会自动创建空的文件化存储
 docker-compose up -d
 ```
 
-### Q3: 如何查看数据库内容？
+### Q3: 如何查看数据内容？
 
 ```bash
-# 查看表结构
-docker-compose exec backend sqlite3 /app/data/ai_chat.db ".tables"
+# 会话元数据库
+docker-compose exec backend sqlite3 /app/data/sessions/_meta.db ".tables"
+docker-compose exec backend sqlite3 /app/data/sessions/_meta.db "SELECT id, title FROM sessions LIMIT 20;"
 
-# 查询用户表
-docker-compose exec backend sqlite3 /app/data/ai_chat.db "SELECT id, username FROM user;"
-
-# 查看迁移记录
-docker-compose exec backend sqlite3 /app/data/ai_chat.db "SELECT * FROM _app_migrations;"
+# 知识库（每库一个 kb.db）
+docker-compose exec backend sh -c 'for db in /app/data/kb/*/kb.db; do echo "== $db"; sqlite3 "$db" ".tables"; done'
 ```
 
 ### Q4: 如何修改前端 API 地址？
@@ -645,9 +613,9 @@ docker-compose build frontend
 docker-compose up -d frontend
 ```
 
-### Q5: 升级版本后需要手动迁移数据库吗？
+### Q5: 升级版本后需要手动迁移数据吗？
 
-**不需要**。后端启动时 MigrationRunner 会自动检测并执行 pending 迁移。只需正常更新代码、重新构建并启动即可：
+**不需要**。后端启动时会自动完成 `_meta.db` / `kb.db` 的 schema 升级。只需正常更新代码、重新构建并启动即可：
 
 ```bash
 git pull
@@ -669,9 +637,9 @@ Frontend Nginx (80/443)
     └─→ /static/* → Backend (backend:3000)
          ↓
     NestJS Backend
-         ├─ MigrationRunner (启动时自动迁移)
-         ├─ SQLite Database (/app/data/ai_chat.db)
-         ├─ Vector Database (/app/data/vector_db.sqlite)
+         ├─ 会话元数据库 (/app/data/sessions/_meta.db)
+         ├─ JSONL 消息 (/app/data/sessions/<id>/seg-*.jsonl)
+         ├─ 知识库 (/app/data/kb/<kbId>/kb.db + raw/)
          ├─ File Storage (/app/data/uploads)
          └─ Logs (/app/logs)
 ```

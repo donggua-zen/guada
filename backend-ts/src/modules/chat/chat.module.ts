@@ -1,6 +1,7 @@
-import { Module, OnModuleInit } from "@nestjs/common";
+import { Logger, Module, OnModuleInit } from "@nestjs/common";
 
 import { SessionMetaStore } from "./session-meta.store";
+import { ProjectGroupBootstrapService } from "./project-group-bootstrap.service";
 import { AgentEngine } from "./agent-engine.service";
 import { SessionContextFactory } from "./session-context.factory";
 import { ChatController } from "./chat.controller";
@@ -52,7 +53,6 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
   providers: [
     // 会话元数据存储：`sessions/_meta.db`（SQLite），会话域公开仓储，跨域消费者
     // （files/bot-gateway/sub-agent）经 import ChatModule 获取。
-    // 一次性转换在启动期由迁移脚手架直写本库（冻结主库 → _meta.db，不经文件中间层）。
     SessionMetaStore,
 
     AgentEngine,
@@ -61,6 +61,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     SessionGroupService,
     // 目录分组（按工作目录分组）：实体在启动期注册，成员关系派生
     ProjectGroupService,
+    ProjectGroupBootstrapService,
     // 会话上下文工厂与压缩引擎（依赖经全局 PersistenceModule 注入的 MESSAGE_STORE_TOKEN）
     JsonlSessionContextFactory,
     CompressionEngine,
@@ -89,11 +90,22 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
   exports: [SessionMetaStore, AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory, UserInputQueueService],
 })
 export class ChatModule implements OnModuleInit {
-  // 会话 store 索引预热：本模块在 PersistenceModule（迁移脚手架）之后初始化，
-  // 此刻 gate 已放行，扫描成本留在启动期而非首个请求
-  constructor(private sessionStore: SessionMetaStore) {}
+  private readonly logger = new Logger(ChatModule.name);
+
+  constructor(
+    private sessionStore: SessionMetaStore,
+    private projectGroupBootstrap: ProjectGroupBootstrapService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
+    // 目录分组一次性注册先于索引预热：分组行依赖 sessions 表的 workspace_key。
+    // 失败只记日志不阻塞启动（下次启动重试），与旧编排器的 step 语义一致。
+    try {
+      await this.projectGroupBootstrap.run();
+    } catch (err) {
+      this.logger.error(`目录分组注册失败（下次启动重试）: ${String(err)}`);
+    }
+    // 索引预热：扫描成本留在启动期而非首个请求
     await this.sessionStore.initialize();
   }
 }

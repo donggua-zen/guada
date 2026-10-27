@@ -9,7 +9,6 @@
   <img src="https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vue.js&logoColor=white" alt="Vue">
   <img src="https://img.shields.io/badge/TypeScript-6.x-blue.svg" alt="TypeScript">
   <img src="https://img.shields.io/badge/Electron-41-47848F?logo=electron&logoColor=white" alt="Electron">
-  <img src="https://img.shields.io/badge/Prisma-7.x-2D3748?logo=prisma&logoColor=white" alt="Prisma">
   <img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="MIT">
 </p>
 
@@ -206,10 +205,9 @@ codesign --force --deep --sign - /Applications/GuaDa.app
 ### Option 3: Develop from Source
 
 ```bash
-# Terminal 1: Start the backend (initialize the DB on first run)
+# Terminal 1: Start the backend (file storage is created on first run)
 cd backend-ts
 pnpm install
-pnpm run db:seed:force
 pnpm run start:dev
 
 # Terminal 2: Start the frontend
@@ -250,7 +248,7 @@ pnpm run dev
 | **Frontend Entry** | User interaction | Vue 3, Electron (embedded Chromium), phone/tablet browser (mobile web), QQ/WeCom/Feishu/Discord/WeChat Bot |
 | **Entry Layer** | Routing & protocol conversion | REST + SSE API, Bot Gateway, Bridge (named pipe ↔ Electron), Mobile Access (LAN / SSH reverse tunnel), SPA hosting |
 | **Core Service Layer** | Agent engine + Sub-Agent + Plugins + RAG + Skills + LLM adapters | Agent Engine (ReAct loop), Sub-Agent Manager, Workflow, Plugin System, Skills Framework, Context Compression, RAG, MCP, Scheduled Tasks, Shell Sandbox/Command Policy, Computer Use, Remote Workspace (SSH / Docker containers / WSL distros), LLM Adapters |
-| **Data Layer** | Persistent storage | SQLite (Prisma 7 + better-sqlite3), sqlite-vec + FTS5, file system |
+| **Data Layer** | Persistent storage | JSONL event log + local SQLite (`_meta.db` / `kb.db`), sqlite-vec + FTS5, file system |
 
 **Browser automation chain:** Agent decision (backend) → named-pipe Bridge → Electron controls embedded Chromium → AX semantic snapshot compressed and returned → Agent continues reasoning. The entry point is the `browser_run` script.
 
@@ -261,10 +259,9 @@ pnpm run dev
 ```
 ai_chat/
 ├── backend-ts/                  # NestJS backend
-│   ├── prisma/schema.prisma     # Database schema (SQLite)
 │   ├── bundled-providers/       # Built-in provider templates
 │   ├── src/
-│   │   ├── common/              # Infrastructure (database, vector DB, MCP, logging, command policy)
+│   │   ├── common/              # Infrastructure (persistence, vector DB, MCP, logging, command policy)
 │   │   ├── modules/
 │   │   │   ├── chat/            # ⭐ Core dialogue (Agent engine, compression, context, approval)
 │   │   │   ├── sub-agent/       # ⭐ Sub-Agent system (hierarchical delegation, foreground/background)

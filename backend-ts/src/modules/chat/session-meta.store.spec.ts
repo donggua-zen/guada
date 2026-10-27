@@ -2,19 +2,12 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import Database from "better-sqlite3";
-import {
-  META_DOMAIN_SESSIONS,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
-import { sessionRowToMeta } from "../../common/database/bootstrap/session-meta-mapping";
 import { normalizeWorkspaceKey } from "../../common/utils/workspace-key.util";
 import {
   META_DB_FILE,
   SESSION_ID_PREFIX,
   SessionMetaStore,
-  isMetaDbMigrated,
   importSessionMetaRows,
-  markMetaDbMigrated,
   openMetaDb,
   readMetaRow,
   replaceAllGroups,
@@ -24,20 +17,19 @@ import {
 /**
  * 会话元数据存储（sessions/_meta.db）契约测试
  *
- * 覆盖：冻结主库行 → 库的一次性转换（含幂等门控）、CRUD 与结构化查询、
- * root_id 解析、data 扩展位、schema 迁移（v1 与误标记 v2 两种自愈）、
- * 孤儿/幽灵收敛、分组 CRUD、id 铸造与路径安全（原文件版 store 的回归点）。
+ * 覆盖：批量写入与 root_id 回填、CRUD 与结构化查询、data 扩展位、
+ * schema 迁移（v1 与误标记 v2 两种自愈）、孤儿/幽灵收敛、分组 CRUD、
+ * id 铸造与路径安全（原文件版 store 的回归点）。
  */
 describe("SessionMetaStore", () => {
   let tmpRoot: string;
   let sessionsBase: string;
-  let gate: MetadataBootstrapGate;
   let store: SessionMetaStore;
 
   const sessionDir = (id: string) => path.join(sessionsBase, id);
   const dbPath = () => path.join(sessionsBase, META_DB_FILE);
 
-  /** 只读原始连接（断言 schema/标记；不经 openMetaDb，避免触发迁移） */
+  /** 只读原始连接（断言 schema；不经 openMetaDb，避免触发 schema 初始化） */
   const rawDb = () => new Database(dbPath(), { readonly: true });
 
   const writeEventLog = (id: string, events: any[]) => {
@@ -48,7 +40,7 @@ describe("SessionMetaStore", () => {
     fs.writeFileSync(path.join(sessionDir(id), "seg-0000.jsonl"), body);
   };
 
-  /** 冻结主库 session 行的形状（Prisma 列名；character_id 即 agentId） */
+  /** 历史 session 行的形状（characterId 即 agentId） */
   const dbRow = (id: string, over: Record<string, any> = {}) => ({
     id,
     title: `会话 ${id}`,
@@ -73,15 +65,47 @@ describe("SessionMetaStore", () => {
     ...over,
   });
 
-  const newStore = () => new SessionMetaStore(gate);
+  /** 历史行 → SessionMeta（测试夹具用） */
+  const toMeta = (row: Record<string, any>) => {
+    const now = new Date().toISOString();
+    return {
+      id: String(row.id),
+      title: row.title ?? null,
+      avatarUrl: row.avatarUrl ?? null,
+      description: row.description ?? null,
+      modelId: row.modelId ?? null,
+      agentId: row.characterId ?? null,
+      groupId: row.groupId ?? null,
+      settings:
+        row.settings && typeof row.settings === "object" ? row.settings : null,
+      data: null,
+      sessionType: row.sessionType ?? "web",
+      archived: row.archived === true,
+      pinned: false,
+      botId: row.botId ?? null,
+      platform: row.platform ?? null,
+      externalId: row.externalId ?? null,
+      workspacePath: row.workspacePath ?? null,
+      workspaceKey: null,
+      parentId: row.parentId ?? null,
+      rootId: null,
+      closedAt: row.closedAt ? new Date(row.closedAt).toISOString() : null,
+      closeReason: row.closeReason ?? null,
+      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : now,
+      updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : now,
+      lastActiveAt: row.lastActiveAt
+        ? new Date(row.lastActiveAt).toISOString()
+        : null,
+    };
+  };
+
+  const newStore = () => new SessionMetaStore();
 
   beforeEach(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "session-meta-spec-"));
     sessionsBase = path.join(tmpRoot, "sessions");
     fs.mkdirSync(sessionsBase, { recursive: true });
     process.env.SESSION_DATA_DIR = tmpRoot; // → sessionsBase = <tmpRoot>/sessions
-    gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_SESSIONS);
     store = newStore();
   });
 
@@ -91,15 +115,15 @@ describe("SessionMetaStore", () => {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   });
 
-  describe("冻结主库 → _meta.db 一次性转换", () => {
-    it("转换行与分组，回填 root_id，并落库内标记（幂等）", async () => {
+  describe("批量写入与 root_id 回填", () => {
+    it("写入行与分组，回填 root_id", async () => {
       const db = openMetaDb(sessionsBase);
       try {
         importSessionMetaRows(
           db,
           [
-            sessionRowToMeta(dbRow("sess-parent")),
-            sessionRowToMeta(
+            toMeta(dbRow("sess-parent")),
+            toMeta(
               dbRow("sess-child", {
                 parentId: "sess-parent",
                 sessionType: "sub_agent",
@@ -110,9 +134,6 @@ describe("SessionMetaStore", () => {
           ],
           [{ id: "grp-1", name: "工作", sortOrder: 1, icon: null, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }],
         );
-        expect(isMetaDbMigrated(db)).toBe(false);
-        markMetaDbMigrated(db);
-        expect(isMetaDbMigrated(db)).toBe(true);
       } finally {
         db.close();
       }
@@ -128,18 +149,17 @@ describe("SessionMetaStore", () => {
       expect(child.rootId).toBe("sess-parent");
       expect(child.closedAt).toBe("2026-01-03T00:00:00.000Z");
       expect(store.getMeta("sess-parent")!.rootId).toBeNull();
-      // settings 从主库行折入 data.settings
+      // settings 折入 data.settings
       expect(store.getMeta("sess-parent")!.settings).toEqual({ thinkingEnabled: true });
-      // 分组随转换落库
+      // 分组随批量写入落库
       expect((await store.listGroups()).map((g) => g.id)).toEqual(["grp-1"]);
-      // 行视图 Date 形状（对齐旧 Prisma 返回）
+      // 行视图 Date 形状（兼容既有调用方）
       expect(store.get("sess-parent")!.createdAt).toBeInstanceOf(Date);
     });
 
-    it("库文件被删后转换标记随之消失（重转入口），重开实例得到空库", async () => {
+    it("库文件被删后重开实例得到空库", async () => {
       const db = openMetaDb(sessionsBase);
-      importSessionMetaRows(db, [sessionRowToMeta(dbRow("a1"))], []);
-      markMetaDbMigrated(db);
+      importSessionMetaRows(db, [toMeta(dbRow("a1"))], []);
       db.close();
       fs.mkdirSync(sessionDir("a1"), { recursive: true });
 
@@ -150,11 +170,7 @@ describe("SessionMetaStore", () => {
 
       store = newStore();
       await store.initialize();
-      // 空库（重开时文件被重建）且转换标记为空 → 下次启动会从主库重转
       expect(store.query({}).length).toBe(0);
-      const probe = rawDb();
-      expect(isMetaDbMigrated(probe)).toBe(false);
-      probe.close();
     });
   });
 
@@ -650,10 +666,10 @@ describe("SessionMetaStore", () => {
       expect((await store.findGroupById(group.id))!.icon).toBeNull();
     });
 
-    it("转换助手：readMetaRow 读回转换后的行（骨架判定依据）", () => {
+    it("读取助手：readMetaRow 读回写入后的行（骨架判定依据）", () => {
       const db = openMetaDb(sessionsBase);
       try {
-        upsertMetaRow(db, sessionRowToMeta(dbRow("conv-1")));
+        upsertMetaRow(db, toMeta(dbRow("conv-1")));
         expect(readMetaRow(db, "conv-1")?.title).toBe("会话 conv-1");
         expect(readMetaRow(db, "missing")).toBeNull();
       } finally {

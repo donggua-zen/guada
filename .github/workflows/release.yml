@@ -71,7 +71,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           # 24 = LTS，且满足全部依赖的 engines：electron 要 >=22.12.0、
-          # prisma 要 ^20.19 || ^22.12 || >=24.0、vite 要 ^20.19.0 || >=22.12.0
+          # vite 要 ^20.19.0 || >=22.12.0
           node-version: '24'
           cache: pnpm
           cache-dependency-path: |

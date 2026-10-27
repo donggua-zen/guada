@@ -1,7 +1,13 @@
 # 元信息文件格式（会话 / 机器人 / 知识库 / MCP）
 
-本文档描述会话 / 机器人 / 知识库 / MCP 四个数据域从 SQLite 迁到本地后的存储格式。
+本文档描述会话 / 机器人 / 知识库 / MCP 四个数据域的本地存储格式。
 角色/智能体定义见 [character-file-format.md](./character-file-format.md)。
+
+> **现状提示（Prisma 主库已移除）**：会话元数据与分组已改为
+> `<sessions根>/_meta.db`（`SessionMetaStore`，原生 SQLite + `better-sqlite3`）。
+> 下文的 `meta.json` / `_groups.json` 仅描述历史文件形态，不再写入。
+> `backend-ts/prisma/`、`src/common/database/**` 与 DB→文件迁移脚本已删除；
+> 旧 `ai_chat.db` / `vector_db.sqlite` 仅保留在用户磁盘上作为回滚快照。
 
 > 知识库已进一步改为「每库一个自包含目录（原件 + 元信息 + 分块 + 向量）」，细节见
 > [kb-storage.md](./kb-storage.md)。本文只保留其与其余三域共有的文件化约定。
@@ -10,8 +16,8 @@
 
 | 域 | 权威来源 | 布局 |
 |---|---|---|
-| 会话 | `<sessions根>/<sessionId>/meta.json` | 一目录一会话（与 JSONL 事件日志同址） |
-| 会话分组 | `<sessions根>/_groups.json` | 整表一份 |
+| 会话 | `<sessions根>/_meta.db` 的 `sessions` 表 | 一目录一会话（与 JSONL 事件日志同址） |
+| 会话分组 | `<sessions根>/_meta.db` 的 `session_groups` / `project_groups` 表 | 库内表 |
 | 机器人 | `<BOTS根>/<botId>.yaml` | 一实例一文件 |
 | 知识库配置 | `<KB根>/<kbId>/kb.json` | 一库一份 |
 | KB 条目/分块/向量 | `<KB根>/<kbId>/kb.db` | 每库一个 SQLite（含 raw/ 原件） |
@@ -270,37 +276,22 @@ updatedAt: '2026-07-13T10:42:22.304Z'
 - 导出失败**不落 marker**，下次启动重试；重跑幂等（已存在文件不覆盖）。
 - 还原旧快照后想重跑：删掉对应 marker 重启即可。
 
-### 跳版升级 runbook（旧库 → 当前版本）
+### 历史升级 runbook（仅适用于仍带迁移脚手架的版本）
 
-自动导出只覆盖**元信息域**（上表全部）。消息与分块是手动脚本，升级后执行一次（幂等可重跑）：
+> 当前版本已移除 Prisma 主库与 DB→文件迁移脚手架，下面的脚本与自动导出流程都不再存在。
+> 仍停留在 Prisma 主库时代（≤ v0.5.6）的用户，**必须先安装 v1.0.8 完成迁移**，再升级到
+> 移除版；旧 `ai_chat.db` 不会被删除，但新版本不再读取它。
 
-```bash
-# 1. 启动一次应用（自动导出各域元信息 + 角色/供应商 rekey）
-# 2. 消息/附件 → JSONL（SESSION_DATA_DIR 指向数据根）
-DATABASE_URL="file:<数据根>/data/ai_chat.db" SESSION_DATA_DIR=<数据根> \
-  npx ts-node src/scripts/migrate-messages.ts --all
-# 3. kb_chunk → chunks.jsonl（未迁移的存量才需要；已迁过则 0 写入）
-DATABASE_URL="file:<数据根>/data/ai_chat.db" USERDATA_DIR=<数据根> \
-  npx ts-node src/scripts/migrate-kb-chunks.ts
-# 4. 逐域断言 DB ↔ 文件一致（只读）
-node scripts/verify-migration.cjs <数据根>
-```
-
-**无导出路径、升级即弃的四张表**：`user_setting`（设置早已在 `<SETTINGS_DIR>/*.json`）、
-`memory`（记忆走插件文件）、`character_group`（死模型）、`session_context_state`
-（压缩历史由 JSONL compaction 事件承载）。保留表结构仅作存档。
+旧版本的启动期脚手架会自动完成会话/机器人/MCP/智能体/供应商/账户/知识库的元信息导出；
+消息与 KB 分块的补充脚本已随主库一起删除。
 
 ### 孤儿自愈
 
-若 `<sessions根>/<id>/` 有 JSONL 事件日志但缺 `meta.json`（手删 / 导出中断），启动时从
-`session/init` 事件重建骨架 meta，避免会话从列表消失。
+若 `<sessions根>/<id>/` 有 JSONL 事件日志但 `_meta.db` 无对应行（手删 / 导入中断），
+启动时从 `session/init` 事件重建骨架行，避免会话从列表消失。
 
 只救**含真实往来消息**的会话：仅 `session/init` 的空壳目录是历史遗留产物（建了目录但从未
 对话），复活它们会在侧边栏产生幽灵会话，故跳过。
-
-KB 侧同理：导出可能从冻结 DB 复活「文件侧早已删除」的项（DB 行残留）。这类行现在会以
-`failed` 状态导入并在 `errorMessage` 里写明「迁移时未找到原件」，**在界面上可见可删**——
-不再静默丢弃，也不再自动清理（避免误删用户数据）。
 
 ## 环境变量
 
@@ -312,31 +303,29 @@ KB 侧同理：导出可能从冻结 DB 复活「文件侧早已删除」的项�
 | `KB_DATA_DIR` | 知识库根（环境变量回退项） |
 | `MCP_DATA_DIR` | MCP 服务器目录 |
 
-## 与 DB 的关系
+## 与主库的关系（已移除）
 
-四域迁完后对 DB **只读不写**，相关表已冻结（schema 内有 `已冻结` 标注），作为回滚快照保留，
-**安装/升级时仍要读它们做用户数据迁移，故不删除**。**无需 DB migration**：id 未变更故无引用
-改写，外键不会触发。
+Prisma/SQLite 主库（`ai_chat.db`）已不再是运行时依赖：
 
-保留在 SQLite 的：`user`（认证，单账户下已改读 `account.json`）、`file`（附件绑定，上传已改为
-内联 FileRef 写进 JSONL）、`message*`。
+- `backend-ts/prisma/`、`prisma.config.*`、`src/common/database/**`（PrismaService、
+  MigrationRunner、migrations、bootstrap 脚手架）与 `db:*` 脚本已删除。
+- `@prisma/client`、`@prisma/adapter-better-sqlite3`、`prisma` 已从依赖中移除；
+  安装包不再携带 Prisma 引擎与 CLI。
+- 会话元数据 `_meta.db`、知识库 `kb.db` 仍由 `better-sqlite3` 直接读写；消息仍是 JSONL。
+- 用户磁盘上的旧 `ai_chat.db` / `vector_db.sqlite` **保留不删**，作为只读回滚快照；
+  新版本不再创建或读取它们。
 
-`kb_chunk` 的 prisma fallback 已随本次改造**删除**：分块从冻结库、旧 `chunks.jsonl`、旧全局
-向量库三源一并导入 `kb.db`，因此不再需要"JSONL 缺失时回读主库"的兜底路径。
-未迁移存量安装仍需这些表。
+### 已执行的移除清单
 
-### 脚手架移除清单（预计两个版本后执行）
-
-主库彻底退役时一次性删除，不留中间态：
-
-- `src/common/database/bootstrap/` 整个目录（bootstrap 服务 + 编排器 + model-reference-migration；
-  其中 `kb-migration-bootstrap.service.ts` 负责旧 KB 三源导入，主库退役同批删除）
-- `kb-meta.store.ts` 的旧形态读取分支（若有）与 `.migrated-kb` / `.migrated-kb-sqlite` marker
-- `scripts/verify-migration.cjs`
-- `src/common/database/` 下的 PrismaService、MigrationRunner、migrations/（`kb-chunk.repository.ts`
-  已不再依赖 Prisma，成为正式的 kb.db 分块仓储，**保留**）
-- `prisma/`（schema + client 依赖）、`@prisma/client` / `prisma` / `better-sqlite3` 依赖、`.env` 的 `DATABASE_URL`
+- `src/common/database/bootstrap/` 整个目录（bootstrap 服务 + 编排器 + model-reference-migration）
+- `src/common/database/` 下的 PrismaService、MigrationRunner、migrations/、legacy-schema-reconcile
+- `prisma/`、`prisma.config.ts/js`、`.env` 的 `DATABASE_URL`、`VECTOR_DB_PATH`
 - `package.json` 的 `db:seed` / `db:seed:force` / `db:migrate:gen` / `db:generate-baseline` / `db:rollback`、`postinstall` 的 `prisma generate`
-- 各域 marker 检查与 `.rekey.json`（历史存档，可留可删）
-- `src/scripts/`（seed / rollback / migrate-messages / fix-bot-instances；`kb-reembed.ts` **保留**
-  ——它是向量重建的常规运维手段，不依赖主库）
+- `src/scripts/`（seed / rollback / migrate-messages / fix-bot-instances）与
+  `scripts/verify-migration.*` / `gen-migration.js` / `rebuild-sessions-from-db.ts` / `export-session.ts`
+- 各域 marker 检查（`.migrated-*`、`.rekey.json` 的写入逻辑；历史文件可留可删）
+- Electron 的 AppData → `~/.guada` 目录迁移入口与“数据已迁移”提示
+
+**保留**：`better-sqlite3`、`@types/better-sqlite3`、`sqlite-vec`、
+`ProjectGroupBootstrapService`（已移到 `src/modules/chat/`，用于 v1.0.7 目录分组的一次性注册）、
+`kb-chunk.repository.ts`（正式的 `kb.db` 分块仓储）、`kb-reembed.ts`（向量重建运维手段）。

@@ -5,10 +5,6 @@ import {
   KbDatabaseService,
   setConfiguredKbRoot,
 } from '../../src/modules/knowledge-base/kb-database.service';
-import {
-  META_DOMAIN_KB,
-  MetadataBootstrapGate,
-} from '../../src/common/database/metadata-bootstrap.gate';
 import { KbMetaStore } from '../../src/modules/knowledge-base/kb-meta.store';
 import { KBFileRepository } from '../../src/modules/knowledge-base/kb-file.repository';
 import { KBChunkRepository } from '../../src/modules/knowledge-base/kb-chunk.repository';
@@ -71,10 +67,7 @@ describe('KbFileService 内容重复检测', () => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-dup-'));
     process.env.KB_DATA_DIR = root;
     setConfiguredKbRoot(null);
-
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_KB);
-    databases = new KbDatabaseService(gate);
+    databases = new KbDatabaseService();
     metaStore = new KbMetaStore(databases);
     fileRepo = new KBFileRepository(databases);
     chunkRepo = new KBChunkRepository(databases);

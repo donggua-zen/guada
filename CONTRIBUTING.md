@@ -104,9 +104,8 @@ cd backend-ts && pnpm install && cd ../frontend && pnpm install
 ```
 guada_ai/
 ├── backend-ts/              # NestJS 11 后端（TypeScript）
-│   ├── prisma/schema.prisma # 数据库 Schema
 │   ├── src/
-│   │   ├── common/          # 基础设施（数据库、向量库、MCP、日志）
+│   │   ├── common/          # 基础设施（持久化、向量库、MCP、日志）
 │   │   └── modules/         # 业务模块（chat / plugins / knowledge-base / ...）
 │   └── test/                # Jest 测试
 ├── frontend/                # Vue 3 前端（Vite + Pinia + Element Plus + Tailwind 4）
@@ -125,7 +124,7 @@ guada_ai/
 
 | 层 | 技术 |
 |----|------|
-| 后端 | NestJS 11, TypeScript 6, Prisma 7, SQLite + sqlite-vec + FTS5 |
+| 后端 | NestJS 11, TypeScript 6, better-sqlite3, sqlite-vec + FTS5 |
 | 前端 | Vue 3, Vite 7, Pinia, Element Plus, Tailwind CSS 4, vue-i18n 9 |
 | 桌面 | Electron 41, TypeScript |
 | 测试 | Jest（后端） |
@@ -143,7 +142,6 @@ guada_ai/
 # 终端 1：启动后端
 cd backend-ts
 pnpm install
-pnpm run db:seed:force    # 仅首次需要初始化数据库
 pnpm run start:dev
 
 # 终端 2：启动前端
@@ -244,27 +242,21 @@ refactor/<简短描述>    # 重构
 
 ---
 
-## 数据库变更
+## 数据存储变更
 
-项目使用自建的 MigrationRunner（非 Prisma Migrate），详见 [数据库迁移文档](docs/DATABASE_MIGRATION.md)。
+项目已移除 Prisma 主库，运行时存储全部是文件/本地 SQLite：
 
-修改 Schema 的流程：
+- 消息：JSONL 事件日志（`sessions/<id>/seg-*.jsonl`）
+- 会话元数据与分组：`sessions/_meta.db`（原生 SQLite，`better-sqlite3`）
+- 知识库：`<KB根>/<kbId>/kb.db`
+- 智能体 / 供应商 / Bot / MCP：文件（`AGENT.md` / YAML）
 
-1. 编辑 `backend-ts/prisma/schema.prisma`
-2. 生成迁移：
+修改 schema 的方式：
 
-   ```bash
-   cd backend-ts
-   pnpm run db:migrate:gen -- --name <迁移名称>
-   ```
-
-   此命令会同时生成增量迁移文件（供升级用户）和重新生成 `baseline.sql`（供全新安装）。
-
-3. 如涉及种子数据，更新 `src/common/database/migrations/seed-data.ts`
-4. 在 `migrations/index.ts` 中注册新迁移
-5. 重启后端，MigrationRunner 自动执行待迁移项
-
-**不要使用 `prisma db push`** — 该命令是开发专用、不可逆、可能静默丢弃列。
+1. 会话元数据：提升 `SESSION_META_DB_VERSION`，并在 `session-meta.store.ts` 的
+   `migrateMetaDbSchema()` 中追加一步。
+2. 知识库：在 `kb-schema.ts` 的 `migrateKbDatabase()` 中追加一步。
+3. 两者都基于 SQLite `user_version` 幂等升级，无需 Prisma，也没有独立的迁移命令。
 
 ---
 

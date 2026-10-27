@@ -6,10 +6,6 @@ import {
   GENERAL_PROJECT_GROUP_ID,
   SessionMetaStore,
 } from "./session-meta.store";
-import {
-  META_DOMAIN_SESSIONS,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
 import { normalizeWorkspaceKey } from "../../common/utils/workspace-key.util";
 
 /**
@@ -49,10 +45,7 @@ describe("SessionService 侧栏目录分组", () => {
   beforeEach(async () => {
     fs.rmSync(sessionsBase, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     fs.mkdirSync(sessionsBase, { recursive: true });
-
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_SESSIONS);
-    store = new SessionMetaStore(gate);
+    store = new SessionMetaStore();
     await store.initialize();
 
     streaming = new Set();

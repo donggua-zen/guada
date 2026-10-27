@@ -5,10 +5,6 @@ import { HttpException } from "@nestjs/common";
 import { SessionService } from "./session.service";
 import { SessionMetaStore } from "./session-meta.store";
 import type { BaseEvent } from "../../common/persistence/types";
-import {
-  META_DOMAIN_SESSIONS,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
 import { TODO_META_CARD } from "../../common/utils/todo-store.util";
 
 /**
@@ -275,10 +271,7 @@ describe("SessionService.branchSession", () => {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
     fs.mkdirSync(sessionsBase, { recursive: true });
     fs.mkdirSync(workspaceRoot, { recursive: true });
-
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_SESSIONS);
-    store = new SessionMetaStore(gate);
+    store = new SessionMetaStore();
     await store.initialize();
 
     messages = new FakeMessageStore();

@@ -54,13 +54,6 @@ function getDependenciesHash() {
     JSON.stringify({ targetPlatforms: platformManifest.resolveTargetPlatforms(process.env) })
   )
 
-  // 将 schema.prisma 内容纳入哈希计算，schema 变更时强制重新生成
-  const prismaSchemaPath = path.join(backendPath, 'prisma', 'schema.prisma')
-  if (fs.existsSync(prismaSchemaPath)) {
-    const schemaContent = fs.readFileSync(prismaSchemaPath, 'utf-8')
-    hash = hash.update(schemaContent)
-  }
-
   return hash.digest('hex')
 }
 
@@ -196,13 +189,6 @@ if (rewrittenScripts.length > 0) {
   console.log(`✓ Rewrote ../scripts/ paths for staging dir: ${rewrittenScripts.join(', ')}`)
 }
 
-// 暂存目录里既没有 prisma/schema.prisma，prisma 又是被 --prod 跳过的 devDependency，
-// postinstall 里的 prisma generate 必然报 "Could not find Prisma Schema" 再被 || 吞掉，
-// 只会干扰排查。真正的生成在下方 Step 3（cwd 指向 backend-ts），这里只留补丁调用。
-if (packageJson.scripts && packageJson.scripts.postinstall) {
-  packageJson.scripts.postinstall = 'node ../../scripts/patch-parcel-watcher.mjs'
-}
-
 fs.writeFileSync(
   path.join(optimizedPath, 'package.json'),
   JSON.stringify(packageJson, null, 2)
@@ -283,65 +269,7 @@ console.log()
 console.log('Verifying @parcel/watcher patch...')
 ensureWatcherPatched()
 
-// Step 4: 复制 Prisma schema 并生成客户端
-console.log()
-console.log('Step 3: Generating Prisma Client...')
-
-// 从原项目复用已有 prisma CLI（devDependency），避免在生产目录临时安装
-console.log('Generating Prisma Client using existing CLI...')
-try {
-  const cleanEnv = { ...process.env }
-  delete cleanEnv.ELECTRON_MIRROR
-  delete cleanEnv.ELECTRON_BUILDER_BINARIES_MIRROR
-  delete cleanEnv.WIN_CSC_IDENTITY_AUTO_DISCOVERY
-
-  // 强制清除 Prisma Client 缓存，确保基于最新 schema 重新生成
-  const prismaClientCachePath = path.join(backendPath, 'node_modules', '.prisma')
-  if (fs.existsSync(prismaClientCachePath)) {
-    fs.rmSync(prismaClientCachePath, { recursive: true, force: true })
-    console.log('✓ Cleared existing Prisma Client cache')
-  }
-
-  execSync('pnpm exec prisma generate', {
-    cwd: backendPath,
-    stdio: 'inherit',
-    env: cleanEnv
-  })
-  console.log('✓ Prisma Client generated in source project')
-
-  // pnpm 布局下生成物位于 node_modules/.pnpm/@prisma+client@X/node_modules/.prisma
-  // （npm 布局则直接在 node_modules/.prisma），两种都兼容
-  function findGeneratedPrismaClient() {
-    const flatPath = path.join(backendPath, 'node_modules', '.prisma')
-    if (fs.existsSync(flatPath)) return flatPath
-    const virtualRoot = path.join(backendPath, 'node_modules', '.pnpm')
-    if (fs.existsSync(virtualRoot)) {
-      const entry = fs.readdirSync(virtualRoot).find((d) => d.startsWith('@prisma+client@'))
-      if (entry) {
-        const candidate = path.join(virtualRoot, entry, 'node_modules', '.prisma')
-        if (fs.existsSync(candidate)) return candidate
-      }
-    }
-    return null
-  }
-
-  const srcPrismaClient = findGeneratedPrismaClient()
-  const destPrismaClient = path.join(optimizedPath, 'node_modules', '.prisma')
-  if (srcPrismaClient) {
-    if (fs.existsSync(destPrismaClient)) {
-      fs.rmSync(destPrismaClient, { recursive: true, force: true })
-    }
-    fs.cpSync(srcPrismaClient, destPrismaClient, { recursive: true })
-    console.log('✓ Copied .prisma client to production directory')
-  } else {
-    console.warn('⚠️  .prisma client not found in source project')
-  }
-} catch (error) {
-  console.warn('⚠️  Prisma generation warning:', error.message)
-  console.warn('Note: You may need to run "pnpm run rebuild:backend-native:electron" after optimization')
-}
-
-// Step 5: 清理不必要的文件
+// Step 4: 清理不必要的文件
 console.log()
 console.log('Step 4: Cleaning unnecessary files...')
 
@@ -533,128 +461,6 @@ function cleanDirectory(dirPath, patterns) {
 const cleanedCount = cleanDirectory(optimizedPath)
 console.log(`✓ Cleaned ${cleanedCount} unnecessary files`)
 
-// Step 5.3: 优化 Prisma 引擎（根据目标平台动态保留）
-console.log()
-console.log('Step 5: Optimizing Prisma engines...')
-const prismaEnginesPath = path.join(optimizedPath, 'node_modules', '@prisma', 'engines')
-if (fs.existsSync(prismaEnginesPath)) {
-  try {
-    const engineFiles = fs.readdirSync(prismaEnginesPath)
-    let removedEngines = 0
-    let keptEngines = 0
-    
-    for (const file of engineFiles) {
-      const filePath = path.join(prismaEnginesPath, file)
-      const stats = fs.statSync(filePath)
-      if (!stats.isFile()) {
-        continue
-      }
-
-      // 识别引擎文件对应的平台（schema-engine-* / query-engine-* / libquery_engine-* 等，
-      // 支持 .exe / .dylib.node / .so.node / 无后缀二进制）
-      const filePlatform = platformManifest.prismaEnginePlatform(file)
-
-      // 没有平台标记的文件（如 WASM、说明文件）保留
-      if (!filePlatform) {
-        keptEngines++
-        continue
-      }
-
-      // 根据目标平台决定是否保留
-      const shouldKeep = targetPlatforms.includes(filePlatform)
-      if (shouldKeep) {
-        keptEngines++
-        console.log(`  ✓ Keeping Prisma engine: ${file} (${filePlatform})`)
-      } else {
-        const size = stats.size
-        fs.unlinkSync(filePath)
-        removedEngines++
-        console.log(`  ✗ Removed Prisma engine: ${file} (${filePlatform}, ${(size / (1024 * 1024)).toFixed(2)} MB)`)
-      }
-    }
-    
-    console.log(`  Summary: Kept ${keptEngines} engines, removed ${removedEngines} engines`)
-  } catch (e) {
-    console.warn('⚠️  Could not optimize Prisma engines:', e.message)
-  }
-}
-
-// Step 5.4: 优化 Prisma Client WASM 文件（只保留 SQLite）
-console.log()
-console.log('Step 6: Optimizing Prisma Client WASM files...')
-const prismaClientRuntimePath = path.join(optimizedPath, 'node_modules', '@prisma', 'client', 'runtime')
-if (fs.existsSync(prismaClientRuntimePath)) {
-  try {
-    // 定义需要保留的数据库（当前项目只使用 SQLite）
-    const keepDatabases = ['sqlite']
-    const removeDatabases = ['postgresql', 'mysql', 'sqlserver', 'cockroachdb']
-    
-    let removedFiles = 0
-    let removedSize = 0
-    let keptFiles = 0
-    
-    const runtimeFiles = fs.readdirSync(prismaClientRuntimePath)
-    
-    for (const file of runtimeFiles) {
-      const filePath = path.join(prismaClientRuntimePath, file)
-      const stats = fs.statSync(filePath)
-      
-      if (!stats.isFile()) {
-        continue
-      }
-      
-      // 检查文件是否属于要移除的数据库
-      let shouldRemove = false
-      let matchedDb = null
-      
-      for (const db of removeDatabases) {
-        if (file.toLowerCase().includes(db)) {
-          shouldRemove = true
-          matchedDb = db
-          break
-        }
-      }
-      
-      if (shouldRemove) {
-        const size = stats.size
-        fs.unlinkSync(filePath)
-        removedFiles++
-        removedSize += size
-        console.log(`  ✗ Removed ${matchedDb} WASM: ${file} (${(size / (1024 * 1024)).toFixed(2)} MB)`)
-      } else {
-        keptFiles++
-      }
-    }
-    
-    console.log(`  Summary: Kept ${keptFiles} files, removed ${removedFiles} files (${(removedSize / (1024 * 1024)).toFixed(2)} MB)`)
-  } catch (e) {
-    console.warn('⚠️  Could not optimize Prisma Client WASM files:', e.message)
-  }
-}
-
-// Step 5.5: 移除 Prisma Studio Web UI（生产环境不需要）
-console.log()
-console.log('Step 7: Removing Prisma Studio Web UI...')
-const studioUiPath = path.join(optimizedPath, 'node_modules', '@prisma', 'studio-core', 'dist', 'ui')
-if (fs.existsSync(studioUiPath)) {
-  try {
-    const beforeSize = getDirSize(path.dirname(studioUiPath))
-    
-    // 删除整个 ui 目录（Web 界面，CLI 不需要）
-    fs.rmSync(studioUiPath, { recursive: true, force: true })
-    
-    const afterSize = getDirSize(path.dirname(studioUiPath))
-    const savedSize = beforeSize - afterSize
-    
-    console.log(`  ✓ Removed Prisma Studio Web UI: ${(savedSize / (1024 * 1024)).toFixed(2)} MB`)
-    console.log(`  Note: 'npx prisma studio' will not work, but CLI commands remain functional`)
-  } catch (e) {
-    console.warn('⚠️  Could not remove Prisma Studio UI:', e.message)
-  }
-} else {
-  console.log('  ℹ️  Prisma Studio UI not found (already removed or not installed)')
-}
-
 // Step 5.6: 重建原生模块为 Electron 兼容版本（在清理之前）
 console.log()
 console.log('Step 6: Rebuilding native modules for Electron...')
@@ -793,7 +599,7 @@ console.log()
 console.log('Next step:')
 console.log('1. Run "pnpm run build:electron" to package')
 
-// 收尾复核：后续步骤（Prisma 生成、裁剪、原生模块重建）若改写了 watcher 二进制，
+// 收尾复核：后续步骤（裁剪、原生模块重建）若改写了 watcher 二进制，
 // 这里必须拦住；同时保证失败的构建不会留下有效的缓存 hash
 console.log()
 console.log('Final check: @parcel/watcher patch...')

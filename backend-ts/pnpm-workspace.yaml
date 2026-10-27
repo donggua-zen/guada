@@ -1,11 +1,9 @@
 allowBuilds:
   '@parcel/watcher': true
-  '@prisma/engines': true
   better-sqlite3: true
   cpu-features: true
   koffi: true
   node-pty: true
-  prisma: true
   protobufjs: true
   sharp: true
   ssh2: true

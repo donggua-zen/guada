@@ -3,15 +3,15 @@ import type Database from "better-sqlite3";
 import {
   PROJECT_GROUPS_BOOTSTRAPPED_KEY,
   openMetaDb,
-} from "../../../modules/chat/session-meta.store";
-import { resolveSessionsBasePath } from "../../utils/session-path.util";
+} from "./session-meta.store";
+import { resolveSessionsBasePath } from "../../common/utils/session-path.util";
 import {
   qualifiesForProjectGroup,
   workspaceBasename,
-} from "../../utils/workspace-key.util";
-import { ID_PREFIXES } from "../../utils/id.util";
-import { mintId } from "../../persistence/file-store-kit";
-import { WorkspaceService } from "../../services/workspace.service";
+} from "../../common/utils/workspace-key.util";
+import { ID_PREFIXES } from "../../common/utils/id.util";
+import { mintId } from "../../common/persistence/file-store-kit";
+import { WorkspaceService } from "../../common/services/workspace.service";
 
 /**
  * 目录分组一次性注册（启动期脚手架）。

@@ -44,6 +44,16 @@ export const SK_MOD_TRANS_PROMPT = 'defaultTranslationPrompt';
 export const SK_MOD_COMPRESS_MODEL = 'defaultHistoryCompressionModelId';
 export const SK_MOD_VISUAL = 'defaultVisualAssistantModelId';
 
+/** models 设置组里语义为「模型引用」的键（写入时校验） */
+export const MODEL_ID_KEYS: ReadonlySet<string> = new Set([
+  SK_MOD_TITLE_MODEL,
+  SK_MOD_TRANS_MODEL,
+  SK_MOD_COMPRESS_MODEL,
+  SK_MOD_VISUAL,
+  SK_MOD_SEARCH,
+  SK_MOD_SUMMARY,
+]);
+
 /**
  * 工具设置键名
  */

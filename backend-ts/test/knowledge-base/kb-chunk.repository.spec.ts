@@ -5,10 +5,6 @@ import {
   KbDatabaseService,
   setConfiguredKbRoot,
 } from '../../src/modules/knowledge-base/kb-database.service';
-import {
-  META_DOMAIN_KB,
-  MetadataBootstrapGate,
-} from '../../src/common/database/metadata-bootstrap.gate';
 import { KBChunkRepository } from '../../src/modules/knowledge-base/kb-chunk.repository';
 import { KBFileRepository } from '../../src/modules/knowledge-base/kb-file.repository';
 import { KbSearchService } from '../../src/modules/knowledge-base/kb-search.service';
@@ -58,9 +54,7 @@ describe('KBChunkRepository', () => {
       path.join(root, kbId, 'kb.json'),
       JSON.stringify({ id: kbId, name: 'test' }),
     );
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_KB);
-    service = new KbDatabaseService(gate);
+    service = new KbDatabaseService();
     repo = new KBChunkRepository(service);
     fileRepo = new KBFileRepository(service);
     search = new KbSearchService(service);

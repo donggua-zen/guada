@@ -36,7 +36,7 @@ cd /opt/guada-ai
 git clone <repository-url> .
 cd backend-ts
 
-# 安装依赖（会自动执行 prisma generate）
+# 安装依赖（自动打 node-pty / parcel-watcher 补丁）
 pnpm install
 ```
 
@@ -53,9 +53,6 @@ nano .env
 **必须修改的配置项**：
 
 ```ini
-# 数据库路径（使用绝对路径）
-DATABASE_URL="file:/opt/guada-ai/backend-ts/data/ai_chat.db"
-
 # JWT 密钥（生产环境务必修改为强随机字符串）
 JWT_SECRET="your-production-secret-key-here-change-this"
 
@@ -73,15 +70,15 @@ UPLOAD_URL_PREFIX=/uploads
 BASE_URL=https://api.yourdomain.com
 ```
 
-### 3. 初始化数据库
+### 3. 首次启动
 
 ```bash
-# 生成 Prisma 客户端（如果 postinstall 未执行）
-npx prisma generate
-
-# 初始化种子数据
-pnpm run db:seed:force
+pnpm run build
+pnpm run start:prod
 ```
+
+首次启动会自动创建文件化存储：`sessions/_meta.db`、`account.json`、`agents/`、
+`providers/`、`data/kb/` 等。**无需数据库 seed，也不再生成 `ai_chat.db`。**
 
 ### 4. 构建生产版本
 
@@ -438,24 +435,31 @@ curl http://localhost:80
 
 ```bash
 #!/bin/bash
-# backup.sh - 数据库备份脚本
+# backup.sh - 数据目录备份脚本
+#
+# 需要备份的是「数据根」下的文件化存储，而不是某个数据库文件：
+#   sessions/     会话元信息 _meta.db + JSONL 消息 + 工作流快照
+#   data/kb/      知识库（kb.json / kb.db / raw/）
+#   account.json  账户
+#   agents/ providers/ file_stores/ 等配置与上传文件
+# DATA_ROOT 必须与后端实际使用的 USERDATA_DIR / SESSION_DATA_DIR 一致。
 
 BACKUP_DIR="/opt/guada-ai/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-DB_PATH="/opt/guada-ai/backend-ts/data/ai_chat.db"
+DATA_ROOT="/opt/guada-ai/backend-ts"
 
 mkdir -p $BACKUP_DIR
 
-# 备份数据库
-cp $DB_PATH "$BACKUP_DIR/ai_chat_$TIMESTAMP.db"
-
-# 压缩备份
-gzip "$BACKUP_DIR/ai_chat_$TIMESTAMP.db"
+# 备份数据根下的文件化存储（不存在的路径自动跳过）
+tar -czf "$BACKUP_DIR/guada-data_$TIMESTAMP.tar.gz" \
+  -C "$DATA_ROOT" \
+  --ignore-failed-read \
+  sessions data account.json agents providers file_stores 2>/dev/null || true
 
 # 删除 30 天前的备份
-find $BACKUP_DIR -name "ai_chat_*.db.gz" -mtime +30 -delete
+find $BACKUP_DIR -name "guada-data_*.tar.gz" -mtime +30 -delete
 
-echo "Backup completed: ai_chat_$TIMESTAMP.db.gz"
+echo "Backup completed: guada-data_$TIMESTAMP.tar.gz"
 ```
 
 设置定时任务：
@@ -469,26 +473,30 @@ crontab -e
 
 ## 七、常见问题排查
 
-### 1. 数据库表不存在
+### 1. 会话列表为空 / `_meta.db` 不存在
 
-**症状**：启动时报错 `Table does not exist`
-
-**解决**：
-```bash
-cd backend-ts
-npx prisma generate
-pnpm run db:seed:force
-```
-
-### 2. Prisma Client 未生成
-
-**症状**：`Module '"@prisma/client"' has no exported member 'PrismaClient'`
+**症状**：启动后侧栏没有会话，或日志提示无法打开 `sessions/_meta.db`
 
 **解决**：
 ```bash
-cd backend-ts
-npx prisma generate
+# 确认数据根与权限（SESSION_DATA_DIR / USERDATA_DIR 必须指向实际数据目录）
+ls -la sessions/_meta.db
+ls -la data/kb
+
+# 目录权限
+chown -R $USER:$USER sessions data
 ```
+
+### 2. 旧版 Prisma 主库数据不可见
+
+**症状**：从 ≤ v0.5.6 直接升级后，旧会话/账户/供应商没有出现
+
+**原因**：当前版本已移除 Prisma 主库与 DB→文件迁移脚手架，不再读取 `ai_chat.db`。
+
+**解决**：
+1. 先安装 **v1.0.8** 启动一次，让旧版迁移完成；
+2. 再升级到当前版本。
+3. 旧 `ai_chat.db` / `vector_db.sqlite` 仍在磁盘上，不会被自动删除。
 
 ### 3. 端口冲突
 
@@ -528,8 +536,8 @@ sudo chown -R www-data:www-data /var/www/guada-frontend
 # 确认 .env 文件存在
 ls -la backend-ts/.env
 
-# 检查环境变量
-cat backend-ts/.env | grep DATABASE_URL
+# 检查环境变量（数据根）
+cat backend-ts/.env | grep -E "USERDATA_DIR|SESSION_DATA_DIR"
 
 # PM2 中手动设置
 pm2 delete guada-backend
@@ -594,12 +602,14 @@ pnpm run build
 pm2 restart guada-backend
 ```
 
-### 2. 数据库迁移
+### 2. 数据存储升级
 
-```bash
-cd backend-ts
-npx prisma migrate deploy
-```
+无需执行数据库迁移命令。后端启动时会自动完成：
+
+- `sessions/_meta.db` 的 `user_version` schema 升级（`SessionMetaStore`）
+- 各知识库 `kb.db` 的 schema 升级（`KbDatabaseService`）
+
+旧 `ai_chat.db` 不再被读取；如需从 Prisma 时代升级，请先安装 v1.0.8 完成迁移。
 
 ---
 
@@ -618,25 +628,21 @@ echo "安装后端依赖..."
 cd backend-ts
 pnpm install
 
-# 2. 初始化数据库
-echo "初始化数据库..."
-pnpm run db:seed:force
-
-# 3. 构建后端
+# 2. 构建后端（首次启动会自动创建文件化存储）
 echo "构建后端..."
 pnpm run build
 
-# 4. 构建前端
+# 3. 构建前端
 echo "构建前端..."
 cd ../frontend
 pnpm install
 pnpm run build
 
-# 5. 部署前端
+# 4. 部署前端
 echo "部署前端..."
 sudo cp -r dist/* /var/www/guada-frontend/
 
-# 6. 启动后端
+# 5. 启动后端
 echo "启动后端服务..."
 cd ../backend-ts
 pm2 start dist/main.js --name guada-backend
@@ -667,9 +673,10 @@ Nginx (80/443)
     └─→ /static/* → 静态资源 (localhost:3000)
          ↓
     NestJS Backend (PM2 守护)
-         ├─ SQLite 数据库 (/opt/guada-ai/backend-ts/data/ai_chat.db)
-         ├─ 向量数据库 (/opt/guada-ai/backend-ts/data/vector_db.sqlite)
-         └─ 文件存储 (/opt/guada-ai/backend-ts/data/uploads)
+         ├─ 会话元数据库 (sessions/_meta.db)
+         ├─ JSONL 消息 (sessions/<id>/seg-*.jsonl)
+         ├─ 知识库 (data/kb/<kbId>/kb.db + raw/)
+         └─ 上传文件 (data/uploads 或 file_stores/)
 ```
 
 ---

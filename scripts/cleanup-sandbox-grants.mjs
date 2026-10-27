@@ -9,7 +9,7 @@
  *
  * 用法：
  *   node scripts/cleanup-sandbox-grants.mjs --workspace <dir> [--workspace <dir> ...]
- *   node scripts/cleanup-sandbox-grants.mjs --db "%USERPROFILE%\.guada\data\ai_chat.db"
+ *   node scripts/cleanup-sandbox-grants.mjs --db "%USERPROFILE%\.guada\sessions\_meta.db"
  *   node scripts/cleanup-sandbox-grants.mjs --workspace <dir> --apply
  *
  * 默认 **dry-run**：只报告将删除哪些 ACE / 目录；加 `--apply` 才真正修改。
@@ -43,7 +43,13 @@ async function discoverFromDb(dbFile) {
   try {
     const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(dbFile, { readOnly: true });
-    const rows = db.prepare("SELECT DISTINCT workspace_path AS p FROM session WHERE workspace_path IS NOT NULL").all();
+    // 新布局：sessions/_meta.db 的 sessions 表；旧布局：Prisma 主库的 session 表
+    let rows;
+    try {
+      rows = db.prepare("SELECT DISTINCT workspace_path AS p FROM sessions WHERE workspace_path IS NOT NULL").all();
+    } catch {
+      rows = db.prepare("SELECT DISTINCT workspace_path AS p FROM session WHERE workspace_path IS NOT NULL").all();
+    }
     for (const row of rows) if (row.p) found.push(row.p);
     db.close();
   } catch (error) {

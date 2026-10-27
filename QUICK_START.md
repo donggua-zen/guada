@@ -6,8 +6,7 @@
 ```bash
 # 终端 1: 启动后端
 cd backend-ts
-pnpm install             # 自动执行 prisma generate
-pnpm run db:seed:force    # 首次运行需要初始化数据库
+pnpm install             # 安装依赖（自动打 node-pty / parcel-watcher 补丁）
 pnpm run start:dev
 
 # 终端 2: 启动前端

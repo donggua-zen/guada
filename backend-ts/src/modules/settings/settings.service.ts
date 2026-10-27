@@ -3,7 +3,6 @@ import { SettingsStorage } from '../../common/utils/settings-storage.util';
 import { isValidChatUploadSubdir, normalizeChatUploadSubdir } from '../../common/utils/attachment-subdir.util';
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { assertResolvableModelRef } from '../llm-core/utils/model-reference.util';
-import { MODEL_ID_KEYS } from '../../common/database/bootstrap/model-reference-migration';
 import { assertUsableKbRoot } from '../knowledge-base/kb-database.service';
 import {
   SG_SYSTEM,
@@ -18,6 +17,7 @@ import {
   SK_SYS_KEEP_AWAKE_MODE,
   KEEP_AWAKE_MODES,
   LEGACY_SK_MOD_CHAT,
+  MODEL_ID_KEYS,
 } from '../../constants/settings.constants';
 
 @Injectable()

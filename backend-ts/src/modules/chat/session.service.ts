@@ -1061,7 +1061,7 @@ export class SessionService {
     }
 
     // 子会话（子代理 / workflow 成员，含已冻结的）随主会话一并删除：
-    // Prisma 自关联未配置 onDelete，若只删主会话，子会话会被 ON DELETE SET NULL 孤儿化
+    // 子会话通过 parentId 关联；只删主会话会让它们变成孤儿，因此一并清理。
     // 先取消并清理父/子会话的后台作业，避免删除后 job 仍尝试投递到不存在的会话。
     if (this.jobRegistry) {
       try {
@@ -1079,10 +1079,10 @@ export class SessionService {
 
     await this.sessionStore.deleteChildrenOf(sessionId);
 
-    // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
+    // 级联删除消息（deleteSession 同时清理 JSONL 事件目录）
     await this.sessionStore.deleteSession(sessionId);
 
-    // 同步删除 JSONL 事件存储目录（含子会话），避免遗留孤儿目录（此前只删 DB，目录会永久泄漏）。
+    // 同步删除 JSONL 事件存储目录（含子会话），避免遗留孤儿目录。
     // 失败不影响会话删除本身：DB 行已删，目录可稍后手工清理。
     try {
       await this.contextManager.clearSessionTurns(sessionId);
@@ -1523,7 +1523,7 @@ ${diffText}
   // ── 会话搜索 ──
 
   /**
-   * 搜索会话 — 标题匹配（Prisma contains）+ 消息内容匹配（JSONL 实时批扫描）
+   * 搜索会话 — 标题匹配（SQL LIKE）+ 消息内容匹配（JSONL 实时批扫描）
    *
    * 游标协议（base64 JSON，前端不透明透传）：
    * - 无 cursor：title 阶段 —— 标题命中先行返回，并携带扫描清单规模（progress.total）

@@ -111,8 +111,6 @@ export default {
     searchSession: '搜索会话',
     debugTools: '调试工具',
     devConsole: '开发者控制台',
-    dataMigration: '📦 数据迁移',
-    dataMigrated: '✅ 数据已迁移',
     openDataFolder: '打开数据目录',
     openInstallFolder: '打开安装目录',
     githubRepo: 'GitHub 仓库',
@@ -127,10 +125,6 @@ export default {
     updateTooltipDownloading: '正在下载更新 {percent}%，点击查看进度',
     updateTooltipReady: '更新包已下载，点击重启安装',
     updateTooltipInstalling: '正在安装更新',
-    migrationConfirm: '即将把数据从 AppData 目录迁移到用户主目录下的 .guada 目录，此过程需要重启后端，是否继续？',
-    migrationSuccess: '✅ 数据迁移成功！数据已迁移至 ~/.guada/',
-    migrationFailed: '❌ 迁移失败：{reason}',
-    migrationError: '❌ 迁移异常：{reason}',
   },
 
   // ── 侧边栏 ──

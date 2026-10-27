@@ -40,16 +40,16 @@ cd guada-ai
 pnpm install
 ```
 
-### 3. 初始化数据库
+### 3. 首次启动
 
 ```bash
 cd backend-ts
-pnpm run db:seed:force
+pnpm run start:dev
 ```
 
-这会创建默认管理员账户：
-- 用户名：`guada`
-- 密码：`guada`
+首次启动会自动创建文件化存储与默认账户：
+- `sessions/_meta.db`、`account.json`、`agents/`、`providers/` 等
+- 默认用户名：`guada`，未设密码（免登录）
 
 ### 4. 开发模式运行
 
@@ -80,9 +80,6 @@ env: {
   ELECTRON_RUN_AS_NODE: '1',
   PORT: backendPort.toString(),
   BASE_URL: '__auto__',  // 自动检测端口
-  DATABASE_URL: `file:${dbPath}`,
-  // 旧的全局向量库路径，现已退役；仍在传入只为让启动迁移能把老数据搬进各库的 kb.db
-  VECTOR_DB_PATH: vectorDbPath,
   STATIC_DIR: staticDir,
   UPLOAD_ROOT_DIR: uploadDir,
   UPLOAD_URL_PREFIX: '/uploads',
@@ -125,7 +122,7 @@ pnpm run build:electron
 ### 2.1 平台二进制裁剪
 
 后端依赖中包含大量按平台分发的预编译二进制（sharp / sqlite-vec / @node-rs/jieba /
-@parcel/watcher / Prisma 引擎）。构建时**只保留目标平台的二进制**，避免打包体积膨胀：
+@parcel/watcher 等原生模块）。构建时**只保留目标平台的二进制**，避免打包体积膨胀：
 
 - 目标平台由 `TARGET_PLATFORMS`（或兼容的 `SHARP_TARGET_PLATFORMS`）控制，
   默认取当前构建平台；多值用逗号分隔，如 `TARGET_PLATFORMS=darwin-x64,darwin-arm64`
@@ -403,46 +400,42 @@ fail-closed 并打印明确原因。
 
 ### Electron 数据存储位置
 
-Electron 应用的数据存储在用户数据目录中，不同平台路径如下：
+新安装与已迁移用户使用用户主目录下的 `~/.guada`（开发模式隔离到 `~/.guada-dev`）。
+旧 AppData 布局仍会被识别并原地使用，但**不再提供目录迁移入口**。
 
-#### Windows
-```
-C:\Users\<用户名>\AppData\Roaming\GuaDa\
-├── ai_chat.db              # SQLite 数据库
-├── vector_db.sqlite        # 向量数据库
-├── uploads/                # 上传文件
-│   ├── avatars/
-│   ├── documents/
-│   └── ...
-├── settings.json           # 应用设置
-├── logs/                   # 日志文件
-├── skills/                 # 技能插件
-└── workspace/              # 会话工作区
-```
+#### 新布局（`~/.guada`）
 
-#### macOS
 ```
-~/Library/Application Support/GuaDa/
-├── ai_chat.db
-├── vector_db.sqlite
-├── uploads/
-├── settings.json
+~/.guada/
+├── sessions/                  # 会话
+│   ├── _meta.db               # 会话元数据与分组（SQLite）
+│   └── <sessionId>/
+│       ├── seg-0000.jsonl     # 消息事件日志
+│       ├── manifest.json
+│       ├── snapshot.json
+│       ├── workflows/
+│       └── images/ previews/
+├── data/
+│   └── kb/<kbId>/             # 知识库（kb.json / kb.db / raw/）
+├── file_stores/               # 上传文件（头像/图片/附件）
+├── agents/                    # 智能体（AGENT.md + avatar）
+├── providers/                 # 供应商 YAML
+├── bots/                      # 机器人 YAML
+├── mcp-servers/               # MCP YAML + tools.json
+├── account.json               # 账户
+├── system.json / models.json  # 设置
 ├── logs/
 ├── skills/
-└── workspace/
+├── workspaces/
+└── plugins/
 ```
 
-#### Linux
-```
-~/.config/GuaDa/
-├── ai_chat.db
-├── vector_db.sqlite
-├── uploads/
-├── settings.json
-├── logs/
-├── skills/
-└── workspace/
-```
+#### 旧布局（AppData，仅原地兼容）
+
+Windows `%APPDATA%\GuaDa\`、macOS `~/Library/Application Support/GuaDa/`、
+Linux `~/.config/GuaDa/` 下的旧数据仍可直接使用；其中 `ai_chat.db` /
+`vector_db.sqlite` 是 Prisma 时代的遗留文件，新版本不再读取，也不会删除。
+需要从 Prisma 时代升级的用户请先安装 v1.0.8 完成迁移。
 
 ### 备份与迁移
 
@@ -539,16 +532,16 @@ SqliteError: database is locked
 **解决方案**：
 
 1. 确保没有其他 GuaDa 实例在运行
-2. 删除锁文件：
+2. 删除 SQLite 锁文件（`_meta.db` 或某个 `kb.db`）：
    ```bash
    # Windows
-   Remove-Item "$env:APPDATA\GuaDa\ai_chat.db-shm"
-   Remove-Item "$env:APPDATA\GuaDa\ai_chat.db-wal"
-   
+   Remove-Item "$env:USERPROFILE\.guada\sessions\_meta.db-shm" -ErrorAction SilentlyContinue
+   Remove-Item "$env:USERPROFILE\.guada\sessions\_meta.db-wal" -ErrorAction SilentlyContinue
+
    # macOS/Linux
-   rm ~/Library/Application\ Support/GuaDa/ai_chat.db-shm
-   rm ~/Library/Application\ Support/GuaDa/ai_chat.db-wal
+   rm -f ~/.guada/sessions/_meta.db-shm ~/.guada/sessions/_meta.db-wal
    ```
+   旧 AppData 布局用户请把路径换成对应的 AppData 数据根。
 
 ### 3. 白屏或无法加载
 

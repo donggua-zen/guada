@@ -794,27 +794,37 @@ const DEFAULT_USER_DATA = app.getPath("userData");
 const GUADA_HOME = GUADA_DEV_DATA
   ? path.join(os.homedir(), ".guada-dev")
   : path.join(os.homedir(), ".guada");
-// 迁移标记文件
-const MIGRATED_FLAG = path.join(GUADA_HOME, ".migrated");
-// 跳过迁移标记
-const SKIP_MIGRATION_FLAG = path.join(DEFAULT_USER_DATA, ".skip_migration");
+// 历史目录迁移标记：只读兼容（迁移入口已移除，不再写入）
+const LEGACY_MIGRATED_FLAG = path.join(GUADA_HOME, ".migrated");
+
+/** 数据根下是否已有文件化存储的落地物（用于区分新旧布局） */
+function hasFileStoreData(dataHome: string): boolean {
+  return (
+    fs.existsSync(path.join(dataHome, "sessions")) ||
+    fs.existsSync(path.join(dataHome, "account.json")) ||
+    fs.existsSync(path.join(dataHome, "agents"))
+  );
+}
 
 /**
  * 检测应使用的数据目录
- * 优先级：已迁移标记 > 已存在 ~/.guada 数据 > 老用户 AppData > 新安装
+ * 优先级：历史迁移标记 > ~/.guada 已有文件数据 > 老用户 AppData > 新安装
+ * 旧 AppData 布局继续原地可用；不再提供目录迁移入口。
  * Electron 环境下，环境变量由主进程动态设置，不作为用户自定义依据
  * @returns 数据根目录（~/guada/ 或 AppData/Roaming/guada-ai/）
  */
 function detectDataPath(): string {
-  // 已迁移：~/.guada/ 下有数据或迁移标记
-  if (
-    fs.existsSync(MIGRATED_FLAG) ||
-    fs.existsSync(path.join(GUADA_HOME, "data", "ai_chat.db"))
-  ) {
+  if (fs.existsSync(LEGACY_MIGRATED_FLAG)) {
     return GUADA_HOME;
   }
-  // 老用户：AppData 下已有数据库
-  if (fs.existsSync(path.join(DEFAULT_USER_DATA, "ai_chat.db"))) {
+  if (hasFileStoreData(GUADA_HOME)) {
+    return GUADA_HOME;
+  }
+  // 老用户：AppData 下已有旧库或文件化数据
+  if (
+    fs.existsSync(path.join(DEFAULT_USER_DATA, "ai_chat.db")) ||
+    hasFileStoreData(DEFAULT_USER_DATA)
+  ) {
     return DEFAULT_USER_DATA;
   }
   // 新安装：直接使用 ~/.guada/
@@ -824,11 +834,7 @@ function detectDataPath(): string {
 /** 数据路径集合 */
 interface DataPaths {
   dataHome: string; // 数据根目录
-  dbPath: string; // 数据库文件
-  // 旧全局向量库路径。知识库已改为「每库一个 kb.db」，本路径**只用于兼容**：
-  // 启动迁移时若它存在，会改名保留为 .pre-sqlite 并把向量搬进各库。
-  vectorDbPath: string;
-  versionFile: string; // 数据库版本标记
+  dataDir: string; // 数据子目录（知识库等）
   uploadDir: string; // 上传文件目录
   logsDir: string; // 日志目录
   skillsDir: string; // 技能目录
@@ -849,9 +855,7 @@ function computeDataPaths(dataHome: string): DataPaths {
   if (isNewLayout) {
     return {
       dataHome,
-      dbPath: path.join(dataHome, "data", "ai_chat.db"),
-      vectorDbPath: path.join(dataHome, "data", "vector_db.sqlite"),
-      versionFile: path.join(dataHome, "data", "db_version.json"),
+      dataDir: path.join(dataHome, "data"),
       uploadDir: path.join(dataHome, "file_stores"),
       logsDir: path.join(dataHome, "logs"),
       skillsDir: path.join(dataHome, "skills"),
@@ -861,12 +865,10 @@ function computeDataPaths(dataHome: string): DataPaths {
       isNewLayout: true,
     };
   }
-  // 旧布局：数据库、上传文件等直接在根目录
+  // 旧布局：上传文件等直接在根目录
   return {
     dataHome,
-    dbPath: path.join(dataHome, "ai_chat.db"),
-    vectorDbPath: path.join(dataHome, "vector_db.sqlite"),
-    versionFile: path.join(dataHome, "db_version.json"),
+    dataDir: path.join(dataHome, "data"),
     uploadDir: path.join(dataHome, "file_stores"),
     logsDir: path.join(dataHome, "logs"),
     skillsDir: path.join(dataHome, "skills"),
@@ -928,155 +930,12 @@ function backendCrtPathEnv(): Record<string, string> {
   return { [pathKey]: `${crtDir}${path.delimiter}${process.env[pathKey] ?? ""}` };
 }
 
-// 确保 data 目录存在（数据库迁移由后端 MigrationRunner 负责）
+// 确保 data 目录存在（文件化存储的知识库等落地物在 <dataHome>/data 下）
 function ensureDataDir(dataHome: string): void {
   const paths = computeDataPaths(dataHome);
-  const dataDir = path.dirname(paths.dbPath);
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+  if (!fs.existsSync(paths.dataDir)) {
+    fs.mkdirSync(paths.dataDir, { recursive: true });
   }
-}
-
-// 迁移状态枚举
-type MigrationStatus =
-  | "available"
-  | "migrated"
-  | "new_install"
-  | "skipped"
-  | "env_override";
-
-/**
- * 检测迁移状态（供前端判断是否显示迁移提示）
- */
-function getMigrationStatus(): MigrationStatus {
-  if (
-    process.env.DATABASE_URL ||
-    process.env.UPLOAD_ROOT_DIR ||
-    process.env.SKILLS_DIR
-  ) {
-    return "env_override";
-  }
-  if (
-    fs.existsSync(MIGRATED_FLAG) ||
-    fs.existsSync(path.join(GUADA_HOME, "data", "ai_chat.db"))
-  ) {
-    return "migrated";
-  }
-  if (fs.existsSync(SKIP_MIGRATION_FLAG)) {
-    return "skipped";
-  }
-  if (fs.existsSync(path.join(DEFAULT_USER_DATA, "ai_chat.db"))) {
-    return "available";
-  }
-  return "new_install";
-}
-
-/** 递归复制目录 */
-function copyRecursiveSync(src: string, dest: string): void {
-  if (!fs.existsSync(src)) return;
-  const stat = fs.statSync(src);
-  if (stat.isDirectory()) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    const entries = fs.readdirSync(src);
-    for (const entry of entries) {
-      copyRecursiveSync(path.join(src, entry), path.join(dest, entry));
-    }
-  } else {
-    fs.copyFileSync(src, dest);
-  }
-}
-
-/**
- * 执行数据迁移（从 AppData 复制到 ~/.guada/）
- * 注意：必须在后端进程停止后执行，否则 SQLite 文件被锁定
- */
-async function handleMigration(): Promise<void> {
-  const oldDir = DEFAULT_USER_DATA;
-  const newDir = GUADA_HOME;
-
-  // 1. 创建目标目录结构
-  const newPaths = computeDataPaths(newDir);
-  fs.mkdirSync(path.dirname(newPaths.dbPath), { recursive: true });
-  fs.mkdirSync(newPaths.logsDir, { recursive: true });
-  fs.mkdirSync(path.join(newDir, "skills"), { recursive: true });
-
-  // 2. 复制数据文件（后端已停止，数据库处于一致状态）
-  const oldDbPath = path.join(oldDir, "ai_chat.db");
-  const copyTasks = [
-    // 数据库文件
-    { src: oldDbPath, dest: newPaths.dbPath },
-    {
-      src: path.join(oldDir, "ai_chat.db-wal"),
-      dest: path.join(path.dirname(newPaths.dbPath), "ai_chat.db-wal"),
-    },
-    {
-      src: path.join(oldDir, "ai_chat.db-shm"),
-      dest: path.join(path.dirname(newPaths.dbPath), "ai_chat.db-shm"),
-    },
-    { src: path.join(oldDir, "vector_db.sqlite"), dest: newPaths.vectorDbPath },
-    {
-      src: path.join(oldDir, "vector_db.sqlite-wal"),
-      dest: path.join(path.dirname(newPaths.vectorDbPath), "vector_db.sqlite-wal"),
-    },
-    {
-      src: path.join(oldDir, "vector_db.sqlite-shm"),
-      dest: path.join(path.dirname(newPaths.vectorDbPath), "vector_db.sqlite-shm"),
-    },
-    { src: path.join(oldDir, "db_version.json"), dest: newPaths.versionFile },
-    // 上传文件
-    { src: path.join(oldDir, "file_stores"), dest: newPaths.uploadDir },
-    // 技能
-    { src: path.join(oldDir, "skills"), dest: newPaths.skillsDir },
-    // 日志
-    { src: path.join(oldDir, "logs"), dest: newPaths.logsDir },
-    // 定时任务
-    { src: path.join(oldDir, "scheduler"), dest: path.join(newDir, "scheduler") },
-    // 子 Agent
-    { src: path.join(oldDir, "agents"), dest: path.join(newDir, "agents") },
-    // 微信机器人会话
-    { src: path.join(oldDir, "wechat-personal"), dest: path.join(newDir, "wechat-personal") },
-    // 设置中心配置文件（模型偏好、插件开关、OCR、外观等）
-    { src: path.join(oldDir, ".config"), dest: path.join(newDir, ".config") },
-  ];
-
-  for (const task of copyTasks) {
-    if (fs.existsSync(task.src)) {
-      copyRecursiveSync(task.src, task.dest);
-      console.log(`已复制: ${task.src} → ${task.dest}`);
-    }
-  }
-
-  // 3. 校验目标数据库文件头（SQLite 格式标记 "SQLite format 3\0"）
-  const newDbPath = newPaths.dbPath;
-  if (fs.existsSync(newDbPath)) {
-    const fd = fs.openSync(newDbPath, 'r');
-    const buffer = Buffer.alloc(16);
-    fs.readSync(fd, buffer, 0, 16, 0);
-    fs.closeSync(fd);
-    const header = buffer.toString('utf8', 0, 16);
-    if (header !== 'SQLite format 3\0') {
-      throw new Error(`目标数据库文件格式无效: ${header}`);
-    }
-    console.log('目标数据库校验通过（SQLite 格式正确）');
-  }
-
-  // 4. 写迁移标记
-  fs.writeFileSync(
-    MIGRATED_FLAG,
-    JSON.stringify(
-      {
-        migratedAt: new Date().toISOString(),
-        from: oldDir,
-        to: newDir,
-        version: 2,
-      },
-      null,
-      2,
-    ),
-  );
-  console.log(`迁移标记已写入: ${MIGRATED_FLAG}`);
 }
 
 // 后端健康看门狗：HTTP 探测 /api/v1/health，仅记录日志不做恢复动作。
@@ -1211,8 +1070,6 @@ async function startBackend(): Promise<void> {
 
       const staticDir = path.join(backendPath, "static");
 
-      console.log("Database path:", paths.dbPath);
-      console.log("Legacy vector database path (compat only):", paths.vectorDbPath);
       console.log("Static directory:", staticDir);
       console.log("Upload directory:", paths.uploadDir);
       console.log("Backend logs directory:", paths.logsDir);
@@ -1242,8 +1099,6 @@ async function startBackend(): Promise<void> {
             "--report-uncaught-exception",
             `--report-dir=${diagnosticReportDir(paths.logsDir)}`,
           ].filter(Boolean).join(" "),
-          DATABASE_URL: `file:${paths.dbPath}`,
-          VECTOR_DB_PATH: paths.vectorDbPath,
           STATIC_DIR: staticDir,
           UPLOAD_ROOT_DIR: paths.uploadDir,
           UPLOAD_URL_PREFIX: "/uploads",
@@ -1317,13 +1172,11 @@ async function startBackend(): Promise<void> {
       const paths = computeDataPaths(dataHome);
       console.log(`数据目录: ${dataHome}`);
 
-      // 初始化数据库
+      // 确保数据目录存在
       ensureDataDir(dataHome);
 
       const staticDir = path.join(backendPath, "static");
 
-      console.log("Database path:", paths.dbPath);
-      console.log("Legacy vector database path (compat only):", paths.vectorDbPath);
       console.log("Static directory:", staticDir);
       console.log("Upload directory:", paths.uploadDir);
       console.log("Backend logs directory:", paths.logsDir);
@@ -1360,8 +1213,6 @@ async function startBackend(): Promise<void> {
           NODE_PATH: getBackendNodeModulesPath(),
           PORT: backendPort.toString(),
           BASE_URL: "__auto__", // Electron 生产环境使用自动模式，动态设置 BASE_URL
-          DATABASE_URL: `file:${paths.dbPath}`,
-          VECTOR_DB_PATH: paths.vectorDbPath,
           STATIC_DIR: staticDir,
           UPLOAD_ROOT_DIR: paths.uploadDir,
           UPLOAD_URL_PREFIX: "/uploads",
@@ -2109,49 +1960,7 @@ function setupIpcHandlers() {
       version: app.getVersion(),
       userDataPath: app.getPath("userData"),
       backendPort: backendPort,
-      migration: {
-        status: getMigrationStatus(),
-        oldPath: DEFAULT_USER_DATA,
-        newPath: GUADA_HOME,
-      },
     };
-  });
-
-  // 数据迁移 IPC
-  ipcMain.handle("migrate-data", async () => {
-    try {
-      console.log("开始数据迁移...");
-      // 先停止后端（标记为主动停机，避免包装进程退出时弹崩溃框）
-      if (backendProcess && !backendProcess.killed) {
-        isBackendStopping = true;
-        await forceKillBackendTree();
-        backendProcess = null;
-      }
-
-      await handleMigration();
-      console.log("数据迁移完成，重新启动后端...");
-
-      // 重启后端（startBackend 会检测到 .migrated 标记，使用新路径）
-      isBackendReady = false;
-      isBackendStarting = false;
-      backendReadyPromise = startBackend()
-        .then(() => {
-          isBackendReady = true;
-          console.log("后端迁移后重启成功");
-        })
-        .catch((error) => {
-          console.error("后端迁移后重启失败:", error);
-          isBackendReady = true;
-        });
-
-      await backendReadyPromise;
-      isBackendStopping = false; // 迁移后重启完成，恢复看门狗与崩溃判定
-      return { success: true, message: "迁移完成" };
-    } catch (error: any) {
-      console.error("数据迁移失败:", error);
-      isBackendStopping = false;
-      return { success: false, message: error.message };
-    }
   });
 
   // wait-backend-ready：单次 IPC 调用，后端就绪后返回，无需双向通信

@@ -65,19 +65,23 @@ docker stats                  # 查看资源使用
 docker-compose logs -f        # 查看日志
 ```
 
-### 数据库管理
+### 数据管理
 
 ```bash
-# 备份数据库
-docker cp guada-backend:/app/data/ai_chat.db ./backup.db
+# 备份数据（会话 / 知识库 / 上传文件 / 账户设置）
+docker-compose exec -T backend tar -czf - -C /app data .config \
+  > "./guada-data-$(date +%Y%m%d).tar.gz"
 
-# 恢复数据库
+# 恢复数据
 docker-compose down
-docker cp ./backup.db guada-backend:/app/data/ai_chat.db
+docker cp ./guada-data-YYYYMMDD.tar.gz guada-backend:/tmp/
+docker-compose run --rm --entrypoint sh backend -c \
+  "rm -rf /app/data/* && tar -xzf /tmp/guada-data-YYYYMMDD.tar.gz -C /app"
 docker-compose up -d
 ```
 
-> 💡 数据库迁移在容器启动时自动执行，无需手动操作。详见 [数据库迁移章节](docs/DOCKER_DEPLOYMENT.md#四数据库迁移)。
+> 💡 文件化存储的 schema 升级在容器启动时自动执行，无需手动迁移命令。
+> 详见 [数据存储章节](docs/DOCKER_DEPLOYMENT.md#四数据存储与升级)。
 
 ### 更新部署
 
@@ -98,15 +102,14 @@ docker-compose logs backend     # 查看详细日志
 docker-compose ps               # 检查服务状态
 ```
 
-### 数据库迁移问题
+### 数据存储问题
 
 ```bash
-# 查看迁移日志
-docker-compose logs backend | grep -i migration
+# 查看启动日志里的 schema 升级错误
+docker-compose logs backend | grep -E "SessionMetaStore|KbDatabaseService|schema"
 
-# 查看已应用的迁移
-docker-compose exec backend sqlite3 /app/data/ai_chat.db \
-  "SELECT * FROM _app_migrations ORDER BY id;"
+# 检查会话元数据库
+docker-compose exec backend ls -lh /app/data/sessions/_meta.db
 ```
 
 ### 端口冲突

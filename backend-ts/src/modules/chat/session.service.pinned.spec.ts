@@ -3,10 +3,6 @@ import * as os from "os";
 import * as path from "path";
 import { SessionService } from "./session.service";
 import { SessionMetaStore } from "./session-meta.store";
-import {
-  META_DOMAIN_SESSIONS,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
 
 /**
  * 置顶（pin）在侧边栏聚合层的契约：
@@ -38,10 +34,7 @@ describe("SessionService 侧边栏置顶聚合", () => {
   beforeEach(async () => {
     fs.rmSync(sessionsBase, { recursive: true, force: true });
     fs.mkdirSync(sessionsBase, { recursive: true });
-
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_SESSIONS);
-    store = new SessionMetaStore(gate);
+    store = new SessionMetaStore();
     await store.initialize();
 
     streaming = new Set();

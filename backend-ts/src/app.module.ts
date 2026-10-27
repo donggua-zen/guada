@@ -45,12 +45,8 @@ import { MobileAccessModule } from './modules/mobile-access/mobile-access.module
       maxListeners: 20,
     }),
     LlmCoreModule, // LLM 核心模块（全局）
-    // ⚠️ 持久化机制层必须位于其余域模块之前：迁移脚手架在此完成 DB→文件导出
-    // 并放行 MetadataBootstrapGate，域模块的 onModuleInit（AgentSeedService
-    // 补种、各 store 索引预热）依赖该顺序。
-    // 例外：LlmCoreModule 排在本模块之前（@Global 基座，被几乎所有域依赖）。
-    // Nest 的模块钩子跨模块串行 await，故它的 ProviderFileStore 预热必然早于这里的
-    // 迁移导出；store 以「预热 + 门控放行后重扫」兜底（providers 域），不依赖数组顺序。
+    // 持久化机制层（@Global）：只提供 JSONL 后端与 MESSAGE_STORE_TOKEN。
+    // 各域 store 的初始化顺序由所属模块的 onModuleInit 自行负责。
     PersistenceModule,
     UsageModule, // Token 用量统计（@Global；LLMService 经全局导出注入 UsageService）
     SharedModule, // 全局共享服务（UploadPathService, UrlService）

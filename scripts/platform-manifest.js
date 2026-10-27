@@ -115,25 +115,10 @@ const IN_PACKAGE_BINARIES = [
   },
 ];
 
-/**
- * Prisma 引擎文件名中的平台标记 → 目标平台。
- * 无平台标记的文件返回 null（视为通用文件，保留）。
- * @param {string} name 文件名
- * @returns {string|null}
- */
-function prismaEnginePlatform(name) {
-  const lower = name.toLowerCase();
-  if (lower.includes("windows") || lower.includes("win32")) return "win32";
-  if (lower.includes("linux")) return "linux";
-  if (lower.includes("darwin") || lower.includes("macos")) return "darwin";
-  return null;
-}
-
 module.exports = {
   PLATFORM_ALIASES,
   normalizePlatforms,
   resolveTargetPlatforms,
   PACKAGE_FAMILIES,
   IN_PACKAGE_BINARIES,
-  prismaEnginePlatform,
 };

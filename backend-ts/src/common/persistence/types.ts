@@ -138,7 +138,7 @@ export interface UserMessageData {
   kind: 'user' | 'model';
   /**
    * 原生内容块（统一格式：所有 user/message 事件 content 均存 ContentBlock[]，
-   * 不再有 content 字符串 / files 附件平铺——旧格式需经 scripts/rebuild-sessions-from-db.ts 重建）。
+   * 不再有 content 字符串 / files 附件平铺）。
    */
   blocks: import('../types/conversation.types').ContentBlock[];
   /**

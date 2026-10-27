@@ -4,7 +4,7 @@
  * 按当前构建平台自动设置 SHARP_TARGET_PLATFORMS / TARGET_PLATFORMS，
  * 依次执行：
  *   1. backend 编译（nest build）
- *   2. 依赖优化（按目标平台裁剪 sharp / sqlite-vec / jieba / watcher / Prisma 引擎）
+ *   2. 依赖优化（按目标平台裁剪 sharp / sqlite-vec / jieba / watcher 等原生模块）
  *   3. Electron 原生模块重建（@electron/rebuild）
  *
  * 交叉构建示例（在 Apple Silicon 上构建 x64 包）：

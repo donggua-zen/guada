@@ -18,24 +18,20 @@ RUN corepack enable && corepack prepare pnpm@11.7.0 --activate
 # Copy package files
 COPY backend-ts/package.json backend-ts/pnpm-lock.yaml backend-ts/pnpm-workspace.yaml ./
 COPY backend-ts/patches ./patches/
-COPY backend-ts/prisma ./prisma/
 COPY scripts /repo/scripts/
 
 # Install all dependencies (including devDependencies for build)
-RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY backend-ts/ .
-
-# Generate Prisma Client
-RUN pnpm exec prisma generate
 
 # Build the application (remove tsbuildinfo to force full rebuild)
 RUN rm -f tsconfig.tsbuildinfo && pnpm run build
 
 # Remove devDependencies, keep production deps only.
-# pnpm 的 .pnpm 布局自包含：prisma 生成客户端（在 @prisma/client 内）、
-# 原生模块及其兄弟依赖（sharp → @img/*）都会随 node_modules 一起保留
+# pnpm 的 .pnpm 布局自包含：原生模块及其兄弟依赖（sharp → @img/*）
+# 都会随 node_modules 一起保留
 RUN pnpm prune --prod
 
 

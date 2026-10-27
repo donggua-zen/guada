@@ -8,6 +8,7 @@ import { UrlService } from "./common/services/url.service";
 import { resolveAttachmentResponseHeaders } from "./common/utils/attachment-serving.util";
 import { createWinstonConfig } from './common/logger/winston.config';
 import { RequestTimingInterceptor } from "./common/interceptors/request-timing.interceptor";
+import { resolveSessionsBasePath } from "./common/utils/session-path.util";
 import * as express from "express";
 import * as path from "path";
 import * as fs from "fs";
@@ -118,6 +119,37 @@ for (const sig of ["SIGTERM", "SIGINT", "SIGHUP", "SIGBREAK"] as const) {
   });
 }
 
+/**
+ * 旧 Prisma 主库提示：新版本不再读取 ai_chat.db。
+ * 仅当「旧库存在且 _meta.db 不存在」时告警，避免已迁移用户误报。
+ * 不引入任何 Prisma 依赖，只做文件存在性检查。
+ */
+function warnIfLegacyDatabaseUnmigrated(): void {
+  const sessionsBase = resolveSessionsBasePath();
+  if (fs.existsSync(path.join(sessionsBase, "_meta.db"))) return;
+
+  const dataRoots = new Set(
+    [
+      process.env.USERDATA_DIR,
+      process.env.SESSION_DATA_DIR,
+      path.dirname(sessionsBase),
+      process.cwd(),
+    ].filter((value): value is string => !!value),
+  );
+  const candidates = [...dataRoots].flatMap((root) => [
+    path.join(root, "data", "ai_chat.db"),
+    path.join(root, "ai_chat.db"),
+  ]);
+  const legacy = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!legacy) return;
+
+  logger.warn(
+    `检测到旧版 Prisma 主库但尚未完成文件化迁移: ${legacy}\n` +
+      `当前版本不再读取 ai_chat.db。请先安装 v1.0.8 启动一次完成迁移，` +
+      `再升级到当前版本。旧库文件不会被删除。`,
+  );
+}
+
 async function bootstrap() {
   // 修正工作目录到 backend-ts 根目录，确保 bundled-skills/、skills/ 等路径可预测
   const backendRoot = path.resolve(__dirname, '..');
@@ -125,6 +157,8 @@ async function bootstrap() {
     process.chdir(backendRoot);
     console.log(`工作目录已修正: ${backendRoot}`);
   }
+
+  warnIfLegacyDatabaseUnmigrated();
 
   // 创建应用实例并配置 Winston 日志
   const app = await NestFactory.create(AppModule, { logger });

@@ -3,6 +3,9 @@
 > 项目：GuaDa AI（frontend + backend-ts）
 > 日期：2026-08-29
 > 状态：待实施
+>
+> **更新（2026-10）**：Prisma 主库已移除，文中 `schema.prisma` / `onDelete: Cascade`
+> 等依据是历史方案；当前子会话关联由 `SessionMetaStore` 的 `parentId` 维护。
 
 ---
 

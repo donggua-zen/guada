@@ -1,6 +1,9 @@
 # 知识库存储形态：每库一个自包含目录
 
 > 面向维护者。改动前请先读「不变式」一节——这些是踩过坑之后定下来的。
+>
+> **更新（2026-10）**：Prisma 主库与 `KbMigrationBootstrapService` 已删除。
+> 下文「迁移来源 / 导入器」段落是历史记录，当前新安装直接创建 `kb.db`。
 
 ## 一句话
 
@@ -158,11 +161,11 @@ kbId**（`findById(kbId, id)`）——全局 id 空间已不存在。跨库方�
 - **换存储根**：设置页「通用 → 知识库 → 知识库存储根」改 → **重启生效**（运行期不热切换）。
   然后把旧根下的库目录整体移过去。若新根为空而默认根下有库，启动会打醒目告警列出数量。
   校验规则：必须绝对路径、拒绝 UNC 网络路径（`assertUsableKbRoot`）。
-- **迁移来源**（`KbMigrationBootstrapService`）：S1 冻结主库（`knowledge_base`/`kb_file`/`kb_chunk`）、
-  S2 旧文件形态（`kb.json` + `<itemId>/file.json` + `<itemId>/chunks.jsonl`）、
-  S3 旧全局 `vector_db.sqlite`（补向量，按 chunk id 对齐）。
-  切换方式：逐库在 `<kbId>.new` 建好 → 校验 → 旧目录 rename 到 `.pre-sqlite/<kbId>`。
-  旧向量库改名保留为 `vector_db.sqlite.pre-sqlite`，确认无误后可手动删。
+- **迁移来源（历史，导入器已删除）**：早期由 `KbMigrationBootstrapService` 从
+  S1 冻结主库（`knowledge_base`/`kb_file`/`kb_chunk`）、S2 旧文件形态
+  （`kb.json` + `<itemId>/file.json` + `<itemId>/chunks.jsonl`）、
+  S3 旧全局 `vector_db.sqlite`（补向量，按 chunk id 对齐）三源导入。
+  该服务已随 Prisma 主库移除；新安装直接创建 `kb.db`。
 - **导入器的三个坑（都已在实测中修掉并加测试）**：
   1. 「已有 kb.db」不足以判定已迁移——被中断的启动可能留下**空库**，会永久阻断导入。
      判据是「库里有条目行」。
@@ -235,7 +238,7 @@ kbId**（`findById(kbId, id)`）——全局 id 空间已不存在。跨库方�
 - `kb-vector-index.ts` / `kb-vector-index.service.ts` 向量索引层（vec0 建表、KNN、回填、就绪判定）
 - `kb-tokenizer.ts` 分词（写入/查询同源）
 - `kb-search.service.ts` 语义 / FTS / BM25 重排 / RRF 融合
-- `../../common/database/kb-file.repository.ts`、`kb-chunk.repository.ts` 仓储
-- `../../common/database/bootstrap/kb-migration-bootstrap.service.ts` 迁移导入器
+- `../../common/database/kb-file.repository.ts`、`kb-chunk.repository.ts` 仓储（已迁移到 `modules/knowledge-base/`）
+- ~~`../../common/database/bootstrap/kb-migration-bootstrap.service.ts`~~（迁移导入器，已随 Prisma 主库删除）
 - `kb:reembed` 从正文重建向量
 - 测试：`test/knowledge-base/kb-*.spec.ts`，搜索回归基线 `fixtures/kb-search-golden.json`

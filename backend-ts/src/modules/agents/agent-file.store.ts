@@ -32,8 +32,6 @@ import {
 export const AGENT_FILE = "AGENT.md";
 export const TRASH_DIR = ".trash";
 export const TOMBSTONE_FILE = ".tombstones.json";
-/** 旧 id（DB cuid）→ 目录名（name slug）的映射，一次性导出时落盘 */
-export const REKEY_FILE = ".rekey.json";
 
 /** 用户可写根目录 */
 export function resolveAgentsDir(): string {
@@ -52,7 +50,7 @@ export function resolveBundledAgentsDir(): string {
   );
 }
 
-/** 对外的智能体视图（对齐原 Prisma Agent，title 已更名为 name） */
+/** 对外的智能体视图（字段名沿用既有 API，title 已更名为 name） */
 export interface AgentDefinition {
   /** 目录名 */
   id: string;

@@ -142,9 +142,9 @@ policy-rules.service 用户文件读写 / 迁移 / 校验 / mtime 缓存
 :: 指定工作区
 node scripts/cleanup-sandbox-grants.mjs --workspace "D:\AI\ai_chat"
 :: 从会话库自动发现工作区（Node ≥ 22.5）
-node scripts/cleanup-sandbox-grants.mjs --db "%USERPROFILE%\.guada\data\ai_chat.db"
+node scripts/cleanup-sandbox-grants.mjs --db "%USERPROFILE%\.guada\sessions\_meta.db"
 :: 真正执行
-node scripts/cleanup-sandbox-grants.mjs --db "%USERPROFILE%\.guada\data\ai_chat.db" --apply
+node scripts/cleanup-sandbox-grants.mjs --db "%USERPROFILE%\.guada\sessions\_meta.db" --apply
 ```
 
 清理内容：工作区目录 DACL 上**非继承**且 SID 前缀为 `S-1-4-`（v1.3.0 确定性能力 SID）或

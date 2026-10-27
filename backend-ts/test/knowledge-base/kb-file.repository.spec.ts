@@ -6,10 +6,6 @@ import {
   setConfiguredKbRoot,
 } from '../../src/modules/knowledge-base/kb-database.service';
 import {
-  META_DOMAIN_KB,
-  MetadataBootstrapGate,
-} from '../../src/common/database/metadata-bootstrap.gate';
-import {
   KBFileRepository,
   KB_ITEM_ID_PREFIX,
 } from '../../src/modules/knowledge-base/kb-file.repository';
@@ -41,9 +37,7 @@ describe('KBFileRepository', () => {
       path.join(root, kbId, 'kb.json'),
       JSON.stringify({ id: kbId, name: 'test' }),
     );
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_KB);
-    service = new KbDatabaseService(gate);
+    service = new KbDatabaseService();
     repo = new KBFileRepository(service);
     chunkRepo = new KBChunkRepository(service);
 

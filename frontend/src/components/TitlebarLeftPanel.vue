@@ -28,14 +28,6 @@
           <div class="px-4 py-2 cursor-pointer text-sm text-(--gd-titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--gd-titlebar-hover-bg) hover:text-(--gd-color-text)" @click="openDevTools">
             <span>{{ t('ui.titlebar.devConsole') }}</span>
           </div>
-          <div v-if="migrationStatus === 'available'"
-            class="px-4 py-2 cursor-pointer text-sm text-yellow-400 transition-colors duration-150 whitespace-nowrap hover:bg-(--gd-titlebar-hover-bg)" @click="startMigration">
-            <span>{{ t('ui.titlebar.dataMigration') }}</span>
-          </div>
-          <div v-if="migrationStatus === 'migrated'"
-            class="px-4 py-2 text-sm text-green-400 whitespace-nowrap opacity-70">
-            <span>{{ t('ui.titlebar.dataMigrated') }}</span>
-          </div>
           <div class="px-4 py-2 cursor-pointer text-sm text-(--gd-titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--gd-titlebar-hover-bg) hover:text-(--gd-color-text)" @click="openUserDataFolder">
             <span>{{ t('ui.titlebar.openDataFolder') }}</span>
           </div>
@@ -84,7 +76,6 @@
 </template>
 
 <script setup lang="ts">
-import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowDownload16Regular, ArrowSync16Regular, Bug16Regular, Search16Regular } from '@vicons/fluent'
@@ -110,8 +101,6 @@ const logoPath = computed(() => fixFrontendAssetUrl('/images/guada_logo_small.pn
 const showDebugMenu = ref(false)
 const showUpdateDialog = ref(false)
 const showSearchDialog = ref(false)
-const migrationStatus = ref<string>('')
-const isMigrating = ref(false)
 
 const handleUpdateClick = () => {
   if (updateStore.hasUpdate) {
@@ -196,42 +185,6 @@ const openInstallFolder = () => {
   showDebugMenu.value = false
 }
 
-const loadMigrationStatus = async () => {
-  if (!window.electronAPI) return
-  try {
-    const info = await window.electronAPI.getAppInfo()
-    migrationStatus.value = info.migration?.status || ''
-  } catch {
-    // ignore
-  }
-}
-
-const startMigration = async () => {
-  if (!window.electronAPI || isMigrating.value) return
-  isMigrating.value = true
-  showDebugMenu.value = false
-
-  const confirmed = confirm(t('ui.titlebar.migrationConfirm'))
-  if (!confirmed) {
-    isMigrating.value = false
-    return
-  }
-
-  try {
-    const result = await window.electronAPI.migrateData()
-    if (result.success) {
-      alert(t('ui.titlebar.migrationSuccess'))
-      migrationStatus.value = 'migrated'
-    } else {
-      alert(t('ui.titlebar.migrationFailed', { reason: result.message }))
-    }
-  } catch (error) {
-    alert(t('ui.titlebar.migrationError', { reason: getErrorMessage(error) }))
-  } finally {
-    isMigrating.value = false
-  }
-}
-
 const handleClickOutside = (event: MouseEvent) => {
   const dropdown = document.querySelector('.debug-dropdown')
   if (dropdown && !dropdown.contains(event.target as Node)) {
@@ -240,7 +193,6 @@ const handleClickOutside = (event: MouseEvent) => {
 }
 
 onMounted(() => {
-  loadMigrationStatus()
   updateStore.init()
   // init() 里的状态查询是异步的；若检查结果已在挂载前到达，这里补一次自动弹窗。
   if (updateStore.status === 'available' && !updateStore.isSkipped) {

@@ -6,8 +6,7 @@
 
 ## 目录
 
-- [数据库问题](#数据库问题)
-- [Prisma 相关问题](#prisma-相关问题)
+- [数据存储问题](#数据存储问题)
 - [端口与网络问题](#端口与网络问题)
 - [环境变量问题](#环境变量问题)
 - [权限问题](#权限问题)
@@ -19,37 +18,34 @@
 
 ---
 
-## 数据库问题
+## 数据存储问题
 
-### 1. 数据库表不存在
+### 1. 会话列表为空 / `_meta.db` 无法打开
 
 **症状**：
 ```
-Error: Table 'User' does not exist in the database
+Error: unable to open database file
 ```
+或启动后侧栏没有会话。
 
 **原因**：
-- 数据库文件存在但表结构未初始化
-- 连接到了错误的数据库文件
+- 数据根（`SESSION_DATA_DIR` / `USERDATA_DIR`）指向了错误位置
+- `sessions/` 目录没有写权限
 
 **解决方案**：
 
 ```bash
-cd backend-ts
+# 确认数据根
+echo $USERDATA_DIR
+ls -la "$USERDATA_DIR/sessions/_meta.db"
 
-# 方法一：重新初始化（会清空数据）
-pnpm run db:seed:force
-
-# 方法二：仅同步表结构（保留数据）
-npx prisma db push
-
-# 验证数据库
-pnpm run db:verify
+# 修复权限
+chmod -R u+w "$USERDATA_DIR/sessions"
 ```
 
 **预防措施**：
-- 确保 `DATABASE_URL` 配置正确
-- 检查所有配置文件中的路径是否一致
+- Electron 会自动注入数据根；手工部署时显式设置 `USERDATA_DIR` / `SESSION_DATA_DIR`
+- 不要多个进程同时指向同一数据根
 
 ---
 
@@ -61,122 +57,55 @@ SqliteError: database is locked
 ```
 
 **原因**：
-- 多个进程同时访问数据库
+- 多个进程同时访问 `_meta.db` / `kb.db`
 - 之前的进程未正常关闭
 
 **解决方案**：
 
 ```bash
-# 查找并杀死占用数据库的进程
-lsof backend-ts/data/ai_chat.db
+# 查找占用进程（Windows 用 handle.exe / 资源监视器）
+lsof "$USERDATA_DIR/sessions/_meta.db"
 kill -9 <PID>
 
-# 或删除锁文件（SQLite 自动管理，通常不需要手动删除）
-rm backend-ts/data/ai_chat.db-shm
-rm backend-ts/data/ai_chat.db-wal
+# SQLite WAL 锁文件（通常不需要手动删）
+rm -f "$USERDATA_DIR/sessions/_meta.db-shm" "$USERDATA_DIR/sessions/_meta.db-wal"
 ```
 
 ---
 
-### 3. 数据库路径不一致
+### 3. 旧版 Prisma 主库数据不可见
 
 **症状**：
-- 种子脚本执行成功，但后端启动后找不到数据
-- 不同操作连接到不同的数据库文件
+从 ≤ v0.5.6 直接升级后，旧会话/账户/供应商没有出现。
 
 **原因**：
-项目中存在多个数据库路径配置，如果不设置环境变量会导致路径不一致。
+当前版本已移除 Prisma 主库与 DB→文件迁移脚手架，不再读取 `ai_chat.db`。
+
+**解决方案**：
+1. 先安装 **v1.0.8** 启动一次，让旧版迁移完成；
+2. 再升级到当前版本；
+3. 旧 `ai_chat.db` / `vector_db.sqlite` 仍保留在磁盘上，不会被删除。
+
+---
+
+### 4. 数据目录不一致
+
+**症状**：
+- 在一个目录写入的会话，另一个入口看不到
+- 不同操作连接到不同数据根
+
+**原因**：
+`SESSION_DATA_DIR`、`USERDATA_DIR`、`UPLOAD_ROOT_DIR` 不一致时，各 store 会解析到不同根。
 
 **解决方案**：
 
-确保所有地方使用统一的数据库路径：
-
-1. **检查 `.env` 文件**：
+1. **统一数据根**：Electron 由 `detectDataPath()` 自动选择；手工部署显式设置：
    ```ini
-   DATABASE_URL="file:./data/ai_chat.db"
+   USERDATA_DIR=/opt/guada-ai/backend-ts
+   SESSION_DATA_DIR=/opt/guada-ai/backend-ts
    ```
-
-2. **验证 PrismaService**：
-   ```typescript
-   // src/common/database/prisma.service.ts
-   const databaseUrl = configService.get<string>("DATABASE_URL") || "file:./data/ai_chat.db";
-   ```
-
-3. **验证 prisma.config.ts**：
-   ```typescript
-   url: process.env["DATABASE_URL"] || "file:./data/ai_chat.db"
-   ```
-
-4. **验证 seed.ts**：
-   ```typescript
-   const databaseUrl = process.env.DATABASE_URL || "file:./data/ai_chat.db";
-   ```
-
-**最佳实践**：始终设置 `DATABASE_URL` 环境变量，不要依赖默认值。
-
----
-
-## Prisma 相关问题
-
-### 4. Prisma Client 未生成
-
-**症状**：
-```
-error TS2305: Module '"@prisma/client"' has no exported member 'PrismaClient'.
-```
-
-**原因**：
-- 安装依赖后未执行 `prisma generate`
-- `postinstall` 脚本失败
-
-**解决方案**：
-
-```bash
-cd backend-ts
-
-# 手动生成 Prisma Client
-npx prisma generate
-
-# 验证生成结果
-ls node_modules/@prisma/client
-```
-
-**预防措施**：
-
-在 `package.json` 中添加 `postinstall` 脚本（已完成）：
-```json
-{
-  "scripts": {
-    "postinstall": "prisma generate"
-  }
-}
-```
-
-这样每次执行 `pnpm install` 时会自动生成客户端。
-
----
-
-### 5. Prisma Schema 变更未应用
-
-**症状**：
-- 代码中使用了新字段，但运行时提示字段不存在
-- 迁移失败
-
-**解决方案**：
-
-```bash
-cd backend-ts
-
-# 开发环境：直接推送变更
-npx prisma db push
-
-# 生产环境：使用迁移
-npx prisma migrate deploy
-```
-
-**注意**：
-- `db push` 适用于开发环境，不生成迁移文件
-- `migrate deploy` 适用于生产环境，按顺序应用迁移文件
+2. **确认解析结果**：启动日志会打印 `数据目录` 与各子目录路径。
+3. **不要混用旧 AppData 与新 `~/.guada`**：旧布局会原地兼容，但两套数据互不可见。
 
 ---
 
@@ -253,7 +182,7 @@ VITE_API_BASE_URL=https://api.yourdomain.com
 
 **症状**：
 - 使用默认配置而非 `.env` 中的配置
-- 连接到错误的数据库
+- 连接到错误的数据目录
 
 **解决方案**：
 
@@ -264,8 +193,8 @@ ls -la backend-ts/.env
 # 2. 检查文件格式（不能有 BOM 或特殊字符）
 cat backend-ts/.env | head -n 5
 
-# 3. 验证 dotenv 是否正确加载
-node -e "require('dotenv').config(); console.log(process.env.DATABASE_URL)"
+# 3. 验证数据根是否生效
+node -e "require('dotenv').config(); console.log(process.env.USERDATA_DIR)"
 
 # 4. PM2 环境中手动传递环境变量
 pm2 start dist/main.js --name guada-backend --env production
@@ -275,12 +204,12 @@ pm2 start dist/main.js --name guada-backend --env production
 
 ❌ 错误写法：
 ```ini
-DATABASE_URL = "file:./data/ai_chat.db"  # 等号两边有空格
+USERDATA_DIR = "/opt/guada-ai/backend-ts"  # 等号两边有空格
 ```
 
 ✅ 正确写法：
 ```ini
-DATABASE_URL="file:./data/ai_chat.db"
+USERDATA_DIR="/opt/guada-ai/backend-ts"
 ```
 
 ---
@@ -684,29 +613,31 @@ echo ""
 echo "2. 环境变量配置:"
 if [ -f backend-ts/.env ]; then
     echo "✓ .env 文件存在"
-    grep DATABASE_URL backend-ts/.env
+    grep -E "USERDATA_DIR|SESSION_DATA_DIR|UPLOAD_ROOT_DIR" backend-ts/.env
 else
     echo "✗ .env 文件不存在"
 fi
 echo ""
 
-# 3. 检查 Prisma Client
-echo "3. Prisma Client:"
-if [ -d backend-ts/node_modules/@prisma/client ]; then
-    echo "✓ Prisma Client 已生成"
+# 3. 检查会话元数据库
+echo "3. 会话元数据库:"
+if [ -f "${USERDATA_DIR:-backend-ts}/sessions/_meta.db" ]; then
+    echo "✓ _meta.db 存在"
+    ls -lh "${USERDATA_DIR:-backend-ts}/sessions/_meta.db"
 else
-    echo "✗ Prisma Client 未生成，请运行: npx prisma generate"
+    echo "✗ _meta.db 不存在（首次启动会自动创建）"
 fi
 echo ""
 
-# 4. 检查数据库文件
-echo "4. 数据库文件:"
-if [ -f backend-ts/data/ai_chat.db ]; then
-    echo "✓ 数据库文件存在"
-    ls -lh backend-ts/data/ai_chat.db
-else
-    echo "✗ 数据库文件不存在，请运行: pnpm run db:seed:force"
-fi
+# 4. 检查数据目录
+echo "4. 数据目录:"
+for d in sessions data/kb agents providers file_stores; do
+    if [ -d "${USERDATA_DIR:-backend-ts}/$d" ]; then
+        echo "✓ $d 存在"
+    else
+        echo "· $d 不存在（首次启动会自动创建）"
+    fi
+done
 echo ""
 
 # 5. 检查端口占用

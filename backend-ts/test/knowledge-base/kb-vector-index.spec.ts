@@ -5,10 +5,6 @@ import {
   KbDatabaseService,
   setConfiguredKbRoot,
 } from '../../src/modules/knowledge-base/kb-database.service';
-import {
-  META_DOMAIN_KB,
-  MetadataBootstrapGate,
-} from '../../src/common/database/metadata-bootstrap.gate';
 import { KBChunkRepository } from '../../src/modules/knowledge-base/kb-chunk.repository';
 import { KBFileRepository } from '../../src/modules/knowledge-base/kb-file.repository';
 import { KbSearchService } from '../../src/modules/knowledge-base/kb-search.service';
@@ -89,10 +85,7 @@ describe('vec0 向量索引：与扫描路径行为等价', () => {
       path.join(root, kbId, 'kb.json'),
       JSON.stringify({ id: kbId, name: 'vecidx' }),
     );
-
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_KB);
-    databases = new KbDatabaseService(gate);
+    databases = new KbDatabaseService();
     vectorIndex = new KbVectorIndexService(databases);
     indexed = new KbSearchService(databases, vectorIndex);
     scanned = new KbSearchService(databases);
@@ -355,10 +348,7 @@ describe('vec0 索引：边界与异常态', () => {
       path.join(root, kbId, 'kb.json'),
       JSON.stringify({ id: kbId, name: 'edge' }),
     );
-
-    const gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_KB);
-    databases = new KbDatabaseService(gate);
+    databases = new KbDatabaseService();
     vectorIndex = new KbVectorIndexService(databases);
     chunkRepo = new KBChunkRepository(databases);
     fileRepo = new KBFileRepository(databases);

@@ -32,6 +32,7 @@ vc-runtime/
 
 # Electron
 release/
+release-test/
 electron/dist/
 build/
 backend-ts/static/knowledge-base/**

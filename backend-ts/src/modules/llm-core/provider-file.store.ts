@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as yaml from 'js-yaml';
 import {
   AnyThinkingEffort,
@@ -22,10 +22,6 @@ import { resolveThinkingMenu } from './thinking/resolve-thinking-efforts';
 import type { ThinkingAwareModelEntry } from './thinking/resolve-thinking-efforts';
 import { BundledCatalogService } from './bundled-catalog.service';
 import { atomicWriteFile } from '../../common/persistence/file-store-kit';
-import {
-  META_DOMAIN_PROVIDERS,
-  MetadataBootstrapGate,
-} from '../../common/database/metadata-bootstrap.gate';
 
 /** 单个供应商实例配置（providers/*.yaml 的 schema） */
 export interface ProviderFileConfig {
@@ -137,11 +133,7 @@ export class ProviderFileStore {
   private loadErrors = new Map<string, LoadError>();
   private ready: Promise<void> | null = null;
 
-  constructor(
-    private readonly bundledCatalog: BundledCatalogService,
-    // 门控：DI 实例等待 DB→文件导出完成后再预热索引（脚手架自持实例不传，它是导出方）
-    @Optional() private readonly gate?: MetadataBootstrapGate,
-  ) {
+  constructor(private readonly bundledCatalog: BundledCatalogService) {
     this.providersDir = this.resolveDir();
   }
 
@@ -168,26 +160,6 @@ export class ProviderFileStore {
   private async doInitialize(): Promise<void> {
     await fsp.mkdir(this.providersDir, { recursive: true });
     await this.loadAll();
-
-    // 升级首启的「供应商全丢」根因：本模块（@Global 基座）的 onModuleInit 在
-    // app.module.ts 中排在 PersistenceModule **之前**，而 Nest 的模块钩子是
-    // 跨模块串行 await——所以这里**不能阻塞等门控**（会与迁移导出互锁到 30s 超时，
-    // 且超时后读到的仍是导出前的空目录）。
-    // 正确做法：先按磁盘现状预热，门控（= 迁移导出已尝试结束）放行后再扫一次，
-    // 把刚导出的实例纳入索引；HTTP 服务在全部模块钩子之后才 listen，故 UI 不会看到空列表。
-    if (this.gate && !this.gate.isCompleted(META_DOMAIN_PROVIDERS)) {
-      this.gate
-        .wait(META_DOMAIN_PROVIDERS)
-        .then(() => this.loadAll())
-        .then(() =>
-          this.logger.log(
-            `Provider index reloaded after bootstrap (${this.cache.size} providers)`,
-          ),
-        )
-        .catch((err) =>
-          this.logger.warn(`Provider index reload after bootstrap failed: ${String(err)}`),
-        );
-    }
 
     this.logger.log(
       `Provider file store ready at ${this.providersDir} (${this.cache.size} providers)`,

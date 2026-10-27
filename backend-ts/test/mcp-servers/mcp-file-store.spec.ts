@@ -5,10 +5,6 @@ import {
   MCP_TOOLS_SUFFIX,
   McpFileStore,
 } from '../../src/modules/mcp-servers/mcp-file.store';
-import {
-  META_DOMAIN_MCP,
-  MetadataBootstrapGate,
-} from '../../src/common/database/metadata-bootstrap.gate';
 
 /**
  * MCP 服务器文件存储测试
@@ -19,13 +15,9 @@ import {
 describe('McpFileStore', () => {
   let dir: string;
   let store: McpFileStore;
-  let gate: MetadataBootstrapGate;
-
   function mkStore(): McpFileStore {
     // 门控是纯内存类，直接放行，避免测试挂在 30s 超时上
-    gate = new MetadataBootstrapGate();
-    gate.complete(META_DOMAIN_MCP);
-    return new McpFileStore(gate);
+    return new McpFileStore();
   }
 
   beforeEach(() => {

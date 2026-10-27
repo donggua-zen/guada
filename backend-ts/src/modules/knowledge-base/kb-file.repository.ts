@@ -85,7 +85,7 @@ interface ItemDbRow {
  * 权威来源 = `<KB根>/<kbId>/kb.db` 的 `item` 表。类名保留 `KBFileRepository`，
  * 以便既有调用方与 DI 装配零改动。
  *
- * 与原 Prisma/文件版的关键差别：**点查询需要 kbId**（库即作用域，不再有全局 id 空间）。
+ * 与早期文件版的关键差别：**点查询需要 kbId**（库即作用域，不再有全局 id 空间）。
  * 跨库方法（findByStatus / listItems 省略 kbId）保留：启动期对账确实需要跨库视图。
  *
  * 排序语义与原实现保持一致：

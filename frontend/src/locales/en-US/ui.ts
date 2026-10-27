@@ -111,8 +111,6 @@
     searchSession: 'Search Sessions',
     debugTools: 'Debug Tools',
     devConsole: 'Developer Console',
-    dataMigration: '📦 Data Migration',
-    dataMigrated: '✅ Data migrated',
     openDataFolder: 'Open Data Folder',
     openInstallFolder: 'Open Install Folder',
     githubRepo: 'GitHub Repository',
@@ -127,10 +125,6 @@
     updateTooltipDownloading: 'Downloading update {percent}%. Click to view progress.',
     updateTooltipReady: 'Update downloaded. Click to restart and install.',
     updateTooltipInstalling: 'Installing update',
-    migrationConfirm: 'Data will be migrated from the AppData directory to the .guada directory under your home directory. This requires restarting the backend. Continue?',
-    migrationSuccess: '✅ Data migration successful! Data has been moved to ~/.guada/',
-    migrationFailed: '❌ Migration failed: {reason}',
-    migrationError: '❌ Migration error: {reason}',
   },
 
   // ── 侧边栏 ──

@@ -1,6 +1,9 @@
 # GuaDa 对话记录 JSONL 持久化方案 — 详细设计
 
 > 版本：2.0 | 日期：2026-08-20 | 状态：已确认（事件溯源方案）
+>
+> **更新（2026-10）**：Prisma 主库已移除。文中 `ai_chat.db` / Prisma schema / MigrationRunner
+> 等描述是当时的历史方案；当前元数据走 `sessions/_meta.db`，消息仍走 JSONL。
 
 ---
 

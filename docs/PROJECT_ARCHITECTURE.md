@@ -2,8 +2,9 @@
 
 > 生成时间：会话内 workflow 实战分析（9 个 AI 代理协作）
 > 方法：8 个代理并行分层审查 → 流水线加工（风险分类 + 健康度评分）→ 总架构师汇总
-> 材料来源：根/backend-ts/frontend/electron 的 package.json、app.module.ts、main.ts、prisma schema、目录结构、文档索引等真实项目文件
+> 材料来源：根/backend-ts/frontend/electron 的 package.json、app.module.ts、main.ts、目录结构、文档索引等真实项目文件
 > ⚠️ 说明：报告中标注「推测」的发现基于材料推断，标注「事实/材料级证据」的有明确文件佐证，落地前建议人工复核关键结论。
+> **更新（2026-10）**：Prisma 主库与 DB→文件迁移脚手架已整体移除，运行时只使用 JSONL + 本地 SQLite（`_meta.db` / `kb.db`）。下文涉及 Prisma/主库的段落为历史记录。
 
 ---
 
@@ -65,13 +66,13 @@
 
 ### 3.2 数据层与持久化（health 52）
 
-**总览**：SQLite 唯一存储底座 = Prisma 7 + better-sqlite3 adapter + sqlite-vec 向量扩展 + FTS5 全文搜索（独立库）+ 自研 MigrationRunner 迁移体系 + jsonl 持久化抽象（IMessageStore）。17 个业务模型（SessionGroup/Session/Message/MessageContent/ModelProvider/Model/User/CharacterGroup/Character/KnowledgeBase/KBFile/KBChunk/Memory/File/McpServer/UserSetting/BotInstance）。
+**总览（历史段落，Prisma 已移除）**：早期 SQLite 存储底座 = Prisma 7 + better-sqlite3 adapter + sqlite-vec 向量扩展 + FTS5 全文搜索 + 自研 MigrationRunner。当前运行时已无 Prisma：会话元数据走 `sessions/_meta.db`（`SessionMetaStore`），知识库走每库 `kb.db`，消息走 JSONL。
 
-**去主库化分层（知识库已改为每库自包含目录）**：会话消息主存储 = JSONL 事件日志（sessions/<id>/seg-*.jsonl + snapshot）；知识库 = `<知识库根>/<kbId>/{kb.json, kb.db, raw/}`，条目元信息、分块正文、向量与 FTS 全在 `kb.db` 内（`KbDatabaseService` 管每库连接：懒开 + LRU + `user_version` schema 迁移，删除前必须关闭句柄），原件副本存 `raw/<itemId>/`，检索走 `KbSearchService`（语义 + FTS + BM25 重排 + RRF，库内暴力余弦）；删库 = 关连接 + 删目录。主库 kb_chunk 的 prisma fallback 已删除——分块由冻结库 / 旧 `chunks.jsonl` / 旧全局 `vector_db.sqlite` 三源导入 `kb.db`。详见 [design/kb-storage.md](design/kb-storage.md)。
+**去主库化分层（知识库已改为每库自包含目录）**：会话消息主存储 = JSONL 事件日志（sessions/<id>/seg-*.jsonl + snapshot）；知识库 = `<知识库根>/<kbId>/{kb.json, kb.db, raw/}`，条目元信息、分块正文、向量与 FTS 全在 `kb.db` 内（`KbDatabaseService` 管每库连接：懒开 + LRU + `user_version` schema 迁移，删除前必须关闭句柄），原件副本存 `raw/<itemId>/`，检索走 `KbSearchService`（语义 + FTS + BM25 重排 + RRF，库内暴力余弦）；删库 = 关连接 + 删目录。Prisma 主库已整体移除，旧 `ai_chat.db` 仅作为磁盘上的回滚快照保留。详见 [design/kb-storage.md](design/kb-storage.md)。
 
-**角色/智能体定义已文件化（2026-09）**：权威来源 = `agents/<id>/AGENT.md`（YAML frontmatter + Markdown 正文，目录名即 id，头像在同目录内）。`CharacterFileStore` 双根解析（`AGENTS_DATA_DIR` → `USERDATA_DIR/agents` → `cwd()/data/agents`）+ chokidar 热重载 + 原子写；`bundled-agents/` 为随包内置模板，启动补种（已存在不覆盖、有墓碑不复活），UI 删除走 `.trash/` 回收站 + 墓碑。DB `character`/`character_group` 表已冻结（仅供回滚，上线前删除），`session.character_id` 改悬空引用（迁移 0004 解除外键）；角色分组功能与 `isPublic` 已移除，`title` 统一更名为 `name`。格式详见 `docs/design/character-file-format.md`。
+**角色/智能体定义已文件化（2026-09）**：权威来源 = `agents/<id>/AGENT.md`（YAML frontmatter + Markdown 正文，目录名即 id，头像在同目录内）。`AgentFileStore` 双根解析（`AGENTS_DATA_DIR` → `USERDATA_DIR/agents` → `cwd()/data/agents`）+ chokidar 热重载 + 原子写；`bundled-agents/` 为随包内置模板，启动补种（已存在不覆盖、有墓碑不复活），UI 删除走 `.trash/` 回收站 + 墓碑。早期 DB `character`/`character_group` 表已随 Prisma 主库移除；角色分组功能与 `isPublic` 已移除，`title` 统一更名为 `name`。格式详见 `docs/design/character-file-format.md`。
 
-**会话/机器人/知识库元信息已文件化（2026-09）**：三域权威来源 = `sessions/<id>/meta.json`（会话元信息，与 JSONL 事件日志同址，删除会话即删整目录）、`sessions/_groups.json`（分组）、`bots/<id>.yaml`（机器人实例，同 providers 范式）、`data/kb/<kbId>/kb.json`（KB 配置；条目/分块/向量随后迁入同目录的 `kb.db`，见上一段）。三个域 id 均保持原 cuid → 零引用改写、无需 DB migration。`SessionFileStore`/`BotFileStore` 为「启动全量扫文件建内存索引 + chokidar（只监听元信息文件，过滤 JSONL）+ 原子写 + 每 id 写互斥」（KB 已不需要这些机制：索引在 kb.db 内，不存在"外部改文件要重扫"的场景）；排序键（`lastActiveAt`/`updatedAt`/`createdAt`）落盘在 meta.json 而非用文件系统时间（文件时间不可移植，Electron 整目录拷贝不保留 mtime），查询时内存排序 + 确定性 id tiebreak。启动期由 `MetadataFileBootstrapService` 一次性导出，`MetadataBootstrapGate` 门控确保导出完成前 store 不读索引；导出失败不落 marker 下次重试；孤儿会话（有 JSONL 无 meta.json）从 `session/init` 事件自愈重建。格式详见 `docs/design/metadata-file-format.md`。
+**会话/机器人/知识库元信息已文件化（2026-09，后续收敛为 `_meta.db`）**：当前权威来源 = `sessions/_meta.db`（会话元信息与分组，`SessionMetaStore`）、`bots/<id>.yaml`（机器人实例，同 providers 范式）、`data/kb/<kbId>/kb.json`（KB 配置；条目/分块/向量在 `kb.db`）。早期文件形态 `meta.json` / `_groups.json` 从未上线。各域 id 均保持原 cuid → 零引用改写。`SessionMetaStore` 启动时做孤儿/幽灵收敛；`BotFileStore` 为「启动全量扫文件建内存索引 + chokidar + 原子写 + 每 id 写互斥」。排序键（`lastActiveAt`/`updatedAt`/`createdAt`）落库而非用文件系统时间。启动期已无 `MetadataFileBootstrapService` / `MetadataBootstrapGate`（随 Prisma 主库一起删除）。格式详见 `docs/design/metadata-file-format.md`。
 
 **单账户模型（2026-09）**：多账户体系已彻底移除——子账户接口（本已损坏）、`role`/`parentId`、前端子账户 UI（零引用死代码）全部删除。账户权威来源改为 `<SETTINGS_DIR>/account.json`（单一账户：用户名/可选密码/昵称/头像/壁纸），密码存在与否即免登录开关（取代原 `autoLoginEnabled` 设置，两者语义重叠）。`userId` 作为数据归属维度**彻底移除**：文件格式不再写 userId（旧文件残留字段读时忽略，零数据迁移）、仓储签名与 SSR 订阅分区去维度、全部归属校验删除（**鉴权守卫保留**，删的是"是不是你的"而非"能不能访问"）。迁移 `0005` 移除 `mcp_server.user_id` 与 `file.upload_user_id`；`user`/`user_setting` 表冻结为回滚快照。定位说明：数据本身明文存储，账户仅用于公网部署挡住路人，非安全边界。详见 `docs/design/single-account.md`。
 

@@ -10,10 +10,6 @@ import {
   removeFileWithRetry,
 } from "../../common/persistence/file-store-kit";
 import { ID_PREFIXES } from "../../common/utils/id.util";
-import {
-  META_DOMAIN_MCP,
-  MetadataBootstrapGate,
-} from "../../common/database/metadata-bootstrap.gate";
 
 /**
  * MCP 服务器文件存储（对齐 bots/<id>.yaml 的既有范式）
@@ -26,12 +22,11 @@ import {
  * - 配置与工具缓存分开的理由：tools 是几十个工具 × inputSchema 的冗长 JSON，
  *   内联会让 YAML 膨胀几百行、把配置淹没（同 AGENT.md + avatar、file.json + chunks.jsonl）
  * - 内存缓存是盘的只读视图，**不做实时监听**：外部手改文件重启后生效。
- *   写路径只有 API 与迁移导出，两者都是写后主动刷新缓存，无需 watcher 兜底
+ *   写路径只有 API 与导入工具，两者都是写后主动刷新缓存，无需 watcher 兜底
  * - 原子写（tmp + rename + Windows EPERM 退避重试）
  * - 非法文件隔离：解析失败仅记录，不崩服务、不挤占缓存
  */
 
-export const MCP_MIGRATED_MARKER = ".migrated-mcp";
 /** 工具缓存文件后缀（非配置正本，loadAll 不当作实例加载） */
 export const MCP_TOOLS_SUFFIX = ".tools.json";
 
@@ -62,7 +57,7 @@ export interface McpServerConfig {
 }
 
 /**
- * 对外行视图：额外合并 tools 缓存，字段名与 Prisma 行完全一致（前端零改动）。
+ * 对外行视图：额外合并 tools 缓存，字段名与原数据库行一致（前端零改动）。
  * `tools` 为 `{ [toolName]: { description, inputSchema } }`，未抓取过则为 null。
  */
 export interface McpServerRow extends McpServerConfig {
@@ -105,7 +100,7 @@ export class McpFileStore {
   /** 每实例写互斥（YAML 是整文件重写） */
   private writeChains = new Map<string, Promise<unknown>>();
 
-  constructor(private readonly gate: MetadataBootstrapGate) {
+  constructor() {
     this.mcpDir = resolveMcpDir();
   }
 
@@ -119,8 +114,6 @@ export class McpFileStore {
   }
 
   private async doInitialize(): Promise<void> {
-    // 迁移导出未完成时不得读索引
-    await this.gate.wait(META_DOMAIN_MCP);
     await fsp.mkdir(this.mcpDir, { recursive: true });
     await this.loadAll();
     this.logger.log(
@@ -129,8 +122,8 @@ export class McpFileStore {
   }
 
   /**
-   * 外部批量写入（迁移导出）后强制重载。
-   * 不经过 initialize()：导出引导在门控放行前调用，等待门控会自锁。
+   * 外部批量写入后强制重载。
+   * 不经过 initialize()（保留给导入/修复工具使用）。
    */
   async reload(): Promise<void> {
     await this.loadAll();
@@ -245,7 +238,7 @@ export class McpFileStore {
       await this.writeToolsFile(id, tools);
       this.toolsCache.set(id, tools);
       // 工具缓存变化也是「配置视图」的变化，但不必改 updatedAt（与 DB 版一致：
-      // updateTools 走 prisma.update，会刷新 updatedAt）
+      // updateTools 会刷新 updatedAt）
       const current = this.cache.get(id)!;
       const refreshed: McpServerConfig = {
         ...current,
@@ -257,7 +250,7 @@ export class McpFileStore {
     return this.getRow(id);
   }
 
-  /** 由外部（迁移导出）直接写入并刷新缓存 */
+  /** 由外部（导入/修复工具）直接写入并刷新缓存 */
   async writeDirect(row: McpServerRow): Promise<void> {
     const { tools, ...config } = row;
     await this.withLock(config.id, async () => {
