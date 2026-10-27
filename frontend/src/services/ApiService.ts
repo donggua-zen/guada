@@ -46,6 +46,7 @@ import { fileUploadApi, type FileUploadApi } from "./modules/file-upload.api";
 import { authApi, type AuthApi } from "./modules/auth.api";
 import { settingsApi, type SettingsApi } from "./modules/settings.api";
 import { policyApi, type PolicyApi } from "./modules/policy.api";
+import { capabilitiesApi, type CapabilitiesApi } from "./modules/capabilities.api";
 import { mcpApi, type McpApi } from "./modules/mcp.api";
 import { skillsApi, type SkillsApi } from "./modules/skills.api";
 import { knowledgeBaseApi, type KnowledgeBaseApi } from "./modules/knowledge-base.api";
@@ -76,6 +77,7 @@ interface ApiService
     AuthApi,
     SettingsApi,
     PolicyApi,
+    CapabilitiesApi,
     McpApi,
     SkillsApi,
     KnowledgeBaseApi,
@@ -410,6 +412,7 @@ Object.assign(
   authApi,
   settingsApi,
   policyApi,
+  capabilitiesApi,
   mcpApi,
   skillsApi,
   knowledgeBaseApi,

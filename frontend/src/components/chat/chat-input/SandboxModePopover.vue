@@ -48,11 +48,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, type Component } from 'vue'
+import { computed, onMounted, type Component } from 'vue'
 import { ElIcon } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { ShieldLock20Regular, ClipboardTask20Regular, ShieldError16Regular, Checkmark16Regular, Lightbulb24Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 
 const { t } = useI18n()
 
@@ -79,33 +80,39 @@ const emit = defineEmits<{
 }>()
 
 /**
- * 当前平台。Windows 上 shell 没有 OS 沙盒（由命令策略层接管：只读白名单 + 审批），
- * 档位描述必须说清真实语义，否则用户以为"工作区可写"仍限制命令写入路径。
- * 非 Electron 环境（浏览器 dev）用 navigator.platform 兜底判 Windows。
+ * 后端平台与可选档位。Windows 后端不提供 read-only（shell 只有命令白名单，
+ * 不是真正的只读沙盒）；平台必须以后端能力端点为准，客户端平台在
+ * 手机浏览器/Web 访问 Windows 后端时不可靠。
  */
-const isWindows = computed(() => {
-  const electronPlatform = window.electronAPI?.platform
-  if (typeof electronPlatform === 'string') return electronPlatform === 'win32'
-  return typeof navigator !== 'undefined' && navigator.platform.startsWith('Win')
+const capabilities = useCapabilitiesStore()
+
+onMounted(() => {
+  void capabilities.ensureLoaded()
 })
 
-const options = computed<RunModeOption[]>(() => [
-  {
-    value: 'read-only',
-    label: t('chat.input.runModeReadOnly'),
-    desc: isWindows.value ? t('chat.input.runModeReadOnlyDescWin') : t('chat.input.runModeReadOnlyDesc'),
-    icon: ClipboardTask20Regular,
-  },
-  {
-    value: 'workspace-write',
-    label: t('chat.input.runModeWorkspaceWrite'),
-    desc: isWindows.value ? t('chat.input.runModeWorkspaceWriteDescWin') : t('chat.input.runModeWorkspaceWriteDesc'),
-    icon: ShieldLock20Regular,
-  },
-  { value: 'danger-full-access', label: t('chat.input.runModeFullAccess'), desc: t('chat.input.runModeFullAccessDesc'), icon: ShieldError16Regular, danger: true },
-])
+const options = computed<RunModeOption[]>(() => {
+  const all: RunModeOption[] = [
+    {
+      value: 'read-only',
+      label: t('chat.input.runModeReadOnly'),
+      desc: t('chat.input.runModeReadOnlyDesc'),
+      icon: ClipboardTask20Regular,
+    },
+    {
+      value: 'workspace-write',
+      label: t('chat.input.runModeWorkspaceWrite'),
+      desc: capabilities.isWindows
+        ? t('chat.input.runModeWorkspaceWriteDescWin')
+        : t('chat.input.runModeWorkspaceWriteDesc'),
+      icon: ShieldLock20Regular,
+    },
+    { value: 'danger-full-access', label: t('chat.input.runModeFullAccess'), desc: t('chat.input.runModeFullAccessDesc'), icon: ShieldError16Regular, danger: true },
+  ]
+  return all.filter((opt) => capabilities.isSupported(opt.value))
+})
 
 function handleSelect(mode: string) {
+  if (!capabilities.isSupported(mode)) return
   emit('select', mode)
   emit('update:visible', false)
 }

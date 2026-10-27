@@ -203,6 +203,7 @@ import { usePopup } from "@/composables/usePopup";
 import { useSessionStore } from "../../stores/session";
 import { useAuthStore } from "../../stores/auth"
 import { useLayoutStore } from "@/stores/layout"
+import { useCapabilitiesStore } from "@/stores/capabilities"
 import { streamReceiver } from "@/services/modules/StreamReceiver"
 import { writeTextToClipboard } from "@/utils/clipboard"
 import { SESSION_RESYNC_EVENT } from "@/utils/sessionResync"
@@ -260,6 +261,7 @@ const { confirm, editText, toast, notify } = usePopup();
 const { refreshQueue } = useSessionEvents();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
+const capabilities = useCapabilitiesStore();
 const { scheduleSave, flushSession } = useSessionSettingsSync();
 const layoutStore = useLayoutStore();
 const router = useRouter();
@@ -830,7 +832,7 @@ const chatInputConfig = computed(() => {
     maxTokensLimit: settings?.maxTokensLimit ?? null,
     knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || settings?.referencedKbs || [],
     workspacePath: currentSession.value?.workspacePath || null,
-    sandboxMode: settings?.sandboxMode || 'workspace-write',
+    sandboxMode: capabilities.normalize(settings?.sandboxMode),
     // 计划模式读 UI 投影（不是设置直读）：模型经 ExitPlanMode 退出时流帧只更新投影与会话对象，
     // 由下方 watcher 与设置收敛，这里始终取当前生效值。
     planEnabled: currentSessionId.value
@@ -942,7 +944,8 @@ const handleConfigChange = (config: ChatInputConfigChange) => {
 
   // 处理安全模式
   if (typeof config.sandboxMode !== 'undefined') {
-    sessionStore.patchSessionSettings(sessionId, { sandboxMode: config.sandboxMode });
+    // Windows 后端已取消 read-only：本地乐观更新也收敛，避免 UI 短暂显示已取消档位
+    sessionStore.patchSessionSettings(sessionId, { sandboxMode: capabilities.normalize(config.sandboxMode) });
     settingsChanged = true;
   }
 
@@ -1416,7 +1419,11 @@ async function sendLocalSlashCommand(
 function buildSettingsOverride(sid: string): ChatSettingsOverride {
   const session = currentSession.value;
   const settings = session?.settings as SessionSettingsView | undefined;
-  const sandboxMode = settings?.sandboxMode;
+  const rawSandboxMode = settings?.sandboxMode;
+  const sandboxMode =
+    rawSandboxMode === undefined
+      ? undefined
+      : capabilities.normalize(rawSandboxMode);
   const thinkingEffort = session?.settings?.thinkingEffort;
   const maxTokensLimit = settings?.maxTokensLimit;
   // 会话未绑定时带智能体默认模型，保证本回合与输入区显示一致
@@ -1429,11 +1436,7 @@ function buildSettingsOverride(sid: string): ChatSettingsOverride {
     ...(typeof maxTokensLimit === 'number' || maxTokensLimit === null
       ? { maxTokensLimit }
       : {}),
-    ...(sandboxMode === 'read-only' ||
-    sandboxMode === 'workspace-write' ||
-    sandboxMode === 'danger-full-access'
-      ? { sandboxMode }
-      : {}),
+    ...(sandboxMode ? { sandboxMode } : {}),
     planEnabled: sessionStore.sessionPlanEnabled(sid),
   };
 }

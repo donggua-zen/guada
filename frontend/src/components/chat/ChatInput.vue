@@ -198,6 +198,7 @@ import {
   Lightbulb24Regular, Dismiss16Regular
 } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService';
+import { useCapabilitiesStore } from '@/stores/capabilities';
 
 /** File object managed by ChatInput (created via createFileObject) */
 interface ChatFile {
@@ -521,8 +522,11 @@ const localThinkingEffort = ref<string>('none');
 // 运行模式相关
 const sandboxModeButtonRef = ref<HTMLElement | null>(null);
 const sandboxModePopoverVisible = ref(false);
+const capabilities = useCapabilitiesStore();
 
-const currentSandboxMode = computed(() => props.config?.sandboxMode || 'workspace-write');
+// Windows 后端已取消 read-only 用户档位：历史会话/旧客户端的值在展示层收敛，
+// 后端执行侧另有一道同样的归一化。
+const currentSandboxMode = computed(() => capabilities.normalize(props.config?.sandboxMode));
 const sandboxModeLabel = computed(() => {
   if (currentSandboxMode.value === 'read-only') return t('chat.input.runModeReadOnly');
   if (currentSandboxMode.value === 'workspace-write') return t('chat.input.runModeWorkspaceWrite');
@@ -1466,6 +1470,7 @@ watch(() => props.buttons, (value) => {
 }, { immediate: true });
 
 onMounted(() => {
+  void capabilities.ensureLoaded();
   loadModels();
   initThinkingEffort(); // 初始化思考强度
 

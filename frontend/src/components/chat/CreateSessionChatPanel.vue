@@ -79,6 +79,7 @@ import { useWorkspaceStore } from '@/stores/workspace';
 import { usePrefillInput } from '@/composables/usePrefillInput';
 import { useSelectedAgent } from '@/composables/useSelectedAgent';
 import { useNewSessionDraftStore, type NewSessionDraftConfig } from '@/stores/newSessionDraft';
+import { useCapabilitiesStore } from '@/stores/capabilities';
 // 组件导入
 import { ChatInput, Avatar } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
@@ -89,6 +90,7 @@ import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 const { notify } = usePopup();
 const router = useRouter();
 const route = useRoute();
+const capabilities = useCapabilitiesStore();
 
 // 响应式数据 - 类型化
 const title = useTitle();
@@ -119,14 +121,11 @@ const userSelectedThinkingEffort = useStorage<string>('userSelectedThinkingEffor
 const userSelectedKnowledgeBaseIds = useStorage<string[]>('userSelectedKnowledgeBaseIds', []);
 
 // 沙盒模式：记住上次选择，新会话草稿默认沿用（与上面几处偏好同构的本地记忆）。
-// 词表校验兜底：本地值损坏/过期时回落默认档——后端 DTO 有 @IsIn 校验，发坏值会 400。
+// 词表校验由 capabilities 负责：Windows 后端已取消 read-only，历史本地值会被收敛。
 // 计划模式刻意不随此记忆（任务级意图、默认关；对齐 ZCode 新任务 plan→build 归零）。
-const SANDBOX_MODE_VALUES = ['read-only', 'workspace-write', 'danger-full-access'] as const;
 const userSelectedSandboxMode = useStorage<string>('userSelectedSandboxMode', 'workspace-write');
 const rememberedSandboxMode = computed(() =>
-  (SANDBOX_MODE_VALUES as readonly string[]).includes(userSelectedSandboxMode.value)
-    ? userSelectedSandboxMode.value
-    : 'workspace-write'
+  capabilities.normalize(userSelectedSandboxMode.value)
 );
 
 // 新建页草稿上提到 store：本组件切走即整体卸载，组件本地状态会随之丢失；
@@ -505,7 +504,7 @@ const chatInputConfig = computed(() => ({
   knowledgeBaseIds: currentSession.value?.settings?.referencedKbs || [],
 
   // 运行模式
-  sandboxMode: currentSession.value?.settings?.sandboxMode || 'workspace-write',
+  sandboxMode: capabilities.normalize(currentSession.value?.settings?.sandboxMode),
 
   // 计划模式（协作状态，正交于 sandboxMode）：新建页无会话，草稿值随 create-session 一并提交
   planEnabled: currentSession.value?.settings?.planEnabled === true,
@@ -575,9 +574,10 @@ const handleConfigChange = (config: ChatInputConfigChange): void => {
 
   // 处理安全模式变更：同时写入本地记忆，供下次新建会话作为草稿默认
   if (typeof config.sandboxMode !== 'undefined') {
-    currentSession.value.settings.sandboxMode = config.sandboxMode;
-    userSelectedSandboxMode.value = config.sandboxMode;
-    console.log('保存 sandboxMode 到会话:', config.sandboxMode);
+    const normalized = capabilities.normalize(config.sandboxMode);
+    currentSession.value.settings.sandboxMode = normalized;
+    userSelectedSandboxMode.value = normalized;
+    console.log('保存 sandboxMode 到会话:', normalized);
   }
 
   // 处理计划模式（协作状态）：仅写草稿——新建页尚无会话，不走 store/API，
@@ -606,6 +606,14 @@ const { consumePrefill } = usePrefillInput()
 const { consumeSelectedAgent } = useSelectedAgent()
 
 onMounted(() => {
+  void capabilities.ensureLoaded().then(() => {
+    // 本地记忆里的历史 read-only 在 Windows 上无法再提交：先收敛并写回记忆
+    const normalized = capabilities.normalize(userSelectedSandboxMode.value);
+    if (normalized !== userSelectedSandboxMode.value) {
+      userSelectedSandboxMode.value = normalized;
+      currentSession.value.settings.sandboxMode = normalized;
+    }
+  });
   title.value = t('chat.welcome.pageTitle');
   // 先加载模型列表，再加载智能体列表
   Promise.all([loadModels(), loadAgents()]).then(() => {

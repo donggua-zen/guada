@@ -311,7 +311,7 @@ describe('ChatRunnerService（supervisor：直发模式下的流生命周期收�
           modelId: 'prov-b:model-b',
           thinkingEffort: 'high',
           maxTokensLimit: 2000,
-          sandboxMode: 'read-only',
+          sandboxMode: 'danger-full-access',
         },
       });
 
@@ -323,7 +323,7 @@ describe('ChatRunnerService（supervisor：直发模式下的流生命周期收�
       expect(effective.settings).toMatchObject({
         thinkingEffort: 'high',
         maxTokensLimit: 2000,
-        sandboxMode: 'read-only',
+        sandboxMode: 'danger-full-access',
       });
 
       // 原对象保持原值（覆盖不得落回会话）

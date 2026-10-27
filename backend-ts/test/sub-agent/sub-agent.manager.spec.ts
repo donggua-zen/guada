@@ -84,6 +84,23 @@ async function until(predicate: () => boolean, timeoutMs = 2000): Promise<void> 
   }
 }
 
+/** 临时切换 process.platform：spawn 在首个 await 之前就读取了档位 */
+function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
+  const original = process.platform;
+  Object.defineProperty(process, "platform", {
+    value: platform,
+    configurable: true,
+  });
+  try {
+    return fn();
+  } finally {
+    Object.defineProperty(process, "platform", {
+      value: original,
+      configurable: true,
+    });
+  }
+}
+
 describe("SubAgentManager", () => {
   beforeEach(() => {
     jest.spyOn(Logger.prototype, "log").mockImplementation(() => undefined);
@@ -142,7 +159,9 @@ describe("SubAgentManager", () => {
         getSandboxMode: () => "read-only",
       });
 
-      await manager.spawn({ parentContext, name: "x", task: "t" });
+      await withPlatform("linux", () =>
+        manager.spawn({ parentContext, name: "x", task: "t" }),
+      );
 
       expect(sessionStore.createCalls[0].settings).toMatchObject({
         thinkingEffort: "high",
@@ -150,6 +169,22 @@ describe("SubAgentManager", () => {
         plugins: ["p1"],
         skills: { s: 1 },
       });
+    });
+
+    it("Windows 上继承的 read-only 归一化为 workspace-write（旧会话迁移）", async () => {
+      const { manager, sessionStore, chatRunner } = setup();
+      completesImmediately(chatRunner);
+      const parentContext = createFakeParentContext({
+        getSandboxMode: () => "read-only",
+      });
+
+      await withPlatform("win32", () =>
+        manager.spawn({ parentContext, name: "x", task: "t" }),
+      );
+
+      expect(sessionStore.createCalls[0].settings.sandboxMode).toBe(
+        "workspace-write",
+      );
     });
 
     it("通用子代理使用默认系统提示词", async () => {

@@ -3,6 +3,7 @@ import { SessionMetaStore } from "../chat/session-meta.store";
 import { AgentFileStore } from "../agents/agent-file.store";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
+import { normalizeSandboxMode } from "../../common/services/sandbox-policy";
 import { ISessionContext } from "../chat/session-context";
 import { safeTruncate } from "../../common/utils/string.utils";
 import { JobRegistryService } from "../jobs/job-registry.service";
@@ -241,7 +242,7 @@ export class SubAgentManager implements OnModuleInit {
     // 思考强度：无论是否有智能体，都从父会话继承
     settings.thinkingEffort = parentContext.getSettings("thinkingEffort");
     // 安全模式：从父会话继承，防止子代理权限逃逸（如 workspace-write → danger-full-access）
-    settings.sandboxMode = parentContext.getSandboxMode();
+    settings.sandboxMode = normalizeSandboxMode(parentContext.getSandboxMode());
     // 附加连接配置：从父会话继承（如 ssh-connection 远程连接），使子代理可复用主代理绑定的连接
     settings.attachments = parentContext.getSettings("attachments") ?? {};
 
@@ -435,7 +436,7 @@ export class SubAgentManager implements OnModuleInit {
     const settings: Record<string, any> = {
       thinkingEffort: parentContext.getSettings("thinkingEffort"),
       // 安全模式：从父会话继承，防止子代理权限逃逸（如 workspace-write → danger-full-access）
-      sandboxMode: parentContext.getSandboxMode(),
+      sandboxMode: normalizeSandboxMode(parentContext.getSandboxMode()),
       attachments: parentContext.getSettings("attachments") ?? {},
       workflow: {
         runId: params.workflow.runId,

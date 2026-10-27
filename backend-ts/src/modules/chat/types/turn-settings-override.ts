@@ -1,5 +1,9 @@
 import { BadRequestException } from "@nestjs/common";
 import { mintPlanModeEpoch } from "../../../common/utils/plan-mode-epoch.util";
+import {
+  ALL_SANDBOX_MODES,
+  normalizeSandboxMode,
+} from "../../../common/services/sandbox-policy";
 
 /**
  * 回合级设置覆盖（排队消息补发时使用）。
@@ -7,11 +11,7 @@ import { mintPlanModeEpoch } from "../../../common/utils/plan-mode-epoch.util";
  * 语义：只影响当前回合，不写回会话持久化设置。字段是白名单——绝不能把客户端
  * 传入的任意 settings 键展开进会话（plugins/skills/systemPrompt 等不可由客户端改）。
  */
-export const SANDBOX_MODES = [
-  "read-only",
-  "workspace-write",
-  "danger-full-access",
-] as const;
+export const SANDBOX_MODES = ALL_SANDBOX_MODES;
 
 export type SandboxMode = (typeof SANDBOX_MODES)[number];
 
@@ -108,7 +108,8 @@ export function applyTurnSettingsOverride<T extends Record<string, any>>(
     settings.maxTokensLimit = override.maxTokensLimit;
   }
   if (override.sandboxMode !== undefined) {
-    settings.sandboxMode = override.sandboxMode;
+    // 保留 read-only 的入参兼容（旧客户端/排队消息），执行前按平台归一化。
+    settings.sandboxMode = normalizeSandboxMode(override.sandboxMode);
   }
   if (override.planEnabled !== undefined) {
     settings.planEnabled = override.planEnabled;

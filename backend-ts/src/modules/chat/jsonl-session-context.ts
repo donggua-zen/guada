@@ -58,6 +58,7 @@ import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { RemoteBindingStateService } from '../remote-workspace/remote-binding-state.service';
 import { SessionMetaStore } from './session-meta.store';
 import { mintPlanModeEpoch } from '../../common/utils/plan-mode-epoch.util';
+import { normalizeSandboxMode } from '../../common/services/sandbox-policy';
 import { wrapSystemReminder } from '../../common/utils/system-reminder.util';
 import {
   pickBaselineUserMessage,
@@ -246,13 +247,17 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     );
 
     // 4. 恢复持久化的安全模式（三档词表持久化于 settings.sandboxMode，未知值回退默认）
+    // Windows 已取消用户可选 read-only：历史值/非法值在此归一化，并落库一次。
     const savedSandboxMode = this.session.settings?.sandboxMode;
-    if (
-      savedSandboxMode === 'read-only' ||
-      savedSandboxMode === 'workspace-write' ||
-      savedSandboxMode === 'danger-full-access'
-    ) {
-      this.sandboxMode = savedSandboxMode;
+    if (savedSandboxMode !== undefined) {
+      const normalized = normalizeSandboxMode(savedSandboxMode);
+      this.sandboxMode = normalized;
+      if (normalized !== savedSandboxMode) {
+        this.logger.log(
+          `Normalized sandbox mode for session ${this.sessionId}: ${String(savedSandboxMode)} -> ${normalized}`,
+        );
+        await this.persistSandboxModeSettings();
+      }
     }
 
     // 4b. 恢复持久化的计划模式（布尔，缺省关；与 sandboxMode 各读各的，互不影响）
@@ -744,8 +749,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   }
 
   async setSandboxMode(mode: SessionSandboxMode): Promise<void> {
-    this.logger.debug(`Switching sandbox mode: ${this.sandboxMode} -> ${mode}`);
-    this.sandboxMode = mode;
+    const normalized = normalizeSandboxMode(mode);
+    this.logger.debug(
+      `Switching sandbox mode: ${this.sandboxMode} -> ${normalized}`,
+    );
+    this.sandboxMode = normalized;
   }
 
   getPlanEnabled(): boolean {
@@ -793,6 +801,28 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       // 落库失败不阻断本次切换（内存态已生效，用户可再次切换纠正）
       this.logger.warn(
         `Failed to persist plan mode (${this.planEnabled}): ${error?.message}`,
+      );
+    }
+  }
+
+  /**
+   * 持久化归一化后的 sandboxMode（仅历史 read-only / 非法值触发一次）。
+   *
+   * SessionMetaStore.update 是顶层浅合并（settings 整体替换），因此同样读改写。
+   */
+  private async persistSandboxModeSettings(): Promise<void> {
+    if (!this.sessionMetaStore) return;
+    try {
+      const current = this.sessionMetaStore.getMeta(this.sessionId);
+      const settings: Record<string, any> = {
+        ...((current?.settings as Record<string, any>) ?? this.session?.settings ?? {}),
+        sandboxMode: this.sandboxMode,
+      };
+      await this.sessionMetaStore.update(this.sessionId, { settings });
+      if (this.session) this.session.settings = settings;
+    } catch (error: any) {
+      this.logger.warn(
+        `Failed to persist sandbox mode (${this.sandboxMode}): ${error?.message}`,
       );
     }
   }
@@ -1319,7 +1349,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     const narrations: string[] = [];
 
     // ── 安全档位（三档词表）──
-    const prevMode = prevUserMsg?.metadata?.sandboxMode || 'workspace-write';
+    // 历史 Windows 会话的 metadata 可能仍是 read-only：先归一化再比较，
+    // 避免升级后首条消息误报「已退出只读」。
+    const prevMode = normalizeSandboxMode(
+      prevUserMsg?.metadata?.sandboxMode ?? 'workspace-write',
+    );
     const currentMode = this.sandboxMode;
 
     if (prevMode !== currentMode) {
@@ -1448,7 +1482,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     merged.thinkingEffort = sessionSettings.thinkingEffort;
     merged.attachments = sessionSettings.attachments ?? {};
     merged.referencedKbs = sessionSettings.referencedKbs ?? [];
-    merged.sandboxMode = sessionSettings.sandboxMode ?? 'workspace-write';
+    merged.sandboxMode = normalizeSandboxMode(
+      sessionSettings.sandboxMode ?? 'workspace-write',
+    );
     merged.planEnabled = sessionSettings.planEnabled === true;
     merged.planModeEpoch = sessionSettings.planModeEpoch ?? null;
     merged.modelName = sessionSettings.modelName ?? null;

@@ -65,6 +65,23 @@ describe('normalizeTurnSettingsOverride', () => {
 });
 
 describe('applyTurnSettingsOverride', () => {
+  /** 临时切换 process.platform，验证平台相关的档位归一化 */
+  function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', {
+      value: platform,
+      configurable: true,
+    });
+    try {
+      return fn();
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: original,
+        configurable: true,
+      });
+    }
+  }
+
   const session = () => ({
     id: 's1',
     modelId: 'prov-a:model-a',
@@ -103,5 +120,24 @@ describe('applyTurnSettingsOverride', () => {
   it('未提供覆盖时原样返回', () => {
     const original = session();
     expect(applyTurnSettingsOverride(original, undefined)).toBe(original);
+  });
+
+  it('Windows 上 read-only 覆盖归一化为 workspace-write（旧客户端兼容）', () => {
+    const original = session();
+    original.settings.sandboxMode = 'read-only';
+    const effective = withPlatform('win32', () =>
+      applyTurnSettingsOverride(original, { sandboxMode: 'read-only' }),
+    );
+
+    expect(effective.settings.sandboxMode).toBe('workspace-write');
+    // 不修改入参
+    expect(original.settings.sandboxMode).toBe('read-only');
+  });
+
+  it('macOS / Linux 上 read-only 覆盖保持原值', () => {
+    const effective = withPlatform('linux', () =>
+      applyTurnSettingsOverride(session(), { sandboxMode: 'read-only' }),
+    );
+    expect(effective.settings.sandboxMode).toBe('read-only');
   });
 });

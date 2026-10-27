@@ -17,6 +17,23 @@ import type { Message } from '../../src/common/types/conversation.types';
 
 /// <reference types="jest" />
 
+/**
+ * 这些用例验证的是模式叙事/注入逻辑，默认按 macOS/Linux 语义运行；
+ * Windows 的 read-only 归一化单独放在文件末尾的 describe 里。
+ * 显式固定平台，避免 Windows CI 与 Linux CI 断言分叉。
+ */
+const ORIGINAL_PLATFORM = process.platform;
+
+function setPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', {
+    value: platform,
+    configurable: true,
+  });
+}
+
+beforeAll(() => setPlatform('linux'));
+afterAll(() => setPlatform(ORIGINAL_PLATFORM));
+
 function makeSession(overrides: any = {}): any {
   return {
     id: 's1',
@@ -103,7 +120,7 @@ function createContext(overrides: any = {}) {
       ...(overrides.bindingState || {}),
     } as any,
     // sessionMetaStore（可选）：这些用例不落库会话设置
-    undefined,
+    overrides.sessionMetaStore,
     // answerSurfaceProbe（可选）：命令策略层"有人能应答审批"的探针
     overrides.answerSurfaceProbe,
   );
@@ -809,8 +826,7 @@ describe('JsonlSessionContext 写侧注入块（消息伴随信息）', () => {
   });
 });
 
-describe('计划模式周期与退出标记', () => {
-  function makeStoreReturnValidUserMessage(messageStore: any) {
+describe('计划模式周期与退出标记', () => {  function makeStoreReturnValidUserMessage(messageStore: any) {
     messageStore.addUserMessage.mockImplementation(async () => ({
       messageId: 'u_new',
       userMessage: makeMsg('u_new', 'user'),
@@ -867,5 +883,61 @@ describe('计划模式周期与退出标记', () => {
     expect(opts.metadata.planModeEpoch).toBe(epoch);
     expect(opts.injectedBlocks?.[0]?.text).toContain('disabled plan mode');
     expect(opts.injectedBlocks?.[0]?.text).toContain('no longer apply');
+  });
+});
+
+describe('Windows 档位迁移（用户 read-only 已取消）', () => {
+  beforeAll(() => setPlatform('win32'));
+  afterAll(() => setPlatform('linux'));
+
+  it('initialize：历史 read-only 归一化为 workspace-write 并落库一次', async () => {
+    const update = jest.fn(
+      async (_sessionId: string, _patch: Record<string, any>) => undefined,
+    );
+    const metaStore = {
+      getMeta: jest.fn(() => ({
+        settings: { systemPrompt: 'sys', sandboxMode: 'read-only' },
+      })),
+      update,
+    };
+    const { ctx } = createContext({
+      session: { settings: { systemPrompt: 'sys', sandboxMode: 'read-only' } },
+      sessionMetaStore: metaStore,
+    });
+
+    await ctx.initialize();
+
+    expect(ctx.getSandboxMode()).toBe('workspace-write');
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(
+      (update.mock.calls[0][1] as any).settings.sandboxMode,
+    ).toBe('workspace-write');
+  });
+
+  it('addUserMessage：历史 metadata 的 read-only 不再触发退出叙事', async () => {
+    const { ctx, messageStore } = createContext({
+      session: { settings: { systemPrompt: 'sys', sandboxMode: 'read-only' } },
+      sessionMetaStore: {
+        getMeta: jest.fn(() => ({ settings: { sandboxMode: 'read-only' } })),
+        update: jest.fn(async () => undefined),
+      },
+      messageStore: {
+        loadContext: jest.fn(async () => [
+          makeMsg('u1', 'user', { metadata: { sandboxMode: 'read-only' } }),
+        ]),
+        addUserMessage: jest.fn(async () => ({
+          messageId: 'u_new',
+          userMessage: makeMsg('u_new', 'user'),
+          revision: 1,
+        })),
+      },
+    });
+
+    await ctx.initialize();
+    await ctx.addUserMessage('继续');
+
+    const opts = (messageStore.addUserMessage as jest.Mock).mock.calls[0][3];
+    expect(opts.injectedBlocks).toBeUndefined();
+    expect(opts.metadata.sandboxMode).toBe('workspace-write');
   });
 });

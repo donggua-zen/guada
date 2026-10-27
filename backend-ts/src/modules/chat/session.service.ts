@@ -49,6 +49,7 @@ import { EventBusService } from "../../common/events/event-bus.service";
 import { StreamStatusChangedEvent } from "../../common/events/stream.events";
 import { SessionReplayService } from "./session-replay.service";
 import { mergePlanModeSettings } from "./plan-mode-settings.util";
+import { normalizeSandboxMode } from "../../common/services/sandbox-policy";
 import { pickTitleMessages } from "./session-title.util";
 import { resolveThinkingEffort } from "../llm-core";
 
@@ -159,7 +160,22 @@ export class SessionService {
     const agent = session.agentId
       ? ((await this.agentStore.findById(session.agentId)) ?? null)
       : null;
-    return { ...session, agent };
+    return this.normalizeSessionSettings({ ...session, agent });
+  }
+
+  /**
+   * 返回带归一化 sandboxMode 的会话副本。
+   *
+   * 只改响应，不原地改写 store 缓存对象：历史 Windows 会话里可能仍是
+   * read-only，读取时必须与执行侧（JsonlSessionContext）保持同一语义。
+   */
+  private normalizeSessionSettings<T extends Record<string, any>>(session: T): T {
+    const settings = session?.settings;
+    if (!settings || typeof settings !== "object") return session;
+    if (settings.sandboxMode === undefined) return session;
+    const normalized = normalizeSandboxMode(settings.sandboxMode);
+    if (normalized === settings.sandboxMode) return session;
+    return { ...session, settings: { ...settings, sandboxMode: normalized } };
   }
 
   private async hydrateMany(sessions: any[]): Promise<any[]> {
@@ -173,10 +189,12 @@ export class SessionService {
       ),
     );
     const map = await this.agentStore.findManyByIds(ids);
-    return sessions.map((s) => ({
-      ...s,
-      agent: s.agentId ? (map.get(s.agentId) ?? null) : null,
-    }));
+    return sessions.map((s) =>
+      this.normalizeSessionSettings({
+        ...s,
+        agent: s.agentId ? (map.get(s.agentId) ?? null) : null,
+      }),
+    );
   }
 
   /**
@@ -761,9 +779,14 @@ export class SessionService {
       description: source.description,
       // 老会话未绑定模型时继承智能体模型；全局默认已移除
       modelId: source.modelId || source.agent?.modelId || null,
-      settings: source.settings
-        ? JSON.parse(JSON.stringify(source.settings))
-        : null,
+      settings: (() => {
+        if (!source.settings) return null;
+        const copied = JSON.parse(JSON.stringify(source.settings));
+        copied.sandboxMode = normalizeSandboxMode(
+          copied.sandboxMode ?? "workspace-write",
+        );
+        return copied;
+      })(),
       groupId: source.groupId,
       workspacePath: source.workspacePath,
       sessionType: "web",
@@ -922,6 +945,14 @@ export class SessionService {
 
     const filteredSettings = { ...sessionSettings };
 
+    // 安全档位：Windows 不再提供 read-only，入口即归一化，避免历史/旧客户端
+    // 把已取消的档位写进新会话。
+    if (filteredSettings.sandboxMode !== undefined) {
+      filteredSettings.sandboxMode = normalizeSandboxMode(
+        filteredSettings.sandboxMode,
+      );
+    }
+
     // memory 配置始终从智能体继承，会话不再支持自定义 memory 覆盖
     filteredSettings.memory = agentSettings?.memory || null;
     // 移除 memoryEnabled 字段，不再使用
@@ -959,7 +990,17 @@ export class SessionService {
     let planTransition: { from: boolean; to: boolean } | null = null;
     if (updateData.settings !== undefined) {
       const merged = mergePlanModeSettings(session.settings, updateData.settings);
-      updateData.settings = merged.settings;
+      const nextSettings: Record<string, any> = { ...merged.settings };
+      // 安全档位：即使本次只改其它字段，也把历史 read-only 收敛为当前平台支持的档位；
+      // 未传时沿用会话现值，避免部分更新丢字段。
+      const currentSettings =
+        (session.settings as Record<string, any> | undefined) ?? {};
+      nextSettings.sandboxMode = normalizeSandboxMode(
+        nextSettings.sandboxMode ??
+          currentSettings.sandboxMode ??
+          "workspace-write",
+      );
+      updateData.settings = nextSettings;
       planTransition = merged.transition;
     }
 
