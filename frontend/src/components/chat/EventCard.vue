@@ -235,6 +235,14 @@ const contextNoticeLabel = computed(() => {
       }),
     );
   }
+  if (typeof notice.totalContextWindow === "number") {
+    parts.push(
+      t("chat.turn.contextWindowDetail", {
+        total: formatTokenCount(notice.totalContextWindow),
+        reserve: formatTokenCount(notice.outputReserveTokens ?? 0),
+      }),
+    );
+  }
   parts.push(
     t(
       notice.overWindow

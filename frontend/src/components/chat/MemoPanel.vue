@@ -33,6 +33,13 @@
               {{ t('chat.memo.details') }}
             </el-button>
           </div>
+          <!-- 窗口口径说明：环形/进度条的分母是“压缩有效窗口”（总窗口 − 封顶输出预留） -->
+          <div v-if="tokenStats.totalContextWindow" class="mt-0.5 text-[11px] text-gray-400 dark:text-[#8b8d95]">
+            {{ t('chat.memo.windowDetail', {
+              total: tokenStats.totalContextWindow.toLocaleString(),
+              reserve: (tokenStats.outputReserveTokens || 0).toLocaleString(),
+            }) }}
+          </div>
         </div>
 
         <!-- 细分统计：垂直列表 -->

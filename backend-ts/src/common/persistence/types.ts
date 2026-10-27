@@ -110,8 +110,12 @@ export interface ContextStatsData {
   turnId: string;
   /** 当前完整请求 token（envelope + 可见视图） */
   usedTokens: number;
-  /** 有效上下文窗口 */
+  /** 有效上下文窗口（压缩有效窗口：总窗口 − 封顶输出预留） */
   effectiveContextWindow: number;
+  /** 输入 + 输出共享总窗口（请求 preflight 使用；旧数据缺省） */
+  totalContextWindow?: number;
+  /** 压缩决策扣掉的输出预留（0..21K；旧数据缺省） */
+  outputReserveTokens?: number;
   /** 可见视图消息数 */
   messageCount?: number;
   /** 细分 token */

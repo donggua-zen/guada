@@ -247,7 +247,8 @@
     thinkingActive: 'Thinking...',
     thinkingDone: 'Deep Thinking Complete',
     executingSteps: 'Executing {n} steps',
-    executingStepsWithCompleted: 'Executing {n} steps, {m} completed',
+    executedThenExecuting: '{m} steps executed, executing {n} steps',
+    executedThenThinking: '{m} steps executed, thinking...',
     executedSteps: '{n} steps executed',
 
     // EventCard.vue compaction placeholder
@@ -263,6 +264,7 @@
     contextWindowNoticeTitle: 'Context window notice',
     contextWindowChanged: 'Switched to {model}: context window reduced from {previous} to {current}. ',
     contextWindowCurrent: 'Current model {model} has a context window of {current}. ',
+    contextWindowDetail: '(total window {total}, output reserve {reserve}) ',
     contextWindowOver: 'History is about {used} tokens, exceeding the new window; ',
     contextWindowNearLimit: 'History is about {used} tokens, at {ratio}% of the compaction trigger; ',
     contextWindowWillCompact: 'Auto-compaction will be attempted; tool results/thinking may be omitted and the earliest content dropped if needed.',
@@ -543,6 +545,7 @@
   memo: {
     contextUsage: 'Context Usage',
     contextUsageTooltip: 'Context is an estimated value for reference only and may differ from the actual value',
+    windowDetail: 'Total window {total} · output reserve cap {reserve} (ring uses usable input)',
     messages: '{count} messages',
     details: 'Details',
     compressing: 'Compressing...',

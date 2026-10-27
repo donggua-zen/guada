@@ -145,6 +145,40 @@ describe('AgentEngine - completions', () => {
       });
     });
 
+    it('主请求 preflight：输入接近窗口时把 max_tokens 收缩到剩余空间', async () => {
+      const chunks = loadChunksFromJsonl(
+        path.join(__dirname, 'fixtures/chunks-text-only.jsonl'),
+      );
+      const mocks = createAllMocks({ llmChunks: chunks });
+      const originalModel = mocks.sessionContext.getModelConfig();
+      mocks.sessionContext.getModelConfig.mockReturnValue({
+        ...originalModel,
+        config: {
+          ...originalModel.config,
+          contextWindow: 1_000_000,
+          maxOutputTokens: 384_000,
+        },
+      });
+      mocks.sessionContext.getTotalContextWindow.mockReturnValue(1_000_000);
+      mocks.sessionContext.getTokenCount.mockResolvedValue(669_530);
+
+      const agentEngine = new AgentEngine(
+        mocks.toolExecutor as any,
+        mocks.llmService as any,
+        {
+          serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
+          parallel: jest.fn(async () => []),
+        } as any,
+      );
+
+      await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
+
+      const call = (mocks.llmService.completions as jest.Mock).mock
+        .calls[0][0];
+      // 1,000,000 − 669,530 − 2,000 = 328,470（小于配置的 384,000）
+      expect(call.maxTokens).toBe(328_470);
+    });
+
     it('应该为内容块记录生命周期计时（timing）', async () => {
       const chunks = loadChunksFromJsonl(
         path.join(__dirname, 'fixtures/chunks-text-only.jsonl'),

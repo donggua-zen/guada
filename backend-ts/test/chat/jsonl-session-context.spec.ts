@@ -437,7 +437,8 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
     } as any);
     const passed = (messageStore.finalizeTurn as jest.Mock).mock.calls[0][3];
     expect(typeof passed.usedTokens).toBe('number');
-    expect(passed.effectiveContextWindow).toBe(8000);
+    // 未声明 maxOutputTokens：小窗口按 1/4 预留（8000 → 2000），有效窗口 6000
+    expect(passed.effectiveContextWindow).toBe(6000);
   });
 
   it('appendCompact：快照就绪时写前模拟压缩后占用并透传 store（compaction/end 锚点）', async () => {
@@ -457,7 +458,7 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
       mode: 'memory_sync',
     } as any);
     const passed = (messageStore.appendCompact as jest.Mock).mock.calls[0][1];
-    expect(passed).toMatchObject({ effectiveContextWindow: 8000 });
+    expect(passed).toMatchObject({ effectiveContextWindow: 6000 });
     expect(typeof passed.usedTokens).toBe('number');
   });
 
@@ -469,7 +470,7 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
     const [sid, data] = (messageStore.recordContextAnchor as jest.Mock).mock.calls[0];
     expect(sid).toBe('s1');
     expect(typeof data.usedTokens).toBe('number');
-    expect(data.effectiveContextWindow).toBe(8000);
+    expect(data.effectiveContextWindow).toBe(6000);
   });
 
   it('压缩锚点优先：compaction/end 的纠正值取代被抵消的 provider 增量', async () => {

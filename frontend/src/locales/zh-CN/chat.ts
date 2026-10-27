@@ -247,7 +247,8 @@ export default {
     thinkingActive: '正在思考...',
     thinkingDone: '已深度思考',
     executingSteps: '正在执行{n}个步骤',
-    executingStepsWithCompleted: '正在执行{n}个步骤,已完成{m}个步骤',
+    executedThenExecuting: '已执行{m}个步骤,正在执行{n}个步骤',
+    executedThenThinking: '已执行{m}个步骤,正在思考...',
     executedSteps: '已执行{n}个步骤',
 
     // EventCard.vue 压缩占位
@@ -263,6 +264,7 @@ export default {
     contextWindowNoticeTitle: '上下文窗口提示',
     contextWindowChanged: '已切换到 {model}：上下文窗口从 {previous} 降至 {current}。',
     contextWindowCurrent: '当前模型 {model} 的上下文窗口为 {current}。',
+    contextWindowDetail: '（总窗口 {total}，输出预留 {reserve}）',
     contextWindowOver: '当前历史约 {used} tokens，已超过新窗口；',
     contextWindowNearLimit: '当前历史约 {used} tokens，已达到 {ratio}% 压缩触发线；',
     contextWindowWillCompact: '将尝试自动压缩，必要时省略工具结果/思考并丢弃最早内容。',
@@ -543,6 +545,7 @@ export default {
   memo: {
     contextUsage: '上下文使用率',
     contextUsageTooltip: '上下文为估算值，仅供参考，与实际值可能存在差异',
+    windowDetail: '总窗口 {total} · 输出预留上限 {reserve}（环形分母为可用输入）',
     messages: '{count}条消息',
     details: '详情',
     compressing: '压缩中...',

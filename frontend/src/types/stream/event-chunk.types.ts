@@ -30,7 +30,12 @@ export interface ContextStatsEvent {
   turnId?: string;
   contextStats: {
     usedTokens: number;
+    /** 压缩有效窗口（总窗口 − 封顶输出预留，最多 21K） */
     effectiveContextWindow: number;
+    /** 输入 + 输出共享总窗口（旧后端缺省） */
+    totalContextWindow?: number;
+    /** 压缩决策扣掉的输出预留（0..21K；旧后端缺省） */
+    outputReserveTokens?: number;
     /** 可见视图消息数（旧锚点/旧后端缺省） */
     messageCount?: number;
     /** 细分 token（旧锚点/旧后端缺省） */
@@ -65,7 +70,12 @@ export interface TurnEndEvent {
   /** 会话上下文统计（前端用于更新上下文使用率环形指示器） */
   contextStats?: {
     usedTokens: number;
+    /** 压缩有效窗口（总窗口 − 封顶输出预留，最多 21K） */
     effectiveContextWindow: number;
+    /** 输入 + 输出共享总窗口（旧后端缺省） */
+    totalContextWindow?: number;
+    /** 压缩决策扣掉的输出预留（0..21K；旧后端缺省） */
+    outputReserveTokens?: number;
   };
   /**
    * 回合模型名：live 广播不带此字段；由领域事件 turn/finish 映射而来的 turn_end 会带上
@@ -188,7 +198,12 @@ export interface CompressionEndEvent {
   /** 压缩后当前完整请求 token + 窗口（与 turn_end.contextStats 同构） */
   contextStats?: {
     usedTokens: number;
+    /** 压缩有效窗口（总窗口 − 封顶输出预留，最多 21K） */
     effectiveContextWindow: number;
+    /** 输入 + 输出共享总窗口（旧后端缺省） */
+    totalContextWindow?: number;
+    /** 压缩决策扣掉的输出预留（0..21K；旧后端缺省） */
+    outputReserveTokens?: number;
   };
   /** 本次写入的工具结果裁剪事件数（微压缩） */
   pruneEvents?: number;
@@ -228,7 +243,12 @@ export interface CompactionSummaryEvent {
   /** 压缩后当前完整请求 token + 窗口（前端即时更新环形指示器，无需 REST） */
   contextStats?: {
     usedTokens: number;
+    /** 压缩有效窗口（总窗口 − 封顶输出预留，最多 21K） */
     effectiveContextWindow: number;
+    /** 输入 + 输出共享总窗口（旧后端缺省） */
+    totalContextWindow?: number;
+    /** 压缩决策扣掉的输出预留（0..21K；旧后端缺省） */
+    outputReserveTokens?: number;
   };
 }
 
@@ -245,6 +265,10 @@ export interface ContextWindowChangedEvent {
   modelName: string;
   previousEffectiveContextWindow?: number;
   effectiveContextWindow: number;
+  /** 输入 + 输出共享总窗口（旧后端缺省） */
+  totalContextWindow?: number;
+  /** 压缩决策扣掉的输出预留（0..21K；旧后端缺省） */
+  outputReserveTokens?: number;
   usedTokens: number;
   triggerRatio: number;
   willAutoCompact: boolean;

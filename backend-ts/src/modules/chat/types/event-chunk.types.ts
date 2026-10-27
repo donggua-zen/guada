@@ -23,8 +23,12 @@ import type { SummaryDegradation } from "../compaction/compression-engine";
 export interface ContextStatsPayload {
   /** 当前完整请求 token（provider 真值锚点 + tiktoken 增量） */
   usedTokens: number;
-  /** 有效上下文窗口 */
+  /** 压缩有效窗口（总窗口 − 封顶输出预留，最多 21K） */
   effectiveContextWindow: number;
+  /** 输入 + 输出共享总窗口（请求 max_tokens preflight 使用；旧事件缺省） */
+  totalContextWindow?: number;
+  /** 压缩决策扣掉的输出预留（0..21K；旧事件缺省） */
+  outputReserveTokens?: number;
   /** 可见视图消息数 */
   messageCount?: number;
   /** 细分 token（三项真值；旧锚点数据缺省） */
@@ -177,6 +181,10 @@ export interface ContextWindowChangedEvent {
   modelName: string;
   previousEffectiveContextWindow?: number;
   effectiveContextWindow: number;
+  /** 输入 + 输出共享总窗口（旧事件缺省） */
+  totalContextWindow?: number;
+  /** 压缩决策扣掉的输出预留（0..21K；旧事件缺省） */
+  outputReserveTokens?: number;
   /** 当前完整请求 token（与压缩阈值同口径） */
   usedTokens: number;
   /** 压缩触发比例（用于文案：达到该比例将自动压缩） */

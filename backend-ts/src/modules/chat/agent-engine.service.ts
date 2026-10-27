@@ -33,6 +33,7 @@ import {
   toolResultCallIdOf,
 } from "../../common/utils/tool-pairing.util";
 import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
+import { resolvePreflightMaxTokens } from "../llm-core/utils/output-budget.util";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { TurnReminderRegistry } from "../plugins/turn-reminders/turn-reminder.registry";
 import { PluginManager } from "../plugins/plugin.manager";
@@ -576,6 +577,39 @@ export class AgentEngine {
       // 本轮组装产物（流结束后填充；同一 Message 对象入 parts，便于后续回写元数据）
       let assistantMessage: Message | null = null;
 
+      // 主请求输出预算 preflight（对齐 zcode model-token-limits）：
+      // 上游把请求的 max_tokens 计入共享总窗口（实测 input 669,530 + max_tokens 384,000 > 1,048,576）。
+      // 输入接近窗口时把 max_tokens 收缩到"总窗口 − 估算输入 − 安全余量"；
+      // 压缩决策仍用 effectiveContextWindow（只扣 21K 封顶预留），不按最大输出浪费输入预算。
+      let preflightMaxTokens: number | undefined;
+      const configuredMaxOutput = modelConfig.config.maxOutputTokens;
+      if (
+        typeof configuredMaxOutput === "number" &&
+        Number.isFinite(configuredMaxOutput) &&
+        configuredMaxOutput > 0
+      ) {
+        try {
+          const estimatedInputTokens = await sessionContext.getTokenCount();
+          const totalContextWindow = sessionContext.getTotalContextWindow();
+          preflightMaxTokens = resolvePreflightMaxTokens({
+            configuredMaxOutputTokens: configuredMaxOutput,
+            totalContextWindow,
+            estimatedInputTokens,
+          });
+          if (preflightMaxTokens !== configuredMaxOutput) {
+            this.logger.log(
+              `[llm.request] max_tokens clamped configured=${configuredMaxOutput}` +
+                ` effective=${preflightMaxTokens} input=${estimatedInputTokens}` +
+                ` window=${totalContextWindow}`,
+            );
+          }
+        } catch (error: any) {
+          this.logger.warn(
+            `[llm.request] max_tokens preflight failed: ${error?.message ?? error}`,
+          );
+        }
+      }
+
       // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义，对齐 DSH retryPolicy）
       {
         let streamAborted = false;
@@ -586,6 +620,7 @@ export class AgentEngine {
             SessionLlmRequestBuilder.buildCompletionParams(sessionContext, {
               messages: requestMessages,
               abortSignal,
+              maxTokens: preflightMaxTokens,
               usageContext: {
                 turnId,
                 requestId: messageId,

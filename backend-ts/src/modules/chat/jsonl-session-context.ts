@@ -45,6 +45,7 @@ import {
   COMPRESSION_TIER_PRESETS,
   resolveCompressionTier,
 } from './compaction/compression-tiers';
+import { resolveContextWindowBudget } from './compaction/window-budget';
 import { ToolExecutor } from '../tools/tool-executor.service';
 import { toRuntimeProviderConfig } from '../llm-core/utils/provider-runtime.util';
 import { ModelNotResolvedError } from '../llm-core/model-not-resolved.error';
@@ -145,7 +146,15 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   private effectiveSettings!: EffectiveSettings;
   /** 合并后的压缩配置（压缩侧经 CompactionDataSource.getCompressionConfig 消费） */
   private compactionConfig: CompactionConfig = {};
+  /**
+   * 压缩有效窗口（总窗口 − 封顶输出预留，最多扣 21K；见 compaction/window-budget.ts）。
+   * 自动压缩阈值/微压缩/环形使用它；请求 preflight 使用 totalContextWindow。
+   */
   private effectiveContextWindow!: number;
+  /** 输入 + 输出共享总窗口（min(模型窗口, 会话 maxTokensLimit)） */
+  private totalContextWindow!: number;
+  /** 压缩决策实际扣掉的输出预留（0..21K） */
+  private outputReserveTokens!: number;
   private _workspacePath!: string;
   private conversationStateLoaded = false;
 
@@ -241,10 +250,14 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         : undefined;
     this.effectiveSettings = merged;
     this.compactionConfig = await this.buildCompactionConfig(merged.memory);
-    this.effectiveContextWindow = this.calcEffectiveContextWindow(
-      model,
-      merged.maxTokensLimit,
-    );
+    const windowBudget = resolveContextWindowBudget({
+      contextWindow: model?.config?.contextWindow,
+      maxOutputTokens: model?.config?.maxOutputTokens,
+      maxTokensLimit: merged.maxTokensLimit,
+    });
+    this.totalContextWindow = windowBudget.totalContextWindow;
+    this.effectiveContextWindow = windowBudget.effectiveContextWindow;
+    this.outputReserveTokens = windowBudget.outputReserveTokens;
 
     // 4. 恢复持久化的安全模式（三档词表持久化于 settings.sandboxMode，未知值回退默认）
     // Windows 已取消用户可选 read-only：历史值/非法值在此归一化，并落库一次。
@@ -927,6 +940,14 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     return this.effectiveContextWindow;
   }
 
+  getTotalContextWindow(): number {
+    return this.totalContextWindow;
+  }
+
+  getOutputReserveTokens(): number {
+    return this.outputReserveTokens;
+  }
+
   /**
    * 是否有"人能应答审批"的面（命令策略层 fail-closed 的判据）。
    *
@@ -1013,15 +1034,23 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     usedTokens?: number;
     heuristicTokens?: number;
     effectiveContextWindow?: number;
+    totalContextWindow?: number;
+    outputReserveTokens?: number;
     messageCount?: number;
     breakdown?: TokenBreakdown;
     beforeTokens?: number;
   }> {
     const effectiveContextWindow = this.getEffectiveContextWindow();
+    const totalContextWindow = this.getTotalContextWindow();
+    const outputReserveTokens = this.getOutputReserveTokens();
     const shadowedCount = data.shadowedCount;
     if (!this.snapshot || shadowedCount <= 0) {
       // 快照不可得（冷路径）或无遮蔽：不提供锚点（调用方省略字段）
-      return { effectiveContextWindow };
+      return {
+        effectiveContextWindow,
+        totalContextWindow,
+        outputReserveTokens,
+      };
     }
     const perMessageTokens = this.snapshot.perMessageTokens;
     let shadowedTokens = 0;
@@ -1075,6 +1104,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       usedTokens,
       heuristicTokens: snap.preludeTokens + historyAfter,
       effectiveContextWindow,
+      totalContextWindow,
+      outputReserveTokens,
       // 细分与消息数按压缩后视图结算（避免 usedTokens 已降、细分/条数仍是压缩前）
       messageCount: Math.max(0, snap.view.length - shadowedCount + 1),
       breakdown: { ...breakdown, history: historyAfter },
@@ -1129,6 +1160,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       usedTokens,
       heuristicTokens,
       effectiveContextWindow: this.getEffectiveContextWindow(),
+      totalContextWindow: this.getTotalContextWindow(),
+      outputReserveTokens: this.getOutputReserveTokens(),
       messageCount: snap.view.length,
       breakdown: await this.getTokenBreakdown(),
       ...(opts?.beforeTokens !== undefined
@@ -1272,6 +1305,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   async getContextStats(): Promise<{
     usedTokens: number;
     effectiveContextWindow: number;
+    totalContextWindow: number;
+    outputReserveTokens: number;
     messageCount: number;
     breakdown: TokenBreakdown;
   }> {
@@ -1283,6 +1318,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     return {
       usedTokens,
       effectiveContextWindow: this.getEffectiveContextWindow(),
+      totalContextWindow: this.getTotalContextWindow(),
+      outputReserveTokens: this.getOutputReserveTokens(),
       messageCount: snap.view.length,
       breakdown,
     };
@@ -1490,16 +1527,6 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     merged.modelName = sessionSettings.modelName ?? null;
 
     return merged;
-  }
-
-  private calcEffectiveContextWindow(
-    model: any,
-    maxTokensLimit?: number | null,
-  ): number {
-    const modelContextWindow = model?.config?.contextWindow || 128000;
-    return maxTokensLimit
-      ? Math.min(modelContextWindow, maxTokensLimit)
-      : modelContextWindow;
   }
 
   /**

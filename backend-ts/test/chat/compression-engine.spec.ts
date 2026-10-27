@@ -687,6 +687,14 @@ describe('LLMSummaryProvider', () => {
     })();
   }
 
+  /** 复现实测：有 usage/finish=length，但没有 text 块 → 摘要为空 */
+  function emptyStreamMock(): AsyncGenerator<any> {
+    return (async function* () {
+      yield { type: 'usage', usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+      yield { type: 'finish', finishReason: 'length' };
+    })();
+  }
+
   it('回退模式（无 prefix）：提取旧检查点 + 单条指令消息', async () => {
     const { LLMSummaryProvider } = await import('../../src/modules/chat/compaction/llm-summary.provider');
     const llmService = {
@@ -911,6 +919,44 @@ it('buildParams 复用：摘要请求参数与主请求同源，system/tools/max
     expect(call.modelCapabilities).toEqual({ supportsImageInput: false });
     expect(call.thinkingEffort).toBe('none');
     expect(call.temperature).toBe(0.2);
+  });
+
+  it('空摘要重试：第一次无文本、第二次成功（对齐 21:39/21:53 实测）', async () => {
+    const { LLMSummaryProvider } = await import('../../src/modules/chat/compaction/llm-summary.provider');
+    const llmService = {
+      completions: jest
+        .fn()
+        .mockResolvedValueOnce(emptyStreamMock())
+        .mockResolvedValueOnce(streamMock('retry ok')),
+    } as any;
+    const provider = new LLMSummaryProvider(llmService, {
+      modelName: 'gpt-4o',
+      provider: { id: 'test', type: 'openai', protocol: 'openai' },
+    });
+    const result = await provider.generate({
+      allMessages: [],
+      shadowed: [makeMessages(1)[0]],
+    });
+    expect(result.summary).toBe('retry ok');
+    expect(llmService.completions).toHaveBeenCalledTimes(2);
+  });
+
+  it('空摘要重试：两次都空才抛错', async () => {
+    const { LLMSummaryProvider } = await import('../../src/modules/chat/compaction/llm-summary.provider');
+    const llmService = {
+      completions: jest
+        .fn()
+        .mockResolvedValueOnce(emptyStreamMock())
+        .mockResolvedValueOnce(emptyStreamMock()),
+    } as any;
+    const provider = new LLMSummaryProvider(llmService, {
+      modelName: 'gpt-4o',
+      provider: { id: 'test', type: 'openai', protocol: 'openai' },
+    });
+    await expect(
+      provider.generate({ allMessages: [], shadowed: [makeMessages(1)[0]] }),
+    ).rejects.toThrow(/empty content/);
+    expect(llmService.completions).toHaveBeenCalledTimes(2);
   });
 });
 

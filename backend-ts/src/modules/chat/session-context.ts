@@ -213,8 +213,10 @@ export interface ISessionContext {
   ): Promise<void>;
 
   // === 压缩数据源 ===
-  /** 获取实际生效的上下文窗口大小（压缩决策等场景使用） */
+  /** 获取实际生效的上下文窗口大小（压缩决策等场景使用；总窗口 − 封顶输出预留） */
   getEffectiveContextWindow(): number;
+  /** 获取输入 + 输出共享总窗口（主请求 max_tokens preflight 使用） */
+  getTotalContextWindow(): number;
 
   // === 工作目录 ===
   /** 获取会话工作目录路径 */
@@ -304,7 +306,12 @@ export interface ISessionContext {
   /** 会话上下文统计聚合（占用 + 窗口 + 视图消息数 + 细分），流事件与持久化锚点统一取数 */
   getContextStats(): Promise<{
     usedTokens: number;
+    /** 压缩有效窗口（总窗口 − 封顶输出预留，最多 21K） */
     effectiveContextWindow: number;
+    /** 输入 + 输出共享总窗口（请求 preflight 使用） */
+    totalContextWindow: number;
+    /** 压缩决策扣掉的输出预留（0..21K） */
+    outputReserveTokens: number;
     messageCount: number;
     breakdown: TokenBreakdown;
   }>;

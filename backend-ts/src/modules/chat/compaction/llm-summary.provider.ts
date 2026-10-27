@@ -168,9 +168,7 @@ export class LLMSummaryProvider implements SummaryProvider {
       );
     }
 
-    // 流式调用（对齐 DSH ctx.llm.stream() 单次、无重试）：BlockAssembler 累积并捕获 usage。
-    // 优先复用 builder（buildParams）——thinkingEffort/temperature 等与主请求同源，前缀缓存最大命中；
-    // 仅 override system/tools（前缀一致）与 maxTokens。未注入 buildParams 时回退手工组装（兼容）。
+    // 请求参数组装（复用 builder 时保持与主请求同源；序列化/专用模型分支做覆盖）
     let params: LLMCompletionParams;
     if (this.options.buildParams) {
       params = this.options.buildParams(requestMessages.messages);
@@ -213,19 +211,36 @@ export class LLMSummaryProvider implements SummaryProvider {
         purpose: 'compaction',
       };
     }
-    const stream = (await this.llmService.completions(params)) as AsyncGenerator<StreamChunk>;
 
-    const assembler = new BlockAssembler();
-    for await (const chunk of stream) {
-      assembler.push(chunk);
+    // 流式调用（对齐 DSH ctx.llm.stream() 单次调用语义）。仅对"空文本"做一次重试：
+    // 实测同一请求曾返回 2000 token / finish_reason=length 但无文本（21:39），
+    // 同参数下一次请求成功（21:53）——属于瞬时失败，直接抛错会把原始 400 暴露给用户。
+    const MAX_EMPTY_SUMMARY_ATTEMPTS = 2;
+    let summary = '';
+    let usage: SummaryResult['usage'] | undefined;
+    for (let attempt = 1; attempt <= MAX_EMPTY_SUMMARY_ATTEMPTS; attempt += 1) {
+      const stream = (await this.llmService.completions(
+        params,
+      )) as AsyncGenerator<StreamChunk>;
+      const assembler = new BlockAssembler();
+      for await (const chunk of stream) {
+        assembler.push(chunk);
+      }
+      const snapshot = assembler.snapshot();
+      usage = snapshot.usage;
+      summary = snapshot.blocks
+        .filter(
+          (b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text',
+        )
+        .map((b) => b.text)
+        .join('')
+        .trim();
+      if (summary) break;
+      this.logger.warn(
+        `[summary] empty content (attempt ${attempt}/${MAX_EMPTY_SUMMARY_ATTEMPTS})` +
+          `, finishReason=${(snapshot as any).finishReason ?? 'unknown'}; retrying`,
+      );
     }
-    const { blocks, usage } = assembler.snapshot();
-
-    const summary = blocks
-      .filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text')
-      .map((b) => b.text)
-      .join('')
-      .trim();
     if (!summary) {
       throw new Error('LLM summary provider returned empty content');
     }

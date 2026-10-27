@@ -89,6 +89,29 @@ describe('CompactionService', () => {
       const hot = createDataSource({ getTokenCount: jest.fn(async () => 900) }); // 0.9 >= 0.8
       expect(await service.shouldCompress(hot)).toBe(true);
     });
+
+    it('窗口口径：1M 总窗口 + 384K 输出 → 有效 979K，669K 不触发、881K 触发', async () => {
+      const { service } = createService();
+      const config = {
+        enabled: true,
+        compressionTriggerRatio: 0.9,
+        compressionRetainRatio: 0.4,
+        summaryMode: SummaryMode.MEMORY_SYNC,
+      };
+      const dsLow = createDataSource({
+        getTokenCount: jest.fn(async () => 669_501),
+        getEffectiveContextWindow: jest.fn(() => 979_000),
+        getCompressionConfig: jest.fn(() => config),
+      });
+      expect(await service.shouldCompress(dsLow)).toBe(false);
+
+      const dsHigh = createDataSource({
+        getTokenCount: jest.fn(async () => 881_100),
+        getEffectiveContextWindow: jest.fn(() => 979_000),
+        getCompressionConfig: jest.fn(() => config),
+      });
+      expect(await service.shouldCompress(dsHigh)).toBe(true);
+    });
   });
 
   describe('compress', () => {

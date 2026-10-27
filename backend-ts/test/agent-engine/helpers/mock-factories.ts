@@ -152,6 +152,7 @@ export function createMockSessionContext(options?: {
     publishStream: jest.fn().mockResolvedValue(undefined),
     getMemoryConfig: jest.fn(() => ({})),
     getEffectiveContextWindow: jest.fn(() => options?.contextWindow || 8000),
+    getTotalContextWindow: jest.fn(() => options?.contextWindow || 8000),
     getWorkspacePath: jest.fn(() => ''),
     setMessageCursor: jest.fn(),
     // 对话状态方法
@@ -175,6 +176,8 @@ export function createMockSessionContext(options?: {
     getContextStats: jest.fn(async () => ({
       usedTokens: 0,
       effectiveContextWindow: 128000,
+      totalContextWindow: 128000,
+      outputReserveTokens: 0,
       messageCount: 0,
       breakdown: { systemPrompt: 0, history: 0, tools: 0 },
     })),

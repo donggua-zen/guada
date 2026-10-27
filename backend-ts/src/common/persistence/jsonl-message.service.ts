@@ -847,6 +847,12 @@ export class JsonlMessageService implements IMessageStore {
         ...(finish.effectiveContextWindow !== undefined
           ? { effectiveContextWindow: finish.effectiveContextWindow }
           : {}),
+        ...(finish.totalContextWindow !== undefined
+          ? { totalContextWindow: finish.totalContextWindow }
+          : {}),
+        ...(finish.outputReserveTokens !== undefined
+          ? { outputReserveTokens: finish.outputReserveTokens }
+          : {}),
         ...(finish.messageCount !== undefined ? { messageCount: finish.messageCount } : {}),
         ...(finish.breakdown !== undefined ? { breakdown: finish.breakdown } : {}),
       },
@@ -1259,8 +1265,12 @@ export class JsonlMessageService implements IMessageStore {
     usedTokens?: number;
     /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
     heuristicTokens?: number;
-    /** 有效上下文窗口（与 usedTokens 配套） */
+    /** 有效上下文窗口（压缩有效窗口；与 usedTokens 配套） */
     effectiveContextWindow?: number;
+    /** 输入 + 输出共享总窗口（与 usedTokens 配套；旧数据缺省） */
+    totalContextWindow?: number;
+    /** 压缩决策扣掉的输出预留（0..21K；旧数据缺省） */
+    outputReserveTokens?: number;
     /** 可见视图消息数（与 usedTokens 配套） */
     messageCount?: number;
     /** 细分 token（与 usedTokens 配套） */
@@ -1285,8 +1295,12 @@ export class JsonlMessageService implements IMessageStore {
     usedTokens?: number;
     /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
     heuristicTokens?: number;
-    /** 有效上下文窗口（与 usedTokens 配套） */
+    /** 有效上下文窗口（压缩有效窗口；与 usedTokens 配套） */
     effectiveContextWindow?: number;
+    /** 输入 + 输出共享总窗口（与 usedTokens 配套；旧数据缺省） */
+    totalContextWindow?: number;
+    /** 压缩决策扣掉的输出预留（0..21K；旧数据缺省） */
+    outputReserveTokens?: number;
     /** 可见视图消息数（与 usedTokens 配套） */
     messageCount?: number;
     /** 细分 token（与 usedTokens 配套） */
@@ -1330,6 +1344,12 @@ export class JsonlMessageService implements IMessageStore {
           ...data.effectiveContextWindow === undefined
             ? {}
             : { effectiveContextWindow: data.effectiveContextWindow },
+          ...data.totalContextWindow === undefined
+            ? {}
+            : { totalContextWindow: data.totalContextWindow },
+          ...data.outputReserveTokens === undefined
+            ? {}
+            : { outputReserveTokens: data.outputReserveTokens },
           ...data.messageCount === undefined ? {} : { messageCount: data.messageCount },
           ...data.breakdown === undefined ? {} : { breakdown: data.breakdown },
           ...data.beforeTokens === undefined ? {} : { beforeTokens: data.beforeTokens },
@@ -1354,6 +1374,10 @@ export class JsonlMessageService implements IMessageStore {
       /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
       heuristicTokens?: number;
       effectiveContextWindow: number;
+      /** 输入 + 输出共享总窗口（旧数据缺省） */
+      totalContextWindow?: number;
+      /** 压缩决策扣掉的输出预留（0..21K；旧数据缺省） */
+      outputReserveTokens?: number;
       messageCount?: number;
       breakdown?: TokenBreakdown;
       beforeTokens?: number;
@@ -1369,6 +1393,10 @@ export class JsonlMessageService implements IMessageStore {
       /** 与 usedTokens 配套的启发式总量（占用锚点增量口径基准；缺省则不作锚点） */
       heuristicTokens?: number;
       effectiveContextWindow: number;
+      /** 输入 + 输出共享总窗口（旧数据缺省） */
+      totalContextWindow?: number;
+      /** 压缩决策扣掉的输出预留（0..21K；旧数据缺省） */
+      outputReserveTokens?: number;
       messageCount?: number;
       breakdown?: TokenBreakdown;
       beforeTokens?: number;
@@ -1385,6 +1413,12 @@ export class JsonlMessageService implements IMessageStore {
           ? {}
           : { heuristicTokens: data.heuristicTokens },
         effectiveContextWindow: data.effectiveContextWindow,
+        ...data.totalContextWindow === undefined
+          ? {}
+          : { totalContextWindow: data.totalContextWindow },
+        ...data.outputReserveTokens === undefined
+          ? {}
+          : { outputReserveTokens: data.outputReserveTokens },
         ...data.messageCount === undefined ? {} : { messageCount: data.messageCount },
         ...data.breakdown === undefined ? {} : { breakdown: data.breakdown },
         ...data.beforeTokens === undefined ? {} : { beforeTokens: data.beforeTokens },
@@ -1414,6 +1448,12 @@ export class JsonlMessageService implements IMessageStore {
           turnId: data.turnId,
           usedTokens: data.usedTokens,
           effectiveContextWindow: data.effectiveContextWindow,
+          ...(data.totalContextWindow === undefined
+            ? {}
+            : { totalContextWindow: data.totalContextWindow }),
+          ...(data.outputReserveTokens === undefined
+            ? {}
+            : { outputReserveTokens: data.outputReserveTokens }),
           ...(data.messageCount === undefined
             ? {}
             : { messageCount: data.messageCount }),

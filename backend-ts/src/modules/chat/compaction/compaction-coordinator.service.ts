@@ -253,6 +253,17 @@ export class CompactionCoordinatorService {
         modelId: model.id,
         modelName: model.modelName,
         effectiveContextWindow: effectiveWindow,
+        totalContextWindow:
+          typeof context.getTotalContextWindow === "function"
+            ? context.getTotalContextWindow()
+            : effectiveWindow,
+        outputReserveTokens:
+          typeof context.getTotalContextWindow === "function"
+            ? Math.max(
+                0,
+                context.getTotalContextWindow() - effectiveWindow,
+              )
+            : 0,
         usedTokens,
         triggerRatio,
         willAutoCompact,

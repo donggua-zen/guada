@@ -14,12 +14,19 @@ export interface TokenStatsData {
   modelName: string
   messageCount: number
   breakdown?: TokenBreakdown
+  /** 输入 + 输出共享总窗口（旧数据缺省） */
+  totalContextWindow?: number
+  /** 压缩决策扣掉的输出预留（0..21K；旧数据缺省） */
+  outputReserveTokens?: number
 }
 
 /** 上下文统计事件负载（turn_end / compression_end / compaction_summary 与持久化锚点同构） */
 export interface ContextStatsInput {
   usedTokens: number
+  /** 压缩有效窗口（总窗口 − 封顶输出预留，最多 21K） */
   effectiveContextWindow: number
+  totalContextWindow?: number
+  outputReserveTokens?: number
   messageCount?: number
   breakdown?: TokenBreakdown
 }
@@ -65,6 +72,10 @@ function applyContextStats(sessionId: string, stats: ContextStatsInput) {
     modelName: prev?.modelName || '',
     messageCount: stats.messageCount ?? prev?.messageCount ?? 0,
     breakdown: stats.breakdown ?? prev?.breakdown,
+    totalContextWindow:
+      stats.totalContextWindow ?? prev?.totalContextWindow,
+    outputReserveTokens:
+      stats.outputReserveTokens ?? prev?.outputReserveTokens,
   })
   if (tokenStatsBySession.value.size > MAX_CACHED_SESSIONS) {
     const oldest = tokenStatsBySession.value.keys().next().value
@@ -139,6 +150,14 @@ export function applyContextStatsFromEvents(
       applyContextStats(sessionId, {
         usedTokens: live.usedTokens,
         effectiveContextWindow: live.effectiveContextWindow,
+        totalContextWindow:
+          typeof live.totalContextWindow === 'number'
+            ? live.totalContextWindow
+            : undefined,
+        outputReserveTokens:
+          typeof live.outputReserveTokens === 'number'
+            ? live.outputReserveTokens
+            : undefined,
         messageCount: typeof live.messageCount === 'number' ? live.messageCount : undefined,
         breakdown: pickBreakdown(live.breakdown),
       })
@@ -156,6 +175,14 @@ export function applyContextStatsFromEvents(
       applyContextStats(sessionId, {
         usedTokens: domain.usedTokens,
         effectiveContextWindow: domain.effectiveContextWindow,
+        totalContextWindow:
+          typeof domain.totalContextWindow === 'number'
+            ? domain.totalContextWindow
+            : undefined,
+        outputReserveTokens:
+          typeof domain.outputReserveTokens === 'number'
+            ? domain.outputReserveTokens
+            : undefined,
         messageCount: typeof domain.messageCount === 'number' ? domain.messageCount : undefined,
         breakdown: pickBreakdown(domain.breakdown),
       })
