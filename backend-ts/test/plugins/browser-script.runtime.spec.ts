@@ -82,6 +82,14 @@ function createBridge() {
             width: 800,
             height: 600,
           };
+        case "browser_set_viewport":
+          return {
+            ok: true,
+            tabId: params.tab_id || "t1",
+            width: params.width,
+            height: params.height,
+            applied: true,
+          };
         case "browser_console":
           return ["log one", "log two"];
         case "browser_history":
@@ -437,5 +445,47 @@ return 1;
     });
     expect(shotCall?.params.file_path).toBeUndefined();
     expect(shotCall?.params.session_path).toBeUndefined();
+  });
+
+  it("setViewportSize 透传尺寸与 tabId", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `
+const withTab = await tab.setViewportSize({ width: 390, height: 844, tabId: "t2" });
+const positional = await tab.setViewportSize(1024, 768);
+return { withTab, positional };
+`,
+    );
+
+    expect(result.status).toBe("completed");
+    expect((result.value as any).withTab).toMatchObject({
+      ok: true,
+      tabId: "t2",
+      width: 390,
+      height: 844,
+      applied: true,
+    });
+
+    const viewportCalls = calls.filter(
+      (call) => call.method === "browser_set_viewport",
+    );
+    expect(viewportCalls.map((call) => call.params)).toEqual([
+      { width: 390, height: 844, created_by: "s1", tab_id: "t2" },
+      { width: 1024, height: 768, created_by: "s1" },
+    ]);
+  });
+
+  it("setViewportSize 拒绝越界或非整数尺寸", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `return await tab.setViewportSize({ width: 319, height: 844 });`,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("INVALID_ARGUMENT");
+    expect(result.error?.message).toContain("setViewportSize requires integer");
+    expect(calls.some((call) => call.method === "browser_set_viewport")).toBe(false);
   });
 });

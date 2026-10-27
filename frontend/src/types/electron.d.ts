@@ -91,6 +91,13 @@ export interface WebviewRenderablePayload {
   renderable: boolean
 }
 
+/** Webview 渲染视口变更事件载荷（主进程 → 前端） */
+export interface WebviewViewportPayload {
+  windowId: string
+  width: number
+  height: number
+}
+
 /** 窗口图标更新事件载荷（主进程 → 前端） */
 export interface WindowFaviconPayload {
   windowId: string
@@ -185,6 +192,7 @@ export interface ElectronAPI {
   onDestroyWebview?: (callback: (event: unknown, data: WebviewDestroyPayload) => void) => void
   onSetWebviewVisibility?: (callback: (event: unknown, data: WebviewVisibilityPayload) => void) => void
   onSetWebviewRenderable?: (callback: (event: unknown, data: WebviewRenderablePayload) => void) => void
+  onSetWebviewViewport?: (callback: (event: unknown, data: WebviewViewportPayload) => void) => void
   onWindowFaviconUpdated?: (callback: (event: unknown, data: WindowFaviconPayload) => void) => void
 
   // 清空所有浏览器自动化 session 数据

@@ -162,6 +162,18 @@ describe("browserWebview viewport", () => {
     expect(store.getViewportMode(WID)).toBe("fixed");
   });
 
+  it("AI 显式设置视口：即使等于全局默认也保留覆盖", () => {
+    const store = useBrowserWebviewStore();
+    addWindow(store);
+
+    store.setWebviewViewportExact(WID, 1280, 720);
+    expect(store.viewportOverrides.get(WID)).toEqual({ width: 1280, height: 720 });
+
+    // 全局默认变化后该页仍保持显式尺寸
+    store.setViewportSize(1920, 1080);
+    expect(store.getViewportSize(WID)).toEqual({ width: 1280, height: 720 });
+  });
+
   it("自适应切回固定：写入全局固定尺寸覆盖", () => {
     const store = useBrowserWebviewStore();
     addWindow(store);

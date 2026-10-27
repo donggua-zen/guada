@@ -40,6 +40,7 @@ LLM
 | `tab.waitForLoadState` | `browser_evaluate` 轮询 `document.readyState` |
 | `tab.evaluate` | `browser_evaluate` |
 | `tab.screenshot` | `browser_screenshot` |
+| `tab.setViewportSize` | `browser_set_viewport` |
 | `tab.console` | `browser_console` |
 | `tab.back/forward/reload` | `browser_history` |
 | `browser.tabs.*` / `browser.current` | `browser_tabs` |
@@ -86,6 +87,7 @@ LLM
 | `tab.waitForLoadState("domcontentloaded" \| "load", { timeout? })` | 默认 3 秒；`networkidle` 明确拒绝 |
 | `tab.evaluate(fnOrExpression, arg?)` | 页面 JS |
 | `tab.screenshot({ fullPage?, saveTo? })` | 截图只落一份到会话附件目录；工具结果给出绝对路径，最近 6 张附图；`saveTo` 额外导出原始 PNG 到工作区 |
+| `tab.setViewportSize({ width, height, tabId? })` | 设置固定渲染视口（整数，宽 320–3840、高 240–2160）；不导航、不激活标签；返回实际生效尺寸与 `applied` |
 | `tab.console({ clear? })` | 默认只读日志；`clear:true` 才清空 |
 | `tab.back()` / `forward()` / `reload()` | 历史导航 |
 | `log(message)` / `sleep(ms)` / `args` | `sleep` 上限 5 秒 |

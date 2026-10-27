@@ -220,6 +220,7 @@ children: [e4, e5]
 | `browser_scroll` | `delta_x?, delta_y?, timeout?, created_by` | `{ok, action, deltaX, deltaY, scrollX, scrollY, url, title}` |
 | `browser_evaluate` | `code, timeout_ms?, mutates?, created_by` | 页面结果原值 |
 | `browser_screenshot` | `full_page?, wants_save?, created_by` | `{ok, data(base64 PNG), mime_type, width, height}` |
+| `browser_set_viewport` | `width, height, tab_id?, created_by` | `{ok, tabId, width, height, applied}` |
 | `browser_console` | `created_by, clear?` | `string[]` |
 | `browser_history` | `action: "back"\|"forward"\|"reload", created_by` | `{ok, url}` |
 | `browser_tabs` | `action: "list"\|"current"\|"select"\|"close"\|"close_all", index?, tab_id?, created_by` | list: `TabInfo[]`；current: `TabInfo\|null`；select: `TabInfo`；close: `{ok,closedTabId,currentTabId}`；close_all: `{ok,closedCount}` |

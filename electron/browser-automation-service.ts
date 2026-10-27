@@ -54,6 +54,15 @@ export interface ToolResponse {
  */
 export type BrowserWaitUntil = "none" | "domcontentloaded" | "load";
 
+/** 渲染视口固定尺寸范围（与前端 VIEWPORT_MIN/MAX、browser-script runtime 保持一致） */
+const MIN_VIEWPORT_WIDTH = 320;
+const MAX_VIEWPORT_WIDTH = 3840;
+const MIN_VIEWPORT_HEIGHT = 240;
+const MAX_VIEWPORT_HEIGHT = 2160;
+/** 渲染层应用视口是异步的：有界回读 guest 尺寸，避免事件发出即返回 */
+const VIEWPORT_APPLY_TIMEOUT_MS = 2000;
+const VIEWPORT_APPLY_POLL_MS = 50;
+
 /**
  * 浏览器自动化核心服务（基于独立窗口系统)
  *
@@ -2136,6 +2145,94 @@ export class BrowserAutomationService {
     });
   }
 
+  // ── 渲染视口 ──
+
+  /**
+   * 设置某个标签的固定渲染视口。
+   *
+   * 真实布局盒由前端 store 驱动：主进程只发 IPC，渲染层写入 per-tab override，
+   * webview 布局盒变化后 guest 的 window.innerWidth/innerHeight 才会更新。
+   * 这里在有界时间内回读 guest 尺寸，返回真实生效值（applied=false 表示超时未确认）。
+   */
+  async setViewport(
+    width: number,
+    height: number,
+    createdBy?: string,
+    windowId?: string,
+  ): Promise<any> {
+    const w = Number(width);
+    const h = Number(height);
+    if (
+      !Number.isInteger(w) ||
+      !Number.isInteger(h) ||
+      w < MIN_VIEWPORT_WIDTH ||
+      w > MAX_VIEWPORT_WIDTH ||
+      h < MIN_VIEWPORT_HEIGHT ||
+      h > MAX_VIEWPORT_HEIGHT
+    ) {
+      throw new BrowserBridgeError(
+        "INVALID_ARGUMENT",
+        `width/height must be integers within ${MIN_VIEWPORT_WIDTH}-${MAX_VIEWPORT_WIDTH} x ${MIN_VIEWPORT_HEIGHT}-${MAX_VIEWPORT_HEIGHT}`,
+        { width, height },
+      );
+    }
+
+    const { windowId: wid } = await this.ensureWindow(windowId || "", createdBy);
+    if (!this.windowManager) {
+      throw new BrowserBridgeError("CALL_FAILED", "WindowManager not initialized");
+    }
+
+    this.windowManager.setWebviewViewport(wid, w, h);
+
+    const deadline = Date.now() + VIEWPORT_APPLY_TIMEOUT_MS;
+    let actual = await this.readViewportSize(wid);
+    while (
+      Date.now() < deadline &&
+      (!actual || actual.width !== w || actual.height !== h)
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, VIEWPORT_APPLY_POLL_MS));
+      actual = await this.readViewportSize(wid);
+    }
+
+    const applied = !!actual && actual.width === w && actual.height === h;
+    if (!applied) {
+      log.warn(
+        `Viewport ${w}x${h} not confirmed for ${wid}; actual=${
+          actual ? `${actual.width}x${actual.height}` : "unknown"
+        }`,
+      );
+    }
+
+    return {
+      ok: true,
+      tabId: wid,
+      width: actual?.width ?? w,
+      height: actual?.height ?? h,
+      applied,
+    };
+  }
+
+  /** 读取 guest 当前 CSS viewport（失败返回 null） */
+  private async readViewportSize(
+    windowId: string,
+  ): Promise<{ width: number; height: number } | null> {
+    const wc = this.windowManager?.getWebContents(windowId);
+    if (!wc) return null;
+    try {
+      const value = await wc.executeJavaScript(
+        "({ width: window.innerWidth, height: window.innerHeight })",
+        true,
+      );
+      const width = Number(value?.width);
+      const height = Number(value?.height);
+      return Number.isFinite(width) && Number.isFinite(height)
+        ? { width, height }
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * 处理工具调用请求
    *
@@ -2315,6 +2412,14 @@ export class BrowserAutomationService {
             params.created_by,
             params.full_page || false,
             params.wants_save === true,
+          );
+
+        case "browser_set_viewport":
+          return await this.setViewport(
+            params.width,
+            params.height,
+            params.created_by,
+            params.tab_id || params.window_id,
           );
 
         case "browser_history": {

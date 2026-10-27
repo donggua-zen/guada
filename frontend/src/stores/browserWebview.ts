@@ -303,6 +303,17 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
   }
 
   /**
+   * 强制写入某网页的固定视口覆盖（AI setViewportSize 入口）。
+   * 与 setWebviewViewport 不同：即使尺寸等于全局默认也保留覆盖，
+   * 保证该页后续不随全局默认变更而跳变。
+   */
+  function setWebviewViewportExact(windowId: string, width: number, height: number): void {
+    const next = new Map(viewportOverrides.value)
+    next.set(windowId, { width, height })
+    viewportOverrides.value = next
+  }
+
+  /**
    * 设置某网页是否自适应预览面板（预览工具栏入口，仅当前网页生效、不持久化）。
    * 与全局默认一致时不落覆盖项，保持"跟随默认"语义。
    */
@@ -428,6 +439,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     getViewportMode,
     getViewportSize,
     setWebviewViewport,
+    setWebviewViewportExact,
     setWebviewAdaptive,
     setActiveWebviewEl,
     setNavState,

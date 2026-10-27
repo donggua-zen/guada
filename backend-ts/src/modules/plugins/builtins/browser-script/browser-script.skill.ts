@@ -117,8 +117,13 @@ tab-level convenience actions accept a locator or CSS selector:
     tab.check(target, checked?, options) / tab.uncheck(target, options)
     tab.elementState(target)
     tab.waitFor(target, { state?, timeout? })
+    tab.setViewportSize({ width, height, tabId? })
 
 Any element can be a target: button, link, heading, text, or custom div. The actionability check decides whether it can be clicked (visible, enabled, stable, inside the viewport, and not covered). fill still requires an editable element.
+
+### Viewport
+
+tab.setViewportSize({ width, height, tabId? }) sets a fixed render viewport for the current tab (or the given tabId) and returns { ok, tabId, width, height, applied }. width/height must be integers within 320-3840 x 240-2160. It changes only the viewport: it does not navigate, reload, or activate the tab. Use it to test responsive layouts or mobile widths before taking a screenshot. applied=false means the guest had not reported the new size yet (the page may still be resizing).
 
 ### Strictness
 
@@ -192,6 +197,7 @@ Rules:
 - tab.snapshot -> { type, url, title, tree, source?, stats? }
 - tab.waitForLoadState -> { state }
 - tab.screenshot -> { ok, width, height, savedTo? }
+- tab.setViewportSize -> { ok, tabId, width, height, applied }
 - tab.back / forward / reload -> { ok, url }
 - tab.console -> array of console log entries
 - browser.tabs.list -> TabInfo[] (array)

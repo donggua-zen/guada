@@ -18,6 +18,12 @@ const MAX_TRACE_STEPS = 100;
 const MAX_LOGS = 100;
 const WAIT_POLL_MS = 100;
 
+/** 渲染视口固定尺寸范围（与前端 VIEWPORT_MIN/MAX、Electron 侧校验保持一致） */
+const MIN_VIEWPORT_WIDTH = 320;
+const MAX_VIEWPORT_WIDTH = 3840;
+const MIN_VIEWPORT_HEIGHT = 240;
+const MAX_VIEWPORT_HEIGHT = 2160;
+
 export class BrowserScriptError extends Error {
   constructor(
     readonly code: string,
@@ -362,6 +368,8 @@ export class BrowserScriptRuntime {
         return this.handleEvaluate(params, state, run, signal);
       case "screenshot":
         return this.handleScreenshot(params, state, run, signal);
+      case "setViewport":
+        return this.setViewport(params, run, signal);
       case "console":
         return this.handleConsole(params, run, signal);
       case "history":
@@ -785,6 +793,49 @@ export class BrowserScriptRuntime {
     };
   }
 
+  /**
+   * 设置当前标签（或显式 tabId）的固定渲染视口。
+   * 仅接受整数与固定范围；实际生效值由 Electron 回读 guest 后返回。
+   */
+  private async setViewport(
+    params: any,
+    run: BrowserScriptRunParams,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const width = Number(params?.width);
+    const height = Number(params?.height);
+    if (
+      !Number.isInteger(width) ||
+      !Number.isInteger(height) ||
+      width < MIN_VIEWPORT_WIDTH ||
+      width > MAX_VIEWPORT_WIDTH ||
+      height < MIN_VIEWPORT_HEIGHT ||
+      height > MAX_VIEWPORT_HEIGHT
+    ) {
+      throw new BrowserScriptError(
+        "INVALID_ARGUMENT",
+        `setViewportSize requires integer width ${MIN_VIEWPORT_WIDTH}-${MAX_VIEWPORT_WIDTH} and height ${MIN_VIEWPORT_HEIGHT}-${MAX_VIEWPORT_HEIGHT}`,
+        { width: params?.width, height: params?.height },
+      );
+    }
+
+    const tabId =
+      typeof params?.tabId === "string" && params.tabId.trim()
+        ? params.tabId.trim()
+        : undefined;
+
+    return this.bridge.request(
+      "browser_set_viewport",
+      {
+        width,
+        height,
+        created_by: run.createdBy,
+        ...(tabId ? { tab_id: tabId } : {}),
+      },
+      signal,
+    );
+  }
+
   private async handleHistory(
     params: any,
     state: RunState,
@@ -1020,6 +1071,8 @@ function summarizeCall(method: string, params: any): string | undefined {
       return "<js>";
     case "screenshot":
       return String(params?.saveTo ?? "viewport");
+    case "setViewport":
+      return `${String(params?.width ?? "?")}x${String(params?.height ?? "?")}`;
     default:
       return undefined;
   }

@@ -31,12 +31,14 @@ import type {
   WebviewCreatePayload,
   WebviewDestroyPayload,
   WebviewRenderablePayload,
+  WebviewViewportPayload,
   WebviewVisibilityPayload,
   WindowFaviconPayload,
 } from '@/types/electron'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
 import { getAutoShowSidebar } from '@/utils/workspacePreview'
+import { isValidViewportSize } from '@/utils/browserViewport'
 import { t } from '@/locales'
 
 const store = useBrowserWebviewStore()
@@ -365,6 +367,18 @@ function handleSetRenderable(_event: unknown, data: WebviewRenderablePayload): v
   store.setRenderableOverride(data.windowId, data.renderable)
 }
 
+/** AI/主进程按网页设置固定渲染视口（browser_set_viewport） */
+function handleSetViewport(_event: unknown, data: WebviewViewportPayload): void {
+  if (!data?.windowId) return
+  // 主进程可能在 webview 创建前下发；忽略孤儿事件，避免留下无人认领的覆盖
+  if (!store.webviews.has(data.windowId)) return
+  const width = Math.round(Number(data.width))
+  const height = Math.round(Number(data.height))
+  if (!isValidViewportSize(width, height)) return
+  // AI 设置是显式覆盖：即使等于全局默认也保留，避免后续默认变更影响该页
+  store.setWebviewViewportExact(data.windowId, width, height)
+}
+
 function handlePointerLockChanged(_event: unknown, data: BrowserPointerLockPayload): void {
   if (!data?.windowId) return
   store.setPointerLocked(data.windowId, !!data.locked)
@@ -381,6 +395,7 @@ onMounted(() => {
   api.onDestroyWebview?.(handleDestroyWebview)
   api.onSetWebviewVisibility?.(handleSetVisibility)
   api.onSetWebviewRenderable?.(handleSetRenderable)
+  api.onSetWebviewViewport?.(handleSetViewport)
   api.onWindowFaviconUpdated?.(handleWindowFaviconUpdated)
   api.onBrowserPointerLockChanged?.(handlePointerLockChanged)
 })

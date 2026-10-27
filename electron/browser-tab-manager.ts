@@ -960,6 +960,20 @@ export class BrowserWebviewManager {
   }
 
   /**
+   * 通知渲染层把某个 webview 的渲染视口设为固定尺寸。
+   * 主进程不保存尺寸副本：真实布局与 guest viewport 由前端 store 驱动。
+   */
+  setWebviewViewport(windowId: string, width: number, height: number): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("browser:set-webview-viewport", {
+        windowId,
+        width,
+        height,
+      });
+    }
+  }
+
+  /**
    * 隐藏窗口（后台模式）— 通知前端切换 CSS
    */
   hideWindow(windowId: string): void {

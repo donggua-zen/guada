@@ -270,6 +270,16 @@ const tab = Object.freeze({
     });
   },
   screenshot: function (options) { return hostCall('screenshot', options || {}); },
+  setViewportSize: function (widthOrOptions, height) {
+    var params;
+    if (widthOrOptions && typeof widthOrOptions === 'object') {
+      params = { width: widthOrOptions.width, height: widthOrOptions.height };
+      if (widthOrOptions.tabId !== undefined) params.tabId = widthOrOptions.tabId;
+    } else {
+      params = { width: widthOrOptions, height: height };
+    }
+    return hostCall('setViewport', params);
+  },
   console: function (options) { return hostCall('console', options || {}); },
   back: function (options) {
     return hostCall('history', Object.assign({}, options || {}, { action: 'back' }));

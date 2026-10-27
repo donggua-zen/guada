@@ -139,6 +139,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSetWebviewRenderable: (callback: (event: any, data: { windowId: string; renderable: boolean }) => void) => {
     ipcRenderer.on('browser:set-webview-renderable', callback)
   },
+  onSetWebviewViewport: (callback: (event: any, data: { windowId: string; width: number; height: number }) => void) => {
+    ipcRenderer.on('browser:set-webview-viewport', callback)
+  },
   onWindowFaviconUpdated: (callback: (event: any, data: { windowId: string; favicon: string }) => void) => {
     ipcRenderer.on('window-favicon-updated', callback)
   },
