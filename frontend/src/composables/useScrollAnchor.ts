@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue'
+import { perfStart } from '@/utils/perf'
 
 /**
  * 聊天滚动底部锚定：following 表达用户滚动权，不是瞬时几何快照。
@@ -307,9 +308,14 @@ export function useScrollAnchor(options: ScrollAnchorOptions = {}) {
   function scrollToBottomImmediate(): void {
     const element = scrollElementRef.value
     if (!element) return
-    markLayoutScroll()
-    element.scrollTop = element.scrollHeight
-    lastObservedScrollTop = element.scrollTop
+    const span = perfStart('scroll.bottom')
+    try {
+      markLayoutScroll()
+      element.scrollTop = element.scrollHeight
+      lastObservedScrollTop = element.scrollTop
+    } finally {
+      span?.end()
+    }
   }
 
   /**

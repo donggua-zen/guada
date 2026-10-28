@@ -21,6 +21,7 @@
 import { reactive } from "vue";
 import { messageToTurnContent, extFromMediaType } from "@/services/modules/message.api";
 import { updateTokenStatsFromSSE } from "@/composables/useSessionTokenStats";
+import { perfStart, perfStartScoped } from "@/utils/perf";
 import type { WireStreamEvent } from "@/types/stream";
 import type { DomainEvent } from "@/types/stream/domain-event.types";
 import type { ContentBlock } from "@/types/stream/content-block.types";
@@ -1261,24 +1262,29 @@ export function projectChunk(
   sessionId: string,
   chunk: ProjectorChunk,
 ): void {
-  const sessionState = sessionStore.getSessionState(sessionId);
+  const span = perfStartScoped("live.chunk", chunk.type);
+  try {
+    const sessionState = sessionStore.getSessionState(sessionId);
 
-  // 会话级交互卡以 sessionId 唯一锚点、与回合缓存无关：先于 hasCache 门控直写，
-  // 否则「未打开过内容的会话」（刷新后的非当前会话、另一窗口正在跑的会话）在 store 里
-  // 看不到 pendingAsk，侧边栏等会话级消费者失明。与 applyLiveChunk 的 live 分支同值幂等双写。
-  if (chunk.type === "ask_requested") {
-    sessionStore.upsertSessionPendingAsk(sessionId, toPendingAsk(chunk));
-  } else if (chunk.type === "ask_resolved") {
-    sessionStore.removeSessionPendingAsk(sessionId, chunk.requestId);
-  }
+    // 会话级交互卡以 sessionId 唯一锚点、与回合缓存无关：先于 hasCache 门控直写，
+    // 否则「未打开过内容的会话」（刷新后的非当前会话、另一窗口正在跑的会话）在 store 里
+    // 看不到 pendingAsk，侧边栏等会话级消费者失明。与 applyLiveChunk 的 live 分支同值幂等双写。
+    if (chunk.type === "ask_requested") {
+      sessionStore.upsertSessionPendingAsk(sessionId, toPendingAsk(chunk));
+    } else if (chunk.type === "ask_resolved") {
+      sessionStore.removeSessionPendingAsk(sessionId, chunk.requestId);
+    }
 
-  const hasCache =
-    sessionState.loaded === true || (sessionState.turns?.length ?? 0) > 0;
-  if (!hasCache) {
-    stashEvent(sessionId, chunk);
-    return;
+    const hasCache =
+      sessionState.loaded === true || (sessionState.turns?.length ?? 0) > 0;
+    if (!hasCache) {
+      stashEvent(sessionId, chunk);
+      return;
+    }
+    applyLiveChunk(sessionStore, sessionId, chunk);
+  } finally {
+    span?.end();
   }
-  applyLiveChunk(sessionStore, sessionId, chunk);
 }
 
 /**
@@ -1290,18 +1296,29 @@ export function foldEvents(
   sessionStore: ProjectorSessionStore,
   sessionId: string,
   chunks: ProjectorChunk[],
+  reason: string = "unknown",
 ): void {
-  currentTurnBySession.set(sessionId, undefined);
-  sessionStore.setTurns(sessionId, []);
-  for (const chunk of chunks) {
-    applyChunkToStore(sessionStore, sessionId, chunk, "replay");
-  }
-  // 历史重放不复活工作态：JSONL 里 turn/start 无 turn/finish（后端重启/断连时终态未落盘）时，
-  // 折叠会置 isWorking + startedAt → 重开会话永久卡"正在流式中"。会话当前不在流式中
-  // （Bot 本地适配器无此方法，可选调用为 undefined，同样视为非流式）→ 折叠产物一律视为已终止。
-  // 流式中重折（load-more / 打开进行中的会话）跳过复位，live 事件照常接管。
-  if (!sessionStore.sessionIsStreaming?.(sessionId)) {
-    resetSessionTurnsTransientState(sessionStore, sessionId);
+  const span = perfStart("replay.foldEvents");
+  try {
+    currentTurnBySession.set(sessionId, undefined);
+    sessionStore.setTurns(sessionId, []);
+    for (const chunk of chunks) {
+      applyChunkToStore(sessionStore, sessionId, chunk, "replay");
+    }
+    // 历史重放不复活工作态：JSONL 里 turn/start 无 turn/finish（后端重启/断连时终态未落盘）时，
+    // 折叠会置 isWorking + startedAt → 重开会话永久卡"正在流式中"。会话当前不在流式中
+    // （Bot 本地适配器无此方法，可选调用为 undefined，同样视为非流式）→ 折叠产物一律视为已终止。
+    // 流式中重折（load-more / 打开进行中的会话）跳过复位，live 事件照常接管。
+    if (!sessionStore.sessionIsStreaming?.(sessionId)) {
+      resetSessionTurnsTransientState(sessionStore, sessionId);
+    }
+  } finally {
+    // 可选链短路参数求值：关闭统计时不读 turns、不建 meta 对象
+    span?.end({
+      reason,
+      events: chunks.length,
+      turns: sessionStore.getTurns(sessionId)?.length ?? 0,
+    });
   }
 }
 

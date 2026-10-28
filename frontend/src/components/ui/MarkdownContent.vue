@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n';
 import { useMarkdown, delegateMarkdownCodeClick } from "../../composables/useMarkdown";
 import { useDiffDOM } from "../../composables/useDiffDOM";
 import { DiffDOM } from 'diff-dom';
+import { perfStart } from '../../utils/perf';
 
 const { marked } = useMarkdown()
 const { t } = useI18n()
@@ -49,10 +50,14 @@ onMounted(() => {
 const initialRender = async () => {
     if (!markdownContainerRef.value || !props.content) return;
 
-    const newHTML = await marked.parse(props.content) as string;
-    markdownContainerRef.value.innerHTML = newHTML;
-    lastRenderedHTML = newHTML;
-
+    const span = perfStart('markdown.initial');
+    try {
+        const newHTML = await marked.parse(props.content) as string;
+        markdownContainerRef.value.innerHTML = newHTML;
+        lastRenderedHTML = newHTML;
+    } finally {
+        span?.end({ chars: props.content.length });
+    }
 };
 
 /**
@@ -65,12 +70,15 @@ const renderWithDiffDOM = async () => {
     if (!container || !props.content) return;
 
     // 1. 将最新的 Markdown 解析为 HTML
+    const parseSpan = perfStart('markdown.parse');
     const newHTML = await marked.parse(props.content) as string;
+    parseSpan?.end({ chars: props.content.length });
 
     // 2. 与上一次渲染的 HTML 进行比较
     if (newHTML === lastRenderedHTML) {
         return;
     }
+    const diffSpan = perfStart('markdown.diff');
     try {
         // 3. 创建临时容器
         const tempContainer = document.createElement('div') as HTMLElement;
@@ -107,6 +115,8 @@ const renderWithDiffDOM = async () => {
         container.innerHTML = newHTML as string;
         lastRenderedHTML = newHTML as string;
     
+    } finally {
+        diffSpan?.end({ html: newHTML.length });
     }
 };
 

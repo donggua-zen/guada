@@ -123,7 +123,7 @@ const loadMessages = async () => {
       clearSessionPendingAsks: () => {},
       getSessionState: () => ({ loaded: true, turns: turns.value, eventLog: [] }),
     } satisfies ProjectorSessionStore
-    foldEvents(localStore, props.session.id, page.events)
+    foldEvents(localStore, props.session.id, page.events, 'bot')
   } catch (error) {
     console.error('加载消息失败:', error)
     ElMessage.error(t('bot.sessionDialog.loadFailed'))

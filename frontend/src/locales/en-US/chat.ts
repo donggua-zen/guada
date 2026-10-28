@@ -247,8 +247,7 @@
     thinkingActive: 'Thinking...',
     thinkingDone: 'Deep Thinking Complete',
     executingSteps: 'Executing {n} steps',
-    executedThenExecuting: '{m} steps executed, executing {n} steps',
-    executedThenThinking: '{m} steps executed, thinking...',
+    executedThenStatus: '{m} steps executed, {status}',
     executedSteps: '{n} steps executed',
 
     // EventCard.vue compaction placeholder

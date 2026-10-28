@@ -92,21 +92,21 @@
               <!-- text-sm（Tailwind v4 = 14px/20px 行盒）：原先的 text-[14px] 只给字号，
                    行盒继承 html{line-height:1.5} = 21px（奇数），图标居中余量会随容器奇偶变半像素 -->
               <div v-if="group.isCollapsible" class="process-group__header text-sm group"
-                :class="{ 'shimmer-text': isLastActive(groupIndex), 'text-gray-600 dark:text-gray-400': !isLastActive(groupIndex) }"
-                @click="toggleGroup(isLastActive(groupIndex) ? 'last-active' : group.id)">
-                <template v-for="(parts, _) in [getGroupTitleParts(group, isLastActive(groupIndex))]" :key="_">
+                :class="{ 'shimmer-text': isGroupBusy(groupIndex), 'text-gray-600 dark:text-gray-400': !isGroupBusy(groupIndex) }"
+                @click="toggleGroup(groupIndex, group)">
+                <template v-for="(parts, _) in [getGroupTitleParts(group, isGroupBusy(groupIndex), isGroupExpanded(groupIndex, group))]" :key="_">
                   <!-- 图标盒 16px（偶数）：20px 行盒内居中余量 2px 整数；奇数盒会得到 X.5px 余量 -->
                   <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
-                    <!-- <span class="block w-1 h-1 rounded-3xl bg-gray-400 dark:bg-gray-700/50" v-if="!isLastActive(groupIndex)"></span> -->
-                    <component :is="parts.icon" v-if="!isGroupExpanded(group.id)"
+                    <!-- <span class="block w-1 h-1 rounded-3xl bg-gray-400 dark:bg-gray-700/50" v-if="!isGroupBusy(groupIndex)"></span> -->
+                    <component :is="parts.icon" v-if="!isGroupExpanded(groupIndex, group)"
                       class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-gray-500" />
                     <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200"
-                      :class="isGroupExpanded(group.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
-                      :style="isGroupExpanded(group.id) ? {} : { transform: 'rotate(-90deg)' }" />
+                      :class="isGroupExpanded(groupIndex, group) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+                      :style="isGroupExpanded(groupIndex, group) ? {} : { transform: 'rotate(-90deg)' }" />
                   </span>
                   <span class="shrink-0 font-medium ml-1.5">{{ parts.action }}</span>
                   <span v-if="parts.args" class="text-sm truncate ml-1.5"
-                    :class="{ 'text-gray-400 dark:text-gray-400': !isLastActive(groupIndex) }">{{ parts.args }}</span>
+                    :class="{ 'text-gray-400 dark:text-gray-400': !isGroupBusy(groupIndex) }">{{ parts.args }}</span>
                 </template>
               </div>
               <!-- 分组内容 -->
@@ -122,12 +122,10 @@
                         :reasoning-content="item.reasoningContent || ''"
                         :is-thinking="item.source.state?.isThinking || false"
                         :thinking-duration-ms="item.source.thinkingDurationMs"
-                        :thinking-started-at="item.source.thinkingStartedAt"
-                        :auto-expand="isGroupContentVisible(groupIndex, group) && isSingleStepGroup(group)" />
+                        :thinking-started-at="item.source.thinkingStartedAt" />
                       <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
                         :tool-responses="item.toolResponses"
-                        :is-streaming="streamingState.isStreaming" :session-id="props.sessionId"
-                        :auto-expand="isGroupContentVisible(groupIndex, group) && isSingleStepGroup(group)" />
+                        :is-streaming="streamingState.isStreaming" :session-id="props.sessionId" />
                     </template>
                   </div>
                 </div>
@@ -201,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, inject } from "vue";
+import { computed, ref, watch, nextTick, inject, type Component } from "vue";
 import { ElAlert, ElIcon, ElImageViewer } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { MenuBookOutlined } from "@vicons/material";
@@ -210,9 +208,9 @@ import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
 import { isVisionImageMediaType } from '@/utils/media-type';
-import { groupContentsForDisplay, type DisplayGroup, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
+import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
 import type { Turn, MessageContent, TurnContent, FileAttachment } from '@/types/message';
-import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, countSteps, DEFAULT_CONFIG, type ToolCall } from '@/utils/toolDisplay';
+import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
 import ThinkingStatus from './ThinkingStatus.vue';
@@ -227,6 +225,8 @@ import { useLayoutStore } from '@/stores/layout';
 import { isHiddenBlock, getThinkingPreview } from '@/utils/messageUtils';
 import { isJobNoticeSource } from '@/utils/jobNotice';
 import { previewFile } from '@/utils/workspacePreview';
+import { resolveGroupExpanded, nextGroupExpandOverride, hasUnfinishedSteps, isToolCallExecuting, resolveGroupTitlePhase } from './groupExpansion';
+import { perfCount, perfStart } from '@/utils/perf';
 
 const { t } = useI18n();
 
@@ -278,7 +278,11 @@ const activeBlocks = computed(() => {
 // ============================================
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
-const expandedGroups = ref<Set<string>>(new Set());
+/**
+ * 分组展开状态的显式覆盖（group.id -> 是否展开，仅用户点击时写入）。
+ * 缺省不落状态：由 isGroupExpanded 按运行态派生——流式中的最后一组展开、其余收起。
+ */
+const groupExpandOverrides = ref<Map<string, boolean>>(new Map());
 
 // 从 ChatPanel 注入锁定滚动方法，展开分组时调用
 const lockScrollAnchor = inject<() => void>('lockScrollAnchor', () => { });
@@ -301,43 +305,35 @@ const onActiveBodyScroll = (e: Event) => {
   userScrolledAway = !atBottom;
 };
 
-const toggleGroup = (groupId: string) => {
-  const set = expandedGroups.value;
-  if (set.has(groupId)) {
-    set.delete(groupId);
-  } else {
-    set.add(groupId);
-    if (groupId !== 'last-active') {
-      lockScrollAnchor()
-    }
-  }
+/**
+ * 分组展开态：显式覆盖优先；无覆盖时按运行态派生——进行中的最后一组默认展开。
+ * 回合结束后活动组不再满足 isLastActive，自动回落为收起；
+ * 用户手动展开过的组因覆盖存在而保持展开。
+ */
+const isGroupExpanded = (groupIndex: number, group: DisplayGroup): boolean => {
+  return resolveGroupExpanded(groupExpandOverrides.value, group.id, isLastActive(groupIndex));
 };
 
-const isGroupExpanded = (groupId: string): boolean => {
-  return expandedGroups.value.has(groupId);
+const toggleGroup = (groupIndex: number, group: DisplayGroup) => {
+  const expanded = isGroupExpanded(groupIndex, group);
+  const active = isLastActive(groupIndex);
+  groupExpandOverrides.value.set(group.id, nextGroupExpandOverride(groupExpandOverrides.value, group.id, active));
+  if (!expanded && !active) {
+    lockScrollAnchor()
+  }
 };
 
 /** 分组内容当前是否可见（与模板 collapsible 的 is-expanded 判定保持同一表达式） */
 const isGroupContentVisible = (groupIndex: number, group: DisplayGroup): boolean => {
   // 不可折叠组（独立渲染工具卡，如计划）永远直接渲染：
-  // 不参与 last-active 的"进行中收成一行"处理，否则待审批/流式最后一组时又被藏住
+  // 不参与进行中分组的展开/收起判定，否则待审批/流式最后一组时又被藏住
   if (!group.isCollapsible) return true;
-  return isLastActive(groupIndex)
-    ? isGroupExpanded('last-active')
-    : isGroupExpanded(group.id);
+  return isGroupExpanded(groupIndex, group);
 };
 
-/**
- * 分组是否只含单个子步骤（单条思考 或 单个工具调用）。
- * 单步骤分组展开时自动展开子项，省去二次点击。
- */
-const isSingleStepGroup = (group: DisplayGroup): boolean => {
-  if (group.items.length !== 1) return false;
-  const item = group.items[0];
-  if (item.type === 'think') return true;
-  if (item.type === 'tool') return (item.toolCalls?.length ?? 0) === 1;
-  return false;
-};
+/** 分组内的工具步骤数（思考项不计入） */
+const countToolSteps = (items: ReadonlyArray<DisplayItem>): number =>
+  items.reduce((sum, item) => sum + (item.type === 'tool' ? item.toolCalls?.length ?? 0 : 0), 0);
 
 // ============================================
 // 展示计算
@@ -388,49 +384,118 @@ const openFilePreview = (entry: FileChangeEntry) => {
 
 // 激活分组内容更新时自动滚动到底部（用户手动滚动后不干扰）
 watch(activeContents, () => {
+  perfCount('turnItem.deepWatch');
   if (!streamingState.value.isStreaming) return;
   nextTick(() => {
     const el = activeBodyRef.value;
     if (!el || userScrolledAway) return;
-    el.scrollTop = el.scrollHeight;
+    const span = perfStart('scroll.groupBody');
+    try {
+      el.scrollTop = el.scrollHeight;
+    } finally {
+      span?.end();
+    }
   });
 }, { deep: true });
 
-// 流式过程中最后一组且需折叠为标题行
-const isLastActiveGroup = computed(() => {
-  if (!streamingState.value.isStreaming) return null;
+// 流式过程中最后一组是否为进行中的过程分组（该组默认展开）
+const hasActiveGroup = computed(() => {
+  if (!streamingState.value.isStreaming) return false;
   const groups = displayGroups.value;
-  if (groups.length === 0) return null;
-  const lastGroup = groups[groups.length - 1];
-  return lastGroup.type === 'process' ? 'last-active' : null;
+  if (groups.length === 0) return false;
+  return groups[groups.length - 1].type === 'process';
 });
 
-// 判断当前 group 是否为流式过程中需特殊处理的最后一组
+// 判断当前 group 是否为流式过程中的进行中分组
 const isLastActive = (groupIndex: number): boolean => {
-  if (!isLastActiveGroup.value) return false;
-  return groupIndex === displayGroups.value.length - 1;
+  return hasActiveGroup.value && groupIndex === displayGroups.value.length - 1;
 };
-// 统一的分组标题生成：active=true 时显示"正在"，active=false 时显示"已"
-// 内部自行判断展开状态，返回 { icon, action, args }
-const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
-  const groupId = active ? 'last-active' : group.id;
-  const expanded = isGroupExpanded(groupId);
-  const items = active ? group.items.slice(-1) : group.items;
-  const steps = countSteps(group.items);
-  if (expanded) {
-    if (active) {
-      const currentItemSteps = countSteps(items);
-      const completedSteps = steps - currentItemSteps;
-      return { icon: Wrench24Filled, action: completedSteps ? t('chat.turn.executingStepsWithCompleted', { n: currentItemSteps, m: completedSteps }) : t('chat.turn.executingSteps', { n: currentItemSteps }), args: '' };
-    }
-    return { icon: Wrench24Filled, action: t('chat.turn.executedSteps', { n: steps }), args: '' };
-  }
-  const toolItems = items.filter(i => i.type === 'tool');
-  const allToolCalls = toolItems.flatMap(i => i.toolCalls || []);
 
-  // 纯思考（无工具）：摘要为思考内容最后一行，思考中实时跟随、结束后保留
-  if (allToolCalls.length === 0) {
-    const thinkItem = items.find(i => i.type === 'think');
+/**
+ * 分组是否忙碌（存在未完成步骤）：标题「正在…」/微光动画按此判定，而非组位置。
+ * 工具全部执行完、等待模型下次响应时不算忙碌——标题回落「已执行 N 个步骤」，
+ * 但组仍保持展开（默认展开按 isLastActive 位置判定，等待间隙不闪烁收起）。
+ */
+const isGroupBusy = (groupIndex: number): boolean => {
+  if (!streamingState.value.isStreaming) return false;
+  const group = displayGroups.value[groupIndex];
+  return !!group && hasUnfinishedSteps(group.items, true);
+};
+
+/** 分组内仍在执行的工具调用（忙碌步骤） */
+const executingCallsOf = (group: DisplayGroup): ToolCall[] =>
+  group.items.flatMap((item) =>
+    item.type === 'tool'
+      ? (item.toolCalls ?? []).filter((tool, i) => isToolCallExecuting(tool, i, item.toolResponses, true))
+      : [],
+  );
+
+/**
+ * 分组标题的当前状态段（正在进行的步骤/思考），配合已执行前缀拼接。
+ * 同类型执行中调用 → 聚合文案（如「正在搜索 3 个网页」）；混合 → 通用步骤数。
+ */
+const getActiveStatusParts = (executing: ToolCall[]): { icon: Component; text: string } => {
+  if (executing.length === 0) {
+    return { icon: BrainCircuit20Regular, text: t('chat.turn.thinkingActive') };
+  }
+  const refTool = executing[executing.length - 1] as ToolCall;
+  const allSameType = executing.every(tc => _resolveToolName(tc as ToolCall) === _resolveToolName(refTool));
+  if (allSameType) {
+    const config = getToolConfig(refTool);
+    return {
+      icon: getToolIcon(refTool),
+      text: config.aggregate!.executing.replace('{n}', String(executing.length)),
+    };
+  }
+  return { icon: Wrench24Filled, text: t('chat.turn.executingSteps', { n: executing.length }) };
+};
+
+// 统一的分组标题生成：busy=存在未完成步骤，expanded 由调用方传入。
+// 展开态只显示「已执行 x 个步骤（有完成项时）+ 当前状态」，不再重复正文摘要（思考预览/工具参数）
+const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolean) => {
+  const toolSteps = countToolSteps(group.items);
+  const allToolCalls = group.items.flatMap(i => i.type === 'tool' ? i.toolCalls || [] : []);
+  const phase = resolveGroupTitlePhase(group.items, streamingState.value.isStreaming);
+
+  if (expanded) {
+    if (busy) {
+      const executing = executingCallsOf(group);
+      const status = getActiveStatusParts(executing);
+      const completedToolSteps = toolSteps - executing.length;
+      const action = completedToolSteps > 0
+        ? t('chat.turn.executedThenStatus', { m: completedToolSteps }).replace('{status}', status.text)
+        : status.text;
+      return { icon: status.icon, action, args: '' };
+    }
+    // 已结束：有工具显示工具步骤总数；纯思考显示思考态
+    if (toolSteps > 0) {
+      return { icon: Wrench24Filled, action: t('chat.turn.executedSteps', { n: toolSteps }), args: '' };
+    }
+    return { icon: BrainCircuit20Regular, action: t('chat.turn.thinkingDone'), args: '' };
+  }
+
+  // 收起态：工具执行中 → 工具动作/聚合文案 + 参数摘要
+  if (phase === 'executing-tools') {
+    const executing = executingCallsOf(group);
+    const refTool = executing[executing.length - 1] as ToolCall;
+    const allExecutingSameType = executing.every(tc => _resolveToolName(tc as ToolCall) === _resolveToolName(refTool));
+
+    // 同类型多调用 → 聚合文案（n=全部调用数，沿用既有收起态口径）；单工具 → 动作 + 参数摘要
+    if (allExecutingSameType && allToolCalls.length > 1) {
+      const config = getToolConfig(refTool);
+      return { icon: getToolIcon(refTool), action: config.aggregate!.executing.replace('{n}', String(allToolCalls.length)), args: '' };
+    }
+    if (allExecutingSameType && allToolCalls.length === 1) {
+      const config = getToolConfig(refTool);
+      return { icon: getToolIcon(refTool), action: config.text.executing, args: getArgsText(refTool) || '' };
+    }
+    return { icon: Wrench24Filled, action: t('chat.turn.executingSteps', { n: executing.length }), args: '' };
+  }
+
+  // 收起态：纯思考，或工具已完成、当前正在思考 → 思考摘要（只有这种时候才显示思考）
+  if (phase === 'thinking') {
+    const thinkItem = group.items.find(i => i.type === 'think' && i.source.state?.isThinking)
+      ?? group.items.find(i => i.type === 'think');
     const isThinking = thinkItem?.source.state?.isThinking;
     return {
       icon: BrainCircuit20Regular,
@@ -439,25 +504,22 @@ const getGroupTitleParts = (group: DisplayGroup, active: boolean) => {
     };
   }
 
-  // 判断是否所有工具同类型
+  // 收起 + 非忙碌 + 有工具：completed 聚合文案（等待下次响应的间隙/回合已结束），不显示思考
   const refTool = allToolCalls[allToolCalls.length - 1] as ToolCall;
   const allSameType = allToolCalls.every(tc => _resolveToolName(tc as ToolCall) === _resolveToolName(refTool));
 
   if (allSameType && allToolCalls.length > 1) {
     const config = getToolConfig(refTool);
-    const agg = config.aggregate || DEFAULT_CONFIG.aggregate!;
-    const text = active ? agg.executing : agg.completed;
-    return { icon: getToolIcon(refTool), action: text.replace('{n}', String(allToolCalls.length)), args: '' };
+    return { icon: getToolIcon(refTool), action: config.aggregate!.completed.replace('{n}', String(allToolCalls.length)), args: '' };
   }
 
   if (allSameType && allToolCalls.length === 1) {
     const config = getToolConfig(refTool);
-    const args = getArgsText(refTool);
-    return { icon: getToolIcon(refTool), action: active ? config.text.executing : config.text.completed, args: args || '' };
+    return { icon: getToolIcon(refTool), action: config.text.completed, args: getArgsText(refTool) || '' };
   }
 
   // 混合工具 — 通用图标
-  return { icon: Wrench24Filled, action: active ? t('chat.turn.executingSteps', { n: countSteps(items) }) : t('chat.turn.executedSteps', { n: steps }), args: '' };
+  return { icon: Wrench24Filled, action: t('chat.turn.executedSteps', { n: toolSteps }), args: '' };
 };
 // ============================================
 const userContent = computed(() => {

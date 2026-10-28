@@ -31,6 +31,7 @@ import { registerUiPrimitives } from "@/components/ui/register";
 import { initGlobalErrorHandler } from "@/utils/globalErrorHandler";
 // 设备像素网格：CSS 需要 1/dpr 才能把卡片底边吸附到设备像素上（防输入区底部半行泄漏）
 import { initDevicePixelGrid } from "@/utils/devicePixelGrid";
+import { installPerfGlobal } from "@/utils/perf";
 import {
   backendReady,
   backendError,
@@ -288,6 +289,10 @@ router.afterEach((to, from) => {
 });
 
 const app = createApp(App);
+// 性能统计（默认关闭）：?perf=1 / localStorage['gd:perf']='1' / 控制台 __gdPerf.enable()
+installPerfGlobal();
+// Vue DevTools Performance 时间线（仅 dev）：组件 render/update 打点
+if (import.meta.env.DEV) app.config.performance = true;
 // ── 插件运行时共享环境（__GuaDaShared__）──
 // runtime：响应式共享数据（用户/会话/语言/主题），插件 UI 可响应式读取
 // i18n：插件语言包注册表（{ zh, en } 字典）

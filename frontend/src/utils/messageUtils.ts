@@ -5,6 +5,7 @@
 // 统一复用 types/message 的消息/内容/附件类型（避免两套 Message 类型冲突）
 import type { MessageContent, FileAttachment, MessageBundle, ToolCallResponseEntry } from "@/types/message";
 import { isStandaloneTool, type ToolCall } from "./toolDisplay";
+import { perfStart } from "./perf";
 export type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
 
 /**
@@ -270,10 +271,13 @@ export function groupContentsForDisplay(
 ): DisplayGroup[] {
   if (!contents || contents.length === 0) return [];
 
+  const span = perfStart("group.build");
   const items = flattenContents(contents);
   if (items.length === 0) return [];
 
-  return doGrouping(items);
+  const groups = doGrouping(items);
+  span?.end({ blocks: contents.length, groups: groups.length });
+  return groups;
 }
 
 /**

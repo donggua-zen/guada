@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, inject } from 'vue';
+import { computed, ref, inject } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { BrainCircuit20Regular, ChevronDown12Regular } from '@vicons/fluent';
@@ -52,8 +52,6 @@ const props = defineProps<{
   thinkingDurationMs: number | null | undefined;
   /** 思考跳动锚点（epoch ms，流式期间展示层秒表用） */
   thinkingStartedAt?: number | null;
-  /** 所在分组可见且仅含本步骤时由父级置真：跟随分组展开/收起（单步骤分组免二次点击） */
-  autoExpand?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -85,15 +83,6 @@ const { elapsedMs: thinkingDuration } = useElapsedTicker(
 const formattedDuration = computed(() => {
   return formatDuration(thinkingDuration.value);
 });
-
-// 展开状态：仅跟随单步骤分组的 autoExpand（与工具行同语义）；依赖从真变假才收起，不覆盖用户手动切换
-watch(() => props.autoExpand, (auto, prevAuto) => {
-  if (auto) {
-    isExpanded.value = true;
-  } else if (prevAuto) {
-    isExpanded.value = false;
-  }
-}, { immediate: true });
 </script>
 
 <style scoped>

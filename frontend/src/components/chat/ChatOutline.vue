@@ -38,6 +38,7 @@ import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import type { MessageBundle, Turn } from '@/types/message'
 import { stripSystemReminder, isHiddenBlock } from '@/utils/messageUtils'
+import { perfStart } from '@/utils/perf'
 
 const { t } = useI18n()
 
@@ -105,6 +106,7 @@ function bundlePreview(bundle: MessageBundle): string {
 }
 
 const outlineItems = computed<OutlineItem[]>(() => {
+  const span = perfStart('outline.recompute')
   const items: OutlineItem[] = []
   for (const turn of props.turns) {
     // 用户锚点：回合内第一条真实用户输入（id 与 TurnItem 的 data-message-id 同源）
@@ -131,6 +133,7 @@ const outlineItems = computed<OutlineItem[]>(() => {
         : ''
     })
   }
+  span?.end({ turns: props.turns.length })
   return items
 })
 

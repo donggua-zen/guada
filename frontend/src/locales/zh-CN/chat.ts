@@ -247,8 +247,7 @@ export default {
     thinkingActive: '正在思考...',
     thinkingDone: '已深度思考',
     executingSteps: '正在执行{n}个步骤',
-    executedThenExecuting: '已执行{m}个步骤,正在执行{n}个步骤',
-    executedThenThinking: '已执行{m}个步骤,正在思考...',
+    executedThenStatus: '已执行{m}个步骤,{status}',
     executedSteps: '已执行{n}个步骤',
 
     // EventCard.vue 压缩占位

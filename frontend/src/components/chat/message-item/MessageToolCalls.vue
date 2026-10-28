@@ -123,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, inject } from 'vue';
+import { computed, ref, inject } from 'vue';
 import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { ErrorCircle16Regular, ChevronDown12Regular, PanelRightExpand20Filled, Image24Regular } from '@vicons/fluent';
@@ -152,14 +152,13 @@ import SubAgentToolRow from './SubAgentToolRow.vue';
 import WorkflowRunInlineCard from './WorkflowRunInlineCard.vue';
 import ToolImageGrid from './ToolImageGrid.vue';
 import { useSessionStore } from '@/stores/session';
+import { perfStart } from '@/utils/perf';
 
 const props = defineProps<{
   toolCalls: ToolCall[];
   toolResponses?: ToolCallResponseEntry[];
   isStreaming?: boolean;
   sessionId?: string;
-  /** 所在分组可见且仅含本步骤时由父级置真：展开分组即展开全部调用（单步骤分组免二次点击） */
-  autoExpand?: boolean;
 }>();
 
 const { t } = useI18n();
@@ -224,19 +223,12 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
   return executing ? config.text.executing : config.text.completed;
 };
 
-// ── 展开/闭合（默认闭合，点击展开；单步骤分组由 autoExpand 跟随分组展开）──
+// ── 展开/闭合（默认闭合，点击展开）──
 // 例外：独立渲染工具（计划卡、子智能体行等，isStandaloneTool）默认展开——正文就是内容本身，
 // 模型还在写时就要"边写边看"，不该先点一下才可见；用户显式折叠后尊重其选择。
 
 const expandedIndexes = ref<Set<number>>(new Set());
 const collapsedIndexes = ref<Set<number>>(new Set());
-
-watch(() => props.autoExpand, (auto) => {
-  expandedIndexes.value = auto
-    ? new Set(props.toolCalls.map((_, i) => i))
-    : new Set();
-  collapsedIndexes.value = new Set();
-}, { immediate: true });
 
 /** 默认展开的行（独立渲染工具 / 带图片的工具：正文即内容，与分组判定共用 isStandaloneTool） */
 const isDefaultExpandedRow = (index: number): boolean => {
@@ -315,8 +307,9 @@ const responseTexts = computed<string[]>(() =>
 
 // ── 远程工作区标识（通用 workspace 参数约定，无工具名白名单）──
 // 单行摘要加「远程·」前缀；展开区显示连接名。本地调用两项均为空。
-const rowDisplays = computed(() =>
-  props.toolCalls.map((tool) => {
+const rowDisplays = computed(() => {
+  const span = perfStart('toolCalls.rowDisplays');
+  const rows = props.toolCalls.map((tool) => {
     const remoteName = getRemoteWorkspaceName(tool);
     return {
       remoteName,
@@ -326,13 +319,16 @@ const rowDisplays = computed(() =>
         t('chat.toolCalls.remote'),
       ),
     };
-  }),
-);
+  });
+  span?.end({ calls: props.toolCalls.length });
+  return rows;
+});
 
 // ── 定制渲染（renderer 声明：后端 display.renderer 优先，内置映射兜底） ──
 
-const rendererInfos = computed<(ToolRendererInfo | null)[]>(() =>
-  props.toolCalls.map((tool) => {
+const rendererInfos = computed<(ToolRendererInfo | null)[]>(() => {
+  const span = perfStart('toolCalls.rendererInfos');
+  const infos = props.toolCalls.map((tool) => {
     const renderer = getToolRenderer(tool);
     if (!renderer) return null;
     const args = getRendererArgs(tool, renderer);
@@ -350,8 +346,10 @@ const rendererInfos = computed<(ToolRendererInfo | null)[]>(() =>
       info.stat = countDiffLines(args.oldValue ?? '', args.newValue ?? '');
     }
     return info;
-  }),
-);
+  });
+  span?.end({ calls: props.toolCalls.length });
+  return infos;
+});
 
 /** 通用 IO 行：没有定制卡片/子代理/工作流分支，图片放在"输出"段内 */
 const genericIoRows = computed<boolean[]>(() =>

@@ -233,6 +233,7 @@ import { useSessionSettingsSync } from '@/composables/useSessionSettingsSync'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 import { getErrorMessage, getApiErrorStatus } from '@/utils/errorMessage'
+import { perfStart } from '@/utils/perf'
 import {
   parseLocalSlashCommand,
   type LocalSlashCommand,
@@ -1060,10 +1061,12 @@ async function loadMessages(
     const scrollElement = scrollContainerRef.value?.getScrollElement?.();
     const oldScrollHeight = !isInitial ? scrollElement?.scrollHeight || 0 : 0;
 
+    const fetchSpan = perfStart('replay.fetch');
     const page = await apiService.fetchSessionEvents(sessionId, {
       beforeSeq: isInitial ? undefined : options.beforeSeq,
       turns: isInitial ? INITIAL_PAGE_SIZE : MESSAGES_PAGE_SIZE,
     });
+    fetchSpan?.end({ initial: isInitial ? 1 : 0, events: page.events.length });
 
     // 事件数组：初始替换 / load-more 前插（live 终态事件已由 applyLiveChunk 追加进 eventLog）
     const prevLog = sessionState.eventLog || [];
@@ -1080,7 +1083,7 @@ async function loadMessages(
     }
 
     // 折叠：清树后全量重建（eventLog 含 live 终态事件，re-fold 天然保留实时尾部）
-    foldEvents(sessionStore, sessionId, sessionState.eventLog);
+    foldEvents(sessionStore, sessionId, sessionState.eventLog, isInitial ? 'initial' : 'load-more');
 
     // 分页游标：下一页 = 页首前一 seq（null = 无更早内容）
     sessionState.eventCursor = page.nextBeforeSeq;
@@ -1093,11 +1096,15 @@ async function loadMessages(
     // (user_message 等)由 projector 按 messageId/turnId 幂等吸收。prevSeq 缺失照旧应用(fail-open)。
     const endSeq = page.endSeq ?? 0;
     const projectorStash = takeProjectorStash(sessionId);
+    const stashSpan = perfStart('replay.stashApply');
+    let appliedStash = 0;
     for (const chunk of projectorStash) {
       const prevSeq = (chunk as { prevSeq?: number }).prevSeq;
       if (typeof prevSeq === "number" && prevSeq < endSeq) continue;
       applyLiveChunk(sessionStore, sessionId, chunk);
+      appliedStash += 1;
     }
+    stashSpan?.end({ events: appliedStash });
 
     hasMoreMessages.value = page.hasMore;
     // 分页游标状态按会话记忆(切会话回来时恢复)
