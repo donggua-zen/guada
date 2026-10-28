@@ -589,18 +589,21 @@ async function restorePreviewCache(sessionId: string): Promise<void> {
         // 恢复激活标签（显示完全由激活标签驱动）
         // 优先级：调用方刚激活的标签 > 缓存中的激活标签 > 第一个标签
         // null = 起始页；'newtab' 为旧缓存哨兵键，一并归一到起始页
+        //
+        // 必须同步 selectTab，不能再 await nextTick()：关闭侧栏后从概览/对话流等
+        // 入口重开时，调用方会在挂载后的 nextTick 里 selectTab 目标标签；恢复逻辑
+        // 若也 await nextTick，注册更晚，会反过来覆盖调用方的选择（典型症状：
+        // 概览点浏览器条目，结果仍选中旧文件标签）。同步恢复 + 调用方后注册的
+        // nextTick 正好符合上面的优先级。
         if (preExistingActiveKey && tabStore.tabs.some(t => t.key === preExistingActiveKey)) {
             // 调用方（如概览点击子代理）在本函数前已激活了目标标签 —— 保持它
-            await nextTick()
             tabStore.selectTab(preExistingActiveKey)
         } else if (cached.activeTabKey === null || cached.activeTabKey === 'newtab') {
             // 起始页不占用标签：恢复为无激活标签
             tabStore.selectTab(null)
         } else if (restoredActiveKey && tabStore.tabs.some(t => t.key === restoredActiveKey)) {
-            await nextTick()
             tabStore.selectTab(restoredActiveKey)
         } else if (tabStore.tabs.length > 0) {
-            await nextTick()
             tabStore.selectTab(tabStore.tabs[0].key)
         }
     } finally {
