@@ -46,6 +46,9 @@
 
     // ModelSelectorPanel.vue
     selectModelHint: 'Select a model, hover here to choose a mode',
+    followBotDefault: 'Following Bot default model',
+    followAgentDefault: 'Following agent default model',
+    resetToDefault: 'Reset to follow default model',
     reasoningEffort: 'Reasoning Effort',
     favoriteModels: 'Favorite Models',
     manageModels: 'Manage Models',

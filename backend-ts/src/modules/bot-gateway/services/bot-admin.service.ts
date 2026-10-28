@@ -214,6 +214,8 @@ export class BotAdminService {
       }
     }
 
+    // session.modelSource（session/bot/agent）由 enrichSession 在内存中写入，
+    // 仅用于前端区分「用户显式选择」与「跟随默认」，不落库。
     return {
       session: {
         ...session,

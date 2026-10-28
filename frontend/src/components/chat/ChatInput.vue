@@ -99,7 +99,7 @@
           <!-- 模型选择按钮 -->
           <button ref="modelButtonRef" @click.stop="openModelPanel" class="model-selector-btn"
             :class="{ 'is-open': modelButtonExpanded, 'cursor-not-allowed': props.readonly }"
-            :style="{ width: modelButtonWidth }">
+            :title="modelButtonTitle" :style="{ width: modelButtonWidth }">
             <span class="text-sm font-medium truncate flex-1 min-w-0"
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
@@ -134,8 +134,10 @@
       <!-- 模型选择器弹窗 -->
       <ModelSelectorPanel v-model:visible="modelPanelVisible" :anchor-el="modelButtonRef" :models="models"
         :providers="providers" :current-model-id="props.config?.modelId || null"
+        :model-source="props.config?.modelSource ?? null"
+        :source-hint="modelSourceHint"
         :thinking-effort-options="thinkingEffortOptions" :thinking-effort-value="localThinkingEffort"
-        @select="handleModelSelect" @favorite-changed="handleFavoriteChanged"
+        @select="handleModelSelect" @select-default="handleSelectDefault" @favorite-changed="handleFavoriteChanged"
         @select-thinking-effort="handleThinkingEffortChange" />
 
       <!-- 粘贴文本预览弹窗 -->
@@ -222,6 +224,8 @@ interface ChatFile {
 /** Chat session config passed from parent */
 interface ChatConfig {
   modelId?: string | null
+  /** Bot 会话模型来源：session=用户选择，bot/agent=运行时跟随默认 */
+  modelSource?: 'session' | 'bot' | 'agent' | null
   thinkingEffort?: string
   workspacePath?: string | null
   maxTokensLimit?: number | null
@@ -607,6 +611,19 @@ const currentModelNameOnly = computed(() => {
   return model ? model.modelName.split("/").pop() : t('chat.input.selectModel');
 });
 
+/** Bot 会话：当前模型是运行时跟随 Bot/智能体默认时给出提示 */
+const modelSourceHint = computed(() => {
+  if (props.config?.modelSource === 'bot') return t('chat.input.followBotDefault');
+  if (props.config?.modelSource === 'agent') return t('chat.input.followAgentDefault');
+  return '';
+});
+
+const modelButtonTitle = computed(() =>
+  modelSourceHint.value
+    ? `${currentModelNameOnly.value} · ${modelSourceHint.value}`
+    : undefined,
+);
+
 const currentThinkingLabel = computed(() => {
   if (!showButtons.thinkingButton) return '';
   const effort = localThinkingEffort.value;
@@ -843,6 +860,11 @@ const handleModelSelect = (modelId: string) => {
   }
 
   emit('config-change', configChanges);
+};
+
+/** 恢复跟随 Bot/智能体默认：清空会话自选 modelId（不改变思考档位） */
+const handleSelectDefault = () => {
+  emit('config-change', { modelId: null });
 };
 
 // 处理收藏状态变化（同步更新本地模型数据）

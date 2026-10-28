@@ -15,6 +15,7 @@ import { useSessionStore } from '@/stores/session'
 import { ApiError } from '@/utils/errors'
 import {
   useSessionSettingsSync,
+  getPendingSessionSettings,
   __resetSessionSettingsSyncForTests,
 } from './useSessionSettingsSync'
 
@@ -66,6 +67,19 @@ describe('useSessionSettingsSync', () => {
     expect(store.getSession('s1')!.modelId).toBe('m2')
   })
 
+  it('显式清空 modelId：null 原样发给后端并落库', async () => {
+    const store = useSessionStore()
+    store.setSession(makeSession({ modelId: 'm1' }))
+    apiMocks.updateSession.mockResolvedValue(makeSession({ modelId: null }))
+
+    const { scheduleSave, flushSession } = useSessionSettingsSync()
+    scheduleSave('s1', { modelId: null })
+    await flushSession('s1')
+
+    expect(apiMocks.updateSession).toHaveBeenCalledWith('s1', { modelId: null })
+    expect(store.getSession('s1')!.modelId).toBeNull()
+  })
+
   it('合并服务端快照时保留前端注入字段（如 isStreaming）', async () => {
     const store = useSessionStore()
     store.setSession(makeSession({ isStreaming: true }))
@@ -77,6 +91,66 @@ describe('useSessionSettingsSync', () => {
 
     expect(store.getSession('s1')!.isStreaming).toBe(true)
     expect(store.getSession('s1')!.modelId).toBe('m2')
+  })
+
+  it('未落盘快照可读：在途期间可读，成功后清理', async () => {
+    const defer = deferred()
+    apiMocks.updateSession.mockReturnValueOnce(defer.promise)
+
+    const { scheduleSave } = useSessionSettingsSync()
+    scheduleSave('s1', { modelId: 'm2', settings: { thinkingEffort: 'low' } })
+
+    // 请求在途：详情回填时仍能拿到用户刚改的值
+    expect(getPendingSessionSettings('s1')).toEqual({
+      modelId: 'm2',
+      settings: { thinkingEffort: 'low' },
+    })
+
+    defer.resolve(makeSession({ modelId: 'm2' }))
+    await tick()
+    expect(getPendingSessionSettings('s1')).toBeUndefined()
+  })
+
+  it('未落盘快照返回克隆，外部修改不影响队列', async () => {
+    const defer = deferred()
+    apiMocks.updateSession.mockReturnValueOnce(defer.promise)
+
+    const { scheduleSave } = useSessionSettingsSync()
+    scheduleSave('s1', { modelId: 'm2' })
+
+    const snapshot = getPendingSessionSettings('s1')!
+    snapshot.modelId = 'tampered'
+    expect(getPendingSessionSettings('s1')!.modelId).toBe('m2')
+
+    defer.resolve(makeSession({ modelId: 'm2' }))
+    await tick()
+  })
+
+  it('在途与 pending 按字段合并，pending 覆盖同名字段', async () => {
+    const first = deferred()
+    const second = deferred()
+    apiMocks.updateSession
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+
+    const { scheduleSave } = useSessionSettingsSync()
+    scheduleSave('s1', { modelId: 'm1' })
+    scheduleSave('s1', { settings: { thinkingEffort: 'low' } })
+
+    expect(getPendingSessionSettings('s1')).toEqual({
+      modelId: 'm1',
+      settings: { thinkingEffort: 'low' },
+    })
+
+    first.resolve(makeSession({ modelId: 'm1' }))
+    await tick()
+    expect(getPendingSessionSettings('s1')).toEqual({
+      settings: { thinkingEffort: 'low' },
+    })
+
+    second.resolve(makeSession({ modelId: 'm1' }))
+    await tick()
+    expect(getPendingSessionSettings('s1')).toBeUndefined()
   })
 
   it('在途期间的新变更不会被旧响应覆盖，最终落最新快照', async () => {

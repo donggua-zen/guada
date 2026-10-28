@@ -26,6 +26,7 @@
                   <LightbulbFilament24Regular />
                 </el-icon>
               </div>
+              <div v-if="sourceHint" class="text-[11px] text-gray-400 truncate">{{ sourceHint }}</div>
             </div>
           </template>
           <template v-else>
@@ -37,6 +38,14 @@
         </div>
       </div>
 
+      <!-- Bot 会话：清空显式选择，恢复运行时跟随 Bot/智能体默认 -->
+      <template v-if="modelSource === 'session'">
+        <div class="section-divider"></div>
+        <div class="cascade-trigger" @click="handleFollowDefault">
+          <ArrowReset20Regular class="w-4 h-4 text-gray-400" />
+          <span class="text-sm flex-1">{{ t('chat.input.resetToDefault') }}</span>
+        </div>
+      </template>
 
       <!-- 推理强度 - 级联 -->
       <template v-if="thinkingEffortOptions.length > 0">
@@ -159,7 +168,7 @@ import { computed, ref, watch, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { ElIcon } from 'element-plus'
-import { WrenchScrewdriver24Regular, LightbulbFilament24Regular, ChevronRight24Regular, Star24Regular, Star24Filled } from '@vicons/fluent'
+import { WrenchScrewdriver24Regular, LightbulbFilament24Regular, ChevronRight24Regular, Star24Regular, Star24Filled, ArrowReset20Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import Avatar from '../../ui/Avatar.vue'
 import { getModelDisplayName, getModelAvatarPath, getThinkingEffortLabel } from '@/utils/modelUtils'
@@ -192,6 +201,10 @@ const props = defineProps<{
   models: Model[]
   providers: Provider[]
   currentModelId: string | null
+  /** Bot 会话：当前模型来源（session=显式选择，bot/agent=跟随默认） */
+  modelSource?: 'session' | 'bot' | 'agent' | null
+  /** Bot 会话：当前模型跟随 Bot/智能体默认时的提示文案 */
+  sourceHint?: string
   thinkingEffortOptions: string[]
   thinkingEffortValue: string
 }>()
@@ -199,6 +212,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   'select': [modelId: string]
+  /** 清空会话模型绑定，恢复跟随 Bot/智能体默认 */
+  'select-default': []
   'favorite-changed': [modelId: string, isFavorite: boolean]
   'select-thinking-effort': [effort: string]
 }>()
@@ -256,6 +271,12 @@ function getModelProviderName(model: Model): string {
 
 function handleSelect(modelId: string) {
   emit('select', modelId)
+}
+
+/** 清空会话自选模型，恢复跟随 Bot/智能体默认 */
+function handleFollowDefault() {
+  emit('select-default')
+  emit('update:visible', false)
 }
 
 // 模型管理快速入口：关闭面板并跳设置页「模型供应商」分区

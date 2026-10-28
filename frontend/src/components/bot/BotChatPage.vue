@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useStorage } from '@vueuse/core'
 import { ElIcon, ElMessage } from 'element-plus'
@@ -77,6 +77,7 @@ import { useSessionStore } from '@/stores/session'
 import { useBotStore } from '@/stores/bot'
 import { usePopup } from '@/composables/usePopup'
 import { useBotLiveSync } from '@/composables/useBotLiveSync'
+import { getPendingSessionSettings, useSessionSettingsSync } from '@/composables/useSessionSettingsSync'
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import PageHeader from '@/components/PageHeader.vue'
@@ -93,6 +94,7 @@ const { t } = useI18n()
 const sessionStore = useSessionStore()
 const botStore = useBotStore()
 const { confirm } = usePopup()
+const { flushSession } = useSessionSettingsSync()
 
 /**
  * 窄屏只用宽度判断：列表/聊天两态切换。
@@ -201,8 +203,21 @@ async function loadDetail(
   try {
     const detail = await apiService.fetchBotSessionDetail(sessionId)
     if (token !== detailRequestToken) return
+    // 详情返回的是服务端已落盘值；未落盘的模型/设置选择不能被它回填冲掉
+    const pendingSettings = getPendingSessionSettings(sessionId)
     activeDetail.value = detail
     sessionStore.mergeSession(detail.session)
+    if (pendingSettings) {
+      if (pendingSettings.modelId !== undefined) {
+        sessionStore.patchSession(sessionId, {
+          modelId: pendingSettings.modelId,
+          modelSource: pendingSettings.modelId ? 'session' : null,
+        })
+      }
+      if (pendingSettings.settings) {
+        sessionStore.patchSessionSettings(sessionId, pendingSettings.settings)
+      }
+    }
     lastAppliedActiveId = sessionId
     sessionStore.activeSessionId = sessionId
     lastBotSessionId.value = sessionId
@@ -447,6 +462,23 @@ const { cleanup: cleanupBotLiveSync } = useBotLiveSync({
     }
   },
 })
+
+/**
+ * 用户选择「恢复跟随默认」后 store.modelId 被清空。
+ * 等保存落盘再重读详情，让后端 enrich 出真正的 Bot/智能体默认模型与 modelSource，
+ * 避免输入框停在「请选择模型」或显示出错误的回退模型。
+ */
+watch(
+  () => activeSession.value?.modelId ?? null,
+  async (modelId) => {
+    if (modelId !== null) return
+    const sid = activeSessionId.value
+    if (!sid || activeDetail.value?.session?.id !== sid) return
+    await flushSession(sid)
+    if (activeSessionId.value !== sid) return
+    await loadDetail(sid)
+  },
+)
 
 /** 卡片状态列要 join botInstances，创建弹窗要 platforms —— 原先都由管理页负责加载 */
 async function loadBotMetadata() {

@@ -1121,7 +1121,13 @@ const currentModelId = computed({
   set(value: string | null) {
     const session = currentSession.value;
     if (!session) return;
-    sessionStore.patchSession(session.id, { modelId: value });
+    sessionStore.patchSession(session.id, {
+      modelId: value,
+      // 仅 Bot 会话维护来源标记；Web 会话没有「跟随 Bot 默认」语义
+      ...(session.sessionType === 'bot'
+        ? { modelSource: value ? 'session' : null }
+        : {}),
+    });
     scheduleSave(session.id, { modelId: value });
   }
 });
@@ -1156,6 +1162,8 @@ const chatInputConfig = computed(() => {
   const settings = currentSession.value?.settings as SessionSettingsView | undefined;
   return {
     modelId: currentModelId.value,
+    // Bot 会话：区分用户显式选择与会话运行时跟随的 Bot/智能体默认模型
+    modelSource: currentSession.value?.modelSource ?? null,
     // 未设置 = 会话从未选过档位 → 交给 ChatInput 取菜单默认中间档（不要在这里填 'none'）
     thinkingEffort: currentSession.value?.settings?.thinkingEffort || undefined,
     maxTokensLimit: settings?.maxTokensLimit ?? null,
@@ -1254,7 +1262,13 @@ const handleConfigChange = (config: ChatInputConfigChange) => {
 
   // 处理模型 ID 变更
   if (typeof config.modelId !== 'undefined') {
-    sessionStore.patchSession(sessionId, { modelId: config.modelId });
+    sessionStore.patchSession(sessionId, {
+      modelId: config.modelId,
+      // 仅 Bot 会话维护来源标记；Web 会话没有「跟随 Bot 默认」语义
+      ...(session.sessionType === 'bot'
+        ? { modelSource: config.modelId ? 'session' : null }
+        : {}),
+    });
     modelIdChanged = true;
   }
 
@@ -2117,13 +2131,15 @@ function regenerateResponse(turn: Turn) {
     const sid = currentSessionId.value;
     if (!sid) return;
 
-    // 发送链路独立:只调 apiService.chat 发起(重答=replaceTurnId 触发 turn/delete+新建),
+    // 发送链路独立:只调发起接口(重答=replaceTurnId 触发 turn/delete+新建),
     // 不订阅、不处理事件;事件由常驻接收链路(唯一 receiver)消费。
     // 与普通发送一致：先 flush 配置，再带回合级快照，避免“改完模型马上重答”仍用旧值。
+    // Bot 会话必须走 sendHandler（/bot-admin/sessions/:id/messages），否则会绕过 Bot 侧
+    // 的 agent/model enrich，行为与正常发送不一致。
     const settingsOverride = buildSettingsOverride(sid);
     sessionStore.setStreamStatus(sid, "pending");
     await flushSession(sid);
-    await apiService.chat({
+    const payload: ChatStreamParams = {
       sessionId: sid,
       userMessage: {
         content: userContent,
@@ -2132,7 +2148,12 @@ function regenerateResponse(turn: Turn) {
         knowledgeBaseIds,
       },
       ...(Object.keys(settingsOverride).length > 0 ? { settingsOverride } : {}),
-    });
+    };
+    if (props.sendHandler) {
+      await props.sendHandler(payload);
+    } else {
+      await apiService.chat(payload);
+    }
   });
 }
 

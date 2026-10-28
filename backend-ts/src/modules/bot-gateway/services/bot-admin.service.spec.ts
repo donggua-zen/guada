@@ -141,6 +141,23 @@ describe('BotAdminService bot chat workspace', () => {
     expect(result.bot?.supportsPushMessage).toBe(true);
   });
 
+  it('passes through enrichment modelSource for the input hint', async () => {
+    const { service, sessionStore, botStore, sessionMapper } = createService();
+    sessionStore.get.mockReturnValue(botSession);
+    botStore.findById.mockReturnValue(botInstance);
+    sessionMapper.enrichSession.mockImplementation(async (session: any) => {
+      session.agent = { id: 'agent-1' };
+      session.model = { id: 'model-1' };
+      session.modelId = 'model-1';
+      session.modelSource = 'bot';
+    });
+
+    const result = await service.getSessionDetail('session-1');
+
+    // session 的推断类型只暴露 agent/model，modelSource 是 enrich 运行时追加的字段
+    expect((result.session as any).modelSource).toBe('bot');
+  });
+
   it('rejects non-bot sessions', async () => {
     const { service, sessionStore } = createService();
     sessionStore.get.mockReturnValue({ ...botSession, sessionType: 'web' });

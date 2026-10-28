@@ -6,6 +6,9 @@ import { WorkspaceService } from '../../../common/services/workspace.service';
 import { BotFileStore } from '../bot-file.store';
 import { isMeaningfulSenderName } from '../utils/bot-user';
 
+/** Bot 会话模型解析来源：用户显式选择 / Bot 默认 / 智能体默认 */
+export type BotModelSource = 'session' | 'bot' | 'agent';
+
 /** Bot 会话动态 enrich 所需的最小配置切片 */
 export interface BotSessionEnrichConfig {
   defaultAgentId: string;
@@ -210,32 +213,36 @@ export class SessionMapperService {
 
   /**
    * 为 Bot 会话动态解析并挂载 model 信息
-   * 
-   * 优先级链：Bot实例配置 -> 智能体配置 -> 全局默认设置
-   * 这样确保 Bot 会话的模型配置与智能体/全局设置实时同步
-   * 
+   *
+   * 优先级链：会话自选 modelId（用户通过 UI 选择并持久化）-> Bot 实例默认 -> 智能体默认
+   * 这样既尊重用户选择，又保证未选择时与 Bot/智能体配置实时同步
+   *
    * 注意：此方法仅用于 Bot 会话，不影响 Web 会话等其他模块
    * 注意：调用此方法前必须先调用 enrichBotSessionAgent 挂载 agent
-   * 
+   *
    * @param session 会话对象
    * @param defaultModelId Bot 实例配置的默认模型 ID（可选）
    */
   private async enrichBotSessionModel(session: any, defaultModelId?: string | null): Promise<void> {
     let modelId: string | null = null;
+    let modelSource: BotModelSource | null = null;
 
     // 0. 如果会话已有 modelId（用户通过 UI 选择的），优先使用
     if (session.modelId) {
       modelId = session.modelId;
+      modelSource = 'session';
     }
 
     // 1. 其次使用传入的 defaultModelId（如果用户在 Bot 配置中明确选择了模型）
     if (!modelId && defaultModelId) {
       modelId = defaultModelId;
+      modelSource = 'bot';
     }
 
     // 2. 其次使用智能体的 modelId（agent 已通过 enrichBotSessionAgent 挂载）
     if (!modelId && session.agent?.modelId) {
       modelId = session.agent.modelId;
+      modelSource = 'agent';
     }
 
     // 全局默认对话模型已移除：Bot 和智能体都没有配置时直接报错
@@ -253,13 +260,17 @@ export class SessionMapperService {
     // 将 model 对象挂载到 session，模拟 include 的效果
     session.model = model;
     session.modelId = model.id;
+    // 仅内存：供前端区分「用户显式选择」与「跟随 Bot/智能体默认」，不落库
+    session.modelSource = modelSource;
   }
 
   /**
    * 为 Bot 会话动态注入思考强度设置
    *
-   * 将 Bot 实例的 defaultThinkingEffort 注入到 session.settings.thinkingEffort（仅内存，不持久化）。
-   * 这样确保修改 Bot 的思考强度后立即对所有会话生效，无需重启。
+   * Bot 实例的 defaultThinkingEffort 只作为「未显式选择」时的兜底：
+   * 用户在输入区选过并持久化到 session.settings 的值优先，避免每次详情/消息
+   * enrich 都把用户选择覆盖回 Bot 默认。
+   *
    * 仅对支持 thinking feature 的模型实际生效（由 PersistentSessionContext 判断）。
    *
    * @param session 会话对象
@@ -272,6 +283,8 @@ export class SessionMapperService {
     if (!defaultThinkingEffort) return;
 
     if (!session.settings) session.settings = {};
+    // 用户显式选择（含 'none'）优先
+    if (session.settings.thinkingEffort) return;
     session.settings.thinkingEffort = defaultThinkingEffort;
   }
 

@@ -230,7 +230,7 @@ export const useSessionStore = defineStore('session', () => {
      */
     const patchSession = (
         sessionId: string,
-        patch: Partial<Pick<Session, 'modelId' | 'agentId' | 'title' | 'groupId' | 'pinned' | 'workspacePath'>>,
+        patch: Partial<Pick<Session, 'modelId' | 'modelSource' | 'agentId' | 'title' | 'groupId' | 'pinned' | 'workspacePath'>>,
     ): void => {
         const session = sessionsMap.value.get(sessionId)
         if (!session) return

@@ -279,6 +279,7 @@ export interface Session {
     lastActiveAt?: ISODateString
     avatarUrl?: string
     /** 会话扩展数据（Bot 会话用 data.botUser 存外部用户昵称等） */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Bot 扩展数据为开放字典
     data?: Record<string, any> | null
     
     // === Bot 会话专用字段 ===
@@ -286,6 +287,8 @@ export interface Session {
     botId?: string            // Bot 实例ID
     platform?: string         // 来源平台: 'qq', 'wechat'
     externalId?: string       // 外部会话标识,格式: "platform:type:nativeId"
+    /** Bot 会话模型来源（仅详情 enrich 返回，不落库）：session=用户选择，bot/agent=运行时默认 */
+    modelSource?: 'session' | 'bot' | 'agent' | null
     workspacePath?: string | null  // 自定义工作目录路径
     /**
      * 工作目录比较键（后端归一化派生列）。

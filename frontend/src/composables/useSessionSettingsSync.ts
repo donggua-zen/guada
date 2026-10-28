@@ -31,6 +31,8 @@ interface PendingSave {
 const pending = new Map<string, PendingSave>()
 /** 在途 PUT（每个会话最多一个） */
 const inFlight = new Map<string, Promise<void>>()
+/** 在途 PUT 的快照：供详情回填时保护未落盘的选择 */
+const inFlightPayloads = new Map<string, SessionSettingsSavePayload>()
 /** 本地变更代际：用于判断 PUT 响应是否已落后于本地状态 */
 const revisions = new Map<string, number>()
 /** 已提示过保存失败的会话：同一轮失败只提示一次，成功或新变更后复位 */
@@ -78,9 +80,11 @@ function drain(sessionId: string): Promise<void> {
     while (pending.has(sessionId)) {
       const entry = pending.get(sessionId)!
       pending.delete(sessionId)
+      inFlightPayloads.set(sessionId, entry.payload)
 
       try {
         const updated = await apiService.updateSession(sessionId, entry.payload)
+        inFlightPayloads.delete(sessionId)
         if (!updated) continue
 
         // 期间有更新的本地变更 → 不覆盖本地，循环继续发最新快照
@@ -90,6 +94,7 @@ function drain(sessionId: string): Promise<void> {
           errorNotified.delete(sessionId)
         }
       } catch (error) {
+        inFlightPayloads.delete(sessionId)
         if (getApiErrorStatus(error) === 404) {
           // 会话已删除：丢弃待保存项，避免对已删除会话无限重试
           pending.delete(sessionId)
@@ -171,6 +176,24 @@ async function flushAll(): Promise<void> {
   await Promise.all([...ids].map((id) => flushSession(id)))
 }
 
+/**
+ * 读取某会话尚未落盘的最新配置快照。
+ * 在途请求与 pending 按字段合并（pending 更新，覆盖同名字段）：
+ * 先发 modelId、在途期间又改 settings 时，两者都要保护，不能只剩后者。
+ */
+export function getPendingSessionSettings(
+  sessionId: string,
+): SessionSettingsSavePayload | undefined {
+  const inFlightPayload = inFlightPayloads.get(sessionId)
+  const pendingEntry = pending.get(sessionId)
+  if (!inFlightPayload && !pendingEntry) return undefined
+
+  return {
+    ...(inFlightPayload ? clonePayload(inFlightPayload) : {}),
+    ...(pendingEntry ? clonePayload(pendingEntry.payload) : {}),
+  }
+}
+
 export function useSessionSettingsSync() {
   return { scheduleSave, flushSession, flushAll }
 }
@@ -179,6 +202,7 @@ export function useSessionSettingsSync() {
 export function __resetSessionSettingsSyncForTests(): void {
   pending.clear()
   inFlight.clear()
+  inFlightPayloads.clear()
   revisions.clear()
   errorNotified.clear()
 }
