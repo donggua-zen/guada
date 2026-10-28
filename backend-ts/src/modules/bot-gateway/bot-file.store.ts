@@ -43,6 +43,11 @@ export interface BotFileInstance {
   lastStartedAt: string | null;
   lastError: string | null;
   additionalKwargs: Record<string, any> | null;
+  /**
+   * 列表展示顺序（用户拖拽写入）。原 DB 表无此列，文件存储侧新增；
+   * 旧 YAML 缺省解析为 0，未拖拽过的实例保持原有加载序。
+   */
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -110,6 +115,49 @@ export class BotFileStore {
     return Array.from(this.cache.values());
   }
 
+  /**
+   * 展示顺序：sortOrder 升序；同值（未拖拽过的旧实例全是 0）按 createdAt 倒序、
+   * 再按 id 升序兜底。tiebreak 必须确定 —— readdir 顺序跨平台不保证稳定。
+   */
+  listOrdered(): BotFileInstance[] {
+    return this.list().sort(
+      (a, b) =>
+        a.sortOrder - b.sortOrder ||
+        b.createdAt.localeCompare(a.createdAt) ||
+        a.id.localeCompare(b.id),
+    );
+  }
+
+  /** 新实例落到队尾；调用方需已完成 initialize() */
+  private nextSortOrder(): number {
+    let max = -1;
+    for (const bot of this.cache.values()) max = Math.max(max, bot.sortOrder);
+    return max + 1;
+  }
+
+  /**
+   * 按给定 id 顺序回写 sortOrder。
+   * 未列出的实例（并发新建）追加到队尾；只写实际变化的文件。
+   */
+  async reorder(orderedIds: string[]): Promise<BotFileInstance[]> {
+    await this.initialize();
+    const target = new Map<string, number>();
+    let cursor = 0;
+    for (const id of orderedIds) {
+      if (this.cache.has(id) && !target.has(id)) target.set(id, cursor++);
+    }
+    for (const bot of this.listOrdered()) {
+      if (!target.has(bot.id)) target.set(bot.id, cursor++);
+    }
+
+    for (const [id, sortOrder] of target) {
+      const current = this.cache.get(id);
+      if (!current || current.sortOrder === sortOrder) continue;
+      await this.update(id, { sortOrder });
+    }
+    return this.listOrdered();
+  }
+
   listEnabled(): BotFileInstance[] {
     return this.list().filter((b) => b.enabled);
   }
@@ -144,6 +192,7 @@ export class BotFileStore {
       lastStartedAt: data.lastStartedAt ?? null,
       lastError: data.lastError ?? null,
       additionalKwargs: data.additionalKwargs ?? null,
+      sortOrder: data.sortOrder ?? this.nextSortOrder(),
       createdAt: data.createdAt ?? now,
       updatedAt: now,
     };
@@ -261,6 +310,7 @@ export class BotFileStore {
       lastStartedAt: this.str(raw.lastStartedAt),
       lastError: this.str(raw.lastError),
       additionalKwargs: this.obj(raw.additionalKwargs),
+      sortOrder: this.num(raw.sortOrder, 0),
       createdAt: iso(raw.createdAt) ?? now,
       updatedAt: iso(raw.updatedAt) ?? now,
     };

@@ -11,6 +11,8 @@ import {
   SubAgentClosedEvent,
   TodoUpdatedEvent,
   UserQueueChangedEvent,
+  BotStatusChangedEvent,
+  BotChangedEvent,
   toSessionEvent,
 } from "../../common/events/stream.events";
 import {
@@ -41,7 +43,9 @@ export type SessionEventType =
   | "jobs_snapshot"
   | "plugins_changed"
   | "queue_updated"
-  | "queues_snapshot";
+  | "queues_snapshot"
+  | "bot_status_changed"
+  | "bot_changed";
 
 /**
  * 会话事件
@@ -384,6 +388,35 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       payload: event,
     };
     this.broadcastToAllClients(sessionEvent);
+  }
+
+  /**
+   * 机器人运行状态变化（连接/重连/停止/重连耗尽禁用）
+   *
+   * 会话列表里的 online 与 lastError 由此即时刷新；sessionId 用 "*" 表示宿主级事件
+   * （与 plugins_changed 同一惯例），前端按 payload.botId 定位实例。
+   */
+  @OnEvent("bot.status_changed")
+  handleBotStatusChanged(event: BotStatusChangedEvent) {
+    this.broadcastToAllClients({
+      type: "bot_status_changed",
+      sessionId: "*",
+      timestamp: event.timestamp,
+      payload: event,
+    });
+  }
+
+  /**
+   * 机器人配置变化（增删改/排序），用于多窗口同步侧栏
+   */
+  @OnEvent("bot.changed")
+  handleBotChanged(event: BotChangedEvent) {
+    this.broadcastToAllClients({
+      type: "bot_changed",
+      sessionId: "*",
+      timestamp: event.timestamp,
+      payload: event,
+    });
   }
 
   /**

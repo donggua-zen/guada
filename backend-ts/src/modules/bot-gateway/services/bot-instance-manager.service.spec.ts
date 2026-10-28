@@ -149,6 +149,7 @@ describe('BotInstanceManager lifecycle', () => {
   let adapterFactory: any;
   let orchestrator: any;
   let botStore: any;
+  let eventBus: any;
   let adapters: ControlledBotAdapter[];
 
   beforeEach(() => {
@@ -174,7 +175,8 @@ describe('BotInstanceManager lifecycle', () => {
       findById: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
     };
-    manager = new BotInstanceManager(adapterFactory, orchestrator, botStore);
+    eventBus = { emit: jest.fn() };
+    manager = new BotInstanceManager(adapterFactory, orchestrator, botStore, eventBus);
     (manager as any).logger = {
       log: jest.fn(),
       warn: jest.fn(),
@@ -200,6 +202,53 @@ describe('BotInstanceManager lifecycle', () => {
       connect: 1,
       disconnect: 1,
     });
+  });
+
+  it('broadcasts bot.status_changed on start / reconnect / stop', async () => {
+    await manager.startBot(createConfig());
+
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      'bot.status_changed',
+      expect.objectContaining({
+        botId: BOT_ID,
+        runtimeStatus: BotRuntimeStatus.CONNECTING,
+        reason: 'start',
+      }),
+    );
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      'bot.status_changed',
+      expect.objectContaining({
+        botId: BOT_ID,
+        runtimeStatus: BotRuntimeStatus.CONNECTED,
+        status: 'running',
+      }),
+    );
+
+    adapters[0].emitExternalDisconnect();
+    await settleMicrotasks();
+    // 首次重连 delay=0，由定时器回调把状态标为 RECONNECTING 并广播
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      'bot.status_changed',
+      expect.objectContaining({
+        botId: BOT_ID,
+        runtimeStatus: BotRuntimeStatus.RECONNECTING,
+        reason: 'reconnect',
+      }),
+    );
+
+    eventBus.emit.mockClear();
+    await manager.stopBot(BOT_ID);
+
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      'bot.status_changed',
+      expect.objectContaining({
+        botId: BOT_ID,
+        runtimeStatus: BotRuntimeStatus.STOPPED,
+        status: 'stopped',
+      }),
+    );
   });
 
   it('repeated start replaces the adapter and unsubscribes the old streams', async () => {

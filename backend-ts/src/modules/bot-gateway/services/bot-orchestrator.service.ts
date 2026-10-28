@@ -13,7 +13,9 @@ import {
 import { ChatRunnerService } from "../../chat/chat-runner.service";
 import { SessionMapperService } from "./session-mapper.service";
 import { WorkspaceService } from "../../../common/services/workspace.service";
+import { EventBusService } from "../../../common/events/event-bus.service";
 import { buildExternalId } from "../utils/external-id";
+import { isMeaningfulSenderName } from "../utils/bot-user";
 import { StreamReplyCoalescer } from "../utils/stream-reply-coalescer";
 
 /**
@@ -52,6 +54,7 @@ export class BotOrchestrator {
     private chatRunner: ChatRunnerService,
     private sessionMapper: SessionMapperService,
     private workspaceService: WorkspaceService,
+    private eventBus: EventBusService,
   ) {}
 
   /**
@@ -230,14 +233,44 @@ export class BotOrchestrator {
       throw new Error(`Bot config or defaultAgentId not found: ${botId}`);
     }
 
-    const session = await this.sessionMapper.getOrCreateBotSession(
+    // 仅私聊记录发送者身份；群聊的 senderName 是群成员，不能当会话名。
+    // 昵称要过滤平台占位值；头像独立判断，没有昵称时也可以记录头像。
+    const senderName = isMeaningfulSenderName(
+      message.senderName,
+      message.senderId,
+    )
+      ? message.senderName?.trim()
+      : undefined;
+    const senderAvatar = message.senderAvatar?.trim() || undefined;
+    const botUser =
+      !isGroupChat && (senderName || senderAvatar)
+        ? {
+            id: message.senderId,
+            ...(senderName ? { name: senderName } : {}),
+            ...(senderAvatar ? { avatarUrl: senderAvatar } : {}),
+          }
+        : undefined;
+
+    const { session, created } = await this.sessionMapper.getOrCreateBotSession(
       botId,
       externalId,
       platform,
       config.defaultAgentId,
       config.defaultModelId,
       config.defaultThinkingEffort,
+      undefined,
+      botUser,
     );
+
+    // 新建的 Bot 会话不会经过 sessions.controller，得自己广播，
+    // 否则前端只能等 20s 轮询才发现有新会话。source 留空 = 所有窗口都收。
+    if (created) {
+      this.eventBus.emit("session.created", {
+        sessionId: session.id,
+        timestamp: new Date().toISOString(),
+        payload: { session },
+      });
+    }
 
     this.logger.log(
       `Session ensured: ${session.id}, externalId: ${session.externalId}`,
@@ -422,7 +455,7 @@ export class BotOrchestrator {
                 content: mergedContent,
                 knowledgeBaseIds: config.knowledgeBaseIds,
               },
-              source: { type: "bot", platform: config.platform, botId },
+              source: { origin: "bot", platform: config.platform, botId },
               preloadedSession: session,
             },
             {

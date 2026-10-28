@@ -32,11 +32,11 @@ import type { Turn, TurnContent, MessageBundle, ToolCallEntry, ToolCallResponseE
 /**
  * 投影器所需的最小会话 store 接口。
  *
- * 刻意不用 ReturnType<typeof useSessionStore>：BotSessionDialog 的本地适配器与单测 mock
+ * 刻意不用 ReturnType<typeof useSessionStore>：轻量回放视图的本地适配器与单测 mock
  * 都是鸭子类型实现，最小接口让它们可 satisfies 而无需实现整个 store。
- * sessionIsStreaming 可选——Bot 适配器无此方法，缺省视为非流式。
+ * sessionIsStreaming 可选——本地回放适配器无此方法，缺省视为非流式。
  */
-/** 投影器读取的会话状态切片（完整 SessionState 的最小子集，Bot 适配器只需提供这些字段） */
+/** 投影器读取的会话状态切片（完整 SessionState 的最小子集，本地回放适配器只需提供这些字段） */
 export interface ProjectorSessionState {
   loaded?: boolean;
   turns?: Turn[];

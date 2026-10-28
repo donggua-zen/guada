@@ -64,6 +64,17 @@ describe('External ID Reset Marker Functions', () => {
     });
   });
 
+  describe('Platform @ suffix is not a reset marker', () => {
+    const wechatPersonal =
+      'wechat-personal:private:o9cq80zRUXRORAi_bDdDFZMUPLbc@im.wechat';
+
+    it('should keep the platform suffix intact', () => {
+      expect(hasResetMarker(wechatPersonal)).toBe(false);
+      expect(extractBaseExternalId(wechatPersonal)).toBe(wechatPersonal);
+      expect(getResetTimestamp(wechatPersonal)).toBeNull();
+    });
+  });
+
   describe('Round-trip consistency', () => {
     it('should maintain consistency through mark and extract', () => {
       const original = baseExternalId;

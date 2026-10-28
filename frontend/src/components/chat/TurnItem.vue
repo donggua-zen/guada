@@ -14,9 +14,7 @@
           <div class="message-item__text break-all whitespace-pre-wrap">
             <template v-if="isSystemMessage">
               <div class="system-message-header">
-                <el-icon size="14" class="system-message-icon">
-                  <Alert16Regular />
-                </el-icon>
+                <Alert16Regular class="system-message-icon w-3.5 h-3.5" />
                 <span class="system-message-label">{{ systemMessageLabel }}</span>
               </div>
               <div class="system-message-divider" />
@@ -200,7 +198,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, inject, type Component } from "vue";
-import { ElAlert, ElIcon, ElImageViewer } from "element-plus";
+import { ElAlert, ElImageViewer } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { MenuBookOutlined } from "@vicons/material";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
@@ -558,10 +556,12 @@ const userTime = computed(() => {
   };
 });
 
+/** metadata.type 的旧系统消息词表；bot/bot-admin 等来源不应命中（它们只是消息来源标识） */
+const SYSTEM_MESSAGE_TYPES = new Set(['scheduler', 'sub_agent', 'system']);
+
 const isSystemMessage = computed(() => {
-  const meta = user.value?.metadata;
-  const type = meta?.type;
-  return type && type !== 'client';
+  const type = user.value?.metadata?.type;
+  return typeof type === 'string' && SYSTEM_MESSAGE_TYPES.has(type);
 });
 
 const systemMessageLabel = computed(() => {
@@ -737,17 +737,13 @@ const handleImageClick = (file: FileAttachment) => {
   width: 100%;
   margin-top: 20px;
   margin-bottom: 25px;
-  /* 屏外消息跳过 layout/paint：重排成本与历史长度解耦（对齐 Qoder 的 MessageScrollerItem）。
-     contain-intrinsic-size 的 auto 关键字在元素渲染过后记住真实高度，800px 只是首次
-     渲染前的占位估算（实测本应用回合高度 800~2700，中位数约 1700）。
-     content-visibility 附带 paint 包含会裁剪越界后代，而 .message-actions 有 ±4px
-     光学位移（translate-x-1），故用「content-box + 4px 内边距 - 4px 外边距」把裁剪
-     边界外扩 4px，内容位置与换行宽度保持原样 */
+  /* 不再使用 content-visibility：懒挂载已把初始/滚动时的挂载量降下来，
+     而 content-visibility 的 800px 估算会在回合进入视口时替换成真实高度
+     （本应用回合中位数 ~1700px），关闭原生滚动锚定后就会表现为"内容突然被顶出去"。
+     现在已挂载回合始终按真实高度参与布局，占位挂载的锚点补偿才准确。 */
   box-sizing: content-box;
   padding-inline: 4px;
   margin-inline: -4px;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 800px;
   transition: opacity 0.3s ease;
 }
 

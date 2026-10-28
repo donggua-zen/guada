@@ -278,6 +278,8 @@ export interface Session {
     updatedAt: ISODateString
     lastActiveAt?: ISODateString
     avatarUrl?: string
+    /** 会话扩展数据（Bot 会话用 data.botUser 存外部用户昵称等） */
+    data?: Record<string, any> | null
     
     // === Bot 会话专用字段 ===
     sessionType?: string      // "web" | "bot"

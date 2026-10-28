@@ -31,7 +31,12 @@ function createMockDeps() {
 
   const sessionMapper = {
     getOrCreateBotSession: jest.fn().mockResolvedValue({
-      id: 'session-1',
+      session: {
+        id: 'session-1',
+        workspacePath: '/tmp/test-workspace',
+        externalId: 'qq:private-user-1',
+      },
+      created: true,
     }),
   };
 
@@ -40,7 +45,9 @@ function createMockDeps() {
     getDefaultWorkspaceDir: jest.fn().mockResolvedValue('/tmp/test-workspace'),
   };
 
-  return { chatRunner, sessionMapper, workspaceService, captured };
+  const eventBus = { emit: jest.fn() };
+
+  return { chatRunner, sessionMapper, workspaceService, eventBus, captured };
 }
 
 // ── Mock adapters ──
@@ -197,6 +204,7 @@ describe('BotOrchestrator - 分轮次消息发送', () => {
       deps.chatRunner as any,
       deps.sessionMapper as any,
       deps.workspaceService as any,
+      deps.eventBus as any,
     );
   });
 
@@ -310,6 +318,7 @@ describe('BotOrchestrator - 流式平台不受影响', () => {
       deps.chatRunner as any,
       deps.sessionMapper as any,
       deps.workspaceService as any,
+      deps.eventBus as any,
     );
   });
 
@@ -405,6 +414,7 @@ describe('BotOrchestrator - 错误反馈', () => {
       deps.chatRunner as any,
       deps.sessionMapper as any,
       deps.workspaceService as any,
+      deps.eventBus as any,
     );
   });
 
@@ -503,6 +513,53 @@ describe('BotOrchestrator - 错误反馈', () => {
     expect(adapter.sentMessages).toHaveLength(1);
     expect(adapter.sentMessages[0].content).toBe(
       '当前已有任务正在进行，请等待结束',
+    );
+  });
+});
+
+describe('BotOrchestrator - 新建会话 SSE 广播', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let adapter: MockNonStreamingAdapter;
+  let config: BotConfig;
+  let message: BotMessage;
+  let orchestrator: BotOrchestrator;
+  let instance: any;
+
+  beforeEach(async () => {
+    deps = createMockDeps();
+    config = createBotConfig();
+    adapter = new MockNonStreamingAdapter();
+    await adapter.connect(config);
+    message = createBotMessage();
+    instance = { adapter, config, status: BotRuntimeStatus.CONNECTED };
+    orchestrator = new BotOrchestrator(
+      deps.chatRunner as any,
+      deps.sessionMapper as any,
+      deps.workspaceService as any,
+      deps.eventBus as any,
+    );
+  });
+
+  it('首次收到该用户的消息：广播 session.created，前端不必等轮询', async () => {
+    await orchestrator.enqueueMessage('bot-1', message, instance);
+
+    expect(deps.eventBus.emit).toHaveBeenCalledWith(
+      'session.created',
+      expect.objectContaining({ sessionId: 'session-1' }),
+    );
+  });
+
+  it('复用已有会话：不广播 session.created', async () => {
+    deps.sessionMapper.getOrCreateBotSession.mockResolvedValue({
+      session: { id: 'session-1' },
+      created: false,
+    });
+
+    await orchestrator.enqueueMessage('bot-1', message, instance);
+
+    expect(deps.eventBus.emit).not.toHaveBeenCalledWith(
+      'session.created',
+      expect.anything(),
     );
   });
 });

@@ -56,34 +56,41 @@ export function appendResetMarker(externalId: string): string {
 }
 
 /**
+ * 清空标记：externalId 末尾的 `@<毫秒时间戳>`。
+ *
+ * 不能只判断 `includes('@')`：微信个人号的 externalId 本身可能带
+ * `@im.wechat` 这类平台后缀，误判会让用户行错误标记为「已清空」。
+ */
+const RESET_MARKER_PATTERN = /@(\d{10,})$/;
+
+/**
  * 从 externalId 中提取基础部分（去除重置标记）
  * @param externalId 可能包含重置标记的 externalId
  * @returns 基础 externalId
  */
 export function extractBaseExternalId(externalId: string): string {
-  const atIndex = externalId.indexOf('@');
-  if (atIndex === -1) {
+  const match = RESET_MARKER_PATTERN.exec(externalId);
+  if (!match) {
     return externalId;
   }
-  return externalId.substring(0, atIndex);
+  return externalId.slice(0, match.index);
 }
 
 /**
  * 检查 externalId 是否包含重置标记
  */
 export function hasResetMarker(externalId: string): boolean {
-  return externalId.includes('@');
+  return RESET_MARKER_PATTERN.test(externalId);
 }
 
 /**
  * 获取重置时间戳（如果存在）
  */
 export function getResetTimestamp(externalId: string): number | null {
-  const atIndex = externalId.indexOf('@');
-  if (atIndex === -1) {
+  const match = RESET_MARKER_PATTERN.exec(externalId);
+  if (!match) {
     return null;
   }
-  const timestampStr = externalId.substring(atIndex + 1);
-  const timestamp = parseInt(timestampStr, 10);
+  const timestamp = parseInt(match[1], 10);
   return isNaN(timestamp) ? null : timestamp;
 }

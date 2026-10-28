@@ -7,6 +7,8 @@ import { AgentFileStore } from '../../agents/agent-file.store';
 import { SessionMetaStore } from '../../chat/session-meta.store';
 import { BotFileStore } from '../bot-file.store';
 import { BotInstanceManager } from '../services/bot-instance-manager.service';
+import { SessionMapperService } from '../services/session-mapper.service';
+import { ChatRunnerService } from '../../chat/chat-runner.service';
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
 import { CreateBotDto, SubmitBotVerificationDto } from './bot-admin.dto';
 import { BotStatus } from '../interfaces/bot-platform.interface';
@@ -56,8 +58,10 @@ describe('BotAdminService.createInstance platform validation', () => {
         { provide: BotInstanceManager, useValue: instanceManager },
         { provide: ProviderFileStore, useValue: { findModel: () => undefined } },
         { provide: AgentFileStore, useValue: { findById: jest.fn().mockResolvedValue(null) } },
-        { provide: SessionMetaStore, useValue: { query: jest.fn().mockReturnValue([]), get: jest.fn() } },
+        { provide: SessionMetaStore, useValue: { initialize: jest.fn(), query: jest.fn().mockReturnValue([]), get: jest.fn() } },
         { provide: BotFileStore, useValue: botStore },
+        { provide: SessionMapperService, useValue: { enrichSession: jest.fn() } },
+        { provide: ChatRunnerService, useValue: { startStream: jest.fn() } },
       ],
     }).compile();
 
@@ -131,8 +135,10 @@ describe('BotAdminService 数字配对码', () => {
         { provide: BotInstanceManager, useValue: instanceManager },
         { provide: ProviderFileStore, useValue: { findModel: () => undefined } },
         { provide: AgentFileStore, useValue: { findById: jest.fn().mockResolvedValue(null) } },
-        { provide: SessionMetaStore, useValue: { query: jest.fn().mockReturnValue([]), get: jest.fn() } },
+        { provide: SessionMetaStore, useValue: { initialize: jest.fn(), query: jest.fn().mockReturnValue([]), get: jest.fn() } },
         { provide: BotFileStore, useValue: { findById: jest.fn(), list: jest.fn().mockReturnValue([]) } },
+        { provide: SessionMapperService, useValue: { enrichSession: jest.fn() } },
+        { provide: ChatRunnerService, useValue: { startStream: jest.fn() } },
       ],
     }).compile();
 

@@ -10,6 +10,8 @@ export interface BotMessage {
   senderId: string;
   /** 发送者昵称 */
   senderName?: string;
+  /** 发送者头像 URL（平台提供时记录；缺省由前端回退到平台图标） */
+  senderAvatar?: string;
   /** 会话ID(群聊为群ID,私聊为用户ID) */
   conversationId: string;
   /** 消息内容文本 */

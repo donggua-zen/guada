@@ -41,15 +41,24 @@
                 </Transition>
 
                 <template v-for="(turn, index) in visibleTurns" :key="turn.id">
+                  <!-- 懒挂载占位：未进入视口附近的回合只占高度，不创建组件树。
+                       接近视口时由 v-lazy-turn 挂载并保留，避免 30 回合一次性 mount 阻塞主线程。 -->
+                  <div v-if="!isTurnMounted(turn)" v-lazy-turn="turn.id" class="turn-placeholder"
+                    :data-turn-id="turn.id" :style="{ height: `${estimatedTurnHeight(turn)}px` }">
+                    <div class="turn-placeholder__skeleton">
+                      <div class="turn-placeholder__line" style="width: 38%" />
+                      <div class="turn-placeholder__line" style="width: 62%" />
+                    </div>
+                  </div>
                   <!-- 事件类消息外壳（turn.kind='event'，compaction/command 等）：渲染专门事件卡片。
                        尾部外边距与普通回合同款（25px）——状态胶囊是不占布局高度的浮层，末尾事件卡
                        没有这层留白会被它盖住（实测重叠 14px；补 25px 后实测净空 11px）。
                        刻意不加 last:min-h-[60vh]：那是整段对话末尾的呼吸位，短小的事件卡套上会
                        留一大片空白（用户反馈）。 -->
-                  <div v-if="turn.kind === 'event'" class="event-turn">
+                  <div v-else-if="turn.kind === 'event'" class="event-turn" :data-turn-id="turn.id">
                     <EventCard :event="turn" />
                   </div>
-                  <TurnItem v-else :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
+                  <TurnItem v-else :data-turn-id="turn.id" :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
                     :turn="turn" :avatar="userAvater"
                     :agent-name="currentSession?.agent?.name"
                     :agent-avatar="currentSession?.agent?.avatarUrl" :is-last="index === visibleTurns.length - 1"
@@ -57,7 +66,7 @@
                     :animate-in="animateIds.includes(turn.id)" @delete="deleteTurnMessage" @edit="editMessage"
                     @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
                     @branch="branchFromTurn"
-                    :branching="branchingTurnId === turn.id" :branch-disabled="branchingTurnId !== null"
+                    :branching="branchingTurnId === turn.id" :branch-disabled="disableBranch || branchingTurnId !== null"
                     :session-id="currentSessionId || undefined" />                </template>
                 <!-- <div class="min-h-60"></div> -->
 
@@ -125,9 +134,10 @@
                    display:none 同时退出视觉与可访问树（对齐 ZCode 的 composer 隐藏做法） -->
               <div v-show="!hasPendingAsk" class="w-full flex items-center relative">
 
-                <ChatInput ref="chatInputRef" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
+                <ChatInput ref="chatInputRef" :key="composerKey" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
                   :session-id="effectiveSessionId" :agent-id="props.session?.agentId || ''"
                   :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly" mode="chat"
+                  :readonly-placeholder="readonlyPlaceholder"
                   :uploader="chatAttachmentUploader"
                   :backdrop="hasWallpaper" @config-change="handleConfigChange" @send="handleSendMessage"
                   @abort="abortResponse">
@@ -194,7 +204,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, type VNode } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, defineAsyncComponent, type VNode, type Directive } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 const { t } = useI18n()
@@ -219,7 +229,7 @@ import type { Turn, TurnContent, MessageBundle } from '@/types/message';
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
 import { useSessionEvents } from '@/composables/useSessionEvents'
-import type { ChatSettingsOverride } from '@/services/modules/ChatStreamService'
+import type { ChatSettingsOverride, ChatStreamParams, ChatStreamResponse } from '@/services/modules/ChatStreamService'
 import {
   buildChatSessionScrollMemoryKey,
   clampScrollTop,
@@ -233,7 +243,7 @@ import { useSessionSettingsSync } from '@/composables/useSessionSettingsSync'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 import { getErrorMessage, getApiErrorStatus } from '@/utils/errorMessage'
-import { perfStart } from '@/utils/perf'
+import { perfStart, traceSessionOpen, endSessionOpenTrace } from '@/utils/perf'
 import {
   parseLocalSlashCommand,
   type LocalSlashCommand,
@@ -324,6 +334,10 @@ const props = defineProps<{
   session: Session | null;
   sessionId?: string;      // 外部传入的会话 ID（优先级高于 session.id）
   readonly?: boolean;      // 只读模式（子 Agent）
+  /** 只读模式占位文案覆盖（Bot 会话等旁路宿主用） */
+  readonlyPlaceholder?: string;
+  /** 输入编辑器重建 key（Bot 会话按 sessionId+只读态切换，保证占位文案随状态更新） */
+  composerKey?: string;
   hideHeader?: boolean;    // 隐藏头部（子 Agent）
   /** 子会话列表（ChatPage 维护，含已冻结项）：输入区运行时胶囊的「子代理」段数据源 */
   subSessions?: Session[];
@@ -331,6 +345,10 @@ const props = defineProps<{
   asideWidth?: number;
   /** 避让占位宽（px，0 = 不占位）：消息列让位的唯一来源，与浮层面板各管各的 */
   asideReserve?: number;
+  /** 自定义发送处理器（Bot 会话续聊等旁路）；缺省走 /chat/stream */
+  sendHandler?: (params: ChatStreamParams) => Promise<ChatStreamResponse>;
+  /** 禁用回合分支（Bot 页面避免跳转到主聊天路由） */
+  disableBranch?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -599,6 +617,11 @@ function handleFollowingChange(following: boolean) {
 
 /** 到顶：按分页游标拉取更早一页（在途标记与游标判定留在本组件）。 */
 function handleNearTop() {
+  // 懒挂载：先补齐已加载但尚未挂载的回合（小批量 + 锚点补偿），避免把"占位区顶部"误判成历史到顶。
+  if (hasUnmountedTurns.value) {
+    mountNextUnmountedBatch(8);
+    return;
+  }
   if (!hasMoreMessages.value || isLoadingMore.value || !currentSessionId.value) return;
   // 分页游标：事件页的 nextBeforeSeq（null = 无更早内容）
   const eventCursor =
@@ -619,6 +642,10 @@ function handleNearTop() {
 function handleScroll() {
   // 按钮显隐由 showScrollToBottomBtn（跟随态 + 回合数派生），无需在此写入状态。
   // 保留本函数作为 @scroll 的接线点：ScrollContainer 的 emit 需要监听方。
+  // 几何兜底：后台/遮挡时 IntersectionObserver 可能不回调，滚动时按位置补挂占位。
+  scheduleMountVisiblePlaceholders()
+  // 锚点保持器：滚动后重记视口内第一个回合，作为内容高度变化的参照
+  scheduleAnchorRefresh()
 }
 
 /**
@@ -662,8 +689,10 @@ async function applyScrollRestoreForSession() {
   const key = scrollMemoryKeyFor(sessionId);
   const container = scrollContainerRef.value;
   if (!key || !container) return;
+  traceSessionOpen(sessionId, 'scroll:restore-start');
   const state = loadChatSessionScrollMemory(key);
   if (!state) {
+    traceSessionOpen(sessionId, 'scroll:no-memory-bottom');
     pendingScrollRestore = null;
     container.setFollowing(true);
     container.scrollToBottomProgrammatic('auto');
@@ -678,6 +707,7 @@ async function applyScrollRestoreForSession() {
   handleFollowingChange(container.isFollowing());
   if (state.wasPinnedToBottom) {
     applyingScrollRestore = false;
+    traceSessionOpen(sessionId, 'scroll:pinned-bottom');
     container.scrollToBottomProgrammatic('auto');
     return;
   }
@@ -686,6 +716,10 @@ async function applyScrollRestoreForSession() {
   // （applyingScrollRestore 已兜住；顺序 + 标记双保险。）
   scrollRestoreApplied = false;
   pendingScrollRestore = { key, state };
+  traceSessionOpen(sessionId, 'scroll:restore-apply', {
+    top: state.scrollTop,
+    height: state.scrollHeight,
+  });
   applyPendingScrollRestore();
   applyingScrollRestore = false;
 }
@@ -698,6 +732,10 @@ function applyPendingScrollRestore() {
   if (!metrics) return;
   scrollRestoreApplied = true;
   container.applyScrollTop(clampScrollTop(pendingScrollRestore.state, metrics));
+  traceSessionOpen(currentSessionId.value, 'scroll:applied', {
+    target: pendingScrollRestore.state.scrollTop,
+    contentHeight: metrics.contentHeight,
+  });
 }
 
 /**
@@ -706,6 +744,11 @@ function applyPendingScrollRestore() {
  * 贴底记忆不在此列——后续撑高由状态机的尺寸增长贴底路径继续跟随。
  */
 function handleContentResizeForScrollRestore() {
+  // 折叠/展开、图片加载、懒挂载等都会改变内容高度：
+  // 1) 触发几何兜底，补挂新进入视口附近的占位；
+  // 2) 非贴底时把视口锚点钉回原位，避免内容被顶走。
+  scheduleMountVisiblePlaceholders()
+  scheduleAnchorRestore()
   if (!pendingScrollRestore || isFollowingScroll.value) return;
   // 首次写入之前一律不判定到位：此刻 scrollTop 还是替换内容后的初始值，
   // 拿它比目标只会把待恢复误清掉（切换会话回来停在顶部就是这个原因）。
@@ -713,9 +756,13 @@ function handleContentResizeForScrollRestore() {
     const metrics = scrollContainerRef.value?.getScrollMetrics?.();
     if (metrics && !shouldRetryScrollMemoryRestore(pendingScrollRestore.state, metrics.scrollTop)) {
       pendingScrollRestore = null;
+      traceSessionOpen(currentSessionId.value, 'scroll:settled');
+      // 恢复完成后以当前视口重新建立锚点，避免沿用恢复前的旧位置
+      rememberContentAnchor();
       return;
     }
   }
+  traceSessionOpen(currentSessionId.value, 'scroll:retry');
   applyPendingScrollRestore();
 }
 
@@ -765,6 +812,287 @@ const visibleTurns = computed(() =>
 const showScrollToBottomBtn = computed(() =>
   !isFollowingScroll.value && visibleTurns.value.length > 0,
 );
+
+// ============================================
+// 回合懒挂载：首屏只挂载最后 N 个回合，其余用等高占位；接近视口再挂载并保留（不卸载）。
+// 目的：30 回合 × 数千组件一次性 mount 会阻塞主线程 1s+（实测 ~1.4–1.6s）。
+// 关闭：localStorage['gd:lazy-turns']='0' 后刷新。
+// 安全回退：非贴底滚动记忆、滚到顶要加载更早历史、大纲跳转 → 全量挂载。
+// ============================================
+const LAZY_TURNS_INITIAL = 8
+const LAZY_TURN_ESTIMATE_PX = 800
+const LAZY_TURNS_KEY = 'gd:lazy-turns'
+const lazyTurnsEnabled = (() => {
+  try {
+    return localStorage.getItem(LAZY_TURNS_KEY) !== '0'
+  } catch {
+    return true
+  }
+})()
+const mountedTurnIds = ref<Set<string>>(new Set())
+let prevVisibleTurnIds: string[] = []
+
+const isTurnMounted = (turn: Turn): boolean =>
+  !lazyTurnsEnabled || mountedTurnIds.value.has(turn.id)
+
+const estimatedTurnHeight = (turn: Turn): number =>
+  turn.kind === 'event' ? 160 : LAZY_TURN_ESTIMATE_PX
+
+const hasUnmountedTurns = computed(() =>
+  lazyTurnsEnabled && visibleTurns.value.some((t) => !mountedTurnIds.value.has(t.id)),
+)
+
+/** 会话打开（骨架屏隐藏）时初始化挂载窗口；非贴底记忆直接全量，避免恢复位置落在占位区。 */
+function resetLazyMountForOpen() {
+  const list = visibleTurns.value
+  prevVisibleTurnIds = list.map((t) => t.id)
+  if (!lazyTurnsEnabled) {
+    mountedTurnIds.value = new Set(prevVisibleTurnIds)
+    return
+  }
+  const sessionId = currentSessionId.value
+  const key = sessionId ? scrollMemoryKeyFor(sessionId) : null
+  const memory = key ? loadChatSessionScrollMemory(key) : null
+  if (memory && memory.wasPinnedToBottom === false) {
+    mountedTurnIds.value = new Set(prevVisibleTurnIds)
+    return
+  }
+  const start = Math.max(0, list.length - LAZY_TURNS_INITIAL)
+  mountedTurnIds.value = new Set(list.slice(start).map((t) => t.id))
+}
+
+/** 全量挂载已加载回合（大纲跳转等需要真实 offsetTop 的场景；不做滚动补偿）。 */
+function mountAllLoadedTurns() {
+  const list = visibleTurns.value
+  if (list.length === 0) return
+  if (list.every((t) => mountedTurnIds.value.has(t.id))) return
+  mountedTurnIds.value = new Set(list.map((t) => t.id))
+}
+
+/**
+ * 到顶兜底：只挂载紧邻当前窗口的一小批（而不是一次性 20+ 个），
+ * 每批用锚点补偿，避免"内容突然被顶出去"。
+ */
+function mountNextUnmountedBatch(count = 8) {
+  const list = visibleTurns.value
+  const unmounted = list.filter((t) => !mountedTurnIds.value.has(t.id))
+  if (unmounted.length === 0) return
+  mountPlaceholders(unmounted.slice(-count).map((t) => t.id))
+}
+
+// 新回合（流式追加）自动挂载；删除的回合清理；同一会话内不重置已挂载集合。
+watch(() => visibleTurns.value.map((t) => t.id), (ids) => {
+  if (!lazyTurnsEnabled) {
+    prevVisibleTurnIds = ids
+    return
+  }
+  const prev = new Set(prevVisibleTurnIds)
+  const next = new Set(mountedTurnIds.value)
+  let changed = false
+  for (const id of ids) {
+    if (!prev.has(id) && !next.has(id)) {
+      next.add(id)
+      changed = true
+    }
+  }
+  for (const id of next) {
+    if (!ids.includes(id)) {
+      next.delete(id)
+      changed = true
+    }
+  }
+  prevVisibleTurnIds = ids
+  if (changed) mountedTurnIds.value = next
+})
+
+// 占位观察：进入视口上下各 800px 即挂载并保留。
+let turnObserver: IntersectionObserver | null = null
+const lazyPlaceholderEls = new Map<string, HTMLElement>()
+
+interface LazyScrollAnchor {
+  id: string
+  /** 相对滚动视口顶部的屏幕位置 */
+  top: number
+}
+
+/** 取视口内第一个回合/占位作为锚点（按 DOM 顺序）。 */
+function captureLazyAnchor(root: HTMLElement): LazyScrollAnchor | null {
+  const rootRect = root.getBoundingClientRect()
+  for (const el of root.querySelectorAll<HTMLElement>('[data-turn-id]')) {
+    const rect = el.getBoundingClientRect()
+    if (rect.bottom <= rootRect.top) continue
+    if (rect.top >= rootRect.bottom) break
+    const id = el.dataset.turnId
+    if (!id) continue
+    return { id, top: rect.top - rootRect.top }
+  }
+  return null
+}
+
+// ── 内容锚点保持器：折叠/展开、图片加载、占位挂载等高度变化时，保持视口内
+//    第一个回合/占位的位置不变（非贴底时）。与懒挂载的挂载补偿共用同一套。 ──
+interface ContentAnchor extends LazyScrollAnchor {
+  /** 记录锚点时的 scrollTop，用于区分用户滚动 */
+  scrollTop: number
+}
+
+let contentAnchor: ContentAnchor | null = null
+let anchorRestoreScheduled = false
+let anchorRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 记录当前视口内第一个回合/占位的屏幕位置。 */
+function rememberContentAnchor() {
+  const root = scrollContainerRef.value?.getScrollElement?.()
+  if (!root) {
+    contentAnchor = null
+    return
+  }
+  const anchor = captureLazyAnchor(root)
+  contentAnchor = anchor ? { ...anchor, scrollTop: root.scrollTop } : null
+}
+
+/** 滚动后短延迟刷新锚点（合并高频 scroll，避免每帧读布局）。 */
+function scheduleAnchorRefresh() {
+  if (anchorRefreshTimer !== null) return
+  anchorRefreshTimer = setTimeout(() => {
+    anchorRefreshTimer = null
+    rememberContentAnchor()
+  }, 16)
+}
+
+/** 内容高度变化后，在 nextTick 把锚点钉回原位（非贴底时）。 */
+function scheduleAnchorRestore() {
+  if (anchorRestoreScheduled) return
+  if (!contentAnchor || isFollowingScroll.value || pendingScrollRestore || applyingScrollRestore) return
+  anchorRestoreScheduled = true
+  nextTick(() => {
+    anchorRestoreScheduled = false
+    restoreContentAnchor()
+  })
+}
+
+function restoreContentAnchor() {
+  const anchor = contentAnchor
+  if (!anchor || isFollowingScroll.value || pendingScrollRestore || applyingScrollRestore || showSkeleton.value) return
+  const root = scrollContainerRef.value?.getScrollElement?.()
+  if (!root) return
+  // 用户已经滚动：旧锚点失效，按新位置重记，不与用户抢滚动权
+  if (Math.abs(root.scrollTop - anchor.scrollTop) > 1) {
+    rememberContentAnchor()
+    return
+  }
+  const anchorEl = root.querySelector<HTMLElement>(`[data-turn-id="${CSS.escape(anchor.id)}"]`)
+  if (!anchorEl) {
+    contentAnchor = null
+    return
+  }
+  const rootTop = root.getBoundingClientRect().top
+  const currentTop = anchorEl.getBoundingClientRect().top - rootTop
+  const delta = currentTop - anchor.top
+  if (Math.abs(delta) < 1) return
+  scrollContainerRef.value?.markLayoutScroll?.()
+  root.scrollTop += delta
+  // 回读校正后的位置；若被浏览器钳制（如顶到 0），以实际位置为准
+  const afterTop = anchorEl.getBoundingClientRect().top - root.getBoundingClientRect().top
+  contentAnchor = {
+    id: anchor.id,
+    top: Math.abs(afterTop - anchor.top) > 1 ? afterTop : anchor.top,
+    scrollTop: root.scrollTop,
+  }
+}
+
+/**
+ * 统一挂载入口：Observer 与滚动几何兜底共用。
+ * 挂载前记录视口锚点，挂载后由内容锚点保持器把同一锚点钉回原位。
+ */
+function mountPlaceholders(ids: string[]) {
+  const next = new Set(mountedTurnIds.value)
+  let changed = false
+  for (const id of ids) {
+    if (!next.has(id)) {
+      next.add(id)
+      changed = true
+    }
+  }
+  if (!changed) return
+
+  if (!isFollowingScroll.value && !pendingScrollRestore) rememberContentAnchor()
+  mountedTurnIds.value = next
+  scheduleAnchorRestore()
+}
+
+/**
+ * 几何兜底：不依赖 IntersectionObserver（后台/被遮挡时可能不回调），
+ * 滚动或列表刚挂载时直接按占位与滚动视口的相对位置挂载。80ms 合并一次。
+ */
+let visibleCheckTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleMountVisiblePlaceholders() {
+  if (!lazyTurnsEnabled || lazyPlaceholderEls.size === 0) return
+  if (visibleCheckTimer !== null) return
+  visibleCheckTimer = setTimeout(() => {
+    visibleCheckTimer = null
+    mountVisiblePlaceholders()
+  }, 80)
+}
+
+function mountVisiblePlaceholders() {
+  if (!lazyTurnsEnabled || lazyPlaceholderEls.size === 0) return
+  const root = scrollContainerRef.value?.getScrollElement?.()
+  if (!root) return
+  const rootRect = root.getBoundingClientRect()
+  const margin = 800
+  const ids: string[] = []
+  for (const [id, el] of lazyPlaceholderEls) {
+    if (mountedTurnIds.value.has(id)) continue
+    const rect = el.getBoundingClientRect()
+    if (rect.bottom < rootRect.top - margin || rect.top > rootRect.bottom + margin) continue
+    ids.push(id)
+  }
+  mountPlaceholders(ids)
+}
+
+function ensureTurnObserver(): IntersectionObserver | null {
+  if (turnObserver) return turnObserver
+  if (typeof IntersectionObserver === 'undefined') return null
+  const root = scrollContainerRef.value?.getScrollElement?.() ?? null
+  if (!root) return null
+  turnObserver = new IntersectionObserver((entries) => {
+    const ids: string[] = []
+    for (const entry of entries) {
+      const id = (entry.target as HTMLElement).dataset.turnId
+      if (!entry.isIntersecting || !id || mountedTurnIds.value.has(id)) {
+        turnObserver?.unobserve(entry.target)
+        continue
+      }
+      ids.push(id)
+      turnObserver?.unobserve(entry.target)
+    }
+    mountPlaceholders(ids)
+  }, {
+    root,
+    rootMargin: '800px 0px',
+    threshold: 0,
+  })
+  return turnObserver
+}
+
+const vLazyTurn: Directive<HTMLElement, string> = {
+  mounted(el, binding) {
+    el.dataset.turnId = binding.value
+    lazyPlaceholderEls.set(binding.value, el)
+    const observer = ensureTurnObserver()
+    if (observer) {
+      observer.observe(el)
+    } else {
+      // 无 IntersectionObserver / 根节点未就绪：退化为立即挂载，避免内容永久空白
+      mountedTurnIds.value = new Set([...mountedTurnIds.value, binding.value])
+    }
+  },
+  unmounted(el, binding) {
+    turnObserver?.unobserve(el)
+    lazyPlaceholderEls.delete(binding.value)
+  },
+}
 
 // 监听轮次变化：仅 handleSendMessage 发送的新消息才标记动画
 watch(() => visibleTurns.value.length, (newLen, oldLen) => {
@@ -860,6 +1188,7 @@ function handleSessionResync(event: Event) {
 onMounted(() => {
   // 附加连接类型由 ChatInput 内部自行加载渲染标签,此处不再维护
   window.addEventListener(SESSION_RESYNC_EVENT, handleSessionResync)
+  ensureTurnObserver()
 });
 
 onUnmounted(() => {
@@ -867,6 +1196,18 @@ onUnmounted(() => {
   clearSkeletonTimers();
   chatResizeObserver?.disconnect();
   chatResizeObserver = null;
+  turnObserver?.disconnect();
+  turnObserver = null;
+  if (visibleCheckTimer !== null) {
+    clearTimeout(visibleCheckTimer);
+    visibleCheckTimer = null;
+  }
+  if (anchorRefreshTimer !== null) {
+    clearTimeout(anchorRefreshTimer);
+    anchorRefreshTimer = null;
+  }
+  contentAnchor = null;
+  lazyPlaceholderEls.clear();
 });
 
 /**
@@ -976,6 +1317,7 @@ const handleConfigChange = (config: ChatInputConfigChange) => {
 watch(() => props.session?.id || props.sessionId, async (newSessionId: string | undefined, oldSessionId: string | undefined) => {
   const newId = newSessionId ?? props.sessionId ?? null;
   const effectiveOldId = oldSessionId ?? null;
+  traceSessionOpen(newId, 'panel:watch-fired', { old: effectiveOldId ?? 'none' });
   captureScrollMemoryForSession(effectiveOldId);
   await handleSessionChange(newId, effectiveOldId);
   await applyScrollRestoreForSession();
@@ -1020,10 +1362,17 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
   */
 async function loadSession(sessionId: string) {
   await loadMessages(sessionId, { isInitial: true });
+  traceSessionOpen(sessionId, 'panel:load-messages-done');
   // 上下文占用：逆向扫描事件日志最后一个锚点（turn/finish / compaction/end 等）填充环形指示器。
   // 无锚点 → 显示 0，绝不访问 token-stats（唯一 REST 入口 = 记忆弹窗打开时按需拉取 breakdown）。
   const eventLog = sessionStore.getSessionState(sessionId).eventLog || [];
-  applyContextStatsFromEvents(sessionId, eventLog);
+  const statsSpan = perfStart('session.contextStats');
+  try {
+    applyContextStatsFromEvents(sessionId, eventLog);
+  } finally {
+    statsSpan?.end({ events: eventLog.length });
+    traceSessionOpen(sessionId, 'panel:context-stats-done');
+  }
 }
 
 /**
@@ -1044,9 +1393,15 @@ async function loadMessages(
   // (旧版曾按 isStreaming 短路不拉历史,导致"流式中打开无缓存会话"永远空白,已移除)
   if (isInitial) {
     const sessionState = sessionStore.getSessionState(sessionId);
+    traceSessionOpen(sessionId, 'panel:cache-gate', {
+      loaded: sessionState.loaded === true ? 1 : 0,
+      turns: sessionState.turns?.length ?? 0,
+      events: sessionState.eventLog?.length ?? 0,
+    });
     if (sessionState.loaded === true) {
       // 恢复本会话自己的分页状态(组件级单例 ref 会残留上一个会话的值)
       hasMoreMessages.value = sessionState.turnsHasMore ?? true;
+      traceSessionOpen(sessionId, 'panel:cache-hit');
       return;
     }
   }
@@ -1187,7 +1542,7 @@ function stopSkeletonDisplay() {
 
   const elapsed = Date.now() - skeletonShowTime
   const remaining = Math.max(SKELETON_MIN_DISPLAY - elapsed, 100)
-  console.log('Skeleton remaining time:', remaining, 'ms')
+  traceSessionOpen(currentSessionId.value, 'panel:skeleton-hide-scheduled', { elapsed, remaining })
   // 还未满 500ms，延迟剩余时间后再隐藏
   skeletonMinDisplayTimer = setTimeout(() => {
     showSkeleton.value = false
@@ -1195,6 +1550,63 @@ function stopSkeletonDisplay() {
   }, remaining)
 
 }
+
+// 骨架屏隐藏 = 消息列表开始挂载（模板 v-if/v-else 互斥，列表此时才创建）。
+// 骨架屏出现 = 旧列表开始卸载。两个方向都测，切换慢时先分清是卸旧还是挂新。
+// nextTick 定位 flush 完成，双 rAF 定位首次绘制——这段就是用户感知的「打开耗时」。
+watch(showSkeleton, (visible, prevVisible) => {
+  if (visible && !prevVisible) {
+    // 旧会话列表开始卸载：清掉旧锚点，避免高度变化时跨会话校正
+    contentAnchor = null
+    const sessionId = currentSessionId.value
+    traceSessionOpen(sessionId, 'panel:list-unmount-start')
+    const unmountSpan = perfStart('session.listUnmount')
+    nextTick(() => {
+      traceSessionOpen(sessionId, 'panel:list-unmounted')
+      unmountSpan?.end()
+    })
+    return
+  }
+  if (visible || !prevVisible) return
+  // 骨架屏隐藏前确定本轮初始挂载窗口（懒挂载）
+  resetLazyMountForOpen()
+  const sessionId = currentSessionId.value
+  traceSessionOpen(sessionId, 'panel:skeleton-hidden', {
+    turns: activeTurns.value.length,
+    visibleTurns: visibleTurns.value.length,
+    mounted: mountedTurnIds.value.size,
+  })
+  // 挂载耗时以 nextTick（patch 完成）为准，后台标签页 rAF 暂停也不会丢账；
+  // 首次绘制单独记 session.listPainted（double rAF，250ms 兜底）。
+  const mountSpan = perfStart('session.listMount')
+  const paintedSpan = perfStart('session.listPainted')
+  nextTick(() => {
+    traceSessionOpen(sessionId, 'panel:list-patched', {
+      turns: activeTurns.value.length,
+      visibleTurns: visibleTurns.value.length,
+      mounted: mountedTurnIds.value.size,
+    })
+    mountSpan?.end({ turns: visibleTurns.value.length, mounted: mountedTurnIds.value.size })
+    // 几何兜底：Observer 被后台节流/HMR 未生效时，至少把视口附近的占位补挂上
+    mountVisiblePlaceholders()
+    // 会话滚动恢复未完成时先不建锚点，等 restore settle 后再记
+    if (!pendingScrollRestore) rememberContentAnchor()
+    setTimeout(() => {
+      mountVisiblePlaceholders()
+      if (!pendingScrollRestore) rememberContentAnchor()
+    }, 300)
+    let painted = false
+    const finishPaint = () => {
+      if (painted) return
+      painted = true
+      traceSessionOpen(sessionId, 'panel:list-painted')
+      paintedSpan?.end({ turns: visibleTurns.value.length })
+      endSessionOpenTrace(sessionId)
+    }
+    requestAnimationFrame(() => requestAnimationFrame(finishPaint))
+    setTimeout(finishPaint, 250)
+  })
+})
 
 async function handleSessionChange(newSessionId: string | null, oldSessionId: string | null) {
   if (newSessionId === oldSessionId) return;
@@ -1209,12 +1621,14 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   const token = ++sessionChangeToken;
   isLoading.value = true;
   startSkeletonDelay();
+  traceSessionOpen(newSessionId, 'panel:start');
   try {
     currentSessionId.value = newSessionId;
     // 打开会话:直接拉历史快照(loadSession 返回 lastSeq 作为订阅游标)。
     // StreamEventHub 邮箱常驻收事件,无需 startBuffering——订阅时按 prevSeq >= lastSeq 取增量。
     await loadSession(newSessionId);
     if (token !== sessionChangeToken) return;
+    traceSessionOpen(newSessionId, 'panel:load-done');
 
     // 队列补拉：后端队列在会话打开时可能与本地投影不同步（后台消费/刷新），
     // 以服务端快照为准；不再由前端触发发送。
@@ -1238,6 +1652,7 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   } finally {
     if (token !== sessionChangeToken) return;
     isLoading.value = false;
+    traceSessionOpen(newSessionId, 'panel:loading-false');
     stopSkeletonDisplay();
   }
 }
@@ -1278,6 +1693,7 @@ async function deleteTurnMessage(turn: Turn) {
 const branchingTurnId = ref<string | null>(null);
 
 async function branchFromTurn(turn: Turn) {
+  if (props.disableBranch) return;
   if (!currentSessionId.value || !turn?.id) return;
   const confirmed = await confirm(
     t('chat.panel.branchConfirmTitle'),
@@ -1510,7 +1926,7 @@ async function handleSendMessage(payload?: InputMessageState) {
       if (!alreadyStreaming) {
         sessionStore.setStreamStatus(sid, "pending");
       }
-      const response = await apiService.chat({
+      const payload: ChatStreamParams = {
         sessionId: sid,
         userMessage: {
           content: prepared.content,
@@ -1521,7 +1937,10 @@ async function handleSendMessage(payload?: InputMessageState) {
         ...(Object.keys(settingsOverride).length > 0
           ? { settingsOverride }
           : {}),
-      });
+      };
+      const response = props.sendHandler
+        ? await props.sendHandler(payload)
+        : await apiService.chat(payload);
 
       // 后端判定忙碌：已进入服务端队列，本窗口撤销 pending/入场动画，
       // 并以快照为准（queue_updated 可能晚于 HTTP 响应到达）。
@@ -1742,7 +2161,18 @@ defineExpose({
  */
 const SCROLL_TO_MESSAGE_MAX_CORRECTIONS = 4
 
-function scrollToMessage(messageId: string) {
+async function scrollToMessage(messageId: string) {
+  // 大纲跳转是明确的导航：挂载/滚动期间不要让旧锚点做补偿
+  contentAnchor = null
+  // 懒挂载下目标回合可能还是占位：先全量挂载，保证锚点元素存在且 offsetTop 为真实高度。
+  const targetTurn = visibleTurns.value.find((t) =>
+    (t.messages ?? []).some((m) => m.messageId === messageId),
+  )
+  if (lazyTurnsEnabled && targetTurn && !mountedTurnIds.value.has(targetTurn.id)) {
+    mountAllLoadedTurns()
+    await nextTick()
+  }
+
   // 使用外层容器作为滚动上下文
   const container = scrollContainerRef.value?.getScrollElement?.() || null;
 
@@ -1793,6 +2223,42 @@ function scrollToMessage(messageId: string) {
   transform: translateZ(0);
   contain: layout style paint;
   transition: opacity 0.3s ease;
+}
+
+/* 懒挂载占位：只占高度，不创建组件树；进入视口附近后替换为 TurnItem。
+   顶部两条 shimmer 线条明确表示“还在加载”，避免被误认为内容缺失。 */
+.turn-placeholder {
+  width: 100%;
+  box-sizing: border-box;
+  pointer-events: none;
+  padding-top: 10px;
+}
+
+.turn-placeholder__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.turn-placeholder__line {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg,
+      rgba(127, 127, 127, 0.08) 0%,
+      rgba(127, 127, 127, 0.2) 50%,
+      rgba(127, 127, 127, 0.08) 100%);
+  background-size: 200% 100%;
+  animation: turn-placeholder-shimmer 1.4s linear infinite;
+}
+
+@keyframes turn-placeholder-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 /* 消息行：flex row；撑满剩余高度（flex:1 0 auto），消息列拉伸对齐 */

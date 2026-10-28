@@ -331,6 +331,8 @@ export class QQBotAdapter extends BaseBotAdapter {
       senderId: rawEvent.author?.id || rawEvent.user_openid || rawEvent.user_id,
       senderName:
         rawEvent.author?.username || rawEvent.member?.nickname || "Unknown",
+      // 频道消息的 author 带有头像；群聊/私聊事件通常只有 openid
+      senderAvatar: rawEvent.author?.avatar || undefined,
       conversationId: this.extractConversationId(rawEvent),
       content: rawEvent.content || rawEvent.text || "",
       messageType: this.detectMessageType(rawEvent),

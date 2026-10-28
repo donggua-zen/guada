@@ -12,7 +12,13 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '../../auth/auth.guard';
 import { BotAdminService } from '../services/bot-admin.service';
-import { CreateBotDto, UpdateBotDto, SubmitBotVerificationDto } from '../dto/bot-admin.dto';
+import {
+  CreateBotDto,
+  SendBotSessionMessageDto,
+  UpdateBotDto,
+  SubmitBotVerificationDto,
+  ReorderBotInstancesDto,
+} from '../dto/bot-admin.dto';
 
 /**
  * 机器人管理（单账户）
@@ -48,6 +54,22 @@ export class BotAdminController {
   @Get('instances')
   async getInstances() {
     return this.botService.getAllInstances();
+  }
+
+  /**
+   * 微信式会话工作台：按机器人 → 用户聚合的 Bot 会话。
+   */
+  @Get('chat-groups')
+  async getChatGroups(@Query('perBotLimit') perBotLimit = '200') {
+    return this.botService.getChatGroups(Number(perBotLimit));
+  }
+
+  /**
+   * 按拖拽结果重排机器人实例（须在 instances/:id 系列之前定义）
+   */
+  @Post('instances/reorder')
+  async reorderInstances(@Body() dto: ReorderBotInstancesDto) {
+    return this.botService.reorderInstances(dto.orderedIds);
   }
 
   /**
@@ -143,5 +165,24 @@ export class BotAdminController {
     @Query('botId') botId?: string,
   ) {
     return this.botService.getBotSessions(Number(skip), Number(limit), botId);
+  }
+
+  /**
+   * 单个 Bot 会话详情（动态挂载 agent/model，供聊天面板复用）
+   */
+  @Get('sessions/:id')
+  async getBotSessionDetail(@Param('id') id: string) {
+    return this.botService.getSessionDetail(id);
+  }
+
+  /**
+   * 在 Bot 会话中续聊（本期仅写入会话，不回推 IM）
+   */
+  @Post('sessions/:id/messages')
+  async sendBotSessionMessage(
+    @Param('id') id: string,
+    @Body() dto: SendBotSessionMessageDto,
+  ) {
+    return this.botService.sendSessionMessage(id, dto);
   }
 }

@@ -15,7 +15,9 @@ export type SessionEventType =
   | "jobs_snapshot"
   | "plugins_changed"
   | "queue_updated"
-  | "queues_snapshot";
+  | "queues_snapshot"
+  | "bot_status_changed"
+  | "bot_changed";
 
 /**
  * 会话事件

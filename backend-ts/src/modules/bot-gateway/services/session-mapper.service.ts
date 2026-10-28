@@ -4,6 +4,22 @@ import { SessionMetaStore } from '../../chat/session-meta.store';
 import { AgentFileStore } from '../../agents/agent-file.store';
 import { WorkspaceService } from '../../../common/services/workspace.service';
 import { BotFileStore } from '../bot-file.store';
+import { isMeaningfulSenderName } from '../utils/bot-user';
+
+/** Bot 会话动态 enrich 所需的最小配置切片 */
+export interface BotSessionEnrichConfig {
+  defaultAgentId: string;
+  defaultModelId?: string | null;
+  defaultThinkingEffort?: string | null;
+}
+
+/** 私聊用户身份（用于左侧会话列表展示） */
+export interface BotUserIdentity {
+  id?: string;
+  name?: string;
+  /** 平台提供的用户头像 URL（可选） */
+  avatarUrl?: string;
+}
 
 /**
  * 会话映射服务
@@ -33,6 +49,7 @@ export class SessionMapperService {
    * @param defaultModelId 默认模型 ID（可选，用于模型解析优先级）
    * @param defaultThinkingEffort 默认思考强度（可选，动态注入到 session.settings）
    * @param title 会话标题(可选,不提供则自动生成)
+   * @param botUser 私聊发送者身份（可选，写入 session.data.botUser 供会话列表展示）
    */
   async getOrCreateBotSession(
     botId: string,
@@ -42,12 +59,16 @@ export class SessionMapperService {
     defaultModelId?: string | null,
     defaultThinkingEffort?: string | null,
     title?: string,
-  ): Promise<any> {
+    botUser?: BotUserIdentity,
+  ): Promise<{ session: any; created: boolean }> {
+    const normalizedBotUser = this.normalizeBotUser(botUser);
+
     // 尝试查找已存在的会话（Bot 会话的 agentId 为 null）
     let session = this.sessionStore.findByBotAndExternalId(
       botId,
       externalId,
     );
+    const created = !session;
 
     if (!session) {
       // 校验机器人实例存在（权威来源 bots/<id>.yaml）
@@ -68,16 +89,97 @@ export class SessionMapperService {
         title: title || this.generateBotSessionTitleFromExternalId(externalId),
         settings: {},
         workspacePath,
+        data: normalizedBotUser ? { botUser: normalizedBotUser } : undefined,
       });
 
+    } else {
+      await this.backfillBotUser(session, normalizedBotUser);
     }
 
     // 动态挂载 agent 和 model（确保与 Bot 配置同步）
-    await this.enrichBotSessionAgent(session, defaultAgentId);
-    await this.enrichBotSessionModel(session, defaultModelId);
-    this.enrichBotSessionThinkingEffort(session, defaultThinkingEffort);
+    await this.enrichSession(session, {
+      defaultAgentId,
+      defaultModelId,
+      defaultThinkingEffort,
+    });
 
-    return session;
+    return { session, created };
+  }
+
+  /**
+   * 为 Bot 会话动态挂载 agent / model / 思考强度。
+   *
+   * 供会话详情、管理员续聊等非消息链路复用；调用方负责 catch，
+   * 因为 Bot 配置被删除/改坏时这里会抛错。
+   */
+  async enrichSession(
+    session: any,
+    config: BotSessionEnrichConfig,
+  ): Promise<void> {
+    await this.enrichBotSessionAgent(session, config.defaultAgentId);
+    await this.enrichBotSessionModel(session, config.defaultModelId);
+    this.enrichBotSessionThinkingEffort(session, config.defaultThinkingEffort);
+  }
+
+  /**
+   * 归一化用户身份：丢弃占位昵称/空值，避免把“用户”“Unknown”写进会话列表。
+   */
+  private normalizeBotUser(
+    botUser?: BotUserIdentity,
+  ): BotUserIdentity | undefined {
+    if (!botUser) return undefined;
+
+    const name = isMeaningfulSenderName(botUser.name, botUser.id)
+      ? botUser.name?.trim()
+      : undefined;
+    const avatarUrl = botUser.avatarUrl?.trim() || undefined;
+
+    // 只有 id、没有昵称/头像时不写 botUser：externalId 已经能定位用户，
+    // 空的 botUser 只会让前端误以为存在用户资料。
+    if (!name && !avatarUrl) return undefined;
+
+    return {
+      ...(botUser.id ? { id: botUser.id } : {}),
+      ...(name ? { name } : {}),
+      ...(avatarUrl ? { avatarUrl } : {}),
+    };
+  }
+
+  /**
+   * 已有会话首次拿到昵称/头像时回填，保留 data 中的其他键（含 settings）。
+   * name 与 avatarUrl 独立判断：任一缺失都可以补，已有真实值不被覆盖。
+   */
+  private async backfillBotUser(
+    session: any,
+    botUser?: BotUserIdentity,
+  ): Promise<void> {
+    if (!botUser) return;
+
+    const existing = session.data?.botUser;
+    const next: Record<string, any> = { ...(existing ?? {}) };
+    let changed = false;
+
+    if (botUser.id && !next.id) {
+      next.id = botUser.id;
+      changed = true;
+    }
+    if (botUser.name && !isMeaningfulSenderName(next.name, botUser.id)) {
+      next.name = botUser.name;
+      changed = true;
+    }
+    if (botUser.avatarUrl && !next.avatarUrl) {
+      next.avatarUrl = botUser.avatarUrl;
+      changed = true;
+    }
+    if (!changed) return;
+
+    const data = {
+      ...(session.data ?? {}),
+      botUser: next,
+    };
+
+    await this.sessionStore.update(session.id, { data });
+    session.data = data;
   }
 
   /**

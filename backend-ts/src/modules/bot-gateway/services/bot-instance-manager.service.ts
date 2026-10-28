@@ -15,6 +15,7 @@ import {
 import { BotAdapterFactory } from './bot-adapter.factory';
 import { BotOrchestrator } from './bot-orchestrator.service';
 import { BotFileStore } from '../bot-file.store';
+import { EventBusService } from '../../../common/events/event-bus.service';
 
 interface ManagedBotInstance {
   adapter: IBotPlatform;
@@ -52,7 +53,26 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     private adapterFactory: BotAdapterFactory,
     private orchestrator: BotOrchestrator,
     private botStore: BotFileStore,
+    private eventBus: EventBusService,
   ) { }
+
+  /**
+   * 广播机器人运行状态变化（SessionEventsService 转成 SSE 的 bot_status_changed）。
+   *
+   * 只在生命周期迁移点调用；status 显式传入，避免实例已清理后读不到适配器状态。
+   */
+  private emitBotStatusChanged(
+    botId: string,
+    runtimeStatus: BotRuntimeStatus | 'error',
+    extra: { status?: string; lastError?: string | null; reason?: string } = {},
+  ): void {
+    this.eventBus.emit('bot.status_changed', {
+      botId,
+      timestamp: new Date().toISOString(),
+      runtimeStatus,
+      ...extra,
+    });
+  }
 
   /**
    * 模块初始化时自动启动已启用的机器人
@@ -193,6 +213,9 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       subscriptions: [] as Subscription[],
     };
     this.botInstances.set(config.id, instance);
+    this.emitBotStatusChanged(config.id, BotRuntimeStatus.CONNECTING, {
+      reason: 'start',
+    });
 
     try {
       // 重要：先订阅所有事件，再建立连接，避免丢失早期事件
@@ -255,6 +278,11 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       // 4. 最后才建立连接（确保不会丢失任何事件）
       await adapter.connect(config);
       instance.status = BotRuntimeStatus.CONNECTED;
+      this.emitBotStatusChanged(config.id, BotRuntimeStatus.CONNECTED, {
+        status: 'running',
+        lastError: null,
+        reason: 'start',
+      });
 
       this.logger.log(`Bot started successfully: ${config.id}`);
     } catch (error: any) {
@@ -498,6 +526,9 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     // 无延迟（首次）时由定时器回调内设置，避免与上一次 finally 的重置产生竞争。
     if (delay > 0) {
       instance.status = BotRuntimeStatus.RECONNECTING;
+      this.emitBotStatusChanged(botId, BotRuntimeStatus.RECONNECTING, {
+        reason: 'reconnect',
+      });
     }
 
     this.logger.log(
@@ -513,6 +544,9 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
 
       instance.status = BotRuntimeStatus.RECONNECTING;
       instance.reconnectTimedOut = false;
+      this.emitBotStatusChanged(botId, BotRuntimeStatus.RECONNECTING, {
+        reason: 'reconnect',
+      });
       try {
         this.logger.log(`Attempting to reconnect bot ${botId}...`);
 
@@ -652,6 +686,11 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     }
     instance.status = BotRuntimeStatus.CONNECTED;
     instance.reconnectAttempts = 0;
+    this.emitBotStatusChanged(botId, BotRuntimeStatus.CONNECTED, {
+      status: 'running',
+      lastError: null,
+      reason: 'connect',
+    });
 
     // 重连成功后，补发重连期间积压的回复消息
     void this.orchestrator.flushPendingReplies(botId, instance).catch((err) => {
@@ -689,6 +728,11 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
         enabled: false,
         status: 'error',
         lastError: errorMessage,
+      });
+      this.emitBotStatusChanged(botId, 'error', {
+        status: 'error',
+        lastError: errorMessage,
+        reason: 'exhausted',
       });
       this.logger.log(`Bot ${botId} has been disabled`);
     } catch (error: any) {
@@ -741,6 +785,10 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       this.botInstances.delete(botId);
     }
 
+    this.emitBotStatusChanged(botId, BotRuntimeStatus.STOPPED, {
+      status: 'stopped',
+      reason,
+    });
     this.logger.log(`Bot ${botId} cleanup completed`);
   }
 }

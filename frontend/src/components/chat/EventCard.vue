@@ -145,7 +145,7 @@ const props = defineProps<{
 const { t } = useI18n();
 const expanded = ref(false);
 
-/** 子代理面板跳转：宿主提供（ChatPage）；BotSessionDialog 等无 provide 时按钮不渲染 */
+/** 子代理面板跳转：宿主提供（ChatPage）；Bot 会话面板等无 provide 时按钮不渲染 */
 const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
   'workspace:openSubAgentSession',
   null,

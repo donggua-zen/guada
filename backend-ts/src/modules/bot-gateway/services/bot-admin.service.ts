@@ -4,13 +4,23 @@ import {
   SessionMetaStore,
   toRow,
 } from '../../chat/session-meta.store';
-import { BotFileStore } from '../bot-file.store';
+import { ChatRunnerService } from '../../chat/chat-runner.service';
+import { normalizeTurnSettingsOverride } from '../../chat/types/turn-settings-override';
+import { BotFileInstance, BotFileStore } from '../bot-file.store';
 import { BotInstanceManager } from './bot-instance-manager.service';
+import { SessionMapperService } from './session-mapper.service';
 import { PLATFORM_METADATA } from '../constants/platform-metadata';
-import { CreateBotDto, UpdateBotDto } from '../dto/bot-admin.dto';
+import {
+  CreateBotDto,
+  SendBotSessionMessageDto,
+  UpdateBotDto,
+} from '../dto/bot-admin.dto';
 import { BotConfig, BotStatus } from '../interfaces/bot-platform.interface';
+import { buildChatGroups, type ChatBotMeta } from '../utils/chat-groups';
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
 import { assertResolvableModelRef } from '../../llm-core/utils/model-reference.util';
+import { EventBusService } from '../../../common/events/event-bus.service';
+import type { BotChangedEvent } from '../../../common/events/stream.events';
 
 @Injectable()
 export class BotAdminService {
@@ -22,7 +32,25 @@ export class BotAdminService {
     private agentStore: AgentFileStore,
     private sessionStore: SessionMetaStore,
     private botStore: BotFileStore,
+    private sessionMapper: SessionMapperService,
+    private chatRunner: ChatRunnerService,
+    private eventBus: EventBusService,
   ) {}
+
+  /**
+   * 广播机器人配置变化（SessionEventsService 转为 SSE 的 bot_changed），用于多窗口同步。
+   * 本地窗口仍走各自的 @changed 回调，不依赖事件回环。
+   */
+  private emitBotChanged(
+    action: BotChangedEvent['action'],
+    botId?: string,
+  ): void {
+    this.eventBus.emit('bot.changed', {
+      ...(botId ? { botId } : {}),
+      timestamp: new Date().toISOString(),
+      action,
+    });
+  }
 
   /**
    * 获取所有平台元数据(包含配置字段定义)
@@ -44,20 +72,27 @@ export class BotAdminService {
   }
 
   /**
-   * 获取所有机器人实例
+   * 获取所有机器人实例（顺序与侧栏分组一致：sortOrder 优先）
    */
   async getAllInstances() {
-    const instances = this.botStore
-      .list()
-      .sort((a, b) =>
-        b.createdAt === a.createdAt
-          ? a.id.localeCompare(b.id)
-          : b.createdAt.localeCompare(a.createdAt),
-      );
+    const instances = this.botStore.listOrdered();
 
     // 附加运行时状态
     return instances.map(instance => ({
       ...instance,
+      runtimeStatus: this.instanceManager.getStatus(instance.id),
+    }));
+  }
+
+  /**
+   * 按前端拖拽后的 id 顺序回写 sortOrder。
+   */
+  async reorderInstances(orderedIds: string[]) {
+    const reordered = await this.botStore.reorder(orderedIds);
+    this.emitBotChanged('reordered');
+    return reordered.map(instance => ({
+      id: instance.id,
+      sortOrder: instance.sortOrder,
       runtimeStatus: this.instanceManager.getStatus(instance.id),
     }));
   }
@@ -87,6 +122,193 @@ export class BotAdminService {
       total,
       page: Math.floor(skip / limit) + 1,
       pageSize: limit,
+    };
+  }
+
+  /**
+   * 微信式会话工作台：按「机器人 → 用户」聚合 Bot 会话。
+   */
+  async getChatGroups(perBotLimit = 200) {
+    await this.sessionStore.initialize();
+
+    const sessions = this.sessionStore.query(
+      { sessionType: 'bot' },
+      'lastActiveDesc',
+    );
+
+    const bots: ChatBotMeta[] = this.botStore.listOrdered().map((bot) => {
+      const runtimeStatus = this.instanceManager.getStatus(bot.id);
+      return {
+        id: bot.id,
+        name: bot.name,
+        platform: bot.platform,
+        enabled: bot.enabled,
+        status: bot.status,
+        runtimeStatus: runtimeStatus ?? null,
+        online: runtimeStatus === BotStatus.CONNECTED,
+        sortOrder: bot.sortOrder,
+      };
+    });
+
+    const limit =
+      Number.isFinite(perBotLimit) && perBotLimit > 0
+        ? Math.min(Math.floor(perBotLimit), 1000)
+        : 200;
+
+    return {
+      groups: buildChatGroups(sessions, bots, limit),
+    };
+  }
+
+  /**
+   * 单个 Bot 会话详情：带动态挂载的 agent/model，供右侧 ChatPanel 复用。
+   */
+  async getSessionDetail(sessionId: string) {
+    const raw = this.sessionStore.get(sessionId);
+    if (!raw) {
+      throw new NotFoundException(`Session ${sessionId} not found`);
+    }
+    if (raw.sessionType !== 'bot') {
+      throw new BadRequestException('Not a bot session');
+    }
+
+    const instance = raw.botId ? this.botStore.findById(raw.botId) : null;
+    const session = { ...raw };
+    let warning: string | null = null;
+    let canReply = false;
+    let bot: {
+      id: string;
+      name: string;
+      platform: string;
+      enabled: boolean;
+      runtimeStatus: string | null;
+      online: boolean;
+      supportsPushMessage: boolean;
+    } | null = null;
+
+    if (!instance) {
+      warning = '机器人不存在或已删除，仅可查看历史记录';
+    } else {
+      const runtimeStatus = this.instanceManager.getStatus(instance.id);
+      const adapter = this.instanceManager.getAdapter(instance.id);
+      bot = {
+        id: instance.id,
+        name: instance.name,
+        platform: instance.platform,
+        enabled: instance.enabled,
+        runtimeStatus: runtimeStatus ?? null,
+        online: runtimeStatus === BotStatus.CONNECTED,
+        supportsPushMessage:
+          adapter?.getCapabilities().supportsPushMessage ?? false,
+      };
+
+      try {
+        await this.sessionMapper.enrichSession(session, {
+          defaultAgentId: instance.defaultAgentId,
+          defaultModelId: instance.defaultModelId,
+          defaultThinkingEffort: instance.defaultThinkingEffort,
+        });
+        canReply = !!session.agent && !!session.modelId;
+      } catch (error: any) {
+        warning = error?.message ?? '机器人配置不完整，仅可查看历史记录';
+      }
+    }
+
+    return {
+      session: {
+        ...session,
+        agent: session.agent ?? null,
+        model: session.model ?? null,
+      },
+      bot,
+      canReply,
+      warning,
+    };
+  }
+
+  /**
+   * 管理台续聊：在 Bot 会话中继续一轮对话。
+   *
+   * 本期只把消息写入会话并让 AI 正常回复，不回推 IM；
+   * forwardToPlatform 预留给后续版本。
+   */
+  async sendSessionMessage(sessionId: string, dto: SendBotSessionMessageDto) {
+    const raw = this.sessionStore.get(sessionId);
+    if (!raw) {
+      throw new NotFoundException(`Session ${sessionId} not found`);
+    }
+    if (raw.sessionType !== 'bot') {
+      throw new BadRequestException('Not a bot session');
+    }
+    if (!raw.botId) {
+      throw new BadRequestException('会话未关联机器人');
+    }
+    if (!dto.content?.trim() && !dto.files?.length) {
+      throw new BadRequestException('消息内容不能为空');
+    }
+
+    const instance = this.botStore.findById(raw.botId);
+    if (!instance) {
+      throw new NotFoundException('机器人不存在或已删除');
+    }
+
+    const session = { ...raw };
+    try {
+      await this.sessionMapper.enrichSession(session, {
+        defaultAgentId: instance.defaultAgentId,
+        defaultModelId: instance.defaultModelId,
+        defaultThinkingEffort: instance.defaultThinkingEffort,
+      });
+    } catch (error: any) {
+      throw new BadRequestException(
+        error?.message ?? '机器人配置不完整，无法继续对话',
+      );
+    }
+
+    if (dto.forwardToPlatform) {
+      throw new BadRequestException('当前版本暂不支持回推消息到 IM 平台');
+    }
+
+    const settingsOverride = normalizeTurnSettingsOverride(
+      dto.settingsOverride,
+    );
+
+    await this.chatRunner.startStream({
+      sessionId,
+      userMessage: {
+        content: dto.content ?? '',
+        files: dto.files as any,
+        replaceTurnId: dto.replaceTurnId,
+        knowledgeBaseIds: dto.knowledgeBaseIds,
+      },
+      source: { origin: 'bot-admin', botId: raw.botId },
+      preloadedSession: session,
+      ...(settingsOverride ? { settingsOverride } : {}),
+    });
+
+    return { ok: true, started: true };
+  }
+
+  /**
+   * 从文件实例构造 orchestrator/chatRunner 共用的 BotConfig。
+   */
+  private buildBotConfig(instance: BotFileInstance): BotConfig {
+    return {
+      id: instance.id,
+      platform: instance.platform as any,
+      name: instance.name,
+      platformConfig: instance.platformConfig as any,
+      enabled: instance.enabled,
+      reconnectConfig: {
+        enabled: instance.reconnectEnabled,
+        maxRetries: instance.maxRetries,
+        retryInterval: instance.retryInterval,
+      },
+      defaultAgentId: instance.defaultAgentId || undefined,
+      defaultModelId: instance.defaultModelId || undefined,
+      defaultThinkingEffort: instance.defaultThinkingEffort || undefined,
+      knowledgeBaseIds:
+        (instance.additionalKwargs as any)?.knowledgeBaseIds || [],
     };
   }
 
@@ -148,6 +370,7 @@ export class BotAdminService {
       enabled: true,
       status: 'stopped',
     });
+    this.emitBotChanged('created', instance.id);
 
     // 如果启用了自动启动,则立即启动
     if (dto.autoStart) {
@@ -228,6 +451,7 @@ export class BotAdminService {
       }
     }
 
+    this.emitBotChanged('updated', id);
     return updated;
   }
 
@@ -247,24 +471,8 @@ export class BotAdminService {
       await this.botStore.update(id, { enabled: true });
     }
 
-    // 构建 BotConfig
-    const config: BotConfig = {
-      id: instance.id,
-      platform: instance.platform as any,
-      name: instance.name,
-      platformConfig: instance.platformConfig as any,
-      enabled: instance.enabled,
-      reconnectConfig: {
-        enabled: instance.reconnectEnabled,
-        maxRetries: instance.maxRetries,
-        retryInterval: instance.retryInterval,
-      },
-      defaultAgentId: instance.defaultAgentId || undefined,
-      defaultModelId: instance.defaultModelId || undefined,
-      defaultThinkingEffort: instance.defaultThinkingEffort || undefined,
-      // 从 additionalKwargs 中提取知识库ID列表
-      knowledgeBaseIds: (instance.additionalKwargs as any)?.knowledgeBaseIds || [],
-    };
+    // 构建 BotConfig（与编排器/续聊共用同一份字段映射）
+    const config = this.buildBotConfig(instance);
 
     // 启动机器人
     await this.instanceManager.startBot(config);
@@ -320,6 +528,7 @@ export class BotAdminService {
 
     // 再删除
     await this.botStore.delete(id);
+    this.emitBotChanged('deleted', id);
 
     return { success: true };
   }

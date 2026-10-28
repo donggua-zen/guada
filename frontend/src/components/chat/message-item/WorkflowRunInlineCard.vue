@@ -179,7 +179,7 @@ const resultText = computed(() => {
 });
 
 // 成员行点击 → 跳转子代理会话 / 头部详情 → 工作流审阅标签（均复用 ChatPage provide；
-// 无 provide 的宿主如 BotSessionDialog 下入口不渲染/不可点）
+// 无 provide 的宿主如 Bot 会话面板下入口不渲染/不可点）
 const openSubAgent = inject<((subSessionId: string) => void) | null>(
   "workspace:openSubAgentSession",
   null,

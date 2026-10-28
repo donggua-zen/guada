@@ -206,6 +206,37 @@ describe("SessionEventsService 连接补发", () => {
     service.unsubscribe("client-1", second.connectionId);
     expect(service.getClientCount()).toBe(0);
   });
+
+  it("bot.status_changed / bot.changed 转成宿主级 bot_* 事件广播", () => {
+    const { observable } = service.subscribe("client-1");
+    const received: any[] = [];
+    observable.subscribe((e) => received.push(parse(e)));
+    received.length = 0; // 丢弃建连补发
+
+    service.handleBotStatusChanged({
+      botId: "bot-1",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      runtimeStatus: "reconnecting",
+      status: "disconnected",
+      reason: "reconnect",
+    });
+    service.handleBotChanged({
+      botId: "bot-1",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      action: "updated",
+    });
+
+    expect(received.map((e) => e.type)).toEqual([
+      "bot_status_changed",
+      "bot_changed",
+    ]);
+    expect(received[0].sessionId).toBe("*");
+    expect(received[0].payload).toMatchObject({
+      botId: "bot-1",
+      runtimeStatus: "reconnecting",
+    });
+    expect(received[1].payload.action).toBe("updated");
+  });
 });
 
 describe("SessionStreamManager 事件盖戳", () => {

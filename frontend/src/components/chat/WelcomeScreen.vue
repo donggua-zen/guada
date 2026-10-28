@@ -5,20 +5,20 @@
       <div class="relative inline-block mb-5">
         <div
           class="w-24 h-24 rounded-full flex items-center justify-center mx-auto relative overflow-hidden p-0 animate-bounce-in">
-          <Avatar v-if="session" :src="session.agent.avatarUrl" :name="session.agent.name" type="assistant"
+          <Avatar v-if="session?.agent" :src="session.agent.avatarUrl" :name="session.agent.name" type="assistant"
             round />
           <div v-else class="text-4xl text-white">?</div>
         </div>
-        <div class="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-2 border-white rounded-full"></div>
+        <div v-if="session?.agent" class="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-2 border-white rounded-full"></div>
       </div>
 
       <!-- 标题和描述 -->
       <div class="mb-8">
         <h1 class="text-3xl font-bold mb-4 text-(--gd-color-primary)">
-          {{ session?.agent.name || '' }}
+          {{ session?.agent?.name || '' }}
         </h1>
         <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
-          {{ session?.agent.description || '' }}
+          {{ session?.agent?.description || '' }}
         </h2>
 
       </div>

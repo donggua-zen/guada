@@ -1128,12 +1128,19 @@ export class SessionService {
         throw new Error("Session not found");
       }
 
-      if (session.sessionType === "sub_agent")
+      // 子代理会话与 Bot 会话的标题由系统维护：
+      // - sub_agent 用固定标识；
+      // - bot 的标题承载外部用户/群标识，自动改写会让会话列表失去稳定身份。
+      if (
+        session.sessionType === "sub_agent" ||
+        session.sessionType === "bot"
+      ) {
         return {
           title: session.title,
           skipped: true,
-          reason: "session_type_sub_agent",
+          reason: `session_type_${session.sessionType}`,
         };
+      }
 
       // 从全局设置中获取标题总结模型
       const titleModelId = await this.settingsStorage.getSettingValue(

@@ -140,6 +140,41 @@ export interface TodoUpdatedEvent {
 }
 
 /**
+ * 机器人运行状态变化事件（内部模块间使用）
+ *
+ * 事件名：bot.status_changed
+ *
+ * BotInstanceManager 在生命周期状态迁移点发射（connecting/connected/reconnecting/
+ * stopped/error）。前端据此即时更新侧栏状态点与 lastError，不必等会话列表轮询。
+ */
+export interface BotStatusChangedEvent {
+  botId: string;
+  timestamp: string;
+  /** 管理器生命周期状态（BotRuntimeStatus：connecting/connected/reconnecting/stopped） */
+  runtimeStatus: string;
+  /** 持久化/UI 状态（running/connecting/stopped/error）；重连中不改写，避免与落盘值漂移 */
+  status?: string;
+  /** 重连耗尽落盘的错误信息（如 fetch failed），侧栏 tooltip 展示 */
+  lastError?: string | null;
+  /** 触发原因，便于排查：start/connect/disconnect/reconnect/cleanup/exhausted */
+  reason?: string;
+}
+
+/**
+ * 机器人配置变化事件（内部模块间使用）
+ *
+ * 事件名：bot.changed
+ *
+ * BotAdminService 在 create/update/delete/reorder 成功后发射，用于多窗口同步。
+ */
+export interface BotChangedEvent {
+  /** 变更的机器人；reorder 这类批量动作可留空（前端收到即全量重拉） */
+  botId?: string;
+  timestamp: string;
+  action: "created" | "updated" | "deleted" | "reordered";
+}
+
+/**
  * 将内部事件转换为 SSE 事件格式
  */
 export function toSessionEvent(

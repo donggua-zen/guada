@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsObject, IsBoolean, IsNumber, ValidateNested, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsObject, IsBoolean, IsNumber, IsArray, ValidateNested, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class ReconnectConfigDto {
@@ -101,4 +101,46 @@ export class SubmitBotVerificationDto {
   @IsString()
   @Matches(/^\d{4,8}$/, { message: '数字配对码必须是 4 至 8 位数字' })
   code: string;
+}
+
+/**
+ * 机器人会话续聊
+ *
+ * content 与 files 至少提供一个；settingsOverride 由后端白名单归一化。
+ * forwardToPlatform 为后续「AI 回复回推 IM」预留，当前版本不使用。
+ */
+export class SendBotSessionMessageDto {
+  @IsOptional()
+  @IsString()
+  content?: string;
+
+  @IsOptional()
+  @IsArray()
+  files?: any[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  knowledgeBaseIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  replaceTurnId?: string;
+
+  @IsOptional()
+  @IsObject()
+  settingsOverride?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsBoolean()
+  forwardToPlatform?: boolean;
+}
+
+/**
+ * 机器人实例拖拽排序 DTO
+ */
+export class ReorderBotInstancesDto {
+  @IsArray()
+  @IsString({ each: true })
+  orderedIds: string[];
 }

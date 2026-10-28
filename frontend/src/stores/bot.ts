@@ -27,16 +27,38 @@ export const useBotStore = defineStore('bot', () => {
     }
   }
 
-  async function loadBotInstances() {
+  /**
+   * @param options.silent 后台同步用：失败不弹 toast（由下一页事件/轮询重试）
+   */
+  async function loadBotInstances(options: { silent?: boolean } = {}) {
     loading.value = true
     try {
       botInstances.value = await apiService.fetchBotInstances()
     } catch (error) {
-      ElMessage.error(t('session.bot.loadBotsFailed'))
+      if (!options.silent) ElMessage.error(t('session.bot.loadBotsFailed'))
       throw error
     } finally {
       loading.value = false
     }
+  }
+
+  /**
+   * 事件推送的运行时状态就地更新（bot_status_changed）。
+   * 只覆盖事件携带的字段：重连中不带 status，避免把落盘的 running 写成 connecting。
+   */
+  function applyRuntimeStatus(
+    botId: string,
+    patch: {
+      runtimeStatus?: string | null
+      status?: BotInstance['status']
+      lastError?: string | null
+    },
+  ) {
+    const bot = botInstances.value.find(item => item.id === botId)
+    if (!bot) return
+    if (patch.runtimeStatus !== undefined) bot.runtimeStatus = patch.runtimeStatus
+    if (patch.status !== undefined) bot.status = patch.status
+    if (patch.lastError !== undefined) bot.lastError = patch.lastError
   }
 
   async function createBot(data: CreateBotRequest) {
@@ -130,6 +152,7 @@ export const useBotStore = defineStore('bot', () => {
     getBotById,
     loadPlatforms,
     loadBotInstances,
+    applyRuntimeStatus,
     createBot,
     updateBot,
     deleteBot,

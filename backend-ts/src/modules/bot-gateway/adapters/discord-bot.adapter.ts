@@ -220,6 +220,7 @@ export class DiscordBotAdapter extends BaseBotAdapter {
       messageId: message.id,
       senderId: message.author.id,
       senderName: message.author.username || message.author.globalName || 'Unknown',
+      senderAvatar: message.author.displayAvatarURL(),
       conversationId,
       content,
       messageType,
