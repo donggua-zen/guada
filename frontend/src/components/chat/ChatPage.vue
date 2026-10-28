@@ -205,6 +205,7 @@ import { useWorkflowRunsStore } from "@/stores/workflowRuns";
 import { useTitle } from '@/composables/useTitle';
 import { isMobileDevice } from '@/composables/useDevice';
 import { writeTextToClipboard } from '@/utils/clipboard';
+import { beginSessionOpenTrace, traceSessionOpen, perfStart } from '@/utils/perf';
 import type { Session, CreateSessionRequest, InputMessageState } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { SessionEvent } from '@/services/modules/SessionEventsService';
@@ -651,13 +652,24 @@ const updateSelectedSession = async (sessionId: string) => {
     sessionStore.activeSessionId = NEW_SESSION_ID;
     return;
   }
+  beginSessionOpenTrace(sessionId);
+  traceSessionOpen(sessionId, 'route:update-start');
   sessionStore.activeSessionId = sessionId;
   // 用「最近一次成功拉取详情的会话」判断，而不是 mainSession：
   // store 里可能已有侧栏列表项，但缺少 subSessions / 最新设置，仍需拉一次详情。
   if (sessionId !== lastFetchedSessionId) {
     // 切换会话时重置子会话列表（侧边栏 subagent 标签由 WorkspaceSidebar 的会话切换 watch 统一清空）
     subSessions.value = [];
-    await fetchSession(sessionId);
+    traceSessionOpen(sessionId, 'detail:start');
+    const detailSpan = perfStart('session.detailFetch');
+    try {
+      await fetchSession(sessionId);
+    } finally {
+      detailSpan?.end({ sessionId });
+      traceSessionOpen(sessionId, 'detail:end');
+    }
+  } else {
+    traceSessionOpen(sessionId, 'detail:skip');
   }
 };
 

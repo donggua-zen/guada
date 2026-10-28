@@ -12,9 +12,7 @@
         <span class="fcb__added">+{{ totalAdded }}</span>
         <span class="fcb__removed">−{{ totalRemoved }}</span>
       </span>
-      <el-icon class="fcb__chevron" :class="{ 'is-open': expanded }" :size="12">
-        <ChevronDown12Regular />
-      </el-icon>
+      <ChevronDown12Regular class="fcb__chevron w-3 h-3" :class="{ 'is-open': expanded }" />
     </div>
 
     <!-- 展开态：文件列表（点文件名 → 打开文件标签；点行其余部分 → 侧边栏「编辑记录」标签） -->

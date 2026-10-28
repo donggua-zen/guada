@@ -4,9 +4,7 @@
     <div
       class="group thinking-section__header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
       @click.stop="handleToggle">
-      <el-icon size="16" class="shrink-0">
-        <BrainCircuit20Regular />
-      </el-icon>
+      <BrainCircuit20Regular class="w-4 h-4 shrink-0" />
       <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
         <span class="shrink-0 text-gray-700 dark:text-gray-300 font-medium"
           :class="{ 'shimmer-text': isThinking }">{{ isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone') }}</span>
@@ -18,10 +16,8 @@
         </span>
       </div>
       <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示 -->
-      <el-icon class="shrink-0 ml-2 text-gray-400 transition-opacity duration-200"
-        :class="isExpanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'" size="12">
-        <ChevronDown12Regular :class="{ '-rotate-90': !isExpanded }" class="transition-transform duration-200" />
-      </el-icon>
+      <ChevronDown12Regular class="w-3 h-3 shrink-0 ml-2 text-gray-400 transition-all duration-200"
+        :class="isExpanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 -rotate-90'" />
     </div>
 
     <!-- 内容区：仅展开时渲染；折叠态为纯单行步骤，与工具行完全一致 -->
@@ -37,7 +33,6 @@
 
 <script setup lang="ts">
 import { computed, ref, inject } from 'vue';
-import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { BrainCircuit20Regular, ChevronDown12Regular } from '@vicons/fluent';
 import MarkdownContent from '../../ui/MarkdownContent.vue';

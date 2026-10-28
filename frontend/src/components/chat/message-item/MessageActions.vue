@@ -5,18 +5,14 @@
 
     <GdTooltip :content="t('chat.messageActions.copy')" placement="top">
       <div class="message-action-button" @click="$emit('copy')">
-        <el-icon :size="16">
-          <Copy16Regular />
-        </el-icon>
+        <Copy16Regular class="w-4 h-4" />
       </div>
     </GdTooltip>
 
     <template v-if="!isAssistant && allowGenerate">
       <GdTooltip :content="t('chat.messageActions.regenerate')" placement="top">
         <div class="message-action-button" @click="$emit('generate')">
-          <el-icon :size="16">
-            <ArrowDownwardTwotone />
-          </el-icon>
+          <ArrowDownwardTwotone class="w-4 h-4" />
         </div>
       </GdTooltip>
     </template>
@@ -24,9 +20,7 @@
     <template v-if="isAssistant && isLast">
       <GdTooltip :content="t('chat.messageActions.regenerate')" placement="top">
         <div class="message-action-button" @click="$emit('regenerate')">
-          <el-icon :size="16">
-            <ArrowClockwise16Regular />
-          </el-icon>
+          <ArrowClockwise16Regular class="w-4 h-4" />
         </div>
       </GdTooltip>
     </template>
@@ -38,10 +32,8 @@
         <!-- 真 button 而非 div：让 .message-action-button 预置的 disabled: 工具类生效 -->
         <button type="button" class="message-action-button"
           :disabled="branching || branchDisabled" @click="handleBranch">
-          <el-icon :size="16" :class="{ 'is-loading': branching }">
-            <LoadingOutlined v-if="branching" />
-            <BranchFork16Regular v-else />
-          </el-icon>
+          <LoadingOutlined v-if="branching" class="w-4 h-4 animate-spin" />
+          <BranchFork16Regular v-else class="w-4 h-4" />
         </button>
       </GdTooltip>
     </template>
@@ -49,21 +41,15 @@
     <GdTooltip :content="t('chat.messageActions.more')" placement="top">
       <DropdownMenu @command="handleCommand">
         <div class="message-action-button">
-          <el-icon :size="16" class="pointer-events-none">
-            <MoreHorizontal16Regular />
-          </el-icon>
+          <MoreHorizontal16Regular class="w-4 h-4 pointer-events-none" />
         </div>
       <template #dropdown>
         <DropdownMenuItem command="edit">
-          <el-icon class="mr-2">
-            <Edit16Regular />
-          </el-icon>
+          <Edit16Regular class="w-3.5 h-3.5 mr-2" />
           {{ t('chat.messageActions.editContent') }}
         </DropdownMenuItem>
         <DropdownMenuItem command="delete">
-          <el-icon class="mr-2">
-            <Delete16Regular />
-          </el-icon>
+          <Delete16Regular class="w-3.5 h-3.5 mr-2" />
           {{ t('chat.messageActions.deleteTurn') }}
         </DropdownMenuItem>
       </template>
@@ -73,9 +59,7 @@
     <!-- 用量：只常显总量，明细走 tooltip（窄屏优先截断这一段） -->
     <GdTooltip v-if="isAssistant && tokenUsage" class="min-w-0" :content="tokenDetail" placement="top">
       <div class="ml-2 flex min-w-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-        <el-icon :size="14" class="shrink-0">
-          <InsightsTwotone />
-        </el-icon>
+        <InsightsTwotone class="w-3.5 h-3.5 shrink-0" />
         <span class="truncate">{{ tokenSummary }}</span>
       </div>
     </GdTooltip>
@@ -92,7 +76,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import DropdownMenu from '../../ui/DropdownMenu.vue';
 import DropdownMenuItem from '../../ui/DropdownMenuItem.vue';

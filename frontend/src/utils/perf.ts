@@ -189,11 +189,17 @@ function startMonitors(): void {
     try {
       observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          longTaskCount += 1;
-          longTaskMs += entry.duration;
+          if (entry.entryType === 'longtask') {
+            longTaskCount += 1;
+            longTaskMs += entry.duration;
+          } else if (entry.entryType === 'measure' && entry.name.startsWith('<')) {
+            // Vue 在 app.config.performance=true 时输出的组件阶段 measure：
+            // `<TurnItem> mount` / `<MessageToolCalls> render` / ...（同步、准确）
+            collector.record(`vue.${entry.name}`, entry.duration);
+          }
         }
       });
-      observer.observe({ entryTypes: ['longtask'] });
+      observer.observe({ entryTypes: ['longtask', 'measure'] });
     } catch {
       observer = null;
     }
@@ -269,6 +275,93 @@ export function perfMeasure<T>(name: string, fn: () => T, meta?: PerfMeta): T {
 export function perfCount(name: string, delta = 1): void {
   if (!enabled) return;
   collector.count(name, delta);
+}
+
+// ── 会话打开链路 trace（仅在统计开启时输出） ──────────────────
+// 用于定位「切换会话 → 骨架屏消失」的时间去向：跨 ChatPage(路由/详情) 与 ChatPanel(缓存/骨架/列表挂载)。
+// 每次切换打印带相对毫秒的阶段日志，结束时再打一张 stepMs 表。
+
+interface SessionOpenMark {
+  stage: string;
+  at: number;
+  meta?: PerfMeta;
+}
+
+interface SessionOpenTrace {
+  sessionId: string;
+  seq: number;
+  startedAt: number;
+  marks: SessionOpenMark[];
+}
+
+let activeSessionOpenTrace: SessionOpenTrace | null = null;
+let sessionOpenSeq = 0;
+
+function shortSessionId(sessionId: string): string {
+  return sessionId.length > 8 ? sessionId.slice(0, 8) : sessionId;
+}
+
+/** 标记一次会话打开开始；同一会话重复调用不重置。 */
+export function beginSessionOpenTrace(sessionId: string): void {
+  if (!enabled) return;
+  if (activeSessionOpenTrace?.sessionId === sessionId) return;
+  sessionOpenSeq += 1;
+  activeSessionOpenTrace = {
+    sessionId,
+    seq: sessionOpenSeq,
+    startedAt: nowMs(),
+    marks: [],
+  };
+  console.info(`[session-open#${sessionOpenSeq}] begin session=${shortSessionId(sessionId)}`);
+}
+
+/** 记录一个阶段；sessionId 不匹配时忽略（多 ChatPanel 实例互不干扰）。 */
+export function traceSessionOpen(
+  sessionId: string | null | undefined,
+  stage: string,
+  meta?: PerfMeta,
+): void {
+  if (!enabled) return;
+  const trace = activeSessionOpenTrace;
+  if (!trace) return;
+  if (sessionId && trace.sessionId !== sessionId) return;
+  const at = nowMs();
+  trace.marks.push({ stage, at, meta });
+  const delta = round(at - trace.startedAt);
+  console.info(
+    `[session-open#${trace.seq}] +${delta}ms ${stage}` +
+    (meta ? ` | ${compactMeta(meta)}` : ''),
+  );
+}
+
+/** 结束并打印阶段汇总表。 */
+export function endSessionOpenTrace(sessionId?: string | null): void {
+  if (!enabled) return;
+  const trace = activeSessionOpenTrace;
+  if (!trace) return;
+  if (sessionId && trace.sessionId !== sessionId) return;
+  traceSessionOpen(sessionId, 'done');
+  let prevAt = trace.startedAt;
+  const table = trace.marks.map((mark) => {
+    const stepMs = round(mark.at - prevAt);
+    prevAt = mark.at;
+    return {
+      stage: mark.stage,
+      totalMs: round(mark.at - trace.startedAt),
+      stepMs,
+      meta: mark.meta ? compactMeta(mark.meta) : '',
+    };
+  });
+  console.group(`[session-open#${trace.seq}] summary session=${shortSessionId(trace.sessionId)}`);
+  console.table(table);
+  console.groupEnd();
+  activeSessionOpenTrace = null;
+}
+
+export function isSessionOpenTraceActive(sessionId?: string | null): boolean {
+  const trace = activeSessionOpenTrace;
+  if (!trace) return false;
+  return !sessionId || trace.sessionId === sessionId;
 }
 
 export function resetPerf(): void {

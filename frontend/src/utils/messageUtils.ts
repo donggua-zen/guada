@@ -134,9 +134,14 @@ export interface DisplayGroup {
  */
 export function getThinkingPreview(reasoningContent: string | null | undefined): string {
   if (!reasoningContent) return '';
-  const lines = reasoningContent.split('\n').map((l) => l.trim()).filter(Boolean);
-  const lastLine = lines[lines.length - 1] || '';
-  return lastLine.length > 200 ? lastLine.substring(0, 200) + '...' : lastLine;
+  const span = perfStart('thinking.preview');
+  try {
+    const lines = reasoningContent.split('\n').map((l) => l.trim()).filter(Boolean);
+    const lastLine = lines[lines.length - 1] || '';
+    return lastLine.length > 200 ? lastLine.substring(0, 200) + '...' : lastLine;
+  } finally {
+    span?.end({ chars: reasoningContent.length });
+  }
 }
 
 /**

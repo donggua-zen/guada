@@ -24,18 +24,14 @@
         <el-tag v-for="kb in selectedKnowledgeBases" :key="`kb-${kb.id}`" closable type="info"
           @close="removeKnowledgeBase(kb.id)" class="text-xs">
           <span class="flex items-center gap-1">
-            <el-icon size="14">
-              <BookSearch24Regular />
-            </el-icon>
+            <BookSearch24Regular class="w-3.5 h-3.5" />
             {{ kb.name }}
           </span>
         </el-tag>
         <el-tag v-for="tag in selectedAttachmentTags" :key="`att-${tag.typeId}-${tag.id}`" closable type="info"
           @close="removeAttachmentTag(tag.typeId, tag.id)" class="text-xs">
           <span class="flex items-center gap-1">
-            <el-icon size="14">
-              <Cloud24Regular />
-            </el-icon>
+            <Cloud24Regular class="w-3.5 h-3.5" />
             {{ tag.name }}
           </span>
         </el-tag>
@@ -60,9 +56,7 @@
           <!-- 附件/图片/知识库按钮 -->
           <template v-if="!props.readonly">
             <button ref="attachButtonRef" class="tool-btn" @click.stop="toggleAttachPopover">
-              <el-icon size="16">
-                <Add16Filled />
-              </el-icon>
+              <Add16Filled class="w-4 h-4" />
             </button>
             <AttachmentPopover v-model:visible="attachPopoverVisible" :anchor-el="attachButtonRef"
               :knowledge-bases="knowledgeBases" :selected-kb-ids="props.config?.knowledgeBaseIds || []"
@@ -75,9 +69,8 @@
           <template v-if="!props.readonly">
             <button ref="sandboxModeButtonRef" class="tool-btn" :class="{ 'run-mode-unrestricted': isUnrestrictedMode }"
               @click.stop="toggleSandboxModePopover">
-              <el-icon size="16">
-                <component :is="sandboxModeIcon" :class="isUnrestrictedMode ? 'text-red-500' : 'text-gray-600'" />
-              </el-icon>
+              <component :is="sandboxModeIcon" class="w-4 h-4"
+                :class="isUnrestrictedMode ? 'text-red-500' : 'text-gray-600'" />
               <span class="run-mode-label text-xs font-medium" :class="isUnrestrictedMode ? 'text-red-500' : ''">{{
                 sandboxModeLabel }}</span>
             </button>
@@ -88,10 +81,8 @@
                  入口在安全档位弹窗里（计划模式项）；此处 hover 图标变 × 表示"点击即退出"。 -->
             <GdTooltip v-if="planModeEnabled" :content="t('chat.input.planModeOff')" placement="top">
               <button class="tool-btn plan-mode-btn" @click.stop="exitPlanMode">
-                <el-icon size="16">
-                  <Lightbulb24Regular class="plan-mode-icon-default" />
-                  <Dismiss16Regular class="plan-mode-icon-hover" />
-                </el-icon>
+                <Lightbulb24Regular class="plan-mode-icon-default w-4 h-4" />
+                <Dismiss16Regular class="plan-mode-icon-hover w-4 h-4" />
                 <span class="plan-mode-label text-xs font-medium">{{ t('chat.input.planMode') }}</span>
               </button>
             </GdTooltip>
@@ -128,17 +119,13 @@
           <GdTooltip v-if="streaming && !inputContent.trim() && uploadFiles.length === 0"
             :content="t('chat.input.stopGenerating')" placement="top">
             <button class="send-btn stop-btn" @click="abortResponse">
-              <el-icon size="18">
-                <Stop24Filled />
-              </el-icon>
+              <Stop24Filled class="w-4.5 h-4.5" />
             </button>
           </GdTooltip>
           <GdTooltip v-else :content="streaming ? t('chat.input.enqueue') : t('chat.input.send')" placement="top">
             <button class="send-btn" :class="{ 'queue-btn': streaming }" @click="sendMessage"
               :disabled="props.readonly || (!inputContent.trim() && uploadFiles.length === 0) || !props.config?.modelId || sending">
-              <el-icon size="18">
-                <Send24Filled />
-              </el-icon>
+              <Send24Filled class="w-4.5 h-4.5" />
             </button>
           </GdTooltip>
         </div>
@@ -168,7 +155,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon, ElButton, ElTag, ElMessage } from 'element-plus';
+import { ElButton, ElTag, ElMessage } from 'element-plus';
 import type { Model, ModelProvider } from '@/types/api'
 import type { UploadResponse } from '@/types/service'
 import type { ChatFileView } from '@/types/session'
@@ -357,6 +344,8 @@ const props = defineProps({
   files: { type: Array as PropType<ChatFileView[]>, default: () => [] },
   streaming: { type: Boolean, default: false },
   readonly: { type: Boolean, default: false },
+  /** 只读模式占位文案覆盖（Bot 会话等旁路宿主用；缺省用子代理文案） */
+  readonlyPlaceholder: { type: String, default: null },
   buttons: { type: Object as PropType<Record<string, boolean>>, default: () => ({}) },
   class: { type: String, default: '' },
   sessionId: { type: [String, Number], default: null },
@@ -1484,7 +1473,7 @@ onMounted(() => {
           // 只读模式（子代理会话）提示只读文案，不可输入；
           // showOnlyWhenEditable: false —— 默认 true 时不可编辑的编辑器不渲染占位装饰
           placeholder: props.readonly
-            ? t('chat.input.readonlyPlaceholder')
+            ? props.readonlyPlaceholder || t('chat.input.readonlyPlaceholder')
             : t('chat.input.editorPlaceholder'),
           showOnlyWhenEditable: false,
         }),

@@ -49,14 +49,25 @@ onMounted(() => {
  */
 const initialRender = async () => {
     if (!markdownContainerRef.value || !props.content) return;
+    const chars = props.content.length;
 
-    const span = perfStart('markdown.initial');
+    // marked 配置为 async:false：只对同步 parse 计时。
+    // 不能把 await 之后的微任务等待算进来——226 个块同一次挂载时区间会互相吞并。
+    const parseSpan = perfStart('markdown.initial.parse');
+    let parsed: string | Promise<string>;
     try {
-        const newHTML = await marked.parse(props.content) as string;
+        parsed = marked.parse(props.content) as string | Promise<string>;
+    } finally {
+        parseSpan?.end({ chars });
+    }
+    const newHTML = await parsed;
+
+    const domSpan = perfStart('markdown.initial.dom');
+    try {
         markdownContainerRef.value.innerHTML = newHTML;
         lastRenderedHTML = newHTML;
     } finally {
-        span?.end({ chars: props.content.length });
+        domSpan?.end({ chars });
     }
 };
 
@@ -69,10 +80,15 @@ const renderWithDiffDOM = async () => {
     const container = markdownContainerRef.value;
     if (!container || !props.content) return;
 
-    // 1. 将最新的 Markdown 解析为 HTML
+    // 1. 将最新的 Markdown 解析为 HTML（只计同步 parse，await 语义保持不变）
     const parseSpan = perfStart('markdown.parse');
-    const newHTML = await marked.parse(props.content) as string;
-    parseSpan?.end({ chars: props.content.length });
+    let parsed: string | Promise<string>;
+    try {
+        parsed = marked.parse(props.content) as string | Promise<string>;
+    } finally {
+        parseSpan?.end({ chars: props.content.length });
+    }
+    const newHTML = await parsed;
 
     // 2. 与上一次渲染的 HTML 进行比较
     if (newHTML === lastRenderedHTML) {

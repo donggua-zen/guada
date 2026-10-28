@@ -6,6 +6,7 @@
  */
 import { computed, type Ref } from "vue";
 import { countDiffLines } from "@/utils/diff";
+import { perfStart } from "@/utils/perf";
 import type { MessageContent } from "@/utils/messageUtils";
 
 export interface FileChangeOperation {
@@ -50,7 +51,10 @@ function basename(filePath: string): string {
 
 export function useFileChanges(turnsCache: Ref<MessageContent[]>) {
   const fileChanges = computed<FileChangeEntry[]>(() => {
+    const span = perfStart("fileChanges.compute");
     const entries = new Map<string, FileChangeEntry>();
+    let edits = 0;
+    let chars = 0;
 
     for (const content of turnsCache.value) {
       const toolCalls = content.metadata?.toolCalls;
@@ -73,6 +77,8 @@ export function useFileChanges(turnsCache: Ref<MessageContent[]>) {
         const newText: string =
           toolName === "edit" ? ((args.new_text as string | undefined) ?? "") : ((args.content as string | undefined) ?? "");
 
+        edits += 1;
+        chars += oldText.length + newText.length;
         const { added, removed } = countDiffLines(oldText, newText);
 
         const op: FileChangeOperation = {
@@ -101,6 +107,7 @@ export function useFileChanges(turnsCache: Ref<MessageContent[]>) {
       }
     }
 
+    span?.end({ blocks: turnsCache.value.length, edits, chars });
     return Array.from(entries.values());
   });
 

@@ -12,12 +12,8 @@
       <!-- ── 待办段 ── -->
       <span v-if="todoItems.length" class="csb-seg">
         <span class="csb-icon">
-          <el-icon v-if="currentTodo?.status === 'in_progress'" size="14" class="csb-icon--active">
-            <ArrowRight16Regular />
-          </el-icon>
-          <el-icon v-else-if="currentTodo?.status === 'completed'" size="14" class="csb-icon--done">
-            <Check />
-          </el-icon>
+          <ArrowRight16Regular v-if="currentTodo?.status === 'in_progress'" class="w-3.5 h-3.5 csb-icon--active" />
+          <Checkmark16Regular v-else-if="currentTodo?.status === 'completed'" class="w-3.5 h-3.5 csb-icon--done" />
           <span v-else class="csb-ring"></span>
         </span>
         <span class="csb-text" :title="currentTodo?.content">{{ currentTodo?.content }}</span>
@@ -30,7 +26,7 @@
            命令等详情在 hover 面板里看（三段可能同时出现，文案会互相挤占宽度） ── -->
       <span v-if="processes.length" class="csb-seg">
         <span class="csb-icon">
-          <el-icon :size="14" class="csb-icon--muted"><WindowConsole20Filled /></el-icon>
+          <WindowConsole20Filled class="w-3.5 h-3.5 csb-icon--muted" />
         </span>
         <span class="csb-count">{{ processes.length }}</span>
       </span>
@@ -40,7 +36,7 @@
            已结束（冻结）项不进本段，详情与回放在 hover 面板与列表面板） ── -->
       <span v-if="activeSubagents.length" class="csb-seg">
         <span class="csb-icon">
-          <el-icon :size="14" class="csb-icon--muted"><Bot20Regular /></el-icon>
+          <Bot20Regular class="w-3.5 h-3.5 csb-icon--muted" />
         </span>
         <span class="csb-count" :class="{ 'csb-count--live': runningSubagentCount > 0 }">
           {{ runningSubagentCount }}/{{ activeSubagents.length }}
@@ -61,12 +57,8 @@
             <div class="csb-list">
               <div v-for="(item, i) in todoItems" :key="i" class="csb-row">
                 <span class="csb-icon">
-                  <el-icon v-if="item.status === 'completed'" size="14" class="csb-icon--done">
-                    <Check />
-                  </el-icon>
-                  <el-icon v-else-if="item.status === 'in_progress'" size="14" class="csb-icon--active">
-                    <ArrowRight16Regular />
-                  </el-icon>
+                  <Checkmark16Regular v-if="item.status === 'completed'" class="w-3.5 h-3.5 csb-icon--done" />
+                  <ArrowRight16Regular v-else-if="item.status === 'in_progress'" class="w-3.5 h-3.5 csb-icon--active" />
                   <span v-else class="csb-ring"></span>
                 </span>
                 <span class="csb-row-text" :class="item.status === 'completed'
@@ -92,7 +84,7 @@
                   <span class="csb-elapsed">{{ elapsedText(p.startedAt) }}</span>
                   <GdTooltip :content="t('chat.workspace.killProcess')" placement="bottom">
                     <button class="csb-kill" @click.stop="killProcess(p)">
-                      <el-icon :size="10"><Close /></el-icon>
+                      <Dismiss16Regular class="w-2.5 h-2.5" />
                     </button>
                   </GdTooltip>
                 </div>
@@ -108,7 +100,7 @@
               <span class="csb-sec-count">{{ runningSubagentCount }}/{{ activeSubagents.length }}</span>
               <GdTooltip v-if="openSubagentList" :content="t('chat.workspace.subagentListTab')" placement="bottom">
                 <button class="csb-sec-btn ml-auto" @click="openSubagentList?.(props.sessionId)">
-                  <el-icon :size="14"><Bot20Regular /></el-icon>
+                  <Bot20Regular class="w-3.5 h-3.5" />
                 </button>
               </GdTooltip>
             </header>
@@ -131,9 +123,7 @@
 <script setup lang="ts">
 import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElIcon } from "element-plus";
-import { Check, Close } from "@element-plus/icons-vue";
-import { ArrowRight16Regular, Bot20Regular, WindowConsole20Filled } from "@vicons/fluent";
+import { ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, WindowConsole20Filled } from "@vicons/fluent";
 import GdTooltip from "@/components/ui/GdTooltip.vue";
 import WorkflowStatusDot from "@/components/chat/workflow/WorkflowStatusDot.vue";
 import { useTodoStatus } from "@/composables/useTodoStatus";

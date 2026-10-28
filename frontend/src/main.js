@@ -291,8 +291,17 @@ router.afterEach((to, from) => {
 const app = createApp(App);
 // 性能统计（默认关闭）：?perf=1 / localStorage['gd:perf']='1' / 控制台 __gdPerf.enable()
 installPerfGlobal();
-// Vue DevTools Performance 时间线（仅 dev）：组件 render/update 打点
-if (import.meta.env.DEV) app.config.performance = true;
+// Vue 组件阶段 measure（<TurnItem> mount/render/patch）默认关闭：
+// 每个组件都会生成 mark/measure，31 回合列表实测让 session.listMount 从 ~0.87s 涨到 ~2.79s。
+// 需要归因时：localStorage['gd:vue-perf']='1' + 刷新；用完 removeItem 后刷新。
+const vuePerfEnabled = (() => {
+  try {
+    return localStorage.getItem("gd:vue-perf") === "1";
+  } catch {
+    return false;
+  }
+})();
+if (vuePerfEnabled) app.config.performance = true;
 // ── 插件运行时共享环境（__GuaDaShared__）──
 // runtime：响应式共享数据（用户/会话/语言/主题），插件 UI 可响应式读取
 // i18n：插件语言包注册表（{ zh, en } 字典）

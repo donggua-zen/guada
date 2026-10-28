@@ -7,16 +7,11 @@
       <div v-if="!standaloneRows[toolIndex]"
         class="group flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
         @click.stop="toggleExpand(toolIndex)">
-        <el-icon v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" class="shrink-0" size="16"
-          style="color: #f56c6c;">
-          <component :is="getToolIcon(tool)" />
-        </el-icon>
-        <el-icon v-else-if="tool.outcome === 'aborted'" class="shrink-0" size="16" style="color: #c0c4cc;">
-          <component :is="getToolIcon(tool)" />
-        </el-icon>
-        <el-icon v-else class="shrink-0" size="16" :class="{ 'shimmer-icon': isToolExecuting(tool, toolIndex) }">
-          <component :is="getToolIcon(tool)" class="text-gray-500" />
-        </el-icon>
+        <component v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" :is="getToolIcon(tool)"
+          class="w-4 h-4 shrink-0" style="color: #f56c6c;" />
+        <component v-else-if="tool.outcome === 'aborted'" :is="getToolIcon(tool)"
+          class="w-4 h-4 shrink-0" style="color: #c0c4cc;" />
+        <component v-else :is="getToolIcon(tool)" class="w-4 h-4 shrink-0 text-gray-500" />
         <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
           <span class="shrink-0"
             :class="tool.outcome === 'aborted' ? 'text-gray-400 dark:text-gray-500 font-medium' : 'text-gray-700 dark:text-gray-300 font-medium'">{{
@@ -25,9 +20,7 @@
           <!-- 工具产出图片数量徽标（缩略图在展开区；此处让闭合状态也能看出有图） -->
           <span v-if="toolImages[toolIndex].length" class="tool-image-count shrink-0"
             :title="t('chat.toolCalls.imageCount', { count: toolImages[toolIndex].length })">
-            <el-icon size="13">
-              <Image24Regular />
-            </el-icon>
+            <Image24Regular class="w-[13px] h-[13px]" />
             {{ toolImages[toolIndex].length }}
           </span>
           <!-- diff 类工具的增删行数徽章 -->
@@ -37,22 +30,17 @@
           </span>
         </div>
         <!-- 子代理工具：打开对应子代理会话的面板（点击不触发行展开；
-             无 provide 的宿主如 BotSessionDialog 下不渲染） -->
+             无 provide 的宿主如 Bot 会话面板下不渲染） -->
         <GdTooltip v-if="canOpenSubAgentPanel && subAgentLinks[toolIndex]"
           :content="t('chat.toolCalls.openSubAgentPanel')" placement="top"
           class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <span class="open-subagent-btn" @click.stop="openSubAgentPanel(toolIndex)">
-            <el-icon size="14">
-              <PanelRightExpand20Filled />
-            </el-icon>
+            <PanelRightExpand20Filled class="w-3.5 h-3.5" />
           </span>
         </GdTooltip>
         <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示 -->
-        <el-icon class="shrink-0 ml-2 text-gray-400 transition-opacity duration-200"
-          :class="isExpanded(toolIndex) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'" size="12">
-          <ChevronDown12Regular :class="{ '-rotate-90': !isExpanded(toolIndex) }"
-            class="transition-transform duration-200" />
-        </el-icon>
+        <ChevronDown12Regular class="w-3 h-3 shrink-0 ml-2 text-gray-400 transition-all duration-200"
+          :class="isExpanded(toolIndex) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 -rotate-90'" />
       </div>
 
       <!-- 内联结果区（默认闭合，点击展开；带图片的工具行默认展开，直接展示产出）。
@@ -68,9 +56,7 @@
              独立渲染行不显示——其失败/拒绝状态由卡片头部徽标承担 -->
         <div v-if="!standaloneRows[toolIndex] && (tool.outcome === 'error' || tool.outcome === 'rejected')"
           class="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-          <el-icon size="14" style="color:#f56c6c">
-            <ErrorCircle16Regular />
-          </el-icon>
+          <ErrorCircle16Regular class="w-3.5 h-3.5" style="color:#f56c6c" />
           <span class="ml-1.5">{{ t('chat.toolCalls.resultFailed') }}</span>
         </div>
 
@@ -124,7 +110,6 @@
 
 <script setup lang="ts">
 import { computed, ref, inject } from 'vue';
-import { ElIcon } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { ErrorCircle16Regular, ChevronDown12Regular, PanelRightExpand20Filled, Image24Regular } from '@vicons/fluent';
 import { parse as partialParse } from 'partial-json';
@@ -181,7 +166,7 @@ const isPendingApproval = (tool: ToolCall): boolean =>
 
 // ── 子代理跳转（工具行 → 侧边栏工作区打开 subagent 标签）──
 
-/** ChatPage provide；无 provide 的宿主（BotSessionDialog 等）下为 null → 不渲染入口 */
+/** ChatPage provide；无 provide 的宿主（Bot 会话面板等）下为 null → 不渲染入口 */
 const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
   'workspace:openSubAgentSession',
   null,
