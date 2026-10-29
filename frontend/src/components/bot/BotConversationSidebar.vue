@@ -85,6 +85,19 @@
                 {{ group.unknownBot ? t('bot.chat.unknownBot') : group.name }}
               </span>
 
+              <!-- 微信个人号：二维码入口常显在名字旁，避免新用户找不到；登录中高亮提示 -->
+              <button
+                v-if="group.platform === 'wechat-personal' && resolveBot(group)"
+                type="button"
+                class="bot-card-qr"
+                :class="{ 'is-pending': botStatusKey(group) === 'connecting' }"
+                :title="t('bot.card.qrCode')"
+                :aria-label="t('bot.card.qrCode')"
+                @click.stop="openQrForGroup(group)"
+              >
+                <QrCode20Regular class="w-4 h-4" />
+              </button>
+
               <div
                 v-if="resolveBot(group)"
                 class="bot-card-more"
@@ -413,6 +426,12 @@ const handleBotCommand = async (group: BotChatGroup, command: string) => {
   else if (command === 'toggle') await toggleRunning(bot)
 }
 
+/** 名字旁的二维码入口（微信个人号）：与菜单里的「登录二维码」走同一事件 */
+const openQrForGroup = (group: BotChatGroup) => {
+  const bot = resolveBot(group)
+  if (bot) emit('qr', bot)
+}
+
 /* ===== 机器人分组拖拽排序（原生 HTML5 DnD，落位语义与 GlobalSidebar 的分组拖拽一致） ===== */
 const dragSourceId = ref<string | null>(null)
 const dropTargetId = ref<string | null>(null)
@@ -535,6 +554,15 @@ async function togglePin(conv: BotChatConversation) {
   --bot-line: color-mix(in srgb, var(--gd-color-text) 12%, transparent);
 }
 
+/* 可交互元素统一手型指针：原生 button 默认是箭头，与全局侧栏的 cursor-pointer 对齐 */
+.bot-chat-sidebar button:not(:disabled) {
+  cursor: pointer;
+}
+
+.bot-chat-sidebar button:disabled {
+  cursor: not-allowed;
+}
+
 .bot-chat-sidebar :deep(.bot-search .el-input__wrapper) {
   height: 30px;
   padding: 0 9px;
@@ -617,6 +645,29 @@ async function togglePin(conv: BotChatConversation) {
 .bot-card-more.is-pending {
   pointer-events: none;
   opacity: 0.5;
+}
+
+/* 微信个人号二维码入口：常显（不像 ⋯ 只在 hover 出现），登录中高亮提示 */
+.bot-card-qr {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--gd-color-text-gray);
+  transition: color var(--bot-duration) var(--bot-ease),
+    background-color var(--bot-duration) var(--bot-ease);
+}
+
+.bot-card-qr:hover {
+  background: var(--bot-bg-hover);
+  color: var(--gd-color-text);
+}
+
+.bot-card-qr.is-pending {
+  color: var(--gd-color-warning);
 }
 
 .bot-card-kebab {
@@ -746,6 +797,7 @@ async function togglePin(conv: BotChatConversation) {
   margin: 2px var(--bot-gutter);
   padding: 5px 6px 5px 24px;
   border-radius: var(--bot-radius);
+  cursor: pointer;
   transition: background-color var(--bot-duration) var(--bot-ease),
     color var(--bot-duration) var(--bot-ease);
 }
