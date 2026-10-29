@@ -56,6 +56,8 @@ import {
 import type { ThinkingEffort } from '../llm-core/thinking/thinking-vocabulary';
 import { ResolvedPluginInfo } from '../plugins/types/plugin.types';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
+import type { ToolPolicy } from '../../common/types/tool-policy';
+import { applyToolPolicy } from '../plugins/utils/tool-policy.util';
 import { RemoteBindingStateService } from '../remote-workspace/remote-binding-state.service';
 import { SessionMetaStore } from './session-meta.store';
 import { mintPlanModeEpoch } from '../../common/utils/plan-mode-epoch.util';
@@ -192,6 +194,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /** 工具范围锁定（瞬态、不入库）：影子轮次等场景仅允许指定插件的工具 */
   private toolScope: string | null = null;
 
+  /** 逐回合工具白名单（瞬态、不入库）：Bot 安全模式按发送者身份注入，只收窄 */
+  private transientToolPolicy: ToolPolicy | null = null;
+
   /** 路径牢笼（瞬态、不入库）：设置后文件工具只能访问该根内的路径，且牢笼内写入不受只读安全模式限制 */
   private pathJail: string | null = null;
 
@@ -228,6 +233,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     // 1. 解析工作目录
     this._workspacePath =
       await this.workspaceService.resolveSessionWorkspaceDir(this.session);
+
+    // 1b. 逐回合安全策略（仅服务端注入的瞬态字段，挂在会话克隆顶层，不落库）
+    this.transientToolPolicy = (this.session?.toolPolicy as ToolPolicy) ?? null;
 
     // 2. 解析模型、合并设置
     const model = await this.resolveModel();
@@ -287,6 +295,15 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       this.resolvedPlugins = await this.pluginManager.resolvePlugins(
         this,
         merged.plugins,
+      );
+    }
+
+    // 6. 安全模式工具白名单（仅服务端注入的逐回合瞬态）：决议结果上收窄，
+    //    enabledTools/allTools/enabledToolKits 三者一致，否则 tool_use 可绕过
+    if (this.transientToolPolicy) {
+      this.resolvedPlugins = applyToolPolicy(
+        this.resolvedPlugins,
+        this.transientToolPolicy,
       );
     }
   }
@@ -846,6 +863,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   getToolScope(): string | null {
     return this.toolScope;
+  }
+
+  /** 逐回合工具白名单（Bot 安全模式）：构造时从会话克隆顶层读取，null = 不限制 */
+  getToolPolicy(): ToolPolicy | null {
+    return this.transientToolPolicy;
   }
 
   setPathJail(root: string | null): void {

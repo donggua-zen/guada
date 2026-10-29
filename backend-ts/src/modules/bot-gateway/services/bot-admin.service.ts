@@ -311,6 +311,7 @@ export class BotAdminService {
       defaultThinkingEffort: instance.defaultThinkingEffort || undefined,
       knowledgeBaseIds:
         (instance.additionalKwargs as any)?.knowledgeBaseIds || [],
+      adminUserIds: instance.adminUserIds ?? [],
     };
   }
 
@@ -371,6 +372,7 @@ export class BotAdminService {
       additionalKwargs: dto.additionalKwargs || null,
       enabled: true,
       status: 'stopped',
+      adminUserIds: dto.adminUserIds ?? [],
     });
     this.emitBotChanged('created', instance.id);
 
@@ -401,6 +403,8 @@ export class BotAdminService {
     if (dto.defaultModelId !== undefined) updateData.defaultModelId = dto.defaultModelId;
     if (dto.defaultThinkingEffort !== undefined) updateData.defaultThinkingEffort = dto.defaultThinkingEffort;
     if (dto.additionalKwargs !== undefined) updateData.additionalKwargs = dto.additionalKwargs;
+    // 管理员/安全模式名单：逐消息动态读取，改后无需重启
+    if (dto.adminUserIds !== undefined) updateData.adminUserIds = dto.adminUserIds;
     if (updateData.defaultModelId !== undefined) {
       assertResolvableModelRef(this.modelStore, updateData.defaultModelId, 'defaultModelId');
     }

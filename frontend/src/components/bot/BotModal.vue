@@ -82,6 +82,20 @@
         </div>
       </el-form-item>
 
+      <!-- 安全与权限 -->
+      <el-divider content-position="left">{{ t('bot.modal.securitySection') }}</el-divider>
+
+      <!-- 管理员用户 ID（多选标签输入） -->
+      <el-form-item :label="t('bot.modal.adminUserIdsLabel')">
+        <el-select v-model="formData.adminUserIds" :placeholder="t('bot.modal.adminUserIdsPlaceholder')" style="width: 100%"
+          multiple filterable allow-create default-first-option no-data-text="">
+          <el-option v-for="id in formData.adminUserIds" :key="id" :label="id" :value="id" />
+        </el-select>
+        <div class="text-xs text-gray-500 mt-1">
+          {{ t('bot.modal.adminUserIdsHint') }}
+        </div>
+      </el-form-item>
+
       <!-- 动态平台配置字段 -->
       <template v-if="selectedPlatform">
         <el-divider content-position="left">{{ t('bot.modal.platformConfig') }}</el-divider>
@@ -273,6 +287,7 @@ const formData = ref({
   defaultModelId: '' as string | null, // null 表示继承自智能体
   defaultThinkingEffort: null as string | null,
   knowledgeBaseIds: [] as string[],
+  adminUserIds: [] as string[],
   // 动态边界：键由后端平台元数据定义，同一键多态绑定 el-input/el-input-number/el-select/el-switch，
   // 各组件 modelValue 契约互斥（string|number / number|null / boolean|...），值类型无法收窄为单一形状
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
@@ -364,6 +379,7 @@ watch(dialogVisible, (visible) => {
         defaultModelId: bot.defaultModelId || null, // null 表示继承自智能体
         defaultThinkingEffort: bot.defaultThinkingEffort || null,
         knowledgeBaseIds: bot.additionalKwargs?.knowledgeBaseIds || [],
+        adminUserIds: bot.adminUserIds || [],
         platformConfig: platformConfig,
         reconnectConfig: {
           enabled: bot.reconnectEnabled,
@@ -411,6 +427,7 @@ const resetForm = () => {
     defaultModelId: null, // null 表示继承自智能体
     defaultThinkingEffort: null,
     knowledgeBaseIds: [],
+    adminUserIds: [],
     platformConfig: {},
     reconnectConfig: {
       enabled: true,
@@ -500,7 +517,8 @@ const handleSubmit = async () => {
           reconnectConfig: formData.value.reconnectConfig,
           additionalKwargs: {
             knowledgeBaseIds: formData.value.knowledgeBaseIds.length > 0 ? formData.value.knowledgeBaseIds : undefined
-          }
+          },
+          adminUserIds: formData.value.adminUserIds,
         }
         await botStore.updateBot(props.bot.id, updateData)
       } else {
@@ -516,7 +534,8 @@ const handleSubmit = async () => {
           autoStart: formData.value.autoStart,
           additionalKwargs: {
             knowledgeBaseIds: formData.value.knowledgeBaseIds.length > 0 ? formData.value.knowledgeBaseIds : undefined
-          }
+          },
+          adminUserIds: formData.value.adminUserIds,
         }
         await botStore.createBot(createData)
       }

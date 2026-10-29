@@ -131,12 +131,18 @@ export interface BotConfig {
   defaultThinkingEffort?: string;
   /**
    * 扩展配置（如知识库ID列表等）
-   * 
+   *
    * 注意：此字段在每次处理消息时动态读取，修改后无需重启机器人
    */
   additionalKwargs?: Record<string, any>;
   /** 关联的知识库ID列表(从 additionalKwargs 中读取) */
   knowledgeBaseIds?: string[];
+  /**
+   * 管理员（自己人）的平台用户 ID 白名单。
+   * 命中的发送者使用完整能力；未命中/未配置一律按安全模式（工具白名单）运行。
+   * 逐消息动态读取，修改后无需重启机器人。
+   */
+  adminUserIds?: string[];
 }
 
 /**

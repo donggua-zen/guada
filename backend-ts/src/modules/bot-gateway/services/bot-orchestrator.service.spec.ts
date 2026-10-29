@@ -563,3 +563,149 @@ describe('BotOrchestrator - 新建会话 SSE 广播', () => {
     );
   });
 });
+
+describe('BotOrchestrator - 按发送者身份强制安全模式', () => {
+  let deps: ReturnType<typeof createMockDeps>;
+  let adapter: MockNonStreamingAdapter;
+  let orchestrator: BotOrchestrator;
+  let instance: any;
+
+  beforeEach(async () => {
+    deps = createMockDeps();
+    adapter = new MockNonStreamingAdapter();
+    await adapter.connect(createBotConfig());
+    orchestrator = new BotOrchestrator(
+      deps.chatRunner as any,
+      deps.sessionMapper as any,
+      deps.workspaceService as any,
+      deps.eventBus as any,
+    );
+  });
+
+  afterEach(() => {
+    orchestrator.cleanup();
+  });
+
+  function setup(config: BotConfig) {
+    instance = { adapter, config, status: BotRuntimeStatus.CONNECTED };
+  }
+
+  /** enqueue 后直接调私有 handleIncomingMessage，跳过 3s 防抖（不 await 回合完成） */
+  async function processDirectly(
+    message: BotMessage,
+    messages: BotMessage[] = [message],
+  ) {
+    await orchestrator.enqueueMessage('bot-1', message, instance);
+    // 与 enqueueMessage 相同的 externalId 规则：私聊 nativeId=senderId，群聊=conversationId
+    const isGroup = message.sourceType === 'group';
+    const nativeId = isGroup ? message.conversationId : message.senderId;
+    const queueKey = `bot-1:${buildExternalId('mock', isGroup ? 'group' : 'private', nativeId)}`;
+    const priv = orchestrator as any;
+    priv.handleIncomingMessage(queueKey, 'bot-1', messages, instance);
+    await flushPromises();
+  }
+
+  it('未配置管理员：私聊消息注入安全模式工具策略，source 带 isAdmin=false', async () => {
+    setup(createBotConfig());
+
+    await processDirectly(createBotMessage());
+
+    expect(deps.chatRunner.startStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settingsOverride: expect.objectContaining({
+          internalToolPolicy: expect.objectContaining({
+            allowedTools: expect.arrayContaining(['web_search', 'kb_search']),
+          }),
+        }),
+        source: expect.objectContaining({
+          senderId: 'user-123',
+          isAdmin: false,
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('管理员发送：不注入工具策略，source.isAdmin=true', async () => {
+    const config = {
+      ...createBotConfig(),
+      adminUserIds: ['user-123'],
+    };
+    setup(config);
+
+    await processDirectly(createBotMessage());
+
+    const params = deps.chatRunner.startStream.mock.calls[0][0];
+    expect(params.settingsOverride).toBeUndefined();
+    expect(params.source).toMatchObject({ senderId: 'user-123', isAdmin: true });
+  });
+
+  it('安全模式策略按前缀放行全部 MCP（不额外收窄 server）', async () => {
+    setup(createBotConfig());
+
+    await processDirectly(createBotMessage());
+
+    const policy =
+      deps.chatRunner.startStream.mock.calls[0][0].settingsOverride
+        .internalToolPolicy;
+    expect(policy.allowedToolPrefixes).toEqual(['mcp__']);
+  });
+
+  it('群聊多发送者：只要有一个非管理员，整批按安全模式执行', async () => {
+    const config = {
+      ...createBotConfig(),
+      adminUserIds: ['admin-1'],
+    };
+    setup(config);
+
+    const messages = [
+      createBotMessage({
+        messageId: 'm1',
+        senderId: 'admin-1',
+        sourceType: 'group',
+        conversationId: 'group-1',
+      }),
+      createBotMessage({
+        messageId: 'm2',
+        senderId: 'guest-1',
+        sourceType: 'group',
+        conversationId: 'group-1',
+      }),
+    ];
+
+    await processDirectly(messages[0], messages);
+
+    const params = deps.chatRunner.startStream.mock.calls[0][0];
+    expect(params.source).toMatchObject({ isAdmin: false });
+    expect(params.settingsOverride?.internalToolPolicy).toBeTruthy();
+  });
+
+  it('群聊全部为管理员：不注入策略', async () => {
+    const config = {
+      ...createBotConfig(),
+      adminUserIds: ['admin-1', 'admin-2'],
+    };
+    setup(config);
+
+    const messages = [
+      createBotMessage({
+        messageId: 'm1',
+        senderId: 'admin-1',
+        sourceType: 'group',
+        conversationId: 'group-1',
+      }),
+      createBotMessage({
+        messageId: 'm2',
+        senderId: 'admin-2',
+        sourceType: 'group',
+        conversationId: 'group-1',
+      }),
+    ];
+
+    await processDirectly(messages[0], messages);
+
+    expect(
+      deps.chatRunner.startStream.mock.calls[0][0].settingsOverride,
+    ).toBeUndefined();
+  });
+});

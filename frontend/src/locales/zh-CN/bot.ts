@@ -62,6 +62,12 @@ export default {
     deleteFailed: '删除失败',
     group: '群聊',
     private: '私聊',
+    adminBadge: '管理员',
+    setAdmin: '设为管理员',
+    unsetAdmin: '取消管理员',
+    setAdminSuccess: '已更新管理员名单',
+    setAdminFailed: '更新管理员失败',
+    safeModeHint: '当前用户非管理员，已启用安全模式：仅可使用网络搜索、知识库等只读能力。',
     localOnlyHint: '当前为本地续聊：消息会写入该 Bot 会话，但不会发送到 IM 用户。',
     botOfflineHint: '机器人当前离线，AI 回复仍会在本地生成。',
     deletedBotHint: '机器人已删除，仅可查看历史记录。',
@@ -121,6 +127,11 @@ export default {
     kbLabel: '引用知识库',
     kbPlaceholder: '请选择知识库（可多选）',
     kbHint: 'AI回复时会引用这些知识库的内容',
+    // 安全与权限
+    securitySection: '安全与权限',
+    adminUserIdsLabel: '管理员用户 ID',
+    adminUserIdsPlaceholder: '输入平台用户 ID 后回车（可多个）',
+    adminUserIdsHint: '命中的用户可使用 Bot 的完整能力；未配置时所有用户按安全模式运行（仅搜索、知识库等只读工具）',
     // 平台配置
     platformConfig: '平台配置',
     // 高级配置

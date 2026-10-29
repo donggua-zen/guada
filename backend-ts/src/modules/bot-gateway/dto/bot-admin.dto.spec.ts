@@ -12,6 +12,7 @@ import { ChatRunnerService } from '../../chat/chat-runner.service';
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
 import { CreateBotDto, SubmitBotVerificationDto } from './bot-admin.dto';
 import { BotStatus } from '../interfaces/bot-platform.interface';
+import { EventBusService } from '../../../common/events/event-bus.service';
 
 describe('CreateBotDto validation', () => {
   it('should accept a valid platform', () => {
@@ -62,6 +63,7 @@ describe('BotAdminService.createInstance platform validation', () => {
         { provide: BotFileStore, useValue: botStore },
         { provide: SessionMapperService, useValue: { enrichSession: jest.fn() } },
         { provide: ChatRunnerService, useValue: { startStream: jest.fn() } },
+        { provide: EventBusService, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 
@@ -139,6 +141,7 @@ describe('BotAdminService 数字配对码', () => {
         { provide: BotFileStore, useValue: { findById: jest.fn(), list: jest.fn().mockReturnValue([]) } },
         { provide: SessionMapperService, useValue: { enrichSession: jest.fn() } },
         { provide: ChatRunnerService, useValue: { startStream: jest.fn() } },
+        { provide: EventBusService, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 

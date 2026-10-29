@@ -13,6 +13,10 @@
     <span class="title-name truncate min-w-0">{{ displayName }}</span>
     <span v-if="sourceType" class="title-badge">{{ sourceLabel }}</span>
     <span
+      v-if="isAdminBadge"
+      class="title-badge title-badge--admin"
+    >{{ t('bot.chat.adminBadge') }}</span>
+    <span
       v-if="online !== null"
       class="status-dot"
       :class="online ? 'online' : 'offline'"
@@ -26,6 +30,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatTime } from '@/utils/formatTime'
+import { useBotStore } from '@/stores/bot'
 import type { BotChatConversation, BotSessionDetail } from '@/types/bot'
 import type { Session } from '@/types/session'
 import BotUserAvatar from './BotUserAvatar.vue'
@@ -39,6 +44,16 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const botStore = useBotStore()
+
+/** 私聊发送者在 Bot 管理员名单里时显示徽标 */
+const isAdminBadge = computed(() => {
+  const conv = props.conversation
+  if (!conv?.botId || !conv.nativeId) return false
+  if (conv.sourceType !== 'private') return false
+  const bot = botStore.getBotById(conv.botId)
+  return (bot?.adminUserIds ?? []).includes(conv.nativeId)
+})
 
 const platform = computed(
   () =>
@@ -122,6 +137,11 @@ const tooltip = computed(() => {
   white-space: nowrap;
   color: var(--gd-color-primary);
   background: var(--gd-color-primary-100);
+}
+
+.title-badge--admin {
+  color: var(--gd-color-success);
+  background: color-mix(in srgb, var(--gd-color-success) 15%, transparent);
 }
 
 .status-dot {

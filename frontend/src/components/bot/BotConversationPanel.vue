@@ -62,6 +62,7 @@ import { useI18n } from 'vue-i18n'
 import { ElButton, ElIcon } from 'element-plus'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
+import { useBotStore } from '@/stores/bot'
 import type { BotSessionDetail } from '@/types/bot'
 import type { Session } from '@/types/session'
 import type { ChatStreamParams, ChatStreamResponse } from '@/services/modules/ChatStreamService'
@@ -69,6 +70,8 @@ import type { ChatStreamParams, ChatStreamResponse } from '@/services/modules/Ch
 const props = defineProps<{
   detail: BotSessionDetail | null
   session: Session | null
+  /** 会话聚合行：用于定位私聊发送者身份（安全模式横幅） */
+  conversation: import('@/types/bot').BotChatConversation | null
   loading: boolean
   error: string | null
   sendHandler: (params: ChatStreamParams) => Promise<ChatStreamResponse>
@@ -79,7 +82,10 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const botStore = useBotStore()
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null)
+
+const conversation = computed(() => props.conversation)
 
 const bannerKind = computed<'warning' | 'info'>(() => {
   if (props.detail?.warning) return 'warning'
@@ -92,8 +98,21 @@ const bannerText = computed(() => {
   if (props.detail.warning) return props.detail.warning
   if (!props.detail.canReply) return t('bot.chat.readonlyHint')
   if (props.detail.bot && !props.detail.bot.online) return t('bot.chat.botOfflineHint')
+  // 私聊非管理员（不在 Bot 管理员名单）：提示已进入安全模式
+  if (isSafeModeConversation.value) return t('bot.chat.safeModeHint')
   // 正常可回复时不展示「本地续聊」提示
   return ''
+})
+
+/** 私聊且发送者不在 Bot 管理员名单（安全模式生效；名单未配置时全部命中） */
+const isSafeModeConversation = computed(() => {
+  const conv = conversation.value
+  if (!conv || conv.sourceType !== 'private' || !conv.nativeId || !conv.botId) {
+    return false
+  }
+  const bot = botStore.getBotById(conv.botId)
+  if (!bot) return false
+  return !(bot.adminUserIds ?? []).includes(conv.nativeId)
 })
 
 /** 供父页在清空记录后强制 ChatPanel 重新拉事件页 */

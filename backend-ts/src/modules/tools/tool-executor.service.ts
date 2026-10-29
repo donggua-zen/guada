@@ -19,6 +19,7 @@ import { ISessionContext } from "../chat/session-context";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { AskDeniedError } from "../../common/types/ask.types";
 import { getRetiredToolMessage } from "./retired-tools";
+import { isToolAllowedByPolicy } from "../../common/types/tool-policy";
 
 /**
  * 工具执行器
@@ -250,6 +251,21 @@ export class ToolExecutor {
           isError: true,
         };
       }
+    }
+
+    // 逐回合安全策略（Bot 安全模式）兜底门：策略在决议结果上已过滤，
+    // 这里再拦一次，防御未来新增的注册/调用路径绕过决议快照。
+    const toolPolicy = session.getToolPolicy?.();
+    if (toolPolicy && !isToolAllowedByPolicy(toolPolicy, toolEntry)) {
+      this.logger.warn(
+        `Tool policy denied: session=${session.sessionId} bot=${session.botId ?? "-"} tool=${fullToolName}`,
+      );
+      return {
+        toolCallId,
+        name: fullToolName,
+        content: `Tool "${fullToolName}" is not allowed in the current safe mode`,
+        isError: true,
+      };
     }
 
     // 计划模式门（协作状态的强制力所在）：开启后只放行只读工具与显式逃生舱。

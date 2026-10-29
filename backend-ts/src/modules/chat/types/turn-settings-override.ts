@@ -4,6 +4,7 @@ import {
   ALL_SANDBOX_MODES,
   normalizeSandboxMode,
 } from "../../../common/services/sandbox-policy";
+import type { ToolPolicy } from "../../../common/types/tool-policy";
 
 /**
  * 回合级设置覆盖（排队消息补发时使用）。
@@ -21,6 +22,11 @@ export interface TurnSettingsOverride {
   maxTokensLimit?: number | null;
   sandboxMode?: SandboxMode;
   planEnabled?: boolean;
+  /**
+   * 仅服务端内部使用（Bot 按发送者身份注入安全模式）。
+   * 不参与 normalizeTurnSettingsOverride，HTTP 客户端无法设置；不落库。
+   */
+  internalToolPolicy?: ToolPolicy;
 }
 
 /**
@@ -116,6 +122,12 @@ export function applyTurnSettingsOverride<T extends Record<string, any>>(
     if (override.planEnabled === true && !settings.planModeEpoch) {
       settings.planModeEpoch = mintPlanModeEpoch();
     }
+  }
+
+  // 仅服务端构造的安全策略：挂会话顶层（瞬态字段通道，与 sandboxMode 的
+  // settings 路径分离），避免任何把它写进持久化 settings 的可能。
+  if (override.internalToolPolicy) {
+    next.toolPolicy = override.internalToolPolicy;
   }
 
   next.settings = settings;

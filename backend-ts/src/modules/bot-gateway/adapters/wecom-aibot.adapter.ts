@@ -258,11 +258,12 @@ export class WeComAiBotAdapter extends BaseBotAdapter {
     const body = frame.body;
 
     // 提取发送者信息
+    // 注：SDK 类型只有 from.userid（没有 name）；name 可能是旧版本字段或网关注入，取不到就退化为 Unknown
     const senderId = body.from?.userid || 'unknown';
     const senderName = body.from?.name || 'Unknown';
 
-    // 提取会话 ID
-    const conversationId = body.conversation_id || senderId;
+    // 提取会话 ID：SDK 协议是 chatid（conversation_id 为旧版兼容回退）
+    const conversationId = body.chatid || body.conversation_id || senderId;
 
     // 提取消息内容
     let content = '';
@@ -317,9 +318,9 @@ export class WeComAiBotAdapter extends BaseBotAdapter {
    * 检测消息来源类型
    */
   private detectSourceType(body: any): 'private' | 'group' | 'channel' {
-    // 根据 conversation_type 判断
-    // single: 私聊, group: 群聊
-    return body.conversation_type === 'group' ? 'group' : 'private';
+    // SDK 协议是 chattype（single/group）；conversation_type 为旧版兼容回退
+    const chatType = body.chattype || body.conversation_type;
+    return chatType === 'group' ? 'group' : 'private';
   }
 
   /**

@@ -216,6 +216,14 @@
                         <PinOff20Regular v-else class="w-4 h-4 mr-2 inline-block" />
                         {{ conv.pinned ? t('bot.chat.unpin') : t('bot.chat.pin') }}
                       </DropdownMenuItem>
+                      <!-- 私聊才能精确定位发送者身份；群聊成员 ID 需在 Bot 配置里手工维护 -->
+                      <DropdownMenuItem
+                        v-if="conv.sourceType === 'private' && conv.nativeId && conv.botId"
+                        command="toggle-admin"
+                      >
+                        <PersonCircle20Regular class="w-4 h-4 mr-2 inline-block" />
+                        {{ isConversationAdmin(conv) ? t('bot.chat.unsetAdmin') : t('bot.chat.setAdmin') }}
+                      </DropdownMenuItem>
                       <template v-if="conv.sessionCount > 1">
                         <DropdownMenuItem disabled>
                           <History20Regular class="w-4 h-4 mr-2 inline-block" />
@@ -298,6 +306,7 @@ import {
   Delete20Regular,
   History20Regular,
   MoreHorizontal20Filled,
+  PersonCircle20Regular,
   Pin20Regular,
   PinOff20Regular,
   Play20Regular,
@@ -327,6 +336,7 @@ const emit = defineEmits<{
   select: [conversation: BotChatConversation, sessionId?: string]
   clearConversation: [conversation: BotChatConversation]
   deleteConversation: [conversation: BotChatConversation]
+  toggleAdmin: [conversation: BotChatConversation]
   retry: []
   loadMore: [botId: string]
   create: []
@@ -478,7 +488,18 @@ const handleConversationCommand = (conv: BotChatConversation, command: string) =
     emit('deleteConversation', conv)
     return
   }
+  if (command === 'toggle-admin') {
+    emit('toggleAdmin', conv)
+    return
+  }
   emit('select', conv, command)
+}
+
+/** 该私聊会话的发送者是否在 Bot 的管理员名单里 */
+const isConversationAdmin = (conv: BotChatConversation) => {
+  if (!conv.botId || !conv.nativeId) return false
+  const bot = botStore.getBotById(conv.botId)
+  return (bot?.adminUserIds ?? []).includes(conv.nativeId)
 }
 
 /** 置顶写在该用户默认打开的那个会话上，聚合行按「任一会话置顶」判定 */
@@ -498,8 +519,7 @@ async function togglePin(conv: BotChatConversation) {
 </script>
 
 <style scoped>
-/* 局部视觉原语：hover 与选中在侧栏共用 token 里是同一个值，
-   这里按 --gd-color-text 派生两档底色，深浅主题都能自动成立 */
+/* 局部视觉原语：hover / 选中直接复用全局侧边栏 token，保持跨模块一致 */
 .bot-chat-sidebar {
   /* ScrollContainer 的 scrollbar-gutter: stable both-edges 已在两侧各留 10px，
      这里只补 2px 才凑成与搜索框一致的 12px 内缩 */
@@ -507,8 +527,9 @@ async function togglePin(conv: BotChatConversation) {
   --bot-radius: 9px;
   --bot-duration: 0.16s;
   --bot-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --bot-bg-hover: color-mix(in srgb, var(--gd-color-text) 4%, transparent);
-  --bot-bg-active: color-mix(in srgb, var(--gd-color-text) 7.5%, transparent);
+  --bot-bg-hover: var(--gd-color-sidebar-bg-hover);
+  --bot-bg-active: var(--gd-color-sidebar-bg-active);
+  --bot-text-hover: var(--gd-color-sidebar-text-hover);
   --bot-focus: color-mix(in srgb, var(--gd-color-primary) 45%, transparent);
   /* 层级线必须半透明：不透明灰压在选中底色上只差 4 级明度，会看不见 */
   --bot-line: color-mix(in srgb, var(--gd-color-text) 12%, transparent);
@@ -731,6 +752,7 @@ async function togglePin(conv: BotChatConversation) {
 
 .conversation-row:hover {
   background: var(--bot-bg-hover);
+  color: var(--bot-text-hover);
 }
 
 .conversation-row.is-active {
@@ -855,11 +877,12 @@ async function togglePin(conv: BotChatConversation) {
   justify-content: center;
   border-radius: 6px;
   color: var(--gd-color-text-gray);
-  transition: background-color var(--bot-duration) var(--bot-ease);
+  transition: color var(--bot-duration) var(--bot-ease);
 }
 
+/* 与全局侧栏一致：hover 只改文字/图标色（深色主题下为浅白），不加边框或底色 */
 .history-trigger:hover {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gd-color-success) 18%, transparent);
+  color: var(--bot-text-hover);
 }
 
 .load-more {

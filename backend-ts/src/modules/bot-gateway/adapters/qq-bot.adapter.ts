@@ -328,7 +328,12 @@ export class QQBotAdapter extends BaseBotAdapter {
     // 根据 QQ 官方 API 的事件结构调整
     return {
       messageId: rawEvent.id || rawEvent.msg_id,
-      senderId: rawEvent.author?.id || rawEvent.user_openid || rawEvent.user_id,
+      // 群消息事件 author 只有 member_openid（无 id），必须兜底，否则群聊发送者身份丢失
+      senderId:
+        rawEvent.author?.id ||
+        rawEvent.author?.member_openid ||
+        rawEvent.user_openid ||
+        rawEvent.user_id,
       senderName:
         rawEvent.author?.username || rawEvent.member?.nickname || "Unknown",
       // 频道消息的 author 带有头像；群聊/私聊事件通常只有 openid

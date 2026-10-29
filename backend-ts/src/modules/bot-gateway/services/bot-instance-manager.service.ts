@@ -132,6 +132,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
           defaultModelId: bot.defaultModelId || undefined,
           defaultThinkingEffort: bot.defaultThinkingEffort,
           knowledgeBaseIds,
+          adminUserIds: bot.adminUserIds ?? [],
         };
 
         try {
@@ -425,6 +426,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       defaultModelId: botData.defaultModelId || undefined,
       defaultThinkingEffort: botData.defaultThinkingEffort,
       knowledgeBaseIds,
+      adminUserIds: botData.adminUserIds ?? [],
     };
 
     // 更新内存中的配置（直接修改对象属性，保持引用不变）

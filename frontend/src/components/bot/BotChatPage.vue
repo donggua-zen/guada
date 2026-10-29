@@ -36,6 +36,7 @@
         @select="selectConversation"
         @clear-conversation="handleClear"
         @delete-conversation="handleDelete"
+        @toggle-admin="handleToggleAdmin"
         @retry="loadGroups()"
         @load-more="handleLoadMore"
         @create="openCreate"
@@ -53,6 +54,7 @@
         ref="conversationPanelRef"
         :detail="activeDetail"
         :session="activeSession"
+        :conversation="activeConversation"
         :loading="detailLoading"
         :error="detailError"
         :send-handler="sendHandler"
@@ -330,9 +332,41 @@ async function handleClear(conversation?: BotChatConversation) {
   }
 }
 
+/**
+ * 私聊会话快捷设置/取消管理员：只更新 adminUserIds，不触发 Bot 重启。
+ * 群聊成员 ID 无法从会话行定位，需在 Bot 配置弹窗里手工维护。
+ */
+async function handleToggleAdmin(conversation: BotChatConversation) {
+  const botId = conversation.botId
+  const senderId = conversation.nativeId
+  if (!botId || !senderId) return
+  const bot = botStore.getBotById(botId)
+  if (!bot) return
+
+  const current = bot.adminUserIds ?? []
+  const isAdmin = current.includes(senderId)
+  const next = isAdmin
+    ? current.filter((id) => id !== senderId)
+    : [...current, senderId]
+
+  try {
+    await apiService.updateBotInstance(botId, { adminUserIds: next })
+    await botStore.loadBotInstances({ silent: true })
+    ElMessage.success(
+      isAdmin ? t('bot.chat.unsetAdminSuccess') : t('bot.chat.setAdminSuccess'),
+    )
+    // 打开中的会话头部可能展示管理员徽标，重读一次
+    if (activeSessionId.value && activeConversation.value?.botId === botId) {
+      await loadDetail(activeSessionId.value)
+    }
+  } catch (err) {
+    console.error('更新 Bot 管理员失败:', err)
+    ElMessage.error(getErrorMessage(err) || t('bot.chat.setAdminFailed'))
+  }
+}
+
 /** 删除指定会话（侧栏会话行菜单）；未传时回退到当前打开会话 */
-async function handleDelete(conversation?: BotChatConversation) {
-  const sessionId = conversation?.sessionId ?? activeSessionId.value
+async function handleDelete(conversation?: BotChatConversation) {  const sessionId = conversation?.sessionId ?? activeSessionId.value
   if (!sessionId) return
   const ok = await confirm(
     t('bot.chat.deleteTitle'),

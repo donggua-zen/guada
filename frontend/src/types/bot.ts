@@ -45,6 +45,8 @@ export interface BotInstance {
   additionalKwargs?: {
     knowledgeBaseIds?: string[];
   };
+  /** 管理员（自己人）的平台用户 ID 白名单；未配置时所有发送者按安全模式运行 */
+  adminUserIds: string[];
   status: 'stopped' | 'running' | 'error' | 'connecting';
   /** 后端 BotStatus 枚举实际返回小写（connected/connecting/...），此处放宽避免契约漂移 */
   runtimeStatus: string | null;
@@ -156,6 +158,7 @@ export interface CreateBotRequest {
   additionalKwargs?: {
     knowledgeBaseIds?: string[];
   };
+  adminUserIds?: string[];
   autoStart?: boolean;
 }
 
@@ -173,4 +176,5 @@ export interface UpdateBotRequest {
   additionalKwargs?: {
     knowledgeBaseIds?: string[];
   };
+  adminUserIds?: string[];
 }

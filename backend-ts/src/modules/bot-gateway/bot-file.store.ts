@@ -48,6 +48,11 @@ export interface BotFileInstance {
    * 旧 YAML 缺省解析为 0，未拖拽过的实例保持原有加载序。
    */
   sortOrder: number;
+  /**
+   * 管理员（自己人）的平台用户 ID 白名单。
+   * 命中的发送者使用 Bot 绑定的完整能力；未命中/未配置一律按安全模式运行。
+   */
+  adminUserIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -193,6 +198,7 @@ export class BotFileStore {
       lastError: data.lastError ?? null,
       additionalKwargs: data.additionalKwargs ?? null,
       sortOrder: data.sortOrder ?? this.nextSortOrder(),
+      adminUserIds: data.adminUserIds ?? [],
       createdAt: data.createdAt ?? now,
       updatedAt: now,
     };
@@ -311,6 +317,7 @@ export class BotFileStore {
       lastError: this.str(raw.lastError),
       additionalKwargs: this.obj(raw.additionalKwargs),
       sortOrder: this.num(raw.sortOrder, 0),
+      adminUserIds: this.strArray(raw.adminUserIds),
       createdAt: iso(raw.createdAt) ?? now,
       updatedAt: iso(raw.updatedAt) ?? now,
     };
@@ -318,6 +325,19 @@ export class BotFileStore {
 
   private str(value: any): string | null {
     return typeof value === "string" && value.length > 0 ? value : null;
+  }
+
+  /** 字符串数组解析（管理员/安全模式名单）：过滤空串、去重；非法输入归一为空数组 */
+  private strArray(value: any): string[] {
+    if (!Array.isArray(value)) return [];
+    return Array.from(
+      new Set(
+        value
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
+    );
   }
 
   private num(value: any, fallback: number): number {

@@ -17,6 +17,7 @@ import { EventBusService } from "../../../common/events/event-bus.service";
 import { buildExternalId } from "../utils/external-id";
 import { isMeaningfulSenderName } from "../utils/bot-user";
 import { StreamReplyCoalescer } from "../utils/stream-reply-coalescer";
+import { buildSafeModeToolPolicy } from "../constants/safe-mode-policy";
 
 /**
  * 机器人消息编排器
@@ -292,6 +293,24 @@ export class BotOrchestrator {
     const firstMessage = messages[0];
     let coalescer: StreamReplyCoalescer | null = null;
 
+    // ── 管理员判定（安全模式的唯一依据）──
+    // fail-closed：未配置管理员时所有发送者按非管理员处理。
+    // 群聊一批消息可能来自多个发送者，取最严格：全部命中白名单才视为管理员。
+    const adminSet = new Set(
+      (config.adminUserIds ?? [])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean),
+    );
+    const isAdmin =
+      messages.length > 0 &&
+      messages.every((m) => m.senderId && adminSet.has(m.senderId));
+    const safeModeSettingsOverride = isAdmin
+      ? undefined
+      : { settingsOverride: { internalToolPolicy: buildSafeModeToolPolicy() } };
+    this.logger.log(
+      `Bot ${botId} sender=${firstMessage.senderId} isAdmin=${isAdmin} (admins=${adminSet.size})`,
+    );
+
     const baseReply = {
       conversationId: firstMessage.conversationId,
       replyToMessageId: firstMessage.messageId,
@@ -455,8 +474,17 @@ export class BotOrchestrator {
                 content: mergedContent,
                 knowledgeBaseIds: config.knowledgeBaseIds,
               },
-              source: { origin: "bot", platform: config.platform, botId },
+              // source 会并入用户消息 metadata 落库，senderId/isAdmin 供审计
+              source: {
+                origin: "bot",
+                platform: config.platform,
+                botId,
+                senderId: firstMessage.senderId,
+                senderName: firstMessage.senderName,
+                isAdmin,
+              },
               preloadedSession: session,
+              ...safeModeSettingsOverride,
             },
             {
               onEvent: (chunk) => {

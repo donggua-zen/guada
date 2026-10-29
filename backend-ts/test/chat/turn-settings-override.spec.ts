@@ -140,4 +140,32 @@ describe('applyTurnSettingsOverride', () => {
     );
     expect(effective.settings.sandboxMode).toBe('read-only');
   });
+
+  it('internalToolPolicy：apply 写到克隆顶层，不进 settings', () => {
+    const policy = { allowedTools: ['web_search'], allowedToolkits: ['mcp_alpha'] };
+    const original = session();
+    const effective = applyTurnSettingsOverride(original, {
+      internalToolPolicy: policy,
+    } as any);
+
+    expect((effective as any).toolPolicy).toEqual(policy);
+    expect((effective.settings as any).toolPolicy).toBeUndefined();
+    // 不修改入参
+    expect((original as any).toolPolicy).toBeUndefined();
+  });
+
+  it('internalToolPolicy：未传时不写 toolPolicy 键', () => {
+    const effective = applyTurnSettingsOverride(session(), { modelId: 'm' });
+    expect((effective as any).toolPolicy).toBeUndefined();
+  });
+});
+
+describe('internalToolPolicy（仅服务端注入，HTTP 不可写）', () => {
+  it('normalize 不解析 internalToolPolicy：HTTP 客户端无法注入', () => {
+    expect(
+      normalizeTurnSettingsOverride({
+        internalToolPolicy: { allowedTools: ['web_search'] },
+      }),
+    ).toBeUndefined();
+  });
 });

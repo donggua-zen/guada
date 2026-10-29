@@ -54,6 +54,13 @@ export class CreateBotDto {
   @IsOptional()
   @IsBoolean()
   autoStart?: boolean;
+
+  /** 管理员（自己人）的平台用户 ID 白名单；未配置时所有发送者按安全模式运行 */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  adminUserIds?: string[];
+
 }
 
 /**
@@ -92,6 +99,11 @@ export class UpdateBotDto {
   @IsOptional()
   @IsObject()
   additionalKwargs?: any;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  adminUserIds?: string[];
 }
 
 /**

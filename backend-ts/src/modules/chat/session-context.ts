@@ -133,6 +133,11 @@ export interface ISessionContext {
   /** 读取当前工具范围锁定 */
   getToolScope(): string | null;
   /**
+   * 逐回合工具白名单（瞬态、不入库）：Bot 安全模式按发送者身份注入的只收窄策略。
+   * null = 不限制。决议结果与执行器都以此为准。
+   */
+  getToolPolicy?(): import("../../common/types/tool-policy").ToolPolicy | null;
+  /**
    * 路径牢笼（瞬态、不入库，正交于安全模式）。
    *
    * 设置后文件工具只能访问该根目录内的路径（读/写/编辑/glob/grep 一律受限），
