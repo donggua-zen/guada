@@ -334,6 +334,12 @@ function handleCreateWebview(_event: unknown, data: WebviewCreatePayload): void 
     metadata: data.metadata,
   })
 
+  // 人类打开的网页默认「自适应」视口（单页覆盖：跟随预览面板，AI 窗口不带此标记）。
+  // 全局默认已是 adaptive 时不落覆盖项（跟随默认语义）；预览工具栏后续手动改固定会替换该项。
+  if (data.metadata?.openedBy === "user") {
+    store.setWebviewAdaptive(data.windowId, true)
+  }
+
   // 新建标签：属于当前会话的窗口，根据设置决定是否自动展开侧边栏。
   // 说明：这是 AI 路径唯一的确定性触发源（主进程创建 webview 后不会主动 setActive）。
   // 用户路径（previewUrl/createNewBrowserWindow）会再幂等执行一次 selectTab，无害。

@@ -2464,7 +2464,10 @@ function setupIpcHandlers() {
   // 创建新窗口
   ipcMain.handle("browser:create-window", async (_, { url, metadata }) => {
     try {
-      const windowInfo = await windowManager!.createWindow(url, metadata);
+      // 人类路径唯一漏斗（侧边栏/概览面板新建、聊天内点链接都走本 IPC）：
+      // 打标记供前端区分——AI 打开的网页走 bridge 内部 createWindow，不经过这里。
+      const meta = { ...(metadata || {}), openedBy: "user" };
+      const windowInfo = await windowManager!.createWindow(url, meta);
       return { success: true, window: windowInfo };
     } catch (error: any) {
       log.error("创建窗口失败:", error.message);

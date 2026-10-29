@@ -210,4 +210,37 @@ describe("browserWebview viewport", () => {
     expect(store.frozenAdaptiveSizes.size).toBe(0);
     expect(store.lastAdaptiveSize).toEqual({ width: 800, height: 900 });
   });
+
+  // ── 人类打开的网页默认自适应（BrowserWebviewLayer.handleCreateWebview 按标记应用）──
+
+  it("人类窗口（openedBy=user 标记）：单页覆盖生效，视口跟随面板", () => {
+    const store = useBrowserWebviewStore();
+    addWindow(store);
+    store.setWebviewAdaptive(WID, true); // handleCreateWebview 对 openedBy=user 的应用
+
+    expect(store.getViewportMode(WID)).toBe("adaptive");
+    store.setPreviewRect({ x: 0, y: 0, width: 900, height: 1000 });
+    expect(store.getViewportSize(WID)).toEqual({ width: 900, height: 1000 });
+  });
+
+  it("AI 窗口（无标记）：跟随全局默认 fixed，不受人类默认影响", () => {
+    const store = useBrowserWebviewStore();
+    addWindow(store); // 不调用 setWebviewAdaptive
+
+    expect(store.getViewportMode(WID)).toBe("fixed");
+    expect(store.getViewportSize(WID)).toEqual({ width: 1280, height: 720 });
+  });
+
+  it("全局默认已是自适应时，人类窗口不落覆盖项（跟随默认语义）", () => {
+    const store = useBrowserWebviewStore();
+    addWindow(store);
+    store.setViewportAdaptive(true);
+    store.setWebviewAdaptive(WID, true);
+
+    expect(store.viewportOverrides.has(WID)).toBe(false);
+    expect(store.getViewportMode(WID)).toBe("adaptive");
+    // 全局默认后续变化时自动跟随
+    store.setViewportAdaptive(false);
+    expect(store.getViewportMode(WID)).toBe("fixed");
+  });
 });
