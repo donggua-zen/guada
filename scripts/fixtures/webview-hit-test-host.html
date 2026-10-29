@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Webview Hit Test Host</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #fff; }
+    #underlying {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 420px;
+      height: 320px;
+      z-index: 1;
+      background: #0a0;
+      color: #fff;
+      border: 0;
+    }
+    /* 复刻 BrowserWebviewLayer.vue 的层叠与命中测试规则 */
+    .browser-webview-layer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 40;
+    }
+    .webview-wrapper { position: fixed; overflow: hidden; }
+    .webview-wrapper webview {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: flex;
+      pointer-events: none;
+    }
+    .webview-wrapper.is-interactive webview { pointer-events: auto; }
+    .webview-wrapper.renderable {
+      visibility: visible;
+      z-index: -1;
+      left: 0;
+      top: 0;
+      width: 1280px;
+      height: 720px;
+      opacity: 0.001;
+      pointer-events: none;
+      transform-origin: 0 0;
+    }
+    .webview-wrapper.is-interactive {
+      visibility: visible;
+      z-index: 40;
+      left: 0;
+      top: 0;
+      width: 1280px;
+      height: 720px;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body>
+  <button id="underlying">underlying</button>
+  <div class="browser-webview-layer">
+    <div id="wrapper" class="webview-wrapper renderable" inert aria-hidden="true">
+      <webview id="wv" src="webview-hit-test-guest.html"></webview>
+    </div>
+  </div>
+  <script>
+    window.__setRenderable = function (renderable) {
+      const wrapper = document.getElementById('wrapper');
+      const vw = 1280;
+      const vh = 720;
+      wrapper.classList.toggle('renderable', renderable);
+      wrapper.classList.remove('is-interactive');
+      if (renderable) {
+        const scale = Math.min(1, window.innerWidth / vw, window.innerHeight / vh);
+        wrapper.style.transform = scale < 1 ? 'scale(' + scale + ')' : '';
+        wrapper.setAttribute('inert', '');
+        wrapper.setAttribute('aria-hidden', 'true');
+      } else {
+        wrapper.style.transform = '';
+        wrapper.removeAttribute('inert');
+        wrapper.removeAttribute('aria-hidden');
+      }
+    };
+    window.__setInteractive = function () {
+      const wrapper = document.getElementById('wrapper');
+      wrapper.classList.remove('renderable');
+      wrapper.classList.add('is-interactive');
+      wrapper.style.transform = '';
+      wrapper.removeAttribute('inert');
+      wrapper.removeAttribute('aria-hidden');
+    };
+    // 初始状态与 BrowserWebviewLayer 挂载后的渲染结果一致
+    window.__setRenderable(true);
+  </script>
+</body>
+</html>

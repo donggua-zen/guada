@@ -243,4 +243,20 @@ describe("browserWebview viewport", () => {
     store.setViewportAdaptive(false);
     expect(store.getViewportMode(WID)).toBe("fixed");
   });
+
+  it("截图临时渲染标记在关闭网页或激活前台时被清理", () => {
+    const store = useBrowserWebviewStore();
+    addWindow(store, "a");
+    addWindow(store, "b");
+
+    store.setRenderableOverride("a", true);
+    expect(store.renderableOverrides.has("a")).toBe(true);
+    store.removeWebview("a");
+    expect(store.renderableOverrides.has("a")).toBe(false);
+
+    store.setRenderableOverride("b", true);
+    expect(store.renderableOverrides.has("b")).toBe(true);
+    store.setActive("b");
+    expect(store.renderableOverrides.has("b")).toBe(false);
+  });
 });

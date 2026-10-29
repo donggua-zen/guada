@@ -11,6 +11,11 @@ import * as path from "path";
 import * as url from "url";
 import log from "electron-log/main";
 import { isNavigableUrl } from "./browser-url";
+import { RenderableLease } from "./renderable-lease";
+import {
+  acquireTransparentPresentation,
+  type TransparentPresentation,
+} from "./transparent-presentation";
 
 /** 宿主释放键：Ctrl+Alt+R（macOS 为 Control+Option+R） */
 const RELEASE_SHORTCUT_CODE = "KeyR";
@@ -160,6 +165,22 @@ export class BrowserWebviewManager {
   private pointerLockedWindows = new Set<string>();
   private fullscreenWindows = new Set<string>();
 
+  // 截图/CDP 动作的临时可渲染租约：引用计数 + TTL，避免卡死的调用方永久留下透明页
+  private readonly renderableLeases = new RenderableLease({
+    ttlMs: 45_000,
+    onChange: (windowId, active) => {
+      this.sendWebviewRenderable(windowId, active);
+      if (!active) this.restoreHostFocusIfGuestFocused(windowId);
+    },
+  });
+
+  // 托盘隐藏窗口的截图 presentation 也要共享：并发截图不能互相 hide/恢复 opacity
+  private screenshotPresentation: {
+    presentation: TransparentPresentation;
+    count: number;
+    timer?: ReturnType<typeof setTimeout>;
+  } | null = null;
+
   constructor(_maxWindows?: number) {
     // 参数已忽略，不再限制窗口数量
   }
@@ -232,6 +253,8 @@ export class BrowserWebviewManager {
     this.pendingAttachQueue.length = 0;
     this.pointerLockedWindows.clear();
     this.fullscreenWindows.clear();
+    this.renderableLeases.releaseAll();
+    this.releaseScreenshotPresentation();
 
     this.webviews.clear();
   }
@@ -451,6 +474,7 @@ export class BrowserWebviewManager {
     webviewWC.once("destroyed", () => {
       this.pointerLockedWindows.delete(windowId);
       this.fullscreenWindows.delete(windowId);
+      this.renderableLeases.releaseAll(windowId);
       if (this.webviews.delete(windowId)) {
         log.info(`Window ${windowId} destroyed, entry removed`);
       }
@@ -771,7 +795,8 @@ export class BrowserWebviewManager {
 
     log.info(`🗑️ Closing webview window: ${windowId}`);
 
-    // 销毁 guest 前先尝试释放指针锁/全屏
+    // 销毁 guest 前先撤销截图租约并释放指针锁/全屏
+    this.renderableLeases.releaseAll(windowId);
     void this.releaseInput(windowId, { focusHost: false }).catch(() => {});
 
     try {
@@ -900,6 +925,8 @@ export class BrowserWebviewManager {
   }
 
   async closeAllWindows(): Promise<void> {
+    this.renderableLeases.releaseAll();
+    this.releaseScreenshotPresentation();
     const windowIds = Array.from(this.webviews.keys());
     for (const windowId of windowIds) {
       await this.closeWindow(windowId);
@@ -947,15 +974,134 @@ export class BrowserWebviewManager {
   }
 
   /**
-   * 临时设置 webview 可渲染（visibility:visible + 离屏定位），不改变 activeWindowId。
-   * 供截图等操作在 webview 隐藏时使用，操作完成后应恢复 false。
+   * 临时设置 webview 可渲染（窗口内透明表面，不改变 activeWindowId）。
+   *
+   * 语义是租约而不是裸 boolean：多次 true 引用计数累加，false 递减，
+   * 归零才真正撤销；45s TTL 兜底调用方挂死。前端会同时关闭该页的命中测试，
+   * 因此渲染期间也不会吞掉应用点击。
    */
   setWebviewRenderable(windowId: string, renderable: boolean): void {
+    if (renderable) {
+      this.renderableLeases.acquire(windowId);
+    } else {
+      this.renderableLeases.release(windowId);
+    }
+  }
+
+  /** 强制撤销某个窗口（或全部）的临时可渲染租约。 */
+  releaseWebviewRenderable(windowId?: string): void {
+    this.renderableLeases.releaseAll(windowId);
+  }
+
+  private sendWebviewRenderable(windowId: string, renderable: boolean): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send("browser:set-webview-renderable", {
         windowId,
         renderable,
       });
+    }
+  }
+
+  /**
+   * 后台页曾通过 sendInputEvent 路径拿过焦点；租约结束时若它仍持有焦点，
+   * 把焦点还给宿主。只在主窗口本来就有焦点时做，避免把用户从别的应用抢回来。
+   */
+  private restoreHostFocusIfGuestFocused(windowId: string): void {
+    const wv = this.webviews.get(windowId);
+    const guest = wv?.webContents;
+    const win = this.mainWindow;
+    if (!guest || guest.isDestroyed()) return;
+    if (wv?.info.isVisible) return;
+    if (!win || win.isDestroyed() || !win.isFocused()) return;
+    try {
+      if (guest.isFocused()) win.webContents.focus();
+    } catch {
+      // 窗口/guest 正在销毁
+    }
+  }
+
+  /** 主窗口是否处于用户可见、可交互的前台状态。 */
+  isHostForeground(): boolean {
+    const win = this.mainWindow;
+    if (!win || win.isDestroyed()) return false;
+    return win.isVisible() && win.isFocused() && !win.isMinimized();
+  }
+
+  getHostWebContents(): WebContents | null {
+    const win = this.mainWindow;
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return null;
+    return win.webContents;
+  }
+
+  /**
+   * 窗口隐藏到托盘时，为截图临时建立一次不可见的窗口 presentation。
+   * 可见/最小化窗口返回 undefined（最小化不做透明激活，与 zcode 一致）。
+   */
+  acquireScreenshotPresentation(): TransparentPresentation | undefined {
+    const win = this.mainWindow;
+    if (!win || win.isDestroyed()) return undefined;
+
+    let entry = this.screenshotPresentation;
+    if (!entry) {
+      const presentation = acquireTransparentPresentation(win, {
+        hideTaskbar: process.platform === "win32",
+        log: (message) => log.warn(message),
+      });
+      if (!presentation) return undefined;
+      entry = { presentation, count: 0 };
+      this.screenshotPresentation = entry;
+    }
+
+    entry.count += 1;
+    this.resetScreenshotPresentationTimer(entry);
+    let released = false;
+    const current = entry;
+    return {
+      release: () => {
+        if (released) return;
+        released = true;
+        this.releaseScreenshotPresentationEntry(current);
+      },
+    };
+  }
+
+  /** 强制结束托盘截图 presentation（窗口关闭/前端重载/退出时）。 */
+  releaseScreenshotPresentation(): void {
+    const entry = this.screenshotPresentation;
+    if (!entry) return;
+    if (entry.timer !== undefined) clearTimeout(entry.timer);
+    this.screenshotPresentation = null;
+    entry.presentation.release();
+  }
+
+  private releaseScreenshotPresentationEntry(entry: {
+    presentation: TransparentPresentation;
+    count: number;
+    timer?: ReturnType<typeof setTimeout>;
+  }): void {
+    if (this.screenshotPresentation !== entry) return;
+    entry.count = Math.max(0, entry.count - 1);
+    if (entry.count > 0) return;
+    if (entry.timer !== undefined) clearTimeout(entry.timer);
+    this.screenshotPresentation = null;
+    entry.presentation.release();
+  }
+
+  private resetScreenshotPresentationTimer(entry: {
+    presentation: TransparentPresentation;
+    count: number;
+    timer?: ReturnType<typeof setTimeout>;
+  }): void {
+    if (entry.timer !== undefined) clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => {
+      if (this.screenshotPresentation !== entry) return;
+      log.warn("[screenshot-presentation] ttl expired, releasing hidden presentation");
+      entry.count = 0;
+      this.screenshotPresentation = null;
+      entry.presentation.release();
+    }, 20_000);
+    if (typeof (entry.timer as { unref?: () => void }).unref === "function") {
+      (entry.timer as { unref: () => void }).unref();
     }
   }
 
@@ -981,6 +1127,8 @@ export class BrowserWebviewManager {
     if (!wv) return;
 
     wv.info.isVisible = false;
+    // 转后台前撤销截图租约，避免透明页继续占用合成资源
+    this.renderableLeases.releaseAll(windowId);
     // 隐藏前释放鼠标/键盘捕获，避免后台页面继续锁定输入
     void this.releaseInput(windowId, { focusHost: false }).catch(() => {});
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {

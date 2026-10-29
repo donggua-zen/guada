@@ -261,6 +261,7 @@ children: [e4, e5]
 
 - 导航只允许 `http:`、`https:`、`about:blank`；`javascript:`、`file:`、`data:`、`chrome:` 返回 `NAVIGATION_BLOCKED`。newTab、当前 tab、`window.open` 转发统一校验。
 - 截图不落工作区：`browser_screenshot` 返回 base64 PNG（默认按模型预算降采样到 ≤1920 长边 / ≤16MP），后端转码后只写一份会话副本（`sessions/<id>/images|previews/`）。`wants_save=true` 跳过降采样，仅用于显式导出原始质量。
+- 截图取帧：后台标签或宿主窗口失焦/被遮挡时，webview 临时进入窗口内透明表面（`opacity:0.001`、`pointer-events:none`、`inert`，不参与命中测试），同时对 guest 与宿主 renderer 做 1×1 `capturePage` 取帧泵；隐藏到托盘时再做一次不可见的 `showInactive` presentation。捕获优先走 CDP `Page.captureScreenshot`，单次 8 秒、总预算 15 秒，`UnknownVizError` 等首帧错误会退避重试。失败时 `details` 带 `reason/hostForeground/tabVisible/hiddenWindow/captureMode`。
 
 ### 错误
 

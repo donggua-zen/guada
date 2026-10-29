@@ -63,7 +63,7 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
   /** 分割面板拖拽中标志（拖拽时屏蔽 webview 指针事件） */
   const isDragging = ref(false)
 
-  /** 截图等操作临时需要渲染的 webview（visibility:visible 但离屏定位），不改变 activeWindowId */
+  /** 截图等操作临时需要渲染的 webview（窗口内 0,0 + opacity 0.001，不参与命中测试），不改变 activeWindowId */
   const renderableOverrides = ref<Set<string>>(new Set())
 
   /** 当前被网页 Pointer Lock 锁定的 webview（windowId 集合） */
@@ -139,6 +139,12 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
       next.delete(windowId)
       pointerLockedWindows.value = next
     }
+    // 清理截图临时渲染标记（主进程租约可能晚一步释放，前端先摘掉避免残留）
+    if (renderableOverrides.value.has(windowId)) {
+      const next = new Set(renderableOverrides.value)
+      next.delete(windowId)
+      renderableOverrides.value = next
+    }
     // 不自动清除 activeWindowId —— 由调用方通过 setActive 控制切换，
     // 避免关闭标签时中间态 null → preview-close → 再 setActive → preview-open 造成闪烁
     if (activeWindowId.value === windowId) {
@@ -169,6 +175,12 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     // 同步更新 isVisible 状态
     for (const [id, wv] of webviews.value.entries()) {
       wv.isVisible = id === windowId
+    }
+    // 前台分支不使用截图 override；提前清掉，避免它转后台后残留成隐形可点层
+    if (windowId && renderableOverrides.value.has(windowId)) {
+      const next = new Set(renderableOverrides.value)
+      next.delete(windowId)
+      renderableOverrides.value = next
     }
     // 新前台网页先按最近面板尺寸记录，避免切回后面板未变化时沿用更早的冻结值
     if (windowId && lastAdaptiveSize.value) {

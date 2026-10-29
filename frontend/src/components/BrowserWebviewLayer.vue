@@ -2,6 +2,9 @@
   <!-- Webview 浮层容器：fixed 定位，不拦截事件 -->
   <div class="browser-webview-layer">
     <div v-for="wv in store.allWebviews" :key="wv.windowId" class="webview-wrapper"
+      :class="{ 'is-interactive': isWebviewInteractive(wv.windowId) }"
+      :inert="isWebviewInteractive(wv.windowId) ? undefined : true"
+      :aria-hidden="isWebviewInteractive(wv.windowId) ? undefined : 'true'"
       :style="getWebviewStyle(wv.windowId)">
       <webview
         :ref="(el: Element | ComponentPublicInstance | null) => setWebviewRef(wv.windowId, el as HTMLElement | null)"
@@ -24,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, watch, type ComponentPublicInstance } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useBrowserWebviewStore, type PreviewRect } from '@/stores/browserWebview'
 import type {
   BrowserPointerLockPayload,
@@ -43,6 +46,16 @@ import { t } from '@/locales'
 
 const store = useBrowserWebviewStore()
 const tabStore = useTabStore()
+
+/** 宿主窗口尺寸：截图表面按它等比缩小，窗口 resize 时保持不超出可见区域 */
+const hostViewport = ref({
+  width: typeof window === 'undefined' ? 0 : window.innerWidth,
+  height: typeof window === 'undefined' ? 0 : window.innerHeight,
+})
+
+function updateHostViewport(): void {
+  hostViewport.value = { width: window.innerWidth, height: window.innerHeight }
+}
 
 /**
  * 浏览器 store → tabStore 同步（常驻于此，而非 OverviewPanel）：
@@ -129,6 +142,18 @@ function syncNavState(el: HTMLElement): void {
 }
 
 /**
+ * 只有「当前激活 + 有预览区域 + 未在拖拽」的网页允许接收鼠标事件。
+ * 其余状态（截图临时可渲染、后台标签、面板收起）都必须命中测试穿透。
+ */
+function isWebviewInteractive(windowId: string): boolean {
+  return (
+    windowId === store.activeWindowId &&
+    Boolean(store.previewRect) &&
+    !store.isDragging
+  )
+}
+
+/**
  * 计算 webview wrapper 的样式
  *
  * 视口来源见 store.getViewportSize：
@@ -139,6 +164,8 @@ function syncNavState(el: HTMLElement): void {
  *   页面随面板实时重排；转后台后保持最后一次前台尺寸，重新激活时再跟随面板；
  *   面板隐藏时同样保留最后一次有效尺寸，避免被压成 0
  * - 非活跃 webview：visibility: hidden, z-index: -1（保留渲染进度）
+ * - 截图临时可渲染：窗口内 0,0 + opacity 0.001（opacity:0 会让 Chromium 丢弃
+ *   guest layer），并按宿主窗口等比缩小，避免表面超出窗口被高 DPI 裁剪
  * - 拖拽中：pointer-events: none（防止 webview 截获鼠标事件导致拖拽中断）
  */
 function getWebviewStyle(windowId: string): Record<string, string> {
@@ -147,7 +174,7 @@ function getWebviewStyle(windowId: string): Record<string, string> {
   const isRenderable = store.renderableOverrides.has(windowId)
   const { width: vw, height: vh } = store.getViewportSize(windowId)
 
-  // 活跃且可见的 webview：固定视口 + 等比缩放留白居中（截图也走这个路径，已可见无需离屏）
+  // 活跃且可见的 webview：固定视口 + 等比缩放留白居中
   if (isActive && rect) {
     const scale = Math.min(rect.width / vw, rect.height / vh)
     const offsetX = (rect.width - vw * scale) / 2
@@ -167,7 +194,9 @@ function getWebviewStyle(windowId: string): Record<string, string> {
 
   // 非活跃或活跃但无 rect 的 webview
   if (isRenderable) {
-    // 临时渲染模式：在视口内但透明不可见（opacity:0 不影响合成器产帧，离屏则不产帧）
+    // 临时渲染模式：必须在视口内并保持可见（离屏会被 Viz 视为 offscreen），
+    // opacity 用极小值而非 0，否则 Chromium 会丢弃 guest layer 导致截不到帧。
+    const scale = getRenderableSurfaceScale(vw, vh)
     return {
       visibility: 'visible',
       zIndex: '-1',
@@ -175,8 +204,11 @@ function getWebviewStyle(windowId: string): Record<string, string> {
       top: '0px',
       width: `${vw}px`,
       height: `${vh}px`,
-      opacity: '0',
+      opacity: '0.001',
       pointerEvents: 'none',
+      ...(scale < 1
+        ? { transform: `scale(${scale})`, transformOrigin: '0 0' }
+        : {}),
     }
   }
 
@@ -190,6 +222,18 @@ function getWebviewStyle(windowId: string): Record<string, string> {
     height: `${vh}px`,
     pointerEvents: 'none',
   }
+}
+
+/**
+ * 截图表面不能超出宿主窗口：超出部分在 Windows 高 DPI 下可能被 Chromium 裁剪，
+ * 导致 capturePage/CDP 截图归一化后拉伸。布局盒保持原视口尺寸，只用 transform 缩放。
+ */
+function getRenderableSurfaceScale(vw: number, vh: number): number {
+  if (vw <= 0 || vh <= 0) return 1
+  const hostWidth = hostViewport.value.width
+  const hostHeight = hostViewport.value.height
+  if (!hostWidth || !hostHeight) return 1
+  return Math.min(1, hostWidth / vw, hostHeight / vh)
 }
 
 /**
@@ -391,6 +435,7 @@ function handlePointerLockChanged(_event: unknown, data: BrowserPointerLockPaylo
 }
 
 onMounted(() => {
+  window.addEventListener('resize', updateHostViewport)
   // 默认渲染视口由启动流程统一加载（main.js → loadBrowserSettings，browser 分组只拉一次），
   // 本组件只读 store 现值，不再自己发请求。
   const api = window.electronAPI
@@ -407,6 +452,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', updateHostViewport)
   // IPC 监听器由主进程管理，无需手动移除
 })
 </script>
@@ -434,6 +480,15 @@ onUnmounted(() => {
   height: 100%;
   border: none;
   display: flex;
+  /*
+   * 关键：wrapper 的 pointer-events:none 不能阻止后代重新开启命中测试。
+   * 只有前台可交互的 wrapper 才允许 webview 接收鼠标事件，否则截图用的
+   * 透明 webview 会在 0,0 变成覆盖应用的隐形点击区。
+   */
+  pointer-events: none;
+}
+
+.webview-wrapper.is-interactive webview {
   pointer-events: auto;
 }
 

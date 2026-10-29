@@ -26,6 +26,11 @@ import {
   SelectOptions,
   WaitState,
 } from "./browser-action-engine";
+import { startCapturePump } from "./capture-activity";
+import {
+  PRESENTATION_GRACE_MS,
+  type TransparentPresentation,
+} from "./transparent-presentation";
 
 export { BrowserBridgeError };
 
@@ -64,6 +69,12 @@ const MAX_VIEWPORT_HEIGHT = 2160;
 /** 渲染层应用视口是异步的：有界回读 guest 尺寸，避免事件发出即返回 */
 const VIEWPORT_APPLY_TIMEOUT_MS = 2000;
 const VIEWPORT_APPLY_POLL_MS = 50;
+/** 截图总预算：取帧等待 + CDP 重试共用，超时返回结构化错误 */
+const SCREENSHOT_DEADLINE_MS = 15_000;
+/** 单次 CDP 截图超时：页面卡死时不再无限挂起 */
+const CDP_CAPTURE_TIMEOUT_MS = 8_000;
+/** 前台 capturePage 快路径超时 */
+const SCREENSHOT_CAPTURE_PAGE_TIMEOUT_MS = 8_000;
 
 /**
  * 浏览器自动化核心服务（基于独立窗口系统)
@@ -468,7 +479,8 @@ export class BrowserAutomationService {
     fullPage: boolean = false,
     wantsSave: boolean = false,
   ): Promise<any> {
-    if (!this.windowManager) {
+    const manager = this.windowManager;
+    if (!manager) {
       throw new Error("WindowManager not initialized");
     }
 
@@ -476,56 +488,59 @@ export class BrowserAutomationService {
 
     log.info(`Taking screenshot (tab: ${wid})...`);
 
-    const webContents = await this.windowManager.getWebviewWebContents(wid);
+    const webContents = await manager.getWebviewWebContents(wid);
     if (!webContents) {
       throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
     }
 
+    // 标签可见 ≠ 能产帧：宿主窗口失焦/被遮挡时 Chromium 会压低帧生产；
+    // 关闭到托盘时窗口根本不可见。这两种情况都按“后台截图”处理。
+    const tabVisible = manager.isWindowVisible(wid);
+    const hostForeground =
+      typeof (manager as any).isHostForeground === "function"
+        ? Boolean((manager as any).isHostForeground())
+        : true;
+    const hostWebContents =
+      typeof (manager as any).getHostWebContents === "function"
+        ? (manager as any).getHostWebContents()
+        : null;
+    const backgroundCapture = !tabVisible || !hostForeground;
+
     let renderableToggled = false;
+    let presentation: TransparentPresentation | undefined;
+    let stopCapturePump: (() => void) | undefined;
+
     try {
       await this.waitForPageLoad(webContents);
 
-      // webview visibility:hidden 时 Chromium 不产生合成器帧，CDP/capturePage 都无法截图。
-      // 临时将 webview 设为可渲染（视口内 + opacity:0），截图后恢复。
-      // 已经可见的标签不需要切换，避免每次截图都闪一下。
-      const wasVisible = this.windowManager.isWindowVisible(wid);
-      if (!wasVisible) {
-        this.windowManager.setWebviewRenderable(wid, true);
+      if (backgroundCapture) {
+        // 隐藏/遮挡时 Chromium 不产帧：
+        // 1) 让 webview 进入窗口内的透明可渲染表面（opacity 0.001，不参与命中测试）
+        // 2) 对 guest + 宿主 renderer 持续 1×1 取帧，迫使 Viz 产帧
+        // 3) 窗口隐藏到托盘时再做一次不可见的 showInactive presentation
+        manager.setWebviewRenderable(wid, true);
         renderableToggled = true;
-        // 等待合成器产生帧
-        await new Promise((r) => setTimeout(r, 300));
+        if (typeof (manager as any).acquireScreenshotPresentation === "function") {
+          presentation = (manager as any).acquireScreenshotPresentation() || undefined;
+        }
+        stopCapturePump = startCapturePump([webContents, hostWebContents], {
+          deadlineMs: SCREENSHOT_DEADLINE_MS,
+        });
+        await new Promise((resolve) =>
+          setTimeout(resolve, presentation ? PRESENTATION_GRACE_MS : 150),
+        );
       } else {
         await new Promise((r) => setTimeout(r, 50));
       }
 
-      let buffer: Buffer;
-      let imgWidth: number;
-      let imgHeight: number;
+      const deadline = Date.now() + SCREENSHOT_DEADLINE_MS;
+      const captured = backgroundCapture
+        ? await this.captureViaCdpWithRetry(webContents, fullPage, deadline)
+        : await this.captureForeground(webContents, fullPage, deadline);
 
-      if (fullPage) {
-        // fullPage: 使用 CDP captureBeyondViewport 截整页
-        buffer = await this.cdpCaptureScreenshot(webContents, { captureBeyondViewport: true });
-        imgWidth = buffer.readUInt32BE(16);
-        imgHeight = buffer.readUInt32BE(20);
-      } else {
-        // 默认: capturePage() 截视口，失败回退 CDP
-        try {
-          const image = await this.withTimeout(
-            webContents.capturePage(),
-            10000,
-            "capturePage timeout",
-          );
-          buffer = image.toPNG();
-          const size = image.getSize();
-          imgWidth = size.width;
-          imgHeight = size.height;
-        } catch (e: any) {
-          log.warn(`capturePage failed (${e.message}), falling back to CDP`);
-          buffer = await this.cdpCaptureScreenshot(webContents);
-          imgWidth = buffer.readUInt32BE(16);
-          imgHeight = buffer.readUInt32BE(20);
-        }
-      }
+      let buffer = captured.buffer;
+      let imgWidth = captured.width;
+      let imgHeight = captured.height;
 
       // 降采样：模型侧转码目标就是最长边 1920，先在捕获端收敛可显著减小
       // base64 过桥体积（视口截图约 0.1–0.4MB），且不损失模型可见质量。
@@ -560,13 +575,99 @@ export class BrowserAutomationService {
           ...(error instanceof BrowserBridgeError
             ? { cause: error.code, ...(error.details === undefined ? {} : { details: error.details }) }
             : {}),
+          reason: backgroundCapture ? "surface_unavailable" : "capture_failed",
+          hostForeground,
+          tabVisible,
+          hiddenWindow: Boolean(presentation),
+          captureMode: backgroundCapture ? "background" : "foreground",
         },
       );
     } finally {
+      stopCapturePump?.();
+      presentation?.release();
       if (renderableToggled) {
-        this.windowManager.setWebviewRenderable(wid, false);
+        manager.setWebviewRenderable(wid, false);
       }
     }
+  }
+
+  /**
+   * 前台可见路径：capturePage 更快；失败再走 CDP。fullPage 只能走 CDP。
+   */
+  private async captureForeground(
+    webContents: Electron.WebContents,
+    fullPage: boolean,
+    deadline: number,
+  ): Promise<{ buffer: Buffer; width: number; height: number }> {
+    if (!fullPage) {
+      try {
+        const timeoutMs = Math.min(
+          SCREENSHOT_CAPTURE_PAGE_TIMEOUT_MS,
+          Math.max(1000, deadline - Date.now()),
+        );
+        const image = await this.withTimeout(
+          webContents.capturePage(),
+          timeoutMs,
+          "capturePage timeout",
+        );
+        if (image && !image.isEmpty()) {
+          const size = image.getSize();
+          return { buffer: image.toPNG(), width: size.width, height: size.height };
+        }
+        throw new Error("capturePage returned an empty image");
+      } catch (error: any) {
+        log.warn(
+          `capturePage failed (${error?.message || error}), falling back to CDP`,
+        );
+      }
+    }
+    return this.captureViaCdpWithRetry(webContents, fullPage, deadline);
+  }
+
+  /**
+   * 后台/遮挡路径：CDP Page.captureScreenshot 优先。
+   * 首帧尚未建立时 Chromium 会抛 UnknownVizError / 空数据，按 200ms 起退避重试，
+   * 总时长受 deadline 约束；取帧泵同时运行，surface 一旦就绪即可成功。
+   */
+  private async captureViaCdpWithRetry(
+    webContents: Electron.WebContents,
+    fullPage: boolean,
+    deadline: number,
+  ): Promise<{ buffer: Buffer; width: number; height: number }> {
+    let attempt = 0;
+    let lastError: unknown;
+    while (Date.now() < deadline) {
+      attempt += 1;
+      const remaining = deadline - Date.now();
+      try {
+        const buffer = await this.cdpCaptureScreenshot(
+          webContents,
+          { captureBeyondViewport: fullPage },
+          Math.min(CDP_CAPTURE_TIMEOUT_MS, Math.max(1000, remaining)),
+        );
+        if (buffer.length < 24) {
+          throw new Error("CDP screenshot returned invalid PNG data");
+        }
+        return {
+          buffer,
+          width: buffer.readUInt32BE(16),
+          height: buffer.readUInt32BE(20),
+        };
+      } catch (error) {
+        lastError = error;
+        const message = String((error as any)?.message || error || "");
+        const transient = /UnknownVizError|surface|not ready|not visible|empty|timeout/i.test(
+          message,
+        );
+        if (!transient) throw error;
+      }
+      const waitMs = Math.min(200 * attempt, Math.max(0, deadline - Date.now()));
+      if (waitMs <= 0) break;
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Screenshot surface did not become ready before the deadline");
   }
 
   /**
@@ -597,6 +698,7 @@ export class BrowserAutomationService {
   private async cdpCaptureScreenshot(
     webContents: Electron.WebContents,
     opts?: { captureBeyondViewport?: boolean },
+    timeoutMs: number = CDP_CAPTURE_TIMEOUT_MS,
   ): Promise<Buffer> {
     const debuggerApi = webContents.debugger;
     let attachedByUs = false;
@@ -605,10 +707,16 @@ export class BrowserAutomationService {
         debuggerApi.attach("1.3");
         attachedByUs = true;
       }
-      const result = await debuggerApi.sendCommand("Page.captureScreenshot", {
-        format: "png",
-        captureBeyondViewport: opts?.captureBeyondViewport || false,
-      });
+      // 页面卡死/被后台节流时 sendCommand 可能永不落定，必须加超时；
+      // finally 仍会 detach，避免 debugger 会话悬挂。
+      const result = await this.withTimeout(
+        debuggerApi.sendCommand("Page.captureScreenshot", {
+          format: "png",
+          captureBeyondViewport: opts?.captureBeyondViewport || false,
+        }),
+        Math.max(1000, timeoutMs),
+        `CDP captureScreenshot timeout (${timeoutMs}ms)`,
+      );
       if (!result?.data) {
         throw new Error("CDP captureScreenshot returned no image data");
       }
