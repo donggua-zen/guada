@@ -350,17 +350,17 @@ ai_chat/
       <b>🐧 QQ 群：1047993501</b>
     </td>
     <td align="center" width="33%">
-      <img src="./images/wx_qun_qrcode.png" width="180" height="180" alt="微信群二维码"/><br>
-      <b>💬 微信群</b>
+      <img src="./images/wx_qun_qrcode.png" width="180" height="180" alt="微信群二维码（活码）"/><br>
+      <b>💬 微信群（活码，长期有效）</b>
     </td>
     <td align="center" width="33%">
-      <img src="./images/wx_public_qrcode.png" width="180" height="180" alt="交流群二维码"/><br>
-      <b>📱 微信群：GuaDa 用户交流群</b>
+      <img src="./images/wx_public_qrcode.png" width="180" height="180" alt="公众号二维码"/><br>
+      <b>📱 公众号：冬瓜编程实验室</b>
     </td>
   </tr>
 </table>
 
-> 微信群二维码会过期，表中图片指向长期有效的活码页：<https://wxhm.dingd.cn/q/ifa4qwg7df>（扫码后自动进入当前有效的群）。
+> 微信群二维码会过期，上表微信群图片指向长期有效的活码页：<https://wxhm.dingd.cn/q/ifa4qwg7df>（扫码后自动进入当前有效的群）。
 
 <p align="center" style="margin-top: 30px;">
   <a href="https://gitee.com/zhendongdong/guada_ai"><b>⭐ 点个 Star 支持项目</b></a>（你的鼓励是持续更新的动力 ❤️）
