@@ -343,17 +343,17 @@ Issues and pull requests are welcome. Before you start, please read [CONTRIBUTIN
       <b>🐧 QQ Group: 1047993501</b>
     </td>
     <td align="center" width="33%">
-      <img src="./images/wx_qun_qrcode.png" width="180" height="180" alt="WeChat Group QR"/><br>
-      <b>💬 WeChat Group</b>
+      <img src="./images/wx_qun_qrcode.png" width="180" height="180" alt="WeChat Group QR (dynamic)"/><br>
+      <b>💬 WeChat Group (dynamic, always valid)</b>
     </td>
     <td align="center" width="33%">
-      <img src="./images/wx_public_qrcode.png" width="180" height="180" alt="WeChat Group QR"/><br>
-      <b>📱 WeChat: GuaDa User Group</b>
+      <img src="./images/wx_public_qrcode.png" width="180" height="180" alt="WeChat Official Account QR"/><br>
+      <b>📱 WeChat Official Account: 冬瓜编程实验室</b>
     </td>
   </tr>
 </table>
 
-> The WeChat group invite expires periodically; the QR above points to a permanent landing page: <https://wxhm.dingd.cn/q/ifa4qwg7df> (scans land on the currently valid group).
+> A WeChat group invite QR expires within days, so the WeChat group QR above points to a permanent landing page: <https://wxhm.dingd.cn/q/ifa4qwg7df> (scans land on the currently valid group).
 
 <p align="center" style="margin-top: 30px;">
   <a href="https://gitee.com/zhendongdong/guada_ai"><b>⭐ Give a Star to Support the Project</b></a> (Your encouragement is the fuel for continuous updates ❤️)
