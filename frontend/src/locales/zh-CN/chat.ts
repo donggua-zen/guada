@@ -49,6 +49,7 @@ export default {
     followBotDefault: '跟随 Bot 默认模型',
     followAgentDefault: '跟随智能体默认模型',
     resetToDefault: '恢复跟随默认模型',
+    configLockedHint: '由 Bot 配置决定，不可修改',
     reasoningEffort: '推理强度',
     favoriteModels: '收藏模型',
     manageModels: '模型管理',

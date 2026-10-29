@@ -137,6 +137,7 @@
                 <ChatInput ref="chatInputRef" :key="composerKey" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
                   :session-id="effectiveSessionId" :agent-id="props.session?.agentId || ''"
                   :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly" mode="chat"
+                  :config-locked="configLocked"
                   :readonly-placeholder="readonlyPlaceholder"
                   :uploader="chatAttachmentUploader"
                   :backdrop="hasWallpaper" @config-change="handleConfigChange" @send="handleSendMessage"
@@ -1131,6 +1132,14 @@ const currentModelId = computed({
     scheduleSave(session.id, { modelId: value });
   }
 });
+
+/**
+ * Bot 会话的模型 / 思考强度 / 知识库统一由 Bot 配置决定：
+ * 输入区只展示当前值，不提供自选入口（Web 会话不受影响）。
+ */
+const configLocked = computed(
+  () => currentSession.value?.sessionType === 'bot',
+);
 
 
 // ========== ChatInput 配置管理 ==========

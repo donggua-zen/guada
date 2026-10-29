@@ -21,7 +21,8 @@
       <!-- 已选知识库 + 附加连接标签显示区域（同一排） -->
       <div class="kb-list flex flex-wrap gap-2 mb-1.5 mx-1.5"
         v-if="selectedKnowledgeBases.length > 0 || selectedAttachmentTags.length > 0">
-        <el-tag v-for="kb in selectedKnowledgeBases" :key="`kb-${kb.id}`" closable type="info"
+        <el-tag v-for="kb in selectedKnowledgeBases" :key="`kb-${kb.id}`"
+          :closable="!props.readonly && !props.configLocked" type="info"
           @close="removeKnowledgeBase(kb.id)" class="text-xs">
           <span class="flex items-center gap-1">
             <BookSearch24Regular class="w-3.5 h-3.5" />
@@ -60,6 +61,7 @@
             </button>
             <AttachmentPopover v-model:visible="attachPopoverVisible" :anchor-el="attachButtonRef"
               :knowledge-bases="knowledgeBases" :selected-kb-ids="props.config?.knowledgeBaseIds || []"
+              :knowledge-base-disabled="props.configLocked"
               :selected-attachments="props.config?.attachments || {}" @select-image="triggerImageInput"
               @select-file="triggerFileInput" @toggle-kb="toggleKnowledgeBaseSelection"
               @toggle-attachment="toggleAttachmentSelection" />
@@ -98,7 +100,8 @@
           </div>
           <!-- 模型选择按钮 -->
           <button ref="modelButtonRef" @click.stop="openModelPanel" class="model-selector-btn"
-            :class="{ 'is-open': modelButtonExpanded, 'cursor-not-allowed': props.readonly }"
+            :class="{ 'is-open': modelButtonExpanded, 'cursor-not-allowed': props.readonly || props.configLocked }"
+            :aria-disabled="props.readonly || props.configLocked"
             :title="modelButtonTitle" :style="{ width: modelButtonWidth }">
             <span class="text-sm font-medium truncate flex-1 min-w-0"
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
@@ -348,6 +351,8 @@ const props = defineProps({
   files: { type: Array as PropType<ChatFileView[]>, default: () => [] },
   streaming: { type: Boolean, default: false },
   readonly: { type: Boolean, default: false },
+  /** Bot 会话：模型/思考强度/知识库由 Bot 配置统一决定，输入区只展示不可改 */
+  configLocked: { type: Boolean, default: false },
   /** 只读模式占位文案覆盖（Bot 会话等旁路宿主用；缺省用子代理文案） */
   readonlyPlaceholder: { type: String, default: null },
   buttons: { type: Object as PropType<Record<string, boolean>>, default: () => ({}) },
@@ -618,11 +623,16 @@ const modelSourceHint = computed(() => {
   return '';
 });
 
-const modelButtonTitle = computed(() =>
-  modelSourceHint.value
+const modelButtonTitle = computed(() => {
+  const base = modelSourceHint.value
     ? `${currentModelNameOnly.value} · ${modelSourceHint.value}`
-    : undefined,
-);
+    : currentModelNameOnly.value;
+  return props.configLocked
+    ? `${base} · ${t('chat.input.configLockedHint')}`
+    : modelSourceHint.value
+      ? base
+      : undefined;
+});
 
 const currentThinkingLabel = computed(() => {
   if (!showButtons.thinkingButton) return '';
@@ -774,7 +784,8 @@ function collapseModelButton() {
 
 const openModelPanel = () => {
   // 只读模式（子代理会话）：模型仅展示不可切换
-  if (props.readonly) return
+  // Bot 会话：模型/思考强度由 Bot 配置统一决定，同样只展示
+  if (props.readonly || props.configLocked) return
   if (modelPanelVisible.value) {
     modelPanelVisible.value = false
     return
@@ -881,16 +892,20 @@ const toggleAttachPopover = async () => {
     attachPopoverVisible.value = false;
     return;
   }
-  try {
-    await loadKnowledgeBases();
-  } catch (error) {
-    console.error('加载附件列表失败:', error);
+  // Bot 会话知识库区块已隐藏，无需加载（也避免无效 id 清理回写配置）
+  if (!props.configLocked) {
+    try {
+      await loadKnowledgeBases();
+    } catch (error) {
+      console.error('加载附件列表失败:', error);
+    }
   }
   attachPopoverVisible.value = true;
 };
 
 // 切换知识库选中状态 - 立即同步到父组件
 const toggleKnowledgeBaseSelection = (kbId: string) => {
+  if (props.configLocked) return;
   const currentKbIds = props.config?.knowledgeBaseIds || [];
   const newKbIds = [...currentKbIds];
   const index = newKbIds.indexOf(kbId);
@@ -932,6 +947,7 @@ const toggleAttachmentSelection = (typeId: string, itemId: string) => {
 
 // 移除单个知识库
 const removeKnowledgeBase = (kbId: string) => {
+  if (props.configLocked) return;
   const currentKbIds = props.config?.knowledgeBaseIds || [];
   const newKbIds = currentKbIds.filter(id => id !== kbId);
 

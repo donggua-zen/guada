@@ -18,22 +18,24 @@
         <span class="att-item-name">{{ t('chat.input.uploadFile') }}</span>
       </div>
 
-      <!-- 知识库（内置，未来可迁移为 registerAttachmentType） -->
-      <div class="att-divider"></div>
-      <div class="att-section-header">{{ t('chat.input.knowledgeBase') }}</div>
-      <div class="att-kb-list">
-        <div v-if="knowledgeBases.length === 0" class="text-center py-3 text-gray-400 dark:text-[#6b6d75] text-xs">
-          {{ t('chat.input.noKnowledgeBase') }}
-        </div>
-        <div v-for="kb in knowledgeBases" :key="kb.id"
-          class="att-kb-item" @click="$emit('toggle-kb', kb.id)">
-          <el-checkbox :model-value="selectedKbIds.includes(kb.id)" @click.stop size="small" />
-          <div class="flex-1 min-w-0">
-            <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ kb.name }}</div>
-            <div v-if="kb.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ kb.description }}</div>
+      <!-- 知识库（内置，未来可迁移为 registerAttachmentType）；Bot 会话由 Bot 配置统一决定，不展示自选 -->
+      <template v-if="!knowledgeBaseDisabled">
+        <div class="att-divider"></div>
+        <div class="att-section-header">{{ t('chat.input.knowledgeBase') }}</div>
+        <div class="att-kb-list">
+          <div v-if="knowledgeBases.length === 0" class="text-center py-3 text-gray-400 dark:text-[#6b6d75] text-xs">
+            {{ t('chat.input.noKnowledgeBase') }}
+          </div>
+          <div v-for="kb in knowledgeBases" :key="kb.id"
+            class="att-kb-item" @click="$emit('toggle-kb', kb.id)">
+            <el-checkbox :model-value="selectedKbIds.includes(kb.id)" @click.stop size="small" />
+            <div class="flex-1 min-w-0">
+              <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ kb.name }}</div>
+              <div v-if="kb.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ kb.description }}</div>
+            </div>
           </div>
         </div>
-      </div>
+      </template>
 
       <!-- 动态附件类型（插件通过 registerAttachmentType 注册） -->
       <template v-for="attType in attachmentTypes" :key="attType.id">
@@ -84,6 +86,8 @@ const props = defineProps<{
   anchorEl: HTMLElement | null;
   knowledgeBases: KnowledgeBase[];
   selectedKbIds: string[];
+  /** Bot 会话：知识库由 Bot 配置统一决定，隐藏本区块（上传图片/文件不受影响） */
+  knowledgeBaseDisabled?: boolean;
   selectedAttachments: Record<string, string[]>;
 }>();
 

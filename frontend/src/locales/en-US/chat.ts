@@ -49,6 +49,7 @@
     followBotDefault: 'Following Bot default model',
     followAgentDefault: 'Following agent default model',
     resetToDefault: 'Reset to follow default model',
+    configLockedHint: 'Configured by the Bot and cannot be changed here',
     reasoningEffort: 'Reasoning Effort',
     favoriteModels: 'Favorite Models',
     manageModels: 'Manage Models',
