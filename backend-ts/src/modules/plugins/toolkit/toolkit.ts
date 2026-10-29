@@ -169,6 +169,7 @@ export class Toolkit implements ToolKitHandle {
       icon: def.display?.icon,
       actionType: def.display?.actionType,
       argsKey,
+      argsCountUnit: def.display?.argsCountUnit,
       displayText: def.display?.text,
       displayAggregate: def.display?.aggregate,
       displayRenderer: def.display?.renderer,

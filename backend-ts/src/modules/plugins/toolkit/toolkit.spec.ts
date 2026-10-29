@@ -116,4 +116,18 @@ describe("Toolkit.registerTool：schema 展平", () => {
       "questions",
     ]);
   });
+
+  it("display.argsKey/argsCountUnit 透传到注册项（数组参数的单位后缀）", () => {
+    const tool = makeTool(
+      z.object({ questions: z.array(z.string()) }),
+      {
+        text: { executing: "", completed: "" },
+        argsKey: "questions",
+        argsCountUnit: "%askUser.display.questionsUnit%",
+      },
+    );
+    expect(tool.argsKey).toBe("questions");
+    // 保留 %key% 原文，由 NLS 在下发前解析；丢了字段前端就只显示数字
+    expect(tool.argsCountUnit).toBe("%askUser.display.questionsUnit%");
+  });
 });

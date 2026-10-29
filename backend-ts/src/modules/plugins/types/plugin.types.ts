@@ -224,6 +224,8 @@ export interface ToolHandlerDef {
   actionType?: string;
   /** 从 args 中提取摘要的字段名（默认自动取第一个字符串参数） */
   argsKey?: string;
+  /** argsKey 指向数组时的项数后缀（如「个问题」；随 display 走 NLS 解析） */
+  argsCountUnit?: string;
   /** 执行中/已完成展示文案 */
   displayText?: { executing: string; completed: string };
   /** 聚合展示文案（{n} 为数量占位符） */
