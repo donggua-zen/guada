@@ -9,7 +9,7 @@
  */
 
 export const BROWSER_SCRIPT_SKILL_DESCRIPTION =
-  "Multi-step browser automation with browser_run: Playwright-style locators, snapshots, conditionals, loops, forms, and pagination.";
+  "Required reading before calling browser_run: Playwright-style locators, snapshots, forms, loops, pagination, limits and error codes.";
 
 export const BROWSER_SCRIPT_SKILL = `# Browser Script
 
