@@ -174,12 +174,13 @@
                 :key="conv.key"
                 class="conversation-row"
                 :class="{ 'is-active': isActive(conv) }"
+                @click="emit('select', conv)"
               >
                 <button
                   type="button"
                   class="conversation-main"
                   :title="`${conv.displayName} · ${platformLabel(conv.platform)}`"
-                  @click="emit('select', conv)"
+                  @click.stop="emit('select', conv)"
                 >
                   <BotUserAvatar
                     :avatar-url="conv.avatarUrl"
