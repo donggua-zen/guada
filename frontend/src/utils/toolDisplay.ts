@@ -122,8 +122,10 @@ function getDefaultConfig(tool?: ToolCall): ToolDisplayConfig {
         : t("common.tool.called"),
     },
     aggregate: {
-      executing: t("common.tool.executingSteps"),
-      completed: t("common.tool.executedSteps"),
+      // 保留 {n} 占位符：聚合标题由调用方按实际数量替换。
+      // 直接 t(key) 会让 vue-i18n 把缺失的 n 插成空串（「正在执行个步骤」）。
+      executing: t("common.tool.executingSteps", { n: "{n}" }),
+      completed: t("common.tool.executedSteps", { n: "{n}" }),
     },
     icon: "wrench",
   };

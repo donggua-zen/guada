@@ -333,6 +333,14 @@ const isGroupContentVisible = (groupIndex: number, group: DisplayGroup): boolean
 const countToolSteps = (items: ReadonlyArray<DisplayItem>): number =>
   items.reduce((sum, item) => sum + (item.type === 'tool' ? item.toolCalls?.length ?? 0 : 0), 0);
 
+/**
+ * 聚合模板安全替换：只有模板里真的含 {n} 才替换。
+ * 插件只配 text、未配 aggregate 时，兜底模板可能不含占位符（如「正在执行个步骤」），
+ * 此时返回 null，由调用方回落到通用步骤文案。
+ */
+const formatAggregateText = (template: string | undefined, n: number): string | null =>
+  template?.includes('{n}') ? template.replace('{n}', String(n)) : null;
+
 // ============================================
 // 展示计算
 // ============================================
@@ -440,9 +448,14 @@ const getActiveStatusParts = (executing: ToolCall[]): { icon: Component; text: s
   const allSameType = executing.every(tc => _resolveToolName(tc as ToolCall) === _resolveToolName(refTool));
   if (allSameType) {
     const config = getToolConfig(refTool);
+    const aggregateText = formatAggregateText(config.aggregate?.executing, executing.length);
     return {
       icon: getToolIcon(refTool),
-      text: config.aggregate!.executing.replace('{n}', String(executing.length)),
+      // 单个工具优先用工具自己的动作文案（如「正在读取作业输出」），
+      // 多工具才用聚合文案（如「正在执行 2 个步骤」）。
+      text: (executing.length === 1 ? config.text.executing : '')
+        || aggregateText
+        || t('chat.turn.executingSteps', { n: executing.length }),
     };
   }
   return { icon: Wrench24Filled, text: t('chat.turn.executingSteps', { n: executing.length }) };
@@ -460,9 +473,15 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
       const executing = executingCallsOf(group);
       const status = getActiveStatusParts(executing);
       const completedToolSteps = toolSteps - executing.length;
-      const action = completedToolSteps > 0
-        ? t('chat.turn.executedThenStatus', { m: completedToolSteps }).replace('{status}', status.text)
-        : status.text;
+      // 状态段为空时只保留已执行前缀，绝不拼出「已执行N个步骤,」这种悬空分隔符
+      const fallback = completedToolSteps > 0
+        ? t('chat.turn.executedSteps', { n: completedToolSteps })
+        : t('chat.turn.executingSteps', { n: Math.max(executing.length, 1) });
+      const action = status.text
+        ? (completedToolSteps > 0
+          ? t('chat.turn.executedThenStatus', { m: completedToolSteps }).replace('{status}', status.text)
+          : status.text)
+        : fallback;
       return { icon: status.icon, action, args: '' };
     }
     // 已结束：有工具显示工具步骤总数；纯思考显示思考态
@@ -481,11 +500,20 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
     // 同类型多调用 → 聚合文案（n=全部调用数，沿用既有收起态口径）；单工具 → 动作 + 参数摘要
     if (allExecutingSameType && allToolCalls.length > 1) {
       const config = getToolConfig(refTool);
-      return { icon: getToolIcon(refTool), action: config.aggregate!.executing.replace('{n}', String(allToolCalls.length)), args: '' };
+      return {
+        icon: getToolIcon(refTool),
+        action: formatAggregateText(config.aggregate?.executing, allToolCalls.length)
+          ?? t('chat.turn.executingSteps', { n: allToolCalls.length }),
+        args: '',
+      };
     }
     if (allExecutingSameType && allToolCalls.length === 1) {
       const config = getToolConfig(refTool);
-      return { icon: getToolIcon(refTool), action: config.text.executing, args: getArgsText(refTool) || '' };
+      return {
+        icon: getToolIcon(refTool),
+        action: config.text.executing || t('chat.turn.executingSteps', { n: 1 }),
+        args: getArgsText(refTool) || '',
+      };
     }
     return { icon: Wrench24Filled, action: t('chat.turn.executingSteps', { n: executing.length }), args: '' };
   }
@@ -508,12 +536,21 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
 
   if (allSameType && allToolCalls.length > 1) {
     const config = getToolConfig(refTool);
-    return { icon: getToolIcon(refTool), action: config.aggregate!.completed.replace('{n}', String(allToolCalls.length)), args: '' };
+    return {
+      icon: getToolIcon(refTool),
+      action: formatAggregateText(config.aggregate?.completed, allToolCalls.length)
+        ?? t('chat.turn.executedSteps', { n: allToolCalls.length }),
+      args: '',
+    };
   }
 
   if (allSameType && allToolCalls.length === 1) {
     const config = getToolConfig(refTool);
-    return { icon: getToolIcon(refTool), action: config.text.completed, args: getArgsText(refTool) || '' };
+    return {
+      icon: getToolIcon(refTool),
+      action: config.text.completed || t('chat.turn.executedSteps', { n: 1 }),
+      args: getArgsText(refTool) || '',
+    };
   }
 
   // 混合工具 — 通用图标
