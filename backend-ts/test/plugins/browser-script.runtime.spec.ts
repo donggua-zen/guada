@@ -344,6 +344,80 @@ return 1;
     expect(filteredSelector.error?.message).toContain("tab.evaluate");
   });
 
+  it("browser.tabs.new 显式新建并选中标签", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `
+const blank = await browser.tabs.new();
+const page = await browser.tabs.new("https://example.com/page");
+return { blank, page };
+`,
+    );
+
+    expect(result.status).toBe("completed");
+    const navigates = calls.filter((call) => call.method === "browser_navigate");
+    expect(navigates[0].params).toMatchObject({
+      url: "about:blank",
+      new_tab: true,
+    });
+    expect(navigates[1].params).toMatchObject({
+      url: "https://example.com/page",
+      new_tab: true,
+    });
+  });
+
+  it("沙箱提供 setTimeout / clearTimeout / setInterval / clearInterval", async () => {
+    const { bridge } = createBridge();
+    const result = await runScript(
+      bridge,
+      `
+const order = [];
+await new Promise((resolve) => setTimeout(() => { order.push("timeout"); resolve(); }, 10));
+const cleared = setTimeout(() => order.push("cleared"), 5);
+clearTimeout(cleared);
+const ticks = [];
+await new Promise((resolve) => {
+  let n = 0;
+  const handle = setInterval(() => {
+    ticks.push(++n);
+    if (n >= 2) { clearInterval(handle); resolve(); }
+  }, 10);
+});
+return { order, ticks };
+`,
+    );
+
+    expect(result.status).toBe("completed");
+    expect((result.value as any).order).toEqual(["timeout"]);
+    expect((result.value as any).ticks).toEqual([1, 2]);
+  });
+
+  it("计时器拒绝字符串回调", async () => {
+    const { bridge } = createBridge();
+    const result = await runScript(
+      bridge,
+      `setTimeout("1 + 1", 0); return 1;`,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("INVALID_ARGUMENT");
+    expect(result.error?.message).toContain("requires a function");
+  });
+
+  it("snapshot 拒绝未知类型并列出合法值", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `await tab.snapshot({ type: "yaml" }); return 1;`,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("INVALID_ARGUMENT");
+    expect(result.error?.message).toContain('"simple", "struct", or "summary"');
+    expect(calls.some((call) => call.method === "browser_snapshot")).toBe(false);
+  });
+
   it("tab 级便利方法同样透传顶层 options", async () => {
     const { bridge, calls } = createBridge();
     const result = await runScript(

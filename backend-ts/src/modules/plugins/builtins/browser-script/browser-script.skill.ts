@@ -26,12 +26,14 @@ browser_run({ name?, script, args?, timeout_ms? })
 
 ## Core workflow
 
-1. await tab.goto(url) - navigates and waits for domcontentloaded; it does NOT snapshot.
+1. await tab.goto(url) - opens a tab if the session has none, otherwise navigates the current tab; it waits for domcontentloaded and does NOT snapshot.
 2. Optional: const page = await tab.snapshot() - read page facts. The snapshot is for observation only; it does not create action handles.
 3. Act with locators built from snapshot facts or known page structure:
    await tab.getByRole("button", { name: "Submit" }).click();
    await tab.getByLabel("Email").fill("user@example.com");
 4. After an action, use count() / isVisible() / text() / state() when that answers the next question; take a fresh snapshot only when you need new page facts.
+
+Non-navigation calls (snapshot/locator/click/...) do not create tabs. If the session has no tab yet they fail with a message telling you to call tab.goto(url) or browser.tabs.new() first.
 
 Locators are resolved live at action time. A locator that no longer matches the current page returns NOT_FOUND; you do not need to carry refs or generations.
 
@@ -53,7 +55,7 @@ Example:
 
 tab.snapshot({ type? }) returns:
 
-- type: simple (default), struct, or summary.
+- type: simple (default), struct, or summary. These are the only valid values; yaml/dom are not aliases and return INVALID_ARGUMENT.
 - url and title.
 - tree: simple is a compact accessibility tree with role/name/value/state/children; struct is a DOM-oriented role tree; summary returns text/links/headings.
 - find(query), findAll(query), text(): helpers on the returned object.
@@ -211,12 +213,21 @@ Rules:
 - tab.back / forward / reload -> { ok, url }
 - tab.console -> array of console log entries
 - browser.tabs.list -> TabInfo[] (array)
+- browser.tabs.new -> { ok, tabId, url, title, readyState? }
 - browser.tabs.select -> TabInfo
 - browser.tabs.close -> { ok, closedTabId, currentTabId }
 - browser.tabs.closeAll -> { ok, closedCount }
 - browser.current / tab.info -> { index, tabId, url, title, isCurrent } or null
 
 TabInfo = { index, tabId, url, title, isCurrent }.
+
+## Tabs
+
+- tab.goto(url) reuses the session's current tab; if the session has no tab yet, it creates one.
+- tab.goto(url, { newTab: true }) always creates and selects a new tab.
+- browser.tabs.new(url?) explicitly creates and selects a tab (about:blank by default); it returns the same shape as tab.goto.
+- browser.tabs.list/select/close/closeAll manage tabs; select(id/index) changes the current tab used by tab.*.
+- Non-navigation calls do not create tabs implicitly.
 
 ## Waits
 
@@ -225,7 +236,8 @@ TabInfo = { index, tabId, url, title, isCurrent }.
 - networkidle is rejected with UNSUPPORTED.
 - locator.waitFor({ state }) supports visible (default), attached, hidden, detached.
 - Every action has its own timeout (default 3000ms, max 30000ms).
-- sleep(ms) is a last resort, max 5000.
+- sleep(ms) is a bounded convenience delay, max 5000.
+- setTimeout/clearTimeout/setInterval/clearInterval are available in the script sandbox (not the page). Wrap setTimeout in a Promise when you need to await it. Timers are cleared when the script ends or is cancelled.
 
 ## Errors
 
@@ -265,7 +277,8 @@ Failed runs include the last five trace steps and error details.
 - Use tab.selectOption for <select>, tab.check/uncheck for checkbox/radio, and tab.fill only for text-like controls.
 - Return only the fields you need; do not return the whole snapshot tree.
 - No filesystem, network, or Node.js APIs. tab.evaluate is the only page-side escape hatch.
-- One script runs against the session's current tab; browser.tabs.select changes it.
+- Timers run in the script sandbox, not the page; use them for generic async patterns, and state waits for page readiness.
+- One script runs against the session's current tab; browser.tabs.select changes it, browser.tabs.new opens and selects a new one.
 
 ## Example: form with a failure branch
 

@@ -233,12 +233,14 @@ export class BrowserAutomationService {
    */
   private async ensureCurrentTab(createdBy: string): Promise<string> {
     if (!createdBy) {
-      throw new Error("No active tab and no session context. Call browser_navigate(url, new_tab=true) first.");
+      throw new Error(
+        "No active tab and no session context. Call tab.goto(url) to open one, or tab.goto(url, { newTab: true }) for a forced new tab.",
+      );
     }
     const wid = this.getCurrentTabId(createdBy);
     if (!wid) {
       throw new Error(
-        `No active tab for this session. Call browser_navigate(url, new_tab=true) to open one.`,
+        `No active tab for this session. Call tab.goto(url) to open one, or tab.goto(url, { newTab: true }) for a new tab.`,
       );
     }
     return wid;
@@ -263,7 +265,7 @@ export class BrowserAutomationService {
 
     if (!resolvedWindowId) {
       throw new Error(
-        "window_id is required (or have an active tab). Call browser_navigate(url, new_tab=true) first.",
+        "window_id is required (or have an active tab). Call tab.goto(url) first.",
       );
     }
 
@@ -272,7 +274,7 @@ export class BrowserAutomationService {
 
     if (!windowInfo) {
       throw new Error(
-        `Window ${resolvedWindowId} not found. Use browser_tabs(action="list") to see available tabs.`,
+        `Window ${resolvedWindowId} not found. Use browser.tabs.list() to see available tabs.`,
       );
     }
 
@@ -335,7 +337,7 @@ export class BrowserAutomationService {
     sessionId?: string,
     waitUntil: BrowserWaitUntil = "load",
   ): Promise<any> {
-    assertNavigableUrl(url, "browser_navigate");
+    assertNavigableUrl(url, "tab.goto");
 
     if (!this.windowManager) {
       throw new Error("WindowManager not initialized");
@@ -375,7 +377,7 @@ export class BrowserAutomationService {
     } else {
       throw new BrowserBridgeError(
         "TAB_NOT_FOUND",
-        "No active tab. Call browser_navigate(url, new_tab=true) first.",
+        "No active tab. Call tab.goto(url, { newTab: true }) first.",
       );
     }
 
@@ -1959,7 +1961,7 @@ export class BrowserAutomationService {
         if (!targetWid) {
           throw new BrowserBridgeError(
             "NOT_FOUND",
-            'Tab not found. Use browser_tabs(action="list") to see available tabs.',
+            'Tab not found. Use browser.tabs.list() to see available tabs.',
           );
         }
 

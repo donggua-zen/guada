@@ -4,8 +4,8 @@
  * 以 `new Worker(source, { eval: true })` 启动，和 workflow 的 worker 模式一致：
  * worker 内先 post ready 等宿主 'go'，再创建 vm context 执行脚本。
  *
- * 脚本只能看到 browser/tab/log/sleep/args：
- * - 没有 require/process/fs/fetch/timers（sleep 由宿主注入）
+ * 脚本只能看到 browser/tab/log/sleep/timers/args：
+ * - 没有 require/process/fs/fetch；timer 由宿主注入并随取消/结束清理
  * - vm 开启 codeGeneration.strings=false，挡住 Function/eval 构造逃逸
  *
  * 宿主侧负责真正的浏览器调用（Bridge → Electron），worker 只做编排。
@@ -18,12 +18,77 @@ const vm = require('vm');
 
 const MAX_SLEEP_MS = 5000;
 const SYNC_TIMEOUT_MS = 5000;
+const MAX_TIMER_MS = 300000;
+const MIN_INTERVAL_MS = 10;
 
 let callSeq = 0;
 let cancelled = false;
 let cancelReason = null;
 const pending = new Map();
 let resolveGo = null;
+
+// ── 沙箱计时器 ──
+// vm context 不继承 Node 的 timer 全局，这里显式注入并统一登记，
+// 取消/结束时清理，避免 interval 在脚本返回后继续产生回调。
+let timerSeq = 0;
+const timerHandles = new Map();
+
+function runTimerHandler(handler, args) {
+  try {
+    handler.apply(null, args);
+  } catch (error) {
+    post({
+      type: 'error',
+      error: {
+        code: (error && error.fatal && error.code) || 'SCRIPT_ERROR',
+        message: (error && error.message) || String(error),
+      },
+    });
+    clearAllTimers();
+  }
+}
+
+function scheduleTimer(kind, handler, delay, args, repeat) {
+  if (typeof handler !== 'function') {
+    throw fatal('INVALID_ARGUMENT', kind + ' requires a function');
+  }
+  const value = delay === undefined ? 0 : Number(delay);
+  if (!Number.isFinite(value) || value < 0) {
+    throw fatal('INVALID_ARGUMENT', kind + ' delay must be a finite number >= 0');
+  }
+  const ms = Math.min(Math.floor(value), MAX_TIMER_MS);
+  const id = ++timerSeq;
+  if (repeat) {
+    const handle = setInterval(function () {
+      runTimerHandler(handler, args);
+    }, Math.max(MIN_INTERVAL_MS, ms));
+    timerHandles.set(id, { handle: handle, repeat: true });
+  } else {
+    const handle = setTimeout(function () {
+      timerHandles.delete(id);
+      runTimerHandler(handler, args);
+    }, ms);
+    timerHandles.set(id, { handle: handle, repeat: false });
+  }
+  return id;
+}
+
+function clearTimer(id) {
+  const key = Number(id);
+  const entry = timerHandles.get(key);
+  if (!entry) return;
+  timerHandles.delete(key);
+  if (entry.repeat) clearInterval(entry.handle);
+  else clearTimeout(entry.handle);
+}
+
+function clearAllTimers() {
+  timerHandles.forEach(function (entry) {
+    if (entry.repeat) clearInterval(entry.handle);
+    else clearTimeout(entry.handle);
+  });
+  timerHandles.clear();
+}
 
 function post(msg) { parentPort.postMessage(msg); }
 
@@ -415,6 +480,12 @@ const browser = Object.freeze({
   },
   tabs: Object.freeze({
     list: function () { return hostCall('tabs', { action: 'list' }); },
+    new: function (url) {
+      if (url !== undefined && typeof url !== 'string') {
+        throw fatal('INVALID_ARGUMENT', 'browser.tabs.new(url) requires a string URL');
+      }
+      return hostCall('goto', { url: url || 'about:blank', newTab: true });
+    },
     select: function (index) { return hostCall('tabs', { action: 'select', index: index }); },
     close: function (index) { return hostCall('tabs', { action: 'close', index: index }); },
     closeAll: function () { return hostCall('tabs', { action: 'close_all' }); },
@@ -428,6 +499,14 @@ const sandbox = {
   tab: tab,
   log: function (message) { post({ type: 'log', message: String(message) }); },
   sleep: sleep,
+  setTimeout: function (handler, delay) {
+    return scheduleTimer('setTimeout', handler, delay, Array.prototype.slice.call(arguments, 2), false);
+  },
+  clearTimeout: function (id) { clearTimer(id); },
+  setInterval: function (handler, delay) {
+    return scheduleTimer('setInterval', handler, delay, Array.prototype.slice.call(arguments, 2), true);
+  },
+  clearInterval: function (id) { clearTimer(id); },
   args: workerData.args,
   console: {
     log: function () {
@@ -454,6 +533,7 @@ parentPort.on('message', function (msg) {
   if (msg.type === 'cancel') {
     cancelled = true;
     cancelReason = msg.reason || 'Browser script cancelled';
+    clearAllTimers();
     pending.forEach(function (entry) { entry.reject(fatal('CANCELLED', cancelReason)); });
     pending.clear();
     return;
@@ -531,14 +611,19 @@ async function main() {
   }
 }
 
-main().catch(function (error) {
-  post({
-    type: 'error',
-    error: {
-      code: 'SCRIPT_ERROR',
-      message: (error && error.message) || String(error),
-      ...(error && error.details !== undefined ? { details: error.details } : {}),
-    },
+main()
+  .then(function () {
+    clearAllTimers();
+  })
+  .catch(function (error) {
+    clearAllTimers();
+    post({
+      type: 'error',
+      error: {
+        code: 'SCRIPT_ERROR',
+        message: (error && error.message) || String(error),
+        ...(error && error.details !== undefined ? { details: error.details } : {}),
+      },
+    });
   });
-});
 `;

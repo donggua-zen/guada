@@ -75,6 +75,29 @@ async function main() {
   service.initializeWindowManager(manager);
   await service.tabsManage("select", "loc-test", 0);
 
+  // 无当前标签 + 非导航命令：错误必须指向 tab.goto，而不是已退役的 browser_navigate
+  let noTabError = null;
+  try {
+    await service.handleToolCall({
+      id: "0",
+      method: "browser_snapshot",
+      params: { created_by: "fresh-session" },
+    });
+  } catch (error) {
+    noTabError = error;
+  }
+  assert(noTabError, "expected a no-active-tab error");
+  const noTabMessage = String(noTabError.message || noTabError);
+  assert(
+    noTabMessage.includes("tab.goto(url)"),
+    `no-tab error should mention tab.goto: ${noTabMessage}`,
+  );
+  assert(
+    !noTabMessage.includes("browser_navigate"),
+    `no-tab error should not mention browser_navigate: ${noTabMessage}`,
+  );
+  console.log("LOCATOR_OK no-tab guidance");
+
   const loc = (action, descriptor, extra = {}) =>
     service.handleToolCall({
       id: "0",

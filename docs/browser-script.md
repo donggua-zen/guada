@@ -62,6 +62,7 @@ LLM
 |---|---|
 | `browser.open(url, { newTab? })` | 导航；不自动快照 |
 | `browser.tabs.list()` | 列出当前会话标签，返回 `TabInfo[]` |
+| `browser.tabs.new(url?)` | 显式新建并选中标签，默认 `about:blank`；返回与 `tab.goto` 相同 |
 | `browser.tabs.select(index)` | 切换当前标签，返回选中的 `TabInfo` |
 | `browser.tabs.close(index?)` | 关闭标签，返回 `{ ok, closedTabId, currentTabId }` |
 | `browser.tabs.closeAll()` | 关闭当前会话全部标签，返回 `{ ok, closedCount }` |
@@ -72,8 +73,8 @@ LLM
 
 | 调用 | 说明 |
 |---|---|
-| `tab.goto(url, { newTab?, waitUntil? })` | `waitUntil`: `"domcontentloaded"`（默认）、`"load"`、`"none"` |
-| `tab.snapshot({ type? })` | `simple`（默认）/ `struct` / `summary`；只观察，不产生动作句柄 |
+| `tab.goto(url, { newTab?, waitUntil? })` | `waitUntil`: `"domcontentloaded"`（默认）、`"load"`、`"none"`；当前会话无标签时自动创建，`newTab:true` 强制新建 |
+| `tab.snapshot({ type? })` | `simple`（默认）/ `struct` / `summary`，仅这三个值；只观察，不产生动作句柄 |
 | `tab.click(target, options)` | 任意元素；动作前自动等待可操作性 |
 | `tab.fill(target, value, options)` | 文本输入/textarea/contenteditable |
 | `tab.hover(target, options)` | 悬停 |
@@ -91,6 +92,9 @@ LLM
 | `tab.console({ clear? })` | 默认只读日志；`clear:true` 才清空 |
 | `tab.back()` / `forward()` / `reload()` | 历史导航 |
 | `log(message)` / `sleep(ms)` / `args` | `sleep` 上限 5 秒 |
+| `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` | 脚本沙箱内可用；回调必须是函数，取消/结束自动清理 |
+
+非导航命令（`snapshot`、locator、`click` 等）不会隐式创建标签；当前会话没有标签时先 `tab.goto(url)` 或 `browser.tabs.new()`。
 
 ### locator
 
@@ -228,6 +232,7 @@ type TabInfo = {
 - `networkidle` 不支持，明确报 `UNSUPPORTED`。
 - 动作本身已经自动等待，不要再在 click/fill 前加 `sleep`。
 - `sleep(ms)` 仅作为逃生舱，上限 5 秒。
+- 通用异步模式可以直接用沙箱里的 `setTimeout/clearTimeout/setInterval/clearInterval`；它们是脚本环境计时器，不是页面计时器，取消/结束时自动清理。
 
 ### 5. 错误码
 
@@ -260,7 +265,7 @@ type TabInfo = {
 ## 安全边界
 
 - 脚本在 `worker_threads` + `vm.createContext` 中执行，使用 `codeGeneration: { strings: false, wasm: false }` 阻断 `Function`/`eval` 构造逃逸。
-- vm 中只有 `browser`、`tab`、`log`、`sleep`、`args`、`console`；没有 `require`、`process`、`fs`、`fetch`、`setTimeout`。
+- vm 中只有 `browser`、`tab`、`log`、`sleep`、`args`、`console` 以及 `setTimeout/clearTimeout/setInterval/clearInterval`；没有 `require`、`process`、`fs`、`fetch`。计时器由宿主注入并登记，取消/结束时统一清理。
 - Worker 有内存上限，整体超时后强制 `terminate()`。
 - 超时/取消会通过内部 `AbortController` 停止本地等待并 reject 在途 Promise；Bridge 没有 cancel 协议，已写入管道的 Electron 动作可能继续执行到结束。
 - ivya 注入在 isolated world，页面脚本不能替换查询引擎；查询结果通过临时 `data-guada-loc` 属性交给动作引擎，动作结束后清理。
