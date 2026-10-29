@@ -27,6 +27,11 @@ export interface LocatorDescriptor {
   level?: number;
   pressed?: boolean;
   selected?: boolean;
+  /**
+   * 父链：由 locator.locator()/链式 getBy* 产生，从最外层到直接父级。
+   * 每级只在自己的匹配元素内继续查询，index 作用于该级结果。
+   */
+  scope?: LocatorDescriptor[];
 }
 
 export interface LocatorCandidate {
@@ -109,7 +114,7 @@ export class BrowserLocatorEngine {
     const result = await this.runDescriptorScript<LocatorQueryResult>(
       webContents,
       descriptor,
-      `const matches = applyIndex(queryElements(d), d).map(describe);
+      `const matches = resolveDescriptor(d).map(describe);
        return { count: matches.length, matches };`,
     );
     if (!result || !Array.isArray(result.matches)) {
@@ -130,7 +135,7 @@ export class BrowserLocatorEngine {
     const result = await this.runDescriptorScript<LocatorMaterializeResult>(
       webContents,
       descriptor,
-      `const matches = applyIndex(queryElements(d), d);
+      `const matches = resolveDescriptor(d);
        if (matches.length === 0) {
          return { ok: false, count: 0, candidates: [] };
        }
@@ -185,7 +190,7 @@ export class BrowserLocatorEngine {
     const result = await this.runDescriptorScript<string>(
       webContents,
       descriptor,
-      `const matches = applyIndex(queryElements(d), d);
+      `const matches = resolveDescriptor(d);
        if (!matches.length) return "";
        return String(matches[0].innerText || matches[0].textContent || "").trim();`,
     );
@@ -200,8 +205,7 @@ export class BrowserLocatorEngine {
     const result = await this.runDescriptorScript<boolean>(
       webContents,
       descriptor,
-      `const withHidden = Object.assign({}, d, { includeHidden: true });
-       const matches = applyIndex(queryElements(withHidden), d);
+      `const matches = resolveDescriptor(includeHiddenTail(d));
        return matches.some(isVisibleElement);`,
     );
     return result === true;
@@ -215,8 +219,7 @@ export class BrowserLocatorEngine {
     const result = await this.runDescriptorScript<LocatorWaitProbe>(
       webContents,
       descriptor,
-      `const withHidden = Object.assign({}, d, { includeHidden: true });
-       const matches = applyIndex(queryElements(withHidden), d);
+      `const matches = resolveDescriptor(includeHiddenTail(d));
        return { count: matches.length, visibleCount: matches.filter(isVisibleElement).length };`,
     );
     if (!result || typeof result.count !== "number") {
@@ -294,6 +297,39 @@ export class BrowserLocatorEngine {
   }
 }
 
+export function flattenLocatorChain(descriptor: LocatorDescriptor): LocatorDescriptor[] {
+  const steps: LocatorDescriptor[] = [];
+  const walk = (step: LocatorDescriptor | undefined): void => {
+    if (!step || typeof step !== "object") return;
+    if (Array.isArray(step.scope)) {
+      for (const parent of step.scope) walk(parent);
+    }
+    const copy: LocatorDescriptor = { ...step };
+    delete copy.scope;
+    steps.push(copy);
+  };
+  walk(descriptor);
+  return steps;
+}
+
+/** 链式 locator 的末级（没有父链时就是 descriptor 本身）。 */
+export function locatorTail(descriptor: LocatorDescriptor): LocatorDescriptor | undefined {
+  const steps = flattenLocatorChain(descriptor);
+  return steps[steps.length - 1];
+}
+
+/** 把 includeHidden 加到链式 locator 的末级，父链保持原选项。 */
+export function setTailIncludeHidden(
+  descriptor: LocatorDescriptor,
+  value: boolean,
+): LocatorDescriptor {
+  const steps = flattenLocatorChain(descriptor);
+  if (!steps.length) return descriptor;
+  const tail: LocatorDescriptor = { ...steps[steps.length - 1], includeHidden: value };
+  if (steps.length === 1) return tail;
+  return { ...tail, scope: steps.slice(0, -1) };
+}
+
 const LOCATOR_HELPERS = `
   const revive = (value) => {
     if (value && typeof value === "object" && typeof value.__regexp === "string") {
@@ -338,32 +374,73 @@ const LOCATOR_HELPERS = `
     if (descriptor.selected !== undefined) options.selected = descriptor.selected;
     return options;
   };
-  const queryElements = (descriptor) => {
+  const queryElements = (descriptor, root) => {
     if (descriptor.kind === "role") {
-      return ivya.queryAllByRole(descriptor.role, roleOptions(descriptor));
+      return ivya.queryAllByRole(descriptor.role, roleOptions(descriptor), root);
     }
     if (descriptor.kind === "text") {
-      return ivya.queryAllByText(revive(descriptor.text), { exact: descriptor.exact === true });
+      return ivya.queryAllByText(revive(descriptor.text), { exact: descriptor.exact === true }, root);
     }
     if (descriptor.kind === "label") {
-      return ivya.queryAllByLabelText(revive(descriptor.text), { exact: descriptor.exact === true });
+      return ivya.queryAllByLabelText(revive(descriptor.text), { exact: descriptor.exact === true }, root);
     }
     if (descriptor.kind === "placeholder") {
-      return ivya.queryAllByPlaceholder(revive(descriptor.text), { exact: descriptor.exact === true });
+      return ivya.queryAllByPlaceholder(revive(descriptor.text), { exact: descriptor.exact === true }, root);
     }
     if (descriptor.kind === "testid") {
-      return ivya.queryAllByTestId(revive(descriptor.testId));
+      return ivya.queryAllByTestId(revive(descriptor.testId), root);
     }
     if (descriptor.kind === "altText") {
-      return ivya.queryAllByAltText(revive(descriptor.text), { exact: descriptor.exact === true });
+      return ivya.queryAllByAltText(revive(descriptor.text), { exact: descriptor.exact === true }, root);
     }
     if (descriptor.kind === "title") {
-      return ivya.queryAllByTitle(revive(descriptor.text), { exact: descriptor.exact === true });
+      return ivya.queryAllByTitle(revive(descriptor.text), { exact: descriptor.exact === true }, root);
     }
     if (descriptor.kind === "selector") {
-      return Array.from(document.querySelectorAll(descriptor.selector));
+      return Array.from(root.querySelectorAll(descriptor.selector));
     }
     return [];
+  };
+  const chainOf = (descriptor) => {
+    const steps = [];
+    const walk = (step) => {
+      if (!step || typeof step !== "object") return;
+      if (Array.isArray(step.scope)) {
+        for (let i = 0; i < step.scope.length; i++) walk(step.scope[i]);
+      }
+      const copy = Object.assign({}, step);
+      delete copy.scope;
+      steps.push(copy);
+    };
+    walk(descriptor);
+    return steps;
+  };
+  const resolveDescriptor = (descriptor) => {
+    const steps = chainOf(descriptor);
+    let roots = [document];
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      const collected = [];
+      const seen = new Set();
+      for (let r = 0; r < roots.length; r++) {
+        const found = queryElements(step, roots[r]);
+        for (let f = 0; f < found.length; f++) {
+          if (seen.has(found[f])) continue;
+          seen.add(found[f]);
+          collected.push(found[f]);
+        }
+      }
+      roots = applyIndex(collected, step);
+    }
+    return roots;
+  };
+  const includeHiddenTail = (descriptor) => {
+    const steps = chainOf(descriptor);
+    if (!steps.length) return descriptor;
+    steps[steps.length - 1].includeHidden = true;
+    const tail = steps[steps.length - 1];
+    if (steps.length === 1) return tail;
+    return Object.assign({}, tail, { scope: steps.slice(0, -1) });
   };
 `;
 

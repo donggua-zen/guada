@@ -146,6 +146,43 @@ async function main() {
   );
   console.log("LOCATOR_OK strictness");
 
+  // chained scopes: parent chain with per-step index
+  const chainAmbiguous = await expectError(
+    () =>
+      loc("click", {
+        kind: "selector",
+        selector: "p",
+        scope: [{ kind: "selector", selector: "article" }],
+      }),
+    "AMBIGUOUS",
+  );
+  assert(
+    chainAmbiguous.details?.candidates?.length === 6,
+    `chained ambiguity candidates: ${JSON.stringify(chainAmbiguous.details)}`,
+  );
+  const zeta = await loc("text", {
+    kind: "selector",
+    selector: "p",
+    index: 1,
+    scope: [{ kind: "selector", selector: "article", index: 2 }],
+  });
+  assert(zeta === "Zeta body", `chained per-step index failed: ${zeta}`);
+  await loc("click", {
+    kind: "role",
+    role: "button",
+    name: "Open",
+    scope: [{ kind: "selector", selector: "#post-2" }],
+  });
+  assert((await pageRun("window.__clicks")).includes("open:two"), "chained scoped click failed");
+  const chainedState = await loc("state", {
+    kind: "role",
+    role: "button",
+    name: "Open",
+    scope: [{ kind: "selector", selector: "#post-3" }],
+  });
+  assert(chainedState.found && chainedState.visible, "chained state failed");
+  console.log("LOCATOR_OK chained scopes");
+
   // state / count / text / isVisible
   const state = await loc("state", { kind: "label", text: "Email" });
   assert(state.found && state.visible && state.editable, "state probe failed");

@@ -105,6 +105,19 @@ LLM
 | `.isVisible()` | 当前是否有可见匹配 |
 | `.waitFor({ state?, timeout? })` | 等待 `attached/visible/hidden/detached` |
 | `.first()` / `.last()` / `.nth(index)` | 显式位置选择 |
+| `.locator(css)` / `.getByRole(...)` 等 | 在父级匹配元素内继续查询，可链式 |
+
+链式 locator 等价于 Playwright 的作用域 locator：父级先解析成元素集合，子查询只在每个父元素内部进行，结果按元素身份去重；`first/last/nth` 作用于调用它的那一级。
+
+```js
+const row = tab.getByRole("row", { name: "Bob" });
+await row.getByRole("button", { name: "Delete" }).click();
+
+const target = tab.locator("article").nth(4);
+await target.locator("p").first().hover();
+```
+
+未实现的其他 Playwright Locator 方法（`filter`、`all`、`getAttribute`、`inputValue`、`isChecked`、`dragTo`、`setInputFiles` 等）会抛 `UNSUPPORTED`，错误信息列出当前支持的方法；读取属性或计算样式请用 `tab.evaluate(...)`。
 
 ### target
 

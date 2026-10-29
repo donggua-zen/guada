@@ -106,6 +106,16 @@ Locator actions:
 - locator.count() / text() / isVisible() / state()
 - locator.first() / last() / nth(index)
 
+Locators are chainable. locator.locator(css) and the chained getBy* factories narrow the search to descendants of the current match; first/last/nth applies to the step they are called on:
+
+    const row = tab.getByRole("row", { name: "Bob" });
+    await row.getByRole("button", { name: "Delete" }).click();
+
+    const target = tab.locator("article").nth(4);
+    await target.locator("p").first().hover();
+
+Other Playwright Locator methods (filter, all, getAttribute, inputValue, isChecked, dragTo, setInputFiles, ...) are not implemented and raise UNSUPPORTED naming the supported members. locator(css) takes no filter options either; encode the condition in the CSS or a chained getBy*. Use tab.evaluate(...) to read attributes or computed styles.
+
 tab-level convenience actions accept a locator or CSS selector:
 
     tab.click(target, options)

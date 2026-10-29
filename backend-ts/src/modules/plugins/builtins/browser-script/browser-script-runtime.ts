@@ -547,11 +547,12 @@ export class BrowserScriptRuntime {
           `Ref target "${selector}" was removed. Use tab.getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/getByAltText/getByTitle or tab.locator(css) instead.`,
         );
       }
-      return {
+      return toWireDescriptor({
+        ...target,
         kind: "selector",
         selector,
         ...(typeof target.index === "number" ? { index: target.index } : {}),
-      };
+      });
     }
 
     const locatorKinds = new Set([

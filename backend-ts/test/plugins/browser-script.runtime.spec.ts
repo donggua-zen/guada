@@ -294,6 +294,56 @@ return 1;
     });
   });
 
+  it("支持链式作用域 locator：父链逐级透传", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `
+const target = tab.locator("article").nth(4);
+await target.locator("p").first().hover();
+await tab.getByRole("article").first().getByRole("link", { name: "More" }).click();
+return 1;
+`,
+    );
+
+    expect(result.status).toBe("completed");
+    const locatorCalls = calls.filter((call) => call.method === "browser_locator");
+    expect(locatorCalls[0].params.descriptor).toEqual({
+      kind: "selector",
+      selector: "p",
+      index: 0,
+      scope: [{ kind: "selector", selector: "article", index: 4 }],
+    });
+    expect(locatorCalls[1].params.descriptor).toMatchObject({
+      kind: "role",
+      role: "link",
+      name: "More",
+      scope: [{ kind: "role", role: "article", index: 0 }],
+    });
+  });
+
+  it("未知 locator 方法返回 UNSUPPORTED 并提示替代写法", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `await tab.locator("article").filter({ hasText: "x" }).click(); return 1;`,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("UNSUPPORTED");
+    expect(result.error?.message).toContain("locator.filter");
+    expect(result.error?.message).toContain("locator.locator");
+    expect(calls.filter((call) => call.method === "browser_locator")).toHaveLength(0);
+
+    const filteredSelector = await runScript(
+      bridge,
+      `await tab.locator("p", { hasText: "x" }).click(); return 1;`,
+    );
+    expect(filteredSelector.status).toBe("failed");
+    expect(filteredSelector.error?.code).toBe("UNSUPPORTED");
+    expect(filteredSelector.error?.message).toContain("tab.evaluate");
+  });
+
   it("tab 级便利方法同样透传顶层 options", async () => {
     const { bridge, calls } = createBridge();
     const result = await runScript(

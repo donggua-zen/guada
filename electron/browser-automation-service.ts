@@ -14,6 +14,8 @@ import {
   BrowserLocatorEngine,
   LocatorDescriptor,
   LocatorWaitState,
+  locatorTail,
+  setTailIncludeHidden,
 } from "./browser-locator-engine";
 import {
   ActionOptions,
@@ -1616,8 +1618,8 @@ export class BrowserAutomationService {
 
       const materialized = await this.locatorEngine.materialize(
         context.webContents,
-        action === "state" && descriptor.kind === "role"
-          ? { ...descriptor, includeHidden: true }
+        action === "state" && locatorTail(descriptor)?.kind === "role"
+          ? setTailIncludeHidden(descriptor, true)
           : descriptor,
       );
       if (!materialized.ok) {

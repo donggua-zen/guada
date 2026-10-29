@@ -40,6 +40,27 @@
     <tr><td>Bob</td><td><button class="delete" data-row="bob">Delete</button></td></tr>
   </table>
 
+  <section id="posts">
+    <article id="post-1">
+      <h2>Post one</h2>
+      <p>Alpha body</p>
+      <p>Beta body</p>
+      <button class="post-open" data-post="one">Open</button>
+    </article>
+    <article id="post-2">
+      <h2>Post two</h2>
+      <p>Gamma body</p>
+      <p>Delta body</p>
+      <button class="post-open" data-post="two">Open</button>
+    </article>
+    <article id="post-3">
+      <h2>Post three</h2>
+      <p>Epsilon body</p>
+      <p>Zeta body</p>
+      <button class="post-open" data-post="three">Open</button>
+    </article>
+  </section>
+
   <div id="shadow-host"></div>
   <iframe id="frame" srcdoc="<button>Inside Frame</button>"></iframe>
 
@@ -61,6 +82,9 @@
     document.getElementById("dynamic").addEventListener("click", () => window.__click("dynamic"));
     document.querySelectorAll(".delete").forEach((btn) => {
       btn.addEventListener("click", () => window.__click("delete:" + btn.dataset.row));
+    });
+    document.querySelectorAll(".post-open").forEach((btn) => {
+      btn.addEventListener("click", () => window.__click("open:" + btn.dataset.post));
     });
 
     const shadow = document.getElementById("shadow-host").attachShadow({ mode: "open" });

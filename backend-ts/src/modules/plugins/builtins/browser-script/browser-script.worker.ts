@@ -77,8 +77,72 @@ function serializeTarget(target) {
   );
 }
 
+function roleStep(role, options) {
+  var step = Object.assign({}, options || {}, { kind: 'role', role: role });
+  delete step.scope;
+  step.exact = Boolean(options && options.exact);
+  return step;
+}
+
+function textStep(kind, text, options) {
+  return { kind: kind, text: text, exact: Boolean(options && options.exact) };
+}
+
+function testIdStep(testId) {
+  return { kind: 'testid', testId: testId };
+}
+
+function selectorStep(selector, options) {
+  if (typeof selector !== 'string' || !selector.trim()) {
+    throw fatal('INVALID_ARGUMENT', 'locator(selector) requires a non-empty CSS selector string');
+  }
+  if (options && typeof options === 'object' && Object.keys(options).length > 0) {
+    throw fatal(
+      'UNSUPPORTED',
+      'locator(selector, options) filtering is not supported. Use a more specific CSS selector, a chained getByRole/getByText/..., or tab.evaluate(...).'
+    );
+  }
+  return { kind: 'selector', selector: selector };
+}
+
+// Playwright 的 locator 是链式的：父级的 scope 收进 descriptor，动作时由宿主逐级解析。
+function appendStep(descriptor, step) {
+  var parent = Object.assign({}, descriptor);
+  delete parent.scope;
+  var scope = Array.isArray(descriptor.scope) ? descriptor.scope.slice() : [];
+  scope.push(parent);
+  return Object.assign({}, step, { scope: scope });
+}
+
+var LOCATOR_METHODS = [
+  'click', 'fill', 'hover', 'press', 'scroll', 'selectOption', 'check', 'uncheck',
+  'state', 'count', 'text', 'isVisible', 'waitFor',
+  'first', 'last', 'nth', 'locator',
+  'getByRole', 'getByText', 'getByLabel', 'getByPlaceholder',
+  'getByTestId', 'getByAltText', 'getByTitle',
+];
+
+function guardLocator(locator) {
+  if (typeof Proxy !== 'function') return locator;
+  return new Proxy(locator, {
+    get: function (target, prop) {
+      if (typeof prop === 'symbol') return target[prop];
+      // thenable / 日志序列化的探测属性保持静默，避免 await 或 JSON.stringify 误判。
+      if (prop === 'then' || prop === 'toJSON' || prop === 'inspect') return undefined;
+      if (prop in target) return target[prop];
+      throw fatal(
+        'UNSUPPORTED',
+        'locator.' + prop + ' is not supported. Supported locator members: ' +
+          LOCATOR_METHODS.join(', ') +
+          '. Narrow scope with locator.locator(css) or a chained getByRole/getByText/...; ' +
+          'read attributes or computed styles with tab.evaluate(...).'
+      );
+    },
+  });
+}
+
 function makeLocator(descriptor) {
-  return {
+  var locator = {
     __browserLocator: descriptor,
     click: function (options) {
       return hostCall('locator', { locator: descriptor, action: 'click', options: options || {} });
@@ -132,7 +196,32 @@ function makeLocator(descriptor) {
     nth: function (index) {
       return makeLocator(Object.assign({}, descriptor, { index: Number(index) }));
     },
+    locator: function (selector, options) {
+      return makeLocator(appendStep(descriptor, selectorStep(selector, options)));
+    },
+    getByRole: function (role, options) {
+      return makeLocator(appendStep(descriptor, roleStep(role, options)));
+    },
+    getByText: function (text, options) {
+      return makeLocator(appendStep(descriptor, textStep('text', text, options)));
+    },
+    getByLabel: function (text, options) {
+      return makeLocator(appendStep(descriptor, textStep('label', text, options)));
+    },
+    getByPlaceholder: function (text, options) {
+      return makeLocator(appendStep(descriptor, textStep('placeholder', text, options)));
+    },
+    getByTestId: function (testId) {
+      return makeLocator(appendStep(descriptor, testIdStep(testId)));
+    },
+    getByAltText: function (text, options) {
+      return makeLocator(appendStep(descriptor, textStep('altText', text, options)));
+    },
+    getByTitle: function (text, options) {
+      return makeLocator(appendStep(descriptor, textStep('title', text, options)));
+    },
   };
+  return guardLocator(locator);
 }
 
 function findNodes(node, query, firstOnly, out) {
@@ -291,52 +380,28 @@ const tab = Object.freeze({
     return hostCall('history', Object.assign({}, options || {}, { action: 'reload' }));
   },
   getByRole: function (role, options) {
-    return makeLocator(Object.assign({}, options || {}, {
-      kind: 'role',
-      role: role,
-      exact: Boolean(options && options.exact),
-    }));
+    return makeLocator(roleStep(role, options));
   },
   getByText: function (text, options) {
-    return makeLocator({
-      kind: 'text',
-      text: text,
-      exact: Boolean(options && options.exact),
-    });
+    return makeLocator(textStep('text', text, options));
   },
   getByLabel: function (text, options) {
-    return makeLocator({
-      kind: 'label',
-      text: text,
-      exact: Boolean(options && options.exact),
-    });
+    return makeLocator(textStep('label', text, options));
   },
   getByPlaceholder: function (text, options) {
-    return makeLocator({
-      kind: 'placeholder',
-      text: text,
-      exact: Boolean(options && options.exact),
-    });
+    return makeLocator(textStep('placeholder', text, options));
   },
   getByTestId: function (testId) {
-    return makeLocator({ kind: 'testid', testId: testId });
+    return makeLocator(testIdStep(testId));
   },
   getByAltText: function (text, options) {
-    return makeLocator({
-      kind: 'altText',
-      text: text,
-      exact: Boolean(options && options.exact),
-    });
+    return makeLocator(textStep('altText', text, options));
   },
   getByTitle: function (text, options) {
-    return makeLocator({
-      kind: 'title',
-      text: text,
-      exact: Boolean(options && options.exact),
-    });
+    return makeLocator(textStep('title', text, options));
   },
-  locator: function (selector) {
-    return makeLocator({ kind: 'selector', selector: selector });
+  locator: function (selector, options) {
+    return makeLocator(selectorStep(selector, options));
   },
   info: function () { return hostCall('info', {}); },
 });

@@ -170,7 +170,7 @@ Locators are strict: 0 matches -> NOT_FOUND, >1 -> AMBIGUOUS (use a more specifi
         "",
         "- Use browser_run for browser work, including single-step actions; the old flat browser_* tools are retired.",
         "- tab.goto does not snapshot. tab.snapshot() is observation-only; it does not return refs.",
-        "- Build locators from page facts: getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/getByAltText/getByTitle/locator(css).",
+        "- Build locators from page facts: getByRole/getByText/getByLabel/getByPlaceholder/getByTestId/getByAltText/getByTitle/locator(css). Locators are chainable: locator.locator(css) / locator.getByRole(...) scope the search to descendants.",
         "- click/fill/check/selectOption wait for actionability (visible, enabled, stable, not covered) up to timeout; use force only when the page is intentionally custom.",
         "- Locators are strict: 0 matches -> NOT_FOUND, multiple -> AMBIGUOUS. Narrow the locator or use first/last/nth.",
         "- Shadow-root actions and iframe content are unsupported; query/count/text still work for open shadow roots.",

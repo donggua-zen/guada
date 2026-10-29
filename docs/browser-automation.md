@@ -226,7 +226,7 @@ children: [e4, e5]
 | `browser_tabs` | `action: "list"\|"current"\|"select"\|"close"\|"close_all", index?, tab_id?, created_by` | list: `TabInfo[]`；current: `TabInfo\|null`；select: `TabInfo`；close: `{ok,closedTabId,currentTabId}`；close_all: `{ok,closedCount}` |
 | `browser_close_by_creator` | `created_by` | `{closedCount}` |
 
-`browser_locator` 的 `descriptor` 支持 `role/text/label/placeholder/testid/altText/title/selector` 和 `index`（first/last/nth）；不再接受 ref/generation。
+`browser_locator` 的 `descriptor` 支持 `role/text/label/placeholder/testid/altText/title/selector` 和 `index`（first/last/nth）；链式调用的父级放在可选的 `scope` 数组里（从外层到直接父级），宿主逐级在父元素内查询并按元素身份去重，`index` 只作用于所在那一级。不再接受 ref/generation。
 
 `TabInfo = { index, tabId, url, title, isCurrent }`。
 
