@@ -43,7 +43,8 @@
           :class="isExpanded(toolIndex) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 -rotate-90'" />
       </div>
 
-      <!-- 内联结果区（默认闭合，点击展开；带图片的工具行默认展开，直接展示产出）。
+      <!-- 内联结果区（默认闭合，点击展开；图片产出在展开后以缩略图展示，
+           行头的图片数量徽标用于闭合状态提示有图）。
            独立渲染工具行（计划卡等）不套这层外框——卡片自带边框，避免双边框；
            同时整行只有卡片（见 .is-plain 清掉的 22px 左缩进）。 -->
       <div v-if="isExpanded(toolIndex)" class="tool-result-inline"
@@ -215,14 +216,12 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
 const expandedIndexes = ref<Set<number>>(new Set());
 const collapsedIndexes = ref<Set<number>>(new Set());
 
-/** 默认展开的行（独立渲染工具 / 带图片的工具：正文即内容，与分组判定共用 isStandaloneTool） */
+/** 默认展开的行：仅独立渲染工具（计划卡/子智能体行等）——正文即内容本身。
+ *  带图片的工具行不再默认展开：行头的图片数量徽标已能提示有产出，点击行再看缩略图。 */
 const isDefaultExpandedRow = (index: number): boolean => {
   const tool = props.toolCalls[index];
   if (!tool) return false;
-  return (
-    isStandaloneTool(tool) ||
-    (getToolResponses(index)?.images?.length ?? 0) > 0
-  );
+  return isStandaloneTool(tool);
 };
 
 const isExpanded = (index: number): boolean => {
