@@ -31,7 +31,7 @@ export class SkillsController {
   }
 
   /**
-   * 获取用户可安装的目标目录（排除 .system）
+   * 用户可安装的技能目录
    */
   private getUserSkillsDir(): string {
     return this.skillsDir;
@@ -283,16 +283,6 @@ export class SkillsController {
         return { success: false, message: validationResult.errors.join('; ') };
       }
 
-      // 检查是否和内置技能冲突
-      const systemDir = path.join(this.skillsDir, '.system', manifestName);
-      try {
-        await fs.access(systemDir);
-        await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: `Skill '${manifestName}' is a system built-in skill and cannot be overwritten.` };
-      } catch {
-        // 不是内置技能，继续
-      }
-
       // 移动到 skills 目录
       const targetDir = path.join(this.skillsDir, manifestName);
       
@@ -538,9 +528,9 @@ export class SkillsController {
         return { success: false, message: `Skill '${skillId}' not found` };
       }
 
-      // 禁止卸载系统内置技能
+      // 禁止卸载系统内置技能（source=system 现为插件注册的文本技能，无磁盘目录可删）
       if (skill.source === 'system') {
-        return { success: false, message: `Skill '${skillId}' is a system built-in skill and cannot be uninstalled.` };
+        return { success: false, message: `Skill '${skillId}' is a built-in skill registered by a plugin and cannot be uninstalled.` };
       }
 
       // 禁止卸载共享目录技能（~/.agents/skills/）
@@ -688,16 +678,6 @@ export class SkillsController {
       if (!validationResult.isValid) {
         result.errors.push({ skillId: manifestName, error: validationResult.errors.join('; ') });
         continue;
-      }
-
-      // 检查是否和内置技能冲突
-      const systemDir = path.join(this.skillsDir, '.system', manifestName);
-      try {
-        await fs.access(systemDir);
-        result.errors.push({ skillId: manifestName, error: `Skill '${manifestName}' is a system built-in skill` });
-        continue;
-      } catch {
-        // 不是内置技能，继续
       }
 
       // 复制到 skills 目录

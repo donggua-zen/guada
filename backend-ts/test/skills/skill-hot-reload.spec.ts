@@ -55,12 +55,12 @@ describe("技能热更新集成测试 (Watcher + SourceManager + Registry)", () 
     skillsDir = path.join(tmpDir, "skills");
     await fs.mkdir(skillsDir, { recursive: true });
 
-    // 初始创建 built-in 技能
-    const systemDir = path.join(skillsDir, ".system", "built-in");
-    await fs.mkdir(systemDir, { recursive: true });
+    // 初始创建一个已存在的技能（global 来源）
+    const initialDir = path.join(skillsDir, "built-in");
+    await fs.mkdir(initialDir, { recursive: true });
     await fs.writeFile(
-      path.join(systemDir, "SKILL.md"),
-      "---\nname: built-in\ndescription: System built-in skill\n---\n\nBuilt-in content",
+      path.join(initialDir, "SKILL.md"),
+      "---\nname: built-in\ndescription: Pre-installed skill\n---\n\nBuilt-in content",
     );
   });
 

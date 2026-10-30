@@ -27,7 +27,7 @@ describe("SkillWatcherService.dispatch", () => {
 
     // 注入 handlers（绕过 chokidar，直接测试 dispatch）
     (watcher as any).handlers.set("skills/*/SKILL.md", { onAdd, onRemove });
-    (watcher as any).handlers.set(".system/*/SKILL.md", { onAdd, onRemove });
+    (watcher as any).handlers.set("extra/*/SKILL.md", { onAdd, onRemove });
   });
 
   afterEach(() => {
@@ -95,14 +95,14 @@ describe("SkillWatcherService.dispatch", () => {
   it("多个匹配模式时应选择最长前缀（防止嵌套误匹配）", async () => {
     const onAddSystem = jest.fn().mockResolvedValue(undefined);
     const onRemoveSystem = jest.fn();
-    (watcher as any).handlers.set("skills/.system/test/*/SKILL.md", {
+    (watcher as any).handlers.set("skills/nested/test/*/SKILL.md", {
       onAdd: onAddSystem,
       onRemove: onRemoveSystem,
     });
 
-    await dispatchAndSettle("add", "skills/.system/test/custom/SKILL.md");
+    await dispatchAndSettle("add", "skills/nested/test/custom/SKILL.md");
 
-    // 最长前缀 "skills/.system/test/" 优先于 "skills/" 和 ".system/"
+    // 最长前缀 "skills/nested/test/" 优先于 "skills/" 和 "extra/"
     expect(onAddSystem).toHaveBeenCalledTimes(1);
     expect(onAdd).not.toHaveBeenCalled(); // 短的未触发
   });

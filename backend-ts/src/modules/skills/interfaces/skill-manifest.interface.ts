@@ -25,6 +25,10 @@ export interface SkillManifest {
 
 /**
  * 技能来源类型
+ * - system：内置技能（由插件注册的文本技能，无磁盘目录）
+ * - agents：共享目录 ~/.agents/skills/
+ * - global：用户技能目录 SKILLS_DIR
+ * - workspace：会话工作区 .guada/skills
  */
 export type SkillSourceType = 'system' | 'agents' | 'global' | 'workspace';
 

@@ -298,8 +298,7 @@ After validation passes, move the skill directory to the system's skills directo
 mv <skill-name> {SKILL_DIR}/<skill-name>
 ```
 
-> **Windows users**: `~` maps to your user directory, i.e. `C:\Users\<username>\.guada\skills\`.  
-> You can also move the `<skill-name>` folder via File Explorer to `C:\Users\<username>\.guada\skills\`.
+> **Windows users**: `{SKILL_DIR}` 已是完整绝对路径（如 `C:\Users\<username>\<数据目录>\skills`），直接使用即可，不要自行拼 `~`。
 
 ### Step 7: Automatic Registration
 

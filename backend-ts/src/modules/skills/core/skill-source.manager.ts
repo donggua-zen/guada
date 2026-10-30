@@ -30,7 +30,7 @@ const WORKSPACE_SKILLS_RELATIVE = ".guada/skills";
 const DEFAULT_TTL = 3 * 60 * 60 * 1000;
 const MAX_SOURCES = 10;
 const SOURCE_PRIORITY: Record<string, number> = {
-  system: 0, agents: 1, global: 2, workspace: 3,
+  agents: 1, global: 2, workspace: 3,
 };
 
 @Injectable()
@@ -38,7 +38,6 @@ export class SkillSourceManager implements OnModuleDestroy {
   private readonly logger = new Logger(SkillSourceManager.name);
   private readonly sources = new Map<string, SkillSource>();
   private readonly skillsDir: string;
-  private readonly systemSkillsDir: string;
   private readonly agentsSkillsDir: string;
 
   constructor(
@@ -50,7 +49,6 @@ export class SkillSourceManager implements OnModuleDestroy {
   ) {
     this.skillsDir = this.configService.get<string>("SKILLS_DIR") ||
                      path.join(process.cwd(), "skills");
-    this.systemSkillsDir = path.join(this.skillsDir, ".system");
     this.agentsSkillsDir = this.configService.get<string>("AGENTS_SKILLS_DIR") ||
                            path.join(os.homedir(), ".agents", "skills");
     this.workspaceService.registerSafeWritePath(this.skillsDir);
@@ -67,14 +65,8 @@ export class SkillSourceManager implements OnModuleDestroy {
   async start(): Promise<void> {
     this.logger.log("Initializing skill sources...");
 
-    // system
-    await this.register({
-      key: "system",
-      dir: this.systemSkillsDir,
-      source: "system",
-      baseDir: this.skillsDir,
-      persistent: true,
-    });
+    // 内置技能已全部改为插件注册的文本技能（SkillBundledPlugin / registerSkill），
+    // 不再有文件系统 system 来源（原 .system 目录机制已废弃）。
 
     // agents (shared directory ~/.agents/skills/, read-only, lower priority than global)
     await this.register({
@@ -97,11 +89,14 @@ export class SkillSourceManager implements OnModuleDestroy {
     this.logger.log(`Skill sources initialized, total skills: ${this.registry.getAll().size}`);
   }
 
-  /** 重新注册 system + global 来源（用于手动触发重新扫描） */
+  /** 重新注册 agents + global 来源（用于手动触发重新扫描） */
   async restart(): Promise<void> {
-    // 暂存所有待重载的 key
-    const keys = Array.from(this.sources.keys());
-    for (const key of keys) {
+    // 只重建持久来源；workspace 等动态来源由会话事件驱动注册，
+    // 手动扫描不应把它们一并注销（否则扫描后 workspace 技能消失，需等下次会话才回来）
+    const persistentKeys = Array.from(this.sources.entries())
+      .filter(([, src]) => src.persistent)
+      .map(([key]) => key);
+    for (const key of persistentKeys) {
       await this.unregister(key);
     }
     await this.start();
@@ -116,6 +111,12 @@ export class SkillSourceManager implements OnModuleDestroy {
     const skills: SkillDefinition[] = [];
 
     try {
+      // 持久来源目录必须先落盘再挂监听：chokidar v4 对不存在的路径 add() 会
+      // 退化为「监听父目录 + 仅放行该 target」，同一父目录下其他子目录（新技能）
+      // 的 add 事件会被永久过滤掉，导致自动注册静默失效（如全新安装时的 skills）。
+      if (cfg.persistent) {
+        await fs.mkdir(cfg.dir, { recursive: true });
+      }
       await fs.access(cfg.dir);
       const entries = await fs.readdir(cfg.dir, { withFileTypes: true });
       const dirs = entries

@@ -16,7 +16,7 @@ This skill guides you through installing, updating, and uninstalling skills. The
 Download/Prepare → Validate (must pass) → Install to {SKILL_DIR}/<name>/
 ```
 
-**Target directory**: `{SKILL_DIR}/` (Windows: `C:\Users\<username>\.guada\skills\`)
+**Target directory**: `{SKILL_DIR}/`（该占位符运行时已替换为真实绝对路径，直接使用，不要自行拼 `~`）
 
 ---
 

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { homedir } from "os";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginApi } from "../../plugins/api/plugin-api";
@@ -32,8 +33,20 @@ export class SkillBundledPlugin extends PluginBase {
   constructor(
     private loader: SkillLoaderService,
     private registry: SkillRegistry,
+    private configService: ConfigService,
   ) {
     super();
+  }
+
+  /**
+   * 技能安装目标目录。必须与 SkillSourceManager 监听的真实 SKILLS_DIR 保持一致——
+   * 硬编码 ~/.guada/skills 会在 dev 模式（~/.guada-dev/skills）与旧数据布局
+   * （AppData 下 skills）下指向不被监听的目录，AI 按指令安装后无法自动注册。
+   */
+  private resolveSkillsDir(): string {
+    const configured = this.configService?.get<string>("SKILLS_DIR");
+    const dir = configured || path.join(homedir(), ".guada", "skills");
+    return dir.replace(/\\/g, "/");
   }
 
   async onLoad(api: PluginApi) {
@@ -43,7 +56,7 @@ export class SkillBundledPlugin extends PluginBase {
           path.join(this.BUNDLED_DIR, name),
         );
         // 替换 {SKILL_DIR} 为实际用户技能目录路径（SKILL.md 内占位符 → 真实路径）
-        const skillsDir = homedir().replace(/\\/g, "/") + "/.guada/skills";
+        const skillsDir = this.resolveSkillsDir();
         const resolved = body.replace(/\{SKILL_DIR\}/g, skillsDir);
         api.registerSkill({
           name,
