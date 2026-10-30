@@ -67,6 +67,23 @@ function createBridge() {
             ...(params.checked !== undefined ? { checked: params.checked } : {}),
           };
         }
+        case "browser_dialog":
+          return params.action === "get"
+            ? { dialog: { type: "confirm", message: "Delete?" } }
+            : { ok: true };
+        case "browser_download":
+          return params.action === "wait"
+            ? {
+                ok: true,
+                download: {
+                  id: "dl_1",
+                  filename: "file.txt",
+                  path: "C:/Downloads/file.txt",
+                  state: "completed",
+                },
+                timeout: params.timeout,
+              }
+            : { ok: true, downloads: [{ id: "dl_1", filename: "file.txt", state: "completed" }] };
         case "browser_press":
           return { ok: true, action: "press", key: params.key };
         case "browser_scroll":
@@ -416,6 +433,36 @@ return { order, ticks };
     expect(result.error?.code).toBe("INVALID_ARGUMENT");
     expect(result.error?.message).toContain('"simple", "struct", or "summary"');
     expect(calls.some((call) => call.method === "browser_snapshot")).toBe(false);
+  });
+
+  it("dialog/download API 透传并应用默认值", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `
+const dialog = await tab.getDialog();
+const handled = await tab.handleDialog();
+const download = await tab.waitForDownload();
+const list = await tab.downloads();
+return { dialog, handled, download, list };
+`,
+    );
+
+    expect(result.status).toBe("completed");
+    const value: any = result.value;
+    expect(value.dialog).toMatchObject({ type: "confirm", message: "Delete?" });
+    expect(value.handled).toEqual({ ok: true });
+    expect(value.download).toMatchObject({ id: "dl_1", state: "completed" });
+    expect(value.list).toEqual([{ id: "dl_1", filename: "file.txt", state: "completed" }]);
+
+    const dialogCalls = calls.filter((call) => call.method === "browser_dialog");
+    expect(dialogCalls[0].params).toMatchObject({ action: "get" });
+    // 默认 dismiss：只有显式 accept:true 才接受
+    expect(dialogCalls[1].params).toMatchObject({ action: "handle", accept: false });
+
+    const downloadCalls = calls.filter((call) => call.method === "browser_download");
+    expect(downloadCalls[0].params).toMatchObject({ action: "wait", timeout: 3000 });
+    expect(downloadCalls[1].params).toMatchObject({ action: "list" });
   });
 
   it("tab 级便利方法同样透传顶层 options", async () => {

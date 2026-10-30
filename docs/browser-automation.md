@@ -222,6 +222,8 @@ children: [e4, e5]
 | `browser_screenshot` | `full_page?, wants_save?, created_by` | `{ok, data(base64 PNG), mime_type, width, height}` |
 | `browser_set_viewport` | `width, height, tab_id?, created_by` | `{ok, tabId, width, height, applied}` |
 | `browser_console` | `created_by, clear?` | `string[]` |
+| `browser_dialog` | `action: "get"\|"handle", accept?, prompt_text?, created_by` | get: `{dialog: {type,message,defaultPrompt?}\|null}`；handle: `{ok:true}` |
+| `browser_download` | `action: "wait"\|"list", timeout?, created_by` | wait: `{ok, download: DownloadRecord\|null, timeout}`；list: `{ok, downloads: DownloadRecord[]}` |
 | `browser_history` | `action: "back"\|"forward"\|"reload", created_by` | `{ok, url}` |
 | `browser_tabs` | `action: "list"\|"current"\|"select"\|"close"\|"close_all", index?, tab_id?, created_by` | list: `TabInfo[]`；current: `TabInfo\|null`；select: `TabInfo`；close: `{ok,closedTabId,currentTabId}`；close_all: `{ok,closedCount}` |
 | `browser_close_by_creator` | `created_by` | `{closedCount}` |
@@ -256,6 +258,10 @@ children: [e4, e5]
 - 失败返回 `NOT_ACTIONABLE`，`details.reason` 为 `hidden/disabled/not-editable/not-stable/outside-viewport/covered`。
 - `fill` 对 select/file/checkbox/radio 返回 `UNSUPPORTED`；select/check 有独立方法。
 - `browser_console` 默认只读，`clear:true` 才清空。
+- 原生弹窗（alert/confirm/prompt/beforeunload）由 CDP 跟踪、交给模型处理（`browser_dialog`）；页面有未处理弹窗时动作返回 `NOT_ACTIONABLE`（`details.dialog`），`browser_navigate` 前会自动 dismiss 残留弹窗，脚本结束兜底关闭。
+- 下载通过 `will-download` 自动落盘系统 Downloads（同名追加序号，不弹另存为对话框），`browser_download` 支持等待与列表。
+- `window.open`/`target=_blank` 路由到新内部标签并切换当前标签；发起标签无 `createdBy`（用户手动打开）时降级为当前页导航。
+- 权限 fail-closed：共享 browser session 只放行 `clipboard-sanitized-write`/`fullscreen`/`pointerLock`/`mediaKeySystem`，摄像头、麦克风、地理位置、通知、USB/HID/串口等一律拒绝并记 `[browser-permission]` 日志；屏幕共享禁用。
 
 ### 导航与截图安全
 

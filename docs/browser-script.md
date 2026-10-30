@@ -93,8 +93,22 @@ LLM
 | `tab.back()` / `forward()` / `reload()` | 历史导航 |
 | `log(message)` / `sleep(ms)` / `args` | `sleep` 上限 5 秒 |
 | `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` | 脚本沙箱内可用；回调必须是函数，取消/结束自动清理 |
+| `tab.getDialog()` | 当前未处理的 JS 弹窗 `{type, message, defaultPrompt?}` 或 `null` |
+| `tab.handleDialog(accept?, promptText?)` | 处理弹窗；`accept` 默认 `false`，prompt 用 `promptText` 应答；返回 `{ ok, handled }` |
+| `tab.waitForDownload({ timeout? })` | 等待当前标签的下一个下载（默认 3 秒，上限 120 秒），返回记录或 `null` |
+| `tab.downloads()` | 当前标签最近的下载记录（新→旧） |
 
 非导航命令（`snapshot`、locator、`click` 等）不会隐式创建标签；当前会话没有标签时先 `tab.goto(url)` 或 `browser.tabs.new()`。
+
+### 原生弹窗
+
+`alert`/`confirm` 不再自动消解：弹窗会真实挂起页面，直到 `tab.handleDialog` 处理。动作在弹窗未处理时返回 `NOT_ACTIONABLE`（`details.dialog`）；`tab.goto` 会自动关掉残留弹窗；脚本结束时残留弹窗也会被自动关闭。`window.open`/`target=_blank` 会打开一个新内部标签并切换为当前标签，原标签保留。
+
+注意 Electron 运行时不支持 `window.prompt()`（直接抛 `prompt() is not supported.`），所以 `prompt` 类型实际上不会出现；`beforeunload` 由 Electron 的卸载策略处理，不作为 CDP 弹窗暴露，只会在控制台日志里记录 `[dialog] beforeunload: ...`。
+
+### 下载
+
+下载自动保存到系统 Downloads 目录（不弹「另存为」），记录可通过 `tab.waitForDownload` / `tab.downloads()` 查询；文件上传暂不支持。
 
 ### locator
 
@@ -275,7 +289,7 @@ type TabInfo = {
 ## 已知限制
 
 - 仅 Electron 模式可用；Web/Docker 没有 Bridge。
-- 未暴露上传、下载、录屏、cookie 管理。
+- 未暴露上传、录屏、cookie 管理；下载已支持（自动落系统 Downloads，`tab.waitForDownload`/`tab.downloads`）。
 - Shadow DOM：open shadow root 可查询/计数/读取，但动作暂不支持；closed shadow root 不可见。
 - iframe：locator 只查顶层文档，iframe 内元素不可见。
 - `locator.first/last/nth` 对 CSS locator 的动作也生效；CSS 选择器本身仍建议唯一。

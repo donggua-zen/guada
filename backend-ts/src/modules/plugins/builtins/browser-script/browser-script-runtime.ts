@@ -67,6 +67,8 @@ interface RunState {
   logs: string[];
   lastUrl?: string;
   lastTitle?: string;
+  /** 是否发生过任何浏览器调用：纯参数错误时不需要做弹窗清理等浏览器侧兜底 */
+  usedBrowser?: boolean;
 }
 
 /**
@@ -149,6 +151,20 @@ export class BrowserScriptRuntime {
         } catch {
           /* ignore */
         }
+
+        // 兜底：脚本结束后关掉当前标签残留的原生弹窗，避免它阻塞后续动作。
+        // 只有弹窗真实存在时 Electron 才会收到 handle 命令；失败不影响脚本结果。
+        // 纯参数错误（从未调用浏览器）不需要发这次请求。
+        if (state.usedBrowser) {
+          void this.bridge
+            .request("browser_dialog", {
+              action: "handle",
+              accept: false,
+              created_by: params.createdBy,
+            })
+            .catch(() => undefined);
+        }
+
         resolve(result);
       };
 
@@ -299,6 +315,7 @@ export class BrowserScriptRuntime {
     run: BrowserScriptRunParams,
     signal?: AbortSignal,
   ): Promise<any> {
+    state.usedBrowser = true;
     const startedAt = Date.now();
     const target = summarizeCall(method, params);
     try {
@@ -372,6 +389,10 @@ export class BrowserScriptRuntime {
         return this.setViewport(params, run, signal);
       case "console":
         return this.handleConsole(params, run, signal);
+      case "dialog":
+        return this.handleDialog(params, run, signal);
+      case "download":
+        return this.handleDownload(params, run, signal);
       case "history":
         return this.handleHistory(params, state, run, signal);
       case "tabs":
@@ -399,6 +420,39 @@ export class BrowserScriptRuntime {
       signal,
     );
     return Array.isArray(logs) ? logs : [];
+  }
+
+  private async handleDialog(
+    params: any,
+    run: BrowserScriptRunParams,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const action = String(params?.action || "get");
+    const payload: any = { action, created_by: run.createdBy };
+    if (action === "handle") {
+      // 默认 dismiss：显式传 accept:true 才接受（confirm/prompt 的保守语义）
+      payload.accept = params?.accept === true;
+      if (typeof params?.promptText === "string") {
+        payload.prompt_text = params.promptText;
+      }
+    }
+    return this.bridge.request("browser_dialog", payload, signal);
+  }
+
+  private async handleDownload(
+    params: any,
+    run: BrowserScriptRunParams,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    const action = String(params?.action || "list");
+    const payload: any = { action, created_by: run.createdBy };
+    if (action === "wait") {
+      const timeout = Number(params?.timeout);
+      payload.timeout = Number.isFinite(timeout)
+        ? Math.min(120_000, Math.max(100, Math.round(timeout)))
+        : 3_000;
+    }
+    return this.bridge.request("browser_download", payload, signal);
   }
 
   private async goto(

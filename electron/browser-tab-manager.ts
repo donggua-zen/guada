@@ -5,17 +5,19 @@ import {
   Menu,
   MenuItem,
   ipcMain,
-  app,
 } from "electron";
 import * as path from "path";
 import * as url from "url";
 import log from "electron-log/main";
-import { isNavigableUrl } from "./browser-url";
 import { RenderableLease } from "./renderable-lease";
 import {
   acquireTransparentPresentation,
   type TransparentPresentation,
 } from "./transparent-presentation";
+import { BrowserDialogTracker, type PendingDialog } from "./browser-dialogs";
+import { applyBrowserPermissionPolicy } from "./browser-permission-policy";
+import { BrowserDownloadTracker, type DownloadRecord } from "./browser-downloads";
+import { installWindowOpenHandler } from "./browser-popups";
 
 /** 宿主释放键：Ctrl+Alt+R（macOS 为 Control+Option+R） */
 const RELEASE_SHORTCUT_CODE = "KeyR";
@@ -131,6 +133,8 @@ export interface WindowInfo {
   metadata?: Record<string, any>; // 元数据支持（用于 session 隔离和作用域标识）
 }
 
+export type { DownloadRecord };
+
 /**
  * 浏览器 Webview 管理器（基于主窗口内 <webview> 标签）
  *
@@ -173,6 +177,17 @@ export class BrowserWebviewManager {
       if (!active) this.restoreHostFocusIfGuestFocused(windowId);
     },
   });
+
+  // JS 原生弹窗跟踪：交给模型决策（getDialog/handleDialog），弹窗事件写入控制台日志
+  readonly dialogs = new BrowserDialogTracker((windowId, type, message) => {
+    this.appendDialogLog(windowId, type, message);
+  });
+
+  // 下载记录：will-download 自动落盘系统 Downloads 并登记
+  readonly downloads = new BrowserDownloadTracker();
+
+  // window.open 路由回调：由 BrowserAutomationService 注入（开新标签）
+  onOpenInNewTab: ((url: string, originWindowId: string) => void) | null = null;
 
   // 托盘隐藏窗口的截图 presentation 也要共享：并发截图不能互相 hide/恢复 opacity
   private screenshotPresentation: {
@@ -255,6 +270,8 @@ export class BrowserWebviewManager {
     this.fullscreenWindows.clear();
     this.renderableLeases.releaseAll();
     this.releaseScreenshotPresentation();
+    this.dialogs.disposeAll();
+    this.downloads.disposeAll();
 
     this.webviews.clear();
   }
@@ -355,17 +372,12 @@ export class BrowserWebviewManager {
     webviewWC.setUserAgent(edgeUserAgent);
     log.info(`Custom User Agent set to Edge for webview ${windowId}`);
 
-    // 拦截新窗口请求，在当前 webview 打开；非白名单协议直接拒绝
-    webviewWC.setWindowOpenHandler(({ url }: { url: string }) => {
-      if (!isNavigableUrl(url)) {
-        log.warn(`Blocked new window navigation to non-allowlisted URL: ${url}`);
-        return { action: "deny" };
-      }
-      log.info(
-        `Intercepting new window request: ${url}, loading in current webview`,
-      );
-      webviewWC.loadURL(url);
-      return { action: "deny" };
+    // 拦截新窗口请求：永远不让 Chromium 开真实新窗。
+    // 白名单 URL 路由到新内部标签（对齐 zcode/浏览器习惯，原页面保留）；
+    // 发起标签没有 createdBy（用户手动打开）或路由失败时降级为当前页导航。
+    installWindowOpenHandler(webviewWC, windowId, {
+      onOpenInNewTab: (url, originWindowId) =>
+        this.onOpenInNewTab ? this.onOpenInNewTab(url, originWindowId) : false,
     });
 
     // 宿主释放键。before-input-event 在页面之前触发，即使页面启用了
@@ -449,6 +461,16 @@ export class BrowserWebviewManager {
       },
     );
 
+    // beforeunload：Electron 不会把它作为 JS 弹窗暴露给 CDP（默认按 will-prevent-unload
+    // 策略处理），这里只记录到控制台日志，让模型能解释「点了链接但 URL 没变」。
+    webviewWC.on("will-prevent-unload", () => {
+      this.appendDialogLog(
+        windowId,
+        "beforeunload",
+        "navigation prevented by page (Electron does not surface beforeunload as a JS dialog)",
+      );
+    });
+
     // 监听 webview 崩溃
     (webviewWC as any).on(
       "render-process-gone",
@@ -464,7 +486,16 @@ export class BrowserWebviewManager {
 
     log.info(`Window ${windowId} webview webContentsId: ${webviewWC.id}`);
 
-    // 反检测脚本 + 弹窗自动关闭已迁移至 browser-preload.ts（<script> 标签注入，零 CDP 依赖）
+    // JS 原生弹窗交给模型决策（getDialog/handleDialog）；setup 是异步的，
+    // 失败只记日志——弹窗跟踪缺失时动作层 probe 探不到，行为退化为页面真实弹窗。
+    if (process.env.GUADA_DISABLE_DIALOG_TRACKING !== "1") {
+      void this.dialogs.setup(webviewWC, windowId).catch((error: any) => {
+        log.warn(`Dialog tracking setup failed for ${windowId}: ${error?.message || error}`);
+      });
+    }
+
+    // 下载：自动落盘系统 Downloads，登记记录供 tab.waitForDownload/downloads 查询
+    this.downloads.setup(webviewWC, windowId);
 
     // 设置右键菜单
     this.setupContextMenu(webviewWC, windowId);
@@ -475,10 +506,22 @@ export class BrowserWebviewManager {
       this.pointerLockedWindows.delete(windowId);
       this.fullscreenWindows.delete(windowId);
       this.renderableLeases.releaseAll(windowId);
+      this.dialogs.dispose(windowId);
+      this.downloads.dispose(windowId);
       if (this.webviews.delete(windowId)) {
         log.info(`Window ${windowId} destroyed, entry removed`);
       }
     });
+  }
+
+  /** 等待该标签的下一个下载完成；已有 pending 记录时立即返回。超时返回 null。 */
+  waitForDownload(windowId: string, timeoutMs: number, signal?: AbortSignal): Promise<DownloadRecord | null> {
+    return this.downloads.wait(windowId, timeoutMs, signal);
+  }
+
+  /** 最近的下载记录（新→旧，最多 limit 条）。 */
+  listDownloads(windowId?: string, limit = 20): DownloadRecord[] {
+    return this.downloads.list(windowId, limit);
   }
 
   /**
@@ -716,7 +759,9 @@ export class BrowserWebviewManager {
 
     log.info(`Creating new webview window: ${windowId}`);
 
-    session.fromPartition(partition, { cache: true });
+    const sharedSession = session.fromPartition(partition, { cache: true });
+    // 权限治理：共享 session 首次创建时注册 fail-closed handler（模块内防重）
+    applyBrowserPermissionPolicy(sharedSession, "browser_shared");
 
     const now = Date.now();
     const windowInfo: WindowInfo = {
@@ -927,6 +972,8 @@ export class BrowserWebviewManager {
   async closeAllWindows(): Promise<void> {
     this.renderableLeases.releaseAll();
     this.releaseScreenshotPresentation();
+    this.dialogs.disposeAll();
+    this.downloads.disposeAll();
     const windowIds = Array.from(this.webviews.keys());
     for (const windowId of windowIds) {
       await this.closeWindow(windowId);
@@ -1018,6 +1065,24 @@ export class BrowserWebviewManager {
     } catch {
       // 窗口/guest 正在销毁
     }
+  }
+
+  /** 当前未处理的 JS 弹窗（无则 null）。 */
+  getPendingDialog(windowId: string): PendingDialog | null {
+    return this.dialogs.get(windowId);
+  }
+
+  async handleDialog(
+    windowId: string,
+    accept: boolean,
+    promptText?: string,
+  ): Promise<{ ok: true; handled: boolean }> {
+    return this.dialogs.handle(windowId, accept, promptText);
+  }
+
+  /** 有残留弹窗时静默关闭；导航/脚本结束兜底。 */
+  async dismissPendingDialogs(windowId: string): Promise<void> {
+    await this.dialogs.dismissAll(windowId);
   }
 
   /** 主窗口是否处于用户可见、可交互的前台状态。 */
@@ -1222,7 +1287,7 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
   }
 
   /**
-   * 记录自动关闭的弹窗信息到控制台日志（供 AI 查询 consoleLogs 时可见）
+   * 记录弹窗事件到控制台日志（供 AI 查询 consoleLogs 时可见）
    */
   appendDialogLog(windowId: string, type: string, message: string): void {
     const wv = this.webviews.get(windowId);

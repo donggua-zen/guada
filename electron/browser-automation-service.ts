@@ -114,6 +114,16 @@ export class BrowserAutomationService {
         }
       },
     });
+    // window.open / target=_blank 路由到新内部标签
+    if (typeof (windowManager as any).onOpenInNewTab !== "undefined") {
+      (windowManager as any).onOpenInNewTab = (url: string, originWindowId: string) => {
+        void this.openInNewTab(url, originWindowId).catch((error: any) => {
+          // manager 侧捕获后降级为当前页导航；这里只记录
+          log.warn(`Open-in-new-tab failed: ${error?.message || error}`);
+          throw error;
+        });
+      };
+    }
     log.info("BrowserAutomationService initialized with WindowManager");
   }
 
@@ -331,8 +341,8 @@ export class BrowserAutomationService {
    */
   async navigate(
     url: string,
-    newTab: boolean,
-    createdBy: string,
+    newTab: boolean = false,
+    createdBy?: string,
     sessionPath?: string,
     sessionId?: string,
     waitUntil: BrowserWaitUntil = "load",
@@ -389,6 +399,11 @@ export class BrowserAutomationService {
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
       throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
+    }
+
+    // 弹窗会阻塞导航：先静默关掉残留弹窗（dismiss 失败不影响导航本身）
+    if (typeof (this.windowManager as any).dismissPendingDialogs === "function") {
+      await (this.windowManager as any).dismissPendingDialogs(wid);
     }
 
     // 拒绝 javascript: 协议（安全风险，且会导致等待挂起）
@@ -1427,6 +1442,8 @@ export class BrowserAutomationService {
 
   /**
    * 动作前的公共准备：所有权、当前标签、webContents。
+   * 页面有未处理的原生弹窗时（alert/confirm/prompt 会阻塞输入与 CDP），
+   * 直接 NOT_ACTIONABLE，details.dialog 提示先 tab.handleDialog。
    */
   private async prepareContext(
     windowId: string,
@@ -1442,6 +1459,16 @@ export class BrowserAutomationService {
     const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
       throw new BrowserBridgeError("TAB_NOT_FOUND", `Tab ${wid} not found`);
+    }
+    if (typeof (this.windowManager as any).getPendingDialog === "function") {
+      const dialog = (this.windowManager as any).getPendingDialog(wid);
+      if (dialog) {
+        throw new BrowserBridgeError(
+          "NOT_ACTIONABLE",
+          "The page has an unhandled JavaScript dialog; handle it with tab.handleDialog(accept, promptText?) first.",
+          { dialog },
+        );
+      }
     }
     return { wid, webContents };
   }
@@ -1813,7 +1840,15 @@ export class BrowserAutomationService {
           `Unknown browser_locator action: ${action}`,
         );
       } finally {
-        await this.locatorEngine.release(context.webContents, materialized.token);
+        // 动作触发了原生弹窗时 renderer 被阻塞，清理 eval 必然挂起：
+        // 跳过清理，临时属性会在弹窗处理完/页面导航后自然失效。
+        const pendingDialog =
+          typeof (this.windowManager as any)?.getPendingDialog === "function"
+            ? (this.windowManager as any).getPendingDialog(context.wid)
+            : null;
+        if (!pendingDialog) {
+          await this.locatorEngine.release(context.webContents, materialized.token);
+        }
       }
     });
   }
@@ -2092,6 +2127,124 @@ export class BrowserAutomationService {
       this.windowManager.clearConsoleLogs(wid);
     }
     return logs;
+  }
+
+  /**
+   * JS 原生弹窗读取/处理。
+   */
+  async dialog(
+    action: string,
+    createdBy: string,
+    options: { accept?: boolean; promptText?: string } = {},
+  ): Promise<any> {
+    if (!this.windowManager) {
+      throw new BrowserBridgeError("CALL_FAILED", "WindowManager not initialized");
+    }
+    const { windowId: wid } = await this.ensureWindow("", createdBy);
+    if (action === "get") {
+      const dialog =
+        typeof (this.windowManager as any).getPendingDialog === "function"
+          ? (this.windowManager as any).getPendingDialog(wid)
+          : null;
+      return { dialog };
+    }
+    if (action === "handle") {
+      if (typeof (this.windowManager as any).handleDialog !== "function") {
+        throw new BrowserBridgeError("UNSUPPORTED", "Dialog handling is not available in this backend.");
+      }
+      return (this.windowManager as any).handleDialog(
+        wid,
+        options.accept === true,
+        typeof options.promptText === "string" ? options.promptText : undefined,
+      );
+    }
+    throw new BrowserBridgeError("INVALID_ARGUMENT", `browser_dialog action must be "get" or "handle"`, {
+      action,
+    });
+  }
+
+  /**
+   * 下载等待/列表。下载由 will-download 自动落盘系统 Downloads。
+   */
+  async download(
+    action: string,
+    createdBy: string,
+    options: { timeout?: number } = {},
+  ): Promise<any> {
+    if (!this.windowManager) {
+      throw new BrowserBridgeError("CALL_FAILED", "WindowManager not initialized");
+    }
+    const { windowId: wid } = await this.ensureWindow("", createdBy);
+    if (action === "wait") {
+      const timeout = Math.min(120_000, Math.max(100, Math.round(options.timeout ?? 3_000)));
+      if (typeof (this.windowManager as any).waitForDownload !== "function") {
+        throw new BrowserBridgeError("UNSUPPORTED", "Download tracking is not available in this backend.");
+      }
+      const record = await (this.windowManager as any).waitForDownload(wid, timeout);
+      return {
+        ok: true,
+        download: record
+          ? {
+              id: record.id,
+              filename: record.filename,
+              path: record.path,
+              state: record.state,
+              receivedBytes: record.receivedBytes,
+              totalBytes: record.totalBytes,
+              mime: record.mime,
+              url: record.url,
+            }
+          : null,
+        timeout,
+      };
+    }
+    if (action === "list") {
+      const records =
+        typeof (this.windowManager as any).listDownloads === "function"
+          ? (this.windowManager as any).listDownloads(wid)
+          : [];
+      return {
+        ok: true,
+        downloads: (records as any[]).map((record) => ({
+          id: record.id,
+          filename: record.filename,
+          path: record.path,
+          state: record.state,
+          receivedBytes: record.receivedBytes,
+          totalBytes: record.totalBytes,
+          mime: record.mime,
+          url: record.url,
+        })),
+      };
+    }
+    throw new BrowserBridgeError("INVALID_ARGUMENT", `browser_download action must be "wait" or "list"`, {
+      action,
+    });
+  }
+
+  /**
+   * window.open / target=_blank 的开新标签路由（由 manager 的 setWindowOpenHandler 调用）。
+   * 失败时抛错，manager 会降级为当前页导航。
+   */
+  private async openInNewTab(url: string, originWindowId: string): Promise<void> {
+    if (!this.windowManager) {
+      throw new Error("WindowManager not initialized");
+    }
+    const originInfo = this.windowManager
+      .getWindowList()
+      .find((w) => w.windowId === originWindowId);
+    const createdBy = originInfo?.metadata?.createdBy as string | undefined;
+    if (!createdBy) {
+      throw new Error("Origin tab has no createdBy; cannot attribute a new tab");
+    }
+    const metadata: Record<string, any> = { createdBy };
+    if (originInfo?.metadata?.sessionId) metadata.sessionId = originInfo.metadata.sessionId;
+    if (originInfo?.metadata?.sessionPath) metadata.sessionPath = originInfo.metadata.sessionPath;
+
+    assertNavigableUrl(url, "window.open");
+    const info = await this.createWindow(url, metadata, "domcontentloaded");
+    this.setCurrentTab(createdBy, info);
+    log.info(`Popup routed to new tab ${info} (origin ${originWindowId}): ${url}`);
   }
 
   private isAbortedNavigationError(error: any): boolean {
@@ -2516,6 +2669,17 @@ export class BrowserAutomationService {
             params.created_by,
             params.clear === true,
           );
+
+        case "browser_dialog":
+          return await this.dialog(params.action || "get", params.created_by, {
+            accept: params.accept,
+            promptText: params.prompt_text,
+          });
+
+        case "browser_download":
+          return await this.download(params.action || "list", params.created_by, {
+            timeout: params.timeout,
+          });
 
         case "browser_screenshot":
           // 不再落工作区；返回 base64 由后端转码进会话附件目录。

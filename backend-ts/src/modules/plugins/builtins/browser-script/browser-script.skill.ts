@@ -218,8 +218,13 @@ Rules:
 - browser.tabs.close -> { ok, closedTabId, currentTabId }
 - browser.tabs.closeAll -> { ok, closedCount }
 - browser.current / tab.info -> { index, tabId, url, title, isCurrent } or null
+- tab.getDialog -> { type: "alert"|"confirm"|"prompt"|"beforeunload", message, defaultPrompt? } | null
+- tab.handleDialog -> { ok: true, handled: boolean }
+- tab.waitForDownload -> DownloadRecord | null
+- tab.downloads -> DownloadRecord[]
 
 TabInfo = { index, tabId, url, title, isCurrent }.
+DownloadRecord = { id, filename, path, state: "completed"|"cancelled"|"interrupted"|"pending", receivedBytes, totalBytes, mime, url }.
 
 ## Tabs
 
@@ -228,6 +233,31 @@ TabInfo = { index, tabId, url, title, isCurrent }.
 - browser.tabs.new(url?) explicitly creates and selects a tab (about:blank by default); it returns the same shape as tab.goto.
 - browser.tabs.list/select/close/closeAll manage tabs; select(id/index) changes the current tab used by tab.*.
 - Non-navigation calls do not create tabs implicitly.
+- window.open / target=_blank opens a new internal tab and selects it; the originating tab keeps its page.
+
+## Dialogs
+
+Native alert/confirm/beforeunload are NOT auto-dismissed; they block the page until handled.
+Electron does not implement window.prompt() (calling it throws "prompt() is not supported"), so prompt dialogs do not occur; beforeunload is handled by Electron's unload policy and is only logged to console, not exposed as a pending dialog.
+
+- tab.getDialog() returns the pending dialog ({type, message, defaultPrompt?}) or null.
+- tab.handleDialog(accept?, promptText?) resolves it; accept defaults to false. For prompt, pass promptText to answer.
+- Actions fail with NOT_ACTIONABLE (details.dialog) while a dialog is pending; navigate dismisses leftover dialogs automatically.
+- A dialog left pending when the script returns is auto-dismissed.
+
+Example:
+
+    await tab.getByRole("button", { name: "Delete" }).click();
+    const dialog = await tab.getDialog();
+    if (dialog?.type === "confirm") await tab.handleDialog(true);
+
+## Downloads
+
+Downloads are saved automatically to the OS Downloads folder (no save dialog); file upload is not supported.
+
+- tab.waitForDownload({ timeout? }) waits for the next download of the current tab (default 3000ms, max 120000) and returns its record, or null on timeout.
+- tab.downloads() lists recent downloads of the current tab (newest first).
+- Wait for state "completed" before reading the file; path is the absolute save location.
 
 ## Waits
 
@@ -246,10 +276,9 @@ TabInfo = { index, tabId, url, title, isCurrent }.
 - RESULT_UNSERIALIZABLE: return value cannot be structured-cloned.
 - NOT_FOUND: locator matched nothing.
 - AMBIGUOUS: multiple elements matched; details.candidates lists them. Narrow the locator or use first/last/nth.
-- NOT_ACTIONABLE: the element exists but failed actionability; details.reason is hidden, disabled, not-editable, not-stable, outside-viewport, or covered.
+- NOT_ACTIONABLE: the element exists but failed actionability; details.reason is hidden, disabled, not-editable, not-stable, outside-viewport, or covered. Also returned when the page has an unhandled JavaScript dialog (details.dialog) — call tab.handleDialog first.
 - ACTION_FAILED: input was dispatched but the effect could not be verified, or the element disappeared mid-action.
-- UNSUPPORTED: fill on select/file/checkbox/radio, shadow-root actions, networkidle, or radio uncheck.
-- EVALUATE_FAILED: page JavaScript failed.
+- UNSUPPORTED: fill on select/file/checkbox/radio, shadow-root actions, networkidle, or radio uncheck.- EVALUATE_FAILED: page JavaScript failed.
 - NAVIGATION_FAILED: navigation failed or landed on an error page.
 - TABS_FAILED: tab operation failed.
 - TAB_NOT_FOUND: the current tab disappeared.

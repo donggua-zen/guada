@@ -170,16 +170,43 @@ export class BrowserLocatorEngine {
 
   async release(webContents: Electron.WebContents, token: string): Promise<void> {
     try {
-      await this.runScript(
+      // 动作触发了原生弹窗（alert/confirm 等）时 renderer 被阻塞，这条清理
+      // eval 会一直挂起。绝不能让清理拖死动作调用：有界等待后放弃，残留的
+      // 临时属性等弹窗处理完/页面导航后自然失效（token 是随机的，无冲突）。
+      await this.runScriptWithTimeout(
         webContents,
         `document.querySelectorAll('[data-guada-loc="${escapeAttribute(token)}"]').forEach(function (el) {
            el.removeAttribute('data-guada-loc');
          });
          return true;`,
+        2_000,
       );
     } catch {
       // 页面导航/销毁后元素自然消失，忽略清理失败。
     }
+  }
+
+  private runScriptWithTimeout<T>(
+    webContents: Electron.WebContents,
+    body: string,
+    timeoutMs: number,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`release eval timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      timer.unref?.();
+      this.runScript<T>(webContents, body).then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
   }
 
   async text(

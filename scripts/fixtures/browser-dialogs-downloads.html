@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Dialog Download Fixture</title>
+  <style>
+    button { display: block; margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <button id="alert-btn">Alert</button>
+  <button id="confirm-btn">Confirm</button>
+  <a id="download-link" href="guada-dialog-download-test.txt" download="guada-dialog-download-test.txt">Download</a>
+
+  <script>
+    window.__log = [];
+    document.getElementById("alert-btn").addEventListener("click", () => {
+      alert("Page alert");
+      window.__log.push("alert-closed");
+    });
+    document.getElementById("confirm-btn").addEventListener("click", () => {
+      window.__log.push("confirm:" + confirm("Delete item?"));
+    });
+  </script>
+</body>
+</html>

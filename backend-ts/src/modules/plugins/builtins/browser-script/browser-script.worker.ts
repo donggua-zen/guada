@@ -424,6 +424,29 @@ const tab = Object.freeze({
     });
   },
   screenshot: function (options) { return hostCall('screenshot', options || {}); },
+  getDialog: function () {
+    return hostCall('dialog', { action: 'get' }).then(function (result) {
+      return (result && result.dialog) || null;
+    });
+  },
+  handleDialog: function (accept, promptText) {
+    return hostCall('dialog', {
+      action: 'handle',
+      accept: accept === true,
+      promptText: typeof promptText === 'string' ? promptText : undefined,
+    });
+  },
+  waitForDownload: function (options) {
+    var params = options && typeof options === 'object' ? options : {};
+    return hostCall('download', { action: 'wait', timeout: params.timeout }).then(function (result) {
+      return (result && result.download) || null;
+    });
+  },
+  downloads: function () {
+    return hostCall('download', { action: 'list' }).then(function (result) {
+      return (result && result.downloads) || [];
+    });
+  },
   setViewportSize: function (widthOrOptions, height) {
     var params;
     if (widthOrOptions && typeof widthOrOptions === 'object') {

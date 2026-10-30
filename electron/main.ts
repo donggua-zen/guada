@@ -2880,20 +2880,6 @@ function setupIpcHandlers() {
       }
     },
   );
-
-  // 弹窗自动关闭通知（preload 中劫持 alert/confirm/prompt 后发送）
-  ipcMain.on(
-    "browser:dialog-auto-dismissed",
-    (event, data: { type: string; message: string }) => {
-      const senderId = (event.sender as any).id;
-      const windowId = windowManager!.getWindowIdByWebContentsId(senderId);
-      if (!windowId) return;
-      windowManager!.appendDialogLog(windowId, data.type, data.message);
-      log.info(
-        `[Dialog] Auto-dismissed on window ${windowId}: ${data.type} - ${data.message}`,
-      );
-    },
-  );
 }
 
 // 后端启动 Promise（供 IPC 和 Browser Bridge 等待）

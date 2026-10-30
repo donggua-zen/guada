@@ -128,12 +128,6 @@ contextBridge.exposeInMainWorld('_browserBridge', {
    */
   removeCookie: (filter: { url: string; name: string }) =>
     ipcRenderer.invoke('browser:remove-cookie', filter),
-
-  /**
-   * 通知主进程弹窗已被自动关闭（alert/confirm/prompt）
-   */
-  notifyDialog: (type: string, message: string) =>
-    ipcRenderer.send('browser:dialog-auto-dismissed', { type, message }),
 })
 
 // ── 指针锁 / 全屏状态上报 ──
@@ -289,18 +283,8 @@ window.addEventListener('message', (event) => {
       var origGetChannel = AudioBuffer.prototype.getChannelData;
       AudioBuffer.prototype.getChannelData = function(ch) { var data = origGetChannel.call(this, ch); if (data.length < 16384) { var n = parseFloat(FP.audioNoise); for (var i = 0; i < data.length; i++) { data[i] += n * (Math.random() - 0.5); } } return data; };
 
-      // 14. Dialog auto-dismiss — 立即返回默认值，通过 IPC 通知主进程
-      window.alert = function(message) {
-        try { window._browserBridge && window._browserBridge.notifyDialog('alert', String(message)); } catch(e) {}
-      };
-      window.confirm = function(message) {
-        try { window._browserBridge && window._browserBridge.notifyDialog('confirm', String(message)); } catch(e) {}
-        return true;
-      };
-      window.prompt = function(message) {
-        try { window._browserBridge && window._browserBridge.notifyDialog('prompt', String(message)); } catch(e) {}
-        return null;
-      };
+      // 注意：不覆盖 alert/confirm/prompt/beforeunload——原生弹窗由主进程
+      // CDP 跟踪并交给模型决策（tab.getDialog / tab.handleDialog）。
     })();
   `
   ;(document.head || document.documentElement).appendChild(script)
