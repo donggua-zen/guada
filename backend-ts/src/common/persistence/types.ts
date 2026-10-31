@@ -14,6 +14,7 @@ import type {
   FileRef,
   TokenUsage,
 } from '../types/conversation.types';
+import type { RequestMetrics } from '../types/request-metrics.types';
 
 // ─── 事件类型 ───
 
@@ -124,6 +125,8 @@ export interface ContextStatsData {
     history: number;
     tools: number;
   };
+  /** 本次请求的媒体负载（图片 base64 字节/预算/张数；旧锚点缺省） */
+  request?: RequestMetrics;
 }
 
 // ─── 消息级三事件（对齐 DSH：user/message、assistant/message、tool/result）───

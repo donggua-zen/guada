@@ -743,6 +743,12 @@ describe("StreamProjector 折叠器", () => {
         effectiveContextWindow: 1000,
         messageCount: 4,
         breakdown: { systemPrompt: 100, history: 200, tools: 21 },
+        request: {
+          mediaBytes: 4096,
+          mediaBudgetBytes: 24 * 1024 * 1024,
+          retainedImages: 2,
+          omittedImages: 1,
+        },
       },
     } as any);
 
@@ -754,6 +760,12 @@ describe("StreamProjector 折叠器", () => {
       percentage: 32.1,
       messageCount: 4,
       breakdown: { systemPrompt: 100, history: 200, tools: 21 },
+      request: {
+        mediaBytes: 4096,
+        mediaBudgetBytes: 24 * 1024 * 1024,
+        retainedImages: 2,
+        omittedImages: 1,
+      },
     });
     // 终态事件入 eventLog：同会话切走再切回可按锚点恢复最新小轮次值
     expect(store.state.eventLog.map((e: any) => e.type)).toContain("context_stats");

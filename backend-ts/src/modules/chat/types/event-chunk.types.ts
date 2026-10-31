@@ -14,6 +14,7 @@
 import type { StreamChunk, StreamUsage } from "../../../common/types/stream-chunk.types";
 import type { TokenBreakdown } from "../../../common/persistence/message-store.interface";
 import type { FileRef } from "../../../common/types/conversation.types";
+import type { RequestMetrics } from "../../../common/types/request-metrics.types";
 import type { SummaryDegradation } from "../compaction/compression-engine";
 
 // ==================== 回合级事件 ====================
@@ -33,6 +34,8 @@ export interface ContextStatsPayload {
   messageCount?: number;
   /** 细分 token（三项真值；旧锚点数据缺省） */
   breakdown?: TokenBreakdown;
+  /** 本次请求实际携带的媒体负载（图片 base64 字节/预算/张数；旧锚点缺省） */
+  request?: RequestMetrics;
 }
 
 /** 单次模型请求（小轮次）结束后的上下文占用快照。

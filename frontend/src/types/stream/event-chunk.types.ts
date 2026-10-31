@@ -19,6 +19,7 @@
 
 import type { StreamChunk, StreamUsage } from "./stream-chunk.types";
 import type { ContentBlock, FileRef } from "./content-block.types";
+import type { RequestMetrics } from "./request-metrics.types";
 
 // ==================== 回合级事件 ====================
 
@@ -44,6 +45,8 @@ export interface ContextStatsEvent {
       history: number;
       tools: number;
     };
+    /** 本次请求携带的媒体负载（图片 base64 字节/预算/张数；旧锚点缺省） */
+    request?: RequestMetrics;
   };
 }
 
@@ -76,6 +79,8 @@ export interface TurnEndEvent {
     totalContextWindow?: number;
     /** 压缩决策扣掉的输出预留（0..21K；旧后端缺省） */
     outputReserveTokens?: number;
+    /** 本次请求携带的媒体负载（旧后端缺省） */
+    request?: RequestMetrics;
   };
   /**
    * 回合模型名：live 广播不带此字段；由领域事件 turn/finish 映射而来的 turn_end 会带上

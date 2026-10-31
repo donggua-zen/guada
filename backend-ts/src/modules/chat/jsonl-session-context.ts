@@ -955,6 +955,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       ...(stats.breakdown === undefined
         ? {}
         : { breakdown: stats.breakdown }),
+      ...(stats.request === undefined ? {} : { request: stats.request }),
     });
   }
 

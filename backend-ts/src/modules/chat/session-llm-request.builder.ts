@@ -62,18 +62,25 @@ export function buildSessionLlmParams(
   // 请求级媒体字节预算：单图转码只约束体积，张数无上限会让请求体无限膨胀
   // （每轮都把全部历史截图重新 base64 化）。这里按字节算总账，旧图换带路径的占位。
   // 关闭图片派生时本可跳过（没有 image 块），但用户上传图同样计入，故统一执行。
-  const messages = projectMessagesForMediaBudget(expanded, {
+  const mediaProjection = projectMessagesForMediaBudget(expanded, {
     maxMediaBytes:
       opts.requestMediaBudgetBytes ??
       getMediaBudgetBytesForSession(ctx.sessionId),
     workspaceDir: ctx.getWorkspacePath?.() ?? null,
-  }).messages;
+  });
   return {
     model: modelConfig.modelName,
     // envelope：system 提示词独立字段（协议槽位由 adapter 映射，对齐 DSH LlmCallConfig.system）
     system: ctx.getSystemText(),
     // surface：纯对话历史（调用方传 getHistory()，不含 system/插件提示）。
-    messages,
+    messages: mediaProjection.messages,
+    // 媒体投影结果随参数带出：adapter 不感知，agent-engine 落 context_stats 供前端展示
+    requestMedia: {
+      attachedBytes: mediaProjection.projectedMediaBytes,
+      retainedImages: mediaProjection.retainedImageCount,
+      budgetBytes: mediaProjection.maxMediaBytes,
+      omittedImages: mediaProjection.omittedImageCount,
+    },
     tools: ToolExecutor.toFlatToolDefs(ctx.getResolvedPlugins()),
     temperature: modelConfig.config.temperature,
     topP: modelConfig.config.topP,

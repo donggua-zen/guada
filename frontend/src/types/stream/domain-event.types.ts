@@ -7,6 +7,7 @@
  */
 import type { ContentBlock, FileRef } from "./content-block.types";
 import type { SummaryDegradation } from "./event-chunk.types";
+import type { RequestMetrics } from "./request-metrics.types";
 
 /**
  * 用户消息附件（FileRef 前端镜像，self-contained 契约）。
@@ -167,6 +168,8 @@ export type DomainEvent =
           history: number;
           tools: number;
         };
+        /** 本次请求携带的媒体负载（旧数据缺省） */
+        request?: RequestMetrics;
       };
     }
   | { type: "workflow/event"; seq: number; data: import("./workflow.types").WorkflowEventData }

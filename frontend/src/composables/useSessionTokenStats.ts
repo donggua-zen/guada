@@ -1,4 +1,5 @@
 import { ref, computed, type Ref } from 'vue'
+import type { RequestMetrics } from '@/types/stream/request-metrics.types'
 
 export interface TokenBreakdown {
   systemPrompt: number
@@ -18,6 +19,8 @@ export interface TokenStatsData {
   totalContextWindow?: number
   /** 压缩决策扣掉的输出预留（0..21K；旧数据缺省） */
   outputReserveTokens?: number
+  /** 最近一次 LLM 请求携带的媒体负载（旧锚点缺省） */
+  request?: RequestMetrics
 }
 
 /** 上下文统计事件负载（turn_end / compression_end / compaction_summary 与持久化锚点同构） */
@@ -29,6 +32,8 @@ export interface ContextStatsInput {
   outputReserveTokens?: number
   messageCount?: number
   breakdown?: TokenBreakdown
+  /** 本次请求携带的媒体负载（压缩等事件不含此字段） */
+  request?: RequestMetrics
 }
 
 /**
@@ -57,6 +62,42 @@ function pickBreakdown(b: unknown): TokenBreakdown | undefined {
   return d
 }
 
+/** request 形状防御校验（旧锚点事件无此字段；只接受有限非负数） */
+function pickRequest(value: unknown): RequestMetrics | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const d = value as Record<string, unknown>
+  const out: RequestMetrics = {}
+  if (
+    typeof d.mediaBytes === 'number' &&
+    Number.isFinite(d.mediaBytes) &&
+    d.mediaBytes >= 0
+  ) {
+    out.mediaBytes = d.mediaBytes
+  }
+  if (
+    typeof d.mediaBudgetBytes === 'number' &&
+    Number.isFinite(d.mediaBudgetBytes) &&
+    d.mediaBudgetBytes > 0
+  ) {
+    out.mediaBudgetBytes = d.mediaBudgetBytes
+  }
+  if (
+    typeof d.omittedImages === 'number' &&
+    Number.isFinite(d.omittedImages) &&
+    d.omittedImages >= 0
+  ) {
+    out.omittedImages = d.omittedImages
+  }
+  if (
+    typeof d.retainedImages === 'number' &&
+    Number.isFinite(d.retainedImages) &&
+    d.retainedImages >= 0
+  ) {
+    out.retainedImages = d.retainedImages
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 /** 会话内共享合并：填充环形指示器字段；messageCount/breakdown 事件携带时才覆盖（旧锚点缺省保留旧值） */
 function applyContextStats(sessionId: string, stats: ContextStatsInput) {
   const prev = tokenStatsBySession.value.get(sessionId)
@@ -76,6 +117,7 @@ function applyContextStats(sessionId: string, stats: ContextStatsInput) {
       stats.totalContextWindow ?? prev?.totalContextWindow,
     outputReserveTokens:
       stats.outputReserveTokens ?? prev?.outputReserveTokens,
+    request: stats.request ?? prev?.request,
   })
   if (tokenStatsBySession.value.size > MAX_CACHED_SESSIONS) {
     const oldest = tokenStatsBySession.value.keys().next().value
@@ -95,6 +137,85 @@ export function updateTokenStatsFromSSE(sessionId: string, stats: ContextStatsIn
   applyContextStats(sessionId, stats)
 }
 
+/** 归一后的上下文锚点（live chunk 与领域事件两种载体） */
+interface ContextStatsAnchor {
+  turnId?: string
+  stats: ContextStatsInput
+}
+
+/** 从一个事件读取上下文锚点；非法/缺字段返回 null（不做删除回合过滤） */
+function readContextStatsAnchor(event: unknown): ContextStatsAnchor | null {
+  const e = event as
+    | {
+        turnId?: unknown
+        contextStats?: Record<string, unknown>
+        data?: Record<string, unknown>
+      }
+    | null
+    | undefined
+  if (!e) return null
+
+  const live = e.contextStats
+  if (
+    live &&
+    typeof live.usedTokens === 'number' &&
+    typeof live.effectiveContextWindow === 'number' &&
+    live.effectiveContextWindow > 0
+  ) {
+    // live chunk 的回合归属在顶层
+    return {
+      turnId: typeof e.turnId === 'string' ? e.turnId : undefined,
+      stats: {
+        usedTokens: live.usedTokens,
+        effectiveContextWindow: live.effectiveContextWindow,
+        totalContextWindow:
+          typeof live.totalContextWindow === 'number'
+            ? live.totalContextWindow
+            : undefined,
+        outputReserveTokens:
+          typeof live.outputReserveTokens === 'number'
+            ? live.outputReserveTokens
+            : undefined,
+        messageCount:
+          typeof live.messageCount === 'number' ? live.messageCount : undefined,
+        breakdown: pickBreakdown(live.breakdown),
+        request: pickRequest(live.request),
+      },
+    }
+  }
+
+  const domain = e.data
+  if (
+    domain &&
+    typeof domain.usedTokens === 'number' &&
+    typeof domain.effectiveContextWindow === 'number' &&
+    domain.effectiveContextWindow > 0
+  ) {
+    // 领域事件的回合归属在 data.turnId
+    return {
+      turnId: typeof domain.turnId === 'string' ? domain.turnId : undefined,
+      stats: {
+        usedTokens: domain.usedTokens,
+        effectiveContextWindow: domain.effectiveContextWindow,
+        totalContextWindow:
+          typeof domain.totalContextWindow === 'number'
+            ? domain.totalContextWindow
+            : undefined,
+        outputReserveTokens:
+          typeof domain.outputReserveTokens === 'number'
+            ? domain.outputReserveTokens
+            : undefined,
+        messageCount:
+          typeof domain.messageCount === 'number' ? domain.messageCount : undefined,
+        breakdown: pickBreakdown(domain.breakdown),
+        request: pickRequest(domain.request),
+      },
+    }
+  }
+
+  return null
+}
+
 /**
  * 从会话事件日志逆向扫描最后一个「上下文占用锚点」并填充该会话的环形指示器切片。
  *
@@ -104,6 +225,9 @@ export function updateTokenStatsFromSSE(sessionId: string, stats: ContextStatsIn
  *
  * 后端在「占用稳定点」（每次小轮次请求、每轮结束、每次压缩后）把权威 usedTokens/
  * effectiveContextWindow（含 messageCount/breakdown）落进事件 → 打开/切换会话时直接取最后一个锚点。
+ *
+ * request（最近一次请求的媒体负载）只有 context/stats / turn_end 才有；若最新锚点是
+ * turn/finish 或 compaction/end，继续向前找最近一条带 request 的锚点，避免刷新后丢失。
  *
  * 被 turn/delete 删除的回合（重答/删除）不参与恢复：否则会显示旧回合的占用。
  * @returns 是否找到锚点（false → 显示空状态）
@@ -126,70 +250,28 @@ export function applyContextStatsFromEvents(
     }
   }
 
+  let anchorIndex = -1
+  let anchor: ContextStatsAnchor | null = null
   for (let i = events.length - 1; i >= 0; i--) {
-    // eventLog 混合两类载体：live chunk（contextStats）与领域事件（data.usedTokens），
-    // 其余字段全部走运行时 typeof 收窄
-    const e = events[i] as
-      | {
-          turnId?: unknown
-          contextStats?: Record<string, unknown>
-          data?: Record<string, unknown>
-        }
-      | null
-      | undefined
-    if (!e) continue
-    const live = e.contextStats
-    if (
-      live &&
-      typeof live.usedTokens === 'number' &&
-      typeof live.effectiveContextWindow === 'number' &&
-      live.effectiveContextWindow > 0
-    ) {
-      // live chunk 的回合归属在顶层
-      if (typeof e.turnId === 'string' && deletedTurnIds.has(e.turnId)) continue
-      applyContextStats(sessionId, {
-        usedTokens: live.usedTokens,
-        effectiveContextWindow: live.effectiveContextWindow,
-        totalContextWindow:
-          typeof live.totalContextWindow === 'number'
-            ? live.totalContextWindow
-            : undefined,
-        outputReserveTokens:
-          typeof live.outputReserveTokens === 'number'
-            ? live.outputReserveTokens
-            : undefined,
-        messageCount: typeof live.messageCount === 'number' ? live.messageCount : undefined,
-        breakdown: pickBreakdown(live.breakdown),
-      })
-      return true
-    }
-    const domain = e.data
-    if (
-      domain &&
-      typeof domain.usedTokens === 'number' &&
-      typeof domain.effectiveContextWindow === 'number' &&
-      domain.effectiveContextWindow > 0
-    ) {
-      // 领域事件的回合归属在 data.turnId
-      if (typeof domain.turnId === 'string' && deletedTurnIds.has(domain.turnId)) continue
-      applyContextStats(sessionId, {
-        usedTokens: domain.usedTokens,
-        effectiveContextWindow: domain.effectiveContextWindow,
-        totalContextWindow:
-          typeof domain.totalContextWindow === 'number'
-            ? domain.totalContextWindow
-            : undefined,
-        outputReserveTokens:
-          typeof domain.outputReserveTokens === 'number'
-            ? domain.outputReserveTokens
-            : undefined,
-        messageCount: typeof domain.messageCount === 'number' ? domain.messageCount : undefined,
-        breakdown: pickBreakdown(domain.breakdown),
-      })
-      return true
-    }
+    const candidate = readContextStatsAnchor(events[i])
+    if (!candidate) continue
+    if (candidate.turnId && deletedTurnIds.has(candidate.turnId)) continue
+    anchorIndex = i
+    anchor = candidate
+    break
   }
-  return false
+  if (!anchor) return false
+
+  let request = anchor.stats.request
+  for (let i = anchorIndex; !request && i >= 0; i--) {
+    const candidate = readContextStatsAnchor(events[i])
+    if (!candidate) continue
+    if (candidate.turnId && deletedTurnIds.has(candidate.turnId)) continue
+    request = candidate.stats.request
+  }
+
+  applyContextStats(sessionId, { ...anchor.stats, request })
+  return true
 }
 
 /** 清空统计切片（测试/会话数据清理用；不传则清全部） */

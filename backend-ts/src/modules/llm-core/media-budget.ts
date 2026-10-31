@@ -25,8 +25,11 @@ import { Logger } from '@nestjs/common';
 import type { ContentBlock, Message } from '../../common/types/conversation.types';
 import { resolveModelVisiblePath } from './utils/attachment.util';
 
-/** 默认请求媒体预算：16 MiB（≈80 张 150KB 工具图，按其 base64 计约 200KB/张） */
-export const DEFAULT_REQUEST_MEDIA_BUDGET_BYTES = 16 * 1024 * 1024;
+/** 默认请求媒体预算（MiB）：≈120 张 150KB 工具图，按其 base64 计约 200KB/张 */
+export const DEFAULT_REQUEST_MEDIA_BUDGET_MB = 24;
+/** 默认请求媒体预算（字节） */
+export const DEFAULT_REQUEST_MEDIA_BUDGET_BYTES =
+  DEFAULT_REQUEST_MEDIA_BUDGET_MB * 1024 * 1024;
 /** 压力收缩的下限：低于此值再收缩没有意义（约 10 张图），交由上游错误兜底 */
 export const MIN_REQUEST_MEDIA_BUDGET_BYTES = 2 * 1024 * 1024;
 /** 压力状态 TTL：上游 413 恢复后一段时间内保持收紧，避免立刻反弹回原预算 */
@@ -58,7 +61,11 @@ function readIntEnv(name: string, fallback: number, min: number, max: number): n
 
 /** 默认请求媒体预算（字节）：env CHAT_REQUEST_MEDIA_BUDGET_MB，夹在 1..256 MiB */
 export function getRequestMediaBudgetBytes(): number {
-  return readIntEnv('CHAT_REQUEST_MEDIA_BUDGET_MB', 16, 1, 256) * 1024 * 1024;
+  return (
+    readIntEnv('CHAT_REQUEST_MEDIA_BUDGET_MB', DEFAULT_REQUEST_MEDIA_BUDGET_MB, 1, 256) *
+    1024 *
+    1024
+  );
 }
 
 // ─── 会话级压力状态 ───

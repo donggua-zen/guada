@@ -51,8 +51,10 @@ import {
 import { LLMService } from "../llm-core/llm.service";
 import type {
   LLMCompletionParams,
+  LLMRequestMediaStats,
   StreamChunk,
 } from "../llm-core/types/llm.types";
+import type { RequestMetrics } from "../../common/types/request-metrics.types";
 import {
   classifyError,
   computeRetryDelayMs,
@@ -72,6 +74,16 @@ function inlineDataRef(mediaType: string, base64: string, byteLength: number): F
     mediaType: mime,
     bytes: byteLength,
     url: `data:${mime};base64,${base64}`,
+  };
+}
+
+/** 请求媒体投影统计 → context_stats 的展示负载（媒体字节为精确值） */
+function toRequestMetrics(media: LLMRequestMediaStats): RequestMetrics {
+  return {
+    mediaBytes: media.attachedBytes,
+    mediaBudgetBytes: media.budgetBytes,
+    omittedImages: media.omittedImages,
+    retainedImages: media.retainedImages,
   };
 }
 
@@ -430,6 +442,8 @@ export class AgentEngine {
     const MAX_INTERCEPTOR_ITERATIONS = 3;
     let finalError: string | undefined;
     let finalUsage: any;
+    /** 最近一次 LLM 请求的媒体投影统计（每轮重置；用于 context_stats 展示） */
+    let lastRequestMedia: LLMRequestMediaStats | undefined;
     // 业务层结束原因：完全独立于上游适配器的 finishReason
     // 上游 finishReason 留在 MessageContent.metadata 供审计，不参与业务判断
     let businessReason: string | undefined;
@@ -515,6 +529,7 @@ export class AgentEngine {
       iterationCount++;
       needToContinue = false;
       let skipLLMCall = false;
+      lastRequestMedia = undefined;
 
       // 通过 agent 钩子（PRE_STEP，副作用管线）让能力订阅者（压缩等）检查/执行——
       // 订阅者原地改写会话存储（store 写即更新）后放行；agent-engine 不感知压缩细节，
@@ -616,8 +631,9 @@ export class AgentEngine {
 
         try {
           // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义，对齐 DSH retryPolicy）
-          const streamResult = this.streamWithRetry(
-            SessionLlmRequestBuilder.buildCompletionParams(sessionContext, {
+          const completionParams = SessionLlmRequestBuilder.buildCompletionParams(
+            sessionContext,
+            {
               messages: requestMessages,
               abortSignal,
               maxTokens: preflightMaxTokens,
@@ -630,8 +646,10 @@ export class AgentEngine {
                     ? "subagent"
                     : "main_turn",
               },
-            }),
+            },
           );
+          lastRequestMedia = completionParams.requestMedia;
+          const streamResult = this.streamWithRetry(completionParams);
           for await (const result of streamResult) {
             // 重试信号：清空本次尝试的半截累积（保留续传 seed 前缀），转发给前端
             // 轮次级瞬态：带 turnId，前端挂 turn.state.retry（与 isWorking 同层，不落库）
@@ -755,7 +773,7 @@ export class AgentEngine {
 
           // 小轮次占用快照：每次 LLM 请求落库后立即推送，环形指示器无需等到 turn_end。
           // 统计为 O(1)（快照增量 + 前缀和），失败只告警，不影响对话主链路。
-          await this.publishContextStats(sessionContext, turnId);
+          await this.publishContextStats(sessionContext, turnId, lastRequestMedia);
 
           const hasToolCalls = assistantMessage.content.some(
             (b) => b.type === "tool-call",
@@ -789,7 +807,7 @@ export class AgentEngine {
                 await sessionContext.publishStream(result.toolEvent!);
                 // 工具结果同样计入上下文：落库后补发一次占用快照，
                 // 避免长工具执行期间圆环停留在上一次请求的数值。
-                await this.publishContextStats(sessionContext, turnId);
+                await this.publishContextStats(sessionContext, turnId, lastRequestMedia);
               }
               execResult = result;
             } catch (error) {
@@ -949,7 +967,14 @@ export class AgentEngine {
             error: finalError,
             usage: finalUsage,
             totalDurationMs: loopDuration,
-            contextStats,
+            contextStats: contextStats
+              ? {
+                  ...contextStats,
+                  ...(lastRequestMedia
+                    ? { request: toRequestMetrics(lastRequestMedia) }
+                    : {}),
+                }
+              : undefined,
           });
         } catch (publishError: any) {
           this.logger.warn(
@@ -980,9 +1005,13 @@ export class AgentEngine {
   private async publishContextStats(
     sessionContext: ISessionContext,
     turnId: string,
+    requestMedia?: LLMRequestMediaStats,
   ): Promise<void> {
     try {
-      const contextStats = await sessionContext.getContextStats();
+      const contextStats = {
+        ...(await sessionContext.getContextStats()),
+        ...(requestMedia ? { request: toRequestMetrics(requestMedia) } : {}),
+      };
       // 持久化锚点：流式中意外退出后，冷启动扫描事件页仍能恢复到本小轮次
       await sessionContext.appendContextStats(turnId, contextStats);
       // 实时广播：前端环形指示器立即更新

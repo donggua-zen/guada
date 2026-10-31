@@ -207,4 +207,83 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
     expect(subStats.value?.usedTokens).toBe(900);
     expect(subStats.value?.percentage).toBe(45);
   });
+
+  it("request：不带 request 的后续锚点保留旧值", () => {
+    updateTokenStatsFromSSE("s1", {
+      usedTokens: 10,
+      effectiveContextWindow: 1000,
+      request: {
+        mediaBytes: 2048,
+        mediaBudgetBytes: 1024 * 1024,
+        retainedImages: 2,
+        omittedImages: 1,
+      },
+    });
+    updateTokenStatsFromSSE("s1", {
+      usedTokens: 20,
+      effectiveContextWindow: 1000,
+    });
+
+    expect(tokenStats.value?.usedTokens).toBe(20);
+    expect(tokenStats.value?.request).toEqual({
+      mediaBytes: 2048,
+      mediaBudgetBytes: 1024 * 1024,
+      retainedImages: 2,
+      omittedImages: 1,
+    });
+  });
+
+  it("request：最新锚点（turn/finish）无 request 时回退到最近一条 context/stats", () => {
+    const events = [
+      {
+        type: "context/stats",
+        data: {
+          turnId: "t1",
+          usedTokens: 100,
+          effectiveContextWindow: 1000,
+          request: {
+            mediaBytes: 4096,
+            mediaBudgetBytes: 24 * 1024 * 1024,
+            retainedImages: 3,
+            omittedImages: 0,
+          },
+        },
+      },
+      {
+        type: "turn/finish",
+        data: { turnId: "t1", usedTokens: 120, effectiveContextWindow: 1000 },
+      },
+    ];
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
+    // 占用取最新锚点，request 取最近一条携带它的锚点
+    expect(tokenStats.value?.usedTokens).toBe(120);
+    expect(tokenStats.value?.request).toEqual({
+      mediaBytes: 4096,
+      mediaBudgetBytes: 24 * 1024 * 1024,
+      retainedImages: 3,
+      omittedImages: 0,
+    });
+  });
+
+  it("request：被删除回合的 request 不参与回退", () => {
+    const events = [
+      {
+        type: "context/stats",
+        data: {
+          turnId: "t_deleted",
+          usedTokens: 50,
+          effectiveContextWindow: 1000,
+          request: { mediaBytes: 999, mediaBudgetBytes: 1000, retainedImages: 1 },
+        },
+      },
+      { type: "turn/delete", data: { turnId: "t_deleted" } },
+      {
+        type: "turn/finish",
+        data: { turnId: "t_ok", usedTokens: 100, effectiveContextWindow: 1000 },
+      },
+    ];
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
+    expect(tokenStats.value?.usedTokens).toBe(100);
+    expect(tokenStats.value?.request).toBeUndefined();
+  });
 });

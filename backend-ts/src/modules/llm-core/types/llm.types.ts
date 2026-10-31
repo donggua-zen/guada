@@ -89,7 +89,24 @@ export interface LLMCompletionParams {
     supportsImageInput?: boolean;
   };
   stream?: boolean;
+  /**
+   * 请求媒体投影统计（builder 填，不参与 wire 请求）。
+   * 用于把本次请求实际携带的图片字节/预算/张数带出，供上下文快照展示。
+   */
+  requestMedia?: LLMRequestMediaStats;
   timeout?: number;
+}
+
+/** 请求组装阶段媒体预算投影的可观察结果（精确值，不参与 wire） */
+export interface LLMRequestMediaStats {
+  /** 实际进入本次请求的媒体字节（base64 计） */
+  attachedBytes: number;
+  /** 实际保留的图片张数 */
+  retainedImages: number;
+  /** 本次生效的媒体预算 */
+  budgetBytes: number;
+  /** 被替换为路径占位的图片张数 */
+  omittedImages: number;
 }
 
 /**

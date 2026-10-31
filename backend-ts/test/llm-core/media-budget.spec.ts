@@ -306,10 +306,10 @@ describe("媒体预算配置与压力状态", () => {
     clearMediaBudgetPressure("s-test");
   });
 
-  it("默认 16MiB", () => {
+  it("默认 24MiB", () => {
     delete process.env.CHAT_REQUEST_MEDIA_BUDGET_MB;
-    expect(getRequestMediaBudgetBytes()).toBe(16 * 1024 * 1024);
-    expect(DEFAULT_REQUEST_MEDIA_BUDGET_BYTES).toBe(16 * 1024 * 1024);
+    expect(getRequestMediaBudgetBytes()).toBe(24 * 1024 * 1024);
+    expect(DEFAULT_REQUEST_MEDIA_BUDGET_BYTES).toBe(24 * 1024 * 1024);
   });
 
   it("env 可覆盖并夹在 1..256MiB", () => {

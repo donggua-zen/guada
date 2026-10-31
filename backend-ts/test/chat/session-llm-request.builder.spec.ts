@@ -120,6 +120,11 @@ function imageBlocks(messages: Message[]): number {
   );
 }
 
+/** 与 media-budget 的 base64 口径一致：字节数 → 编码后字符数 */
+function base64Bytes(bytes: number): number {
+  return Math.ceil(bytes / 3) * 4;
+}
+
 describe("buildSessionLlmParams 媒体预算集成", () => {
   afterEach(() => clearMediaBudgetPressure("s1"));
 
@@ -136,6 +141,12 @@ describe("buildSessionLlmParams 媒体预算集成", () => {
       requestMediaBudgetBytes: 8 * 1024 * 1024,
     });
     expect(imageBlocks(params.messages)).toBe(2);
+    expect(params.requestMedia).toEqual({
+      attachedBytes: 2 * base64Bytes(150 * 1024),
+      retainedImages: 2,
+      budgetBytes: 8 * 1024 * 1024,
+      omittedImages: 0,
+    });
   });
 
   it("超预算：较旧的工具图退化为占位文本，最新的保留", () => {
@@ -157,6 +168,12 @@ describe("buildSessionLlmParams 媒体预算集成", () => {
       .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
       .map((b) => b.text);
     expect(texts.some((t) => t.includes("media budget"))).toBe(true);
+    expect(params.requestMedia).toEqual({
+      attachedBytes: base64Bytes(150 * 1024),
+      retainedImages: 1,
+      budgetBytes: 210 * 1024,
+      omittedImages: 1,
+    });
   });
 
   it("非多模态模型：仍不派生图片（预算投影不制造 image 块）", () => {
@@ -170,5 +187,11 @@ describe("buildSessionLlmParams 媒体预算集成", () => {
       { messages },
     );
     expect(imageBlocks(params.messages)).toBe(0);
+    expect(params.requestMedia).toEqual({
+      attachedBytes: 0,
+      retainedImages: 0,
+      budgetBytes: expect.any(Number),
+      omittedImages: 0,
+    });
   });
 });

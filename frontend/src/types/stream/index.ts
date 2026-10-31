@@ -9,3 +9,4 @@
 export * from "./content-block.types";
 export * from "./stream-chunk.types";
 export * from "./event-chunk.types";
+export * from "./request-metrics.types";

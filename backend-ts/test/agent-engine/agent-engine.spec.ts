@@ -141,6 +141,12 @@ describe('AgentEngine - completions', () => {
         contextStats: expect.objectContaining({
           usedTokens: expect.any(Number),
           effectiveContextWindow: expect.any(Number),
+          request: expect.objectContaining({
+            mediaBytes: 0,
+            retainedImages: 0,
+            omittedImages: 0,
+            mediaBudgetBytes: expect.any(Number),
+          }),
         }),
       });
     });

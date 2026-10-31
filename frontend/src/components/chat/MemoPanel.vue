@@ -13,7 +13,7 @@
                 <el-icon
                   class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors"
                   :size="14">
-                  <QuestionFilled />
+                  <QuestionCircle16Filled />
                 </el-icon>
               </GdTooltip>
             </div>
@@ -21,17 +21,17 @@
               {{ tokenStats.percentage }}%
             </span>
           </div>
-          <el-progress :percentage="tokenStats.percentage" :color="progressColor" :stroke-width="14"
+          <el-progress :percentage="tokenStats.percentage" :color="progressColor" :stroke-width="6"
             :show-text="false" />
           <div class="flex items-center gap-2 mt-1.5">
             <span class="text-xs text-gray-400 dark:text-[#8b8d95]">
               {{ tokenStats.usedTokens.toLocaleString() }} / {{ tokenStats.totalTokens.toLocaleString() }} · {{
                 t('chat.memo.messages', { count: tokenStats.messageCount }) }}
             </span>
-            <el-button v-if="tokenStats.breakdown" size="small" text @click="showBreakdown = !showBreakdown"
+            <GdButton v-if="tokenStats.breakdown" size="small" text @click="showBreakdown = !showBreakdown"
               class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 !px-1 !py-0 !h-auto !text-xs">
               {{ t('chat.memo.details') }}
-            </el-button>
+            </GdButton>
           </div>
           <!-- 窗口口径说明：环形/进度条的分母是“压缩有效窗口”（总窗口 − 封顶输出预留） -->
           <div v-if="tokenStats.totalContextWindow" class="mt-0.5 text-[11px] text-gray-400 dark:text-[#8b8d95]">
@@ -60,20 +60,50 @@
         </div>
 
 
+        <!-- 请求媒体负载（精确值）：媒体预算只约束图片，不含文本/工具定义 -->
+        <div v-if="requestStats" class="mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-1.5">
+              <span class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">{{ t('chat.memo.requestMedia')
+                }}</span>
+              <GdTooltip :content="t('chat.memo.requestMediaTooltip')" placement="top">
+                <el-icon
+                  class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors"
+                  :size="14">
+                  <QuestionCircle16Filled />
+                </el-icon>
+              </GdTooltip>
+            </div>
+            <span class="text-base font-bold" :class="mediaColorClass">
+              {{ mediaUsagePercent }}%
+            </span>
+          </div>
+          <el-progress :percentage="mediaUsagePercent" :color="mediaColor" :stroke-width="6" :show-text="false" />
+          <div class="flex items-center gap-2 mt-1.5">
+            <span class="text-xs text-gray-400 dark:text-[#8b8d95]">
+              {{ formatBytes(requestStats.mediaBytes) }} / {{ formatBytes(requestStats.mediaBudgetBytes) }} ·
+              {{ t('chat.memo.imagesRetained', { count: requestStats.retainedImages ?? 0 }) }}
+              <template v-if="requestStats.omittedImages">
+                · {{ t('chat.memo.imagesOmitted', { count: requestStats.omittedImages }) }}
+              </template>
+            </span>
+          </div>
+        </div>
+
         <!-- 操作按钮 -->
         <div class="flex gap-2 pt-3">
-          <el-button size="small" @click="loadTokenStats" class="flex-1">
+          <GdButton size="small" @click="loadTokenStats" class="flex-1">
             <el-icon class="mr-1">
-              <Refresh />
+              <ArrowClockwise16Regular />
             </el-icon>
             {{ t('common.refresh') }}
-          </el-button>
-          <el-button size="small" @click="handleCompress" :loading="isCompressing" class="flex-1">
+          </GdButton>
+          <GdButton size="small" @click="handleCompress" :loading="isCompressing" class="flex-1">
             <el-icon class="mr-1">
-              <MagicStick />
+              <Wand16Regular />
             </el-icon>
             {{ isCompressing ? t('chat.memo.compressing') : t('chat.memo.compress') }}
-          </el-button>
+          </GdButton>
         </div>
       </div>
     </template>
@@ -138,13 +168,13 @@
               {{ formatTime(summaries[0].createdAt) }}
             </span>
             <div class="flex gap-1">
-              <el-button size="small" text @click="handleViewHistory"
+              <GdButton size="small" text @click="handleViewHistory"
                 class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20">
                 <el-icon>
-                  <List />
+                  <List16Regular />
                 </el-icon>
                 <span class="ml-1">{{ t('chat.memo.history') }}</span>
-              </el-button>
+              </GdButton>
             </div>
           </div>
         </div>
@@ -224,9 +254,7 @@
         <el-empty :description="t('chat.memo.noCompressRecords')" :image-size="80" />
       </template>
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="historyDialogVisible = false">{{ t('chat.memo.close') }}</el-button>
-        </span>
+        <GdButton @click="historyDialogVisible = false">{{ t('chat.memo.close') }}</GdButton>
       </template>
     </GdDialog>
   </div>
@@ -241,10 +269,13 @@ import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
 import type { SessionSummaryItem } from '@/services/modules/session.api';
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage';
+import { formatBytes } from '@/utils/formatBytes';
 import { usePopup } from '@/composables/usePopup';
-import { Refresh, MagicStick, QuestionFilled, List } from '@element-plus/icons-vue';
+import { ArrowClockwise16Regular, QuestionCircle16Filled, Wand16Regular, List16Regular } from '@vicons/fluent';
 import dayjs from 'dayjs';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
+import GdButton from '@/components/ui/GdButton.vue';
+
 
 const { confirm, toast } = usePopup();
 const { t } = useI18n();
@@ -294,6 +325,33 @@ const usageColorClass = computed(() => {
   if (percentage < 60) return 'text-green-600';
   if (percentage < 80) return 'text-yellow-600';
   return 'text-red-600';
+});
+
+/** 最近一次请求携带的媒体负载（旧锚点缺省 → 不渲染卡片） */
+const requestStats = computed(() => tokenStats.value?.request);
+
+/** 媒体预算使用率（超出预算时进度条封顶 100%，但数字仍显示真实值） */
+const mediaUsagePercent = computed(() => {
+  const r = requestStats.value;
+  if (!r?.mediaBytes || !r.mediaBudgetBytes) return 0;
+  return Math.min(
+    100,
+    parseFloat(((r.mediaBytes / r.mediaBudgetBytes) * 100).toFixed(1)),
+  );
+});
+
+const mediaColor = computed(() => {
+  const pct = mediaUsagePercent.value;
+  if (pct >= 90) return '#f56c6c';
+  if (pct >= 70) return '#e6a23c';
+  return '#409eff';
+});
+
+const mediaColorClass = computed(() => {
+  const pct = mediaUsagePercent.value;
+  if (pct >= 90) return 'text-red-600';
+  if (pct >= 70) return 'text-yellow-600';
+  return 'text-green-600';
 });
 
 // 细分统计项（系统提示词/历史/工具定义；摘要已折叠进 history）
@@ -465,15 +523,6 @@ function handleViewHistory() {
   --el-tag-bg-color: rgba(230, 162, 60, 0.1);
   --el-tag-border-color: rgba(230, 162, 60, 0.2);
   --el-tag-text-color: #ebb563;
-}
-
-/* 暗色模式下的按钮样式优化 */
-.dark :deep(.el-button--small.is-text) {
-  color: var(--el-text-color-regular);
-}
-
-.dark :deep(.el-button--small.is-text:hover) {
-  background-color: var(--el-fill-color-light);
 }
 
 /* 暗色模式下的进度条颜色优化 */

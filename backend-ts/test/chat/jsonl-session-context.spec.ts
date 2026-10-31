@@ -231,6 +231,28 @@ describe('JsonlSessionContext 读取层直通', () => {
       usedTokens: 10,
       effectiveContextWindow: 1000,
     });
+
+    await ctx.appendContextStats('t3', {
+      usedTokens: 20,
+      effectiveContextWindow: 1000,
+      request: {
+        mediaBytes: 4096,
+        mediaBudgetBytes: 24 * 1024 * 1024,
+        retainedImages: 2,
+        omittedImages: 1,
+      },
+    });
+    expect(messageStore.appendContextStats).toHaveBeenLastCalledWith('s1', {
+      turnId: 't3',
+      usedTokens: 20,
+      effectiveContextWindow: 1000,
+      request: {
+        mediaBytes: 4096,
+        mediaBudgetBytes: 24 * 1024 * 1024,
+        retainedImages: 2,
+        omittedImages: 1,
+      },
+    });
   });
 
   it('快照缓存：revision 未变时复用视图（loadContext 只调一次）；写入后重建', async () => {

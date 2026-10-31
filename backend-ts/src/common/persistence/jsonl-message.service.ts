@@ -1460,6 +1460,7 @@ export class JsonlMessageService implements IMessageStore {
           ...(data.breakdown === undefined
             ? {}
             : { breakdown: data.breakdown }),
+          ...(data.request === undefined ? {} : { request: data.request }),
         },
       });
       return seq;
