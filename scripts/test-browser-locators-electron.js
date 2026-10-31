@@ -215,6 +215,35 @@ async function main() {
   assert((await loc("isVisible", { kind: "role", role: "button", name: "Submit" })) === true, "visible isVisible failed");
   console.log("LOCATOR_OK state reads");
 
+  // 基础读取：getAttribute / inputValue / boundingBox，以及 focus / clear / dblclick 动作
+  assert(
+    (await loc("attribute", { kind: "role", role: "link", name: "More info" }, { attribute: "href" })) === "#target",
+    "getAttribute href failed",
+  );
+  assert(
+    (await loc("attribute", { kind: "role", role: "button", name: "Submit" }, { attribute: "data-missing" })) === null,
+    "getAttribute missing should be null",
+  );
+  await loc("fill", { kind: "label", text: "Email" }, { value: "typed@example.com" });
+  const emailState = await loc("state", { kind: "label", text: "Email" });
+  assert(emailState.value === "typed@example.com", `inputValue failed: ${emailState.value}`);
+  const box = emailState.rect;
+  assert(box.width > 0 && box.height > 0, `boundingBox failed: ${JSON.stringify(box)}`);
+
+  await loc("clear", { kind: "label", text: "Email" });
+  assert((await pageRun("document.getElementById('email').value")) === "", "clear failed");
+
+  await loc("focus", { kind: "label", text: "Email" });
+  assert(
+    (await pageRun("document.activeElement && document.activeElement.id")) === "email",
+    "focus failed",
+  );
+
+  await pageRun("window.__dbl = 0; document.getElementById('submit').addEventListener('dblclick', () => { window.__dbl += 1; });");
+  await loc("dblclick", { kind: "role", role: "button", name: "Submit" });
+  assert((await pageRun("window.__dbl")) >= 1, "dblclick did not fire");
+  console.log("LOCATOR_OK basic readers and actions");
+
   // wait states
   const delayed = await loc("wait", { kind: "text", text: "Delayed" }, { state: "visible", timeout: 2000 });
   assert(delayed.ok === true && delayed.state === "visible", "visible wait failed");

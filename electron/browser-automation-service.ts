@@ -1743,6 +1743,16 @@ export class BrowserAutomationService {
       if (action === "isVisible") {
         return this.locatorEngine.isVisible(context.webContents, descriptor);
       }
+      if (action === "attribute") {
+        const name = String(params?.attribute ?? "").trim();
+        if (!name) {
+          throw new BrowserBridgeError(
+            "INVALID_ARGUMENT",
+            "attribute is required when action is attribute",
+          );
+        }
+        return this.locatorEngine.attribute(context.webContents, descriptor, name);
+      }
       if (action === "wait") {
         const state = normalizeLocatorWaitState(params.state);
         return this.locatorEngine.waitFor(
@@ -1792,6 +1802,21 @@ export class BrowserAutomationService {
       try {
         if (action === "click") {
           return await this.clickInternal(prepared, params.options || {});
+        }
+        if (action === "dblclick") {
+          return await this.clickInternal(prepared, {
+            ...(params.options || {}),
+            clickCount: 2,
+          });
+        }
+        if (action === "focus") {
+          return await this.actionEngine!.focus(
+            prepared.webContents,
+            prepared.selector,
+          );
+        }
+        if (action === "clear") {
+          return await this.fillInternal(prepared, "", params.options || {});
         }
         if (action === "fill") {
           if (typeof params.value !== "string") {

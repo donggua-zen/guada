@@ -98,6 +98,7 @@ Factories:
 Locator actions:
 
 - locator.click({ button?, clickCount?, modifiers?, force?, timeout?, trusted? })
+- locator.dblclick(options?) / focus() / clear(options?)
 - locator.fill(value, { force?, timeout?, trusted? })
 - locator.hover({ force?, timeout? })
 - locator.press(key, { modifiers?, timeout? })
@@ -105,7 +106,9 @@ Locator actions:
 - locator.selectOption(values, { force?, timeout? })
 - locator.check(checked?, { force?, timeout? }) / uncheck()
 - locator.waitFor({ state?, timeout? })
-- locator.count() / text() / isVisible() / state()
+- locator.count() / text() / innerText() / state()
+- locator.isVisible() / isHidden() / isEnabled() / isDisabled() / isEditable() / isChecked()
+- locator.inputValue() / getAttribute(name) / boundingBox()
 - locator.first() / last() / nth(index)
 
 Locators are chainable. locator.locator(css) and the chained getBy* factories narrow the search to descendants of the current match; first/last/nth applies to the step they are called on:
@@ -116,11 +119,12 @@ Locators are chainable. locator.locator(css) and the chained getBy* factories na
     const target = tab.locator("article").nth(4);
     await target.locator("p").first().hover();
 
-Other Playwright Locator methods (filter, all, getAttribute, inputValue, isChecked, dragTo, setInputFiles, ...) are not implemented and raise UNSUPPORTED naming the supported members. locator(css) takes no filter options either; encode the condition in the CSS or a chained getBy*. Use tab.evaluate(...) to read attributes or computed styles.
+Other Playwright Locator methods (filter, all, dragTo, setInputFiles, hover({ trial }), ...) are not implemented and raise UNSUPPORTED naming the supported members. locator(css) takes no filter options either; encode the condition in the CSS or a chained getBy*. Use tab.evaluate(...) for anything else (computed styles, DOM walking).
 
 tab-level convenience actions accept a locator or CSS selector:
 
     tab.click(target, options)
+    tab.dblclick(target, options) / tab.focus(target) / tab.clear(target, options)
     tab.fill(target, value, options)
     tab.hover(target, options)
     tab.press(key, { target?, modifiers?, timeout? })

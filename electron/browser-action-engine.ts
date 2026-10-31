@@ -93,6 +93,33 @@ export class BrowserActionEngine {
     return { ok: true, ...probe };
   }
 
+  /** 聚焦元素（Playwright locator.focus()）。 */
+  async focus(webContents: Electron.WebContents, selector: string): Promise<any> {
+    const probe = await this.waitForActionable(webContents, selector, {}, {
+      enabled: false,
+      editable: false,
+      stable: false,
+      covered: false,
+    });
+    await this.focusElement(webContents, selector);
+    return this.result(webContents, "focus", selector, {
+      tagName: probe.tagName,
+    });
+  }
+
+  /**
+   * 清空可编辑内容（Playwright locator.clear()）。
+   * 复用 fill 的 editable 探测与回读，只是把目标值设为空串。
+   */
+  async clear(
+    webContents: Electron.WebContents,
+    windowId: string,
+    selector: string,
+    options: FillOptions = {},
+  ): Promise<any> {
+    return this.fill(webContents, windowId, selector, "", options);
+  }
+
   async click(
     webContents: Electron.WebContents,
     windowId: string,

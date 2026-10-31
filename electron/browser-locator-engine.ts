@@ -238,6 +238,24 @@ export class BrowserLocatorEngine {
     return result === true;
   }
 
+  /** 读第一个匹配元素的属性值（不存在返回 null）。 */
+  async attribute(
+    webContents: Electron.WebContents,
+    descriptor: LocatorDescriptor,
+    name: string,
+  ): Promise<string | null> {
+    await this.ensureInjected(webContents);
+    const result = await this.runDescriptorScript<string | null>(
+      webContents,
+      descriptor,
+      `const matches = resolveDescriptor(d);
+       if (!matches.length) return null;
+       const value = matches[0].getAttribute(${JSON.stringify(name)});
+       return value === null || value === undefined ? null : String(value);`,
+    );
+    return typeof result === "string" ? result : null;
+  }
+
   async waitProbe(
     webContents: Electron.WebContents,
     descriptor: LocatorDescriptor,

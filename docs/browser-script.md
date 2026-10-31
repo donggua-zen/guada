@@ -76,6 +76,7 @@ LLM
 | `tab.goto(url, { newTab?, waitUntil? })` | `waitUntil`: `"domcontentloaded"`（默认）、`"load"`、`"none"`；当前会话无标签时自动创建，`newTab:true` 强制新建 |
 | `tab.snapshot({ type? })` | `simple`（默认）/ `struct` / `summary`，仅这三个值；只观察，不产生动作句柄 |
 | `tab.click(target, options)` | 任意元素；动作前自动等待可操作性 |
+| `tab.dblclick(target, options)` / `tab.focus(target)` / `tab.clear(target, options)` | 双击 / 聚焦 / 清空 |
 | `tab.fill(target, value, options)` | 文本输入/textarea/contenteditable |
 | `tab.hover(target, options)` | 悬停 |
 | `tab.press(key, { target?, modifiers?, timeout? })` | `Enter`、`Tab`、`Escape`、`ArrowDown`、`Control+A` 或单字符 |
@@ -115,13 +116,18 @@ LLM
 
 | 方法 | 说明 |
 |---|---|
-| `.click(options?)` / `.fill(value, options?)` | 动作 |
+| `.click(options?)` / `.dblclick(options?)` / `.fill(value, options?)` | 动作 |
+| `.focus()` / `.clear(options?)` | 聚焦 / 清空可编辑内容 |
 | `.hover(options?)` / `.press(key, options?)` / `.scroll(options?)` | 动作 |
 | `.selectOption(values, options?)` / `.check(checked?, options?)` / `.uncheck(options?)` | 表单控件动作 |
 | `.state()` | 只探测不动作 |
 | `.count()` | 匹配数量 |
-| `.text()` | 第一个匹配元素的 `innerText`/`textContent` |
-| `.isVisible()` | 当前是否有可见匹配 |
+| `.text()` / `.innerText()` | 第一个匹配元素的 `innerText`/`textContent` |
+| `.isVisible()` / `.isHidden()` | 可见性 |
+| `.isEnabled()` / `.isDisabled()` / `.isEditable()` / `.isChecked()` | 状态读取（复用同一探针） |
+| `.inputValue()` | input/textarea/select 的当前值 |
+| `.getAttribute(name)` | 属性值，不存在返回 `null` |
+| `.boundingBox()` | `{ x, y, width, height }` |
 | `.waitFor({ state?, timeout? })` | 等待 `attached/visible/hidden/detached` |
 | `.first()` / `.last()` / `.nth(index)` | 显式位置选择 |
 | `.locator(css)` / `.getByRole(...)` 等 | 在父级匹配元素内继续查询，可链式 |

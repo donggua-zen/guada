@@ -180,8 +180,11 @@ function appendStep(descriptor, step) {
 }
 
 var LOCATOR_METHODS = [
-  'click', 'fill', 'hover', 'press', 'scroll', 'selectOption', 'check', 'uncheck',
-  'state', 'count', 'text', 'isVisible', 'waitFor',
+  'click', 'dblclick', 'focus', 'clear', 'fill', 'hover', 'press', 'scroll',
+  'selectOption', 'check', 'uncheck',
+  'state', 'count', 'text', 'innerText', 'isVisible', 'isHidden', 'waitFor',
+  'isEnabled', 'isDisabled', 'isEditable', 'isChecked', 'inputValue', 'boundingBox',
+  'getAttribute',
   'first', 'last', 'nth', 'locator',
   'getByRole', 'getByText', 'getByLabel', 'getByPlaceholder',
   'getByTestId', 'getByAltText', 'getByTitle',
@@ -207,7 +210,8 @@ function guardLocator(locator) {
 }
 
 var TAB_METHODS = [
-  'goto', 'snapshot', 'click', 'fill', 'hover', 'press', 'scroll', 'selectOption',
+  'goto', 'snapshot', 'click', 'dblclick', 'focus', 'clear', 'fill', 'hover',
+  'press', 'scroll', 'selectOption',
   'check', 'uncheck', 'elementState', 'waitFor', 'waitForLoadState', 'evaluate',
   'screenshot', 'title', 'url', 'getDialog', 'handleDialog', 'waitForDownload',
   'downloads', 'setViewportSize', 'console', 'back', 'forward', 'reload',
@@ -240,6 +244,19 @@ function makeLocator(descriptor) {
     click: function (options) {
       return hostCall('locator', { locator: descriptor, action: 'click', options: options || {} });
     },
+    dblclick: function (options) {
+      return hostCall('locator', {
+        locator: descriptor,
+        action: 'dblclick',
+        options: Object.assign({}, options || {}, { clickCount: 2 }),
+      });
+    },
+    focus: function () {
+      return hostCall('locator', { locator: descriptor, action: 'focus' });
+    },
+    clear: function (options) {
+      return hostCall('locator', { locator: descriptor, action: 'clear', options: options || {} });
+    },
     fill: function (value, options) {
       return hostCall('locator', { locator: descriptor, action: 'fill', value: value, options: options || {} });
     },
@@ -268,14 +285,77 @@ function makeLocator(descriptor) {
     state: function () {
       return hostCall('locator', { locator: descriptor, action: 'state' });
     },
+    // 以下读取全部复用 state 探针的返回值，不增加宿主动作
+    isEnabled: function () {
+      return hostCall('locator', { locator: descriptor, action: 'state' }).then(function (probe) {
+        return !!probe.enabled;
+      });
+    },
+    isDisabled: function () {
+      return hostCall('locator', { locator: descriptor, action: 'state' }).then(function (probe) {
+        return !probe.enabled;
+      });
+    },
+    isEditable: function () {
+      return hostCall('locator', { locator: descriptor, action: 'state' }).then(function (probe) {
+        return !!probe.editable;
+      });
+    },
+    isChecked: function () {
+      return hostCall('locator', { locator: descriptor, action: 'state' }).then(function (probe) {
+        if (typeof probe.checked !== 'boolean') {
+          throw fatal(
+            'INVALID_ARGUMENT',
+            'isChecked() requires a checkbox or radio element, got <' + String(probe.tagName || '?') + '>'
+          );
+        }
+        return probe.checked;
+      });
+    },
+    inputValue: function () {
+      return hostCall('locator', { locator: descriptor, action: 'state' }).then(function (probe) {
+        if (typeof probe.value !== 'string') {
+          throw fatal(
+            'INVALID_ARGUMENT',
+            'inputValue() requires an input, textarea, or select element, got <' + String(probe.tagName || '?') + '>'
+          );
+        }
+        return probe.value;
+      });
+    },
+    boundingBox: function () {
+      return hostCall('locator', { locator: descriptor, action: 'state' }).then(function (probe) {
+        var rect = probe.rect || {};
+        return {
+          x: Number(rect.x) || 0,
+          y: Number(rect.y) || 0,
+          width: Number(rect.width) || 0,
+          height: Number(rect.height) || 0,
+        };
+      });
+    },
+    getAttribute: function (name) {
+      if (typeof name !== 'string' || !name.trim()) {
+        throw fatal('INVALID_ARGUMENT', 'getAttribute(name) requires an attribute name');
+      }
+      return hostCall('locator', { locator: descriptor, action: 'attribute', attribute: name });
+    },
     count: function () {
       return hostCall('locator', { locator: descriptor, action: 'count' });
     },
     text: function () {
       return hostCall('locator', { locator: descriptor, action: 'text' });
     },
+    innerText: function () {
+      return hostCall('locator', { locator: descriptor, action: 'text' });
+    },
     isVisible: function () {
       return hostCall('locator', { locator: descriptor, action: 'isVisible' });
+    },
+    isHidden: function () {
+      return hostCall('locator', { locator: descriptor, action: 'isVisible' }).then(function (visible) {
+        return !visible;
+      });
     },
     waitFor: function (options) {
       return hostCall('locator', { locator: descriptor, action: 'waitFor', options: options || {} });
@@ -397,6 +477,15 @@ const tab = Object.freeze({
   },
   click: function (target, options) {
     return hostCall('click', Object.assign({}, options || {}, { target: serializeTarget(target) }));
+  },
+  dblclick: function (target, options) {
+    return hostCall('dblclick', Object.assign({}, options || {}, { target: serializeTarget(target) }));
+  },
+  focus: function (target, options) {
+    return hostCall('focus', Object.assign({}, options || {}, { target: serializeTarget(target) }));
+  },
+  clear: function (target, options) {
+    return hostCall('clear', Object.assign({}, options || {}, { target: serializeTarget(target) }));
   },
   fill: function (target, value, options) {
     return hostCall('fill', Object.assign({}, options || {}, { target: serializeTarget(target), value: value }));

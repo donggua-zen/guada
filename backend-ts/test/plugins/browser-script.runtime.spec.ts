@@ -33,6 +33,9 @@ function createBridge() {
           if (params.action === "count") return 2;
           if (params.action === "text") return "More info";
           if (params.action === "isVisible") return true;
+          if (params.action === "attribute") {
+            return params.attribute === "href" ? "#target" : null;
+          }
           if (params.action === "wait") {
             return {
               ok: true,
@@ -51,7 +54,10 @@ function createBridge() {
               stable: true,
               inViewport: true,
               covered: false,
-              tagName: "button",
+              tagName: "input",
+              type: "text",
+              checked: true,
+              value: "hello",
               rect: { x: 0, y: 0, width: 100, height: 30 },
               viewport: { width: 800, height: 600 },
             };
@@ -485,6 +491,55 @@ return { title, url };
     expect(unknown.error?.message).toContain("tab.getAttribute");
     expect(unknown.error?.message).toContain("title, url");
     expect(unknown.error?.message).toContain("tab.evaluate");
+  });
+
+  it("locator 基础读取与 dblclick/focus/clear 走同一 state/动作通道", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `
+const target = tab.getByRole("button", { name: "Submit" });
+const enabled = await target.isEnabled();
+const disabled = await target.isDisabled();
+const editable = await target.isEditable();
+const checked = await target.isChecked();
+const value = await target.inputValue();
+const box = await target.boundingBox();
+const inner = await target.innerText();
+const hidden = await target.isHidden();
+const href = await target.getAttribute("href");
+const missing = await target.getAttribute("data-x");
+await target.dblclick();
+await target.focus();
+await target.clear();
+await tab.dblclick(tab.getByLabel("Email"));
+return { enabled, disabled, editable, checked, value, box, inner, hidden, href, missing };
+`,
+    );
+
+    expect(result.status).toBe("completed");
+    const value: any = result.value;
+    expect(value.enabled).toBe(true);
+    expect(value.disabled).toBe(false);
+    expect(value.editable).toBe(true);
+    expect(value.checked).toBe(true);
+    expect(value.value).toBe("hello");
+    expect(value.box).toEqual({ x: 0, y: 0, width: 100, height: 30 });
+    expect(value.inner).toBe("More info");
+    expect(value.hidden).toBe(false);
+    expect(value.href).toBe("#target");
+    expect(value.missing).toBeNull();
+
+    const locatorCalls = calls.filter((call) => call.method === "browser_locator");
+    const actions = locatorCalls.map((call) => call.params.action);
+    // 所有读取复用 state，不新增宿主动作
+    expect(actions.filter((action) => action === "state")).toHaveLength(6);
+    expect(actions).toContain("attribute");
+    expect(actions).toContain("dblclick");
+    expect(actions).toContain("focus");
+    expect(actions).toContain("clear");
+    const dbl = locatorCalls.find((call) => call.params.action === "dblclick");
+    expect(dbl?.params.options).toMatchObject({ clickCount: 2 });
   });
 
   it("tab 级便利方法同样透传顶层 options", async () => {

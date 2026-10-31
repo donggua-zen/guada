@@ -354,6 +354,12 @@ export class BrowserScriptRuntime {
         return this.snapshot(params, state, run, signal);
       case "click":
         return this.locatorAction(params.target, "click", params, state, run, signal);
+      case "dblclick":
+        return this.locatorAction(params.target, "dblclick", params, state, run, signal);
+      case "focus":
+        return this.locatorAction(params.target, "focus", params, state, run, signal);
+      case "clear":
+        return this.locatorAction(params.target, "clear", params, state, run, signal);
       case "fill":
         return this.locatorAction(params.target, "fill", params, state, run, signal);
       case "hover":
@@ -649,6 +655,9 @@ export class BrowserScriptRuntime {
     if (params?.checked !== undefined) {
       payload.checked = params.checked !== false;
     }
+    if (action === "attribute") {
+      payload.attribute = String(params?.attribute ?? "");
+    }
     if (action === "wait") {
       payload.state = normalizeWaitState(optionSource?.state ?? params?.state);
       payload.timeout = clamp(optionSource?.timeout, 100, 30_000, 3_000);
@@ -731,6 +740,9 @@ export class BrowserScriptRuntime {
     const action = String(params.action || "");
     switch (action) {
       case "click":
+      case "dblclick":
+      case "focus":
+      case "clear":
       case "fill":
       case "hover":
       case "press":
@@ -742,6 +754,7 @@ export class BrowserScriptRuntime {
       case "count":
       case "text":
       case "isVisible":
+      case "attribute":
       case "waitFor": {
         const bridgeAction = action === "waitFor" ? "wait" : action;
         return this.locatorAction(
