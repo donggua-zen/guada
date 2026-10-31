@@ -86,7 +86,7 @@ MessageContent（message_content 表）
 - **触发**：`compressionTriggerRatio >= 0.8`
 - **目标**：工具结果 > 1000 字符的消息
 - **策略**：头尾各保留 500 字符，中间标记 `[omitted N characters]`
-- **保护**：最近 3 条 tool 消息、`tool_learn`、`todo` 不裁剪
+- **保护**：最近 3 条 tool 消息、`tool_learn`（legacy）、含工具技能完整性标记的 `skill_learn`、`todo` 不裁剪
 - **记录**：`pruningMetadata` 记录原始长度、裁剪后长度、时间戳
 
 #### 二级压缩：Compaction（摘要）

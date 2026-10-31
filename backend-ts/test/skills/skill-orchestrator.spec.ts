@@ -18,6 +18,11 @@ const mockVersionManager = {} as SkillVersionManager;
 const mockPluginManager = {
   isPluginEnabled: jest.fn().mockReturnValue(true),
 } as any;
+const mockToolkitCatalog = {
+  resolveToolSkill: jest.fn().mockReturnValue(undefined),
+  retiredToolkitMessage: jest.fn().mockReturnValue(undefined),
+  buildToolSkillContent: jest.fn().mockResolvedValue(""),
+} as any;
 
 function makeSkill(id: string, enabled = true): SkillDefinition {
   return {
@@ -37,7 +42,7 @@ describe("SkillOrchestrator", () => {
 
   beforeEach(() => {
     registry = new SkillRegistry();
-    orchestrator = new SkillOrchestrator(mockSourceManager, registry, mockLoader, mockVersionManager, mockPluginManager);
+    orchestrator = new SkillOrchestrator(mockSourceManager, registry, mockLoader, mockVersionManager, mockPluginManager, mockToolkitCatalog);
     (mockPluginManager.isPluginEnabled as jest.Mock).mockReturnValue(true);
   });
 
@@ -174,6 +179,42 @@ describe("SkillOrchestrator", () => {
     });
 
     it("未知技能返回 null", async () => {
+      expect(await orchestrator.skillLearn("nope")).toBeNull();
+    });
+
+    it("未知名称命中退役工具包时返回迁移提示（kind=tool）", async () => {
+      (mockToolkitCatalog.retiredToolkitMessage as jest.Mock).mockReturnValueOnce(
+        'The "browser" toolkit is retired. Use the browser_run tool.',
+      );
+      const r = await orchestrator.skillLearn("browser");
+      expect(r).not.toBeNull();
+      expect(r!.kind).toBe("tool");
+      expect(r!.content).toContain("retired");
+      expect(r!.baseDirectory).toBeNull();
+    });
+
+    it("工具包 fallback：真实技能未命中时经 ToolkitCatalogService 解析", async () => {
+      const session = { sessionId: "s1" } as any;
+      (mockToolkitCatalog.resolveToolSkill as jest.Mock).mockReturnValueOnce({
+        id: "workflow",
+        name: "workflow",
+        pluginId: "workflow",
+      });
+      (mockToolkitCatalog.buildToolSkillContent as jest.Mock).mockResolvedValueOnce(
+        "<!-- tool-skill:workflow -->\ndefinitions\n<!-- /tool-skill:workflow -->",
+      );
+
+      const r = await orchestrator.skillLearn("workflow", session);
+
+      expect(r).not.toBeNull();
+      expect(r!.kind).toBe("tool");
+      expect(r!.name).toBe("workflow");
+      expect(r!.content).toContain("tool-skill:workflow");
+      expect(mockToolkitCatalog.resolveToolSkill).toHaveBeenCalledWith("workflow", session);
+      expect(mockToolkitCatalog.buildToolSkillContent).toHaveBeenCalled();
+    });
+
+    it("工具包 fallback 未命中时返回 null", async () => {
       expect(await orchestrator.skillLearn("nope")).toBeNull();
     });
   });

@@ -4,11 +4,12 @@ import { SharedModule } from "../../common/services/shared.module";
 import { PluginsModule, PluginManager } from "../plugins";
 import { UniversalToolsPlugin } from "./plugins/universal-tools.plugin";
 import { ToolExecutor } from "./tool-executor.service";
+import { ToolkitCatalogService } from "./toolkit-catalog.service";
 
 @Module({
   imports: [HttpModule, SharedModule, PluginsModule],
-  providers: [ToolExecutor, UniversalToolsPlugin],
-  exports: [ToolExecutor],
+  providers: [ToolExecutor, ToolkitCatalogService, UniversalToolsPlugin],
+  exports: [ToolExecutor, ToolkitCatalogService],
 })
 export class ToolsModule implements OnModuleInit {
   constructor(

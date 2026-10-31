@@ -19,7 +19,7 @@ export const SAFE_MODE_ALLOWED_TOOLS = [
   'get_current_time',
   // 惰性工具通道：allTools 会同步过滤，只能调出上面的白名单工具
   'tool_use',
-  'tool_learn',
+  'skill_learn',
 ] as const;
 
 /** MCP 工具统一前缀（见 mcp-tool-name.ts）：按前缀放行智能体已绑定的全部 MCP */

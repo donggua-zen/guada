@@ -298,6 +298,7 @@
                       <SegmentedToggle v-model="skillsAllowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
+                  <div class="text-xs text-gray-400 mt-1 w-full">{{ t('agents.setting.skillsSwitchHint') }}</div>
                 </el-form-item>
 
                 <div v-if="loadingSkills" class="text-center py-8">

@@ -1,6 +1,6 @@
 {
   "universalTools.name": "通用工具",
-  "universalTools.description": "tool_learn / tool_use 系统级通用工具",
+  "universalTools.description": "tool_use 系统级通用工具（工具包学习入口为 skill_learn）",
   "universalTools.toolkitName": "懒加载工具包管理",
   "tool_learn.executing": "正在加载工具包",
   "tool_learn.completed": "已加载工具包",
@@ -10,6 +10,5 @@
   "tool_use.completed": "已调用工具",
   "tool_use.aggregate.executing": "正在调用{n}个工具",
   "tool_use.aggregate.completed": "已调用{n}个工具",
-  "universalTools.toolkitDescription": "工具包学习与按需加载（元能力）"
-
+  "universalTools.toolkitDescription": "工具包学习（skill_learn）与按需调用 tool_use（元能力）"
 }

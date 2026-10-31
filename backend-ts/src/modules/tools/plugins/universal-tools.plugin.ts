@@ -3,16 +3,13 @@ import { OnEvent } from "@nestjs/event-emitter";
 import { z } from "zod";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginApi, ToolExecCtx } from "../../plugins/api/plugin-api";
-import { PluginManager } from "../../plugins/plugin.manager";
 import { PromptCollector } from "../../plugins/prompt-collector.service";
 import {
   PluginContext,
   ToolHandlerDef,
-  ResolvedPluginInfo,
 } from "../../plugins/types/plugin.types";
 import { ToolExecutor } from "../tool-executor.service";
-import { getRetiredToolkitMessage } from "../retired-tools";
-import type { ContentBlock } from "../../../common/types/conversation.types";
+import { ToolkitCatalogService } from "../toolkit-catalog.service";
 import { HOOKS } from "../../chat/types/hooks.contract";
 import langZh from "./universal-tools.lang.zh.json";
 import langEn from "./universal-tools.lang.en.json";
@@ -28,7 +25,7 @@ export class UniversalToolsPlugin extends PluginBase {
     id: "universal_tools",
     name: "%universalTools.name%",
     description: "%universalTools.description%",
-    version: "1.0.0",
+    version: "1.1.0",
     category: "system" as const,
     essential: true,
     icon: "images/plugins/universal_tools.svg",
@@ -36,7 +33,7 @@ export class UniversalToolsPlugin extends PluginBase {
 
   constructor(
     private orchestrator: ToolExecutor,
-    private pluginManager: PluginManager,
+    private toolkitCatalog: ToolkitCatalogService,
     private promptCollector: PromptCollector,
   ) {
     super();
@@ -56,51 +53,24 @@ export class UniversalToolsPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
-    // 注册懒加载工具包
+    // 注册懒加载工具包：学习入口已由 skill_learn 承担（经 ToolkitCatalogService
+    // 桥接，见 skill 插件），本插件只剩通用调用器 tool_use。
+    // kit id 保留 lazy_tools：ToolExecutor.toFlatToolDefs 靠它判断
+    // "没有 lazy 包时不广告 tool_use"。
     const lazyKit = api.registerToolKit({
       id: "lazy_tools",
       name: "%universalTools.toolkitName%",
       description: "%universalTools.toolkitDescription%",
       loadMode: "eager",
       activator:
-        "Use tool_learn to learn toolkit usage, use tool_use to invoke specific tools",
-    });
-
-    // 懒加载工具包激活词提示词
-    lazyKit.registerPrompt({
-      frequency: "REGULAR",
-      description: "可用懒加载工具包列表",
-      content: async (context: PluginContext) => {
-        return this.buildActivators(context);
-      },
-    });
-
-    // tool_learn
-    lazyKit.registerTool({
-      name: "tool_learn",
-      description:
-        "Learn the detailed usage of a specified toolkit, including parameter definitions and usage examples for all tools within that toolkit.",
-      inputSchema: z.object({
-        name: z.string().describe("Toolkit name"),
-      }),
-      execute: async (args: { name: string }, ctx?: ToolExecCtx) => {
-        return this.handleToolLearn(args.name, ctx!);
-      },
-      display: {
-        actionType: "tool_load_kit",
-        text: { executing: "%tool_learn.executing%", completed: "%tool_learn.completed%" },
-        aggregate: { executing: "%tool_learn.aggregate.executing%", completed: "%tool_learn.aggregate.completed%" },
-        argsKey: "name",
-        icon: "tool",
-      },
-      readOnly: true,
+        "Use skill_learn to learn toolkit usage, use tool_use to invoke specific tools",
     });
 
     // tool_use
     lazyKit.registerTool({
       name: "tool_use",
       description:
-        "Use a specified tool to perform an operation. Pass the tool name and corresponding parameters to invoke any registered tool in the system.",
+        "Use a specified tool to perform an operation. Pass the tool name and corresponding parameters to invoke any registered tool in the system. For lazy-loaded tools, call skill_learn(\"<toolkit>\") first to get their definitions.",
       inputSchema: z.object({
         tool_name: z.string().describe("Name of the tool to be called"),
         arguments: z
@@ -168,8 +138,10 @@ export class UniversalToolsPlugin extends PluginBase {
    * 构建工具包记忆提示词。
    * 缓存命中 → 直接返回；缓存未命中 → 扫描历史 → 反查工具包 → 构建文本 → 回填缓存。
    *
-   * 优化：如果历史中仍存在 tool_learn 返回的完整工具定义（未被压缩裁掉），
-   * 则跳过注入，避免重复占用 context。
+   * 优化：如果历史中仍存在 skill_learn（或 legacy tool_learn）返回的完整工具定义
+   * （首尾标记俱在、未被压缩裁掉），则跳过注入，避免重复占用 context。
+   *
+   * 学习入口已从 tool_learn 迁到 skill_learn（tool_use 不变），历史扫描两者兼容。
    */
   private async buildToolkitMemoryPrompt(
     context: PluginContext,
@@ -183,45 +155,67 @@ export class UniversalToolsPlugin extends PluginBase {
     const history = await context.session.getHistory();
     if (!history || history.length === 0) return "";
 
-    // ── 1. 单次遍历，同时收集 tool_use 调用 和 已有的 tool_learn 调用 ──
+    // ── 1. 单次遍历：收集 tool_use 调用、learn 调用与 learn 结果正文 ──
     const usedTools = new Set<string>();
-    const existingToolkits = new Set<string>();
+    const learnedNames = new Set<string>();
+    const learnContents: Array<{ name: string; content: string }> = [];
 
     for (const msg of history) {
-      if (msg.role !== "assistant") continue;
-      for (const tc of msg.content.filter(
-        (b): b is Extract<ContentBlock, { type: "tool-call" }> =>
-          b.type === "tool-call",
-      )) {
-        try {
-          const args =
-            typeof tc.arguments === "string"
-              ? JSON.parse(tc.arguments)
-              : tc.arguments;
-          if (tc.name === "tool_use") {
-            const toolName: string | undefined = args?.tool_name;
-            if (toolName && typeof toolName === "string") {
-              usedTools.add(toolName);
+      if (msg.role === "assistant") {
+        for (const block of msg.content) {
+          if (block.type !== "tool-call") continue;
+          try {
+            const args =
+              typeof block.arguments === "string"
+                ? JSON.parse(block.arguments)
+                : block.arguments;
+            if (block.name === "tool_use") {
+              const toolName: string | undefined = args?.tool_name;
+              if (toolName && typeof toolName === "string") {
+                usedTools.add(toolName);
+              }
+            } else if (block.name === "skill_learn" || block.name === "tool_learn") {
+              const name: string | undefined = args?.name ?? args?.toolkit;
+              if (name && typeof name === "string") {
+                learnedNames.add(name.toLowerCase());
+              }
             }
-          } else if (tc.name === "tool_learn") {
-            const kitName: string | undefined = args?.name;
-            if (kitName && typeof kitName === "string") {
-              existingToolkits.add(kitName);
-            }
+          } catch {
+            // JSON 解析失败，跳过
           }
-        } catch {
-          // JSON 解析失败，跳过
+        }
+      } else if (msg.role === "tool") {
+        for (const block of msg.content) {
+          if (block.type !== "tool-result") continue;
+          if (block.name === "skill_learn" || block.name === "tool_learn") {
+            learnContents.push({ name: block.name, content: block.content });
+          }
         }
       }
     }
 
     if (usedTools.size === 0) return "";
 
-    // ── 3. 反查每个工具所属的懒加载工具包，跳过已存在于历史中的 ──
+    // ── 2. 反查每个工具所属的懒加载工具包，跳过定义仍在可见历史的包 ──
     const resolved = context.session.getResolvedPlugins();
     if (!resolved || resolved.length === 0) return "";
 
-    // kitName → { tools, pluginId }
+    // 规范化已学名称：与 resolved 中 kit id / name 对齐（legacy 名称可能不同）
+    const existingKits = new Set<string>();
+    for (const rp of resolved) {
+      if (!rp.enabled) continue;
+      for (const tk of rp.enabledToolKits) {
+        if (!tk.enabled || tk.loadMode !== "lazy") continue;
+        if (
+          learnedNames.has(tk.id.toLowerCase()) ||
+          learnedNames.has((tk.name || "").toLowerCase())
+        ) {
+          existingKits.add(tk.id);
+        }
+      }
+    }
+
+    // kitId → 该包内被使用过的工具
     const kitToolsMap = new Map<
       string,
       { tools: ToolHandlerDef[]; pluginId: string }
@@ -234,7 +228,7 @@ export class UniversalToolsPlugin extends PluginBase {
       const lazyKitMeta = new Map<string, { kitName: string }>();
       for (const tk of rp.enabledToolKits) {
         if (!tk.enabled || tk.loadMode !== "lazy") continue;
-        lazyKitMeta.set(tk.id, { kitName: tk.name || tk.id });
+        lazyKitMeta.set(tk.id, { kitName: tk.id });
       }
       if (lazyKitMeta.size === 0) continue;
 
@@ -243,13 +237,21 @@ export class UniversalToolsPlugin extends PluginBase {
         if (!usedTools.has(t.name) || !t.toolSet) continue;
         const meta = lazyKitMeta.get(t.toolSet);
         if (!meta) continue;
-        // existingToolkits 存的是工具包 ID（tool_learn 的参数），用 t.toolSet（即 tk.id）匹配
-        if (existingToolkits.has(t.toolSet)) continue;
+        // 该包的完整定义仍在可见历史（skill_learn 结果未被裁剪）→ 不重复注入
+        const stillComplete = learnContents.some((lc) =>
+          this.toolkitCatalog.hasCompleteSkillContent(
+            lc.name,
+            lc.content,
+            t.toolSet!,
+          ),
+        );
+        // existingKits 存的是规范 kit id（learn 参数可能是展示名，已对齐）
+        if (existingKits.has(t.toolSet) || stillComplete) continue;
 
-        let entry = kitToolsMap.get(meta.kitName);
+        let entry = kitToolsMap.get(t.toolSet);
         if (!entry) {
           entry = { tools: [], pluginId: rp.plugin.id };
-          kitToolsMap.set(meta.kitName, entry);
+          kitToolsMap.set(t.toolSet, entry);
         }
         entry.tools.push(t);
       }
@@ -259,20 +261,14 @@ export class UniversalToolsPlugin extends PluginBase {
       return "";
     }
 
-    // ── 4. 逐工具包构建完整描述（工具定义 + 使用说明），回填缓存 ──
+    // ── 3. 逐工具包构建完整描述（工具定义 + 使用说明），回填缓存 ──
     const parts: string[] = [
       "The following are toolkits you learned earlier in the conversation and are still actively using.",
       "",
     ];
 
     for (const [kitName, { tools, pluginId }] of kitToolsMap) {
-      const content = await this.buildToolkitContent(
-        kitName,
-        tools,
-        pluginId,
-        resolved,
-        context,
-      );
+      const content = await this.buildKitContent(kitName, tools, pluginId, resolved, context);
       if (content) parts.push(content);
     }
 
@@ -284,35 +280,25 @@ export class UniversalToolsPlugin extends PluginBase {
   }
 
   /**
-   * 构建单个工具包的完整内容（工具定义 XML + 使用说明 prompt）。
+   * 构建单个工具包的完整内容（工具定义 + 使用说明）。
    *
-   * 内部自动收集该插件对应的 lazy prompts（使用指南/说明），
-   * 按工具包维度组装：先工具定义 XML，再使用说明。
-   *
-   * 被 handleToolLearn 和 buildToolkitMemoryPrompt 共用，
-   * 保证 tool_learn 返回的内容与压缩后自动注入的内容格式一致。
+   * 与 ToolkitCatalogService.buildToolSkillContent 输出同构（不含首尾标记），
+   * 保证压缩记忆注入与 skill_learn 返回的内容格式一致。
    */
-  private async buildToolkitContent(
+  private async buildKitContent(
     kitName: string,
     tools: ToolHandlerDef[],
     pluginId: string,
-    resolved: ResolvedPluginInfo[],
+    resolved: import("../../plugins/types/plugin.types").ResolvedPluginInfo[],
     context: PluginContext,
   ): Promise<string> {
     const parts: string[] = [];
 
-    // 1. 工具定义
     if (tools.length > 0) {
       const toolDescriptions = tools
         .map((tool) => {
-          // 按原生 function-calling 形状序列化为**单个 JSON 对象**：
-          // {name, description, parameters} —— 与 openai.adapter 的 function 字段
-          // 及内部 ToolDefinition 同构，模型对这套三件套最熟悉；同一次对话里 eager 工具
-          // 也以同样的键名下发，词表一致。
-          // parameters 直接复用 toolkit 已转换好的 JSON Schema（z.toJSONSchema + 限深展平），
-          // 此前这里手写投影只留 5 个顶层字段，嵌套 items/properties 被丢弃
-          // （workflow 的 phases 被写成字符串数组、触发参数校验失败，即此因）。
-          // 走 JSON 也顺带转义了描述里的裸尖括号（如 `return <value>`），不再产生畸形标签。
+          // 按原生 function-calling 形状序列化为单个 JSON 对象 {name, description, parameters}，
+          // 与 openai.adapter 的 function 字段及内部 ToolDefinition 同构
           const toolJson = JSON.stringify(
             {
               name: tool.name,
@@ -322,15 +308,13 @@ export class UniversalToolsPlugin extends PluginBase {
             null,
             2,
           );
-
           return [`<tool_definition>`, toolJson, `</tool_definition>`].join("\n");
         })
         .join("\n\n");
-
       parts.push(`toolkit ${kitName}`, "", toolDescriptions);
     }
 
-    // 2. 使用说明 prompt（lazy prompts）
+    // 使用说明 prompt（lazy prompts）
     let toolUsagePrompt = "";
     try {
       const prompts = await this.promptCollector.collectLazyPrompts(
@@ -342,97 +326,8 @@ export class UniversalToolsPlugin extends PluginBase {
         toolUsagePrompt = tsPrompts.map((p: any) => p.content).join("\n\n");
       }
     } catch {}
-
-    if (toolUsagePrompt) {
-      parts.push(toolUsagePrompt);
-    }
+    if (toolUsagePrompt) parts.push(toolUsagePrompt);
     parts.push("---");
     return parts.join("\n");
-  }
-
-  private async handleToolLearn(
-    name: string,
-    ctx: ToolExecCtx,
-  ): Promise<string> {
-    // 旧工具包已退役：旧会话可能仍在 tool_learn 旧名称，直接给迁移提示。
-    const retiredKit = getRetiredToolkitMessage(name);
-    if (retiredKit) return retiredKit;
-
-    const resolved = ctx?.session?.getResolvedPlugins();
-    if (!resolved || resolved.length === 0)
-      return "Error: no available toolkits";
-    // 遍历 resolved 查找指定工具包
-    let targetKit:
-      | {
-          tools: ToolHandlerDef[];
-          pluginId: string;
-        }
-      | undefined;
-    for (const rp of resolved) {
-      if (!rp.enabled) continue;
-      // loadMode=none 表示"压根不加载"：既不可广告，也不可被 learn 出来
-      const kitInfo = rp.enabledToolKits.find(
-        (k) =>
-          k.enabled &&
-          k.loadMode !== "none" &&
-          (k.id === name || k.name === name),
-      );
-      if (!kitInfo) continue;
-      // 懒加载工具包的工具存在 allTools 中（enabledTools 不含未激活的懒加载工具）
-      const kitTools = rp.allTools.filter((t) => t.toolSet === kitInfo.id);
-      if (kitTools.length > 0 || kitInfo.loadMode === "lazy") {
-        targetKit = { tools: kitTools, pluginId: rp.plugin.id };
-        break;
-      }
-    }
-
-    if (!targetKit) {
-      return `Error: unknown toolkit set: ${name}`;
-    }
-
-    const plugin = this.pluginManager.getPlugin(targetKit.pluginId);
-    if (!plugin || !plugin.enabled) {
-      return `Error: toolkit set ${name} not available`;
-    }
-
-    try {
-      const resolved = ctx!.session.getResolvedPlugins();
-      const content = await this.buildToolkitContent(
-        name,
-        targetKit.tools,
-        targetKit.pluginId,
-        resolved,
-        ctx!,
-      );
-      if (!content) {
-        return `Error: toolkit set ${name} has no available tools`;
-      }
-
-      // tool_learn 专属尾部：告诉 AI 如何使用
-      return (
-        content +
-        "\n\n## Usage:\nUse `tool_use(tool_name, arguments{param1: value1, param2: value2})` to invoke"
-      );
-    } catch (error: any) {
-      this.logger.error(`Error loading tool set ${name}`, error);
-      return `Error: ${error.message}`;
-    }
-  }
-
-  private async buildActivators(context: PluginContext): Promise<string> {
-    const resolved = context.session.getResolvedPlugins();
-    const items = await this.pluginManager.getToolActivators(resolved);
-    if (items.length === 0) return "";
-    const xml = items.map(
-      (item) => `<toolkit name="${item.name}">${item.activator}</toolkit>`,
-    );
-    return [
-      "# Available Lazy-Load Toolkits",
-      "You can use the following lazy-load toolkits. When a user's request or task matches a toolkit's capabilities, you should proactively use `tool_learn` to load the corresponding toolkit.",
-      "",
-      "<toolkits>",
-      ...xml,
-      "</toolkits>",
-    ].join("\n");
   }
 }

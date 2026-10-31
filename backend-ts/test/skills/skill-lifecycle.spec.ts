@@ -43,8 +43,13 @@ describe("Skill 生命周期（onAdd / onRemove → registry → listSkills）",
     const mockPluginManager = {
       isPluginEnabled: jest.fn().mockReturnValue(true),
     } as any;
+    const mockToolkitCatalog = {
+      resolveToolSkill: jest.fn().mockReturnValue(undefined),
+      retiredToolkitMessage: jest.fn().mockReturnValue(undefined),
+      buildToolSkillContent: jest.fn().mockResolvedValue(""),
+    } as any;
     loader = new SkillLoaderService();
-    orchestrator = new SkillOrchestrator(mockSourceManager, registry, loader, mockVersionManager, mockPluginManager);
+    orchestrator = new SkillOrchestrator(mockSourceManager, registry, loader, mockVersionManager, mockPluginManager, mockToolkitCatalog);
   });
 
   // ================================================================

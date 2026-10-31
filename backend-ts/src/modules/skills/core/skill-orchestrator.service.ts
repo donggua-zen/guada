@@ -11,6 +11,7 @@ import { SkillLoaderService } from "./skill-loader.service";
 import { SkillVersionManager } from "./skill-version-manager.service";
 import { SkillDefinition, SkillLearnResult, SkillResourceBase } from "../interfaces/skill-manifest.interface";
 import { PluginManager } from "../../plugins/plugin.manager";
+import { ToolkitCatalogService } from "../../tools/toolkit-catalog.service";
 
 /**
  * Skill 匹配结果
@@ -31,6 +32,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     private loader: SkillLoaderService,
     private versionManager: SkillVersionManager,
     private pluginManager: PluginManager,
+    private toolkitCatalog: ToolkitCatalogService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -154,16 +156,63 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
 
   /**
    * 通过名称获取技能内容（纯正文，不含 YAML 头）和位置信息
-   * 供 skill_learn 工具调用
+   * 供 skill_learn 工具调用。
+   *
+   * 解析顺序：真实技能 → 退役工具包迁移提示 → 懒加载工具包（动态工具技能）。
+   * 工具包 fallback 是 tool_learn 退役后的等价入口：内容为工具定义 + 使用说明，
+   * 无资源目录，kind="tool" 供 skill_learn 跳过位置头。
    */
   async skillLearn(
     name: string,
     session?: any,
   ): Promise<SkillLearnResult | null> {
     const skill = this.registry.get(name.toLowerCase());
-    if (!skill) return null;
-    // 对齐工具：插件关闭（当前会话岗位/智能体配置下未启用）→ 该插件技能等同于不存在
-    if (!this.isPluginSkillVisible(skill)) return null;
+    if (skill) {
+      // 对齐工具：插件关闭（当前会话岗位/智能体配置下未启用）→ 该插件技能等同于不存在
+      if (!this.isPluginSkillVisible(skill)) return null;
+      return this.loadRealSkill(skill);
+    }
+
+    // 旧工具包退役：返回迁移提示，避免模型把"找不到"误判为临时故障
+    const retired = this.toolkitCatalog.retiredToolkitMessage(name);
+    if (retired) {
+      return {
+        name: name.toLowerCase(),
+        content: retired,
+        path: "",
+        resourceBase: null,
+        baseDirectory: null,
+        skillMdPath: null,
+        kind: "tool",
+      };
+    }
+
+    // 懒加载工具包（动态工具技能）
+    if (session) {
+      const entry = this.toolkitCatalog.resolveToolSkill(name, session);
+      if (entry) {
+        const content = await this.toolkitCatalog.buildToolSkillContent(entry, {
+          session,
+        } as any);
+        return {
+          name: entry.id,
+          content,
+          path: "",
+          resourceBase: null,
+          baseDirectory: null,
+          skillMdPath: null,
+          kind: "tool",
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /** 加载真实技能正文与位置信息（原 skillLearn 主体） */
+  private async loadRealSkill(
+    skill: SkillDefinition,
+  ): Promise<SkillLearnResult> {
     const content = await this.loader.loadInstructions(skill);
 
     // 位置信息分两类：
@@ -242,10 +291,17 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 当前会话可学习的懒加载工具包（动态工具技能清单条目）。
+   * 供技能清单 prompt 追加 <available_tool_skills> 段。
+   */
+  listToolSkills(session: any) {
+    return this.toolkitCatalog.listToolSkills(session);
+  }
+
+  /**
    * 根据用户消息匹配相关 Skills
    */
-  async matchSkills(userMessage: string): Promise<SkillMatch[]> {
-    const skills = Array.from(this.registry.getAll().values());
+  async matchSkills(userMessage: string): Promise<SkillMatch[]> {    const skills = Array.from(this.registry.getAll().values());
     const matches: SkillMatch[] = [];
 
     for (const skill of skills) {

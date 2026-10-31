@@ -77,4 +77,9 @@ export interface SkillLearnResult {
   baseDirectory: string | null;
   /** 文件型技能的 SKILL.md 绝对路径；插件注册型（无磁盘文件）为 null */
   skillMdPath: string | null;
+  /**
+   * 来源类型：缺省为普通技能；"tool" 表示懒加载工具包（动态工具技能，
+   * 无资源目录，内容里的工具需经 tool_use 调用）。
+   */
+  kind?: "tool";
 }

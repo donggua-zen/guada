@@ -78,13 +78,13 @@ describe("WorkflowCommandProvider", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("可用时注入显式请求与 tool_learn/workflow_run 指引", async () => {
+  it("可用时注入显式请求与 skill_learn/workflow_run 指引", async () => {
     const result = await makeProvider({ availability: "available" }).parse(
       { name: "workflow" },
       { sessionId: "s1" },
     );
     expect(result?.appendix).toContain("explicitly invoked the /workflow");
-    expect(result?.appendix).toContain('tool_learn("workflow")');
+    expect(result?.appendix).toContain('skill_learn("workflow")');
     expect(result?.appendix).toContain("workflow_run");
   });
 
@@ -93,7 +93,7 @@ describe("WorkflowCommandProvider", () => {
       { name: "workflow" },
       { sessionId: "s1" },
     );
-    expect(result?.appendix).toContain('tool_learn("workflow")');
+    expect(result?.appendix).toContain('skill_learn("workflow")');
   });
 
   it("可用性查询抛错时 fail-open", async () => {
@@ -107,7 +107,7 @@ describe("WorkflowCommandProvider", () => {
       { name: "workflow" },
       { sessionId: "s1" },
     );
-    expect(result?.appendix).toContain('tool_learn("workflow")');
+    expect(result?.appendix).toContain('skill_learn("workflow")');
   });
 
   it.each([
@@ -120,7 +120,7 @@ describe("WorkflowCommandProvider", () => {
     );
     expect(result?.appendix).toContain(hint);
     expect(result?.appendix).toContain("Do not call workflow_run");
-    expect(result?.appendix).not.toContain('tool_learn("workflow")');
+    expect(result?.appendix).not.toContain('skill_learn("workflow")');
   });
 
   it("sub_agent 分支说明不能嵌套", async () => {
@@ -130,7 +130,7 @@ describe("WorkflowCommandProvider", () => {
     );
     expect(result?.appendix).toContain("sub-agent session");
     expect(result?.appendix).toContain("Do not call workflow_run");
-    expect(result?.appendix).not.toContain('tool_learn("workflow")');
+    expect(result?.appendix).not.toContain('skill_learn("workflow")');
   });
 });
 
@@ -171,7 +171,7 @@ describe("WorkflowPlugin /workflow 可用性解析", () => {
       { name: "workflow" },
       { sessionId: "s1" },
     );
-    expect(result?.appendix).toContain('tool_learn("workflow")');
+    expect(result?.appendix).toContain('skill_learn("workflow")');
   });
 
   it("智能体禁用 workflow 工具包 → toolkit_disabled", async () => {
@@ -215,7 +215,7 @@ describe("WorkflowPlugin /workflow 可用性解析", () => {
       { name: "workflow" },
       { sessionId: "s1" },
     );
-    expect(missingResult?.appendix).toContain('tool_learn("workflow")');
+    expect(missingResult?.appendix).toContain('skill_learn("workflow")');
 
     const failing = await loadPluginProvider({
       getSessionById: async () => {
@@ -226,6 +226,6 @@ describe("WorkflowPlugin /workflow 可用性解析", () => {
       { name: "workflow" },
       { sessionId: "s1" },
     );
-    expect(failingResult?.appendix).toContain('tool_learn("workflow")');
+    expect(failingResult?.appendix).toContain('skill_learn("workflow")');
   });
 });

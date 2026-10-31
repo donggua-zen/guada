@@ -9,6 +9,9 @@
  */
 
 const RETIRED_TOOL_REPLACEMENTS: Record<string, string> = {
+  // 学习入口已并入 skill_learn（懒加载工具包为动态工具技能）
+  tool_learn:
+    'The tool_learn tool is retired. Use skill_learn("<toolkit>") instead — it returns the same toolkit definitions. Then invoke tools via tool_use as before.',
   browser_navigate:
     'Use browser_run with `await tab.goto(url)` (optionally `{ newTab, waitUntil }`) instead.',
   browser_tabs:
@@ -57,6 +60,10 @@ const RETIRED_TOOLKIT_REPLACEMENTS: Record<string, string> = {
 export function getRetiredToolMessage(toolName: string): string | undefined {
   const replacement = RETIRED_TOOL_REPLACEMENTS[toolName];
   if (!replacement) return undefined;
+  // 非 browser 系退役工具（如 tool_learn）自带完整指引，不追加浏览器技能提示
+  if (!replacement.includes("browser_run")) {
+    return `Tool "${toolName}" is retired. ${replacement}`;
+  }
   return `Tool "${toolName}" is retired. ${replacement} Call skill_learn("browser-script") for the full API.`;
 }
 

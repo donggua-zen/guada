@@ -228,7 +228,7 @@ export class ToolExecutor {
         const lazyEntry = ToolExecutor.findTool(resolved, fullToolName, true);
         if (lazyEntry) {
           throw new Error(
-            `Tool ${fullToolName} is a lazy-loaded tool. Call tool_learn("${lazyEntry.toolSet}") to learn its usage, then invoke it via tool_use.`,
+            `Tool ${fullToolName} is a lazy-loaded tool. Call skill_learn("${lazyEntry.toolSet}") to learn its usage, then invoke it via tool_use.`,
           );
         }
       }

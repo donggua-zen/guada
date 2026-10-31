@@ -1,6 +1,5 @@
-import { z } from "zod";
-import { Toolkit } from "../../plugins/toolkit/toolkit";
 import { UniversalToolsPlugin } from "./universal-tools.plugin";
+import { ToolkitCatalogService } from "../toolkit-catalog.service";
 import type { ToolCallResponse } from "../interfaces/tool-provider.interface";
 
 /**
@@ -9,6 +8,9 @@ import type { ToolCallResponse } from "../interfaces/tool-provider.interface";
  * tool_use 是懒加载工具的调用入口，它把内层工具的结果重新包一层返回。若只透传
  * content（旧行为），内层工具的 meta 会在此被静默丢弃——例如 todo 的待办列表
  * meta，会导致分支会话无法从历史还原 TODO。images 同理（多模态图片返回）。
+ *
+ * 工具包学习入口已迁至 skill_learn（经 ToolkitCatalogService），本文件聚焦
+ * tool_use 透传与 # LEARNED TOOLKITS 压缩恢复。
  */
 
 const INNER_META = {
@@ -30,7 +32,7 @@ async function loadToolUse(
   };
   const plugin = new UniversalToolsPlugin(
     orchestrator as any,
-    {} as any,
+    {} as ToolkitCatalogService,
     {} as any,
   );
 
@@ -47,7 +49,7 @@ async function loadToolUse(
 
   const toolUse = tools.get("tool_use");
   if (!toolUse) throw new Error("tool_use 未注册");
-  return { execute: toolUse.execute as any, calls };
+  return { execute: toolUse.execute as any, calls, tools };
 }
 
 const ctx = () =>
@@ -130,123 +132,124 @@ describe("UniversalToolsPlugin tool_use 结果透传", () => {
     expect(result).toContain("Error");
     expect(calls).toHaveLength(0);
   });
+
+  it("tool_learn 已退役：不再注册，tool_use 描述指向 skill_learn", async () => {
+    const { tools } = await loadToolUse(async () => ({ content: "ok" }));
+    expect(tools.has("tool_learn")).toBe(false);
+    expect(tools.get("tool_use").description).toContain("skill_learn");
+  });
 });
 
 /**
- * tool_learn 的 schema 形状透传契约。
+ * # LEARNED TOOLKITS 压缩恢复契约。
  *
- * 懒加载工具（workflow 的 workflow_run 等）模型只能经 tool_learn 学到定义，
- * 所以这里是"模型到底看得见什么形状"的唯一入口。此前 buildToolkitContent 手写投影
- * 只保留 type/description/required/enum/default，嵌套的 items/properties 被丢弃，
- * 模型看不到 phases 的元素形状（写成字符串数组 → 参数校验失败）。
- * 现改为按原生 {name, description, parameters} 形状输出单个 JSON 对象，
- * parameters 直接复用 toolkit 已限深展平的 JSON Schema，与 eager 工具形态一致。
+ * 二级压缩后 skill_learn/tool_learn 的定义正文可能离开可见历史，此时按仍在
+ * 历史里的 tool_use 调用反查所属 lazy 包并重新注入完整定义；若定义正文仍完整
+ * （首尾标记俱在）则跳过，避免重复占用上下文。
  */
-describe("UniversalToolsPlugin tool_learn：schema 形状透传", () => {
-  /** 经真实 Toolkit 注册，复现 workflow_run 的注册链路（z.toJSONSchema + 限深展平） */
-  const makeToolDef = (inputSchema: any) => {
-    const tk = new Toolkit({ id: "t", name: "t" } as any, "plugin-x");
-    tk.registerTool({
-      name: "workflow_run",
-      description: "run a workflow",
-      inputSchema,
-      execute: async () => "ok",
-    } as any);
-    return tk.getTools()[0];
+describe("UniversalToolsPlugin # LEARNED TOOLKITS 恢复", () => {
+  const toolDef = {
+    name: "workflow_run",
+    description: "run a workflow",
+    parameters: { type: "object", properties: {} },
+    toolSet: "workflow",
+    handler: async () => "ok",
   };
 
-  const buildContent = async (toolDef: any) => {
-    const plugin = new UniversalToolsPlugin({} as any, {} as any, {} as any);
-    return (plugin as any).buildToolkitContent("workflow", [toolDef], "plugin-x", [], {
-      session: { sessionId: "s1" },
+  const makeCtx = (history: any[]) =>
+    ({
+      session: {
+        sessionId: "s1",
+        getHistory: async () => history,
+        getResolvedPlugins: () => [
+          {
+            enabled: true,
+            plugin: { id: "workflow", name: "workflow" },
+            enabledTools: [],
+            allTools: [toolDef],
+            enabledToolKits: [
+              {
+                id: "workflow",
+                name: "workflow",
+                loadMode: "lazy",
+                enabled: true,
+                toolCount: 1,
+                promptCount: 0,
+              },
+            ],
+            workspaceProviders: [],
+            attachmentTypes: [],
+          },
+        ],
+      },
       toolCallId: "tc",
-    } as any) as Promise<string>;
-  };
+    }) as any;
 
-  /** 取出 <tool_definition> 块并解析为 JSON（同时验证其内容确为合法 JSON） */
-  const parseTool = (content: string) =>
-    JSON.parse(
-      content
-        .split("<tool_definition>")[1]
-        .split("</tool_definition>")[0]
-        .trim(),
+  const makePlugin = () =>
+    new UniversalToolsPlugin(
+      {} as any,
+      new ToolkitCatalogService({} as any, { collectLazyPrompts: async () => [] } as any),
+      { collectLazyPrompts: async () => [] } as any,
     );
 
-  it("按原生 {name, description, parameters} 形状输出单个 JSON 对象", async () => {
-    const toolDef = makeToolDef(
-      z.object({ name: z.string().describe("Workflow name") }),
-    );
-
-    const tool = parseTool(await buildContent(toolDef));
-
-    expect(Object.keys(tool)).toEqual(["name", "description", "parameters"]);
-    expect(tool.name).toBe("workflow_run");
-    expect(tool.description).toBe("run a workflow");
-    expect(tool.parameters.type).toBe("object");
+  const assistantCall = (name: string, args: object) => ({
+    id: "m1",
+    role: "assistant",
+    content: [
+      { type: "tool-call", toolCallId: "tc1", name, arguments: JSON.stringify(args) },
+    ],
   });
 
-  it("保留嵌套 items/properties/required —— phases 元素形状对模型可见", async () => {
-    const toolDef = makeToolDef(
-      z.object({
-        name: z.string().describe("Workflow name"),
-        phases: z
-          .array(
-            z.object({
-              title: z.string().describe("Phase title"),
-              detail: z
-                .string()
-                .optional()
-                .describe("What happens in this phase"),
-            }),
-          )
-          .optional()
-          .describe("Optional phase declarations"),
-      }),
-    );
-
-    const { parameters } = parseTool(await buildContent(toolDef));
-
-    expect(parameters.required).toEqual(["name"]);
-    expect(parameters.properties.phases.type).toBe("array");
-    expect(parameters.properties.phases.items.type).toBe("object");
-    expect(parameters.properties.phases.items.properties.title).toEqual({
-      type: "string",
-      description: "Phase title",
-    });
-    expect(parameters.properties.phases.items.required).toEqual(["title"]);
+  it("定义被压缩裁掉时按 tool_use 历史重建", async () => {
+    const plugin = makePlugin();
+    const ctx = makeCtx([
+      assistantCall("tool_use", { tool_name: "workflow_run", arguments: "{}" }),
+      // 旧 tool_learn 定义已被二级压缩遮蔽（历史中无结果正文）
+    ]);
+    const prompt = await (plugin as any).buildToolkitMemoryPrompt(ctx);
+    expect(prompt).toContain("# LEARNED TOOLKITS");
+    expect(prompt).toContain('"workflow_run"');
   });
 
-  it("标量参数形状不变（回归）", async () => {
-    const toolDef = makeToolDef(
-      z.object({
-        name: z.string().describe("Workflow name"),
-        description: z.string().optional().describe("One-line description"),
-      }),
-    );
-
-    const { parameters } = parseTool(await buildContent(toolDef));
-
-    expect(parameters.properties.name).toEqual({
-      type: "string",
-      description: "Workflow name",
-    });
-    expect(parameters.properties.description).toEqual({
-      type: "string",
-      description: "One-line description",
-    });
-    expect(parameters.required).toEqual(["name"]);
+  it("定义正文仍完整时跳过注入", async () => {
+    const plugin = makePlugin();
+    const complete =
+      "<!-- tool-skill:workflow -->\n<tool_definition>{}</tool_definition>\n<!-- /tool-skill:workflow -->";
+    const ctx = makeCtx([
+      assistantCall("tool_use", { tool_name: "workflow_run", arguments: "{}" }),
+      {
+        id: "m2",
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "tc1", name: "skill_learn", content: complete }],
+      },
+    ]);
+    const prompt = await (plugin as any).buildToolkitMemoryPrompt(ctx);
+    expect(prompt).toBe("");
   });
 
-  it("描述里的裸尖括号走 JSON 转义，不再产生畸形标签", async () => {
-    const desc = "end with `return <value>` and `return <json-value>`";
-    const toolDef = makeToolDef(
-      z.object({ name: z.string().describe("Workflow name") }),
-    );
-    toolDef.description = desc; // 复现 workflow_run 的真实描述内容
+  it("skill_learn 调用仍在历史且无完整正文时也不重复注入（按已学名称对齐 kit id）", async () => {
+    const plugin = makePlugin();
+    const ctx = makeCtx([
+      assistantCall("skill_learn", { name: "workflow" }),
+      assistantCall("tool_use", { tool_name: "workflow_run", arguments: "{}" }),
+    ]);
+    const prompt = await (plugin as any).buildToolkitMemoryPrompt(ctx);
+    expect(prompt).toBe("");
+  });
 
-    const content = await buildContent(toolDef);
+  it("legacy tool_learn 调用同样对齐", async () => {
+    const plugin = makePlugin();
+    const ctx = makeCtx([
+      assistantCall("tool_learn", { name: "workflow" }),
+      assistantCall("tool_use", { tool_name: "workflow_run", arguments: "{}" }),
+    ]);
+    const prompt = await (plugin as any).buildToolkitMemoryPrompt(ctx);
+    expect(prompt).toBe("");
+  });
 
-    expect(parseTool(content).description).toBe(desc);
-    expect(content).not.toContain("<description>");
+  it("历史无 tool_use 时不注入", async () => {
+    const plugin = makePlugin();
+    const ctx = makeCtx([assistantCall("skill_learn", { name: "workflow" })]);
+    expect(await (plugin as any).buildToolkitMemoryPrompt(ctx)).toBe("");
   });
 });

@@ -89,6 +89,11 @@ describe("SKILL.md 展示扩展字段", () => {
       {} as SkillLoaderService,
       {} as SkillVersionManager,
       mockPluginManager,
+      {
+        resolveToolSkill: jest.fn().mockReturnValue(undefined),
+        retiredToolkitMessage: jest.fn().mockReturnValue(undefined),
+        buildToolSkillContent: jest.fn().mockResolvedValue(""),
+      } as any,
     );
 
     registry.register(

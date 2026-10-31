@@ -42,7 +42,7 @@ export class WorkflowPlugin extends PluginBase {
 
     // ── 斜杠命令 /workflow：用户显式发起工作流的入口 ──
     // 只做意图标记与可用性引导，不新增执行通道：标签由 TagParserPipeline 冻结为
-    // origin=system 注入块，模型仍走 tool_learn("workflow") → workflow_run。
+    // origin=system 注入块，模型仍走 skill_learn("workflow") → tool_use → workflow_run。
     api.registerCommandProvider(
       createWorkflowCommandProvider({
         isEnabled: () => this._enabled,
@@ -57,7 +57,7 @@ export class WorkflowPlugin extends PluginBase {
       description: "%workflow.toolkitDescription%",
       loadMode: "eager", // 注册默认值；实际 loadMode 由 handler 按会话动态决议
       // 目录行是本工具包唯一常驻的模型面文本，承担使用门槛：
-      // 低频重型编排按需学习（tool_learn），API 规格收敛在工具描述里一次性下发
+      // 低频重型编排按需学习（skill_learn），API 规格收敛在工具描述里一次性下发
       activator:
         "Use ONLY when the user explicitly asks for a workflow (for example by invoking the /workflow command) or for large multi-agent orchestration: learn this toolkit to write a JavaScript script that fans work out across many sub-agents with phases and structured results. For one or two delegations, prefer plain subagent calls.",
       handler: async (ctx) => {
@@ -65,7 +65,7 @@ export class WorkflowPlugin extends PluginBase {
         if (ctx.session.sessionType === "sub_agent") {
           return { loadMode: "none" as const };
         }
-        // agents 白名单非空才提供，且为懒加载：目录行常驻，tool_learn 时才进上下文
+        // agents 白名单非空才提供，且为懒加载：目录行常驻，skill_learn 时才进上下文
         const agentsCfg = ctx.session?.getSettings?.("agents");
         const hasEnabledAgent =
           typeof agentsCfg === "object" &&

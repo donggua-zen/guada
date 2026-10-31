@@ -10,7 +10,7 @@ import {
  *
  * 必须同时过滤 enabledTools / allTools / enabledToolKits 三者：
  * - enabledTools 决定广告给 LLM 的工具面；
- * - allTools 是 tool_use / tool_learn 的懒加载通道（ToolExecutor.findTool 第 2 遍），
+ * - allTools 是 tool_use 的懒加载通道（ToolExecutor.findTool 第 2 遍），
  *   不过滤就会被用来调出白名单外工具；
  * - enabledToolKits 的 loadMode/enabled 决定提示词与 activator 是否进入运行时，
  *   包内没有剩余允许工具时整包置为不可用，避免"看起来有这个工具包"误导模型。

@@ -103,6 +103,8 @@ export default {
     noSkills: '暂无可用的 Skills',
     noSkillsHint: '请先到"插件 > Skills"中安装技能',
     sourceBuiltin: '内置',
+    skillsSwitchHint:
+      '关闭仅隐藏真实技能清单；skill_learn 工具与懒加载工具包不受影响，后者由"本地工具"页的工具包开关控制。',
     // 子代理
     loadingAgents: '加载中...',
     noAgents: '暂无可用的子代理',

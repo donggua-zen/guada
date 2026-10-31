@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ToolExecutor } from "../../src/modules/tools/tool-executor.service";
 import { UniversalToolsPlugin } from "../../src/modules/tools/plugins/universal-tools.plugin";
+import { ToolkitCatalogService } from "../../src/modules/tools/toolkit-catalog.service";
 import { PluginManager } from "../../src/modules/plugins/plugin.manager";
 import { SettingsStorage } from "../../src/common/utils/settings-storage.util";
 import { PluginRegistry } from "../../src/modules/plugins/registry/plugin-registry";
@@ -353,7 +354,7 @@ describe("ToolExecutor", () => {
 
   // ── loadMode=none 是真门禁 ──
   //
-  // none 表示"压根不加载"：既不广告，也不可经 tool_use 触达、不可被 tool_learn 学出。
+  // none 表示"压根不加载"：既不广告，也不可经 tool_use 触达、不可被 skill_learn 学出。
 
   describe("loadMode=none 是真门禁", () => {
     class NoneKitPlugin extends PluginBase {
@@ -404,24 +405,15 @@ describe("ToolExecutor", () => {
       ).rejects.toThrow(/not available or disabled/);
     });
 
-    it("tool_learn 学不出来", async () => {
+    it("skill_learn 学不出来（工具技能解析不到 none 包）", async () => {
       const session = await setupNoneSession();
 
-      const ut = new UniversalToolsPlugin(orchestrator, pluginManager, {
+      const catalog = new ToolkitCatalogService(pluginManager, {
         collectLazyPrompts: async () => [],
       } as any);
-      await pluginManager.registerPlugin(ut);
-
-      const lazyKit = PluginRegistry.getToolKits("universal_tools").find(
-        (k) => k.def.id === "lazy_tools",
-      )!;
-      const learn = lazyKit.tools.find((t) => t.name === "tool_learn")!;
-      const out = await learn.handler(
-        { name: "none_kit" },
-        { session, toolCallId: "t1" } as any,
-      );
-
-      expect(String(out)).toMatch(/unknown toolkit/);
+      // loadMode=none 的包不在技能清单
+      expect(catalog.listToolSkills(session)).toHaveLength(0);
+      expect(catalog.resolveToolSkill("none_kit", session)).toBeUndefined();
     });
   });
 });

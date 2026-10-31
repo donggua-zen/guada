@@ -61,7 +61,7 @@ export interface PromptPiece {
   content: string;
   /** 排序优先级：STATIC 在前，VOLATILE 在后 */
   frequency: PromptFrequency;
-  /** 加载模式：eager=始终注入, lazy=经 tool_learn 学习后随工具包注入, none=不注入 */
+  /** 加载模式：eager=始终注入, lazy=经 skill_learn 学习后随工具包注入, none=不注入 */
   loadMode?: ToolKitLoadMode;
   /** 所属插件 ID */
   pluginId: string;

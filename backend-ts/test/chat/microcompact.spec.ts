@@ -81,6 +81,7 @@ function toolResult(
   turnId: string,
   content: string,
   createdAt: number,
+  name = 'shell',
 ): MicrocompactMessage {
   return makeMessage({
     id,
@@ -90,7 +91,7 @@ function toolResult(
     kind: 'model',
     source: { kind: 'tool', toolCallId: `call_${id}` },
     content: [
-      { type: 'tool-result', toolCallId: `call_${id}`, name: 'shell', content },
+      { type: 'tool-result', toolCallId: `call_${id}`, name, content },
     ],
   });
 }
@@ -142,6 +143,42 @@ describe('微压缩计划：工具结果裁剪', () => {
     // 保护线仍是 u1（index 0）→ 其后全部保护 → 无可裁项
     expect(plan.toolPruneCount).toBe(0);
     expect(plan.entries).toHaveLength(0);
+  });
+
+  it('skill_learn 工具技能正文（含完整性标记）不裁剪', async () => {
+    const messages = [
+      realUser('u1', 't1', NOW - 3 * HOUR_MS),
+      toolResult(
+        'sk_t',
+        't1',
+        '<!-- tool-skill:workflow -->\n' + 'd'.repeat(5000) + '\n<!-- /tool-skill:workflow -->',
+        NOW - 3 * HOUR_MS,
+        'skill_learn',
+      ),
+      realUser('u2', 't2', NOW - 1000),
+    ];
+    const plan = await buildMicrocompactPlan({ messages, nowMs: NOW, estimateTextTokens: estimate });
+    expect(plan.entries.some((e) => e.messageId === 'sk_t')).toBe(false);
+  });
+
+  it('skill_learn 真实技能结果（无标记）仍可裁剪', async () => {
+    const messages = [
+      realUser('u1', 't1', NOW - 3 * HOUR_MS),
+      toolResult('sk_t', 't1', 'x'.repeat(5000), NOW - 3 * HOUR_MS, 'skill_learn'),
+      realUser('u2', 't2', NOW - 1000),
+    ];
+    const plan = await buildMicrocompactPlan({ messages, nowMs: NOW, estimateTextTokens: estimate });
+    expect(plan.entries.some((e) => e.messageId === 'sk_t')).toBe(true);
+  });
+
+  it('legacy tool_learn 结果恒不裁剪', async () => {
+    const messages = [
+      realUser('u1', 't1', NOW - 3 * HOUR_MS),
+      toolResult('tl_t', 't1', 'x'.repeat(5000), NOW - 3 * HOUR_MS, 'tool_learn'),
+      realUser('u2', 't2', NOW - 1000),
+    ];
+    const plan = await buildMicrocompactPlan({ messages, nowMs: NOW, estimateTextTokens: estimate });
+    expect(plan.entries.some((e) => e.messageId === 'tl_t')).toBe(false);
   });
 
   it('幂等：已裁剪内容（收益不足门槛）不再入候选', async () => {

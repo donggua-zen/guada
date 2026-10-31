@@ -104,3 +104,93 @@ describe("skill_learn 工具", () => {
     expect(tool.exemptFromLargeResult).toBe(true);
   });
 });
+
+/**
+ * 技能清单 prompt 的门控契约。
+ *
+ * 智能体设置 → Skills 的「功能开关」（settings.plugins.skill = { toolkits_filter:
+ * 'allow' } 空允许列表）只隐藏真实技能段（# Skills），不影响 skill_learn 工具
+ * 本身与懒加载工具包段（<available_tool_skills>）——后者由「本地工具」tab 的
+ * 工具包开关（loadMode）控制，职责分离。
+ */
+describe("技能清单 prompt 门控", () => {
+  const realSkill = {
+    id: "skill-a",
+    manifest: { name: "skill-a", description: "真实技能 A" },
+    enabled: true,
+  };
+  const toolKitEntry = {
+    id: "workflow",
+    name: "workflow",
+    activator: "workflow 编排",
+    pluginId: "workflow",
+  };
+
+  async function loadPromptContent(session: any) {
+    const orchestrator = {
+      listSkills: jest.fn().mockReturnValue([realSkill]),
+      listToolSkills: jest.fn().mockReturnValue([toolKitEntry]),
+      skillLearn: jest.fn(),
+    } as any;
+    const plugin = new SkillPlugin(orchestrator);
+    const { api, captured } = makeApi();
+    await plugin.onLoad(api);
+    const prompt = captured.prompts.find(
+      (p: any) => p.description === "可用技能列表",
+    );
+    expect(prompt).toBeDefined();
+    const content = await prompt.content({ session } as any);
+    return { content, orchestrator };
+  }
+
+  const sessionWith = (plugins: any, skills?: any) =>
+    ({
+      workspacePath: undefined,
+      getSettings: (key: string) =>
+        key === "plugins" ? plugins : key === "skills" ? skills : undefined,
+    }) as any;
+
+  it("无门控配置时：真实技能段与工具包段都在", async () => {
+    const { content, orchestrator } = await loadPromptContent(
+      sessionWith(undefined),
+    );
+
+    expect(content).toContain("# Skills");
+    expect(content).toContain("<available_skills>");
+    expect(content).toContain("skill-a");
+    expect(content).toContain("<available_tool_skills>");
+    expect(content).toContain("workflow");
+    expect(orchestrator.listToolSkills).toHaveBeenCalled();
+  });
+
+  it("功能开关关闭（空 allow 列表）：真实技能段消失，工具包段保留", async () => {
+    const { content } = await loadPromptContent(
+      sessionWith({ skill: { toolkits_filter: "allow" } }),
+    );
+
+    expect(content).not.toContain("# Skills");
+    expect(content).not.toContain("<available_skills>");
+    expect(content).toContain("<available_tool_skills>");
+    expect(content).toContain("workflow");
+  });
+
+  it("功能开关开启（allow 含 skill）：两段都在", async () => {
+    const { content } = await loadPromptContent(
+      sessionWith({
+        skill: { toolkits_filter: "allow", toolkits_allow: ["skill"] },
+      }),
+    );
+
+    expect(content).toContain("# Skills");
+    expect(content).toContain("<available_tool_skills>");
+  });
+
+  it("黑名单 deny skill：同样只隐藏真实技能段", async () => {
+    const { content } = await loadPromptContent(
+      sessionWith({ skill: { toolkits_deny: ["skill"] } }),
+    );
+
+    expect(content).not.toContain("# Skills");
+    expect(content).toContain("<available_tool_skills>");
+  });
+});

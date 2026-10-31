@@ -38,6 +38,12 @@ export const MICROCOMPACT_MIN_TOKEN_SAVINGS = 256;
 export const THINKING_PROTECT_MS = 2 * 60 * 60 * 1000;
 /** 恒不裁剪的工具结果（学习/待办类，裁剪会让模型失忆） */
 const SKIPPED_TOOL_NAMES = new Set(['tool_learn', 'todo']);
+/**
+ * 工具技能正文的完整性标记：skill_learn 返回懒加载工具包定义时首尾各带一个。
+ * 只要标记俱在就不裁剪——头尾截断会把 <tool_definition> 切成残片，模型按残片
+ * 传参会持续触发参数校验失败。真实技能（无标记）仍按原规则裁剪。
+ */
+const TOOL_SKILL_MARKER = '<!-- tool-skill:';
 
 /**
  * 微压缩输入消息：视图消息（getHistory），运行时节点带 turnId（replayer MessageNode）。
@@ -195,6 +201,10 @@ async function buildToolPruneEntry(input: {
   if (!toolResult) return null;
   if (SKIPPED_TOOL_NAMES.has(toolResult.name)) return null;
   const content = toolResult.content;
+  // 工具技能正文（懒加载工具包定义）自带完整性标记，被头尾裁剪等于报废
+  if (toolResult.name === 'skill_learn' && content.includes(TOOL_SKILL_MARKER)) {
+    return null;
+  }
   if (content.length <= maxLength) return null;
 
   const marker = buildPruneMarker(content.length, maxLength);

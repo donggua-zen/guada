@@ -28,7 +28,7 @@ export const WORKFLOW_COMMAND_DESCRIPTION =
 const AVAILABLE_APPENDIX = [
   'The user explicitly invoked the /workflow slash command. This satisfies the "user explicitly asks for a workflow" condition — proceed with workflow orchestration instead of substituting a plain answer or a single sub-agent call.',
   "",
-  'If the workflow toolkit has not been loaded in this conversation yet, call tool_learn("workflow") first; then invoke workflow_run via tool_use.',
+  'If the workflow toolkit has not been loaded in this conversation yet, call skill_learn("workflow") first; then invoke workflow_run via tool_use.',
   "",
   "Write the orchestration script yourself: split the user's request into independent units, fan them out with parallel()/pipeline(), collect the results, and return a concise, well-organized summary. If the toolkit turns out to be unavailable, explain which setting must be enabled instead of attempting workflow_run.",
 ].join("\n");

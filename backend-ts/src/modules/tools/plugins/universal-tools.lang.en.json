@@ -1,6 +1,6 @@
 {
   "universalTools.name": "Universal Tools",
-  "universalTools.description": "System-level universal tools: tool_learn / tool_use",
+  "universalTools.description": "System-level universal tool: tool_use (toolkit learning moved to skill_learn)",
   "universalTools.toolkitName": "Lazy-Load Toolkit Management",
   "tool_learn.executing": "Loading toolkit",
   "tool_learn.completed": "Loaded toolkit",
@@ -10,6 +10,5 @@
   "tool_use.completed": "Invoked tool",
   "tool_use.aggregate.executing": "Invoking {n} tools",
   "tool_use.aggregate.completed": "Invoked {n} tools",
-  "universalTools.toolkitDescription": "Toolkit learning and on-demand loading (meta capability)"
-
+  "universalTools.toolkitDescription": "Toolkit learning (skill_learn) and on-demand invocation via tool_use (meta capability)"
 }

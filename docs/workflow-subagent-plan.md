@@ -94,7 +94,7 @@ WorkflowEngineService.startRun (宿主)
 | `worker/worker-protocol.ts` | Host↔Worker 消息联合（ready/go/cancel/agent-call/agent-settled/agent-failed/result/error） |
 | `worker/worker-bootstrap.ts` | worker 入口源码字符串（`new Worker(code,{eval:true})` 免构建管线改动）：vm context + 5 钩子 + 取消/错误纪律 |
 | `workflow-engine.service.ts` | 引擎：校验/worker 生命周期/RPC 路由/并发槽/事件双发/取消收敛/恰好一次配对 |
-| `workflow.plugin.ts` | toolkit `workflow`（懒加载：目录行承担使用门槛；sub_agent 会话/无启用 agents → none）+ 工具 `workflow_run`（工具描述即脚本 API 唯一规格）+ `registerPrompt` 使用规则与 agents 清单（lazy prompt，tool_learn 时随工具定义一并下发） |
+| `workflow.plugin.ts` | toolkit `workflow`（懒加载：目录行承担使用门槛；sub_agent 会话/无启用 agents → none）+ 工具 `workflow_run`（工具描述即脚本 API 唯一规格）+ `registerPrompt` 使用规则与 agents 清单（lazy prompt，skill_learn 时随工具定义一并下发） |
 | `workflow.module.ts` | NestJS 模块（imports SubAgentModule） |
 | `workflow.lang.zh/en.json` | NLS |
 
@@ -160,7 +160,7 @@ WorkflowEngineService.startRun (宿主)
 | realm 物化 | 手写深拷贝 | postMessage structured clone 等价 |
 | 执行环境 | worker thread + vm | 相同（bootstrap 内联 eval，免构建管线改动） |
 | 并发默认值 | min(16, cores-2) | min(8, max(2, cores-1))，settings 可调 |
-| 模型面注入 | 工具常驻工具表 + 极简策略段（~720 tokens/轮常驻） | **懒加载工具包**：目录行 ~70 tokens/轮常驻，API 规格（工具描述即唯一规格）+ 使用指南在 tool_learn 时一次性下发（~720 tokens 一次），经 tool_use 包装调用 |
+| 模型面注入 | 工具常驻工具表 + 极简策略段（~720 tokens/轮常驻） | **懒加载工具包**：目录行 ~70 tokens/轮常驻，API 规格（工具描述即唯一规格）+ 使用指南在 skill_learn 时一次性下发（~720 tokens 一次），经 tool_use 包装调用 |
 
 ## 七、测试
 
@@ -187,7 +187,7 @@ activator 又要求"用户显式要求"才可使用，导致用户不知道如�
 - 也可以直接输入 `/workflow 审查整个仓库的异常处理`。`ChatController` 在落库/建流前
   把整段命令规范化为 `[/workflow:workflow label="工作流"] 任务`，与面板选中走同一条链路。
 - `TagParserPipeline` 解析标签后调用 `WorkflowPlugin` 的 `parse`，把一段 `origin=system`
-  注入块随消息冻结：用户已显式要求工作流，模型应 `tool_learn("workflow")` 后经
+  注入块随消息冻结：用户已显式要求工作流，模型应 `skill_learn("workflow")` 后经
   `tool_use` 调用 `workflow_run`。正文不改写，徽标与注入块随消息冻结，历史稳定。
 - 命令不新增执行通道，也不绕过现有门控；它只是把"显式要求"送到模型。
 
@@ -199,7 +199,7 @@ activator 又要求"用户显式要求"才可使用，导致用户不知道如�
 | 子代理会话 | 编辑器只读，实际不可用 | 说明不能嵌套 |
 | 智能体禁用 workflow 工具包 | 出现 | 引导去"智能体设置 → 工具包"启用 |
 | 未启用任何子代理（默认） | 出现 | 引导去"智能体设置 → 子代理"启用至少一个 |
-| 有子代理 | 出现 | 显式请求说明 + `tool_learn` + `workflow_run` |
+| 有子代理 | 出现 | 显式请求说明 + `skill_learn` + `workflow_run` |
 
 测试：`backend-ts/test/workflow/workflow-command.spec.ts`（provider 注册、输入规范化、
 四种可用性分支、fail-open）以及 `chat.controller.spec.ts` 的 `/workflow` 规范化断言。
