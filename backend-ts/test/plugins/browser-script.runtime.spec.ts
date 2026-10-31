@@ -67,8 +67,7 @@ function createBridge() {
             ...(params.checked !== undefined ? { checked: params.checked } : {}),
           };
         }
-        case "browser_dialog":
-          return params.action === "get"
+        case "browser_dialog":          return params.action === "get"
             ? { dialog: { type: "confirm", message: "Delete?" } }
             : { ok: true };
         case "browser_download":
@@ -463,6 +462,29 @@ return { dialog, handled, download, list };
     const downloadCalls = calls.filter((call) => call.method === "browser_download");
     expect(downloadCalls[0].params).toMatchObject({ action: "wait", timeout: 3000 });
     expect(downloadCalls[1].params).toMatchObject({ action: "list" });
+  });
+
+  it("tab.title / tab.url 读取当前标签，未知 tab 方法返回 UNSUPPORTED", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `
+const title = await tab.title();
+const url = await tab.url();
+return { title, url };
+`,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.value).toEqual({ title: "A", url: "https://a.example" });
+    expect(calls.filter((call) => call.method === "browser_tabs")).toHaveLength(2);
+
+    const unknown = await runScript(bridge, `await tab.getAttribute("a", "href"); return 1;`);
+    expect(unknown.status).toBe("failed");
+    expect(unknown.error?.code).toBe("UNSUPPORTED");
+    expect(unknown.error?.message).toContain("tab.getAttribute");
+    expect(unknown.error?.message).toContain("title, url");
+    expect(unknown.error?.message).toContain("tab.evaluate");
   });
 
   it("tab 级便利方法同样透传顶层 options", async () => {

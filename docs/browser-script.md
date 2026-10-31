@@ -90,6 +90,7 @@ LLM
 | `tab.screenshot({ fullPage?, saveTo? })` | 截图只落一份到会话附件目录；工具结果给出绝对路径，最近 6 张附图；`saveTo` 额外导出原始 PNG 到工作区 |
 | `tab.setViewportSize({ width, height, tabId? })` | 设置固定渲染视口（整数，宽 320–3840、高 240–2160）；不导航、不激活标签；返回实际生效尺寸与 `applied` |
 | `tab.console({ clear? })` | 默认只读日志；`clear:true` 才清空 |
+| `tab.title()` / `tab.url()` | 当前标签的标题/URL（对应 Playwright `page.title()` / `page.url()`） |
 | `tab.back()` / `forward()` / `reload()` | 历史导航 |
 | `log(message)` / `sleep(ms)` / `args` | `sleep` 上限 5 秒 |
 | `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` | 脚本沙箱内可用；回调必须是函数，取消/结束自动清理 |

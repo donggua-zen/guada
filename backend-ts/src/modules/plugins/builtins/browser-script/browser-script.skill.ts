@@ -130,6 +130,7 @@ tab-level convenience actions accept a locator or CSS selector:
     tab.elementState(target)
     tab.waitFor(target, { state?, timeout? })
     tab.setViewportSize({ width, height, tabId? })
+    tab.title() / tab.url()
 
 Any element can be a target: button, link, heading, text, or custom div. The actionability check decides whether it can be clicked (visible, enabled, stable, inside the viewport, and not covered). fill still requires an editable element.
 
@@ -210,6 +211,8 @@ Rules:
 - tab.waitForLoadState -> { state }
 - tab.screenshot -> { ok, width, height, savedTo? }
 - tab.setViewportSize -> { ok, tabId, width, height, applied }
+- tab.title -> string (current tab title, Playwright page.title())
+- tab.url -> string (current tab URL, Playwright page.url())
 - tab.back / forward / reload -> { ok, url }
 - tab.console -> array of console log entries
 - browser.tabs.list -> TabInfo[] (array)

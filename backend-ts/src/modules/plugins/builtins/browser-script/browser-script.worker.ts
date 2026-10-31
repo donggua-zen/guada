@@ -206,6 +206,34 @@ function guardLocator(locator) {
   });
 }
 
+var TAB_METHODS = [
+  'goto', 'snapshot', 'click', 'fill', 'hover', 'press', 'scroll', 'selectOption',
+  'check', 'uncheck', 'elementState', 'waitFor', 'waitForLoadState', 'evaluate',
+  'screenshot', 'title', 'url', 'getDialog', 'handleDialog', 'waitForDownload',
+  'downloads', 'setViewportSize', 'console', 'back', 'forward', 'reload',
+  'getByRole', 'getByText', 'getByLabel', 'getByPlaceholder', 'getByTestId',
+  'getByAltText', 'getByTitle', 'locator', 'info',
+];
+
+// tab 不是浏览器对象：未知成员（page.getAttribute 等 Playwright Page API）
+// 统一报 UNSUPPORTED 并列出可用方法，避免原生 TypeError 让模型再猜一轮。
+function guardTab(tabFacade) {
+  if (typeof Proxy !== 'function') return tabFacade;
+  return new Proxy(tabFacade, {
+    get: function (target, prop) {
+      if (typeof prop === 'symbol') return target[prop];
+      if (prop === 'then' || prop === 'toJSON' || prop === 'inspect') return undefined;
+      if (prop in target) return target[prop];
+      throw fatal(
+        'UNSUPPORTED',
+        'tab.' + prop + ' is not supported. Supported tab members: ' +
+          TAB_METHODS.join(', ') +
+          '. Use tab.evaluate(...) for arbitrary page JavaScript.'
+      );
+    },
+  });
+}
+
 function makeLocator(descriptor) {
   var locator = {
     __browserLocator: descriptor,
@@ -424,6 +452,17 @@ const tab = Object.freeze({
     });
   },
   screenshot: function (options) { return hostCall('screenshot', options || {}); },
+  // Playwright page.title() / page.url() 的对应物：读当前标签，不发导航
+  title: function () {
+    return hostCall('info', {}).then(function (info) {
+      return info ? String(info.title || '') : '';
+    });
+  },
+  url: function () {
+    return hostCall('info', {}).then(function (info) {
+      return info ? String(info.url || '') : '';
+    });
+  },
   getDialog: function () {
     return hostCall('dialog', { action: 'get' }).then(function (result) {
       return (result && result.dialog) || null;
@@ -494,6 +533,8 @@ const tab = Object.freeze({
   info: function () { return hostCall('info', {}); },
 });
 
+const tabApi = guardTab(tab);
+
 const browser = Object.freeze({
   open: function (url, options) {
     return hostCall('goto', Object.assign({}, options || {}, {
@@ -519,7 +560,7 @@ const browser = Object.freeze({
 
 const sandbox = {
   browser: browser,
-  tab: tab,
+  tab: tabApi,
   log: function (message) { post({ type: 'log', message: String(message) }); },
   sleep: sleep,
   setTimeout: function (handler, delay) {
