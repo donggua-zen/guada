@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { markRaw, defineAsyncComponent, type Component } from 'vue'
 import { ElMessage } from 'element-plus'
 import { apiService } from '@/services/ApiService'
+import { useLayoutStore } from '@/stores/layout'
 import {
   replaceThemesByPlugin,
   removeThemesByPlugin,
@@ -176,10 +177,20 @@ export const usePluginSlots = defineStore('pluginSlots', {
 
     /** 当前生效主题被插件移除时回退 default */
     fallbackIfActiveThemeRemoved(removedIds: string[]) {
-      const { activeThemePreset, setActiveThemePreset } = useTheme()
+      const { activeThemePreset, lightThemePreset, darkThemePreset, setActiveThemePreset } = useTheme()
       if (removedIds.includes(activeThemePreset.value)) {
         setActiveThemePreset('default')
         ElMessage.warning('当前主题已被插件移除，已回退到默认主题')
+        // 同步回退结果到后端与缓存，否则启动期“后端优先”恢复会把已移除的主题 id 再次拉起
+        apiService
+          .updateGroupSettings('appearance', {
+            lightThemePreset: lightThemePreset.value,
+            darkThemePreset: darkThemePreset.value,
+          })
+          .then((saved) =>
+            useLayoutStore().updateAppearanceSettingsCache(saved as Record<string, unknown>),
+          )
+          .catch(() => {})
       }
     },
 

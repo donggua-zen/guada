@@ -346,6 +346,14 @@ export const useLayoutStore = defineStore('layout', () => {
     return appearancePending
   }
 
+  /**
+   * 保存成功后用后端返回的整组数据刷新缓存。
+   * 不刷新的话，设置页重挂载时会复用启动期的旧快照，把已保存的值回滚。
+   */
+  const updateAppearanceSettingsCache = (payload: Partial<AppearanceGroupSettings>) => {
+    appearanceSettings.value = { ...(appearanceSettings.value ?? {}), ...payload }
+  }
+
   const fetchAndApplyAppearance = async (): Promise<boolean> => {
     try {
       const response = await apiService.fetchGroupSettings<AppearanceGroupSettings>('appearance')
@@ -441,5 +449,6 @@ export const useLayoutStore = defineStore('layout', () => {
     applyWallpaperSettings,
     appearanceSettings,
     loadAppearanceSettings,
+    updateAppearanceSettingsCache,
   }
 })

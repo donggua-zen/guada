@@ -257,6 +257,7 @@ import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
 import { themePresets, type ThemePresetInfo } from '@/themes'
+import type { AppearanceGroupSettings } from '@/types/service'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -368,13 +369,8 @@ const loadSettings = async () => {
     settingsForm.floatWidgetOpacity = response.floatWidgetOpacity ?? 95
     previewUrl.value = resolveWallpaperUrl(response.wallpaperUrl || null)
 
-    // 同步主题预设（后端优先，覆盖本地 localStorage）
-    if (response.lightThemePreset) {
-      setLightThemePreset(response.lightThemePreset)
-    }
-    if (response.darkThemePreset) {
-      setDarkThemePreset(response.darkThemePreset)
-    }
+    // 主题预设不从这里同步：运行时真值是 useTheme refs（localStorage 同步），
+    // 回读启动期快照会把用户已保存的主题回滚，下拉回显直接绑定 activeThemePreset
     selectedThemePreset.value = activeThemePreset.value
 
     // 同步到 layout store
@@ -410,7 +406,9 @@ const handleSave = async () => {
       darkThemePreset: darkThemePreset.value,
     }
 
-    await apiService.updateGroupSettings('appearance', dataToSave)
+    const saved = await apiService.updateGroupSettings('appearance', dataToSave)
+    // 用后端返回的合并结果刷新 layout store 缓存，防止重挂载时回读启动期旧值
+    layoutStore.updateAppearanceSettingsCache(saved as Partial<AppearanceGroupSettings>)
 
     // 同步到 layout store
     syncToLayoutStore()
