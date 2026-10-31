@@ -45,6 +45,12 @@ export interface ProviderFileConfig {
   thinking?: ProviderThinkingConfig;
   /** 供应商级 wire 兼容开关（模型条目 compat 可逐字段覆盖） */
   compat?: ThinkingCompatConfig;
+  /**
+   * 请求体压缩：实例级覆盖类型卡默认值（true=大 JSON 请求体 gzip 上传，
+   * 需上游支持 Content-Encoding: gzip；false=显式关闭）。
+   * 缺省时继承类型卡的 requestCompression。
+   */
+  requestCompression?: boolean;
   /** 模型条目列表 */
   models?: ProviderFileModel[];
 }
@@ -254,6 +260,9 @@ export class ProviderFileStore {
       headers: this.parseStringMap(raw.headers),
       ...(thinking ? { thinking } : {}),
       ...(compat ? { compat } : {}),
+      ...(typeof raw.requestCompression === 'boolean'
+        ? { requestCompression: raw.requestCompression }
+        : {}),
       models,
     };
   }
@@ -531,6 +540,11 @@ export class ProviderFileStore {
         thinking,
         // 用解析后的生效值覆盖原始部分声明，适配器只读这一个对象
         compat,
+        // 请求体压缩：实例显式声明 > 类型卡默认 > 关闭（与 compat 同一解析链）
+        requestCompression:
+          provider.requestCompression ??
+          this.bundledCatalog.getType(provider.type)?.requestCompression ??
+          false,
         attributes: provider.headers ? { headers: provider.headers } : undefined,
       },
       thinkingEfforts: resolved.menu,

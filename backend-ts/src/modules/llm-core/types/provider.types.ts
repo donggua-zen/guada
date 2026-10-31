@@ -37,6 +37,11 @@ export interface ProviderConfig {
   thinking?: import("../thinking/thinking-vocabulary").ProviderThinkingConfig;
   /** 实例级 wire 兼容开关（插件适配器可选消费） */
   compat?: import("../thinking/thinking-vocabulary").ThinkingCompatConfig;
+  /**
+   * 请求体压缩：true 时对大 JSON 请求体 gzip 上传（Content-Encoding: gzip）。
+   * 由 store 按「实例 > 类型卡」解析后的生效值；适配器据此包装 fetch。
+   */
+  requestCompression?: boolean;
 }
 
 /**

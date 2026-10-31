@@ -33,6 +33,7 @@ import { assertNoImageContent } from "../utils/content.util";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 import { insecureFetch } from "../utils/tls.util";
+import { withRequestBodyCompression } from "../utils/compression.util";
 import { applyJsonMergePatch } from "../thinking/json-merge-patch";
 
 import {
@@ -156,7 +157,10 @@ export class AnthropicAdapter implements IProtocolAdapter {
     const client = new Anthropic({
       apiKey,
       baseURL: providerConfig.apiUrl || undefined,
-      fetch: insecureFetch,
+      // 请求体压缩（通用传输能力，按供应商配置启用：实例 > 类型卡）
+      fetch: providerConfig.requestCompression
+        ? withRequestBodyCompression(insecureFetch)
+        : insecureFetch,
       maxRetries: 0, // 禁用 SDK 内置重试，由 AgentEngine 统一处理重试
     });
 

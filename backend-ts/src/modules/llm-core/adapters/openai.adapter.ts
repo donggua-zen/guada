@@ -40,6 +40,7 @@ import { assertNoImageContent } from "../utils/content.util";
 import { StreamBlockTracker } from "../utils/block-lifecycle.util";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { insecureFetch } from "../utils/tls.util";
+import { withRequestBodyCompression } from "../utils/compression.util";
 import { applyJsonMergePatch } from "../thinking/json-merge-patch";
 import { composeThinkingFields } from "../thinking/thinking-format-compose";
 import {
@@ -138,7 +139,10 @@ export class OpenAIAdapter implements IProtocolAdapter {
       };
     }
 
-    clientOptions.fetch = insecureFetch;
+    // 请求体压缩（通用传输能力，按供应商配置启用：实例 > 类型卡）
+    clientOptions.fetch = config.requestCompression
+      ? withRequestBodyCompression(insecureFetch)
+      : insecureFetch;
 
     return new BodyPreservingOpenAI(clientOptions);
   }

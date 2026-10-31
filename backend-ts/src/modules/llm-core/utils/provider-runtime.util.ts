@@ -38,6 +38,11 @@ export interface RuntimeProviderConfig {
    * 由 store 的 resolveThinkingCompat 合并解析；store 视图给的是必填解析值）。
    */
   compat?: ThinkingCompatConfig;
+  /**
+   * 请求体压缩（实例显式 > 类型卡默认 > false，由 store 合并解析）。
+   * true 时适配器把 fetch 包一层 gzip 装饰器（见 utils/compression.util.ts）。
+   */
+  requestCompression?: boolean;
 }
 
 /**
@@ -55,6 +60,7 @@ export interface ProviderConfigSource {
   headers?: Record<string, string>;
   thinking?: ProviderThinkingConfig;
   compat?: ThinkingCompatConfig;
+  requestCompression?: boolean;
 }
 
 /** 来源形态 → 运行形态（缺字段按运行默认值兜底，不做校验） */
@@ -70,5 +76,6 @@ export function toRuntimeProviderConfig(
     headers: provider?.headers,
     thinking: provider?.thinking,
     compat: provider?.compat,
+    requestCompression: provider?.requestCompression,
   };
 }

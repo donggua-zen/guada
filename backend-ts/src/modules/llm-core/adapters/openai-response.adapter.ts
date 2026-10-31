@@ -14,6 +14,7 @@ import {
 import type { Message, ContentBlock } from "../../../common/types/conversation.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { insecureFetch } from "../utils/tls.util";
+import { withRequestBodyCompression } from "../utils/compression.util";
 import { applyJsonMergePatch } from "../thinking/json-merge-patch";
 import { attachmentToPart, fileBlockToText } from "../utils/attachment.util";
 import { assertNoImageContent } from "../utils/content.util";
@@ -175,7 +176,10 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         providerConfig?.apiKey ||
         process.env.OPENAI_API_KEY ||
         "sk-placeholder",
-      fetch: insecureFetch,
+      // 请求体压缩（通用传输能力，按供应商配置启用：实例 > 类型卡）
+      fetch: providerConfig?.requestCompression
+        ? withRequestBodyCompression(insecureFetch)
+        : insecureFetch,
       timeout: DEFAULT_REQUEST_TIMEOUT_MS,
       maxRetries: 0, // 禁用 SDK 内置重试，由 AgentEngine 统一处理重试
     });

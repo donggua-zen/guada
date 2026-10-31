@@ -48,6 +48,11 @@ export interface BundledTypeCard {
   thinking?: ProviderThinkingConfig;
   /** 卡片级 wire 兼容开关（模型条目 compat / 实例 compat 可覆盖） */
   compat?: ThinkingCompatConfig;
+  /**
+   * 卡片级请求体压缩默认值：该类型的所有实例默认对大 JSON 请求体做 gzip。
+   * 通用传输能力（任何协议可用）；实例 YAML 显式 false 可覆盖。
+   */
+  requestCompression?: boolean;
   models: CatalogModel[];
 }
 
@@ -144,6 +149,7 @@ export function parseProviderTypeCard(
     protocol: typeof raw.protocol === 'string' ? raw.protocol : 'openai',
     defaultApiUrl:
       typeof raw.defaultApiUrl === 'string' ? raw.defaultApiUrl : undefined,
+    ...(raw.requestCompression === true ? { requestCompression: true } : {}),
     ...(thinking ? { thinking } : {}),
     ...(compat ? { compat } : {}),
     models,
