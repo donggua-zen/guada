@@ -21,6 +21,32 @@
             <div class="flex flex-wrap gap-4 mb-4">
                 <GdButton text v-for="theme in themes" :key="theme" :type="theme" :size="size">{{ theme }}</GdButton>
             </div>
+            <h1>{{ size }} link</h1>
+            <div class="flex flex-wrap gap-4 mb-4">
+                <GdButton link v-for="theme in themes" :key="theme" :type="theme" :size="size">{{ theme }}</GdButton>
+            </div>
+            <h1>{{ size }} loading / circle / disabled</h1>
+            <div class="flex flex-wrap gap-4 items-center mb-4">
+                <GdButton type="primary" :size="size" loading>加载中</GdButton>
+                <GdButton type="primary" :size="size" loading circle></GdButton>
+                <GdButton type="primary" :size="size" loading plain>加载中</GdButton>
+                <GdButton type="primary" :size="size" circle>
+                    <template #icon>
+                        <component :is="icons[0]" />
+                    </template>
+                </GdButton>
+                <GdButton type="primary" :size="size" circle plain>
+                    <template #icon>
+                        <component :is="icons[1]" />
+                    </template>
+                </GdButton>
+                <GdButton type="danger" :size="size" disabled>禁用</GdButton>
+                <GdButton type="danger" :size="size" link disabled>禁用</GdButton>
+            </div>
+            <h1>{{ size }} round</h1>
+            <div class="flex flex-wrap gap-4 mb-4">
+                <GdButton round v-for="theme in themes" :key="theme" :type="theme" :size="size">{{ theme }}</GdButton>
+            </div>
         </template>
         <div class="flex flex-wrap gap-4 mb-4">
             <GdButton disabled v-for="theme, index in themes" :key="theme" :type="theme">
@@ -88,16 +114,16 @@ const icons = [
 ]
 
 const sizes = [
+    'tiny',
     'small',
     'medium',
-    'large',
 ];
 const themes = [
     'default',
     'Primary',
     'Secondary',
     // 'Tertiary',
-    'Error',
+    'Danger',
     'Warning',
 ];
 </script>

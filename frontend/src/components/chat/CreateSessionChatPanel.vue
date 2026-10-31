@@ -52,8 +52,8 @@
     <div>
       <!-- <div class="flex items-center justify-center mt-6">
         您也可以<span class="w-1"></span>
-        <el-button type="primary" plain round size="small" @click="handleCreateSessionClick">直接创建会话
-        </el-button>
+        <GdButton type="primary" plain round size="small" @click="handleCreateSessionClick">直接创建会话
+        </GdButton>
       </div> -->
     </div>
   </div>
@@ -83,6 +83,7 @@ import { useCapabilitiesStore } from '@/stores/capabilities';
 // 组件导入
 import { ChatInput, Avatar } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
+
 import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 
 

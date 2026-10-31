@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupPlugins, groupSkills } from "./pluginGroups";
+import { groupPlugins, groupSkills, isPluginLocked } from "./pluginGroups";
 import type { PluginQueryPlugin } from "@/services/modules/settings.api";
 import type { Skill } from "@/types/skills";
 
@@ -51,6 +51,37 @@ describe("groupPlugins", () => {
 
   it("空列表返回空数组", () => {
     expect(groupPlugins([])).toEqual([]);
+  });
+
+  it("系统插件单独成组且排在最前", () => {
+    const groups = groupPlugins([
+      plugin({ pluginId: "core1", category: "core" }),
+      plugin({ pluginId: "sys", category: "system" }),
+      plugin({ pluginId: "ext", category: "extended" }),
+    ]);
+
+    expect(groups.map((g) => g.key)).toEqual(["system", "core", "extended"]);
+    expect(groups[0].items.map((p) => p.pluginId)).toEqual(["sys"]);
+  });
+});
+
+describe("isPluginLocked", () => {
+  it("category=system 的插件被锁定", () => {
+    expect(isPluginLocked(plugin({ category: "system" }))).toBe(true);
+  });
+
+  it("essential=true 的插件被锁定（即使 category 不是 system）", () => {
+    expect(isPluginLocked(plugin({ category: "core", essential: true }))).toBe(true);
+  });
+
+  it("普通 core/extended 插件不受锁", () => {
+    expect(isPluginLocked(plugin({ category: "core" }))).toBe(false);
+    expect(isPluginLocked(plugin({ category: "extended" }))).toBe(false);
+    expect(isPluginLocked(plugin({ category: "user" }))).toBe(false);
+  });
+
+  it("essential=false 且非 system 时不受锁", () => {
+    expect(isPluginLocked(plugin({ category: "core", essential: false }))).toBe(false);
   });
 });
 

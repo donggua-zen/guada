@@ -176,7 +176,7 @@
 
                 <div v-if="visibleLocalTools.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
-                    <InfoCircleOutlined />
+                    <Info24Regular />
                   </el-icon>
                   <div>{{ t('agents.setting.noLocalTools') }}</div>
                   <div class="text-sm mt-2">{{ t('agents.setting.noLocalToolsHint') }}</div>
@@ -240,7 +240,7 @@
 
                 <div v-if="mcpServers.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
-                    <InfoCircleOutlined />
+                    <Info24Regular />
                   </el-icon>
                   <div>{{ t('agents.setting.noMcpServers') }}</div>
                 </div>
@@ -301,15 +301,15 @@
                 </el-form-item>
 
                 <div v-if="loadingSkills" class="text-center py-8">
-                  <el-icon class="is-loading" size="24">
-                    <LoadingOutlined />
+                  <el-icon size="24">
+                    <ArrowSync16Regular class="animate-spin" />
                   </el-icon>
                   <div class="text-sm text-gray-500 mt-2">{{ t('agents.setting.loadingSkills') }}</div>
                 </div>
 
                 <div v-else-if="visibleSkills.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
-                    <InfoCircleOutlined />
+                    <Info24Regular />
                   </el-icon>
                   <div>{{ t('agents.setting.noSkills') }}</div>
                   <div class="text-sm mt-2">{{ t('agents.setting.noSkillsHint') }}</div>
@@ -356,15 +356,15 @@
                 </el-form-item>
 
                 <div v-if="loadingAgents" class="text-center py-8">
-                  <el-icon class="is-loading" size="24">
-                    <LoadingOutlined />
+                  <el-icon size="24">
+                    <ArrowSync16Regular class="animate-spin" />
                   </el-icon>
                   <div class="text-sm text-gray-500 mt-2">{{ t('agents.setting.loadingAgents') }}</div>
                 </div>
 
                 <div v-else-if="presetAgents.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
-                    <InfoCircleOutlined />
+                    <Info24Regular />
                   </el-icon>
                   <div>{{ t('agents.setting.noAgents') }}</div>
                   <div class="text-sm mt-2">{{ t('agents.setting.noAgentsHint') }}</div>
@@ -409,15 +409,9 @@ import {
   ElSwitch
 } from 'element-plus'
 import {
-  InfoCircleOutlined,
-  LoadingOutlined,
-  UserOutlined,
-  MessageOutlined,
-  ToolOutlined,
-  ApiOutlined
-} from '@vicons/antd'
-
-import { Code24Regular, Bot24Regular, Wrench16Regular, TextDescription20Regular } from '@vicons/fluent'
+  Code24Regular, Bot24Regular, Wrench16Regular, TextDescription20Regular,
+  Info24Regular, ArrowSync16Regular, Person16Regular, Chat16Regular, PlugConnected20Regular
+} from '@vicons/fluent'
 
 import { apiService } from '../../services/ApiService'
 import type { Model, ModelProvider, McpServer } from '@/types/api'
@@ -529,15 +523,15 @@ const sidebarGroups = computed(() => [
   {
     label: t('agents.setting.groupBasic'),
     items: [
-      { label: t('agents.setting.navBasic'), path: 'basic', icon: UserOutlined },
-      { label: t('agents.setting.navPrompt'), path: 'prompt', icon: MessageOutlined },
+      { label: t('agents.setting.navBasic'), path: 'basic', icon: Person16Regular },
+      { label: t('agents.setting.navPrompt'), path: 'prompt', icon: Chat16Regular },
     ]
   },
   {
     label: t('agents.setting.groupTools'),
     items: [
-      { label: t('agents.setting.navLocalTools'), path: 'local_tools', icon: ToolOutlined },
-      { label: t('agents.setting.navMcpTools'), path: 'mcp_tools', icon: ApiOutlined },
+      { label: t('agents.setting.navLocalTools'), path: 'local_tools', icon: Wrench16Regular },
+      { label: t('agents.setting.navMcpTools'), path: 'mcp_tools', icon: PlugConnected20Regular },
       { label: t('agents.setting.navSkills'), path: 'skills', icon: Code24Regular },
       { label: t('agents.setting.navSubAgents'), path: 'agent_presets', icon: Bot24Regular },
     ]

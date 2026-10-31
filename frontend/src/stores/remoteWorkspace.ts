@@ -12,7 +12,7 @@ import { SSH_CONNECTION_ATTACHMENT_TYPE } from '@/constants'
 /**
  * 切换会话的附加目录绑定（纯函数）：在 attachments 上翻转某连接的绑定态，
  * 保留其余附件类型。所有绑定入口（WorkspaceSelectorPopover / WorkingDirBar /
- * TaskEditDialog）共用，保证多选语义与写回形状一致。
+ * SchedulerComposer）共用，保证多选语义与写回形状一致。
  */
 export function toggleConnectionBinding(
   attachments: Record<string, string[]> | undefined,

@@ -33,8 +33,8 @@
           <span class="queue-text">{{ item.content }}</span>
         </div>
         <div class="queue-status">
-          <el-icon v-if="item.status === 'running' || isPromoting(item)" class="is-loading" size="12">
-            <Loading />
+          <el-icon v-if="item.status === 'running' || isPromoting(item)" size="12">
+            <ArrowSync16Regular class="animate-spin" />
           </el-icon>
           <el-icon v-else-if="item.status === 'failed'" size="12" class="queue-failed-icon">
             <Warning24Filled />
@@ -76,10 +76,10 @@
 </template>
 
 <script setup lang="ts">
-import { Loading } from '@element-plus/icons-vue'
 import {
   ArrowClockwise24Regular,
   ArrowDown24Regular,
+  ArrowSync16Regular,
   ArrowUp24Regular,
   Attach24Regular,
   Dismiss24Regular,

@@ -23,12 +23,12 @@
 
             <!-- 搜索按钮 -->
             <div class="flex justify-end mt-4">
-                <el-button type="primary" @click="handleSearch" :loading="isSearching" :disabled="!canSearch">
+                <GdButton type="primary" @click="handleSearch" :loading="isSearching" :disabled="!canSearch">
                     <el-icon class="mr-1">
-                        <Search />
+                        <Search16Regular />
                     </el-icon>
                     {{ t('knowledge.search.searchBtn') }}
-                </el-button>
+                </GdButton>
             </div>
         </div>
 
@@ -36,7 +36,7 @@
         <div v-if="searchResults.length > 0 || isSearching" class="search-results-section">
             <div v-if="isSearching" class="loading-state text-center py-8">
                 <el-icon class="animate-spin text-3xl text-gray-400">
-                    <Loading />
+                    <ArrowSync16Regular />
                 </el-icon>
                 <p class="text-sm text-gray-500 mt-2">{{ t('knowledge.search.searching') }}</p>
             </div>
@@ -47,9 +47,9 @@
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
                         {{ t('knowledge.search.foundResults', { count: searchResults.length }) }}
                     </span>
-                    <el-button size="small" link @click="clearResults">
+                    <GdButton size="small" link @click="clearResults">
                         {{ t('knowledge.search.clearResults') }}
-                    </el-button>
+                    </GdButton>
                 </div>
 
                 <div class="results-content max-h-100 overflow-y-auto">
@@ -108,7 +108,7 @@
         <!-- 空状态 -->
         <div v-else-if="hasSearched" class="empty-state text-center py-12">
             <el-icon size="48" class="text-gray-300 mb-3">
-                <Search />
+                <Search48Regular />
             </el-icon>
             <p class="text-sm text-gray-500">{{ t('knowledge.search.notFound') }}</p>
             <p class="text-xs text-gray-400 mt-1">{{ t('knowledge.search.notFoundHint') }}</p>
@@ -117,7 +117,7 @@
         <!-- 初始状态 -->
         <div v-else class="initial-state text-center py-12">
             <el-icon size="48" class="text-gray-300 mb-3">
-                <Search />
+                <Search48Regular />
             </el-icon>
             <p class="text-sm text-gray-500">{{ t('knowledge.search.initial') }}</p>
             <p class="text-xs text-gray-400 mt-1">{{ t('knowledge.search.initialHint') }}</p>
@@ -125,17 +125,18 @@
 
         <template #footer>
             <div class="flex justify-end gap-2">
-                <el-button @click="dialogVisible = false">{{ t('common.close') }}</el-button>
+                <GdButton @click="dialogVisible = false">{{ t('common.close') }}</GdButton>
             </div>
         </template>
     </GdDialog>
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Search, Loading } from '@element-plus/icons-vue'
+import { Search16Regular, Search48Regular, ArrowSync16Regular } from '@vicons/fluent'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import type { KBSearchResult } from '@/services/modules/knowledge-base.api'
 import { usePopup } from '@/composables/usePopup'

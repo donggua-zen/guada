@@ -3,10 +3,10 @@
     <h2>Splitpanes 性能对比测试</h2>
 
     <div class="controls">
-      <el-button type="primary" @click="runAutoTest" :loading="isTesting">
+      <GdButton type="primary" @click="runAutoTest" :loading="isTesting">
         {{ isTesting ? '测试中...' : '运行自动化测试' }}
-      </el-button>
-      <el-button @click="reset">重置</el-button>
+      </GdButton>
+      <GdButton @click="reset">重置</GdButton>
       <span class="hint">手动拖拽分割条也可查看实时数据</span>
     </div>
 
@@ -123,7 +123,9 @@ import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
 import { GdSplitpanes } from '../ui';
 import { usePerfMonitor } from '@/composables/usePerfMonitor';
-import { ElButton, ElTable, ElTableColumn } from 'element-plus';
+import { ElTable, ElTableColumn } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 
 // 原生 splitpanes 性能监控
 const nativeMonitor = usePerfMonitor();

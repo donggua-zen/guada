@@ -5,7 +5,7 @@
        连接清单未到位时名称位置显示微光骨架占位（避免闪原始连接 ID）；
        hover 提示完整名单；弹窗 = 各远程连接的勾选清单（点击切换绑定，✓ 为已绑定） -->
   <GdTooltip :content="tooltipContent" placement="top">
-    <el-button ref="buttonRef" class="workspace-btn mr-0.5" text @click.stop="togglePopover">
+    <GdButton ref="buttonRef" class="workspace-btn mr-0.5" text @click.stop="togglePopover">
       <el-icon size="18">
         <Cloud24Regular />
       </el-icon>
@@ -19,7 +19,7 @@
       <el-icon size="16" class="ml-0.5">
         <ChevronUpDown16Regular />
       </el-icon>
-    </el-button>
+    </GdButton>
   </GdTooltip>
 
   <GdPopover :show="popoverVisible" @update:show="popoverVisible = $event" :width="300" :max-height="400"
@@ -56,7 +56,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton, ElIcon } from 'element-plus'
+import { ElIcon } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { Checkmark16Filled, ChevronUpDown16Regular, Cloud16Regular, Cloud24Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import GdTooltip from '../../ui/GdTooltip.vue'

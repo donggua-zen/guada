@@ -47,6 +47,7 @@ export class MemoryPlugin extends PluginBase {
     description: "%memory.description%",
     version: "2.0.0",
     category: "core" as const,
+    icon: "images/plugins/memory.svg",
   };
 
   async onLoad(api: PluginApi) {

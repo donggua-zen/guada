@@ -14,8 +14,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   getBackendPort: () => ipcRenderer.invoke('get-backend-port'),
   getBackendStatusSync: () => ipcRenderer.sendSync('get-backend-status-sync'),
-  showNotification: (title: string, body: string) => 
-    ipcRenderer.invoke('show-notification', { title, body }),
+  showNotification: (payload: { title: string; body?: string; sessionId?: string | null }) =>
+    ipcRenderer.invoke('show-notification', payload),
+  /** 点击系统通知：主进程回传本次运行的 sessionId，返回取消订阅函数 */
+  onNotificationClick: (callback: (payload: { sessionId?: string | null }) => void) => {
+    const listener = (_event: unknown, payload: { sessionId?: string | null }) => callback(payload)
+    ipcRenderer.on('notification-clicked', listener)
+    return () => ipcRenderer.removeListener('notification-clicked', listener)
+  },
   
   // 窗口控制（用于无边框窗口拖拽）
   minimizeWindow: () => ipcRenderer.send('window-minimize'),

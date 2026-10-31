@@ -4,33 +4,33 @@
         <!-- 上传按钮组 -->
         <div class="flex gap-2 items-center">
             <!-- 新建文件夹按钮 -->
-            <el-button class="upload-btn" @click="showCreateFolderDialog = true">
+            <GdButton class="upload-btn" @click="showCreateFolderDialog = true">
                 <FolderAdd16Regular class="btn-icon" />
                 {{ t('knowledge.upload.newFolder') }}
-            </el-button>
+            </GdButton>
 
             <!-- 上传文件按钮 -->
             <input ref="fileInputRef" type="file" multiple :accept="ALLOWED_FILE_EXTENSIONS" @change="handleFileSelect"
                 class="hidden" />
-            <el-button class="upload-btn" @click="triggerFileInput">
+            <GdButton class="upload-btn" @click="triggerFileInput">
                 <DocumentAdd16Regular class="btn-icon" />
                 {{ t('knowledge.upload.uploadFile') }}
-            </el-button>
+            </GdButton>
 
             <!-- 上传文件夹按钮 -->
             <input ref="folderInputRef" type="file" webkitdirectory directory multiple @change="handleFolderSelect"
                 class="hidden" />
-            <el-button class="upload-btn" @click="triggerFolderInput">
+            <GdButton class="upload-btn" @click="triggerFolderInput">
                 <FolderAdd16Regular class="btn-icon" />
                 {{ t('knowledge.upload.uploadFolder') }}
-            </el-button>
+            </GdButton>
 
             <!-- 上传任务按钮(仅在有任务时显示) -->
-            <el-button v-if="uploadTasks.length > 0" @click="emit('show-upload-task')" class="upload-btn">
-                <Upload class="btn-icon" />
+            <GdButton v-if="uploadTasks.length > 0" @click="emit('show-upload-task')" class="upload-btn">
+                <ArrowUpload16Regular class="btn-icon" />
                 {{ t('knowledge.upload.uploadTask') }}
                 <el-badge :value="uploadTasks.length" type="warning" class="ml-1" />
-            </el-button>
+            </GdButton>
         </div>
 
         <!-- 新建文件夹对话框 -->
@@ -41,8 +41,8 @@
                 @keyup.enter="confirmCreateFolder"
             />
             <template #footer>
-                <el-button @click="showCreateFolderDialog = false">{{ t('common.cancel') }}</el-button>
-                <el-button type="primary" @click="confirmCreateFolder" :loading="createFolderLoading">{{ t('common.ok') }}</el-button>
+                <GdButton @click="showCreateFolderDialog = false">{{ t('common.cancel') }}</GdButton>
+                <GdButton type="primary" @click="confirmCreateFolder" :loading="createFolderLoading">{{ t('common.ok') }}</GdButton>
             </template>
         </GdDialog>
 
@@ -57,8 +57,8 @@
                     <div v-for="conflict in conflicts" :key="conflict.relativePath"
                         class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
                         <el-icon size="20" :class="conflict.type === 'directory' ? 'text-yellow-500' : 'text-blue-500'">
-                            <Folder v-if="conflict.type === 'directory'" />
-                            <Document v-else />
+                            <Folder20Regular v-if="conflict.type === 'directory'" />
+                            <Document20Regular v-else />
                         </el-icon>
                         <div class="flex-1 min-w-0">
                             <div class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
@@ -94,8 +94,8 @@
 
             <template #footer>
                 <div class="flex justify-end gap-3">
-                    <el-button @click="showConflictDialog = false">{{ t('common.cancel') }}</el-button>
-                    <el-button type="primary" @click="handleConflictConfirm">{{ t('common.ok') }}</el-button>
+                    <GdButton @click="showConflictDialog = false">{{ t('common.cancel') }}</GdButton>
+                    <GdButton type="primary" @click="handleConflictConfirm">{{ t('common.ok') }}</GdButton>
                 </div>
             </template>
         </GdDialog>
@@ -106,9 +106,10 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Upload, Folder, Document } from '@element-plus/icons-vue'
-import { DocumentAdd16Regular, FolderAdd16Regular } from '@vicons/fluent'
-import { ElMessage } from 'element-plus'
+import { DocumentAdd16Regular, FolderAdd16Regular, ArrowUpload16Regular, Folder20Regular, Document20Regular } from '@vicons/fluent'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { useFileUploadStore } from '@/stores/fileUpload'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import type { UploadTask } from '@/stores/fileUpload'

@@ -95,9 +95,9 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.browser.clearAllData') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.browser.clearAllDataDesc') }}</span>
             </div>
-            <el-button type="danger" plain :loading="clearing" @click="handleClearData">
+            <GdButton type="danger" plain :loading="clearing" @click="handleClearData">
               {{ t('settings.browser.clearData') }}
-            </el-button>
+            </GdButton>
           </div>
         </div>
       </div>
@@ -108,7 +108,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import { setLinkOpenMode, setAutoShowSidebar, type LinkOpenMode } from '@/utils/workspacePreview'

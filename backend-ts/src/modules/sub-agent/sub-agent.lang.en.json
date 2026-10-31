@@ -1,6 +1,6 @@
 {
   "subAgent.name": "Sub-Agent",
-  "subAgent.description": "Create and manage sub-agents to execute independent tasks",
+  "subAgent.description": "Create and manage sub-agents to execute independent tasks; mention an agent with @",
   "subAgent.toolkitName": "Sub-Agent",
   "subagent_spawn.executing": "Creating sub-agent",
   "subagent_spawn.completed": "Created sub-agent",

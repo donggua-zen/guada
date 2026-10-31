@@ -31,6 +31,7 @@ export class UniversalToolsPlugin extends PluginBase {
     version: "1.0.0",
     category: "system" as const,
     essential: true,
+    icon: "images/plugins/universal_tools.svg",
   };
 
   constructor(

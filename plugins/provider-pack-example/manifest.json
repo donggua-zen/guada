@@ -1,0 +1,14 @@
+{
+  "id": "provider-pack-example",
+  "name": "示例供应商包",
+  "version": "1.0.0",
+  "description": "声明式供应商包示例：通过 YAML 类型卡接入一个 OpenAI 兼容供应商，无后端代码",
+  "author": "dev",
+  "category": "user",
+  "providerApi": 1,
+  "icon": "assets/logo.svg",
+  "provides": {
+    "providerTypes": ["types/*.yaml"],
+    "assets": "assets"
+  }
+}

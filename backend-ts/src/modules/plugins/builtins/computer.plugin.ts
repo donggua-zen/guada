@@ -45,6 +45,7 @@ export class ComputerPlugin extends PluginBase {
     // Extended plugins ship disabled; desktop control stays opt-in until the
     // user enables it from the plugin list or the Computer Use settings page.
     category: "extended" as const,
+    icon: "images/plugins/computer.svg",
   };
 
   constructor(

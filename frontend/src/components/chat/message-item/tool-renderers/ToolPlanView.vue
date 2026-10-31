@@ -38,13 +38,13 @@
             <!-- 正文一出现就给面板入口：生成期间面板会直接读消息树里这份半截 args
                  （见 utils/sessionPlan 的 findPlanDraft），所以半成品也是可看的。
                  正文还没产出时不显示——没有可看的东西，放了就是"点了没反应"。 -->
-            <el-button v-if="content" type="primary" round size="large" class="plan-open-btn"
+            <GdButton v-if="content" type="primary" round size="large" class="plan-open-btn"
                 @click="openPanel">
                 {{ t('chat.plan.viewFullDoc') }}
                 <el-icon :size="16" class="plan-open-icon">
                     <ArrowRight16Regular />
                 </el-icon>
-            </el-button>
+            </GdButton>
         </div>
     </div>
 </template>
@@ -52,7 +52,9 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton, ElIcon } from 'element-plus'
+import { ElIcon } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { ArrowRight16Regular, Copy16Regular, Notepad20Regular } from '@vicons/fluent'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
@@ -230,13 +232,6 @@ watch(previewContent, () => {
     height: 40px;
     padding: 0 18px 0 24px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-/* 文字与右箭头同一行（el-button 把默认插槽包在单个 span 里） */
-.plan-open-btn :deep(span) {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
 }
 
 .plan-open-icon {

@@ -5,7 +5,7 @@
         <h2 class="text-lg font-bold">{{ t('settings.connection.title') }}</h2>
         <p class="text-sm text-gray-400 mt-0.5">{{ t('settings.connection.desc') }}</p>
       </div>
-      <el-button type="primary" @click="startNew">{{ t('settings.connection.newConnection') }}</el-button>
+      <GdButton type="primary" @click="startNew">{{ t('settings.connection.newConnection') }}</GdButton>
     </div>
 
     <!-- 连接列表 -->
@@ -26,8 +26,8 @@
             </div>
           </div>
           <div class="flex gap-1">
-            <el-button text size="small" @click="editConn(conn)">{{ t('common.edit') }}</el-button>
-            <el-button text size="small" type="danger" @click="deleteConn(conn.id)">{{ t('common.delete') }}</el-button>
+            <GdButton text size="small" @click="editConn(conn)">{{ t('common.edit') }}</GdButton>
+            <GdButton text size="small" type="danger" @click="deleteConn(conn.id)">{{ t('common.delete') }}</GdButton>
           </div>
         </div>
         <div class="text-xs text-gray-400 truncate">
@@ -145,9 +145,9 @@
                 <div class="flex gap-2">
                   <el-input v-model="editConfig.privateKeyPath" class="flex-1 min-w-0"
                     :placeholder="isElectron ? t('settings.connection.privateKeyPathPlaceholderElectron') : t('settings.connection.privateKeyPathPlaceholderWeb')" />
-                  <el-button v-if="isElectron" @click="selectPrivateKeyFile">
+                  <GdButton v-if="isElectron" @click="selectPrivateKeyFile">
                     {{ t('settings.connection.browse') }}
-                  </el-button>
+                  </GdButton>
                 </div>
                 <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
                   {{ t('settings.connection.privateKeyPathDesc') }}
@@ -168,9 +168,9 @@
                       <span class="text-xs text-gray-400 ml-2">{{ c.image }}</span>
                     </el-option>
                   </el-select>
-                  <el-button :loading="containersLoading" @click="loadContainers()">
+                  <GdButton :loading="containersLoading" @click="loadContainers()">
                     {{ t('settings.connection.refreshContainers') }}
-                  </el-button>
+                  </GdButton>
                 </div>
                 <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
                   {{ t('settings.connection.containerDesc') }}
@@ -200,9 +200,9 @@
                       <span class="text-xs text-gray-400 ml-2">{{ d.isDefault ? t('settings.connection.distroDefaultTag') + ' · ' : '' }}{{ d.state || '' }}</span>
                     </el-option>
                   </el-select>
-                  <el-button :loading="distrosLoading" @click="loadDistros()">
+                  <GdButton :loading="distrosLoading" @click="loadDistros()">
                     {{ t('settings.connection.refreshDistros') }}
-                  </el-button>
+                  </GdButton>
                 </div>
                 <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
                   {{ t('settings.connection.distroDesc') }}
@@ -271,7 +271,7 @@
             <!-- 路径栏 -->
             <div class="flex gap-2 shrink-0">
               <el-input v-model="browserPath" placeholder="/" @keyup.enter="navigateBrowser()" size="small" />
-              <el-button size="small" @click="navigateBrowser()" :loading="browserLoading">{{ t('settings.connection.goTo') }}</el-button>
+              <GdButton size="small" @click="navigateBrowser()" :loading="browserLoading">{{ t('settings.connection.goTo') }}</GdButton>
             </div>
             <!-- 目录不存在提示:空列表会让用户误以为目录是空的 -->
             <div v-if="!browserExists && !browserLoading" class="shrink-0 text-xs text-red-500">
@@ -331,28 +331,28 @@
 
           <!-- 底部按钮 -->
           <div class="flex justify-between items-center mt-auto pt-4 shrink-0">
-            <el-button v-if="currentStep > 0" text @click="currentStep--">{{ t('settings.connection.prev') }}</el-button>
+            <GdButton v-if="currentStep > 0" text @click="currentStep--">{{ t('settings.connection.prev') }}</GdButton>
             <span v-else></span>
             <div class="flex gap-2">
-              <el-button v-if="currentStep === 0" type="primary" @click="goToTest"
+              <GdButton v-if="currentStep === 0" type="primary" @click="goToTest"
                 :disabled="!canProceedFromConfig">
                 {{ t('settings.connection.next') }}
-              </el-button>
-              <el-button v-if="currentStep === 1 && !testing" @click="testConn" :disabled="!canProceedFromConfig">
+              </GdButton>
+              <GdButton v-if="currentStep === 1 && !testing" @click="testConn" :disabled="!canProceedFromConfig">
                 {{ t('settings.connection.retest') }}
-              </el-button>
-              <el-button v-if="currentStep === 1 && testResult?.success" type="primary" @click="goToBrowse">
+              </GdButton>
+              <GdButton v-if="currentStep === 1 && testResult?.success" type="primary" @click="goToBrowse">
                 {{ t('settings.connection.next') }}
-              </el-button>
-              <el-button v-if="currentStep === 2" type="primary" @click="goToDeploy" :disabled="!browserExists">
+              </GdButton>
+              <GdButton v-if="currentStep === 2" type="primary" @click="goToDeploy" :disabled="!browserExists">
                 {{ t('settings.connection.next') }}
-              </el-button>
-              <el-button v-if="currentStep === 3 && !deploying" @click="deployConn" :disabled="!browserExists">
+              </GdButton>
+              <GdButton v-if="currentStep === 3 && !deploying" @click="deployConn" :disabled="!browserExists">
                 {{ t('settings.connection.deployRetry') }}
-              </el-button>
-              <el-button v-if="currentStep === 3" type="primary" @click="saveConn" :disabled="!deployResult?.success" :loading="saving">
+              </GdButton>
+              <GdButton v-if="currentStep === 3" type="primary" @click="saveConn" :disabled="!deployResult?.success" :loading="saving">
                 {{ t('settings.connection.save') }}
-              </el-button>
+              </GdButton>
             </div>
           </div>
         </div>
@@ -364,7 +364,9 @@
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { useI18n } from 'vue-i18n'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { apiService } from '@/services/ApiService'

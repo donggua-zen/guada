@@ -7,3 +7,9 @@ export interface PluginRowMenuItem {
     /** 原生 title 提示，用于解释禁用原因（如共享目录技能不可卸载） */
     title?: string
 }
+
+/** 插件页二级视图切换（已安装 / 市场）的一项 */
+export interface PluginViewSwitchItem {
+    value: string
+    label: string
+}

@@ -33,9 +33,9 @@
             </div>
             <div class="flex gap-2 shrink-0 max-w-md w-full">
               <el-input v-model="settingsForm.workspaceBaseDir" :placeholder="t('settings.general.workspaceBaseDirPlaceholder')" clearable />
-              <el-button @click="selectFolder()" type="primary" plain>
+              <GdButton @click="selectFolder()" type="primary" plain>
                 {{ t('settings.general.selectFolder') }}
-              </el-button>
+              </GdButton>
             </div>
           </div>
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-t border-gray-100 dark:border-[#2e3035]">
@@ -64,9 +64,9 @@
             </div>
             <div class="flex gap-2 shrink-0 max-w-md w-full">
               <el-input v-model="settingsForm.kbStorageRoot" :placeholder="t('settings.general.kbStorageRootPlaceholder')" clearable />
-              <el-button @click="selectFolder('kbStorageRoot')" type="primary" plain>
+              <GdButton @click="selectFolder('kbStorageRoot')" type="primary" plain>
                 {{ t('settings.general.selectFolder') }}
-              </el-button>
+              </GdButton>
             </div>
           </div>
           <div class="px-4 pb-3.5">
@@ -138,7 +138,9 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { useDebounceFn } from '@vueuse/core'
 import type { SystemGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'

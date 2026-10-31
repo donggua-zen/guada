@@ -56,6 +56,14 @@ import { getRetryAfterFromError } from "../utils/retry.util";
 @Injectable()
 export class AnthropicAdapter implements IProtocolAdapter {
   readonly protocol = "anthropic";
+  readonly displayName = "Anthropic";
+  readonly capabilities = {
+    streaming: true,
+    tools: true,
+    vision: true,
+    reasoning: true,
+    promptCaching: true,
+  };
   private readonly logger = new Logger(AnthropicAdapter.name);
 
   async testConnection(config: ProviderConfig): Promise<ConnectionTestResult> {

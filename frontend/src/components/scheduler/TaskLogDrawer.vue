@@ -6,12 +6,12 @@
         <div class="text-sm text-gray-500 dark:text-[#8b8d95]">
           {{ t('scheduler.log.count', { count: logs.length }) }}
         </div>
-        <el-button size="small" @click="handleRefresh" :loading="loading">
+        <GdButton size="small" @click="handleRefresh" :loading="loading">
           <template #icon>
-            <RefreshOutlined />
+            <ArrowClockwise16Regular />
           </template>
           {{ t('scheduler.log.refresh') }}
-        </el-button>
+        </GdButton>
       </div>
 
       <!-- 日志列表 -->
@@ -50,7 +50,7 @@
         <!-- 空状态 -->
         <div v-else class="py-12 text-center text-gray-400">
           <el-icon size="48" class="mb-3 opacity-50">
-            <InboxOutlined />
+            <MailInbox24Regular />
           </el-icon>
           <div>{{ t('scheduler.log.empty') }}</div>
           <div class="text-sm mt-2">{{ t('scheduler.log.emptyHint') }}</div>
@@ -63,8 +63,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElDrawer, ElTag, ElButton, ElIcon } from 'element-plus'
-import { RefreshOutlined, InboxOutlined } from '@vicons/material'
+import { ElDrawer, ElTag, ElIcon } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
+import { ArrowClockwise16Regular, MailInbox24Regular } from '@vicons/fluent'
 import type { ScheduledTask, ScheduledTaskLog } from '../../types/scheduler'
 
 interface Props {
@@ -80,7 +82,7 @@ const emit = defineEmits<{
   'refresh': []
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const drawerVisible = computed({
   get: () => props.modelValue,
@@ -136,14 +138,15 @@ function getStatusLabel(status: string): string {
 function formatDateTime(dateStr: string): string {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
+  if (Number.isNaN(date.getTime())) return dateStr
+  return new Intl.DateTimeFormat(locale.value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit'
-  })
+  }).format(date)
 }
 
 /**

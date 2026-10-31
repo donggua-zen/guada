@@ -1,5 +1,11 @@
 # 多模型管理
 
+> ⚠️ 本文档描述的是 2026-09「供应商即数据」重构之前的旧架构（ProviderHub / LLMProvider 子类 / OllamaAdapter 等均已退役）。
+> 现行权威说明：
+> - `backend-ts/bundled-providers/README.md`（类型卡 YAML schema）
+> - `docs/PROJECT_ARCHITECTURE.md` §3.3（llm-core 架构）
+> - `docs/provider-packs.md`（供应商包/插件化接入）
+
 统一 LLM 适配层，灵活接入多种模型供应商，支持多层级模型配置与动态切换。
 
 ## 架构

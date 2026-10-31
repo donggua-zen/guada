@@ -31,7 +31,7 @@
           <div v-for="kb in referencedKbs" :key="kb.id">
             <div
               class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
-              <MenuBookOutlined class="w-4 h-4" />
+              <BookOpen16Regular class="w-4 h-4" />
               {{ kb.name }}
             </div>
           </div>
@@ -200,8 +200,7 @@
 import { computed, ref, watch, nextTick, inject, type Component } from "vue";
 import { ElAlert, ElImageViewer } from "element-plus";
 import { useI18n } from "vue-i18n";
-import { MenuBookOutlined } from "@vicons/material";
-import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular } from "@vicons/fluent";
+import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, BookOpen16Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';

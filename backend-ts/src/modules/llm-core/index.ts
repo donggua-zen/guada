@@ -10,6 +10,17 @@ export * from './types/llm.types';
 export { AdapterRegistry } from './adapter-registry.service';
 export { BundledCatalogService } from './bundled-catalog.service';
 export { LLMService } from './llm.service';
+export { ProviderContributionCoordinator } from './provider-contribution.coordinator';
+export {
+  UnsupportedProtocolError,
+  ProtocolDisabledError,
+} from './provider-errors';
+export { PROVIDER_API_VERSION } from './types/provider-plugin.types';
+export type {
+  ProtocolDescriptor,
+  ProviderTypeCard,
+  ProviderPackManifestFields,
+} from './types/provider-plugin.types';
 
 // 模块
 export { LlmCoreModule } from './providers.module';

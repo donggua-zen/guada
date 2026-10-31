@@ -6,6 +6,7 @@ import { PluginApi } from "../plugins/api/plugin-api";
 import { PluginContext, RolePluginConfig } from "../plugins/types/plugin.types";
 import { isToolkitAllowedByRoleConfig } from "../plugins/utils/role-toolkit-filter";
 import { AgentFileStore } from "../agents/agent-file.store";
+import { CommandContext } from "../commands/interfaces/command-provider.interface";
 import langZh from "./sub-agent.lang.zh.json";
 import langEn from "./sub-agent.lang.en.json";
 
@@ -33,6 +34,7 @@ export class SubAgentPlugin extends PluginBase {
     description: "%subAgent.description%",
     version: "1.0.0",
     category: "system" as const,
+    icon: "images/plugins/sub_agent.svg",
   };
 
   constructor(
@@ -271,6 +273,72 @@ Foreground (default) blocks until done and returns the result. Background mode r
         }
 
         return sections.join("\n");
+      },
+    });
+
+    // ── @ 唤起智能体 ──
+    //
+    // 原独立插件 `agent` 的全部产出，合并到本插件（两者本就是同一能力的两半：
+    // @ 选中的智能体最终就是 subagent_spawn 的 agentId）。
+    //
+    // 提供者 id 必须保持 "agent"：前端把选中项序列化为 `[@agent:<id> ...]`，
+    // TagParserPipeline 按标签 type 反查解析器，改 id 会让历史消息全部失效。
+    api.registerCommandProvider({
+      id: "agent",
+      trigger: "mention",
+      fetchItems: async (ctx?: CommandContext) => {
+        const items = (await this.agentStore.listAgents()).slice(0, 200);
+
+        // 排除当前会话自身的智能体
+        const candidates = ctx?.agentId
+          ? items.filter((c: any) => c.id !== ctx.agentId)
+          : items;
+
+        // 无智能体上下文时，返回全部智能体（向后兼容）
+        if (!ctx?.agentId) {
+          return candidates.map((c: any) => ({
+            name: c.id,
+            description: c.name || c.id,
+            label: c.name || c.id,
+          }));
+        }
+
+        // 从智能体 settings 读取 agents 配置进行过滤
+        const agent = await this.agentStore.findById(ctx.agentId);
+        const agentCfg = (agent?.settings as any)?.agents;
+
+        let filtered: any[];
+
+        if (agentCfg === false) {
+          filtered = [];
+        } else if (typeof agentCfg === "object" && agentCfg !== null) {
+          // 固定白名单：只保留显式 true 的智能体
+          filtered = candidates.filter((c: any) => agentCfg[c.id] === true);
+        } else {
+          // 无 agents 配置：返回全部智能体
+          filtered = candidates;
+        }
+
+        return filtered.map((c: any) => ({
+          name: c.id,
+          description: c.name || c.id,
+          label: c.name || c.id,
+        }));
+      },
+      parse: async (attrs) => {
+        const agentId = attrs.name || "";
+        if (!agentId) return undefined;
+
+        const agent = await this.agentStore.findById(agentId);
+        if (!agent) return undefined;
+
+        const displayName = agent.name || agentId;
+        return {
+          replacement: `\`@subagent: ${displayName} (id:${agentId})\``,
+          appendix: agent.description
+            ? `<available_agents>name:${displayName}\nid:${agentId}\n${agent.description ? `description:${agent.description}` : ""}</available_agents>`
+            : undefined,
+        };
       },
     });
   }

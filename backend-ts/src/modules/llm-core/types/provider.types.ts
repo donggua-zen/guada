@@ -20,12 +20,23 @@ export interface ModelConfig {
 
 /**
  * 供应商配置
+ *
+ * 除 apiUrl/apiKey 外的字段均为可选：内置适配器只消费 wire 必需项，
+ * 插件适配器可按需读取 id/type/thinking/compat（例如自定义认证、思考拼法）。
  */
 export interface ProviderConfig {
+  /** 实例 id（模型 id 前缀；连接测试场景可能缺省） */
+  id?: string;
+  /** 供应商类型键（custom / 内置类型 / 插件类型） */
+  type?: string;
   apiUrl: string;
   apiKey: string;
   protocol?: string;
   headers?: Record<string, string>;
+  /** 实例级 thinking 声明（档位菜单；插件适配器可选消费） */
+  thinking?: import("../thinking/thinking-vocabulary").ProviderThinkingConfig;
+  /** 实例级 wire 兼容开关（插件适配器可选消费） */
+  compat?: import("../thinking/thinking-vocabulary").ThinkingCompatConfig;
 }
 
 /**

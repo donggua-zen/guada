@@ -78,14 +78,14 @@
                 </div>
                 <!-- 操作按钮 -->
                 <div class="flex items-center gap-1 shrink-0" @click.stop>
-                    <el-button size="small" link @click="handleRetry">
-                        <RefreshRight class="w-3 h-3 mr-1" />
+                    <GdButton size="small" link @click="handleRetry">
+                        <ArrowClockwise12Regular class="w-3 h-3 mr-1" />
                         {{ t('knowledge.file.retry') }}
-                    </el-button>
-                    <el-button size="small" type="danger" link @click="handleDelete">
-                        <Delete class="w-3 h-3 mr-1" />
+                    </GdButton>
+                    <GdButton size="small" type="danger" link @click="handleDelete">
+                        <Delete16Regular class="w-3 h-3 mr-1" />
                         {{ t('common.delete') }}
-                    </el-button>
+                    </GdButton>
                 </div>
             </div>
         </div>
@@ -93,9 +93,10 @@
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RefreshRight, Delete } from '@element-plus/icons-vue'
+import { ArrowClockwise12Regular, Delete16Regular } from '@vicons/fluent'
 import { KBFile } from '@/stores/knowledgeBase'
 import { getFileIconByExt } from '@/composables/useFileIcon'
 

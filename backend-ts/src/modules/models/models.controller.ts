@@ -74,6 +74,13 @@ export class ModelsController {
     return this.modelService.getProviderTemplates();
   }
 
+  /** 可用 wire 协议（内置 + 插件贡献；前端协议下拉/标签的数据源） */
+  @Public()
+  @Get("providers/protocols")
+  async getProtocols() {
+    return this.modelService.getProtocols();
+  }
+
   /** 按 apiUrl 推荐思考格式（前端提示用；用户确认后才写入 compat） */
   @Get("models/thinking-format-suggestion")
   async thinkingFormatSuggestion(@Query("apiUrl") apiUrl?: string) {

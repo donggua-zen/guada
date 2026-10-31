@@ -23,6 +23,26 @@ export interface ThinkingCompatConfig {
     includeEncryptedReasoning?: boolean
 }
 
+/** 协议能力标记（与后端 ProtocolCapabilities 同构） */
+export interface ProviderProtocolCapabilities {
+    streaming?: boolean
+    tools?: boolean
+    vision?: boolean
+    reasoning?: boolean
+    embeddings?: boolean
+    promptCaching?: boolean
+    modelDiscovery?: boolean
+}
+
+/** 可用 wire 协议（GET /providers/protocols） */
+export interface ProviderProtocol {
+    protocol: string
+    displayName: string
+    capabilities: ProviderProtocolCapabilities
+    source: 'builtin' | 'plugin'
+    pluginId?: string
+}
+
 /**
  * 模型对象
  */
@@ -96,6 +116,13 @@ export interface ModelProvider {
     attributes?: { headers?: Record<string, string> }
     /** 实例级 wire 兼容开关覆盖（缺省 = 继承类型卡） */
     compat?: ThinkingCompatConfig
+    /** 类型来源是否仍可用（插件包禁用/卸载后为 false；custom 恒为 true） */
+    typeAvailable?: boolean
+    typeSource?: 'builtin' | 'plugin'
+    /** 贡献该类型的插件 id（typeSource=plugin 时存在） */
+    typePluginId?: string
+    /** 协议适配器是否可用（插件协议被禁用/卸载后为 false） */
+    protocolAvailable?: boolean
     createdAt?: string
     updatedAt?: string
     models?: Model[]
@@ -113,6 +140,16 @@ export interface ProviderTemplate {
     description?: string
     /** 类型卡附加属性（当前仅 headers） */
     attributes?: { headers?: Record<string, string> }
+    /** 类型卡来源：builtin=随应用分发；plugin=供应商包贡献 */
+    source?: 'builtin' | 'plugin'
+    /** 贡献该模板的插件 id */
+    pluginId?: string
+    /** 协议展示名（缺省用 protocol） */
+    protocolDisplayName?: string
+    /** 协议能力标记 */
+    capabilities?: ProviderProtocolCapabilities
+    /** 类型卡引用的协议当前是否可用 */
+    protocolAvailable?: boolean
 }
 
 /**
@@ -155,6 +192,21 @@ export interface McpTool {
 }
 
 /**
+ * MCP 服务器配置的市场来源（仅「从市场导入」的才有）
+ *
+ * 判断「这条市场条目是否已安装」只能靠 itemId —— 用户随时能改服务器名，
+ * 名字一改就永久失准。
+ */
+export interface McpServerOrigin {
+    market: string
+    itemId: string
+    version: number
+    importedAt: string
+    needsConfiguration?: boolean
+    configurationFields?: string[]
+}
+
+/**
  * MCP 服务器
  */
 export interface McpServer {
@@ -173,6 +225,8 @@ export interface McpServer {
     tools: McpTool[]
     isActive: boolean
     enabled?: boolean
+    /** 市场来源追踪；手工创建的服务器为 null/undefined */
+    origin?: McpServerOrigin | null
     createdAt?: string
     updatedAt?: string
 }

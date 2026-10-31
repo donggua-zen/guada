@@ -5,11 +5,18 @@ export default {
     tabLocalTools: '插件',
     tabSkills: 'Skills',
     tabMcp: 'MCP 服务器',
+    // 二级视图条（Skills / MCP 两个 tab 共用）
+    viewInstalled: '已安装',
+    viewMarket: '市场',
+    sourceFilterAll: '全部',
+    info: '说明',
+    marketOpenWeb: '在网页版市场打开',
+    goMarket: '去市场看看',
   },
 
   // ── MCP 服务器 (MCPServers.vue) ──
   mcp: {
-    title: 'MCP 服务器列表',
+    viewAdded: '已添加',
     subtitle: '配置和管理 Model Context Protocol 服务器。',
     importConfig: '导入配置',
     addServer: '添加服务器',
@@ -60,6 +67,7 @@ export default {
     toolsNewHint: '新增后才能查看工具',
     toolsNewHintSub: '请先填写基本信息并保存',
     toolsCount: '已获取到 {count} 个工具',
+    toolsTag: '{count} 工具',
     refreshTools: '刷新工具',
     toolParams: '参数：',
     noParams: '无参数',
@@ -100,9 +108,40 @@ export default {
     unnamedServer: '未命名服务器',
   },
 
+  // ── MCP 市场 (McpMarket.vue) ──
+  mcpMarket: {
+    refresh: '刷新',
+    searchPlaceholder: '搜索名称、描述或标签',
+    sourceAll: '全部来源',
+    loadMore: '加载更多 {count} 条',
+    showing: '已显示 {shown} / {total}',
+    empty: '没有匹配的市场条目',
+    noDescription: '暂无描述',
+    installed: '已添加',
+    addBtn: '添加',
+    updateBtn: '更新配置',
+    loadFailed: '加载 MCP 市场失败',
+    partialUnavailable: '部分来源暂时不可用',
+    addTitle: '添加 MCP 服务器',
+    resolving: '正在解析该条目的配置…',
+    resolveFailed: '解析配置失败',
+    importFailed: '导入失败',
+    importWarning:
+      '市场只导入启动配置，不会安装命令或运行时。启用或测试时会在本机执行该命令，请确认后再继续。',
+    needsConfig: '需补全',
+    needsConfigHint: '导入后请补全这些字段再启用：{fields}',
+    fieldCommand: '命令',
+    fieldArgs: '参数',
+    fieldEnv: '环境变量',
+    fieldUrl: '地址',
+    fieldHeaders: '请求头',
+    confirmImport: '确认导入',
+    importSuccess: '已导入 {count} 个服务器（默认禁用，请确认后手动启用）',
+    viewDetail: '查看详情',
+  },
+
   // ── Skills (Skills.vue) ──
   skills: {
-    title: 'Skills',
     subtitle: '系统自动发现的本地技能模块。手动添加或修改技能后点击"刷新"扫描目录变更。',
     install: '安装',
     scan: '扫描',
@@ -147,14 +186,10 @@ export default {
     installBtn: '安装',
     installSelectWarning: '请选择要安装的 ZIP 文件',
     installFailed: '安装失败',
-    // 市场推荐
-    marketTitle: '技能市场',
+    // 市场推荐（标题行已并入页面视图条，这里只留市场条目自身要用的文案）
     marketRefresh: '换一批',
-    marketLink: '技能市场',
     marketError: '加载推荐技能失败',
     marketFallbackHint: '暂无英文',
-    marketFooterPrefix: '访问',
-    marketFooterSuffix: '获取更多推荐技能',
     marketSearchPlaceholder: '搜索技能',
     marketFilterAll: '全部',
     marketEmptyResult: '未找到匹配的技能',
@@ -162,7 +197,7 @@ export default {
     marketUpdatable: '可更新',
     marketInstallBtn: '安装',
     marketUpgradeBtn: '升级',
-    marketReinstallBtn: '重新安装',
+    marketReinstallBtn: '重装',
     marketInstalling: '安装中...',
     marketNoZip: '该技能暂无 ZIP 安装包',
     marketNoGit: '该技能暂无源码链接',
@@ -193,6 +228,8 @@ export default {
     noDescription: '暂无描述',
     sourceDev: 'DEV',
     sourceUser: '外部',
+    sourceProvider: '供应商包',
+    providerPackHint: '提示：供应商包安装后，可在「设置 → 模型供应商」中添加使用。',
     uninstall: '卸载',
     enable: '启用',
     disable: '禁用',
@@ -200,6 +237,7 @@ export default {
     emptyHint: '点击右上角「安装插件」添加',
     // 分区标题
     groups: {
+      system: '系统插件',
       core: '核心插件',
       extended: '扩展插件',
       user: '用户安装',

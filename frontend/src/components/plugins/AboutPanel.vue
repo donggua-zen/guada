@@ -12,12 +12,12 @@
             <div class="w-full bg-(--gd-color-surface-elevated) rounded-lg p-6 border border-(--gd-color-border)">
                 <div class="flex flex-col items-center space-y-4">
                     <div v-if="updateStore.status === 'checking'" class="flex items-center space-x-2 text-blue-500">
-                        <el-icon class="is-loading"><Loading /></el-icon>
+                        <el-icon><ArrowSync16Regular class="animate-spin" /></el-icon>
                         <span>{{ t('plugins.about.checking') }}</span>
                     </div>
 
                     <div v-else-if="updateStore.status === 'not-available'" class="text-green-500 flex items-center space-x-2">
-                        <el-icon><CircleCheck /></el-icon>
+                        <el-icon><CheckmarkCircle16Regular /></el-icon>
                         <span>{{ t('plugins.about.upToDate') }}</span>
                     </div>
 
@@ -46,27 +46,27 @@
 
                         <div class="flex gap-2">
                             <template v-if="updateStore.isDownloading">
-                                <el-button class="flex-1" @click="updateStore.cancelDownload()">
+                                <GdButton class="flex-1" @click="updateStore.cancelDownload()">
                                     {{ t('ui.update.cancelDownload') }}
-                                </el-button>
+                                </GdButton>
                             </template>
                             <template v-else-if="updateStore.isDownloaded">
-                                <el-button type="primary" class="flex-1" @click="updateStore.installAndRestart()">
+                                <GdButton type="primary" class="flex-1" @click="updateStore.installAndRestart()">
                                     {{ t('ui.update.installAndRestart') }}
-                                </el-button>
+                                </GdButton>
                             </template>
                             <template v-else-if="updateStore.status === 'installing'">
-                                <el-button type="primary" class="flex-1" disabled>
+                                <GdButton type="primary" class="flex-1" disabled>
                                     {{ t('ui.update.installing') }}
-                                </el-button>
+                                </GdButton>
                             </template>
                             <template v-else>
-                                <el-button type="primary" class="flex-1" @click="handleDownload">
+                                <GdButton type="primary" class="flex-1" @click="handleDownload">
                                     {{ t('plugins.about.downloadUpdate') }}
-                                </el-button>
-                                <el-button class="flex-1" @click="updateStore.openChangelog()">
+                                </GdButton>
+                                <GdButton class="flex-1" @click="updateStore.openChangelog()">
                                     {{ t('plugins.about.viewChangelog') }}
-                                </el-button>
+                                </GdButton>
                             </template>
                         </div>
                     </div>
@@ -75,9 +75,9 @@
                         {{ errorText }}
                     </div>
 
-                    <el-button v-if="canCheck" @click="updateStore.checkForUpdates()" :disabled="updateStore.isChecking" class="w-full">
+                    <GdButton v-if="canCheck" @click="updateStore.checkForUpdates()" :disabled="updateStore.isChecking" class="w-full">
                         {{ t('plugins.about.checkUpdate') }}
-                    </el-button>
+                    </GdButton>
                 </div>
             </div>
 
@@ -95,7 +95,7 @@
                                 <div class="text-xs text-(--gd-color-text-secondary)">{{ repo.url }}</div>
                             </div>
                         </div>
-                        <el-icon class="text-(--gd-color-text-secondary)"><Link /></el-icon>
+                        <el-icon class="text-(--gd-color-text-secondary)"><Link16Regular /></el-icon>
                     </div>
                 </div>
             </div>
@@ -109,8 +109,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton, ElIcon, ElProgress } from 'element-plus'
-import { Loading, CircleCheck, Link } from '@element-plus/icons-vue'
+import { ElIcon, ElProgress } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
+import { ArrowSync16Regular, CheckmarkCircle16Regular, Link16Regular } from '@vicons/fluent'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useUpdateStore } from '@/stores/update'

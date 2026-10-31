@@ -84,7 +84,8 @@ const currentTabValue = ref(getDefaultTabPath())
 // Tab 切换处理
 const handleTabChange = (tabName: string | number) => {
     const tabPath = typeof tabName === 'string' ? tabName : String(tabName)
-    router.replace({ name: 'Plugins', params: { tab: tabPath } })
+    // 显式丢掉 view：二级视图属于当前 tab，不带过去才不会一进来就停在市场
+    router.replace({ name: 'Plugins', params: { tab: tabPath }, query: { ...route.query, view: undefined } })
 }
 
 // 监听路由参数变化

@@ -43,6 +43,7 @@ export class ImageRecognitionPlugin extends PluginBase {
     description: "%imageRecognition.description%",
     version: "1.1.0",
     category: "core" as const,
+    icon: "images/plugins/image_recognition.svg",
   };
 
   constructor(

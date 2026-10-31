@@ -52,6 +52,7 @@ export class TodoPlugin extends PluginBase {
     description: "%todo.description%",
     version: "3.0.0",
     category: "core" as const,
+    icon: "images/plugins/todo.svg",
   };
 
   constructor(private readonly eventBus: EventBusService) {

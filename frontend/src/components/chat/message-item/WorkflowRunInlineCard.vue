@@ -28,7 +28,7 @@
       <!-- 日志（编排脚本 log() 播报）：默认收起，运行中是想看"在做什么"时的第二视图 -->
       <button v-if="logs.length" class="wf-card-fold" @click="logsExpanded = !logsExpanded">
         <el-icon :size="10" class="wf-card-fold-chevron" :class="{ 'is-open': logsExpanded }">
-          <ArrowDown />
+          <ChevronDown12Regular />
         </el-icon>
         <span>{{ t('chat.workspace.workflowLogs', { count: logs.length }) }}</span>
       </button>
@@ -45,7 +45,7 @@
       <template v-else-if="resultText">
         <button class="wf-card-fold" @click="resultExpanded = !resultExpanded">
           <el-icon :size="10" class="wf-card-fold-chevron" :class="{ 'is-open': resultExpanded }">
-            <ArrowDown />
+            <ChevronDown12Regular />
           </el-icon>
           <span>{{ t('chat.workspace.workflowResult') }}</span>
         </button>
@@ -59,8 +59,7 @@
 import { computed, inject, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElIcon } from "element-plus";
-import { ArrowDown } from "@element-plus/icons-vue";
-import { Flowchart20Regular } from "@vicons/fluent";
+import { ChevronDown12Regular, Flowchart20Regular } from "@vicons/fluent";
 import { parse as partialParse } from "partial-json";
 import GdTooltip from "@/components/ui/GdTooltip.vue";
 import WorkflowStatusDot from "@/components/chat/workflow/WorkflowStatusDot.vue";

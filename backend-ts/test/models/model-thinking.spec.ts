@@ -250,8 +250,8 @@ describe('ModelService：thinking 载荷与白名单 patch', () => {
     const store = new StubStore();
     const service = new ModelService(
       store as any,
-      { hasAdapter: () => true } as any,
-      { getType: () => undefined, hasType: () => false } as any,
+      { hasAdapter: () => true, listAllProtocols: () => [] } as any,
+      { getType: () => undefined, hasType: () => false, getTypeSource: () => undefined } as any,
     );
     return { store, service };
   };

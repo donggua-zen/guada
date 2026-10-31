@@ -24,7 +24,7 @@
     <div class="h-80 overflow-y-auto py-1">
       <!-- 加载中 -->
       <div v-if="loading" class="flex flex-col items-center justify-center h-full text-gray-400">
-        <el-icon class="animate-spin text-2xl mb-2"><Loading /></el-icon>
+        <el-icon class="animate-spin text-2xl mb-2"><ArrowSync16Regular /></el-icon>
         <span class="text-xs">{{ t('ui.directoryBrowser.loading') }}</span>
       </div>
 
@@ -81,8 +81,7 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElIcon } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
-import { ArrowUp16Regular, DismissCircle16Regular, Document16Regular, Folder16Regular, FolderProhibited16Regular } from '@vicons/fluent'
+import { ArrowUp16Regular, DismissCircle16Regular, Document16Regular, Folder16Regular, FolderProhibited16Regular, ArrowSync16Regular } from '@vicons/fluent'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import GdButton from '@/components/ui/GdButton.vue'
 import { apiService } from '@/services/ApiService'

@@ -28,8 +28,8 @@
       <div v-if="compressing" class="event-card__divider">
         <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
         <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
-          <el-icon size="14" class="is-loading">
-            <Loading />
+          <el-icon size="14">
+            <ArrowSync16Regular class="animate-spin" />
           </el-icon>
           <span class="event-card__compaction-text">{{ t('chat.turn.contextCompacting') }}</span>
         </span>
@@ -102,7 +102,7 @@
         <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
         <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
           <el-icon size="14">
-            <Warning />
+            <Warning16Regular />
           </el-icon>
           <span class="event-card__compaction-text">{{ t('chat.turn.contextWindowNoticeTitle') }}</span>
         </span>
@@ -124,13 +124,14 @@
 <script setup lang="ts">
 import { ref, computed, inject } from "vue";
 import { useI18n } from "vue-i18n";
-import { Loading, Warning } from "@element-plus/icons-vue";
 import {
   KeyCommand16Regular,
   ArrowUp16Regular,
   Archive20Regular,
   ChevronDown12Regular,
   PanelRightExpand20Filled,
+  ArrowSync16Regular,
+  Warning16Regular,
 } from "@vicons/fluent";
 import GdTooltip from "@/components/ui/GdTooltip.vue";
 import { stripSystemReminder } from "@/utils/messageUtils";

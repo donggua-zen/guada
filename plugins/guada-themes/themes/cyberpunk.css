@@ -433,9 +433,9 @@ html.dark[data-theme="cyberpunk"] .markdown-text .custom-code-block pre.hljs {
 }
 
 /* ============================================================
-   Element Plus 组件：切角 + 去圆角 + 辉光
+   按钮：切角 + 去圆角 + 辉光（GdButton）
    ============================================================ */
-html.dark[data-theme="cyberpunk"] .el-button {
+html.dark[data-theme="cyberpunk"] .gd-button {
   border-radius: 0;
   clip-path: var(--cp-chamfer-sm);
   font-family: var(--cp-mono);
@@ -443,7 +443,7 @@ html.dark[data-theme="cyberpunk"] .el-button {
   letter-spacing: 0.04em;
   font-weight: 600;
 }
-html.dark[data-theme="cyberpunk"] .el-button--primary:hover {
+html.dark[data-theme="cyberpunk"] .gd-button[data-variant="primary"]:hover {
   filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.55));
 }
 html.dark[data-theme="cyberpunk"] .l-dialog {

@@ -2,27 +2,27 @@
   <GdDialog v-model="visible" :title="t('bot.card.qrTitle')" size="xs" align-center>
     <div class="flex flex-col items-center py-4">
       <div v-if="loading" class="py-8">
-        <el-icon class="is-loading" :size="32">
-          <Loading />
+        <el-icon :size="32">
+          <ArrowSync16Regular class="animate-spin" />
         </el-icon>
       </div>
 
       <!-- 已登录 -->
       <div v-else-if="status === 'logged_in'" class="flex flex-col items-center py-4">
         <el-icon :size="48" class="text-green-500 mb-3">
-          <CircleCheck />
+          <CheckmarkCircle48Regular />
         </el-icon>
         <p class="text-sm text-gray-600">{{ message }}</p>
-        <el-button type="danger" size="small" class="mt-4" @click="handleLogout">
-          <el-icon><SwitchButton /></el-icon>
+        <GdButton type="danger" size="small" class="mt-4" @click="handleLogout">
+          <el-icon><Power20Regular /></el-icon>
           <span class="ml-1">{{ t('bot.card.logout') }}</span>
-        </el-button>
+        </GdButton>
       </div>
 
       <!-- 二维码生成中 -->
       <div v-else-if="status === 'pending'" class="flex flex-col items-center py-4">
         <el-icon :size="32" class="text-orange-400 mb-3">
-          <Timer />
+          <Timer32Regular />
         </el-icon>
         <p class="text-sm text-gray-600">{{ message }}</p>
       </div>
@@ -33,10 +33,10 @@
         <p class="text-xs text-gray-400 mt-3 text-center">
           {{ t('bot.card.qrReadyHint') }}
         </p>
-        <el-button size="small" class="mt-3" @click="refresh">
-          <el-icon><Refresh /></el-icon>
+        <GdButton size="small" class="mt-3" @click="refresh">
+          <el-icon><ArrowClockwise16Regular /></el-icon>
           <span class="ml-1">{{ t('bot.card.refreshQr') }}</span>
-        </el-button>
+        </GdButton>
       </div>
 
       <!-- 需要数字配对码 -->
@@ -54,7 +54,7 @@
           :placeholder="t('bot.card.qrVerifyCodePlaceholder')"
           @keyup.enter="submitVerifyCode"
         />
-        <el-button
+        <GdButton
           type="primary"
           size="small"
           class="mt-3"
@@ -62,7 +62,7 @@
           @click="submitVerifyCode"
         >
           {{ t('bot.card.qrVerifyCodeSubmit') }}
-        </el-button>
+        </GdButton>
       </div>
 
       <!-- 不可用 -->
@@ -75,8 +75,10 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { CircleCheck, Timer, SwitchButton, Loading, Refresh } from '@element-plus/icons-vue'
-import { ElButton, ElIcon, ElInput } from 'element-plus'
+import { CheckmarkCircle48Regular, Timer32Regular, Power20Regular, ArrowSync16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
+import { ElIcon, ElInput } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { useBotQrCode } from '@/composables/useBotQrCode'
 

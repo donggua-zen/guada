@@ -6,9 +6,9 @@
       <div class="flex gap-2">
         <el-input v-model="newGroupName" :placeholder="t('session.group.newPlaceholder')" maxlength="20" show-word-limit
           @keyup.enter="handleCreateGroup" />
-        <el-button type="primary" @click="handleCreateGroup" :disabled="!newGroupName.trim()">
+        <GdButton type="primary" @click="handleCreateGroup" :disabled="!newGroupName.trim()">
           {{ t('session.group.create') }}
-        </el-button>
+        </GdButton>
       </div>
 
       <!-- 分组列表（可拖拽排序） -->
@@ -34,8 +34,8 @@
                 <template v-if="editingId === element.id">
                   <el-input v-model="editingName" size="small" maxlength="20" class="flex-1"
                     @keyup.enter="saveEdit" @keyup.esc="cancelEdit" />
-                  <el-button type="primary" size="small" @click="saveEdit">{{ t('session.group.save') }}</el-button>
-                  <el-button size="small" @click="cancelEdit">{{ t('session.group.cancel') }}</el-button>
+                  <GdButton type="primary" size="small" @click="saveEdit">{{ t('session.group.save') }}</GdButton>
+                  <GdButton size="small" @click="cancelEdit">{{ t('session.group.cancel') }}</GdButton>
                 </template>
 
                 <!-- 分组名称（展示模式） -->
@@ -77,6 +77,7 @@
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import draggable from 'vuedraggable'

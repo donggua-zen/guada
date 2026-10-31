@@ -147,6 +147,19 @@ export class BridgeServer {
   /**
    * 向所有已鉴权连接广播事件
    */
+  /**
+   * 主动断开所有后端连接（后端会立即自动重连）。
+   * 系统唤醒后用于让后端拿到「宿主重新可达」信号，进而自愈 SSH 隧道等
+   * 依赖长连接状态的资源。
+   */
+  kickConnections(): void {
+    for (const socket of this.connections) {
+      if (!socket.destroyed) {
+        socket.destroy();
+      }
+    }
+  }
+
   broadcast(event: string, data: any): void {
     const msg = JSON.stringify({ type: "event", event, data }) + "\n";
     for (const socket of this.connections) {

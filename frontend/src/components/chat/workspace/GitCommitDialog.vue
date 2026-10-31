@@ -16,7 +16,7 @@
             :disabled="!git.status?.isGitRepo || git.totalChanges === 0"
             @click="git.generatingMessage ? git.cancelGenerateMessage() : git.generateCommitMessage()">
             <el-icon :size="14" :class="{ 'is-loading': git.generatingMessage }">
-              <LoadingOutlined v-if="git.generatingMessage" />
+              <ArrowSync16Regular v-if="git.generatingMessage" />
               <Wand16Regular v-else />
             </el-icon>
           </button>
@@ -38,7 +38,7 @@
         <button type="button" class="git-cd-check" :class="{ checked: git.commitIncludeUnstaged }"
           @click="git.commitIncludeUnstaged = !git.commitIncludeUnstaged">
           <span class="git-cd-check-box">
-            <el-icon v-if="git.commitIncludeUnstaged" :size="10"><Check /></el-icon>
+            <el-icon v-if="git.commitIncludeUnstaged" :size="10"><Checkmark12Regular /></el-icon>
           </span>
           <span>{{ t('git.includeUnstaged') }}</span>
         </button>
@@ -53,7 +53,7 @@
           @click="git.submitCommit(false)">
           <el-icon :size="16" :class="{ 'is-loading': git.commitAction === 'commit' }">
             <BranchFork16Regular v-if="git.commitAction !== 'commit'" />
-            <LoadingOutlined v-else />
+            <ArrowSync16Regular v-else />
           </el-icon>
           <span class="git-cd-action-label">{{ t('git.commit') }}</span>
           <span class="git-cd-action-hint">Ctrl + ↵</span>
@@ -61,7 +61,7 @@
         <button type="button" class="git-cd-action" :disabled="git.committing" @click="git.submitCommit(true)">
           <el-icon :size="16" :class="{ 'is-loading': git.commitAction === 'commitAndPush' }">
             <ArrowUpload16Regular v-if="git.commitAction !== 'commitAndPush'" />
-            <LoadingOutlined v-else />
+            <ArrowSync16Regular v-else />
           </el-icon>
           <span class="git-cd-action-label">{{ t('git.commitAndPush') }}</span>
         </button>
@@ -69,7 +69,7 @@
           @click="git.handlePush">
           <el-icon :size="16" :class="{ 'is-loading': git.commitAction === 'push' }">
             <ArrowUpload16Regular v-if="git.commitAction !== 'push'" />
-            <LoadingOutlined v-else />
+            <ArrowSync16Regular v-else />
           </el-icon>
           <span class="git-cd-action-label">{{ t('git.push') }}</span>
         </button>
@@ -94,8 +94,8 @@
         <button type="button" class="git-constraint-btn git-constraint-btn--primary"
           :disabled="git.constraintSaving" @click="git.saveConstraint()">
           <el-icon :size="14" :class="{ 'is-loading': git.constraintSaving }">
-            <LoadingOutlined v-if="git.constraintSaving" />
-            <Check v-else />
+            <ArrowSync16Regular v-if="git.constraintSaving" />
+            <Checkmark16Regular v-else />
           </el-icon>
           <span>{{ t('git.constraintSave') }}</span>
         </button>
@@ -106,9 +106,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { Check } from "@element-plus/icons-vue";
-import { LoadingOutlined } from "@vicons/antd";
-import { Branch20Regular, BranchFork16Regular, ArrowUpload16Regular, Wand16Regular, Settings16Regular } from "@vicons/fluent";
+import { Branch20Regular, BranchFork16Regular, ArrowUpload16Regular, Checkmark12Regular, Checkmark16Regular, Wand16Regular, Settings16Regular, ArrowSync16Regular } from "@vicons/fluent";
 import GdDialog from "../../ui/GdDialog.vue";
 import GdTooltip from "../../ui/GdTooltip.vue";
 import { useGitStore } from "@/stores/git";

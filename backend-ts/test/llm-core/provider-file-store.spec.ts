@@ -70,6 +70,18 @@ describe('ProviderFileStore', () => {
     expect(store.listLoadErrors().map((e) => e.file)).toEqual(['broken.yaml']);
   });
 
+  it('未知协议原样保留（不再静默回退 openai）', async () => {
+    await store.saveProvider({
+      id: 'weird',
+      type: 'weird',
+      name: 'Weird',
+      enabled: true,
+      protocol: 'no-such-protocol',
+      models: [],
+    });
+    expect(store.getProvider('weird')!.protocol).toBe('no-such-protocol');
+  });
+
   it('findModel 解析 {instanceId}:{modelName} 并带 thinkingEfforts 与 provider', () => {
     const model = store.findModel('openai:gpt-4o');
     expect(model).toBeDefined();

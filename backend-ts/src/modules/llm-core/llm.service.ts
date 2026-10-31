@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { AdapterRegistry } from "./adapter-registry.service";
+import { UnsupportedProtocolError, ProtocolDisabledError } from "./provider-errors";
 import { ModelCapabilityService } from "./model-capability.service";
 import type {
   LLMCompletionParams,
@@ -129,28 +130,25 @@ export class LLMService {
 
     const userSignal = params.abortSignal || RequestContext.abortSignal();
 
-    // 按 wire 协议取适配器（供应商差异经 providerConfig.thinking 传入，
-    // 对齐 DSH thinkingFormat；供应商类型仅用于 custom 转发判定与日志）
-    let adapter = this.adapterRegistry.getAdapter(protocol);
-
-    if (!adapter && providerType === 'custom') {
-      // custom 网关声明了协议但网关本身只讲另一种 wire：协议转发（非故障切换）
-      this.logger.log(`Custom provider doesn't support ${protocol}, forwarding to official protocol adapter`);
-      if (protocol === 'gemini') {
-        adapter = this.adapterRegistry.getAdapter('gemini');
-      }
-      if (protocol === 'anthropic') {
-        adapter = this.adapterRegistry.getAdapter('anthropic');
-      }
+    // 按 wire 协议取适配器（供应商差异经 providerConfig.compat 传入，
+    // 对齐 DSH thinkingFormat；供应商类型仅用于日志与协议兜底）。
+    // 插件协议与内置协议走同一张注册表：未注册 / 已禁用分别给出稳定 code。
+    const entry = this.adapterRegistry.getEntry(protocol);
+    if (!entry) {
+      throw new UnsupportedProtocolError(
+        protocol,
+        providerType,
+        this.adapterRegistry.listProtocols().map((p) => p.protocol),
+      );
     }
+    if (!entry.active) {
+      throw new ProtocolDisabledError(protocol, entry.pluginId);
+    }
+    const adapter = entry.adapter;
 
     this.logger.log(
       `Using ${protocol} adapter for provider ${params.providerConfig?.id || providerType}`,
     );
-
-    if (!adapter) {
-      throw new Error(`Unsupported protocol: ${protocol} (provider ${providerType})`);
-    }
 
     // ===== 思考选择校验（能力向 ModelCapabilityService 要，不由调用方搬运） =====
     // 折中语义：模型无思考能力却请求非 none → fail-loud；

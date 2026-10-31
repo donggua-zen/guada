@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Cube Pets · 桌宠真实尺寸预览</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    color: #e6e9ef;
+  }
+  /* 假桌面壁纸，用来判断"小宠物放在桌面上"的真实观感 */
+  body {
+    background:
+      radial-gradient(1100px 620px at 18% -10%, #22344a 0%, #131a24 55%, #0a0d12 100%),
+      #0a0d12;
+  }
+  body::after { /* 一点壁纸纹理，便于看清边缘与透明穿透 */
+    content: ''; position: fixed; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px) 0 0 / 64px 64px,
+      linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px) 0 0 / 64px 64px;
+    mask-image: radial-gradient(circle at 70% 80%, #000 0%, transparent 70%);
+  }
+
+  /* 桌宠舞台：固定在右下角，无边框、透明底 */
+  #stage { position: fixed; right: 20px; bottom: 12px; }
+  #c { display: block; }
+  #shadow {
+    position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+    border-radius: 50%; pointer-events: none;
+    background: radial-gradient(closest-side, rgba(0,0,0,.45), rgba(0,0,0,0));
+  }
+
+  #ui {
+    position: fixed; left: 16px; top: 16px; width: 236px; padding: 12px;
+    background: rgba(18,22,30,.88); border: 1px solid #2a3140; border-radius: 12px;
+    backdrop-filter: blur(10px);
+  }
+  #ui h1 { margin: 0 0 10px; font-size: 12px; font-weight: 600; color: #8fa3ba; letter-spacing: .06em; }
+  select { font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid #333c4d;
+           background: #1b2130; color: #dbe3ef; width: 100%; margin-bottom: 8px; }
+  button { font: inherit; padding: 4px 9px; margin: 2px 2px 0 0; border-radius: 8px;
+           border: 1px solid #333c4d; background: #1b2130; color: #dbe3ef; cursor: pointer; }
+  button.on { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .row input[type=range] { flex: 1; accent-color: #2f6fed; }
+  .val { width: 44px; text-align: right; color: #7fd4a0; font-variant-numeric: tabular-nums; }
+  #state { margin-top: 8px; padding-top: 8px; border-top: 1px solid #2a3140;
+           font-size: 12px; color: #7fd4a0; font-variant-numeric: tabular-nums; }
+  #hint { position: fixed; left: 16px; bottom: 14px; font-size: 12px; color: #6f7f94; }
+  #hint b { color: #9fb0c4; font-weight: 600; }
+
+  /* 浅色壁纸：检验白底下的透明边缘、抗锯齿和接地阴影 */
+  body.light { background: radial-gradient(1100px 620px at 18% -10%, #ffffff 0%, #eef2f8 55%, #dfe6f0 100%); color: #22303f; }
+  body.light::after {
+    background:
+      linear-gradient(90deg, rgba(0,0,0,.055) 1px, transparent 1px) 0 0 / 64px 64px,
+      linear-gradient(rgba(0,0,0,.055) 1px, transparent 1px) 0 0 / 64px 64px;
+  }
+  body.light #ui { background: rgba(255,255,255,.9); border-color: #d5dde8; color: #22303f; }
+  body.light #ui h1 { color: #5b6b80; }
+  body.light select, body.light button { background: #f3f6fa; border-color: #cfd9e6; color: #22303f; }
+  body.light button.on { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+  body.light #state { border-top-color: #dde4ee; color: #1f9d63; }
+  body.light #hint { color: #7386a0; }
+  body.light #hint b { color: #33455c; }
+  body.light #shadow { background: radial-gradient(closest-side, rgba(0,0,0,.32), rgba(0,0,0,0)); }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="shadow"></div>
+</div>
+
+<div id="ui">
+  <h1>CUBE PETS · 桌宠预览</h1>
+  <select id="animal"></select>
+  <div id="anims"></div>
+  <button id="tour" style="width:100%;margin-top:8px">▶ 自动轮播全部动作</button>
+  <button id="wall" style="width:100%;margin-top:6px">🖼 切换壁纸（深/浅）</button>
+  <div class="row">
+    <span style="color:#8fa3ba">尺寸</span>
+    <input id="size" type="range" min="48" max="300" step="2" value="140" />
+    <span class="val" id="sizeVal">140px</span>
+  </div>
+  <div id="state">loading…</div>
+</div>
+
+<div id="hint">
+  右下角就是桌宠的真实尺寸（默认 <b>140px</b>）。拖动滑块可改 <b>48–300px</b>；48–80px 是桌面小挂件档，100–200px 观感最好。
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const ANIMALS = ['beaver','bee','bunny','cat','caterpillar','chick','cow','crab','deer','dog',
+  'elephant','fish','fox','giraffe','hog','koala','lion','monkey','panda','parrot',
+  'penguin','pig','polar','tiger'];
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));   // 小尺寸下保持清晰
+renderer.setClearColor(0x000000, 0);                      // 透明窗口效果
+
+const scene = new THREE.Scene();
+const FOV = 26;
+const camera = new THREE.PerspectiveCamera(FOV, 1, 0.01, 200);
+
+// 光照：半球 + 主光 + 补光，小尺寸下也能读出体积
+scene.add(new THREE.HemisphereLight(0xdff0ff, 0x2a3240, 2.0));
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(3, 6, 4); scene.add(key);
+const fill = new THREE.DirectionalLight(0xbcd8ff, 0.8); fill.position.set(-4, 2, -3); scene.add(fill);
+
+let mixer = null, model = null, clips = [], modelHeight = 1.7, petPx = 140;
+const loader = new GLTFLoader();
+
+/* ---- 尺寸 → 相机距离：让模型在画布上正好占 petPx 像素高 ---- */
+function applyFraming() {
+  const pad = Math.round(petPx * 0.55);              // 留出跳跃/摆动的余量
+  const boardPx = petPx + pad * 2;
+  renderer.setSize(boardPx, boardPx, false);
+  canvas.style.width = boardPx + 'px';
+  canvas.style.height = boardPx + 'px';
+
+  const shadow = document.getElementById('shadow');
+  shadow.style.width = Math.round(petPx * 0.9) + 'px';
+  shadow.style.height = Math.round(petPx * 0.12) + 'px';
+  // 模型在画布里垂直居中 → 脚底距画布底正好是 pad，阴影要贴在脚底
+  shadow.style.bottom = pad + 'px';
+
+  const tan = Math.tan((FOV / 2) * Math.PI / 180);
+  // 可见高度 Vw 满足 modelHeight / Vw = petPx / boardPx
+  const dist = (modelHeight * boardPx) / (2 * petPx * tan);
+  const dir = new THREE.Vector3(0.62, 0.30, 0.85).normalize();   // 略俯视的 3/4 视角
+  camera.position.copy(dir.multiplyScalar(dist));
+  camera.lookAt(0, modelHeight * 0.5, 0);
+  camera.updateProjectionMatrix();
+}
+
+/* ---- 动画 ---- */
+function setAnim(name) {
+  if (!mixer) return;
+  const clip = clips.find(c => c.name === name);
+  if (!clip) return;
+  const action = mixer.clipAction(clip);
+  mixer.stopAllAction();
+  action.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+  document.querySelectorAll('#anims button').forEach(b => b.classList.toggle('on', b.dataset.n === name));
+  document.getElementById('state').textContent = `playing: ${name} (${clip.duration.toFixed(2)}s)`;
+}
+
+/* ---- 载入 ---- */
+function load(animal) {
+  if (model) { scene.remove(model); }
+  loader.load(`models/animal-${animal}.glb`, (gltf) => {
+    model = gltf.scene;
+    model.traverse(o => {
+      if (!o.isMesh) return;
+      o.material.side = THREE.DoubleSide;
+      const map = o.material.map;
+      if (map) {                                  // 调色板图集：必须最近邻 + 关 mipmap
+        map.magFilter = THREE.NearestFilter;
+        map.minFilter = THREE.NearestFilter;
+        map.generateMipmaps = false;
+        map.needsUpdate = true;
+      }
+    });
+    scene.add(model);
+
+    // 量出真实高度，用于"按像素高精确缩放"
+    const box = new THREE.Box3().setFromObject(model);
+    modelHeight = box.max.y - box.min.y;
+
+    clips = gltf.animations;
+    // 去掉整体位移轨道，桌宠要原地动
+    for (const c of clips) c.tracks = c.tracks.filter(t => t.name !== 'root.position');
+    mixer = new THREE.AnimationMixer(model);
+
+    const box2 = document.getElementById('anims');
+    box2.innerHTML = '';
+    for (const n of clips.map(a => a.name)) {
+      const b = document.createElement('button');
+      b.textContent = n; b.dataset.n = n;
+      b.onclick = () => setAnim(n);
+      box2.appendChild(b);
+    }
+
+    window.__dbg = { gltf, scene, renderer, THREE, mixer, clips, camera, setSize: (px) => { petPx = px; applyFraming(); } };
+    window.__anims = clips.map(a => a.name);
+
+    applyFraming();
+    setAnim('idle');
+    document.title = `${animal} · ${clips.length} anims`;
+  });
+}
+
+/* ---- 控件 ---- */
+const sel = document.getElementById('animal');
+ANIMALS.forEach(a => { const o = document.createElement('option'); o.value = o.textContent = a; sel.appendChild(o); });
+sel.value = 'fox';
+sel.onchange = () => load(sel.value);
+
+const sizeEl = document.getElementById('size');
+sizeEl.oninput = () => {
+  petPx = +sizeEl.value;
+  document.getElementById('sizeVal').textContent = petPx + 'px';
+  applyFraming();
+};
+
+// 深浅壁纸切换
+document.getElementById('wall').onclick = () => {
+  document.body.classList.toggle('light');
+};
+
+let tourTimer = null;
+const tourBtn = document.getElementById('tour');tourBtn.onclick = () => {
+  if (tourTimer) {
+    clearInterval(tourTimer); tourTimer = null;
+    tourBtn.textContent = '▶ 自动轮播全部动作'; tourBtn.classList.remove('on');
+    return;
+  }
+  let i = 0;
+  tourBtn.textContent = '⏸ 停止轮播'; tourBtn.classList.add('on');
+  tourTimer = setInterval(() => {
+    const list = window.__anims || [];
+    if (list.length) setAnim(list[i++ % list.length]);
+  }, 1800);
+};
+
+/* ---- 渲染循环 ---- */
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  if (mixer) mixer.update(dt);
+  renderer.render(scene, camera);
+});
+
+load('fox');
+</script>
+</body>
+</html>

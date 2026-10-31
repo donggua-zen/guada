@@ -12,6 +12,7 @@ import {
   crashReporter,
   nativeImage,
   powerSaveBlocker,
+  powerMonitor,
   Notification,
 } from "electron";
 import * as path from "path";
@@ -61,6 +62,8 @@ let lastUpdateInfo: UpdateInfo | null = null;
 let updateCheckTimer: NodeJS.Timeout | null = null;
 /** 防止重复点击“立即安装”拉起多个安装器。 */
 let isInstallingUpdate = false;
+/** 持有正在显示的系统通知，避免被 GC 提前回收 */
+const activeNotifications = new Set<Notification>();
 
 /**
  * 防休眠（keep-awake）：主进程持有 powerSaveBlocker("prevent-app-suspension")，
@@ -1999,10 +2002,54 @@ function setupIpcHandlers() {
     event.returnValue = { ready: isBackendReady, port: backendPort };
   });
 
-  ipcMain.handle("show-notification", (_, { title, body }) => {
-    // 可以在这里实现系统通知
-    console.log("Notification:", title, body);
-  });
+  /**
+   * 系统通知：定时任务完成/失败时由渲染进程请求。
+   *
+   * 只在没有窗口处于聚焦状态时弹出（用户正在看应用就不打扰），
+   * 点击后聚焦主窗口并把 sessionId 回传给渲染进程做跳转。
+   */
+  ipcMain.handle(
+    "show-notification",
+    (
+      _,
+      payload: { title?: string; body?: string; sessionId?: string | null },
+    ) => {
+      const title = payload?.title?.trim();
+      if (!title) return false;
+      if (!Notification.isSupported()) return false;
+
+      const focused = BrowserWindow.getAllWindows().some(
+        (window) => !window.isDestroyed() && window.isVisible() && window.isFocused(),
+      );
+      if (focused) return false;
+
+      try {
+        const notification = new Notification({
+          title,
+          body: payload?.body || "",
+          silent: true,
+        });
+        activeNotifications.add(notification);
+        notification.on("close", () => activeNotifications.delete(notification));
+        notification.on("click", () => {
+          activeNotifications.delete(notification);
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+            mainWindow.webContents.send("notification-clicked", {
+              sessionId: payload?.sessionId ?? null,
+            });
+          }
+        });
+        notification.show();
+        return true;
+      } catch (error) {
+        log.warn("show-notification failed:", error);
+        return false;
+      }
+    },
+  );
 
   // 接收渲染进程推送的托盘统计信息，更新悬浮窗 + 托盘菜单
   ipcMain.on(
@@ -2956,6 +3003,21 @@ app.whenReady().then(async () => {
       if (!keepAwakeBusy) return;
       keepAwakeBusy = false;
       reconcileKeepAwakeBlocker();
+    });
+
+    // 系统唤醒：旧 SSH 连接大概率已死且 close 事件可能迟到。踢掉 Bridge 连接，
+    // 后端 BridgeClient 自动重连成功（reconnected 信号）即主动重建公网隧道 ——
+    // 比等 bind 失败再退避重试更快，也覆盖了「旧连接僵死但未报错」的情况。
+    powerMonitor.on("resume", () => {
+      log.info("System resumed from sleep, kicking bridge to rebuild mobile tunnel");
+      // 等 3s 让网络栈就绪（Wi-Fi 重关联），再断开 bridge；后端会在 1s 内重连
+      setTimeout(() => {
+        try {
+          bridgeServer?.kickConnections();
+        } catch (err) {
+          log.warn("kick bridge connections failed:", err);
+        }
+      }, 3000);
     });
 
     // 将 Bridge 路径和 token 通过环境变量传递给后端

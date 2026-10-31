@@ -175,6 +175,25 @@ export interface BotChangedEvent {
 }
 
 /**
+ * 定时任务执行终态事件（内部模块间使用）
+ *
+ * 事件名：scheduler.task_finished
+ *
+ * 只在一次执行真正结束（completed/failed）时发射；「错过窗口」不通知。
+ */
+export interface SchedulerTaskFinishedEvent {
+  taskId: string;
+  taskName: string;
+  /** 本次执行写入的会话；执行前失败时为 null */
+  sessionId: string | null;
+  status: "completed" | "failed";
+  error: string | null;
+  finishedAt: string;
+  timestamp: string;
+  source?: string;
+}
+
+/**
  * 将内部事件转换为 SSE 事件格式
  */
 export function toSessionEvent(

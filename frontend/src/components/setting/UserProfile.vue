@@ -13,7 +13,7 @@
         <el-input v-model="userForm.username" :placeholder="t('settings.userProfile.username')" />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">{{ t('settings.userProfile.saveInfo') }}</el-button>
+        <GdButton type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">{{ t('settings.userProfile.saveInfo') }}</GdButton>
       </el-form-item>
     </el-form>
   </div>
@@ -28,12 +28,9 @@ import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
 
 // Element Plus 组件导入
-import {
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElButton
-} from 'element-plus'
+import { ElForm, ElFormItem, ElInput } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 
 const { t } = useI18n()
 const { toast } = usePopup()

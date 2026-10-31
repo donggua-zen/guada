@@ -35,9 +35,9 @@
           <el-checkbox v-model="rememberMe">{{ t('ui.login.rememberMe') }}</el-checkbox>
         </div>
 
-        <el-button type="primary" size="large" :loading="loading" @click="handleLogin" class="mt-2 h-11 text-base font-medium rounded-xl">
+        <GdButton type="primary" size="large" :loading="loading" @click="handleLogin" class="mt-2 h-11 text-base font-medium rounded-xl">
           {{ loading ? t('ui.login.logging') : t('ui.login.submit') }}
-        </el-button>
+        </GdButton>
       </el-form>
     </div>
   </div>
@@ -48,9 +48,9 @@
 import { ref, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-    PersonOutlined as UserIcon,
-    LockOutlined as LockIcon
-} from '@vicons/material'
+    Person16Regular as UserIcon,
+    LockClosed16Regular as LockIcon
+} from '@vicons/fluent'
 
 import { useRouter } from 'vue-router'
 
@@ -61,14 +61,9 @@ import { usePopup } from '../composables/usePopup'
 import CustomTitlebar from './CustomTitlebar.vue'
 
 // Element Plus 组件导入
-import {
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElIcon,
-  ElCheckbox,
-  ElButton
-} from 'element-plus'
+import { ElForm, ElFormItem, ElInput, ElIcon, ElCheckbox } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import type { FormInstance } from 'element-plus'
 
 const authStore = useAuthStore()
@@ -190,15 +185,6 @@ const handleLogin = async (): Promise<void> => {
 
 :deep(.el-input.is-focus .el-input__wrapper) {
   box-shadow: 0 0 0 1px var(--gd-color-primary) inset;
-}
-
-:deep(.el-button--primary) {
-  --el-button-bg-color: var(--gd-color-primary);
-  --el-button-border-color: var(--gd-color-primary);
-  --el-button-hover-bg-color: var(--gd-color-primary-hover);
-  --el-button-hover-border-color: var(--gd-color-primary-hover);
-  --el-button-active-bg-color: var(--gd-color-primary-active);
-  --el-button-active-border-color: var(--gd-color-primary-active);
 }
 
 :deep(.el-form-item__label) {

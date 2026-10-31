@@ -1,6 +1,6 @@
 {
   "subAgent.name": "子代理",
-  "subAgent.description": "创建和管理子代理执行独立任务",
+  "subAgent.description": "创建和管理子代理执行独立任务，可通过 @ 唤起指定智能体",
   "subAgent.toolkitName": "子代理",
   "subagent_spawn.executing": "正在创建子代理",
   "subagent_spawn.completed": "已创建子代理",

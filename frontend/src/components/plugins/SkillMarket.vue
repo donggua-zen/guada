@@ -1,52 +1,36 @@
 <template>
-    <div class="mt-8">
-        <!-- 标题行：标题 + 搜索框 -->
-        <div class="mb-4 flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <span class="text-lg font-semibold">{{ t('plugins.skills.marketTitle') }}</span>
-                <el-button link size="small" :loading="loading" @click="handleRefresh">
-                    <template #icon>
-                        <el-icon :class="{ 'is-loading': loading }">
-                            <ArrowClockwise16Regular />
-                        </el-icon>
-                    </template>
-                    {{ loading ? t('common.loading') : t('plugins.skills.marketRefresh') }}
-                </el-button>
-            </div>
-            <el-input
-                v-model="keywordInput"
-                :placeholder="t('plugins.skills.marketSearchPlaceholder')"
-                clearable
-                size="default"
-                class="market-search"
-                @input="handleKeywordInput"
-                @clear="handleKeywordCleared"
-            >
-                <template #prefix>
-                    <el-icon><Search /></el-icon>
-                </template>
-            </el-input>
-        </div>
-
-        <!-- 标签筛选 chips（单选） -->
-        <div v-if="labels.length > 0" class="mb-4 flex flex-wrap items-center gap-2">
+    <!-- 标题行与搜索框已上移到父级视图条；组件常驻（父级用 v-show），切回来不重新请求 -->
+    <div class="plugins-skill-market">
+        <!-- 标签筛选 chips（单选）：市场视图自己的第一行 -->
+        <div v-show="labels.length > 0" class="plugins-filter-row">
             <button
                 v-for="chip in labelChips"
                 :key="`${chip.id}-${chip.index}`"
                 type="button"
-                class="market-chip"
-                :class="{ 'market-chip--active': chip.id === selectedLabelId }"
+                class="plugins-chip"
+                :class="{ 'is-active': chip.id === selectedLabelId }"
                 @click="handleSelectLabel(chip.id)"
             >
                 {{ chip.name }}
             </button>
         </div>
 
+        <!-- 首次切入市场：先按行 geometry 占位，避免视图条切过去是一片空白 -->
+        <div v-if="loading && items.length === 0" class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
+            <div v-for="i in 4" :key="i" class="plugins-skeleton" aria-hidden="true">
+                <span class="plugins-skeleton__avatar"></span>
+                <span class="plugins-skeleton__lines">
+                    <span class="plugins-skeleton__line plugins-skeleton__line--name"></span>
+                    <span class="plugins-skeleton__line"></span>
+                </span>
+            </div>
+        </div>
+
         <!-- 错误提示 -->
-        <div v-if="error"
+        <div v-else-if="error"
             class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-6 text-center">
             <el-icon size="32" class="mb-2 opacity-50 text-gray-400">
-                <InboxOutlined />
+                <MailInbox24Regular />
             </el-icon>
             <div class="text-sm text-gray-500 dark:text-[#8b8d95]">
                 {{ error }}
@@ -78,21 +62,21 @@
                     </el-tag>
                 </template>
                 <template #actions>
-                    <el-button
+                    <GdButton
                         size="small"
-                        round
-                        :type="skill.localStatus === 'updatable' ? 'warning' : 'primary'"
+                        plain
+                        :class="{ 'market-action': true, 'is-persistent': skill.localStatus === 'updatable' || installingFromMarket.has(skill.id) }"
                         :loading="installingFromMarket.has(skill.id)"
                         @click.stop="handleInstallFromMarketUrl(skill)"
                     >
                         {{ getMarketButtonLabel(skill) }}
-                    </el-button>
+                    </GdButton>
                 </template>
             </PluginListRow>
         </div>
 
-        <!-- 分页（仅浏览模式且有多页时显示） -->
-        <div v-if="pagination && pagination.totalPages > 1" class="mt-4 flex justify-center">
+        <!-- 分页（仅浏览模式且有多页时显示）：与行列表 gap-y 对齐，上间距收到 12px -->
+        <div v-if="pagination && pagination.totalPages > 1" class="mt-3 flex justify-center">
             <el-pagination
                 layout="prev, pager, next"
                 :total="pagination.total"
@@ -100,11 +84,6 @@
                 :current-page="pagination.page"
                 @current-change="handlePageChange"
             />
-        </div>
-
-        <!-- 底部提示 -->
-        <div class="mt-6 text-center text-sm text-gray-500 dark:text-[#8b8d95]">
-            {{ t('plugins.skills.marketFooterPrefix') }}<span class="text-blue-500 cursor-pointer hover:underline" @click="openInExternalBrowser('https://ai.dingd.cn/skills')">{{ t('plugins.skills.marketLink') }}</span>{{ t('plugins.skills.marketFooterSuffix') }}
         </div>
 
         <!-- 市场技能安装对话框：对象先行（图标+名称+版本状态），次要动作降为文字链接，
@@ -168,31 +147,31 @@
                 <!-- 操作区：唯一实心主按钮 + 次级文字链接 -->
                 <div class="market-install__actions">
                     <div class="market-install__links">
-                        <el-button v-if="getInstallUrl(selectedMarketSkill, 'git')" link type="primary"
+                        <GdButton v-if="getInstallUrl(selectedMarketSkill, 'git')" link type="primary"
                             @click="handleViewSourceCode(selectedMarketSkill)">
                             {{ t('plugins.skills.marketViewSource') }}
                             <el-icon class="market-install__ext">
-                                <TopRight />
+                                <ArrowUpRight16Regular />
                             </el-icon>
-                        </el-button>
-                        <el-button v-if="selectedMarketSkill.detailUrl" link type="primary"
+                        </GdButton>
+                        <GdButton v-if="selectedMarketSkill.detailUrl" link type="primary"
                             @click="handleOpenDetailUrl(selectedMarketSkill)">
                             {{ t('plugins.skills.marketViewDetail') }}
                             <el-icon class="market-install__ext">
-                                <TopRight />
+                                <ArrowUpRight16Regular />
                             </el-icon>
-                        </el-button>
+                        </GdButton>
                     </div>
                     <div class="market-install__cta">
-                        <el-button @click="showMarketInstallDialog = false">{{ t('common.cancel') }}</el-button>
-                        <el-button v-if="getInstallUrl(selectedMarketSkill, 'zip')" type="primary"
+                        <GdButton @click="showMarketInstallDialog = false">{{ t('common.cancel') }}</GdButton>
+                        <GdButton v-if="getInstallUrl(selectedMarketSkill, 'zip')" type="primary"
                             :loading="installingFromMarket.has(selectedMarketSkill.id)"
                             @click="handleInstallFromMarketUrl(selectedMarketSkill)">
                             <template #icon>
                                 <ArrowDownload16Regular />
                             </template>
                             {{ getMarketButtonLabel(selectedMarketSkill) }}
-                        </el-button>
+                        </GdButton>
                     </div>
                 </div>
             </div>
@@ -202,12 +181,12 @@
 
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElTag, ElIcon, ElInput, ElButton, ElAlert, ElPagination } from 'element-plus'
-import { Search, TopRight } from '@element-plus/icons-vue'
-import { InboxOutlined } from '@vicons/material'
-import { ArrowDownload16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
+import { ElMessage, ElTag, ElIcon, ElAlert, ElPagination } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
+import { ArrowDownload16Regular, ArrowUpRight16Regular, MailInbox24Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import {
     SkillMarketService,
@@ -228,7 +207,12 @@ import type { Skill } from '@/types/skills'
 const props = defineProps<{
     /** 本地已安装技能，用于市场项的安装状态匹配 */
     localSkills: Skill[]
+    /** 父级当前是否停在市场视图：数据只在第一次进入时拉 */
+    active: boolean
 }>()
+
+/** 搜索框在父级视图条上，关键词双向同步；内部防抖后才发请求 */
+const keywordModel = defineModel<string>('keyword', { default: '' })
 
 const emit = defineEmits<{
     /** 市场安装成功，父组件刷新本地技能列表 */
@@ -244,7 +228,6 @@ const error = ref<string | null>(null)
 const pagination = ref<MarketPagination | null>(null)
 
 // 搜索与筛选
-const keywordInput = ref('')
 const keyword = ref('')
 const selectedLabelId = ref<string>('')
 const labels = ref<MarketLabelInfo[]>([])
@@ -428,6 +411,9 @@ async function loadBrowse(): Promise<{ items: MarketSkillWithStatus[]; paginatio
  * 按当前模式加载市场列表；forceRefresh 仅作用于推荐模式（绕过缓存）
  */
 async function loadMarket(forceRefresh: boolean = false) {
+    // 懒加载门控集中在唯一出口：搜索、标签、分页、换一批在首次进入市场前都不会发请求
+    if (!activated.value) return
+
     const seq = ++loadSeq
     loading.value = true
     error.value = null
@@ -462,10 +448,21 @@ async function loadMarket(forceRefresh: boolean = false) {
     }
 }
 
+/** 首次进入市场视图才拉数据；未激活时所有加载出口都直接返回 */
+const activated = ref(false)
+
+function activate() {
+    if (activated.value) return
+    activated.value = true
+    void loadLabels()
+    void loadMarket()
+}
+
 /**
  * 加载标签筛选列表
  */
 async function loadLabels() {
+    if (!activated.value) return
     try {
         labels.value = await SkillMarketService.fetchMarketLabels(localeToMarketLang(getLocale()))
     } catch (err) {
@@ -483,27 +480,19 @@ function handleRefresh() {
 }
 
 /**
- * 搜索输入防抖（350ms），输入即切换到浏览模式
+ * 父级搜索框变化：防抖 350ms 后进入浏览模式；清空立即回到推荐模式
+ * （清空还走防抖会让「全部」状态慢半拍，看起来像没生效）。
  */
-function handleKeywordInput() {
+watch(keywordModel, (raw) => {
     if (searchTimer) clearTimeout(searchTimer)
-    searchTimer = setTimeout(() => {
-        keyword.value = keywordInput.value.trim()
+    const apply = () => {
+        keyword.value = (raw || '').trim()
         currentPage.value = 1
         void loadMarket()
-    }, 350)
-}
-
-/**
- * 清空搜索：立即回到推荐模式
- */
-function handleKeywordCleared() {
-    if (searchTimer) clearTimeout(searchTimer)
-    keywordInput.value = ''
-    keyword.value = ''
-    currentPage.value = 1
-    void loadMarket()
-}
+    }
+    if (!raw) apply()
+    else searchTimer = setTimeout(apply, 350)
+})
 
 /**
  * 选择标签 chip；再点一次取消回到「全部」
@@ -523,48 +512,31 @@ function handlePageChange(page: number) {
 }
 
 // 运行时切换语言后按新语言重载标签与列表（缓存已按语言隔离）
-watch(getLocale, () => {
-    keywordInput.value = ''
+function handleLocaleChange() {
+    keywordModel.value = ''
     keyword.value = ''
     selectedLabelId.value = ''
     currentPage.value = 1
     void loadLabels()
     void loadMarket()
-})
+}
 
-onMounted(async () => {
-    void loadLabels()
-    await loadMarket()
+watch(getLocale, handleLocaleChange)
+
+// 首次切到市场视图才请求；父级直接以市场视图打开地址（?view=market）时 immediate 会立刻补一次
+watch(() => props.active, (value) => { if (value) activate() }, { immediate: true })
+
+/** 搜索框与「换一批」搬到了父级视图条，这里只暴露动作与状态 */
+defineExpose({
+    refresh: handleRefresh,
+    loading,
 })
 </script>
 
 <style scoped>
-/* ── 搜索框 ── */
-.market-search {
-    width: 280px;
-}
-
-/* ── 标签筛选 chips（单选，无界：无描边，仅填充态区分）──
-   颜色取自 CSS 变量，暗色下变量值本身会翻转 */
-.market-chip {
-    padding: 4px 12px;
-    font-size: 13px;
-    line-height: 1.4;
-    border: none;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--gd-color-text-gray);
-    cursor: pointer;
-    transition: background-color 0.15s, color 0.15s;
-}
-
-.market-chip:hover {
-    background: var(--gd-color-surface-subtle-hover);
-    color: var(--gd-color-text);
-}
-
-.market-chip--active {
-    background: var(--gd-color-sidebar-bg-active);
+/* 标签筛选 chips 的几何统一在 PluginViewSwitch.vue 的 .plugins-chip 上（与已安装来源
+   chips 同一档）。这里只补选中态文字色：全局块给的是正文色，本区块保持原有 token。 */
+.plugins-skill-market .plugins-chip.is-active {
     color: var(--gd-color-sidebar-text-active);
 }
 
@@ -575,11 +547,6 @@ onMounted(async () => {
     display: flex;
     flex-direction: column;
     gap: 12px;
-}
-
-/* 按钮行各自用 gap 控制间距，取消 Element Plus 相邻按钮的默认 margin */
-.market-install :deep(.el-button + .el-button) {
-    margin-left: 0;
 }
 
 .market-install__head {

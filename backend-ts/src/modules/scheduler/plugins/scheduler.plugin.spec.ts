@@ -75,4 +75,73 @@ describe('SchedulerPlugin 定时任务工具', () => {
     ).rejects.toThrow(/无法获取会话ID/);
     expect(createTask).not.toHaveBeenCalled();
   });
+
+  it('scheduler_update_task 只透传发生变更的字段', async () => {
+    const updateTask = jest.fn().mockResolvedValue({
+      id: 'task-1',
+      name: '每日早报',
+      scheduleType: 'cron',
+      cronExpression: '0 9 * * *',
+      executeAt: null,
+      enabled: true,
+      nextRunAt: null,
+    });
+    const plugin = new SchedulerPlugin({ updateTask } as any);
+    const tools = await captureTools(plugin);
+
+    const raw = await tools['scheduler_update_task'].execute(
+      { task_id: 'task-1', name: '每日早报（新）', cron_expression: '0 9 * * *' },
+      {} as any,
+    );
+
+    const result = JSON.parse(raw);
+    expect(result.success).toBe(true);
+    expect(updateTask).toHaveBeenCalledWith('task-1', {
+      name: '每日早报（新）',
+      cronExpression: '0 9 * * *',
+    });
+  });
+
+  it('scheduler_update_task 切换到 once 时清空 cron 并要求 execute_at', async () => {
+    const updateTask = jest.fn().mockResolvedValue({
+      id: 'task-1',
+      name: '提醒',
+      scheduleType: 'once',
+      cronExpression: '',
+      executeAt: '2030-01-01T00:00:00.000Z',
+      enabled: true,
+      nextRunAt: null,
+    });
+    const plugin = new SchedulerPlugin({ updateTask } as any);
+    const tools = await captureTools(plugin);
+
+    await expect(
+      tools['scheduler_update_task'].execute({ task_id: 'task-1', schedule_type: 'once' }, {} as any),
+    ).rejects.toThrow(/execute_at/);
+
+    await tools['scheduler_update_task'].execute(
+      {
+        task_id: 'task-1',
+        schedule_type: 'once',
+        execute_at: '2030-01-01T00:00:00.000Z',
+      },
+      {} as any,
+    );
+    expect(updateTask).toHaveBeenCalledWith('task-1', {
+      scheduleType: 'once',
+      executeAt: '2030-01-01T00:00:00.000Z',
+      cronExpression: '',
+    });
+  });
+
+  it('scheduler_update_task 没有变更字段时拒绝', async () => {
+    const updateTask = jest.fn();
+    const plugin = new SchedulerPlugin({ updateTask } as any);
+    const tools = await captureTools(plugin);
+
+    await expect(
+      tools['scheduler_update_task'].execute({ task_id: 'task-1' }, {} as any),
+    ).rejects.toThrow(/至少需要提供一个要修改的字段/);
+    expect(updateTask).not.toHaveBeenCalled();
+  });
 });

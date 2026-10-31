@@ -104,6 +104,14 @@ class BodyPreservingOpenAI extends OpenAI {
 @Injectable()
 export class OpenAIAdapter implements IProtocolAdapter {
   readonly protocol = "openai";
+  readonly displayName = "OpenAI";
+  readonly capabilities = {
+    streaming: true,
+    tools: true,
+    vision: true,
+    reasoning: true,
+    modelDiscovery: true,
+  };
   private readonly logger = new Logger(OpenAIAdapter.name);
 
   constructor(private readonly capability: ModelCapabilityService) {}

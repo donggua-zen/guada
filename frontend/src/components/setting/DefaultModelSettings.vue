@@ -103,7 +103,7 @@
                 <el-input v-model="modelSearchText" :placeholder="t('settings.defaultModel.searchModel')" clearable>
                     <template #prefix>
                         <el-icon>
-                            <SearchFilled />
+                            <Search20Filled />
                         </el-icon>
                     </template>
                 </el-input>
@@ -143,7 +143,7 @@
                                                     </el-icon>
                                                 </template>
                                                 <el-icon :size="10" class="text-gray-300">
-                                                    <ArrowRightTwotone />
+                                                    <ArrowRight16Regular />
                                                 </el-icon>
                                                 <template v-for="cap in (model.config?.outputCapabilities || ['text'])"
                                                     :key="'out-' + cap">
@@ -173,7 +173,7 @@
                                     </div>
                                     <el-icon v-if="tempModelId === model.id" class="text-primary shrink-0 mt-1"
                                         size="18">
-                                        <CheckCircleFilled />
+                                        <CheckmarkCircle16Filled />
                                     </el-icon>
                                 </div>
                             </div>
@@ -182,7 +182,7 @@
                 </template>
                 <div v-if="filteredModels.length === 0" class="text-center py-8 text-gray-400">
                     <el-icon size="48" class="mb-2">
-                        <SearchFilled />
+                        <Search20Filled />
                     </el-icon>
                     <p>{{ t('settings.defaultModel.noMatchFound') }}</p>
                 </div>
@@ -197,13 +197,9 @@ import { useDebounceFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { OpenAI } from "@/components/icons";
 import {
-    SearchFilled,
-    CheckCircleFilled,
-    ArrowRightTwotone
-} from "@vicons/material";
-import {
     TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular,
-    ChevronDown20Regular, DismissCircle16Regular
+    ChevronDown20Regular, DismissCircle16Regular,
+    Search20Filled, CheckmarkCircle16Filled, ArrowRight16Regular
 } from '@vicons/fluent'
 
 import { apiService } from '@/services/ApiService'
@@ -214,11 +210,11 @@ import GdTooltip from '@/components/ui/GdTooltip.vue'
 
 // Element Plus 组件导入
 import {
-    ElButton,
     ElTag,
     ElIcon
 } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import GdButton from '@/components/ui/GdButton.vue'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px

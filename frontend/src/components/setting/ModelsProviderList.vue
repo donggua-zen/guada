@@ -14,6 +14,8 @@
             :title="provider.name">
             {{ provider.name }}
           </h3>
+          <span v-if="provider.typeAvailable === false" class="text-[10px] text-orange-500 shrink-0" title="贡献该类型的插件已卸载或禁用">类型不可用</span>
+          <span v-else-if="provider.protocolAvailable === false" class="text-[10px] text-orange-500 shrink-0" title="该协议适配器已禁用或卸载">协议不可用</span>
           <el-switch
             :model-value="provider.enabled !== false"
             size="small"
@@ -53,21 +55,24 @@
     <div class="section-title text-sm font-medium text-gray-500 dark:text-[#8b8d95] mb-3">可添加的供应商</div>
     <div class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
       <div v-for="template in templates" :key="template.id"
-        class="provider-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
-        @click="$emit('template-click', template)">
+        class="provider-card flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm"
+        :class="{ 'cursor-pointer': template.protocolAvailable !== false, 'opacity-60': template.protocolAvailable === false }"
+        @click="template.protocolAvailable === false ? null : $emit('template-click', template)">
         <div class="flex items-center gap-2.5 mb-3">
           <CardAvatar :src="getProviderIcon(template)" :name="template.name" />
           <h3 class="font-semibold text-gray-700 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);"
             :title="template.name">
             {{ template.name }}
           </h3>
+          <el-tag v-if="template.source === 'plugin'" size="small" type="info" effect="plain" class="shrink-0">插件</el-tag>
         </div>
         <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
           {{ template.description || '点击添加到您的供应商列表' }}
         </div>
         <div class="flex items-center justify-between gap-2 mt-3">
           <span class="text-xs text-gray-400 dark:text-[#6b6d75]">{{ getProtocolLabel(template.protocol) }}</span>
-          <span class="text-xs text-gray-400 dark:text-[#6b6d75]">点击添加</span>
+          <span v-if="template.protocolAvailable === false" class="text-xs text-orange-500">协议不可用</span>
+          <span v-else class="text-xs text-gray-400 dark:text-[#6b6d75]">点击添加</span>
         </div>
       </div>
       <div v-if="templates.length === 0" class="col-span-full py-8 text-center text-gray-400 dark:text-[#6b6d75] text-sm">
@@ -78,16 +83,22 @@
 </template>
 
 <script setup>
-import { ElSwitch } from 'element-plus'
+import { ElSwitch, ElTag } from 'element-plus'
 import { fixFrontendAssetUrl } from '@/utils/url'
+import { apiService } from '@/services/ApiService'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 
-defineProps({
+const props = defineProps({
   items: {
     type: Array,
     default: () => []
   },
   templates: {
+    type: Array,
+    default: () => []
+  },
+  /** 可用协议（含插件贡献），用于协议标签展示 */
+  protocols: {
     type: Array,
     default: () => []
   }
@@ -96,22 +107,37 @@ defineProps({
 defineEmits(['item-click', 'item-toggle', 'item-edit', 'item-delete', 'template-click'])
 
 const getProviderIcon = (item) => {
+  // 插件类型卡的 avatarUrl 为 `plugin:<pluginId>/<path>`：
+  // 前端按 api base 拼插件 assets 地址（与主题/slot 资源规则一致）。
+  const avatar = item?.avatarUrl
+  if (avatar) {
+    if (avatar.startsWith('plugin:')) {
+      const base = String(apiService.baseURL || '/api/v1').replace(/\/$/, '')
+      return `${base}/plugins/${avatar.slice('plugin:'.length)}`
+    }
+    if (/^(https?:|data:|\/)/i.test(avatar)) {
+      return fixFrontendAssetUrl(avatar)
+    }
+  }
   const providerId = (item.provider || item.id || '').toLowerCase();
   if (providerId && providerId !== 'custom') {
     const ext = providerId === 'xqapi' ? 'png' : 'svg';
     return fixFrontendAssetUrl(`/images/providers/${providerId}.${ext}`);
   }
-  return null;
+  return null
+}
+
+const BUILTIN_PROTOCOL_LABELS = {
+  'openai': 'OpenAI',
+  'openai-response': 'OpenAI-Response',
+  'gemini': 'Gemini',
+  'anthropic': 'Anthropic'
 }
 
 const getProtocolLabel = (protocol) => {
-  const protocolMap = {
-    'openai': 'OpenAI',
-    'openai-response': 'OpenAI-Response',
-    'gemini': 'Gemini',
-    'anthropic': 'Anthropic'
-  }
-  return protocolMap[protocol] || protocol || '未知协议'
+  const hit = props.protocols.find((p) => p.protocol === protocol)
+  if (hit) return hit.displayName || hit.protocol
+  return BUILTIN_PROTOCOL_LABELS[protocol] || protocol || '未知协议'
 }
 </script>
 

@@ -5,11 +5,18 @@
     tabLocalTools: 'Plugins',
     tabSkills: 'Skills',
     tabMcp: 'MCP Servers',
+    // 二级视图条（Skills / MCP 两个 tab 共用）
+    viewInstalled: 'Installed',
+    viewMarket: 'Market',
+    sourceFilterAll: 'All',
+    info: 'About',
+    marketOpenWeb: 'Open market in browser',
+    goMarket: 'Browse the market',
   },
 
   // ── MCP 服务器 (MCPServers.vue) ──
   mcp: {
-    title: 'MCP Server List',
+    viewAdded: 'Added',
     subtitle: 'Configure and manage Model Context Protocol servers.',
     importConfig: 'Import Config',
     addServer: 'Add Server',
@@ -60,6 +67,7 @@
     toolsNewHint: 'Tools available after adding',
     toolsNewHintSub: 'Please fill in the basic info and save first',
     toolsCount: '{count} tools retrieved',
+    toolsTag: '{count} tools',
     refreshTools: 'Refresh Tools',
     toolParams: 'Parameters:',
     noParams: 'No parameters',
@@ -100,9 +108,40 @@
     unnamedServer: 'Unnamed Server',
   },
 
+  // ── MCP Market (McpMarket.vue) ──
+  mcpMarket: {
+    refresh: 'Refresh',
+    searchPlaceholder: 'Search name, description or tags',
+    sourceAll: 'All sources',
+    loadMore: 'Load {count} more',
+    showing: 'Showing {shown} of {total}',
+    empty: 'No matching market entries',
+    noDescription: 'No description',
+    installed: 'Added',
+    addBtn: 'Add',
+    updateBtn: 'Update config',
+    loadFailed: 'Failed to load MCP market',
+    partialUnavailable: 'Some sources are temporarily unavailable',
+    addTitle: 'Add MCP Server',
+    resolving: 'Resolving the entry configuration…',
+    resolveFailed: 'Failed to resolve configuration',
+    importFailed: 'Import failed',
+    importWarning:
+      'The market only imports the launch configuration; it does not install the command or runtime. Enabling or testing it runs the command on this machine — review before continuing.',
+    needsConfig: 'Needs config',
+    needsConfigHint: 'Complete these fields after import before enabling: {fields}',
+    fieldCommand: 'Command',
+    fieldArgs: 'Args',
+    fieldEnv: 'Env',
+    fieldUrl: 'URL',
+    fieldHeaders: 'Headers',
+    confirmImport: 'Import',
+    importSuccess: 'Imported {count} server(s) — disabled by default, enable manually after review',
+    viewDetail: 'View details',
+  },
+
   // ── Skills (Skills.vue) ──
   skills: {
-    title: 'Skills',
     subtitle: 'Locally discovered skill modules. After manually adding or modifying skills, click "Refresh" to scan for directory changes.',
     install: 'Install',
     scan: 'Scan',
@@ -147,14 +186,10 @@
     installBtn: 'Install',
     installSelectWarning: 'Please select a ZIP file to install',
     installFailed: 'Install failed',
-    // 市场推荐
-    marketTitle: 'Skill Market',
+    // 市场推荐（标题行已并入页面视图条，这里只留市场条目自身要用的文案）
     marketRefresh: 'Refresh',
-    marketLink: 'Skill Market',
     marketError: 'Failed to load featured skills',
     marketFallbackHint: 'No English yet',
-    marketFooterPrefix: 'Visit the ',
-    marketFooterSuffix: ' for more featured skills',
     marketSearchPlaceholder: 'Search skills',
     marketFilterAll: 'All',
     marketEmptyResult: 'No matching skills',
@@ -193,6 +228,8 @@
     noDescription: 'No description',
     sourceDev: 'DEV',
     sourceUser: 'External',
+    sourceProvider: 'Provider pack',
+    providerPackHint: 'Tip: after installing a provider pack, add it in Settings → Model Providers.',
     uninstall: 'Uninstall',
     enable: 'Enable',
     disable: 'Disable',
@@ -200,6 +237,7 @@
     emptyHint: 'Click "Install Plugin" in the top right to add one',
     // 分区标题
     groups: {
+      system: 'System Plugins',
       core: 'Core Plugins',
       extended: 'Extended Plugins',
       user: 'User Installed',

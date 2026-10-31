@@ -496,9 +496,9 @@ html.dark[data-theme="doodle"] .markdown-text pre::after {
 }
 
 /* ============================================================
-   Element Plus 组件
+   按钮（GdButton）
    ============================================================ */
-html[data-theme="doodle"] .el-button {
+html[data-theme="doodle"] .gd-button {
   border-radius: var(--doodle-blob-c);
   border-width: 2px;
   font-weight: 600;

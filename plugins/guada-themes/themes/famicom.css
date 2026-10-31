@@ -495,15 +495,15 @@ html.dark[data-theme="famicom"] .markdown-text pre {
 }
 
 /* ============================================================
-   Element Plus 组件：零圆角 + 硬边框 + 按键手感
+   按钮：零圆角 + 硬边框 + 按键手感（GdButton）
    ============================================================ */
-html[data-theme="famicom"] .el-button {
+html[data-theme="famicom"] .gd-button {
   border-radius: 0;
   border-width: 2px;
   font-weight: 600;
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
 }
-html[data-theme="famicom"] .el-button:active {
+html[data-theme="famicom"] .gd-button:active {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.15);
 }
@@ -532,13 +532,13 @@ html[data-theme="famicom"] .group-header,
 html[data-theme="famicom"] .markdown-text h1,
 html[data-theme="famicom"] .markdown-text h2,
 html[data-theme="famicom"] .markdown-text h3,
-html[data-theme="famicom"] .el-button,
+html[data-theme="famicom"] .gd-button,
 html[data-theme="famicom"] .custom-titlebar {
   font-family: 'Press Start 2P', 'PingFang SC', 'Microsoft YaHei', monospace;
 }
 /* 像素字体字形偏大，标题区缩小一号保持版式 */
 html[data-theme="famicom"] .session-title,
 html[data-theme="famicom"] .group-header,
-html[data-theme="famicom"] .el-button {
+html[data-theme="famicom"] .gd-button {
   font-size: 0.85em;
 }

@@ -25,8 +25,8 @@
                 <!-- 加载更多历史消息指示器 -->
                 <Transition name="fade-slide">
                   <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
-                    <el-icon class="is-loading mr-2" size="16">
-                      <LoadingOutlined />
+                    <el-icon class="mr-2" size="16">
+                      <ArrowSync16Regular class="animate-spin" />
                     </el-icon>
                     <span class="text-xs">{{ t('chat.panel.loadingHistory') }}</span>
                   </div>
@@ -107,9 +107,9 @@
                   class="max-w-full w-full flex items-center px-4 py-1.5 rounded-tl-xl rounded-tr-xl bg-(--gd-color-sidebar-bg-active) backdrop-blur-xl">
                   <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">{{ t('chat.panel.editingMessage')
                     }}</span>
-                  <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
+                  <GdButton size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
                     {{ t('common.cancel') }}
-                  </el-button>
+                  </GdButton>
                 </div>
               </div>
 
@@ -262,8 +262,10 @@ import QueuedMessages from './QueuedMessages.vue';
 import SessionCards from './SessionCards.vue';
 import WorkingDirBar from './workspace/WorkingDirBar.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
-import { LoadingOutlined } from '@vicons/antd'
+import { ArrowSync16Regular } from '@vicons/fluent'
 import GdTooltip from '../ui/GdTooltip.vue';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import GdPopover from '@/components/ui/GdPopover.vue'
 
 

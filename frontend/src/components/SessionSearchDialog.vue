@@ -15,7 +15,7 @@
       <!-- 扫描中（尚无结果） -->
       <div v-if="isSearching && searchResults.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-400">
         <el-icon class="animate-spin text-2xl mb-2">
-          <Loading />
+          <ArrowSync16Regular />
         </el-icon>
         <span class="text-xs">{{ scanningText }}</span>
       </div>
@@ -49,7 +49,7 @@
 
         <!-- 扫描进度（已有部分结果，继续扫描中） -->
         <div v-if="isSearching" class="flex items-center justify-center py-3 text-gray-400">
-          <el-icon class="animate-spin text-sm mr-1"><Loading /></el-icon>
+          <el-icon class="animate-spin text-sm mr-1"><ArrowSync16Regular /></el-icon>
           <span class="text-xs">{{ scanningText }}</span>
         </div>
       </template>
@@ -73,8 +73,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Search16Regular } from '@vicons/fluent'
-import { Loading } from '@element-plus/icons-vue'
+import { Search16Regular, ArrowSync16Regular } from '@vicons/fluent'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { GENERAL_PROJECT_GROUP_ID, useSessionGroupStore } from '@/stores/sessionGroup'

@@ -50,6 +50,7 @@ export class BrowserScriptPlugin extends PluginBase {
     description: "%browserScript.description%",
     version: "0.1.0",
     category: "core" as const,
+    icon: "images/plugins/browser-script.svg",
   };
 
   constructor(

@@ -112,6 +112,40 @@ backend-ts 现有 185 个 spec / 2770 个用例，但分布极不均衡：chat /
 
 ---
 
+### 3. 内置插件缺少独立资源目录
+
+**现状**
+
+内置插件是编译进 `backend-ts/dist` 的 TS 类（`PluginBase` 子类，manifest 为内联字段），磁盘上没有插件目录，因此不存在「相对插件目录」的资源解析基路径：
+
+- 外部插件：`manifest.json` 的 `icon` 相对插件目录解析（`external-plugin-loader.ts` 的 `pluginPaths`）。
+- 内置插件：`icon` 只能相对 `STATIC_DIR` 解析，图标集中放在 `backend-ts/static/images/plugins/<pluginId>.svg`（`plugins.controller.ts` 的 `getPluginIcon` 回退分支）。
+
+两套语义并存：新增内置插件时必须记得往共享目录丢图，且内置插件无法随实现一起分发其它静态资源（预览图、示例、主题片段等）。
+
+**风险**
+
+- 图标与插件实现分离，删除/重命名插件容易留下孤儿资源，评审时也不易发现漏配。
+- 后续若要支持「插件详情页展示 README / 预览图」，需要再改一次解析逻辑。
+
+**改造方向**
+
+为内置插件引入 `resources/plugins/<pluginId>/` 目录（至少含 `assets/icon.svg`），与外部插件共用「`icon` 相对插件目录」的同一套语义：
+
+1. Electron `extraResources` 增加内置插件目录拷贝，`backend-ts/Dockerfile` 同步 COPY。
+2. `PLUGINS_BUILTIN_DIR` 语义扩展为「内置插件目录集合」，或新增独立的内置资产目录环境变量。
+3. 内置插件 manifest 的 `icon` 改为 `assets/icon.svg`，删除 `getPluginIcon` 的 `STATIC_DIR` 回退分支。
+4. 迁移 `backend-ts/static/images/plugins/*.svg` 到各自插件目录。
+
+**关联文件**
+
+- `backend-ts/src/modules/plugins/plugins.controller.ts`（`getPluginIcon` 的 STATIC_DIR 回退）
+- `backend-ts/src/modules/plugins/types/plugin.types.ts`（`icon` 语义注释）
+- `package.json`（electron-builder `extraResources`）、`backend-ts/Dockerfile`
+- `backend-ts/static/images/plugins/`
+
+---
+
 ## 暂缓项
 
 已确认存在、当前明确不处理的问题。

@@ -118,6 +118,7 @@ export class FilePlugin extends PluginBase {
     description: "%file.description%",
     version: "1.1.0",
     category: "core" as const,
+    icon: "images/plugins/file.svg",
   };
 
   constructor(

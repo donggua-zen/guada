@@ -235,7 +235,7 @@
                 <div v-if="sessionGroupStore.loadingMoreGroupId === group.id"
                   class="flex items-center justify-center gap-2 text-xs text-gray-500">
                   <el-icon class="animate-spin" size="14">
-                    <Loading />
+                    <ArrowSync16Regular />
                   </el-icon>
                   <span>{{ t('ui.sidebar.loadingMore') }}</span>
                 </div>
@@ -265,7 +265,7 @@
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="profile">
-              <PersonOutlined class="w-4 h-4 mr-2" />
+              <Person16Regular class="w-4 h-4 mr-2" />
               {{ t('ui.sidebar.profile') }}
             </el-dropdown-item>
             <!-- 颜色主题：内联三态切换 -->
@@ -287,7 +287,7 @@
               {{ t('ui.sidebar.settingsCenter') }}
             </el-dropdown-item>
             <el-dropdown-item v-if="authStore.passwordSet" command="logout" divided>
-              <LogOutOutlined class="w-4 h-4 mr-2" />
+              <DoorArrowLeft16Regular class="w-4 h-4 mr-2" />
               {{ t('ui.sidebar.logout') }}
             </el-dropdown-item>
           </el-dropdown-menu>
@@ -298,7 +298,7 @@
       <GdTooltip v-if="isElectron" :content="t('ui.sidebar.mobileAccess')" placement="bottom">
         <div @click="mobileAccessDialogVisible = true"
           class="relative flex items-center justify-center px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200 shrink-0 text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)">
-          <component :is="SmartphoneOutlined" class="w-4 h-4" />
+          <component :is="Phone16Regular" class="w-4 h-4" />
           <span v-if="mobileAccessActive" class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
         </div>
       </GdTooltip>
@@ -341,8 +341,8 @@
     </div>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <el-button @click="deleteDialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="danger" @click="confirmDeleteSession">{{ t('ui.sidebar.confirmDelete') }}</el-button>
+        <GdButton @click="deleteDialogVisible = false">{{ t('common.cancel') }}</GdButton>
+        <GdButton type="danger" @click="confirmDeleteSession">{{ t('ui.sidebar.confirmDelete') }}</GdButton>
       </div>
     </template>
   </GdDialog>
@@ -360,8 +360,8 @@
     </div>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <el-button @click="moveGroupDialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="confirmMoveSession">{{ t('common.ok') }}</el-button>
+        <GdButton @click="moveGroupDialogVisible = false">{{ t('common.cancel') }}</GdButton>
+        <GdButton type="primary" @click="confirmMoveSession">{{ t('common.ok') }}</GdButton>
       </div>
     </template>
   </GdDialog>
@@ -400,16 +400,17 @@ import GdTooltip from './ui/GdTooltip.vue'
 import GroupEditDialog from './session/GroupEditDialog.vue'
 import GroupIcon from './session/GroupIcon.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import GdButton from '@/components/ui/GdButton.vue'
 import MobileAccessDialog from '@/components/MobileAccessDialog.vue'
 import DirectoryBrowserDialog from '@/components/DirectoryBrowserDialog.vue'
 import { apiService } from '@/services/ApiService'
 import type { Session, SessionGroup, ProjectGroup, SidebarSessionsResponse, SidebarProjectSessionsResponse } from '@/types/session'
 
 import {
-  PersonOutlined,
-  LogOutOutlined,
-  SmartphoneOutlined,
-} from '@vicons/material'
+  Person16Regular,
+  DoorArrowLeft16Regular,
+  Phone16Regular,
+} from '@vicons/fluent'
 
 import {
   Bot20Regular,
@@ -434,8 +435,7 @@ import {
   Desktop16Regular,
   Settings16Filled,
 } from '@vicons/fluent'
-import { MoreHorizontal20Filled } from '@vicons/fluent'
-import { Loading } from '@element-plus/icons-vue'
+import { MoreHorizontal20Filled, ArrowSync16Regular } from '@vicons/fluent'
 import TitlebarLeftPanel from './TitlebarLeftPanel.vue'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined

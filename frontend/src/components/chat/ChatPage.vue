@@ -17,13 +17,13 @@
                 <template #dropdown>
                   <DropdownMenuItem command="copy-session-id">
                     <span class="flex items-center gap-2">
-                      <ContentCopyOutlined class="w-4 h-4" />
+                      <Copy16Regular class="w-4 h-4" />
                       <span>{{ t('chat.header.copySessionId') }}</span>
                     </span>
                   </DropdownMenuItem>
                   <DropdownMenuItem command="clear">
                     <span class="flex items-center gap-2">
-                      <DeleteTwotone class="w-4 h-4" />
+                      <Delete16Regular class="w-4 h-4" />
                       <span>{{ t('chat.header.clearRecords') }}</span>
                     </span>
                   </DropdownMenuItem>
@@ -75,13 +75,13 @@
                     <template #dropdown>
                       <DropdownMenuItem command="copy-session-id">
                         <span class="flex items-center gap-2">
-                          <ContentCopyOutlined class="w-4 h-4" />
+                          <Copy16Regular class="w-4 h-4" />
                           <span>{{ t('chat.header.copySessionId') }}</span>
                         </span>
                       </DropdownMenuItem>
                       <DropdownMenuItem command="clear">
                         <span class="flex items-center gap-2">
-                          <DeleteTwotone class="w-4 h-4" />
+                          <Delete16Regular class="w-4 h-4" />
                           <span>{{ t('chat.header.clearRecords') }}</span>
                         </span>
                       </DropdownMenuItem>
@@ -219,14 +219,10 @@ import GdTooltip from "@/components/ui/GdTooltip.vue";
 import DropdownMenu from "@/components/ui/DropdownMenu.vue";
 import DropdownMenuItem from "@/components/ui/DropdownMenuItem.vue";
 import {
-  DeleteTwotone,
-  ContentCopyOutlined,
-  // FileDownloadOutlined,
-  // FileUploadOutlined
-} from "@vicons/material";
-import { PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular, MoreHorizontal24Regular, Dismiss24Regular } from "@vicons/fluent";
+  PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular, MoreHorizontal24Regular, Dismiss24Regular,
+  Delete16Regular, Copy16Regular, WindowConsole20Regular,
+} from "@vicons/fluent";
 import { VsCode, WindowsExplorer, Finder } from "@/components/icons";
-import { TerminalOutlined } from "@vicons/material";
 import { ElMessage } from "element-plus";
 import { useStorage } from '@vueuse/core';
 
@@ -606,7 +602,7 @@ const openWithOptions = computed(() => [
     label: t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInFileManager'),
     icon: isMac ? Finder : WindowsExplorer,
   },
-  { mode: 'terminal' as OpenWithMode, label: t('chat.workspace.openInTerminal'), icon: TerminalOutlined },
+  { mode: 'terminal' as OpenWithMode, label: t('chat.workspace.openInTerminal'), icon: WindowConsole20Regular },
 ]);
 
 /** 主按钮当前展示/执行的选项 */

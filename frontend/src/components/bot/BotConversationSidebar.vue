@@ -10,7 +10,7 @@
         :placeholder="t('bot.chat.searchPlaceholder')"
       >
         <template #prefix>
-          <el-icon><Search /></el-icon>
+          <el-icon><Search16Regular /></el-icon>
         </template>
       </el-input>
     </div>
@@ -28,7 +28,7 @@
       class="flex-1 flex flex-col items-center justify-center gap-3 px-5 text-center"
     >
       <p class="text-sm text-(--gd-color-text-gray)">{{ error }}</p>
-      <el-button size="small" @click="emit('retry')">{{ t('bot.chat.retry') }}</el-button>
+      <GdButton size="small" @click="emit('retry')">{{ t('bot.chat.retry') }}</GdButton>
     </div>
 
     <div
@@ -38,7 +38,7 @@
       <div
         class="w-12 h-12 rounded-full flex items-center justify-center bg-(--gd-color-primary-100) text-(--gd-color-primary)"
       >
-        <el-icon :size="22"><ChatDotRound /></el-icon>
+        <el-icon :size="22"><Chat20Regular /></el-icon>
       </div>
       <p class="text-sm font-medium text-(--gd-color-gray-900) dark:text-(--gd-color-gray-100)">
         {{ t('bot.chat.noBots') }}
@@ -46,9 +46,9 @@
       <p class="text-xs leading-relaxed text-(--gd-color-text-gray)">
         {{ t('bot.chat.noBotsHint') }}
       </p>
-      <el-button size="small" type="primary" @click="emit('create')">
+      <GdButton size="small" type="primary" @click="emit('create')">
         {{ t('bot.chat.addBot') }}
-      </el-button>
+      </GdButton>
     </div>
 
     <!-- 机器人 → 用户列表 -->
@@ -136,8 +136,8 @@
               </div>
 
               <el-icon :size="12" class="bot-card-chevron">
-                <ArrowDown v-if="!isCollapsed(group.botId)" />
-                <ArrowRight v-else />
+                <ChevronDown12Regular v-if="!isCollapsed(group.botId)" />
+                <ChevronRight12Regular v-else />
               </el-icon>
             </div>
 
@@ -294,12 +294,12 @@
     <!-- 底部工具条：所有状态下都在，添加机器人不再藏在管理页 -->
     <div class="bot-side-foot">
       <button type="button" class="bot-add" @click="emit('create')">
-        <el-icon :size="14"><Plus /></el-icon>
+        <el-icon :size="14"><Add16Regular /></el-icon>
         {{ t('bot.chat.addBot') }}
       </button>
       <GdTooltip :content="t('bot.card.docs')" placement="top">
         <button type="button" class="bot-docs" @click="emit('docs')">
-          <el-icon :size="14"><Document /></el-icon>
+          <el-icon :size="14"><Document16Regular /></el-icon>
         </button>
       </GdTooltip>
     </div>
@@ -309,8 +309,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElInput, ElButton, ElIcon, ElMessage } from 'element-plus'
-import { ArrowDown, ArrowRight, ChatDotRound, Document, Plus, Search } from '@element-plus/icons-vue'
+import { ElInput, ElIcon, ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
+import { ChevronDown12Regular, ChevronRight12Regular, Chat20Regular, Document16Regular, Add16Regular, Search16Regular } from '@vicons/fluent'
 import { ScrollContainer } from '@/components/ui'
 import DropdownMenu from '@/components/ui/DropdownMenu.vue'
 import DropdownMenuItem from '@/components/ui/DropdownMenuItem.vue'

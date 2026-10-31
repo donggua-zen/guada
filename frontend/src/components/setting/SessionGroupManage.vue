@@ -9,9 +9,9 @@
         <div class="flex gap-2">
             <el-input v-model="newGroupName" placeholder="输入新分组名称" maxlength="20" show-word-limit
                 @keyup.enter="handleCreateGroup" />
-            <el-button type="primary" @click="handleCreateGroup" :disabled="!newGroupName.trim()">
+            <GdButton type="primary" @click="handleCreateGroup" :disabled="!newGroupName.trim()">
                 新建
-            </el-button>
+            </GdButton>
         </div>
 
         <!-- 分组列表（可拖拽排序） -->
@@ -75,6 +75,7 @@
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { ref, computed, watch } from 'vue'
 import draggable from 'vuedraggable'
 import { useSessionGroupStore } from '@/stores/sessionGroup'

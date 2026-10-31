@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Cube Pets · 尺寸对比</title>
+<style>
+  html, body { margin: 0; background: #eef2f8; color: #22303f;
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 14px; font-weight: 600; margin: 16px 20px 4px; }
+  p.sub { margin: 0 20px 12px; color: #5b6b80; font-size: 12px; }
+  #strip { display: flex; align-items: flex-end; gap: 10px; padding: 0 20px 8px; flex-wrap: wrap; }
+  figure { margin: 0; text-align: center; }
+  figure img { display: block; image-rendering: auto; }
+  figcaption { font-size: 11px; color: #5b6b80; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .dark #strip { background: #12161d; }
+</style>
+</head>
+<body>
+<h1>Cube Pets · 同一模型在各尺寸下的实际观感</h1>
+<p class="sub">每个框都是 1:1 像素渲染（非缩放），与桌宠落到屏幕上时完全一致。</p>
+<div id="strip"></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const SIZES = [48, 64, 80, 96, 120, 168];
+const FOV = 26;
+const ANIMAL = new URLSearchParams(location.search).get('a') || 'fox';
+
+const canvas = document.createElement('canvas');
+// preserveDrawingBuffer 才能 toDataURL
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(FOV, 1, 0.01, 200);
+scene.add(new THREE.HemisphereLight(0xdff0ff, 0x2a3240, 2.0));
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(3, 6, 4); scene.add(key);
+const fill = new THREE.DirectionalLight(0xbcd8ff, 0.8); fill.position.set(-4, 2, -3); scene.add(fill);
+
+new GLTFLoader().load(`models/animal-${ANIMAL}.glb`, (gltf) => {
+  const model = gltf.scene;
+  model.traverse(o => {
+    if (!o.isMesh) return;
+    o.material.side = THREE.DoubleSide;
+    const map = o.material.map;
+    if (map) {
+      map.magFilter = THREE.NearestFilter;
+      map.minFilter = THREE.NearestFilter;
+      map.generateMipmaps = false;
+      map.needsUpdate = true;
+    }
+  });
+  scene.add(model);
+
+  const box = new THREE.Box3().setFromObject(model);
+  const modelH = box.max.y - box.min.y;
+
+  const strip = document.getElementById('strip');
+  for (const px of SIZES) {
+    const pad = Math.round(px * 0.55);
+    const board = px + pad * 2;
+    renderer.setSize(board, board, false);
+    camera.aspect = 1;
+    const tan = Math.tan((FOV / 2) * Math.PI / 180);
+    const dist = (modelH * board) / (2 * px * tan);
+    camera.position.copy(new THREE.Vector3(0.62, 0.30, 0.85).normalize().multiplyScalar(dist));
+    camera.lookAt(0, modelH * 0.5, 0);
+    camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+
+    const fig = document.createElement('figure');
+    fig.style.width = board + 'px';
+    const img = new Image();
+    img.src = canvas.toDataURL('image/png');
+    img.width = board; img.height = board;
+    // 主色块兜底：透明背景直接贴页面底色
+    fig.appendChild(img);
+    const cap = document.createElement('figcaption');
+    cap.textContent = px + 'px';
+    fig.appendChild(cap);
+    strip.appendChild(fig);
+  }
+  document.title = `尺寸对比 · ${ANIMAL}`;
+  window.__done = true;
+}, undefined, (e) => { document.title = 'error'; window.__err = String(e); });
+</script>
+</body>
+</html>

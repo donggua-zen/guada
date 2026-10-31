@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Cube Pets · 纯图片桌宠（无 3D 运行时）</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; color: #e6e9ef; }
+  body { background: radial-gradient(1100px 620px at 18% -10%, #22344a 0%, #131a24 55%, #0a0d12 100%); }
+  body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px) 0 0 / 64px 64px,
+      linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px) 0 0 / 64px 64px;
+    mask-image: radial-gradient(circle at 70% 80%, #000 0%, transparent 70%);
+  }
+  body.light { background: radial-gradient(1100px 620px at 18% -10%, #ffffff 0%, #eef2f8 55%, #dfe6f0 100%); color: #22303f; }
+  body.light::after { background:
+      linear-gradient(90deg, rgba(0,0,0,.055) 1px, transparent 1px) 0 0 / 64px 64px,
+      linear-gradient(rgba(0,0,0,.055) 1px, transparent 1px) 0 0 / 64px 64px; }
+
+  /* 桌宠舞台：右下角，纯 DOM，无 canvas */
+  #stage { position: fixed; right: 24px; bottom: 16px; }
+  #pet { background-repeat: no-repeat; will-change: background-position; }
+  #shadow { position: absolute; left: 50%; transform: translateX(-50%);
+    border-radius: 50%; background: radial-gradient(closest-side, rgba(0,0,0,.45), rgba(0,0,0,0));
+    pointer-events: none; }
+  body.light #shadow { background: radial-gradient(closest-side, rgba(0,0,0,.30), rgba(0,0,0,0)); }
+
+  #ui { position: fixed; left: 16px; top: 16px; width: 250px; padding: 12px;
+    background: rgba(18,22,30,.88); border: 1px solid #2a3140; border-radius: 12px; backdrop-filter: blur(10px); }
+  body.light #ui { background: rgba(255,255,255,.92); border-color: #d5dde8; }
+  #ui h1 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: #8fa3ba; letter-spacing: .06em; }
+  body.light #ui h1 { color: #5b6b80; }
+  .note { font-size: 11px; color: #6f7f94; margin-bottom: 10px; }
+  body.light .note { color: #7386a0; }
+  button { font: inherit; padding: 4px 9px; margin: 2px 2px 0 0; border-radius: 8px;
+    border: 1px solid #333c4d; background: #1b2130; color: #dbe3ef; cursor: pointer; }
+  body.light button { background: #f3f6fa; border-color: #cfd9e6; color: #22303f; }
+  button.on { background: #2f6fed !important; border-color: #2f6fed !important; color: #fff !important; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .row input[type=range] { flex: 1; accent-color: #2f6fed; }
+  .val { width: 48px; text-align: right; color: #7fd4a0; font-variant-numeric: tabular-nums; }
+  #state { margin-top: 8px; padding-top: 8px; border-top: 1px solid #2a3140;
+    font-size: 11px; color: #7fd4a0; font-variant-numeric: tabular-nums; }
+  body.light #state { border-top-color: #dde4ee; color: #1f9d63; }
+  #hint { position: fixed; left: 16px; bottom: 14px; font-size: 12px; color: #6f7f94; }
+  body.light #hint { color: #7386a0; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="pet"></div>
+  <div id="shadow"></div>
+</div>
+
+<div id="ui">
+  <h1>纯图片桌宠 · 零 3D 运行时</h1>
+  <div class="note">只有 PNG/WebP 图集 + CSS <code>steps()</code> 切帧，没有 WebGL。</div>
+  <div id="anims"></div>
+  <div class="row">
+    <span style="color:#8fa3ba">缩放</span>
+    <input id="scale" type="range" min="0.5" max="2" step="0.1" value="1" />
+    <span class="val" id="scaleVal">1.0×</span>
+  </div>
+  <button id="flip" style="width:100%;margin-top:8px">↔ 左右翻转</button>
+  <button id="wall" style="width:100%;margin-top:6px">🖼 切换壁纸</button>
+  <div id="state">loading…</div>
+</div>
+
+<div id="hint">这就是"3D 转图片"的最终形态：一张图集一条动画，运行时只换 <b>background-position</b>。</div>
+
+<script type="module">
+const ANIMAL = 'fox';
+const DIR = `bake_out/${ANIMAL}`;       // 由 bake.html 烘出
+const EXT = 'webp';                      // 或 png
+const BOARD = 252;                       // 单帧画布边长（图集里一格）
+const FPS = 12;
+
+/* 每段动画的帧数（与 meta.json 一致） */
+const CLIPS = {
+  static: 2, idle: 12, walk: 6, run: 3,
+  eat: 6, dance: 6, 'gesture-positive': 3, 'gesture-negative': 3,
+};
+
+const pet = document.getElementById('pet');
+const shadow = document.getElementById('shadow');
+const stateEl = document.getElementById('state');
+let scale = 1, flipped = false, current = null;
+
+/* 注入每段动画的 keyframes：位移 = 帧数 × 单帧宽 */
+const style = document.createElement('style');
+let css = '';
+for (const [name, frames] of Object.entries(CLIPS)) {
+  const dur = frames / FPS;
+  css += `
+    @keyframes play-${name} {
+      from { background-position: 0 0; }
+      to   { background-position: ${-frames * BOARD}px 0; }
+    }
+    .play-${name} { animation: play-${name} ${dur}s steps(${frames}) infinite; }
+  `;
+}
+style.textContent = css;
+document.head.appendChild(style);
+
+function applyLayout() {
+  const size = BOARD * scale;
+  pet.style.width = size + 'px';
+  pet.style.height = size + 'px';
+  pet.style.backgroundSize = `${size * CLIPS[current] || size}px ${size}px`;  // 由 setAnim 再精确设
+  // 图集里立绘垂直居中：cell 252、立绘 120 → 上下各留 66px，即脚底距格底 26.2%
+  shadow.style.width = Math.round(size * 0.38) + 'px';
+  shadow.style.height = Math.round(size * 0.055) + 'px';
+  shadow.style.bottom = Math.round(size * 0.262) + 'px';
+}
+
+function setAnim(name) {
+  const frames = CLIPS[name];
+  if (!frames) return;
+  current = name;
+  const size = BOARD * scale;
+  pet.style.width = size + 'px';
+  pet.style.height = size + 'px';
+  // 整条图集宽 = 帧数 × size，高 = size
+  pet.style.backgroundSize = `${frames * size}px ${size}px`;
+  pet.style.backgroundImage = `url("${DIR}/sheet_${name}.${EXT}")`;
+  pet.style.transform = flipped ? 'scaleX(-1)' : 'none';
+  pet.className = '';
+  void pet.offsetWidth;                       // 强制重排，动画从头播
+  pet.classList.add(`play-${name}`);
+  document.querySelectorAll('#anims button').forEach(b => b.classList.toggle('on', b.dataset.n === name));
+  stateEl.textContent = `${name} · ${frames} 帧 @ ${FPS}fps · ${(frames / FPS).toFixed(2)}s`;
+  applyLayout();
+  pet.style.backgroundSize = `${frames * size}px ${size}px`;
+}
+
+/* 按钮 */
+const box = document.getElementById('anims');
+for (const name of Object.keys(CLIPS)) {
+  const b = document.createElement('button');
+  b.textContent = name; b.dataset.n = name;
+  b.onclick = () => setAnim(name);
+  box.appendChild(b);
+}
+
+document.getElementById('scale').oninput = (e) => {
+  scale = +e.target.value;
+  document.getElementById('scaleVal').textContent = scale.toFixed(1) + '×';
+  setAnim(current);
+};
+document.getElementById('flip').onclick = () => {
+  flipped = !flipped;
+  pet.style.transform = flipped ? 'scaleX(-1)' : 'none';
+};
+document.getElementById('wall').onclick = () => document.body.classList.toggle('light');
+
+window.__setAnim = setAnim;
+window.__clips = CLIPS;
+setAnim('idle');
+</script>
+</body>
+</html>

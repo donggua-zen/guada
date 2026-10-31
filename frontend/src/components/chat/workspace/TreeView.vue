@@ -24,7 +24,7 @@
       <template v-else>
         <span v-if="row.isDir" class="tree-view-chevron" :class="{ expanded: !isCollapsed(row) }"
           @click.stop="onToggle(row)">
-          <el-icon :size="12"><ArrowRight /></el-icon>
+          <el-icon :size="12"><ChevronRight12Regular /></el-icon>
         </span>
         <span v-else class="tree-view-chevron-placeholder" />
         <!-- 行内容插槽：图标 / 名称 / 操作按钮由调用方提供 -->
@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
-import { ArrowRight } from "@element-plus/icons-vue";
+import { ChevronRight12Regular } from "@vicons/fluent";
 import { computeTreeViewVisibleRange } from "./treeViewVirtual";
 
 /**
@@ -284,7 +284,7 @@ defineExpose({ scrollToKey });
      - min-width:0  → 允许在 flex 行内收缩（默认 min-width:auto 会撑破行宽）
      - nowrap       → 硬约束：长文本一旦换行会撑高行盒、压到相邻行上
      - ellipsis     → 收缩后用省略号表达"被截断"
-   只针对文本容器 span 生效，不干扰调用方插入的 img / el-button。 */
+   只针对文本容器 span 生效，不干扰调用方插入的 img / button。 */
 .tree-view-row > span {
   min-width: 0;
   overflow: hidden;

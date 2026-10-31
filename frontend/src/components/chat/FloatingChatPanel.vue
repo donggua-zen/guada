@@ -13,12 +13,12 @@
   <div ref="panelRef" class="fcp-panel" :class="{ 'fcp-dragging': isDragging }" :style="panelStyle">
     <div class="fcp-header" @mousedown="startDrag" @dblclick="handleHeaderDblClick">
       <div class="flex items-center gap-1.5 min-w-0 flex-1">
-        <el-icon :size="14" class="shrink-0 fcp-header-icon"><ChatDotRound /></el-icon>
+        <el-icon :size="14" class="shrink-0 fcp-header-icon"><Chat16Regular /></el-icon>
         <span class="truncate">{{ sessionTitle }}</span>
       </div>
       <div class="flex items-center gap-0.5 shrink-0">
         <button class="fcp-btn" :title="t('chat.floating.hide')" @click.stop="hide">
-          <el-icon :size="14"><Close /></el-icon>
+          <el-icon :size="14"><Dismiss16Regular /></el-icon>
         </button>
       </div>
     </div>
@@ -43,7 +43,7 @@
 import { computed, ref, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { ChatDotRound, Close } from '@element-plus/icons-vue'
+import { Chat16Regular, Dismiss16Regular } from '@vicons/fluent'
 import { useLayoutStore } from '@/stores/layout'
 import { useSessionStore } from '@/stores/session'
 import { NEW_SESSION_ID } from '@/constants'

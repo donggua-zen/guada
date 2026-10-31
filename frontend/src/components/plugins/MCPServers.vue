@@ -1,51 +1,100 @@
 <template>
     <div class="flex-1">
-        <PluginTabHeader :title="t('plugins.mcp.title')" :subtitle="t('plugins.mcp.subtitle')">
-            <template #actions>
-                <el-button circle :loading="loading" :title="t('common.refresh')" @click="loadServers">
-                    <template #icon>
-                        <RefreshOutlined />
-                    </template>
-                </el-button>
-                <el-button @click="handleImport">
-                    <template #icon>
-                        <UploadOutlined />
-                    </template>
-                    {{ t('plugins.mcp.importConfig') }}
-                </el-button>
-                <el-button type="primary" @click="handleAddServer">
-                    <template #icon>
-                        <AddOutlined />
-                    </template>
-                    {{ t('plugins.mcp.addServer') }}
-                </el-button>
-            </template>
-        </PluginTabHeader>
-
-        <!-- MCP 服务器列表（无界两列行） -->
-        <div v-if="servers.length > 0" class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
-            <PluginListRow
-                v-for="server in servers"
-                :key="server.id"
-                :name="server.name"
-                :description="server.description || t('plugins.mcp.noDescription')"
-                :menu-items="mcpMenuItems"
-                @click="handleEditServer(server)"
-                @command="(command) => handleServerCommand(command, server)"
-            >
-                <template #actions>
-                    <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
-                        @change="handleToggleServer(server)" @click.stop size="small" />
+        <!-- 视图条：二级切换 + 当前视图的动作（取代原大标题区与市场自带标题行） -->
+        <div class="plugins-view-bar">
+            <div class="plugins-view-bar__left">
+                <PluginViewSwitch v-model="view" :items="viewItems" />
+                <GdTooltip :content="t('plugins.mcp.subtitle')" placement="top">
+                    <button type="button" class="plugins-view-info" :aria-label="t('plugins.page.info')">
+                        <Info24Regular />
+                    </button>
+                </GdTooltip>
+            </div>
+            <div class="plugins-view-bar__right">
+                <template v-if="view === 'installed'">
+                    <GdButton circle :loading="loading" :title="t('common.refresh')" @click="loadServers">
+                        <template #icon>
+                            <ArrowClockwise16Regular />
+                        </template>
+                    </GdButton>
+                    <GdButton @click="handleImport">
+                        <template #icon>
+                            <ArrowUpload16Regular />
+                        </template>
+                        {{ t('plugins.mcp.importConfig') }}
+                    </GdButton>
+                    <GdButton type="primary" @click="handleAddServer">
+                        <template #icon>
+                            <Add16Regular />
+                        </template>
+                        {{ t('plugins.mcp.addServer') }}
+                    </GdButton>
                 </template>
-            </PluginListRow>
+                <template v-else>
+                    <el-input
+                        v-model="marketKeyword"
+                        :placeholder="t('plugins.mcpMarket.searchPlaceholder')"
+                        clearable
+                        size="default"
+                        class="plugins-search"
+                    >
+                        <template #prefix>
+                            <el-icon><Search16Regular /></el-icon>
+                        </template>
+                    </el-input>
+                    <GdButton circle size="small" :loading="marketLoading" :title="t('plugins.mcpMarket.refresh')" @click="handleMarketRefresh">
+                        <template #icon>
+                            <ArrowClockwise16Regular />
+                        </template>
+                    </GdButton>
+                </template>
+            </div>
         </div>
-        <div v-else
-            class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-12 text-center">
-            <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
-                <InboxOutlined />
-            </el-icon>
-            <div class="text-gray-500 dark:text-[#8b8d95]">{{ t('plugins.mcp.empty') }}</div>
-            <div class="text-sm text-gray-400 dark:text-[#6b6d75] mt-2">{{ t('plugins.mcp.emptyHint') }}</div>
+
+        <!-- 已添加视图：行内补协议类型，类型未知（旧数据 null）时不猜 -->
+        <div v-show="view === 'installed'">
+            <div v-if="servers.length > 0" class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
+                <PluginListRow
+                    v-for="server in servers"
+                    :key="server.id"
+                    :name="server.name"
+                    :description="server.description || t('plugins.mcp.noDescription')"
+                    :menu-items="mcpMenuItems"
+                    @click="handleEditServer(server)"
+                    @command="(command) => handleServerCommand(command, server)"
+                >
+                    <template #badges>
+                        <el-tag v-if="server.type" size="small" type="info" effect="plain">{{ server.type }}</el-tag>
+                        <el-tag v-if="toolCount(server) > 0" size="small" type="info" effect="plain">
+                            {{ t('plugins.mcp.toolsTag', { count: toolCount(server) }) }}
+                        </el-tag>
+                    </template>
+                    <template #actions>
+                        <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
+                            @change="handleToggleServer(server)" @click.stop size="small" />
+                    </template>
+                </PluginListRow>
+            </div>
+            <div v-else
+                class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-12 text-center">
+                <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
+                    <MailInbox24Regular />
+                </el-icon>
+                <div class="text-gray-500 dark:text-[#8b8d95]">{{ t('plugins.mcp.empty') }}</div>
+                <div class="text-sm text-gray-400 dark:text-[#6b6d75] mt-2">{{ t('plugins.mcp.emptyHint') }}</div>
+                <GdButton class="mt-4" @click="view = 'market'">{{ t('plugins.page.goMarket') }}</GdButton>
+            </div>
+        </div>
+
+        <!-- 市场视图：v-show 保留实例，切回来不重新请求、搜索与来源筛选状态都在 -->
+        <div v-show="view === 'market'">
+            <McpMarket
+                ref="marketRef"
+                v-model:keyword="marketKeyword"
+                :local-servers="servers"
+                :active="view === 'market'"
+                @imported="loadServers"
+            />
         </div>
 
         <!-- 添加/编辑服务器对话框 -->
@@ -135,7 +184,7 @@
                 <el-tab-pane :label="t('plugins.mcp.tabTools')" name="tools">
                     <div v-if="!isEditMode" class="py-12 text-center">
                         <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
-                            <InfoOutlined />
+                            <Info24Regular />
                         </el-icon>
                         <div class="text-gray-500">{{ t('plugins.mcp.toolsNewHint') }}</div>
                         <div class="text-sm text-gray-400 mt-2">{{ t('plugins.mcp.toolsNewHintSub') }}</div>
@@ -146,18 +195,18 @@
                             <div class="text-sm text-gray-600 dark:text-[#8b8d95]">
                                 {{ t('plugins.mcp.toolsCount', { count: toolsList.length }) }}
                             </div>
-                            <el-button size="small" @click="handleTestConnection" :loading="testingConnection">
+                            <GdButton size="small" @click="handleTestConnection" :loading="testingConnection">
                                 <el-icon class="mr-1" :class="{ 'is-loading': testingConnection }">
-                                    <CableOutlined />
+                                    <PlugConnected24Regular />
                                 </el-icon>
                                 {{ t('plugins.mcp.testConnection') }}
-                            </el-button>
-                            <el-button size="small" @click="handleRefreshTools" :loading="refreshingTools">
-                                <el-icon class="mr-1" :class="{ 'is-loading': refreshingTools }">
-                                    <RefreshRight />
+                            </GdButton>
+                            <GdButton size="small" @click="handleRefreshTools" :loading="refreshingTools">
+                                <el-icon class="mr-1">
+                                    <ArrowClockwise16Regular :class="{ 'animate-spin': refreshingTools }" />
                                 </el-icon>
                                 {{ t('plugins.mcp.refreshTools') }}
-                            </el-button>
+                            </GdButton>
                         </div>
 
                         <div v-if="toolsList.length > 0" class="tools-list">
@@ -198,7 +247,7 @@
 
                         <div v-else class="py-8 text-center text-gray-400">
                             <el-icon size="36" class="mb-2 opacity-50">
-                                <InboxOutlined />
+                                <MailInbox24Regular />
                             </el-icon>
                             <div class="text-sm">{{ t('plugins.mcp.toolsEmpty') }}</div>
                             <div class="text-xs mt-1">{{ t('plugins.mcp.toolsEmptyHint') }}</div>
@@ -208,10 +257,10 @@
             </el-tabs>
 
             <template #footer>
-                <span class="dialog-footer">
-                    <el-button @click="showModal = false">{{ t('common.cancel') }}</el-button>
-                    <el-button type="primary" @click="handleSaveServer" :loading="saving">{{ t('common.ok') }}</el-button>
-                </span>
+                <div class="flex justify-end gap-2">
+                    <GdButton @click="showModal = false">{{ t('common.cancel') }}</GdButton>
+                    <GdButton type="primary" @click="handleSaveServer" :loading="saving">{{ t('common.ok') }}</GdButton>
+                </div>
             </template>
         </GdDialog>
 
@@ -234,10 +283,10 @@
             <el-input v-model="importJsonText" type="textarea" :rows="15" :placeholder="t('plugins.mcp.importPlaceholder')" />
 
             <template #footer>
-                <span class="dialog-footer">
-                    <el-button @click="showImportModal = false">{{ t('common.cancel') }}</el-button>
-                    <el-button type="primary" @click="handleImportJson" :loading="importing">{{ t('plugins.mcp.importBtn') }}</el-button>
-                </span>
+                <div class="flex justify-end gap-2">
+                    <GdButton @click="showImportModal = false">{{ t('common.cancel') }}</GdButton>
+                    <GdButton type="primary" @click="handleImportJson" :loading="importing">{{ t('plugins.mcp.importBtn') }}</GdButton>
+                </div>
             </template>
         </GdDialog>
     </div>
@@ -246,29 +295,44 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane } from 'element-plus'
-import { RefreshRight } from '@element-plus/icons-vue'
-import {
-    AddOutlined,
-    SettingsOutlined,
-    RemoveCircleOutlineRound,
-    InboxOutlined,
-    UploadOutlined,
-    InfoOutlined,
-    CableOutlined,
-    RefreshOutlined
-} from '@vicons/material'
+import { ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
+import { ArrowClockwise16Regular, Add16Regular, ArrowUpload16Regular, MailInbox24Regular, Info24Regular, PlugConnected24Regular, Search16Regular } from '@vicons/fluent'
 import { usePopup } from '../../composables/usePopup'
+import { usePluginViewQuery } from '../../composables/usePluginViewQuery'
 import { apiService } from '../../services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import GdTooltip from '@/components/ui/GdTooltip.vue'
 import PluginListRow from './PluginListRow.vue'
-import PluginTabHeader from './PluginTabHeader.vue'
+import PluginViewSwitch from './PluginViewSwitch.vue'
+import McpMarket from './McpMarket.vue'
 
 const { toast } = usePopup()
 const { t } = useI18n()
 
 // 响应式数据
 const servers = ref([])
+// ── 二级视图：已添加 / 市场（状态落 route query，刷新与前进后退不丢）──
+const view = usePluginViewQuery()
+/** 搜索框在视图条上，市场组件常驻，切回来关键词还在 */
+const marketKeyword = ref('')
+const marketRef = ref(null)
+
+const viewItems = computed(() => [
+    { value: 'installed', label: t('plugins.mcp.viewAdded') },
+    { value: 'market', label: t('plugins.page.viewMarket') },
+])
+
+/** 列表接口已带回 tools，不必进弹窗才看得到数量 */
+const toolCount = (server) => Object.keys(server.tools || {}).length
+
+const marketLoading = computed(() => marketRef.value?.loading === true)
+
+function handleMarketRefresh() {
+    marketRef.value?.refresh()
+}
+
 const showModal = ref(false)
 const showImportModal = ref(false)
 const isEditMode = ref(false)
@@ -812,12 +876,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.dialog-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-}
-
 .tools-panel {
     max-height: 500px;
     overflow-y: auto;

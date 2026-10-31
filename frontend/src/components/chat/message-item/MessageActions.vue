@@ -12,7 +12,7 @@
     <template v-if="!isAssistant && allowGenerate">
       <GdTooltip :content="t('chat.messageActions.regenerate')" placement="top">
         <div class="message-action-button" @click="$emit('generate')">
-          <ArrowDownwardTwotone class="w-4 h-4" />
+          <ArrowDown16Regular class="w-4 h-4" />
         </div>
       </GdTooltip>
     </template>
@@ -32,7 +32,7 @@
         <!-- 真 button 而非 div：让 .message-action-button 预置的 disabled: 工具类生效 -->
         <button type="button" class="message-action-button"
           :disabled="branching || branchDisabled" @click="handleBranch">
-          <LoadingOutlined v-if="branching" class="w-4 h-4 animate-spin" />
+          <ArrowSync16Regular v-if="branching" class="w-4 h-4 animate-spin" />
           <BranchFork16Regular v-else class="w-4 h-4" />
         </button>
       </GdTooltip>
@@ -59,14 +59,14 @@
     <!-- 用量：只常显总量，明细走 tooltip（窄屏优先截断这一段） -->
     <GdTooltip v-if="isAssistant && tokenUsage" class="min-w-0" :content="tokenDetail" placement="top">
       <div class="ml-2 flex min-w-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-        <InsightsTwotone class="w-3.5 h-3.5 shrink-0" />
+        <ChartMultiple20Regular class="w-3.5 h-3.5 shrink-0" />
         <span class="truncate">{{ tokenSummary }}</span>
       </div>
     </GdTooltip>
 
     <template v-if="isAssistant">
       <div v-if="durationText" class="ml-2 flex shrink-0 items-center justify-center text-gray-500">
-        <AccessTimeTwotone class="w-3 h-3 mr-1" />
+        <Clock12Regular class="w-3 h-3 mr-1" />
         <span class="text-xs">{{ durationText }}</span>
       </div>
       <span class="ml-2 shrink-0 text-xs text-gray-500" :title="props.timeFull">{{ props.timeFriendly }}</span>
@@ -86,13 +86,15 @@ const { t } = useI18n();
 import {
   Copy16Regular,
   ArrowClockwise16Regular,
+  ArrowSync16Regular,
+  ArrowDown16Regular,
+  ChartMultiple20Regular,
+  Clock12Regular,
   MoreHorizontal16Regular,
   Delete16Regular,
   Edit16Regular,
   BranchFork16Regular,
 } from '@vicons/fluent';
-import { ArrowDownwardTwotone, AccessTimeTwotone, InsightsTwotone } from '@vicons/material';
-import { LoadingOutlined } from '@vicons/antd';
 
 interface TokenUsageLike {
   promptTokens: number;

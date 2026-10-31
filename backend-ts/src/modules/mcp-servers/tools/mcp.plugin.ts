@@ -24,6 +24,7 @@ export class McpPlugin extends PluginBase {
     version: "1.0.0",
     /** system 类别：插件实例始终加载，工具可用性由 toolsets_allow 控制 */
     category: "system" as const,
+    icon: "images/plugins/mcp.svg",
   };
 
   constructor(

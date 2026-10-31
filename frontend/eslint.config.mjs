@@ -79,14 +79,20 @@ export default ts.config(
           selector: "Literal[value='new-session']",
           message: '改用 @/constants 的 NEW_SESSION_ID（路由哨兵不是会话 id，不能拿它去调后端接口）',
         },
-        {
-          selector: "VElement[name.name='el-dialog']",
-          message: '弹窗统一使用 GdDialog；不要在模板里直接写 <el-dialog>。',
-        },
-        {
-          selector: "VElement[name.name='ElDialog']",
-          message: '弹窗统一使用 GdDialog；不要在模板里直接写 <ElDialog>。',
-        },
+      ],
+    },
+  },
+  // 组件标签防回归：模板元素限制用 vue/no-restricted-html-elements。
+  // 不用 no-restricted-syntax 的 VElement selector——核心规则不遍历模板节点，写了也不生效。
+  {
+    files: ['**/*.vue'],
+    rules: {
+      'vue/no-restricted-html-elements': [
+        'error',
+        { element: 'el-dialog', message: '弹窗统一使用 GdDialog；不要在模板里直接写 <el-dialog>。' },
+        { element: 'ElDialog', message: '弹窗统一使用 GdDialog；不要在模板里直接写 <ElDialog>。' },
+        { element: 'el-button', message: '按钮统一使用 GdButton；不要在模板里直接写 <el-button>。' },
+        { element: 'ElButton', message: '按钮统一使用 GdButton；不要在模板里直接写 <ElButton>。' },
       ],
     },
   },
@@ -103,6 +109,24 @@ export default ts.config(
               name: 'element-plus',
               importNames: ['ElMessageBox', 'ElDialog'],
               message: '弹窗统一使用 GdDialog / usePopup（modalService），不要直接使用 Element Plus 的 ElMessageBox / ElDialog。',
+            },
+            {
+              name: 'element-plus',
+              importNames: ['ElButton'],
+              message: '按钮统一使用 GdButton（@/components/ui/GdButton.vue），不要使用 Element Plus 的 ElButton。',
+            },
+            {
+              name: '@element-plus/icons-vue',
+              message:
+                '图标统一使用 @vicons/fluent（自定义图标放 @/components/icons）。Element Plus 图标已于 2026-10 全量迁移，勿再引入。',
+            },
+            {
+              name: '@vicons/antd',
+              message: '图标统一使用 @vicons/fluent。Ant Design 图标已于 2026-10 全量迁移，勿再引入。',
+            },
+            {
+              name: '@vicons/ionicons5',
+              message: '图标统一使用 @vicons/fluent。Ionicons 图标已于 2026-10 全量迁移，勿再引入。',
             },
           ],
         },

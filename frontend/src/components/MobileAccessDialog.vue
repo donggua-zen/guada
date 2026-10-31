@@ -3,19 +3,19 @@
     <div class="space-y-4">
       <div class="flex items-start justify-between gap-3">
         <p class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('ui.mobileAccess.desc') }}</p>
-        <el-button size="small" class="shrink-0" @click="goSettings">{{ t('ui.mobileAccess.openSettings') }}</el-button>
+        <GdButton size="small" class="shrink-0" @click="goSettings">{{ t('ui.mobileAccess.openSettings') }}</GdButton>
       </div>
 
       <!-- 未开启 / 未设密码：空态 -->
       <div v-if="!anyEnabled" class="rounded-xl border border-dashed border-gray-300 dark:border-[#3a3b3f] px-6 py-10 flex flex-col items-center text-center gap-3">
         <div class="w-12 h-12 rounded-full bg-gray-100 dark:bg-[#2a2b2f] flex items-center justify-center">
-          <SmartphoneOutlined class="w-6 h-6 text-gray-500 dark:text-[#8b8d95]" />
+          <Phone24Regular class="w-6 h-6 text-gray-500 dark:text-[#8b8d95]" />
         </div>
         <div class="space-y-1">
           <p class="text-sm font-medium text-gray-900 dark:text-[#e8e9ed]">{{ t('ui.mobileAccess.emptyTitle') }}</p>
           <p class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('ui.mobileAccess.emptyDesc') }}</p>
         </div>
-        <el-button type="primary" @click="goSettings">{{ t('ui.mobileAccess.goEnable') }}</el-button>
+        <GdButton type="primary" @click="goSettings">{{ t('ui.mobileAccess.goEnable') }}</GdButton>
       </div>
 
       <template v-else>
@@ -29,7 +29,7 @@
                 <span class="text-xs text-gray-500 dark:text-[#8b8d95] truncate">{{ statusDetail }}</span>
               </div>
             </div>
-            <el-button size="small" @click="stopAccess">{{ t('ui.mobileAccess.stop') }}</el-button>
+            <GdButton size="small" @click="stopAccess">{{ t('ui.mobileAccess.stop') }}</GdButton>
           </div>
         </div>
 
@@ -53,7 +53,7 @@
 
           <div class="w-full flex items-center justify-between gap-3">
             <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('ui.mobileAccess.cannotScan') }}</span>
-            <el-button size="small" :disabled="!currentUrl" @click="copyLink">{{ t('ui.mobileAccess.copyLink') }}</el-button>
+            <GdButton size="small" :disabled="!currentUrl" @click="copyLink">{{ t('ui.mobileAccess.copyLink') }}</GdButton>
           </div>
           <code v-if="currentUrl" class="text-xs text-blue-600 dark:text-blue-400 break-all text-center select-all">{{ currentUrl }}</code>
         </div>
@@ -61,7 +61,7 @@
         <!-- 未设密码提示 -->
         <div v-if="!passwordSet" class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 flex items-center justify-between gap-3">
           <span class="text-xs text-amber-700 dark:text-amber-400">{{ t('ui.mobileAccess.needPassword') }}</span>
-          <el-button size="small" type="warning" plain @click="goSecurity">{{ t('ui.mobileAccess.setPassword') }}</el-button>
+          <GdButton size="small" type="warning" plain @click="goSecurity">{{ t('ui.mobileAccess.setPassword') }}</GdButton>
         </div>
       </template>
     </div>
@@ -69,12 +69,13 @@
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import QRCode from 'qrcode'
 import GdDialog from '@/components/ui/GdDialog.vue'
-import { SmartphoneOutlined } from '@vicons/material'
+import { Phone24Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import { writeTextToClipboard } from '@/utils/clipboard'

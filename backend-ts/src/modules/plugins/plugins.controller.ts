@@ -45,18 +45,30 @@ export class PluginsController {
 
   /**
    * 查询插件列表（全局/智能体通用）
-   * Body: { config?: RolePluginConfig, lang?: string } — 智能体层工具包配置（agent/session settings.plugins），
-   * 不传则仅返回全局状态（不做智能体层工具包过滤）。
+   * Body: { config?: RolePluginConfig, lang?: string, includeSystem?: boolean }
+   * — config：智能体层工具包配置（agent/session settings.plugins），
+   *   不传则仅返回全局状态（不做智能体层工具包过滤）。
+   * — includeSystem：是否返回 category=system 的系统插件。默认 false：
+   *   系统插件恒启用、不可禁用，只适合插件管理页展示；智能体工具配置等
+   *   消费方不应看到它们的工具包，故必须显式 opt-in。
    */
   @Public()
   @Post("query")
-  async queryPlugins(@Body() body: { config?: RolePluginConfig; lang?: string }) {
+  async queryPlugins(
+    @Body()
+    body: {
+      config?: RolePluginConfig;
+      lang?: string;
+      includeSystem?: boolean;
+    },
+  ) {
     const resolved = await this.pluginManager.resolvePlugins(undefined, body?.config, true);
     const nlsLocale = this.toNlsLocale(body?.lang);
+    const includeSystem = body?.includeSystem === true;
 
     return {
       plugins: resolved
-        .filter((r) => r.plugin.category !== "system")
+        .filter((r) => includeSystem || r.plugin.category !== "system")
         .map((r) => ({
           pluginId: r.plugin.id,
           effective: r.effective,
@@ -64,11 +76,19 @@ export class PluginsController {
           displayName: this.nlsService.resolveString(r.plugin.id, r.plugin.name, nlsLocale),
           description: this.nlsService.resolveString(r.plugin.id, r.plugin.description, nlsLocale),
           category: r.plugin.category,
+          // 系统必需标记：前端据此判断「不可禁用」（与 PluginManager.setPluginEnabled 一致）
+          essential: r.plugin.essential,
           enabled: r.enabled,
           icon: r.plugin.icon,
+          // 图标版本（文件 mtime，base36）：前端拼进 `?rev=`，替换图标后 URL 变化，
+          // 绕开浏览器/Electron 磁盘缓存里按旧 URL 缓存的响应。
+          iconRev: this.iconRev(r.plugin.id, r.plugin.icon),
           source: r.source || "builtin",
           version: r.plugin.version,
           author: r.plugin.author,
+          // 供应商包标识（前端徽标/安装提示）
+          providerApi: r.plugin.providerApi,
+          provides: r.plugin.provides,
           tools: r.allTools.map((t) => ({
             name: t.name,
             description: t.description,
@@ -218,12 +238,29 @@ export class PluginsController {
   }
 
   /**
+   * 图标端点允许的扩展名：只出图片，避免把插件目录/静态目录里的任意文件当图标暴露。
+   */
+  private static readonly ICON_EXTENSIONS = new Set([
+    ".svg",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+  ]);
+
+  /**
    * 获取插件图标
+   *
+   * 解析顺序：
+   * - `data:` / `http(s):`：直接 302，由浏览器自行加载
+   * - 相对路径：外部插件相对插件目录；内置插件（无插件目录）相对 STATIC_DIR
    */
   @Public()
   @Get(":pluginId/icon")
   async getPluginIcon(
     @Param("pluginId") pluginId: string,
+    @Query("rev") rev: string | undefined,
     @Res() res: Response,
   ) {
     const instance = this.pluginManager.getPlugin(pluginId);
@@ -243,21 +280,40 @@ export class PluginsController {
       return res.redirect(icon);
     }
 
-    // 相对路径：从插件目录读取
-    const pluginPath = this.externalLoader.getPluginPath(pluginId);
-    if (!pluginPath) {
-      return res.status(404).send("Plugin directory not found");
+    const resolved = this.resolveIconPath(pluginId, icon);
+    if (resolved.error === "invalid-type") {
+      return res.status(403).send("Invalid icon type");
     }
-
-    const iconPath = path.resolve(pluginPath, icon);
-    if (!iconPath.startsWith(pluginPath + path.sep) && iconPath !== pluginPath) {
+    if (resolved.error === "denied") {
       return res.status(403).send("Access denied");
     }
+    const iconPath = resolved.path!;
     if (!fs.existsSync(iconPath)) {
       return res.status(404).send("Icon file not found");
     }
 
-    return res.sendFile(iconPath);
+    return res
+      .type(this.assetContentType(iconPath))
+      // 带 `?rev=` 的 URL 由前端按文件 mtime 生成，内容变更即换 URL，
+      // 因此可以长缓存；无 rev 的请求（旧客户端/直接访问）退回协商缓存。
+      .setHeader(
+        "Cache-Control",
+        rev ? "public, max-age=31536000, immutable" : "public, no-cache",
+      )
+      // dotfiles: "allow" 与 assets 端点一致：dev 插件目录可能位于点目录下
+      .sendFile(iconPath, { dotfiles: "allow" }, (err) => {
+        if (err && !res.headersSent) {
+          const status =
+            (err as any).status ||
+            ((err as any).code === "ENOENT" ? 404 : undefined);
+          if (status === 404) {
+            res.status(404).send("Icon file not found");
+          } else {
+            this.logger.error(`sendFile failed: ${iconPath}: ${err.message}`);
+            res.status(500).send("Icon read failed");
+          }
+        }
+      });
   }
 
   /**
@@ -564,6 +620,51 @@ export class PluginsController {
    * 插件产物 rev：递归取插件目录最新文件 mtime（变化时前端重新加载）。
    * 覆盖 frontend/dist（slot 产物）与 themes/（主题 CSS/字体）等全部资源目录。
    */
+  /**
+   * 图标文件路径解析（getPluginIcon 与 iconRev 共用，避免两处基目录规则漂移）。
+   *
+   * 基目录：外部插件 = 扫描记录的真实目录；内置插件无插件目录，回落 STATIC_DIR
+   * （与 main.ts 的静态目录解析保持一致）。
+   * TODO(plugins): 内置插件图标目前集中放在 static/images/plugins/<id>.svg。
+   * 后期目标是为每个内置插件提供独立资源目录 resources/plugins/<id>/assets/，
+   * 与外部插件共用同一套 icon 解析语义（见 docs/technical-debt.md）。
+   */
+  private resolveIconPath(
+    pluginId: string,
+    icon: string,
+  ): { path?: string; error?: "invalid-type" | "denied" } {
+    const ext = path.extname(icon).toLowerCase();
+    if (!PluginsController.ICON_EXTENSIONS.has(ext)) {
+      return { error: "invalid-type" };
+    }
+    const base = path.resolve(
+      this.externalLoader.getPluginPath(pluginId) ||
+        process.env.STATIC_DIR ||
+        path.join(__dirname, "..", "..", "..", "static"),
+    );
+    // 纵深防御：解析后必须仍在基目录内
+    const iconPath = path.resolve(base, icon);
+    if (iconPath !== base && !iconPath.startsWith(base + path.sep)) {
+      return { error: "denied" };
+    }
+    return { path: iconPath };
+  }
+
+  /**
+   * 图标版本号（文件 mtime，base36）。前端拼进 `?rev=`：
+   * 替换图标文件后 URL 变化，绕开浏览器/Electron 按旧 URL 缓存的长 max-age 响应。
+   */
+  private iconRev(pluginId: string, icon?: string): string {
+    if (!icon) return "";
+    const resolved = this.resolveIconPath(pluginId, icon);
+    if (!resolved.path) return "";
+    try {
+      return Math.round(fs.statSync(resolved.path).mtimeMs).toString(36);
+    } catch {
+      return "";
+    }
+  }
+
   private assetRev(pluginPath: string): string {
     try {
       let latest = 0;

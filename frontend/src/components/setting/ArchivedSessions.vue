@@ -14,11 +14,11 @@
                 <el-option v-for="g in sessionGroupStore.sortedGroups" :key="g.id" :label="g.name" :value="g.id" />
                 <el-option :label="t('settings.archived.ungrouped')" :value="UNGROUPED_ID" />
             </el-select>
-            <el-button size="small" :loading="isLoading" @click="loadArchivedSessions" circle>
+            <GdButton size="small" :loading="isLoading" @click="loadArchivedSessions" circle>
                 <el-icon class="w-4 h-4">
                     <ArrowClockwise20Regular />
                 </el-icon>
-            </el-button>
+            </GdButton>
         </div>
 
         <!-- 批量操作栏 -->
@@ -27,16 +27,16 @@
                 <el-checkbox v-model="selectAll" @change="handleSelectAll">{{ t('common.selectAll') }}</el-checkbox>
                 <span class="text-xs text-gray-400" v-if="selectedIds.size > 0">{{ t('settings.archived.selectedCount', { n: selectedIds.size }) }}</span>
             </div>
-            <el-button type="primary" size="small" :disabled="selectedIds.size === 0" :loading="batchLoading"
+            <GdButton type="primary" size="small" :disabled="selectedIds.size === 0" :loading="batchLoading"
                 @click="handleBatchUnarchive">
                 {{ t('settings.archived.batchUnarchive') }}
-            </el-button>
+            </GdButton>
         </div>
 
         <!-- 加载中 -->
         <div v-if="isLoading" class="flex items-center justify-center py-10 text-gray-400">
             <el-icon class="animate-spin text-2xl mr-2">
-                <Loading />
+                <ArrowSync16Regular />
             </el-icon>
             <span class="text-sm">{{ t('common.loading') }}</span>
         </div>
@@ -76,10 +76,10 @@
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Archive20Regular, ArrowUndo20Regular, ArrowClockwise20Regular, Search16Regular } from '@vicons/fluent'
-import { Loading } from '@element-plus/icons-vue'
+import { Archive20Regular, ArrowUndo20Regular, ArrowClockwise20Regular, Search16Regular, ArrowSync16Regular } from '@vicons/fluent'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { useSessionGroupStore } from '@/stores/sessionGroup'

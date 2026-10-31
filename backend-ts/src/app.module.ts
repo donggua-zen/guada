@@ -10,6 +10,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { AgentsModule } from "./modules/agents/agents.module";
 import { FilesModule } from "./modules/files/files.module";
 import { McpServersModule } from "./modules/mcp-servers/mcp-servers.module";
+import { McpMarketModule } from "./modules/mcp-market/mcp-market.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { PolicyModule } from "./modules/policy/policy.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -61,6 +62,7 @@ import { MobileAccessModule } from './modules/mobile-access/mobile-access.module
     AgentsModule,
     FilesModule,
     McpServersModule,
+    McpMarketModule, // MCP 市场（消费端：榜单 + 配置解析 + 导入）
     SettingsModule,
     PolicyModule, // 命令策略规则（policy.yaml 的读写 API）
     UsersModule,

@@ -103,6 +103,7 @@ export class ShellPlugin extends PluginBase {
       description: "%shell.description%",
       version: "1.4.0",
       category: "core" as const,
+      icon: "images/plugins/shell.svg",
     };
 
   async onLoad(api: PluginApi) {

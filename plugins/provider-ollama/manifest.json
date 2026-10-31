@@ -1,0 +1,16 @@
+{
+  "id": "provider-ollama",
+  "name": "Ollama 供应商",
+  "version": "1.0.0",
+  "description": "通过 Ollama 原生 /api/chat 协议接入本地模型（代码型供应商包示例）",
+  "author": "dev",
+  "category": "user",
+  "providerApi": 1,
+  "main": "index.js",
+  "icon": "assets/logo.svg",
+  "provides": {
+    "providerAdapters": "index.js",
+    "providerTypes": ["types/*.yaml"],
+    "assets": "assets"
+  }
+}

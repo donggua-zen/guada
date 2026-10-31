@@ -560,6 +560,7 @@ export default {
     namePlaceholder: '输入分组名字',
     protocol: '协议类型',
     selectProtocol: '请选择协议类型',
+    protocolUnavailable: '当前协议不可用：提供该协议的插件已禁用或卸载，请切换协议。',
     apiUrl: 'API地址',
     apiKey: 'API KEY',
     test: '测试',

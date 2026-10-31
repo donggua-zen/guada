@@ -9,7 +9,7 @@
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2 flex-1 min-w-0">
             <el-icon size="16" class="text-gray-500 dark:text-[#8b8d95] shrink-0">
-              <Document />
+              <Document16Regular />
             </el-icon>
             <span class="text-sm text-gray-700 dark:text-[#e8e9ed] truncate" :title="task.fileName">
               {{ task.fileName }}
@@ -39,12 +39,12 @@
 
         <!-- 操作按钮 -->
         <div v-if="task.processingStatus === 'failed'" class="mt-2 flex justify-end gap-2">
-          <el-button size="small" @click="$emit('retry', task)">
+          <GdButton size="small" @click="$emit('retry', task)">
             {{ t('common.retry') }}
-          </el-button>
-          <el-button size="small" type="danger" @click="$emit('delete', task)">
+          </GdButton>
+          <GdButton size="small" type="danger" @click="$emit('delete', task)">
             {{ t('common.delete') }}
-          </el-button>
+          </GdButton>
         </div>
       </div>
     </div>
@@ -52,7 +52,7 @@
     <!-- 空状态 -->
     <div v-else class="text-center py-12">
       <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
-        <Upload />
+        <ArrowUpload24Regular />
       </el-icon>
       <p class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.uploadTask.empty') }}</p>
     </div>
@@ -60,16 +60,17 @@
     <!-- 底部操作 -->
     <template #footer>
       <div class="flex justify-end">
-        <el-button size="small" @click="handleClose">{{ t('common.close') }}</el-button>
+        <GdButton size="small" @click="handleClose">{{ t('common.close') }}</GdButton>
       </div>
     </template>
   </GdDialog>
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Document, Upload } from '@element-plus/icons-vue'
+import { Document16Regular, ArrowUpload24Regular } from '@vicons/fluent'
 import type { KBFile } from '@/stores/knowledgeBase'
 import GdDialog from '@/components/ui/GdDialog.vue'
 

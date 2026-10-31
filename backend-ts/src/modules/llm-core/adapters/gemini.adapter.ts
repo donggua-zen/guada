@@ -46,6 +46,13 @@ import { getRetryAfterFromError } from "../utils/retry.util";
 @Injectable()
 export class GeminiAdapter implements IProtocolAdapter {
   readonly protocol = "gemini";
+  readonly displayName = "Gemini";
+  readonly capabilities = {
+    streaming: true,
+    tools: true,
+    vision: true,
+    reasoning: true,
+  };
   private readonly logger = new Logger(GeminiAdapter.name);
 
   /**

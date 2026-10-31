@@ -22,6 +22,7 @@ export class SkillPlugin extends PluginBase {
     description: "%skill.description%",
     version: "1.0.0",
     category: "system" as const,
+    icon: "images/plugins/skill.svg",
   };
 
   constructor(private orchestrator: SkillOrchestrator) {

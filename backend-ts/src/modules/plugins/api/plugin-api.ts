@@ -21,6 +21,12 @@ import { NlsService } from "../i18n/nls.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
 import type { TurnReminderProvider } from "../turn-reminders/turn-reminder.types";
 import type { TurnReminderRegistry } from "../turn-reminders/turn-reminder.registry";
+import type { ProviderTypeCard } from "../../llm-core/bundled-catalog.service";
+import type {
+  IProtocolAdapter,
+  ProtocolCapabilities,
+} from "../../llm-core/adapters/base.adapter";
+import type { ProtocolAdapterContribution } from "../../llm-core/types/provider-plugin.types";
 
 // ── PluginApi ──
 
@@ -199,6 +205,29 @@ export interface PluginApi {
    * 前端下拉列表与启动应用均以本声明为准。
    */
   registerTheme(reg: import("../types/plugin.types").ThemeRegistration): void;
+
+  // ── 供应商包（Provider Pack）──
+
+  /**
+   * 注册供应商类型卡（声明式贡献）
+   *
+   * 类型卡进入 app 级供应商目录，与 bundled-providers/*.yaml 合并展示；
+   * 内置 type 是保留位，冲突会导致整个包安装失败。
+   */
+  registerProviderType(card: ProviderTypeCard): void;
+
+  /**
+   * 注册 wire 协议适配器（代码贡献）
+   *
+   * 适配器进入 app 级协议注册表；内置协议是保留位，插件不得覆盖
+   * （防止恶意包劫持 openai/anthropic 等协议把密钥发往其他地址）。
+   */
+  registerProtocolAdapter(def: {
+    protocol: string;
+    adapter: IProtocolAdapter;
+    displayName?: string;
+    capabilities?: ProtocolCapabilities;
+  }): void;
 
   /**
    * 注册技能（第三方插件注册技能，内嵌正文，无需文件/复制）
@@ -448,6 +477,8 @@ export class PluginApiImpl implements PluginApi {
   private _slots: SlotRegistration[] = [];
   private _themes: ThemeRegistration[] = [];
   private _rpcHandlers: Record<string, RpcHandler> = {};
+  private _providerTypeCards: ProviderTypeCard[] = [];
+  private _protocolAdapters: ProtocolAdapterContribution[] = [];
 
   registerAttachmentType(reg: AttachmentTypeRegistration): void {
     if (!this._attachmentTypes.find((x) => x.id === reg.id)) {
@@ -469,6 +500,59 @@ export class PluginApiImpl implements PluginApi {
     if (!this._themes.find((x) => x.id === reg.id)) {
       this._themes.push(reg);
     }
+  }
+
+  registerProviderType(card: ProviderTypeCard): void {
+    const type = typeof card?.type === 'string' ? card.type.trim() : '';
+    if (!type) {
+      throw new Error(`[plugin:${this.pluginId}] provider type card requires a non-empty type`);
+    }
+    if (this._providerTypeCards.find((x) => x.type === type)) {
+      throw new Error(`[plugin:${this.pluginId}] duplicate provider type "${type}"`);
+    }
+    this._providerTypeCards.push({ ...card, type });
+  }
+
+  registerProtocolAdapter(def: {
+    protocol: string;
+    adapter: IProtocolAdapter;
+    displayName?: string;
+    capabilities?: ProtocolCapabilities;
+  }): void {
+    const protocol = def?.protocol?.trim() || def?.adapter?.protocol;
+    if (!protocol) {
+      throw new Error(`[plugin:${this.pluginId}] protocol adapter requires a protocol`);
+    }
+    if (!def.adapter || typeof def.adapter.chatCompletion !== 'function') {
+      throw new Error(
+        `[plugin:${this.pluginId}] protocol "${protocol}" adapter must implement chatCompletion()`,
+      );
+    }
+    if (def.adapter.protocol !== protocol) {
+      throw new Error(
+        `[plugin:${this.pluginId}] protocol "${protocol}" does not match adapter.protocol "${def.adapter.protocol}"`,
+      );
+    }
+    if (this._protocolAdapters.find((x) => x.protocol === protocol)) {
+      throw new Error(`[plugin:${this.pluginId}] duplicate protocol "${protocol}"`);
+    }
+    this._protocolAdapters.push({
+      protocol,
+      adapter: def.adapter,
+      displayName: def.displayName,
+      capabilities: def.capabilities,
+    });
+  }
+
+  /** 供 PluginManager 提交到 ProviderContributionCoordinator */
+  getProviderContributions(): {
+    adapters: ProtocolAdapterContribution[];
+    types: ProviderTypeCard[];
+  } {
+    return {
+      adapters: this._protocolAdapters,
+      types: this._providerTypeCards,
+    };
   }
 
   /**

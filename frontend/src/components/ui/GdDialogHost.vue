@@ -55,19 +55,19 @@
     </div>
 
     <template #footer>
-      <el-button
+      <GdButton
         v-if="entry.options.showCancel !== false"
         @click="cancelModal(entry)"
       >
         {{ entry.options.cancelText || t('common.cancel') }}
-      </el-button>
-      <el-button
+      </GdButton>
+      <GdButton
         :type="entry.options.danger ? 'danger' : 'primary'"
         :loading="entry.loading.value"
         @click="submitModal(entry)"
       >
         {{ entry.options.confirmText || t('common.confirm') }}
-      </el-button>
+      </GdButton>
     </template>
   </GdDialog>
 </template>
@@ -75,12 +75,13 @@
 <script setup lang="ts">
 import { defineComponent, isVNode, type PropType, type VNode } from 'vue'
 import {
-  CircleCloseFilled,
-  InfoFilled,
-  SuccessFilled,
-  WarningFilled,
-} from '@element-plus/icons-vue'
+  DismissCircle16Filled,
+  Info16Filled,
+  CheckmarkCircle16Filled,
+  Warning16Filled,
+} from '@vicons/fluent'
 import GdDialog from './GdDialog.vue'
+import GdButton from './GdButton.vue'
 import {
   cancelModal,
   finishModal,
@@ -91,10 +92,10 @@ import {
 import { t } from '@/locales'
 
 const iconMap = {
-  info: InfoFilled,
-  success: SuccessFilled,
-  warning: WarningFilled,
-  error: CircleCloseFilled,
+  info: Info16Filled,
+  success: CheckmarkCircle16Filled,
+  warning: Warning16Filled,
+  error: DismissCircle16Filled,
 } as const
 
 function getIcon(icon?: keyof typeof iconMap | 'none') {

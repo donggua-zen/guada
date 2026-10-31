@@ -9,7 +9,7 @@
                图标优先选原生尺寸更锐利 -->
           <el-icon :size="16"><Branch20Regular /></el-icon>
           <span class="git-branch-chip-name">{{ selectedBranch || t('git.branchSelectPlaceholder') }}</span>
-          <el-icon :size="10" class="git-branch-chip-chevron"><ArrowDown /></el-icon>
+          <el-icon :size="10" class="git-branch-chip-chevron"><ChevronDown12Regular /></el-icon>
         </button>
         <template #dropdown>
           <div class="git-branch-menu">
@@ -34,9 +34,9 @@
       <div class="flex-1"></div>
       <GdTooltip :content="t('git.refresh')" placement="bottom">
         <button class="git-tool-btn" :disabled="!isGitRepo || refreshing" @click="refresh">
-          <!-- Refresh 为 16 viewBox：按原生尺寸渲染，避免非整数缩放发虚 -->
-          <el-icon :size="16" :class="{ 'is-loading': refreshing }">
-            <Refresh />
+          <!-- RefreshRight 为 16 viewBox：按原生尺寸渲染，避免非整数缩放发虚 -->
+          <el-icon :size="16">
+            <ArrowClockwise16Regular :class="{ 'animate-spin': refreshing }" />
           </el-icon>
         </button>
       </GdTooltip>
@@ -120,12 +120,12 @@
             <div class="git-diff-nav-group">
               <GdTooltip :content="t('git.prevFileShortcut')" placement="bottom">
                 <button class="git-diff-nav" @click="cycleSelection(-1)">
-                  <el-icon :size="12"><ArrowUp /></el-icon>
+                  <el-icon :size="12"><ArrowUp12Regular /></el-icon>
                 </button>
               </GdTooltip>
               <GdTooltip :content="t('git.nextFileShortcut')" placement="bottom">
                 <button class="git-diff-nav" @click="cycleSelection(1)">
-                  <el-icon :size="12"><ArrowDown /></el-icon>
+                  <el-icon :size="12"><ArrowDown12Regular /></el-icon>
                 </button>
               </GdTooltip>
             </div>
@@ -262,7 +262,7 @@
                 :placeholder="t('git.searchFiles')"
               />
               <button v-if="searchText" class="git-tree-search-clear" @click="searchText = ''">
-                <el-icon :size="12"><Close /></el-icon>
+                <el-icon :size="12"><Dismiss12Regular /></el-icon>
               </button>
             </div>
             <!-- 折叠的未跟踪目录提示：目录行本身可 stage，但用户需要知道它没有逐文件展开 -->
@@ -335,8 +335,7 @@ import { ref, computed, watch, nextTick, reactive, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { useStorage } from "@vueuse/core";
-import { Refresh, ArrowDown, ArrowUp, Close } from "@element-plus/icons-vue";
-import { Branch20Regular, BranchFork16Regular, Search20Regular, Add16Regular, Subtract16Regular, CalendarAgenda20Regular, DualScreen20Regular, TextboxAlignTopRotate9020Regular } from "@vicons/fluent";
+import { Branch20Regular, BranchFork16Regular, Search20Regular, Add16Regular, Subtract16Regular, CalendarAgenda20Regular, DualScreen20Regular, TextboxAlignTopRotate9020Regular, ArrowClockwise16Regular, ChevronDown12Regular, ArrowUp12Regular, ArrowDown12Regular, Dismiss12Regular } from "@vicons/fluent";
 import { GdSplitpanes } from "../../ui";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";

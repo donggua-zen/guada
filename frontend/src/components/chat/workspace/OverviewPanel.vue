@@ -47,7 +47,7 @@
               <el-icon :size="16" class="overview-row-icon"><BranchFork16Regular /></el-icon>
               <span class="overview-row-label">{{ t('git.branch') }}</span>
               <span class="overview-row-value overview-row-value--branch">{{ git.selectedBranch || '-' }}</span>
-              <el-icon :size="12" class="overview-row-chevron"><ArrowDown /></el-icon>
+              <el-icon :size="12" class="overview-row-chevron"><ChevronDown12Regular /></el-icon>
             </button>
             <template #dropdown>
               <div class="overview-branch-menu">
@@ -94,7 +94,7 @@
         <p class="overview-empty-hint">{{ emptyText.hint }}</p>
       </div>
       <div v-else-if="showLoadingState" class="overview-empty">
-        <el-icon :size="16" class="overview-empty-icon is-loading"><Loading /></el-icon>
+        <el-icon :size="16" class="overview-empty-icon"><ArrowSync16Regular class="animate-spin" /></el-icon>
         <p class="overview-empty-hint">{{ t('common.loading') }}</p>
       </div>
     </div>
@@ -104,11 +104,12 @@
 <script setup lang="ts">
 import { computed, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowDown, Loading } from "@element-plus/icons-vue";
 import {
   BranchFork16Regular, ArrowUpload16Regular,
   Add16Regular,
   AppsListDetail20Regular,
+  ChevronDown12Regular,
+  ArrowSync16Regular,
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";

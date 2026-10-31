@@ -59,54 +59,57 @@
         <div class="tools left-tools flex gap-0.5 items-center">
           <!-- 图片按钮 -->
           <GdTooltip content="添加图片" placement="top">
-            <el-button class="tool-btn" @click="triggerImageInput" text>
+            <GdButton class="tool-btn" @click="triggerImageInput" text>
               <el-icon size="22"><Image24Regular /></el-icon>
-            </el-button>
+            </GdButton>
           </GdTooltip>
           <!-- 附件按钮 -->
           <GdTooltip content="上传文件" placement="top">
-            <el-button class="tool-btn" @click="triggerFileInput" text>
+            <GdButton class="tool-btn" @click="triggerFileInput" text>
               <el-icon size="22"><Attach24Regular /></el-icon>
-            </el-button>
+            </GdButton>
           </GdTooltip>
           <!-- 知识库按钮 -->
           <GdTooltip content="知识库" placement="top">
-            <el-button class="tool-btn" @click="openKnowledgeBasePanel" text>
+            <GdButton class="tool-btn" @click="openKnowledgeBasePanel" text>
               <el-icon size="22"><BookSearch24Regular /></el-icon>
-            </el-button>
+            </GdButton>
           </GdTooltip>
           <!-- 技能按钮（新增） -->
           <GdTooltip content="选择技能 /" placement="top">
-            <el-button class="tool-btn" @click="insertSkill('code-reviewer')" text>
-              <el-icon size="22"><Tools /></el-icon>
-            </el-button>
+            <GdButton class="tool-btn" @click="insertSkill('code-reviewer')" text>
+              <el-icon size="22"><Wrench20Regular /></el-icon>
+            </GdButton>
           </GdTooltip>
         </div>
         <div class="right-actions">
           <!-- 模型选择按钮 -->
-          <el-button plain class="model-selector-btn rounded-full overflow-hidden flex items-center justify-center">
+          <GdButton plain class="model-selector-btn rounded-full overflow-hidden flex items-center justify-center">
             <div class="flex items-center gap-1.5" style="height:24px; max-width: 200px;">
               <span class="text-sm font-medium truncate flex-1 min-w-0"
                 style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                 {{ currentModelName }}
               </span>
             </div>
-          </el-button>
+          </GdButton>
           <div class="tools right-tools">
             <GdTooltip content="会话设置" placement="top">
-              <el-button class="tool-btn" text>
+              <GdButton class="tool-btn" text>
                 <el-icon size="22"><Settings24Regular /></el-icon>
-              </el-button>
+              </GdButton>
             </GdTooltip>
           </div>
           <div>
             <GdTooltip v-if="streaming && !rawText.trim()" content="停止生成" placement="top">
-              <el-button class="send-btn stop-btn" @click="abortResponse" circle type="danger"
-                :icon="Stop24Filled" />
+              <GdButton class="send-btn stop-btn" @click="abortResponse" circle type="danger">
+                <template #icon><el-icon size="22"><Stop24Filled /></el-icon></template>
+              </GdButton>
             </GdTooltip>
             <GdTooltip v-else content="发送" placement="top">
-              <el-button class="send-btn" type="primary" @click="sendMessage" circle
-                :disabled="!rawText.trim()" :icon="Send24Filled" />
+              <GdButton class="send-btn" type="primary" @click="sendMessage" circle
+                :disabled="!rawText.trim()">
+                <template #icon><el-icon size="22"><Send24Filled /></el-icon></template>
+              </GdButton>
             </GdTooltip>
           </div>
         </div>
@@ -115,10 +118,10 @@
 
     <!-- 工作目录按钮 -->
     <div class="mt-1 w-full flex justify-start px-1">
-      <el-button class="tool-btn mr-0.5" text>
+      <GdButton class="tool-btn mr-0.5" text>
         <el-icon size="22"><FolderOpen24Regular /></el-icon>
         <span class="text-xs font-medium">打开工作目录</span>
-      </el-button>
+      </GdButton>
     </div>
 
     <!-- 测试输出区域 -->
@@ -138,10 +141,11 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import {
   Image24Regular, Attach24Regular, Send24Filled, Stop24Filled,
   Settings24Regular, BookSearch24Regular, FolderOpen24Regular,
-  Apps20Regular
+  Apps20Regular, Wrench20Regular
 } from '@vicons/fluent';
-import { Tools } from '@element-plus/icons-vue';
 import GdTooltip from '../ui/GdTooltip.vue';
+import GdButton from '@/components/ui/GdButton.vue';
+
 
 // ==================== 自定义 Skill 节点 ====================
 const SkillNode = Node.create({
@@ -629,10 +633,6 @@ const abortResponse = () => {
 .left-tools {
   display: flex;
   align-items: center;
-}
-
-:deep(.el-button+.el-button) {
-  margin-left: 0;
 }
 
 .right-actions {

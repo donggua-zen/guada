@@ -3,11 +3,13 @@ import {
   Injectable,
   Logger,
   OnModuleInit,
+  Optional,
 } from "@nestjs/common";
 import { HttpAdapterHost } from "@nestjs/core";
 import * as os from "os";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { AccountFileStore } from "../auth/account-file.store";
+import { BridgeClient } from "../bridge/bridge-client";
 import { encryptSecret } from "../remote-workspace/secret-crypto.util";
 import { SshTunnelService } from "./ssh-tunnel.service";
 import {
@@ -37,6 +39,8 @@ export class MobileAccessService implements OnModuleInit {
     private readonly accountStore: AccountFileStore,
     private readonly tunnel: SshTunnelService,
     private readonly httpAdapterHost: HttpAdapterHost,
+    // BridgeModule 是全局模块；Web 部署（无 Electron 宿主）下 bridge 不会连接
+    @Optional() private readonly bridgeClient?: BridgeClient,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -56,9 +60,28 @@ export class MobileAccessService implements OnModuleInit {
       }
       // 密码强度只在设置/修改密码时用明文校验一次；启动期不再对存量密码做二次判断
       await this.tunnel.apply(config);
+      this.watchHostResume();
     } catch (err: any) {
       this.logger.warn(`初始化移动访问失败: ${err?.message || err}`);
     }
+  }
+
+  /**
+   * 宿主唤醒自愈：系统休眠时本进程被冻结，醒来后旧 SSH 连接大概率已死、
+   * 但 close/error 事件可能迟到甚至不来。宿主侧 Bridge 断线重连成功
+   * （Electron 唤醒后会自动重连）即「系统已唤醒」的可靠信号，此时强制
+   * 重建一次隧道，不用等 bind 失败再退避。
+   */
+  private watchHostResume(): void {
+    if (!this.bridgeClient) return;
+    this.bridgeClient.onReconnected(() => {
+      void (async () => {
+        const config = await this.getConfig();
+        if (!config.publicEnabled) return;
+        this.logger.log("检测到宿主重连（系统唤醒），强制重建公网隧道");
+        await this.tunnel.restart(config);
+      })();
+    });
   }
 
   async getConfig(): Promise<MobileAccessConfig> {

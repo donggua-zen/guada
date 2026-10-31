@@ -112,6 +112,7 @@ export class AskUserPlugin extends PluginBase {
     description: "向用户提出选择题并等待回答后继续",
     version: "1.0.0",
     category: "core" as const,
+    icon: "images/plugins/ask-user.svg",
   };
 
   constructor(private readonly askService: AskService) {

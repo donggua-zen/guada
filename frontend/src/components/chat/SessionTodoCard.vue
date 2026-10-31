@@ -15,7 +15,7 @@
           <ArrowRight16Regular />
         </el-icon>
         <el-icon v-else-if="currentItem?.status === 'completed'" size="14" class="todo-icon--done">
-          <Check />
+          <Checkmark16Regular />
         </el-icon>
         <span v-else class="todo-ring"></span>
       </span>
@@ -26,7 +26,7 @@
         {{ doneCount }}/{{ items.length }}
       </span>
       <el-icon :size="12" class="todo-chevron shrink-0">
-        <ArrowDown />
+        <ChevronDown12Regular />
       </el-icon>
     </div>
 
@@ -41,7 +41,7 @@
           {{ doneCount }}/{{ items.length }}
         </span>
         <el-icon :size="12" class="todo-chevron shrink-0 is-open" :class="{ 'ml-auto': !doneCount }">
-          <ArrowDown />
+          <ChevronDown12Regular />
         </el-icon>
       </div>
 
@@ -50,7 +50,7 @@
         <div v-for="(item, i) in items" :key="i" class="flex items-start gap-2 rounded px-1 py-0.5">
           <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
             <el-icon v-if="item.status === 'completed'" size="14" class="todo-icon--done">
-              <Check />
+              <Checkmark16Regular />
             </el-icon>
             <el-icon v-else-if="item.status === 'in_progress'" size="14" class="todo-icon--active">
               <ArrowRight16Regular />
@@ -74,8 +74,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { Check, ArrowDown } from "@element-plus/icons-vue";
-import { ArrowRight16Regular } from "@vicons/fluent";
+import { Checkmark16Regular, ChevronDown12Regular, ArrowRight16Regular } from "@vicons/fluent";
 import { apiService } from "@/services/ApiService";
 
 interface TodoItem {

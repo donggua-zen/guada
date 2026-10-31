@@ -1,37 +1,85 @@
 <template>
     <div class="flex-1 skills-page">
-        <!-- 头部区域 -->
-        <PluginTabHeader :title="t('plugins.skills.title')" :subtitle="t('plugins.skills.subtitle')">
-            <template #actions>
-                <el-button circle :loading="scanning" :title="t('plugins.skills.scan')" @click="handleScan">
-                    <template #icon>
-                        <RefreshOutlined />
-                    </template>
-                </el-button>
-                <el-button type="primary" @click="handleShowInstallDialog">
-                    <template #icon>
-                        <UploadOutlined />
-                    </template>
-                    {{ t('plugins.skills.install') }}
-                </el-button>
-                <el-button @click="handleOpenSkillsDocs">
-                    <template #icon>
-                        <Document />
-                    </template>
-                    {{ t('plugins.skills.docs') }}
-                </el-button>
-            </template>
-        </PluginTabHeader>
+        <!-- 视图条：二级切换 + 当前视图的动作（取代原大标题区与市场自带标题行） -->
+        <div class="plugins-view-bar">
+            <div class="plugins-view-bar__left">
+                <PluginViewSwitch v-model="view" :items="viewItems" />
+                <GdTooltip :content="t('plugins.skills.subtitle')" placement="top">
+                    <button type="button" class="plugins-view-info" :aria-label="t('plugins.page.info')">
+                        <Info24Regular />
+                    </button>
+                </GdTooltip>
+            </div>
+            <div class="plugins-view-bar__right">
+                <template v-if="view === 'installed'">
+                    <GdButton circle :loading="scanning" :title="t('plugins.skills.scan')" @click="handleScan">
+                        <template #icon>
+                            <ArrowClockwise16Regular />
+                        </template>
+                    </GdButton>
+                    <GdButton type="primary" @click="handleShowInstallDialog">
+                        <template #icon>
+                            <ArrowUpload16Regular />
+                        </template>
+                        {{ t('plugins.skills.install') }}
+                    </GdButton>
+                    <GdButton @click="handleOpenSkillsDocs">
+                        <template #icon>
+                            <Document16Regular />
+                        </template>
+                        {{ t('plugins.skills.docs') }}
+                    </GdButton>
+                </template>
+                <template v-else>
+                    <el-input
+                        v-model="marketKeyword"
+                        :placeholder="t('plugins.skills.marketSearchPlaceholder')"
+                        clearable
+                        size="default"
+                        class="plugins-search"
+                    >
+                        <template #prefix>
+                            <el-icon><Search16Regular /></el-icon>
+                        </template>
+                    </el-input>
+                    <GdButton link size="small" :loading="marketLoading" @click="handleMarketRefresh">
+                        <template #icon>
+                            <el-icon :class="{ 'is-loading': marketLoading }">
+                                <ArrowClockwise16Regular />
+                            </el-icon>
+                        </template>
+                        {{ marketLoading ? t('common.loading') : t('plugins.skills.marketRefresh') }}
+                    </GdButton>
+                    <GdButton circle size="small" :title="t('plugins.page.marketOpenWeb')" @click="handleOpenMarketSite">
+                        <template #icon>
+                            <ArrowUpRight16Regular />
+                        </template>
+                    </GdButton>
+                </template>
+            </div>
+        </div>
 
-        <!-- 已安装 Skills（按来源分区） -->
-        <template v-if="skillGroups.length > 0">
-            <PluginSection
-                v-for="group in skillGroups"
-                :key="group.key"
-                :title="t(`plugins.skills.groups.${group.key}`)"
+        <!-- 已安装视图：来源筛选 chips 取代原竖排可折叠分区 -->
+        <div v-show="view === 'installed'">
+            <div v-if="skillGroups.length > 0" class="plugins-filter-row">
+                <button
+                    v-for="chip in sourceChips"
+                    :key="chip.key"
+                    type="button"
+                    class="plugins-chip"
+                    :class="{ 'is-active': sourceFilter === chip.key }"
+                    @click="sourceFilter = chip.key"
+                >
+                    {{ chip.label }}
+                </button>
+            </div>
+
+            <div
+                v-if="visibleSkills.length > 0"
+                class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2"
             >
                 <PluginListRow
-                    v-for="skill in group.items"
+                    v-for="skill in visibleSkills"
                     :key="skill.id"
                     :name="getSkillDisplayName(skill.manifest, skill.id)"
                     :description="getSkillDisplayDescription(skill.manifest) || t('plugins.skills.noDescription')"
@@ -60,41 +108,52 @@
                         />
                     </template>
                 </PluginListRow>
-            </PluginSection>
-        </template>
+            </div>
 
-        <!-- 空状态 -->
-        <div v-else-if="!loading"
-            class="rounded-[var(--gd-size-surface-radius)] overflow-hidden bg-(--gd-color-surface-subtle)">
-            <div class="p-12 text-center">
-                <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
-                    <InboxOutlined />
-                </el-icon>
-                <div class="text-xl font-medium text-gray-600 dark:text-[#e8e9ed] mb-2">
-                    {{ t('plugins.skills.empty') }}
+            <!-- 空状态 -->
+            <div v-else-if="!loading"
+                class="rounded-[var(--gd-size-surface-radius)] overflow-hidden bg-(--gd-color-surface-subtle)">
+                <div class="p-12 text-center">
+                    <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
+                        <MailInbox24Regular />
+                    </el-icon>
+                    <div class="text-xl font-medium text-gray-600 dark:text-[#e8e9ed] mb-2">
+                        {{ t('plugins.skills.empty') }}
+                    </div>
+                    <div class="text-sm text-gray-500 dark:text-[#8b8d95] mb-4">
+                        {{ t('plugins.skills.emptyHint') }}
+                    </div>
+                    <GdButton type="primary" @click="handleScan" :loading="scanning">
+                        <template #icon>
+                            <ArrowClockwise16Regular />
+                        </template>
+                        {{ t('plugins.skills.scanNow') }}
+                    </GdButton>
+                    <GdButton class="ml-2" @click="view = 'market'">
+                        {{ t('plugins.page.goMarket') }}
+                    </GdButton>
                 </div>
-                <div class="text-sm text-gray-500 dark:text-[#8b8d95] mb-4">
-                    {{ t('plugins.skills.emptyHint') }}
-                </div>
-                <el-button type="primary" @click="handleScan" :loading="scanning">
-                    <template #icon>
-                        <RefreshOutlined />
-                    </template>
-                    {{ t('plugins.skills.scanNow') }}
-                </el-button>
             </div>
         </div>
 
-        <!-- 技能市场（独立组件：搜索/标签筛选/分页/安装） -->
-        <SkillMarket :local-skills="skills" @installed="() => loadSkills()" />
+        <!-- 市场视图：v-show 保留实例，切回来不重新请求、搜索与筛选状态都在；数据首次进入才拉 -->
+        <div v-show="view === 'market'">
+            <SkillMarket
+                ref="marketRef"
+                v-model:keyword="marketKeyword"
+                :local-skills="skills"
+                :active="view === 'market'"
+                @installed="() => loadSkills()"
+            />
+        </div>
 
         <!-- 查看文档对话框 -->
         <GdDialog v-model="showDocDialog" :title="currentSkillName + ' - SKILL.md'" size="lg"
             align-center destroy-on-close append-to-body>
 
             <div v-if="loadingDoc" class="flex justify-center items-center py-12">
-                <el-icon class="is-loading" size="32">
-                    <Loading />
+                <el-icon size="32">
+                    <ArrowSync16Regular class="animate-spin" />
                 </el-icon>
             </div>
             <div v-else-if="docError" class="py-12 text-center text-red-500">
@@ -116,7 +175,7 @@
                 <MarkdownContent class="markdown-text" :content="bodyContent" />
             </div>
             <template #footer>
-                <el-button @click="showDocDialog = false">{{ t('common.close') }}</el-button>
+                <GdButton @click="showDocDialog = false">{{ t('common.close') }}</GdButton>
             </template>
         </GdDialog>
 
@@ -129,7 +188,7 @@
 
                 <el-upload ref="uploadRef" class="upload-demo" drag :auto-upload="false" :show-file-list="false" :on-change="handleFileChange"
                     :limit="1" accept=".zip">
-                    <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                    <el-icon size="48" class="mb-4 text-gray-400 dark:text-[#6b6d75]"><ArrowUpload24Regular /></el-icon>
                     <div class="el-upload__text">
                         {{ t('plugins.skills.uploadText') }} <em>{{ t('plugins.skills.uploadClick') }}</em>
                     </div>
@@ -144,15 +203,15 @@
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
                             <el-icon>
-                                <Document />
+                                <Document16Regular />
                             </el-icon>
                             <span class="text-sm">{{ selectedFile.name }}</span>
                         </div>
-                        <el-button link type="danger" @click="clearSelectedFile">
+                        <GdButton link type="danger" @click="clearSelectedFile">
                             <el-icon>
-                                <Close />
+                                <Dismiss16Regular />
                             </el-icon>
-                        </el-button>
+                        </GdButton>
                     </div>
                     <div class="text-xs text-gray-500 mt-1">
                         {{ t('plugins.skills.fileSize', { size: formatFileSize(selectedFile.size) }) }}
@@ -170,10 +229,10 @@
             </div>
 
             <template #footer>
-                <el-button @click="showInstallDialog = false">{{ t('common.cancel') }}</el-button>
-                <el-button type="primary" @click="handleInstallSkill" :loading="installing" :disabled="!selectedFile">
+                <GdButton @click="showInstallDialog = false">{{ t('common.cancel') }}</GdButton>
+                <GdButton type="primary" @click="handleInstallSkill" :loading="installing" :disabled="!selectedFile">
                     {{ t('plugins.skills.installBtn') }}
-                </el-button>
+                </GdButton>
             </template>
         </GdDialog>
 
@@ -183,12 +242,14 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElButton, ElTag, ElIcon, ElUpload, ElSwitch } from 'element-plus'
+import { ElMessage, ElTag, ElIcon, ElInput, ElUpload, ElSwitch } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import type { UploadFile } from 'element-plus'
-import { RefreshOutlined, InboxOutlined, UploadOutlined } from '@vicons/material'
-import { Loading, UploadFilled, Document, Close } from '@element-plus/icons-vue'
+import { ArrowSync16Regular, ArrowUpload16Regular, ArrowUpload24Regular, ArrowUpRight16Regular, Document16Regular, Dismiss16Regular, ArrowClockwise16Regular, Info24Regular, MailInbox24Regular, Search16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
+import { usePluginViewQuery } from '@/composables/usePluginViewQuery'
 import { getSkillDisplayName, getSkillDisplayDescription } from '@/utils/skillDisplay'
 import { groupSkills } from '@/utils/pluginGroups'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
@@ -196,10 +257,9 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
-import PluginSection from './PluginSection.vue'
-import PluginTabHeader from './PluginTabHeader.vue'
+import PluginViewSwitch from './PluginViewSwitch.vue'
 import SkillMarket from './SkillMarket.vue'
-import type { PluginRowMenuItem } from './pluginList.types'
+import type { PluginRowMenuItem, PluginViewSwitchItem } from './pluginList.types'
 import type { Skill } from '@/types/skills'
 
 const loading = ref(false)
@@ -210,6 +270,44 @@ const skills = ref<Skill[]>([])
 const skillGroups = computed(() => groupSkills(skills.value))
 const { t } = useI18n()
 const { confirm } = usePopup()
+
+// ── 二级视图：已安装 / 市场（状态落 route query，刷新与前进后退不丢）──
+const view = usePluginViewQuery()
+/** 市场搜索词由页面工具栏持有，市场组件常驻不销毁，切回来仍保留 */
+const marketKeyword = ref('')
+/** 已安装的来源筛选（'' = 全部）；与市场标签筛选各自独立 */
+const sourceFilter = ref('')
+const marketRef = ref<InstanceType<typeof SkillMarket> | null>(null)
+
+const viewItems = computed<PluginViewSwitchItem[]>(() => [
+    { value: 'installed', label: t('plugins.page.viewInstalled') },
+    { value: 'market', label: t('plugins.page.viewMarket') },
+])
+
+/** 来源 chips：全部 + 有人的分区（空分区不出现，所以不用再带数字） */
+const sourceChips = computed(() => [
+    { key: '', label: t('plugins.page.sourceFilterAll') },
+    ...skillGroups.value.map(g => ({
+        key: g.key,
+        label: t(`plugins.skills.groups.${g.key}`),
+    })),
+])
+
+const visibleSkills = computed<Skill[]>(() => {
+    if (!sourceFilter.value) return skills.value
+    return skillGroups.value.find(g => g.key === sourceFilter.value)?.items ?? []
+})
+
+/** 换一批按钮的加载态取自市场组件（v-show 常驻，父级只读不调） */
+const marketLoading = computed(() => marketRef.value?.loading === true)
+
+function handleMarketRefresh() {
+    marketRef.value?.refresh()
+}
+
+function handleOpenMarketSite() {
+    openInExternalBrowser('https://ai.dingd.cn/skills')
+}
 
 // 文档查看相关状态
 const showDocDialog = ref(false)
@@ -636,17 +734,5 @@ onMounted(async () => {
 
 .skill-meta-table .meta-value {
     word-break: break-word;
-}
-
-/* All tags: flat gray style, no colored borders */
-.skills-page :deep(.el-tag) {
-    background-color: #f0f0f2;
-    border: none;
-    color: #6b6d75;
-    font-size: calc(var(--gd-size-text-base) - 3px);
-}
-html.dark .skills-page :deep(.el-tag) {
-    background-color: #2a2a2e;
-    color: #8b8d95;
 }
 </style>

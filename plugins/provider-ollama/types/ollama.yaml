@@ -1,0 +1,40 @@
+# 示例：Ollama 类型卡（代码型供应商包）
+#
+# protocol 指向插件 index.js 注册的 ollama-native；
+# defaultApiUrl 为 Ollama 服务根地址（适配器会追加 /api/chat、/api/tags）。
+type: ollama
+name: Ollama
+description: 本地模型运行时，使用原生 /api/chat 协议（无需 OpenAI 兼容层）
+avatarUrl: assets/logo.svg
+protocol: ollama-native
+defaultApiUrl: http://localhost:11434
+models:
+  - modelName: qwen3:8b
+    name: Qwen3 8B
+    supportsThinking: true
+    thinkingEfforts: [none, on]
+    modelType: text
+    config:
+      inputCapabilities: [text]
+      outputCapabilities: [text]
+      features: [tools]
+      contextWindow: 32768
+      maxOutputTokens: 8192
+  - modelName: llama3.2:3b
+    name: Llama 3.2 3B
+    supportsThinking: false
+    modelType: text
+    config:
+      inputCapabilities: [text]
+      outputCapabilities: [text]
+      features: [tools]
+      contextWindow: 131072
+      maxOutputTokens: 4096
+  - modelName: nomic-embed-text
+    name: Nomic Embed Text
+    modelType: embedding
+    config:
+      inputCapabilities: [text]
+      outputCapabilities: [embedding]
+      features: []
+      vectorDimensions: 768

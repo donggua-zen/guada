@@ -1,7 +1,7 @@
 <template>
   <div class="-mb-4 pb-5 pt-2 px-2 w-full flex justify-start gap-1 bg-(--gd-color-secondary-surface) rounded-t-(--gd-size-rounded-radius)">
     <!-- 工作目录按钮 -->
-    <el-button ref="workspaceButtonRef" class="workspace-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
+    <GdButton ref="workspaceButtonRef" class="workspace-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
       <el-icon size="18">
         <FolderOpen24Regular />
       </el-icon>
@@ -11,14 +11,14 @@
       <el-icon size="16" class="ml-0.5">
         <ChevronUpDown16Regular />
       </el-icon>
-    </el-button>
+    </GdButton>
 
     <!-- 远程目录（附加工作目录）：独立按钮，已选后收起文案只留图标 + 数量角标 -->
     <RemoteDirButton :attachments="config?.attachments"
       @update:attachments="emit('config-change', { attachments: $event })" />
 
     <!-- 分组选择按钮（目录模式下隐藏：分组由工作目录决定，手工分组不生效） -->
-    <el-button v-if="sessionGroupStore.groupingMode === 'group'" ref="groupButtonRef" class="workspace-btn mr-0.5"
+    <GdButton v-if="sessionGroupStore.groupingMode === 'group'" ref="groupButtonRef" class="workspace-btn mr-0.5"
       @click.stop="openGroupSelector" text>
       <GroupIcon :icon="selectedGroupIcon" class="w-4 h-4 shrink-0" />
       <span class="text-xs font-medium">
@@ -27,7 +27,7 @@
       <el-icon size="16" class="ml-0.5">
         <ChevronUpDown16Regular />
       </el-icon>
-    </el-button>
+    </GdButton>
 
     <!-- 外部自定义按钮 -->
     <slot name="actions" />
@@ -61,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FolderOpen24Regular, ChevronUpDown16Regular, Checkmark16Filled } from '@vicons/fluent'

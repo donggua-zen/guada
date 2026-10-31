@@ -127,11 +127,7 @@ export class TaskExecutorService {
             `任务 ${task.name} 执行失败${attempt > 0 ? `（已重试 ${attempt} 次）` : ""}:`,
             error,
           );
-          await this.storage.updateLog(log.id, {
-            status: "failed",
-            error: error.message || "未知错误",
-            finishedAt: new Date().toISOString(),
-          });
+          await this.finishLog(task, log, "failed", error.message || "未知错误");
           this.settleSchedulerJob(log.id, {
             status: "failed",
             detail: error.message || "未知错误",
@@ -144,6 +140,36 @@ export class TaskExecutorService {
         );
       }
     }
+  }
+
+  /**
+   * 统一收口一次执行的终态：更新日志 + 广播 scheduler.task_finished。
+   *
+   * 通知只依赖这个终态事件（completed/failed），「错过窗口」不在此列。
+   */
+  private async finishLog(
+    task: ScheduledTask,
+    log: ScheduledTaskLog,
+    status: "completed" | "failed",
+    error: string | null,
+  ): Promise<void> {
+    const finishedAt = new Date().toISOString();
+
+    try {
+      await this.storage.updateLog(log.id, { status, error, finishedAt });
+    } catch (e) {
+      this.logger.error(`回填执行日志状态失败: ${log.id}`, e);
+    }
+
+    this.eventBus.emit("scheduler.task_finished", {
+      taskId: task.id,
+      taskName: task.name,
+      sessionId: log.sessionId ?? null,
+      status,
+      error,
+      finishedAt,
+      timestamp: finishedAt,
+    });
   }
 
   /**
@@ -190,6 +216,7 @@ export class TaskExecutorService {
 
     // 更新日志中的会话 ID
     await this.storage.updateLog(log.id, { sessionId });
+    log.sessionId = sessionId;
     this.ensureSchedulerJob(task, log, sessionId);
 
     // 投递到 ChatRunnerService 队列（S2：结构化入站消息统一载体，文本即 text 块）
@@ -208,13 +235,12 @@ export class TaskExecutorService {
         onEvent: () => {},
         onComplete: (reason: string) => {
           const ok = reason === "completed";
-          this.storage
-            .updateLog(log.id, {
-              status: ok ? "completed" : "failed",
-              error: ok ? null : `回合结束原因: ${reason}`,
-              finishedAt: new Date().toISOString(),
-            })
-            .catch((e) => this.logger.error(`回填执行日志状态失败: ${log.id}`, e));
+          void this.finishLog(
+            task,
+            log,
+            ok ? "completed" : "failed",
+            ok ? null : `回合结束原因: ${reason}`,
+          );
           this.settleSchedulerJob(
             log.id,
             ok
@@ -223,13 +249,7 @@ export class TaskExecutorService {
           );
         },
         onError: (err: any) => {
-          this.storage
-            .updateLog(log.id, {
-              status: "failed",
-              error: err?.message || "未知错误",
-              finishedAt: new Date().toISOString(),
-            })
-            .catch((e) => this.logger.error(`回填执行日志状态失败: ${log.id}`, e));
+          void this.finishLog(task, log, "failed", err?.message || "未知错误");
           this.settleSchedulerJob(log.id, {
             status: "failed",
             detail: err?.message || "未知错误",

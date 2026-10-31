@@ -10,11 +10,11 @@
             <div class="flex items-center gap-0 shrink-0">
                 <!-- 刷新按钮 -->
                 <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
-                    <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="treeStore.isLoading">
+                    <GdButton class="workspace-tool-btn" text @click="refreshTree" :loading="treeStore.isLoading">
                         <el-icon size="16">
-                            <Refresh />
+                            <ArrowClockwise16Regular />
                         </el-icon>
-                    </el-button>
+                    </GdButton>
                 </GdTooltip>
             </div>
         </div>
@@ -62,7 +62,7 @@ import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
-import { Refresh, CopyDocument, Edit, Delete, Plus } from '@element-plus/icons-vue';
+import { ArrowClockwise16Regular, Copy16Regular, Edit16Regular, Delete16Regular, Add16Regular } from '@vicons/fluent';
 import { VsCode, WindowsExplorer, Finder } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
@@ -71,6 +71,8 @@ import TreeView, { type TreeViewRow } from './TreeView.vue';
 import type { WorkspaceNode } from '@/types/workspace';
 import { useWorkspaceTreeStore } from '@/stores/workspaceTree';
 import { useTabStore } from '@/stores/tab';
+import GdButton from '@/components/ui/GdButton.vue';
+
 
 const props = defineProps<{
     sessionId: string;
@@ -242,17 +244,17 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     const items: ContextMenuItem[] = [
         {
             label: t('chat.workspace.copyFileName'),
-            icon: CopyDocument,
+            icon: Copy16Regular,
             onClick: handleCopyFileName,
         },
         {
             label: t('chat.workspace.copyPath'),
-            icon: CopyDocument,
+            icon: Copy16Regular,
             onClick: handleCopyFilePath,
         },
         {
             label: t('chat.workspace.addToSession'),
-            icon: Plus,
+            icon: Add16Regular,
             divider: true,
             onClick: handleInsertToInput,
         },
@@ -272,13 +274,13 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
     }
     items.push({
         label: t('chat.workspace.rename'),
-        icon: Edit,
+        icon: Edit16Regular,
         divider: true,
         onClick: handleRename,
     });
     items.push({
         label: t('chat.workspace.delete'),
-        icon: Delete,
+        icon: Delete16Regular,
         onClick: handleDelete,
     });
     return items;

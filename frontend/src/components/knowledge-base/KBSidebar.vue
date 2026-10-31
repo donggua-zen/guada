@@ -5,9 +5,10 @@
         <div class="px-4 pt-2.5 pb-2.5 ">
             <div class="flex justify-between items-center">
                 <span class="font-semibold text-base text-(--gd-color-text)">{{ t('knowledge.sidebar.title') }}</span>
-                <el-button type="primary" @click="handleCreate" :icon="Plus">
+                <GdButton type="primary" @click="handleCreate">
+                    <template #icon><Add16Regular /></template>
                     {{ t('knowledge.sidebar.create') }}
-                </el-button>
+                </GdButton>
             </div>
         </div>
 
@@ -28,7 +29,7 @@
                     <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
                         <div class="empty-state-icon mb-3 text-gray-300">
                             <el-icon size="32">
-                                <Plus />
+                                <Add24Regular />
                             </el-icon>
                         </div>
                         <div class="empty-state-title text-sm font-medium mb-1">
@@ -60,18 +61,18 @@
                                 <template #dropdown>
                                     <el-dropdown-menu>
                                         <el-dropdown-item command="edit">
-                                            <Edit class="w-4 h-4 mr-2 inline-block" />
+                                            <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
                                             {{ t('knowledge.sidebar.edit') }}
                                         </el-dropdown-item>
                                         <el-dropdown-item command="delete">
-                                            <Delete class="w-4 h-4 mr-2 inline-block" />
+                                            <Delete16Regular class="w-4 h-4 mr-2 inline-block" />
                                             {{ t('knowledge.sidebar.delete') }}
                                         </el-dropdown-item>
                                     </el-dropdown-menu>
                                 </template>
                                 <div @click.stop class="kb-action-trigger">
                                     <el-icon class="w-4 h-4">
-                                        <MoreFilled />
+                                        <MoreHorizontal16Filled />
                                     </el-icon>
                                 </div>
                             </el-dropdown>
@@ -86,8 +87,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Edit, Delete, MoreFilled } from '@element-plus/icons-vue'
-import { ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
+import { Add16Regular, Add24Regular, Edit16Regular, Delete16Regular, MoreHorizontal16Filled } from '@vicons/fluent'
+import { ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 

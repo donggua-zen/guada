@@ -75,9 +75,9 @@
         <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) p-4 space-y-3">
           <p class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.computerUse.testDesc') }}</p>
           <div class="flex items-center gap-3 flex-wrap">
-            <el-button type="primary" :loading="testing" :disabled="!isElectron" @click="runTest">
+            <GdButton type="primary" :loading="testing" :disabled="!isElectron" @click="runTest">
               {{ t('settings.computerUse.testButton') }}
-            </el-button>
+            </GdButton>
             <el-tag v-if="testResult" :type="testResult.ok ? 'success' : 'danger'" size="small">
               {{ testResult.ok ? t('settings.computerUse.testOk') : t('settings.computerUse.testFailed') }}
             </el-tag>
@@ -89,10 +89,10 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <el-button type="primary" :loading="saving" :disabled="!isElectron" @click="save">
+        <GdButton type="primary" :loading="saving" :disabled="!isElectron" @click="save">
           {{ t('common.save') }}
-        </el-button>
-        <el-button :disabled="!isElectron" @click="reset">{{ t('common.reset') }}</el-button>
+        </GdButton>
+        <GdButton :disabled="!isElectron" @click="reset">{{ t('common.reset') }}</GdButton>
       </div>
     </div>
   </div>
@@ -101,7 +101,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { apiService } from '@/services/ApiService'
 import {
   COMPUTER_POLICY_KEYS,

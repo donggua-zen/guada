@@ -10,16 +10,14 @@
             <span v-if="name && props.type === 'assistant'" class="avatar-text">
                 {{ firstChar }}
             </span>
-            <UserOutlined v-else-if="props.type === 'user'" class="w-[65%] h-[65%]" />
+            <Person20Regular v-else-if="props.type === 'user'" class="w-[65%] h-[65%]" />
             <OpenAI v-else />
         </div>
     </div>
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'
-import {
-    UserOutlined,
-} from '@vicons/antd'
+import { Person20Regular } from '@vicons/fluent'
 import { OpenAI } from '@/components/icons'
 
 // Props 类型化

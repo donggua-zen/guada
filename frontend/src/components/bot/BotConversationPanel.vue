@@ -19,7 +19,7 @@
       class="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center"
     >
       <p class="text-sm text-(--gd-color-text-gray)">{{ error }}</p>
-      <el-button size="small" @click="emit('refresh')">{{ t('bot.chat.retry') }}</el-button>
+      <GdButton size="small" @click="emit('refresh')">{{ t('bot.chat.retry') }}</GdButton>
     </div>
 
     <!-- 复用主聊天面板 -->
@@ -46,7 +46,7 @@
       <div
         class="w-14 h-14 rounded-full flex items-center justify-center bg-(--gd-color-primary-100) text-(--gd-color-primary)"
       >
-        <el-icon :size="26"><ChatDotRound /></el-icon>
+        <el-icon :size="26"><Chat24Regular /></el-icon>
       </div>
       <p class="text-sm font-medium text-(--gd-color-gray-900) dark:text-(--gd-color-gray-100)">
         {{ t('bot.chat.selectConversation') }}
@@ -59,8 +59,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton, ElIcon } from 'element-plus'
-import { ChatDotRound } from '@element-plus/icons-vue'
+import { ElIcon } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
+import { Chat24Regular } from '@vicons/fluent'
 import ChatPanel from '@/components/chat/ChatPanel.vue'
 import { useBotStore } from '@/stores/bot'
 import type { BotSessionDetail } from '@/types/bot'

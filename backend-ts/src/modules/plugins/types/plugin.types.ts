@@ -17,10 +17,35 @@ export interface PluginManifest {
   category?: "system" | "core" | "extended" | "user";
   /** 系统必需，不可被任何方式禁用 */
   essential?: boolean;
-  /** 图标：相对路径（"assets/logo.png"）/ data URI / http URL */
+  /**
+   * 图标：相对路径 / data URI / http URL。
+   *
+   * 相对路径的基目录按插件来源区分：
+   * - 内置插件（编译进 dist 的 TS 类，无插件目录）→ 相对 `STATIC_DIR`，
+   *   如 `images/plugins/file.svg`；
+   * - 外部插件（manifest.json + 插件目录）→ 相对插件目录，如 `assets/logo.svg`。
+   *
+   * TODO(plugins): 内置插件后续应改为独立资源目录 `resources/plugins/<id>/assets/`，
+   * 与外部插件共用「相对插件目录」语义，届时删除 STATIC_DIR 回退分支
+   * （见 docs/technical-debt.md）。
+   */
   icon?: string;
   /** 入口文件（仅外部插件，默认 "index.js"） */
   main?: string;
+  /**
+   * Provider Pack 契约版本（缺失 = 非供应商包）。
+   * 声明后该插件可按供应商包加载：声明式类型卡 + 可选协议适配器。
+   */
+  providerApi?: number;
+  /** Provider Pack 贡献声明（providerApi 存在时有效） */
+  provides?: {
+    /** 相对 manifest 的 YAML/JSON 类型卡路径（支持 glob） */
+    providerTypes?: string[];
+    /** 代码适配器入口；缺省用 main */
+    providerAdapters?: string;
+    /** 资源目录（logo 等），默认 assets */
+    assets?: string;
+  };
   /** 插件来源（内部注入，外部插件由 loader 设置） */
   source?: "builtin" | "dev" | "user";
   /** 插件目录绝对路径（仅外部插件） */

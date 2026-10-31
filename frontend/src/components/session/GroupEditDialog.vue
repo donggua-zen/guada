@@ -26,25 +26,26 @@
         </label>
         <div class="flex items-center gap-2">
           <el-input :model-value="projectPath" readonly class="flex-1" />
-          <el-button :disabled="!projectPath" @click="handleCopyPath">
+          <GdButton :disabled="!projectPath" @click="handleCopyPath">
             {{ t('ui.sidebar.copyProjectPath') }}
-          </el-button>
+          </GdButton>
         </div>
       </div>
     </div>
 
     <template #footer>
       <div class="flex justify-end gap-2">
-        <el-button @click="dialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" :disabled="!canSave" :loading="saving" @click="handleSave">
+        <GdButton @click="dialogVisible = false">{{ t('common.cancel') }}</GdButton>
+        <GdButton type="primary" :disabled="!canSave" :loading="saving" @click="handleSave">
           {{ t('common.save') }}
-        </el-button>
+        </GdButton>
       </div>
     </template>
   </GdDialog>
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GdDialog from '@/components/ui/GdDialog.vue'

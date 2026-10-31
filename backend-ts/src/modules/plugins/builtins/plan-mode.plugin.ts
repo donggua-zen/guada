@@ -59,6 +59,7 @@ export class PlanModePlugin extends PluginBase {
     description: "计划模式：只读调研后产出方案，经用户批准再实施",
     version: "1.0.0",
     category: "core" as const,
+    icon: "images/plugins/plan-mode.svg",
   };
 
   constructor(

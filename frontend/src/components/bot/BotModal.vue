@@ -14,9 +14,9 @@
           </el-option>
         </el-select>
         <div class="mt-2">
-          <el-button link type="primary" size="small" @click="openConfigDoc">
+          <GdButton link type="primary" size="small" @click="openConfigDoc">
             {{ configDocButtonText }}
-          </el-button>
+          </GdButton>
         </div>
       </el-form-item>
 
@@ -170,10 +170,10 @@
     </el-form>
 
     <template #footer>
-      <el-button @click="handleClose">{{ t('common.cancel') }}</el-button>
-      <el-button type="primary" :loading="submitting" @click="handleSubmit">
+      <GdButton @click="handleClose">{{ t('common.cancel') }}</GdButton>
+      <GdButton type="primary" :loading="submitting" @click="handleSubmit">
         {{ isEdit ? t('bot.modal.save') : t('bot.modal.create') }}
-      </el-button>
+      </GdButton>
     </template>
   </GdDialog>
 </template>
@@ -181,7 +181,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import type { FormInstance, FormRules } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { useBotStore } from '@/stores/bot'

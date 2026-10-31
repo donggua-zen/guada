@@ -238,4 +238,91 @@ describe('McpFileStore', () => {
     expect(back.tools).toEqual({ t1: { description: 'd1' } });
     expect(fs.existsSync(path.join(dir, `imported${MCP_TOOLS_SUFFIX}`))).toBe(true);
   });
+
+  describe('origin（市场来源追踪）', () => {
+    it('手工创建的服务器不写 origin 字段，读回为 null', async () => {
+      await store.initialize();
+      const created = await store.create({ name: '手工', command: 'node' });
+
+      expect(created.origin).toBeNull();
+      expect(
+        fs.readFileSync(path.join(dir, `${created.id}.yaml`), 'utf8'),
+      ).not.toContain('origin');
+    });
+
+    it('origin 完整落盘并可原样读回', async () => {
+      await store.initialize();
+      const created = await store.create({
+        name: '市场来的',
+        command: 'npx',
+        args: ['-y', '@x/mcp'],
+        enabled: false,
+        origin: {
+          market: 'mcpworld',
+          itemId: 'mcpworld:be0640da',
+          version: 1,
+          importedAt: '2026-10-30T03:12:44.001Z',
+          needsConfiguration: true,
+          configurationFields: ['env.PROM_URL'],
+        },
+      });
+
+      const text = fs.readFileSync(path.join(dir, `${created.id}.yaml`), 'utf8');
+      expect(text).toContain('origin:');
+      expect(text).toContain('mcpworld:be0640da');
+
+      await store.reload();
+      const back = store.getRow(created.id)!;
+      expect(back.origin).toEqual({
+        market: 'mcpworld',
+        itemId: 'mcpworld:be0640da',
+        version: 1,
+        importedAt: '2026-10-30T03:12:44.001Z',
+        needsConfiguration: true,
+        configurationFields: ['env.PROM_URL'],
+      });
+    });
+
+    it('origin 结构不合法时降级为 null，但配置本身仍可加载', async () => {
+      fs.writeFileSync(
+        path.join(dir, 'srv-bad-origin.yaml'),
+        ['name: 坏来源', 'command: node', 'origin: "not-an-object"'].join('\n'),
+        'utf8',
+      );
+      await store.reload();
+
+      const row = store.getRow('srv-bad-origin');
+      expect(row).toBeDefined();
+      expect(row!.origin).toBeNull();
+      expect(row!.name).toBe('坏来源');
+    });
+
+    it('origin 缺 itemId 视为无来源（不能用空 id 判定已安装）', async () => {
+      fs.writeFileSync(
+        path.join(dir, 'srv-no-item.yaml'),
+        ['name: 缺主键', 'command: node', 'origin:', '  market: mcpworld'].join('\n'),
+        'utf8',
+      );
+      await store.reload();
+
+      expect(store.getRow('srv-no-item')!.origin).toBeNull();
+    });
+
+    it('update 可写入 origin，且不影响其它字段', async () => {
+      await store.initialize();
+      const created = await store.create({ name: '后补来源', command: 'node' });
+
+      const updated = await store.update(created.id, {
+        origin: {
+          market: 'skillhub_mcp',
+          itemId: 'skillhub_mcp:demo',
+          version: 1,
+          importedAt: '2026-10-30T04:00:00.000Z',
+        },
+      });
+
+      expect(updated!.name).toBe('后补来源');
+      expect(updated!.origin!.itemId).toBe('skillhub_mcp:demo');
+    });
+  });
 });

@@ -4,7 +4,7 @@
       <span class="guide-title">{{ t('ui.setupGuide.title') }}</span>
       <div class="header-actions no-drag">
         <span class="skip-link" @click="skipGuide">{{ t('ui.setupGuide.skipGuide') }}</span>
-        <el-icon class="close-btn cursor-pointer" @click="closeGuide"><Close /></el-icon>
+        <el-icon class="close-btn cursor-pointer" @click="closeGuide"><Dismiss16Regular /></el-icon>
       </div>
     </div>
 
@@ -12,7 +12,7 @@
     <div class="guide-steps no-drag">
       <template v-for="stepNo in TOTAL_STEPS" :key="stepNo">
         <div class="step-dot" :class="dotClass(stepNo)" @click="goBackToStep(stepNo)">
-          <el-icon v-if="isStepDone(stepNo)" :size="10"><Check /></el-icon>
+          <el-icon v-if="isStepDone(stepNo)" :size="10"><Checkmark12Regular /></el-icon>
           <span v-else>{{ stepNo }}</span>
         </div>
         <div v-if="stepNo < TOTAL_STEPS" class="step-connector"
@@ -38,7 +38,7 @@
         <h3>{{ t('ui.setupGuide.step2Title') }}</h3>
         <p class="desc">{{ t('ui.setupGuide.step2Desc') }}</p>
         <div class="action-area">
-          <el-button type="primary" @click="goToSecuritySettings">{{ t('ui.setupGuide.step2Action') }}</el-button>
+          <GdButton type="primary" @click="goToSecuritySettings">{{ t('ui.setupGuide.step2Action') }}</GdButton>
         </div>
       </div>
 
@@ -47,23 +47,23 @@
         <h3>{{ t('ui.setupGuide.step3Title') }}</h3>
         <p class="desc">{{ t('ui.setupGuide.step3Desc') }}</p>
         <div class="action-area">
-          <el-button type="primary" @click="goToProviderSettings">{{ t('ui.setupGuide.step3Action') }}</el-button>
+          <GdButton type="primary" @click="goToProviderSettings">{{ t('ui.setupGuide.step3Action') }}</GdButton>
         </div>
       </div>
 
     </div>
 
     <div class="guide-footer no-drag">
-      <el-button v-if="currentStep > 1" size="small" @click="prevStep">{{ t('ui.setupGuide.back') }}</el-button>
-      <el-button size="small" type="primary" @click="nextStep">
+      <GdButton v-if="currentStep > 1" size="small" @click="prevStep">{{ t('ui.setupGuide.back') }}</GdButton>
+      <GdButton size="small" type="primary" @click="nextStep">
         {{ currentStep === TOTAL_STEPS ? t('ui.setupGuide.finish') : t('ui.setupGuide.next') }}
-      </el-button>
+      </GdButton>
     </div>
   </div>
 
   <!-- 全局悬浮引导入口（X 关闭或完成后消失） -->
   <div v-if="!visible && !hasCompleted" class="guide-fab" @click="openGuide" :title="t('ui.setupGuide.viewGuide')">
-    <el-icon><QuestionFilled /></el-icon>
+    <el-icon><QuestionCircle16Filled /></el-icon>
   </div>
 </template>
 
@@ -71,9 +71,11 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NEW_SESSION_ID } from '@/constants'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { useI18n } from 'vue-i18n'
-import { Close, QuestionFilled, Check } from '@element-plus/icons-vue'
+import { Dismiss16Regular, QuestionCircle16Filled, Checkmark12Regular } from '@vicons/fluent'
 import { useAuthStore } from '@/stores/auth'
 import { isElectron } from '@/composables/useDevice'
 import { apiService } from '@/services/ApiService'

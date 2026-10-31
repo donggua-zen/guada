@@ -3,17 +3,17 @@
     <!-- 详情标题区（固定不滚动） -->
     <div class="shrink-0 flex items-center justify-between gap-4 mb-8 mt-2 px-4 w-full md:max-w-220 md:mx-auto">
       <div class="flex items-center gap-3 min-w-0">
-        <el-button link @click="$emit('back')"
+        <GdButton link @click="$emit('back')"
           class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--gd-color-primary) font-medium shrink-0">
-          <el-icon :size="20"><ArrowBackIosFilled /></el-icon>
+          <el-icon :size="20"><ChevronLeft20Regular /></el-icon>
           <span>{{ t('settings.providerDetail.back') }}</span>
-        </el-button>
+        </GdButton>
         <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed] truncate">{{ provider?.name }}</h1>
       </div>
-      <el-button @click="handleAddModel">
-        <template #icon><PlusOutlined /></template>
+      <GdButton @click="handleAddModel">
+        <template #icon><Add16Regular /></template>
         {{ t('settings.providerDetail.addModel') }}
-      </el-button>
+      </GdButton>
     </div>
 
     <!-- 内容区（独立滚动，满屏宽度） -->
@@ -27,10 +27,10 @@
           <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ t('settings.providerDetail.noModels') }}</p>
           <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ t('settings.providerDetail.noModelsDesc') }}</p>
           <div class="flex justify-center gap-3 mt-6">
-            <el-button type="primary" @click="handleAddModel">
-              <template #icon><PlusOutlined /></template>
+            <GdButton type="primary" @click="handleAddModel">
+              <template #icon><Add16Regular /></template>
               {{ t('settings.providerDetail.addModel') }}
-            </el-button>
+            </GdButton>
           </div>
         </div>
 
@@ -80,7 +80,7 @@
                           <GdTooltip :content="getLableName(feature)" placement="top">
                             <el-icon class="hover:text-primary transition-colors" :size="16">
                               <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                              <ScienceOutlined v-else />
+                              <Beaker16Regular v-else />
                             </el-icon>
                           </GdTooltip>
                         </template>
@@ -99,13 +99,13 @@
               <div class="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity shrink-0">
                 <el-switch v-model="model.isActive" :active-text="t('common.enabled')" :inactive-text="t('common.disabled')"
                   @change="handleToggleModelActive(model)" inline-prompt size="small" />
-                <el-button link style="font-size: 18px; color: var(--el-text-color-secondary)"
+                <GdButton link style="font-size: 18px; color: var(--el-text-color-secondary)"
                   @click="handleEditClick(model)">
-                  <el-icon><SettingsOutlined /></el-icon>
-                </el-button>
-                <el-button type="danger" link style="font-size: 18px" @click="handleDeleteClick(model)">
-                  <el-icon><RemoveCircleOutlineRound /></el-icon>
-                </el-button>
+                  <el-icon><Settings16Regular /></el-icon>
+                </GdButton>
+                <GdButton type="danger" link style="font-size: 18px" @click="handleDeleteClick(model)">
+                  <el-icon><SubtractCircle16Regular /></el-icon>
+                </GdButton>
               </div>
             </li>
           </ul>
@@ -125,17 +125,17 @@
               <div class="api-key-input-wrapper">
                 <el-input v-model="editModelForm.modelName" :placeholder="t('settings.providerDetail.modelNamePlaceholder')" clearable
                   :disabled="isEditMode" />
-                <el-button v-if="!isEditMode" type="primary" @click="handleFetchModels"
+                <GdButton v-if="!isEditMode" type="primary" @click="handleFetchModels"
                   :loading="fetchingModels">
                   <template #icon>
-                    <CloudDownloadOutlined />
+                    <ArrowDownload16Regular />
                   </template>
                   {{ t('settings.providerDetail.fetchFromProvider') }}
-                </el-button>
+                </GdButton>
               </div>
               <!-- 预设检测提示 -->
               <div v-if="!isEditMode && matchedPreset" class="preset-hint" @click="applyPreset(matchedPreset)">
-                <el-icon class="mr-1"><AutoFixHighOutlined /></el-icon>
+                <el-icon class="mr-1"><Wand16Regular /></el-icon>
                 {{ t('settings.providerDetail.presetDetected', { label: matchedPreset.label }) }}
               </div>
             </el-form-item>
@@ -284,12 +284,12 @@
                         :value="PATCH_TEMPLATE_CUSTOM" />
                     </el-select>
                     <div v-if="formatSuggestion" class="preset-hint">
-                      <el-icon class="mr-1"><AutoFixHighOutlined /></el-icon>
+                      <el-icon class="mr-1"><Wand16Regular /></el-icon>
                       {{ t('settings.providerDetail.thinkingTemplateSuggested', formatSuggestion) }}
-                      <el-button v-if="suggestedTemplateExpr" link type="primary" class="!text-xs !px-1"
+                      <GdButton v-if="suggestedTemplateExpr" link type="primary" class="!text-xs !px-1"
                         @click="fillTemplate(suggestedTemplateExpr)">
                         {{ t('settings.providerDetail.thinkingExprFill') }}
-                      </el-button>
+                      </GdButton>
                     </div>
 
                     <!-- 拼法表达式（CEL）：选模板回填，可自定义；表达式接管思考字段写入 -->
@@ -323,12 +323,12 @@
 
                     <!-- 表达式为空：显示当前生效拼法及其等价表达式，一键填入（不自动改数据） -->
                     <div v-if="!editModelForm.thinkingPatchExpr.trim()" class="preset-hint">
-                      <el-icon class="mr-1"><AutoFixHighOutlined /></el-icon>
+                      <el-icon class="mr-1"><Wand16Regular /></el-icon>
                       {{ t('settings.providerDetail.thinkingExprEmptyHint', { format: formEffectiveFormat }) }}
-                      <el-button v-if="inheritedTemplateExpr" link type="primary" class="!text-xs !px-1"
+                      <GdButton v-if="inheritedTemplateExpr" link type="primary" class="!text-xs !px-1"
                         @click="fillTemplate(inheritedTemplateExpr)">
                         {{ t('settings.providerDetail.thinkingExprFill') }}
-                      </el-button>
+                      </GdButton>
                     </div>
                     <div v-else-if="!effectiveFormatSupportsEffort" class="mt-1.5 text-xs text-amber-500">
                       {{ t('settings.providerDetail.thinkingOnNoEffortHint') }}
@@ -338,9 +338,9 @@
                          有残留数据时提示，可显式清除（不随保存隐式清除） -->
                     <div v-if="legacyPatchLevels" class="mt-1.5 text-xs text-amber-500">
                       {{ t('settings.providerDetail.thinkingLegacyPatch', { levels: legacyPatchLevels }) }}
-                      <el-button link type="primary" class="!text-xs !px-1" @click="clearLegacyPatchRequested = true">
+                      <GdButton link type="primary" class="!text-xs !px-1" @click="clearLegacyPatchRequested = true">
                         {{ t('settings.providerDetail.thinkingLegacyPatchClear') }}
-                      </el-button>
+                      </GdButton>
                     </div>
                     <div v-else-if="clearLegacyPatchRequested" class="mt-1 text-xs text-gray-400">
                       {{ t('settings.providerDetail.thinkingLegacyPatchCleared') }}
@@ -350,9 +350,9 @@
                          （且会优先于档位勾选决定菜单）；有残留时提示，可显式清除 -->
                     <div v-if="legacyMapLevels" class="mt-1.5 text-xs text-amber-500">
                       {{ t('settings.providerDetail.thinkingLegacyMap', { levels: legacyMapLevels }) }}
-                      <el-button link type="primary" class="!text-xs !px-1" @click="clearLegacyMapRequested = true">
+                      <GdButton link type="primary" class="!text-xs !px-1" @click="clearLegacyMapRequested = true">
                         {{ t('settings.providerDetail.thinkingLegacyPatchClear') }}
-                      </el-button>
+                      </GdButton>
                     </div>
                     <div v-else-if="clearLegacyMapRequested" class="mt-1 text-xs text-gray-400">
                       {{ t('settings.providerDetail.thinkingLegacyMapCleared') }}
@@ -427,8 +427,8 @@
       </div>
       <template #footer>
         <div class="dialog-footer flex justify-end gap-3">
-          <el-button @click="showEditModal = false">{{ t('common.cancel') }}</el-button>
-          <el-button type="primary" @click="handleSaveModel" :loading="saving">{{ t('settings.providerDetail.saveChanges') }}</el-button>
+          <GdButton @click="showEditModal = false">{{ t('common.cancel') }}</GdButton>
+          <GdButton type="primary" @click="handleSaveModel" :loading="saving">{{ t('settings.providerDetail.saveChanges') }}</GdButton>
         </div>
       </template>
     </GdDialog>
@@ -441,15 +441,15 @@
           <el-input v-model="searchModelName" :placeholder="t('settings.providerDetail.searchModelName')" clearable @input="handleSearchModel">
             <template #prefix>
               <el-icon>
-                <SearchOutlined />
+                <Search16Regular />
               </el-icon>
             </template>
           </el-input>
         </div>
 
         <div v-if="fetchingModels" class="flex justify-center items-center py-12">
-          <el-icon class="is-loading text-primary" style="font-size: 32px;">
-            <Loading />
+          <el-icon class="text-primary" style="font-size: 32px;">
+            <ArrowSync16Regular class="animate-spin" />
           </el-icon>
         </div>
         <div v-else class="pb-4">
@@ -468,7 +468,7 @@
                     <GdTooltip :content="getLableName(feature)" placement="top">
                       <el-icon class="hover:text-primary transition-colors" :size="14">
                         <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                        <ScienceOutlined v-else />
+                        <Beaker16Regular v-else />
                       </el-icon>
                     </GdTooltip>
                   </template>
@@ -479,9 +479,9 @@
                     </el-icon>
                   </GdTooltip>
                 </div>
-                <el-button link type="primary" size="small" @click="handleSelectFromFetch(model)">
+                <GdButton link type="primary" size="small" @click="handleSelectFromFetch(model)">
                   {{ t('settings.providerDetail.select') }}
-                </el-button>
+                </GdButton>
               </li>
             </ul>
           </div>
@@ -496,21 +496,16 @@
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDebounceFn } from '@vueuse/core'
 import Avatar from '../ui/Avatar.vue'
 import GdTooltip from '../ui/GdTooltip.vue'
 import {
-  SettingsOutlined,
-  RemoveCircleOutlineRound,
-  SearchOutlined, ArrowBackIosFilled, PlusOutlined, CloudDownloadOutlined, ScienceOutlined,
-  AutoFixHighOutlined
-} from '@vicons/material'
-import {
-  TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular, Box16Regular, LockClosed16Regular, ChevronRight16Regular
+  TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular, Box16Regular, LockClosed16Regular, ChevronRight16Regular, ArrowSync16Regular,
+  Settings16Regular, SubtractCircle16Regular, Search16Regular, ChevronLeft20Regular, Add16Regular, ArrowDownload16Regular, Beaker16Regular, Wand16Regular
 } from '@vicons/fluent'
-import { Loading } from '@element-plus/icons-vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import {

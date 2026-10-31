@@ -19,8 +19,8 @@
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">
-                <el-button @click="closeCropModal">取消</el-button>
-                <el-button type="primary" @click="cropAvatar">确认裁剪</el-button>
+                <GdButton @click="closeCropModal">取消</GdButton>
+                <GdButton type="primary" @click="cropAvatar">确认裁剪</GdButton>
             </div>
         </template>
     </GdDialog>
@@ -30,6 +30,7 @@ import { ref, onUnmounted, watch } from 'vue'
 import Avatar from './Avatar.vue'
 import GdTooltip from './GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import GdButton from '@/components/ui/GdButton.vue'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 import { usePopup } from '../../composables/usePopup'

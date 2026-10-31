@@ -1,5 +1,5 @@
 import type { ApiContext } from "./api-context";
-import type { Model, ModelPreset, ModelProvider, ProviderTemplate, ThinkingCompatConfig } from "@/types/api";
+import type { Model, ModelPreset, ModelProvider, ProviderProtocol, ProviderTemplate, ThinkingCompatConfig } from "@/types/api";
 import type { PaginatedResponse } from "@/types/common";
 
 /** 模型 config 块（与后端 addModel 的 config 白名单同构） */
@@ -96,6 +96,8 @@ export interface ModelApi {
   setProviderEnabled(providerId: string, enabled: boolean): Promise<{ id: string; enabled: boolean }>;
   updateProvider(providerId: string, data: UpdateProviderPayload): Promise<ModelProvider>;
   getProviderTemplates(): Promise<ProviderTemplate[]>;
+  /** 可用 wire 协议（内置 + 插件贡献；协议下拉/标签的数据源） */
+  getProviderProtocols(): Promise<ProviderProtocol[]>;
   getModelPresets(): Promise<ModelPreset[]>;
   /** 按 apiUrl 推荐思考格式（仅供提示，用户确认后才写入 compat） */
   getThinkingFormatSuggestion(
@@ -204,6 +206,10 @@ export const modelApi: ModelApi = {
 
   async getProviderTemplates(this: ApiContext) {
     return await this._request<ProviderTemplate[]>("/providers/templates");
+  },
+
+  async getProviderProtocols(this: ApiContext) {
+    return await this._request<ProviderProtocol[]>("/providers/protocols");
   },
 
   async getModelPresets(this: ApiContext) {

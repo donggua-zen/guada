@@ -73,7 +73,7 @@
                         <span class="tab-close"
                             @click.stop="closeTab(tab)">
                             <el-icon size="10">
-                                <Close />
+                                <Dismiss12Regular />
                             </el-icon>
                         </span>
                     </div>
@@ -83,7 +83,7 @@
                 <GdTooltip :content="t('chat.workspace.newTab')" placement="bottom">
                     <button class="sidebar-tool-btn no-drag" @click="tabStore.openNewTab()">
                         <el-icon size="14">
-                            <Plus />
+                            <Add16Regular />
                         </el-icon>
                     </button>
                 </GdTooltip>
@@ -187,8 +187,7 @@
 import { ref, reactive, computed, watch, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Plus, Close } from '@element-plus/icons-vue';
-import { Branch20Regular, Pulse20Regular, Bot20Regular, PeopleTeam20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Chat16Regular, Code20Regular, Notepad20Regular } from '@vicons/fluent';
+import { Branch20Regular, Pulse20Regular, Bot20Regular, PeopleTeam20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Chat16Regular, Code20Regular, Notepad20Regular, Add16Regular, Dismiss12Regular } from '@vicons/fluent';
 import { getFileIcon } from '@/composables/useFileIcon';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';

@@ -17,7 +17,8 @@ export type SessionEventType =
   | "queue_updated"
   | "queues_snapshot"
   | "bot_status_changed"
-  | "bot_changed";
+  | "bot_changed"
+  | "scheduler_task_finished";
 
 /**
  * 会话事件

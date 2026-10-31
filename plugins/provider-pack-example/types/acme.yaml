@@ -1,0 +1,44 @@
+# 示例供应商类型卡（声明式供应商包）
+#
+# 该文件与 bundled-providers/*.yaml 的 schema 完全一致：
+# 类型卡只描述「静态事实」（协议、默认地址、模型目录、思考能力），
+# 用户实例（apiKey/apiUrl）仍由 providers/*.yaml 管理。
+type: acme
+name: Acme AI
+description: 示例供应商（OpenAI 兼容），用于演示声明式供应商包
+apiKeyUrl: https://example.com/api-keys
+avatarUrl: assets/logo.svg
+protocol: openai
+defaultApiUrl: https://api.acme.example/v1/
+compat:
+  thinkingFormat: openai
+models:
+  - modelName: acme-chat-pro
+    name: Acme Chat Pro
+    supportsThinking: true
+    thinkingEfforts: [none, low, medium, high]
+    modelType: text
+    config:
+      inputCapabilities: [text, image]
+      outputCapabilities: [text]
+      features: [tools, vision]
+      contextWindow: 128000
+      maxOutputTokens: 8192
+  - modelName: acme-chat-fast
+    name: Acme Chat Fast
+    supportsThinking: false
+    modelType: text
+    config:
+      inputCapabilities: [text]
+      outputCapabilities: [text]
+      features: [tools]
+      contextWindow: 64000
+      maxOutputTokens: 4096
+  - modelName: acme-embed
+    name: Acme Embedding
+    modelType: embedding
+    config:
+      inputCapabilities: [text]
+      outputCapabilities: [embedding]
+      features: []
+      vectorDimensions: 1024

@@ -85,6 +85,10 @@
   --gd-color-surface-border: #efefef;
   --gd-color-surface-hover: var(--gd-color-sidebar-bg-hover);
   --gd-size-surface-radius: 12px;
+  /* 插件图标托盘：满版图标（todo/知识库等）靠内边距避开圆角裁切。
+     底色默认与页面背景同色（托盘只靠边框勾边界），主题覆盖 bg/border 后自动跟随。 */
+  --gd-plugin-icon-tray-bg: var(--gd-color-bg);
+  --gd-plugin-icon-tray-border: color-mix(in srgb, var(--gd-color-text) 12%, var(--gd-color-surface));
 
   /* 工作区概览面板（OverviewPanel）视觉原语：默认融入背景（无卡片感）。
      自定义主题可赋值恢复卡片样式，例如：
@@ -165,6 +169,29 @@
   --gd-color-success: #67c23a;
   --gd-color-danger: #f56c6c;
   --gd-color-info: #909399;
+
+  /* 语义色五态派生（danger/warning 同构，hover/active 沿用主色加深惯例）。
+     GdButton 的 danger/error/warning 类型消费这套 token；var() 在使用处解析，
+     主题覆盖 danger/warning/surface 后自动跟随，无需逐主题定义 */
+  --gd-color-danger-hover: color-mix(in srgb, var(--gd-color-danger) 88%, #000);
+  --gd-color-danger-active: color-mix(in srgb, var(--gd-color-danger) 78%, #000);
+  --gd-color-danger-disabled: color-mix(in srgb, var(--gd-color-danger) 45%, var(--gd-color-surface));
+  --gd-color-danger-text: #fff;
+  --gd-color-danger-text-disabled: rgb(255 255 255 / 0.7);
+
+  --gd-color-warning-hover: color-mix(in srgb, var(--gd-color-warning) 88%, #000);
+  --gd-color-warning-active: color-mix(in srgb, var(--gd-color-warning) 78%, #000);
+  --gd-color-warning-disabled: color-mix(in srgb, var(--gd-color-warning) 45%, var(--gd-color-surface));
+  --gd-color-warning-text: #fff;
+  --gd-color-warning-text-disabled: rgb(255 255 255 / 0.7);
+
+  /* 插件契约旧名：error 系列指向 danger 系列 */
+  --gd-color-error: var(--gd-color-danger);
+  --gd-color-error-hover: var(--gd-color-danger-hover);
+  --gd-color-error-active: var(--gd-color-danger-active);
+  --gd-color-error-disabled: var(--gd-color-danger-disabled);
+  --gd-color-error-text: var(--gd-color-danger-text);
+  --gd-color-error-text-disabled: var(--gd-color-danger-text-disabled);
 
   --gd-size-text-base: 14px;
   --gd-size-text-sm: 14px;
@@ -324,6 +351,9 @@ html.dark {
   --gd-color-surface-subtle-hover: color-mix(in srgb, var(--gd-color-text) 12%, var(--gd-color-surface));
   --gd-color-surface-border: oklch(28% 0.02 250);
   --gd-color-secondary-surface: #222;
+  /* 插件图标托盘：深色下同样与页面背景同色，靠边框区分边界 */
+  --gd-plugin-icon-tray-bg: var(--gd-color-bg);
+  --gd-plugin-icon-tray-border: color-mix(in srgb, var(--gd-color-text) 18%, var(--gd-color-surface));
   /* #2e3035 左右 */
   /* 文本颜色 - 确保在深色背景下的可读性 */
   --gd-color-text: #d3d3d3;
@@ -499,19 +529,6 @@ html.dark {
   /* 流式波纹动画配色（暗色模式） */
   --gd-shimmer-base: #a8aab3;
   --gd-shimmer-highlight: #ffffff;
-}
-
-/* .el-button:not(.el-button--large) {
-    height: 28px;
-}
-
-.el-button.is-circle {
-    width: 28px;
-} */
-
-.el-button,
-.el-button.is-round {
-  padding: 6px 15px;
 }
 
 /* @theme {

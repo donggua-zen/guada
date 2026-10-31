@@ -70,6 +70,8 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
   private firstConnectFailureAt = 0;
   /** 是否正在主动销毁：销毁触发的 close 不得计入「宿主失联」 */
   private shuttingDown = false;
+  /** 是否成功连过至少一次：区分「首次连接」与「断线重连」（reconnected 事件只对后者广播） */
+  private hadConnectedBefore = false;
   private readyPromise: Promise<void>;
   private readyResolve!: () => void;
 
@@ -152,6 +154,12 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
       this.reconnectDelay = 1000;
       this.firstConnectFailureAt = 0; // 连上了：本轮失联窗口结束
       this.logger.log("Bridge socket connected, authenticating...");
+      // 重连成功 = 宿主（Electron）可达：系统唤醒/宿主重启后的可靠信号。
+      // 首次连接不算（初始化流程自己会跑），只对断线后的重连广播。
+      if (this.hadConnectedBefore) {
+        this.eventEmitter.emit("reconnected");
+      }
+      this.hadConnectedBefore = true;
 
       // 发送鉴权消息
       this.send({ type: "auth", token: this.token });
@@ -387,6 +395,14 @@ export class BridgeClient implements OnModuleInit, OnModuleDestroy {
    */
   on(event: string, callback: (data: any) => void): void {
     this.eventEmitter.on(event, callback);
+  }
+
+  /**
+   * 监听「断线后重连成功」：系统唤醒/宿主重启后宿主重新可达的可靠信号。
+   * 首次连接不触发（模块初始化流程自会执行）。
+   */
+  onReconnected(callback: () => void): void {
+    this.eventEmitter.on("reconnected", callback);
   }
 
   /**

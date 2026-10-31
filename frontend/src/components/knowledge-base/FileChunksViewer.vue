@@ -4,13 +4,13 @@
         :close-on-click-modal="true" @close="handleClose">
         <div v-if="loading" class="loading-container text-center py-8">
             <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">
-                <Loading />
+                <ArrowSync16Regular class="animate-spin" />
             </el-icon>
             <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.chunks.loading') }}</p>
         </div>
         <div v-else-if="chunks.length === 0" class="no-chunks-container text-center py-8">
             <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">
-                <Document />
+                <Document24Regular />
             </el-icon>
             <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.chunks.empty') }}</p>
         </div>
@@ -49,7 +49,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Loading, Document } from '@element-plus/icons-vue'
+import { ArrowSync16Regular, Document24Regular } from '@vicons/fluent'
 import type { KBFile } from '@/stores/knowledgeBase'
 import type { KBChunk } from '@/services/modules/knowledge-base.api'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'

@@ -26,7 +26,7 @@
     <!-- 文件/文件夹列表-->
     <div v-if="isLoading" class="text-center py-8">
       <el-icon class="animate-spin text-blue-500" size="32">
-        <Loading />
+        <ArrowSync16Regular />
       </el-icon>
       <p class="mt-2 text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.tree.loading') }}</p>
     </div>
@@ -119,7 +119,7 @@
     <!-- 加载更多指示器 -->
     <div v-if="isLoadingMore" class="text-center py-4">
       <el-icon class="animate-spin text-blue-500" size="24">
-        <Loading />
+        <ArrowSync16Regular />
       </el-icon>
       <p class="mt-2 text-sm text-gray-500">{{ t('knowledge.tree.loadingMore') }}</p>
     </div>
@@ -142,8 +142,8 @@
     <GdDialog v-model="showRenameDialog" :title="t('knowledge.tree.renameTitle')" size="xs" :close-on-click-modal="false" append-to-body>
       <el-input v-model="renameForm.newName" :placeholder="t('knowledge.tree.newNamePlaceholder')" @keyup.enter="confirmRename" />
       <template #footer>
-        <el-button @click="showRenameDialog = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="confirmRename" :loading="renameLoading">{{ t('common.ok') }}</el-button>
+        <GdButton @click="showRenameDialog = false">{{ t('common.cancel') }}</GdButton>
+        <GdButton type="primary" @click="confirmRename" :loading="renameLoading">{{ t('common.ok') }}</GdButton>
       </template>
     </GdDialog>
 
@@ -154,7 +154,7 @@
         <div class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
           :class="{ 'bg-blue-50 dark:bg-blue-900/30': selectedTargetFolderId === null }" @click="selectRootDirectory">
           <el-icon>
-            <Folder />
+            <Folder16Regular />
           </el-icon>
           <span>{{ t('knowledge.tree.rootDir') }}</span>
         </div>
@@ -165,7 +165,7 @@
           <template #default="{ node }">
             <span class="flex items-center gap-2">
               <el-icon>
-                <Folder />
+                <Folder16Regular />
               </el-icon>
               {{ node.label }}
             </span>
@@ -173,8 +173,8 @@
         </el-tree>
       </div>
       <template #footer>
-        <el-button @click="showMoveDialog = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="confirmMove" :loading="moveLoading">{{ t('common.ok') }}</el-button>
+        <GdButton @click="showMoveDialog = false">{{ t('common.cancel') }}</GdButton>
+        <GdButton type="primary" @click="confirmMove" :loading="moveLoading">{{ t('common.ok') }}</GdButton>
       </template>
     </GdDialog>
   </div>
@@ -184,8 +184,10 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, RefreshRight, Delete, Loading, Edit, Position } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { Folder16Regular, ArrowClockwise16Regular, Delete16Regular, ArrowSync16Regular, Edit16Regular, Location16Regular } from '@vicons/fluent'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
@@ -258,25 +260,25 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
   const items: ContextMenuItem[] = [
     {
       label: t('knowledge.tree.rename'),
-      icon: Edit,
+      icon: Edit16Regular,
       onClick: handleRenameFromMenu,
     },
     {
       label: t('knowledge.tree.moveTo'),
-      icon: Position,
+      icon: Location16Regular,
       onClick: handleMoveFromMenu,
     },
   ];
   if (contextMenu.value.item && !contextMenu.value.item.isDirectory) {
     items.push({
       label: t('knowledge.tree.retry'),
-      icon: RefreshRight,
+      icon: ArrowClockwise16Regular,
       onClick: handleRetryFromMenu,
     });
   }
   items.push({
     label: t('common.delete'),
-    icon: Delete,
+    icon: Delete16Regular,
     onClick: handleDeleteFromMenu,
   });
   return items;

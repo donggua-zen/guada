@@ -10,7 +10,7 @@
   >
     <div class="git-diff-gap-inner">
       <!-- 收起态（gap）：→ 可展开；展开态（gap-close）：→ 旋转 90° = ↓ 可收起（对齐文件树惯例） -->
-      <el-icon :size="12" class="git-diff-gap-icon"><ArrowRight /></el-icon>
+      <el-icon :size="12" class="git-diff-gap-icon"><ChevronRight12Regular /></el-icon>
       <span>{{ gapText }}</span>
     </div>
   </div>
@@ -38,7 +38,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowRight } from "@element-plus/icons-vue";
+import { ChevronRight12Regular } from "@vicons/fluent";
 import type { DisplaySplitLine } from "./git-diff-types";
 
 /** 渲染侧：old=split 旧列 | new=split 新列 | uni=unified 单列 */

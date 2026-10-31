@@ -68,8 +68,8 @@
             </div>
 
             <div v-else-if="previewLoading" class="flex items-center justify-center h-full w-full">
-                <el-icon class="is-loading" size="20">
-                    <LoadingOutlined />
+                <el-icon size="20">
+                    <ArrowSync16Regular class="animate-spin" />
                 </el-icon>
             </div>
 
@@ -108,9 +108,9 @@
                                 ? t('chat.workspace.mediaNotPlayable')
                                 : t('chat.workspace.unsupportedPreview') }}
                     </p>
-                    <el-button v-if="isElectron" @click="handleOpenInFileManager" size="small" class="mt-3">
+                    <GdButton v-if="isElectron" @click="handleOpenInFileManager" size="small" class="mt-3">
                         {{ t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInExplorer') }}
-                    </el-button>
+                    </GdButton>
                 </div>
             </div>
 
@@ -120,18 +120,18 @@
                 <div v-if="fileNotFound" class="w-full h-full flex items-center justify-center p-4">
                     <div class="text-center">
                         <p class="text-gray-400 dark:text-gray-500 text-sm">{{ t('chat.workspace.fileNotFound') }}</p>
-                        <el-button @click="emit('close')" size="small" class="mt-3">
+                        <GdButton @click="emit('close')" size="small" class="mt-3">
                             {{ t('chat.workspace.closeTab') }}
-                        </el-button>
+                        </GdButton>
                     </div>
                 </div>
                 <!-- 其他错误 -->
                 <div v-else-if="previewError" class="w-full h-full flex items-center justify-center p-4">
                     <div class="text-center">
                         <p class="text-gray-400 dark:text-gray-500 text-sm">{{ previewError }}</p>
-                        <el-button v-if="isElectron" @click="handleOpenInFileManager" size="small" class="mt-3">
+                        <GdButton v-if="isElectron" @click="handleOpenInFileManager" size="small" class="mt-3">
                             {{ t(isMac ? 'chat.workspace.openInFinder' : 'chat.workspace.openInExplorer') }}
-                        </el-button>
+                        </GdButton>
                     </div>
                 </div>
                 <template v-else-if="previewType === 'text'">
@@ -181,12 +181,12 @@
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { decidePreviewRefresh } from '@/utils/previewRefresh'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { useI18n } from 'vue-i18n'
 import { apiService } from '@/services/ApiService'
-import { LoadingOutlined } from '@vicons/antd'
-import { Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular, TextboxAlignTopRotate9020Regular } from '@vicons/fluent'
-import { DocumentCopy, Plus, CopyDocument } from '@element-plus/icons-vue'
+import { Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular, TextboxAlignTopRotate9020Regular, DocumentCopy16Regular, Add16Regular, Copy16Regular, ArrowSync16Regular } from '@vicons/fluent'
 import { useStorage } from '@vueuse/core'
 import { Finder, WindowsExplorer } from '@/components/icons'
 import { writeTextToClipboard } from '@/utils/clipboard'
@@ -822,7 +822,7 @@ function showContextMenu(x: number, y: number, selectedText: string, startLine?:
     if (hasSelection) {
         items.push({
             label: t('chat.workspace.addSelectionToSession'),
-            icon: DocumentCopy,
+            icon: DocumentCopy16Regular,
             onClick: () => {
                 const snip = buildSnipData(selectedText, startLine, endLine)
                 if (snip) emit('insert-snip', snip)
@@ -830,7 +830,7 @@ function showContextMenu(x: number, y: number, selectedText: string, startLine?:
         })
         items.push({
             label: t('chat.workspace.addFileToSession'),
-            icon: Plus,
+            icon: Add16Regular,
             divider: true,
             onClick: () => {
                 if (selectedFile.value) emit('insert-to-input', selectedFile.value.path)
@@ -839,7 +839,7 @@ function showContextMenu(x: number, y: number, selectedText: string, startLine?:
     } else {
         items.push({
             label: t('chat.workspace.addFileToSession'),
-            icon: Plus,
+            icon: Add16Regular,
             onClick: () => {
                 if (selectedFile.value) emit('insert-to-input', selectedFile.value.path)
             },
@@ -850,7 +850,7 @@ function showContextMenu(x: number, y: number, selectedText: string, startLine?:
     if (selectedFile.value) {
         items.push({
             label: t('chat.workspace.copyPath'),
-            icon: CopyDocument,
+            icon: Copy16Regular,
             divider: true,
             onClick: handleCopyFilePath,
         })

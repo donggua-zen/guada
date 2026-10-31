@@ -14,7 +14,7 @@
                 :class="{ 'rotate-90': isExpanded }"
                 size="14"
             >
-                <ArrowRight />
+                <ChevronRight16Regular />
             </el-icon>
             <div v-else class="w-3.5"></div>
             
@@ -73,7 +73,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowRight } from '@element-plus/icons-vue'
+import { ChevronRight16Regular } from '@vicons/fluent'
 import type { KBFile } from '@/stores/knowledgeBase'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import FolderIcon from '@/components/ui/FolderIcon.vue'

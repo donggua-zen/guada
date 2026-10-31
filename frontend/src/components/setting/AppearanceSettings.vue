@@ -104,12 +104,12 @@
               <div
                 class="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2"
               >
-                <el-button type="danger" size="small" @click="handleRemoveWallpaper">
+                <GdButton type="danger" size="small" @click="handleRemoveWallpaper">
                   <el-icon class="mr-1">
-                    <Delete />
+                    <Delete16Regular />
                   </el-icon>
                   删除
-                </el-button>
+                </GdButton>
               </div>
             </div>
 
@@ -127,7 +127,7 @@
                   class="w-full h-40 rounded-lg border-2 border-dashed border-gray-300 dark:border-[#2e3035] flex flex-col items-center justify-center cursor-pointer hover:border-(--gd-color-primary) transition-colors"
                 >
                   <el-icon class="text-3xl text-gray-400 mb-2">
-                    <Plus />
+                    <Add24Regular />
                   </el-icon>
                   <span class="text-sm text-gray-500 dark:text-[#8b8d95]">
                     点击或拖拽上传壁纸
@@ -239,7 +239,7 @@
 
       <!-- 重置按钮 -->
       <div class="flex justify-end">
-        <el-button @click="handleReset">恢复默认设置</el-button>
+        <GdButton @click="handleReset">恢复默认设置</GdButton>
       </div>
     </div>
   </div>
@@ -248,10 +248,11 @@
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, watch, markRaw, computed } from 'vue'
-import { ElMessage, ElUpload, ElSlider, ElSwitch, ElButton, ElIcon, ElSelect, ElOption } from 'element-plus'
+import { ElMessage, ElUpload, ElSlider, ElSwitch, ElIcon, ElSelect, ElOption } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import type { UploadFile } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
-import { WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
+import { Add24Regular, Delete16Regular, WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'

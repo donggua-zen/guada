@@ -12,16 +12,17 @@
         </div>
 
         <template #footer>
-            <el-button @click="handleClose">{{ t('common.cancel') }}</el-button>
-            <el-button type="primary" @click="handleSave" :loading="saving" :disabled="!panelHasChanges">{{ t('agents.modal.applyAll') }}</el-button>
+            <GdButton @click="handleClose">{{ t('common.cancel') }}</GdButton>
+            <GdButton type="primary" @click="handleSave" :loading="saving" :disabled="!panelHasChanges">{{ t('agents.modal.applyAll') }}</GdButton>
         </template>
     </GdDialog>
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton } from 'element-plus'
+
 import AgentSettingPanel from './AgentSettingPanel.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '@/composables/usePopup'

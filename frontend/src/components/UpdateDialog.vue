@@ -101,28 +101,28 @@
         <span v-else></span>
         <div class="flex items-center gap-3">
           <template v-if="store.isDownloading">
-            <el-button @click="handleCancelDownload">{{ t('ui.update.cancelDownload') }}</el-button>
-            <el-button type="primary" @click="handleClose">{{ t('ui.update.backgroundDownload') }}</el-button>
+            <GdButton @click="handleCancelDownload">{{ t('ui.update.cancelDownload') }}</GdButton>
+            <GdButton type="primary" @click="handleClose">{{ t('ui.update.backgroundDownload') }}</GdButton>
           </template>
           <template v-else-if="store.isDownloaded">
-            <el-button @click="handleClose">{{ t('ui.update.later') }}</el-button>
-            <el-button type="primary" @click="handleInstall">{{ t('ui.update.installAndRestart') }}</el-button>
+            <GdButton @click="handleClose">{{ t('ui.update.later') }}</GdButton>
+            <GdButton type="primary" @click="handleInstall">{{ t('ui.update.installAndRestart') }}</GdButton>
           </template>
           <template v-else-if="isInstalling">
-            <el-button type="primary" disabled>{{ t('ui.update.installing') }}</el-button>
+            <GdButton type="primary" disabled>{{ t('ui.update.installing') }}</GdButton>
           </template>
           <template v-else-if="hasError">
-            <el-button @click="handleManualDownload">{{ t('ui.update.manualDownload') }}</el-button>
-            <el-button type="primary" @click="handleRetry">{{ t('ui.update.retry') }}</el-button>
+            <GdButton @click="handleManualDownload">{{ t('ui.update.manualDownload') }}</GdButton>
+            <GdButton type="primary" @click="handleRetry">{{ t('ui.update.retry') }}</GdButton>
           </template>
           <template v-else>
-            <el-button @click="handleViewChangelog">{{ t('ui.update.viewChangelog') }}</el-button>
-            <el-button v-if="!store.canInPlaceUpdate" @click="handleManualDownload">
+            <GdButton @click="handleViewChangelog">{{ t('ui.update.viewChangelog') }}</GdButton>
+            <GdButton v-if="!store.canInPlaceUpdate" @click="handleManualDownload">
               {{ t('ui.update.download') }}
-            </el-button>
-            <el-button v-else type="primary" @click="handleDownload">
+            </GdButton>
+            <GdButton v-else type="primary" @click="handleDownload">
               {{ t('ui.update.download') }}
-            </el-button>
+            </GdButton>
           </template>
         </div>
       </div>
@@ -133,7 +133,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton, ElCheckbox, ElProgress } from 'element-plus'
+import { ElCheckbox, ElProgress } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { useUpdateStore } from '@/stores/update'
 

@@ -20,7 +20,8 @@ import {
  *
  * - 使用后端已有的 ssh2 依赖，不依赖用户机器安装 ssh 客户端；
  * - forwardIn 申请远端监听，收到 "tcp connection" 后桥接到本地后端端口；
- * - 断线指数退避重连（1s → 30s），配置类错误不重试（等用户修正）；
+ * - 断线指数退避重连（1s → 30s）；远端端口绑定失败（休眠恢复后服务器还挂着
+ *   旧会话）按可重试错误处理，退避重试直到旧会话被服务器回收；
  * - 主机指纹 TOFU：首次连接记录，之后不一致直接拒绝（防中间人/服务器被换）。
  */
 @Injectable()
@@ -170,6 +171,20 @@ export class SshTunnelService implements OnModuleDestroy {
       client.forwardIn(ssh.remoteBindAddress, ssh.remotePort, (err) => {
         if (this.client !== client) return;
         if (err) {
+          if (this.isRemoteBindFailure(err)) {
+            // 典型场景：休眠恢复后本机旧连接还没被服务器判死，远端端口仍被
+            // 旧会话占用。旧会话会在服务器超时后回收，按可重试错误退避重试，
+            // 直到 bind 成功 —— 而不是永久失败等用户手动重连。
+            this.status = "error";
+            this.lastError = `远端端口 ${ssh.remotePort} 暂被旧会话占用，将自动重试: ${err.message || err}`;
+            this.logger.warn(this.lastError);
+            try {
+              client.end();
+            } catch {
+              /* ignore */
+            }
+            return;
+          }
           const hint =
             ssh.remoteBindAddress === "0.0.0.0"
               ? "（远端绑定 0.0.0.0 需要服务器 sshd 配置 GatewayPorts yes）"
@@ -245,8 +260,19 @@ export class SshTunnelService implements OnModuleDestroy {
     client.connect(connectConfig);
   }
 
-  private verifyHostKey(key: Buffer): boolean {
-    const fingerprint =
+  /**
+   * 远端端口绑定失败：sshd 返回 "bind: Address already in use" 或
+   * "remote port allocation failed"（OpenSSH 拒绝转发时也走这个错误）。
+   * GatewayPorts 未开启导致的拒绝同样报这个错——但那属于配置类错误，
+   * 会带 GatewayPorts 提示且失败信息不同；这里按「端口暂被占用」重试即可，
+   * 真正的 GatewayPorts 问题在重试若干次后依然失败，用户会从状态里看到原文。
+   */
+  private isRemoteBindFailure(err: unknown): boolean {
+    const message = String((err as Error)?.message || err || "");
+    return /bind|address already in use|allocation|listen/i.test(message);
+  }
+
+  private verifyHostKey(key: Buffer): boolean {    const fingerprint =
       "sha256:" + crypto.createHash("sha256").update(key).digest("base64").replace(/=+$/, "");
     const expected = this.ssh?.hostFingerprint || "";
     if (!expected) {
@@ -301,7 +327,9 @@ export class SshTunnelService implements OnModuleDestroy {
 
   private scheduleRetry(): void {
     if (this.stopped || this.permanentFailure || this.retryTimer) return;
-    const delay = this.retryDelayMs;
+    // 退避加随机抖动：休眠恢复后大量客户端同时重连会挤在同一时刻
+    const jitter = Math.floor(Math.random() * 1000);
+    const delay = this.retryDelayMs + jitter;
     this.retryDelayMs = Math.min(this.retryDelayMs * 2, SshTunnelService.MAX_RETRY_DELAY_MS);
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;

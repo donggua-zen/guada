@@ -30,6 +30,31 @@ import { ID_PREFIXES } from "../../common/utils/id.util";
 /** 工具缓存文件后缀（非配置正本，loadAll 不当作实例加载） */
 export const MCP_TOOLS_SUFFIX = ".tools.json";
 
+/**
+ * 市场来源追踪（仅「从市场导入」的服务器才有；手工创建为 null）。
+ *
+ * 为什么需要它：判断「这条市场条目是否已安装」不能只靠 name 匹配 —— 用户随时可以
+ * 改名，名字一改就永久失准（技能市场现网就是这个毛病）。itemId 是市场侧的稳定主键，
+ * 改名、换版本都不变，因此是唯一的权威判定依据。
+ *
+ * 同时它也是后续「升级 / 修复配置」的锚点：拿 itemId 重新解析一遍市场配置，就能
+ * 覆盖本地 YAML 而不产生重复条目。
+ */
+export interface McpServerOrigin {
+  /** 来源标识：skillhub_mcp / mcpworld */
+  market: string;
+  /** 市场条目稳定 id，形如 `mcpworld:be0640da63865...` */
+  itemId: string;
+  /** origin 结构版本，固定 1；将来加字段时用于迁移判定 */
+  version: number;
+  /** 导入时间（ISO） */
+  importedAt: string;
+  /** 该条目是否含占位符、需要用户补全后才能启用 */
+  needsConfiguration?: boolean;
+  /** 待补全字段清单，如 `env.API_KEY` / `url` / `headers.Authorization` */
+  configurationFields?: string[];
+}
+
 /** MCP 服务器配置（= 原 mcp_server 表行的非派生字段） */
 export interface McpServerConfig {
   id: string;
@@ -52,6 +77,8 @@ export interface McpServerConfig {
    */
   timeoutMs: number | null;
   enabled: boolean;
+  /** 市场来源追踪；手工创建的服务器为 null（YAML 里不写这个字段） */
+  origin: McpServerOrigin | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +111,43 @@ function assertValidId(id: string): void {
   if (!id || /[\\/:*?"<>|]/.test(id) || id.startsWith(".")) {
     throw new Error(`Invalid MCP server id: "${id}"`);
   }
+}
+
+/**
+ * 归一市场来源块。
+ *
+ * 宽容是刻意的：origin 只是元数据，一个手写坏了 origin 的 YAML 不该让整份服务器
+ * 配置无法加载（那会静默丢一个用户正在用的 MCP 服务器）。因此结构不合法时返回
+ * undefined，由调用方降级为「无来源信息」，而不是抛错。
+ */
+export function normalizeOrigin(value: any): McpServerOrigin | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, any>;
+  const market = typeof raw.market === "string" ? raw.market.trim() : "";
+  const itemId = typeof raw.itemId === "string" ? raw.itemId.trim() : "";
+  if (!market || !itemId) return null;
+
+  const version =
+    typeof raw.version === "number" && Number.isFinite(raw.version) && raw.version > 0
+      ? Math.floor(raw.version)
+      : 1;
+
+  const fields = Array.isArray(raw.configurationFields)
+    ? raw.configurationFields.filter((f: any) => typeof f === "string" && f.length > 0)
+    : undefined;
+
+  const origin: McpServerOrigin = {
+    market,
+    itemId,
+    version,
+    importedAt:
+      typeof raw.importedAt === "string" && raw.importedAt.length > 0
+        ? raw.importedAt
+        : new Date().toISOString(),
+  };
+  if (raw.needsConfiguration === true) origin.needsConfiguration = true;
+  if (fields && fields.length > 0) origin.configurationFields = fields;
+  return origin;
 }
 
 @Injectable()
@@ -184,6 +248,7 @@ export class McpFileStore {
       cwd: data.cwd ?? null,
       timeoutMs: data.timeoutMs ?? null,
       enabled: data.enabled !== false,
+      origin: normalizeOrigin(data.origin) ?? null,
       createdAt: data.createdAt ?? now,
       updatedAt: now,
     };
@@ -342,6 +407,7 @@ export class McpFileStore {
       cwd: this.str(raw.cwd),
       timeoutMs: this.posInt(raw.timeoutMs),
       enabled: raw.enabled !== false,
+      origin: normalizeOrigin(raw.origin),
       createdAt: iso(raw.createdAt) ?? now,
       updatedAt: iso(raw.updatedAt) ?? now,
     };

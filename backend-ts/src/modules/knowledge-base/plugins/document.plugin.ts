@@ -21,6 +21,7 @@ export class DocumentPlugin extends PluginBase {
     description: "%document.description%",
     version: "1.0.0",
     category: "extended" as const,
+    icon: "images/plugins/document.svg",
   };
 
   constructor(

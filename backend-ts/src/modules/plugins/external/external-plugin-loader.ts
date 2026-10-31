@@ -5,12 +5,20 @@ import * as path from "path";
 import Module from "module";
 import { execFile as execFileCb, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import fg from "fast-glob";
+import * as yaml from "js-yaml";
 import { PluginManager } from "../plugin.manager";
 import { PluginBase } from "../base-plugin";
 import { PluginManifest } from "../types/plugin.types";
 import { NlsService } from "../i18n/nls.service";
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { parsePluginSource } from "./plugin-source";
+import { DataProviderPackPlugin } from "./data-provider-pack.plugin";
+import {
+  parseProviderTypeCard,
+  type ProviderTypeCard,
+} from "../../llm-core/bundled-catalog.service";
+import { PROVIDER_API_VERSION } from "../../llm-core/types/provider-plugin.types";
 
 const execFile = promisify(execFileCb);
 
@@ -22,8 +30,15 @@ interface ExternalManifest {
   author?: string;
   dependencies?: string[];
   category?: "system" | "core" | "extended" | "user";
+  essential?: boolean;
   icon?: string;
   main?: string;
+  providerApi?: number;
+  provides?: {
+    providerTypes?: string[];
+    providerAdapters?: string;
+    assets?: string;
+  };
 }
 
 /** 插件目录来源：builtin=随包分发（resources/plugins），dev=开发仓库目录，user=用户安装目录 */
@@ -149,52 +164,104 @@ export class ExternalPluginLoader implements OnModuleInit {
       }
     }
 
-    // 5. 确定入口文件
-    const mainFile = manifest.main || "index.js";
-    const entryPath = this.resolveEntry(pluginDir, mainFile, source);
-    if (!entryPath) {
-      throw new Error(`Entry file not found: tried ${mainFile}`);
+    // 5. 供应商包声明式类型卡（可选；纯数据包与代码包都可声明）
+    const providerTypeCards = await this.loadProviderTypeCards(pluginDir, manifest);
+
+    // 6. 确定代码入口：provides.providerAdapters > main；
+    //    普通插件（无 provides）保持历史默认 index.js；纯数据包没有入口。
+    const explicitEntry = manifest.provides?.providerAdapters || manifest.main;
+    const adapterEntryFile =
+      explicitEntry ||
+      (providerTypeCards.length === 0 ? "index.js" : undefined);
+    const entryPath = adapterEntryFile
+      ? this.resolveEntry(pluginDir, adapterEntryFile, source)
+      : null;
+    if (!entryPath && providerTypeCards.length === 0) {
+      throw new Error(
+        adapterEntryFile
+          ? `Entry file not found: tried ${adapterEntryFile}`
+          : "No entry file and no provides.providerTypes; nothing to load",
+      );
     }
 
-    // 6. 动态加载（清除缓存以支持热重载）
-    try {
-      delete require.cache[require.resolve(entryPath)];
-    } catch {
-      // 首次加载时 require.resolve 可能尚未缓存，忽略
-    }
+    // 7. 实例化：代码包 require；纯数据包用通用包装插件
+    let instance: PluginBase;
+    if (entryPath) {
+      // 动态加载（清除缓存以支持热重载）
+      try {
+        delete require.cache[require.resolve(entryPath)];
+      } catch {
+        // 首次加载时 require.resolve 可能尚未缓存，忽略
+      }
 
-    // 临时 patch 模块解析：外部插件无法找到 backend-ts 的 node_modules，
-    // 添加 backend-ts/node_modules 作为 fallback 搜索路径
-    const pluginModule = await this.requireWithFallback(entryPath);
+      // 临时 patch 模块解析：外部插件无法找到 backend-ts 的 node_modules，
+      // 添加 backend-ts/node_modules 作为 fallback 搜索路径
+      const pluginModule = await this.requireWithFallback(entryPath);
 
-    // 支持 default 导出 / 命名导出 / CommonJS 直出类（module.exports = class）
-    let PluginClass = pluginModule?.default;
-    if (!PluginClass && typeof pluginModule === "function" && pluginModule.prototype) {
-      // CommonJS 直出类：module.exports = class Valid { ... }
-      PluginClass = pluginModule;
-    }
-    if (!PluginClass) {
-      PluginClass = pluginModule[Object.keys(pluginModule).find((k) => {
-        const val = pluginModule[k];
-        return typeof val === "function" && val.prototype;
-      }) || ""];
-    }
+      // 支持 default 导出 / 命名导出 / CommonJS 直出类（module.exports = class）
+      let PluginClass = pluginModule?.default;
+      if (!PluginClass && typeof pluginModule === "function" && pluginModule.prototype) {
+        // CommonJS 直出类：module.exports = class Valid { ... }
+        PluginClass = pluginModule;
+      }
+      if (!PluginClass) {
+        PluginClass = pluginModule[Object.keys(pluginModule).find((k) => {
+          const val = pluginModule[k];
+          return typeof val === "function" && val.prototype;
+        }) || ""];
+      }
 
-    if (!PluginClass) {
-      throw new Error("No plugin class export found in entry file");
+      if (!PluginClass) {
+        throw new Error("No plugin class export found in entry file");
+      }
+      instance = new PluginClass();
+    } else {
+      instance = new DataProviderPackPlugin(
+        {
+          id: manifest.id,
+          name: manifest.name,
+          version: manifest.version,
+          description: manifest.description,
+        },
+        providerTypeCards,
+      );
     }
-
-    // 7. 实例化（不注入 DI，外部插件通过 onLoad(api) 获取能力）
-    const instance: PluginBase = new PluginClass();
 
     // 8. 合并 manifest（manifest.json 覆盖类内 manifest，注入 source 和 pluginPath）
     const mergedManifest: PluginManifest = {
       ...instance.manifest,
       ...manifest,
+      // provides 存在即供应商包；缺省版本按当前契约版本归一，
+      // 便于前端徽标与 PluginManager 的「默认启用」判定使用同一字段。
+      ...(manifest.provides
+        ? { providerApi: manifest.providerApi ?? PROVIDER_API_VERSION }
+        : {}),
       source,
       pluginPath: pluginDir,
     };
     instance.manifest = mergedManifest;
+
+    // 8.1. 外部供应商包不得自封 system/essential（否则可绕过禁用）；
+    //      随包分发的 builtin 包保留原始声明。
+    if (source !== "builtin" && mergedManifest.providerApi) {
+      if (mergedManifest.category === "system") {
+        this.logger.warn(
+          `Provider pack ${mergedManifest.id} declares category=system; downgraded to user`,
+        );
+        mergedManifest.category = "user";
+      }
+      mergedManifest.essential = false;
+    }
+
+    // 8.2. 代码包 + manifest 声明的类型卡：在插件 onLoad 前注入
+    //（纯数据包的 onLoad 已由 DataProviderPackPlugin 负责）
+    if (entryPath && providerTypeCards.length > 0) {
+      const originalOnLoad = instance.onLoad?.bind(instance);
+      instance.onLoad = async (api) => {
+        for (const card of providerTypeCards) api.registerProviderType(card);
+        await originalOnLoad?.(api);
+      };
+    }
 
     // 8.5. 加载外部插件语言包 (lang/zh.json)
     const langFile = path.join(pluginDir, "lang", "zh.json");
@@ -221,8 +288,59 @@ export class ExternalPluginLoader implements OnModuleInit {
     this.pluginPaths.set(manifest.id, { dir: pluginDir, source });
 
     this.logger.log(
-      `External plugin loaded: ${manifest.name} (${manifest.id}) from ${source}`,
+      `External plugin loaded: ${manifest.name} (${manifest.id}) from ${source}` +
+        (providerTypeCards.length > 0
+          ? ` [provider pack: ${providerTypeCards.length} type card(s)${entryPath ? ", code adapter" : ", declarative"}]`
+          : ""),
     );
+  }
+
+  /**
+   * 加载 manifest 声明的供应商类型卡。
+   *
+   * 路径相对插件根，支持 glob；解析后必须仍在插件目录内（防目录穿越）。
+   */
+  private async loadProviderTypeCards(
+    pluginDir: string,
+    manifest: ExternalManifest,
+  ): Promise<ProviderTypeCard[]> {
+    const patterns = manifest.provides?.providerTypes;
+    if (!Array.isArray(patterns) || patterns.length === 0) return [];
+
+    const root = await fs.promises.realpath(pluginDir);
+    const files = await fg(patterns, {
+      cwd: pluginDir,
+      absolute: true,
+      onlyFiles: true,
+      unique: true,
+    });
+
+    const cards: ProviderTypeCard[] = [];
+    for (const file of files) {
+      // 用 realpath 解析符号链接后再做目录包含判定（防 symlink 指向目录外）
+      const abs = await fs.promises.realpath(path.resolve(file));
+      const rel = path.relative(root, abs);
+      if (rel.startsWith("..") || path.isAbsolute(rel)) {
+        throw new Error(`providerTypes path escapes plugin directory: ${file}`);
+      }
+      const ext = path.extname(abs).toLowerCase();
+      if (ext !== ".yaml" && ext !== ".yml" && ext !== ".json") {
+        throw new Error(`Unsupported provider type card format: ${file}`);
+      }
+      const content = await fs.promises.readFile(abs, "utf-8");
+      const raw =
+        ext === ".json" ? JSON.parse(content) : yaml.load(content);
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        throw new Error(`Provider type card must be a mapping: ${file}`);
+      }
+      cards.push(
+        parseProviderTypeCard(
+          raw as Record<string, any>,
+          path.basename(abs, ext),
+        ),
+      );
+    }
+    return cards;
   }
 
   /**
@@ -315,11 +433,69 @@ export class ExternalPluginLoader implements OnModuleInit {
   private validateManifest(m: ExternalManifest): void {
     if (!m.id || typeof m.id !== "string")
       throw new Error("manifest.json: id is required");
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(m.id)) {
+      throw new Error(
+        "manifest.json: id must match [A-Za-z0-9][A-Za-z0-9._-]* (no path separators)",
+      );
+    }
     if (!m.name || typeof m.name !== "string")
       throw new Error("manifest.json: name is required");
     if (!m.version) throw new Error("manifest.json: version is required");
     if (!m.description)
       throw new Error("manifest.json: description is required");
+
+    const provides = m.provides;
+    if (provides !== undefined) {
+      if (!provides || typeof provides !== "object" || Array.isArray(provides)) {
+        throw new Error("manifest.json: provides must be an object");
+      }
+      const api = m.providerApi ?? PROVIDER_API_VERSION;
+      if (!Number.isInteger(api) || api < 1) {
+        throw new Error("manifest.json: providerApi must be a positive integer");
+      }
+      if (api > PROVIDER_API_VERSION) {
+        throw new Error(
+          `manifest.json: providerApi ${api} is newer than supported ${PROVIDER_API_VERSION}`,
+        );
+      }
+      if (provides.providerTypes !== undefined) {
+        if (
+          !Array.isArray(provides.providerTypes) ||
+          provides.providerTypes.some((p) => typeof p !== "string" || !p.trim())
+        ) {
+          throw new Error(
+            "manifest.json: provides.providerTypes must be a non-empty string array",
+          );
+        }
+      }
+      if (
+        provides.providerAdapters !== undefined &&
+        (typeof provides.providerAdapters !== "string" ||
+          !provides.providerAdapters.trim())
+      ) {
+        throw new Error(
+          "manifest.json: provides.providerAdapters must be a non-empty string",
+        );
+      }
+      if (
+        provides.assets !== undefined &&
+        (typeof provides.assets !== "string" || !provides.assets.trim())
+      ) {
+        throw new Error(
+          "manifest.json: provides.assets must be a non-empty string",
+        );
+      }
+      const hasTypes = (provides.providerTypes?.length || 0) > 0;
+      const hasAdapters =
+        !!provides.providerAdapters || !!m.main;
+      if (!hasTypes && !hasAdapters) {
+        throw new Error(
+          "manifest.json: provider pack must declare provides.providerTypes or a code entry (main/provides.providerAdapters)",
+        );
+      }
+    }
+    // 无 provides 的普通插件保持历史行为：缺省入口为 index.js，
+    // 是否真实存在由 loadExternalPlugin 的 resolveEntry 判定。
   }
 
   /** 获取插件目录路径（供 icon 接口使用） */
@@ -414,12 +590,24 @@ export class ExternalPluginLoader implements OnModuleInit {
     }
 
     // 加载
+    const manifest = this.readManifest(targetDir);
+    const isProviderPack = !!manifest?.provides;
+    if (isProviderPack) {
+      push(`[info] 供应商包：安装后可在 设置 → 模型供应商 中添加`);
+      if (manifest.main || manifest.provides?.providerAdapters) {
+        push(`[warn] 该包包含代码适配器，将在后端主进程内执行`);
+      }
+    }
     push(`[load] 加载插件 ${parsed.dirName} …`);
     await this.loadExternalPlugin(targetDir, "user");
     const id = this.readManifestId(targetDir);
     this.eventBus.emit("plugins.changed", { pluginId: id, action: "installed" });
     this.logger.log(`Plugin installed: ${id} from ${source}`);
-    push(`[done] 插件已安装: ${id}`);
+    push(
+      isProviderPack
+        ? `[done] 供应商包已安装: ${id}`
+        : `[done] 插件已安装: ${id}`,
+    );
     return { id, dir: targetDir };
   }
 
@@ -530,15 +718,19 @@ export class ExternalPluginLoader implements OnModuleInit {
     });
   }
 
+  /** 读取插件目录 manifest（供安装提示/安全告警使用；失败返回 null） */
+  private readManifest(dir: string): ExternalManifest | null {
+    try {
+      return JSON.parse(
+        fs.readFileSync(path.join(dir, "manifest.json"), "utf-8"),
+      ) as ExternalManifest;
+    } catch {
+      return null;
+    }
+  }
+
   /** 读取插件目录 manifest 的 id */
   private readManifestId(dir: string): string {
-    try {
-      const m = JSON.parse(
-        fs.readFileSync(path.join(dir, "manifest.json"), "utf-8"),
-      );
-      return m.id;
-    } catch {
-      return path.basename(dir);
-    }
+    return this.readManifest(dir)?.id || path.basename(dir);
   }
 }

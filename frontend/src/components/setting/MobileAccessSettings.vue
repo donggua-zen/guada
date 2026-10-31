@@ -12,7 +12,7 @@
           <span class="text-sm font-medium text-amber-700 dark:text-amber-400">{{ t('settings.mobileAccess.passwordRequired') }}</span>
           <span class="text-xs text-amber-600/80 dark:text-amber-500/80">{{ t('settings.mobileAccess.passwordRequiredDesc') }}</span>
         </div>
-        <el-button type="warning" plain @click="goSetPassword">{{ t('settings.mobileAccess.goSetPassword') }}</el-button>
+        <GdButton type="warning" plain @click="goSetPassword">{{ t('settings.mobileAccess.goSetPassword') }}</GdButton>
       </div>
 
       <!-- 局域网访问 -->
@@ -37,13 +37,13 @@
                 </div>
                 <div class="shrink-0 flex items-center gap-2">
                   <code class="text-sm text-blue-600 dark:text-blue-400 select-all">{{ lanUrls[0] }}</code>
-                  <el-button size="small" @click="copyUrl(lanUrls[0])">{{ t('settings.mobileAccess.copy') }}</el-button>
+                  <GdButton size="small" @click="copyUrl(lanUrls[0])">{{ t('settings.mobileAccess.copy') }}</GdButton>
                 </div>
               </div>
             </template>
             <div v-else class="flex items-center justify-between gap-4">
               <span class="text-xs text-amber-600 dark:text-amber-500">{{ t('settings.mobileAccess.lanPendingRestart') }}</span>
-              <el-button size="small" type="warning" plain @click="restartApp">{{ t('settings.mobileAccess.restartNow') }}</el-button>
+              <GdButton size="small" type="warning" plain @click="restartApp">{{ t('settings.mobileAccess.restartNow') }}</GdButton>
             </div>
           </div>
         </div>
@@ -73,7 +73,7 @@
               <span class="text-sm text-gray-600 dark:text-[#c0c1c5]">{{ t('settings.mobileAccess.publicUrlLabel') }}</span>
               <div class="flex items-center gap-2 min-w-0">
                 <code class="text-sm text-blue-600 dark:text-blue-400 truncate select-all">{{ publicUrl || '—' }}</code>
-                <el-button size="small" :disabled="!publicUrl" @click="copyUrl(publicUrl!)">{{ t('settings.mobileAccess.copy') }}</el-button>
+                <GdButton size="small" :disabled="!publicUrl" @click="copyUrl(publicUrl!)">{{ t('settings.mobileAccess.copy') }}</GdButton>
               </div>
             </div>
             <div v-if="status?.public.lastError" class="text-xs text-red-600 dark:text-red-400 break-all">
@@ -85,7 +85,7 @@
               </button>
             </div>
             <div class="flex items-center gap-2 pt-1">
-              <el-button size="small" :loading="reconnecting" @click="reconnectTunnel">{{ t('settings.mobileAccess.reconnect') }}</el-button>
+              <GdButton size="small" :loading="reconnecting" @click="reconnectTunnel">{{ t('settings.mobileAccess.reconnect') }}</GdButton>
             </div>
           </div>
 
@@ -121,7 +121,7 @@
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.privateKeyPath') }}</span>
                 <div class="flex gap-2">
                   <el-input v-model="sshForm.privateKeyPath" :placeholder="t('settings.mobileAccess.privateKeyPathPlaceholder')" clearable />
-                  <el-button v-if="isElectronEnv" @click="selectPrivateKey">{{ t('settings.mobileAccess.selectFile') }}</el-button>
+                  <GdButton v-if="isElectronEnv" @click="selectPrivateKey">{{ t('settings.mobileAccess.selectFile') }}</GdButton>
                 </div>
               </div>
 
@@ -154,11 +154,11 @@
                   <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.fingerprint') }}</span>
                   <code class="text-xs text-gray-500 dark:text-[#8b8d95] break-all">{{ config.ssh.hostFingerprint }}</code>
                 </div>
-                <el-button size="small" @click="clearFingerprint">{{ t('settings.mobileAccess.clearFingerprint') }}</el-button>
+                <GdButton size="small" @click="clearFingerprint">{{ t('settings.mobileAccess.clearFingerprint') }}</GdButton>
               </div>
             </div>
             <div class="px-4 pb-3.5 flex items-center justify-end gap-2">
-              <el-button :loading="savingSsh" type="primary" @click="saveSshConfig">{{ t('settings.mobileAccess.save') }}</el-button>
+              <GdButton :loading="savingSsh" type="primary" @click="saveSshConfig">{{ t('settings.mobileAccess.save') }}</GdButton>
             </div>
           </div>
         </div>
@@ -174,7 +174,7 @@
           <p class="font-medium text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.gatewayPortsEnableTitle') }}</p>
           <div class="relative">
             <pre class="bg-gray-900 text-gray-100 rounded-lg p-3 pr-20 text-xs overflow-x-auto"><code>{{ gatewayPortsEnableCommand }}</code></pre>
-            <el-button class="!absolute right-2 top-2" size="small" @click="copyUrl(gatewayPortsEnableCommand)">{{ t('settings.mobileAccess.copy') }}</el-button>
+            <GdButton class="!absolute right-2 top-2" size="small" @click="copyUrl(gatewayPortsEnableCommand)">{{ t('settings.mobileAccess.copy') }}</GdButton>
           </div>
           <p class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.mobileAccess.gatewayPortsEnableNote') }}</p>
         </div>
@@ -183,7 +183,7 @@
           <p class="font-medium text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.gatewayPortsVerifyTitle') }}</p>
           <div class="relative">
             <pre class="bg-gray-900 text-gray-100 rounded-lg p-3 pr-20 text-xs overflow-x-auto"><code>{{ gatewayPortsVerifyCommand }}</code></pre>
-            <el-button class="!absolute right-2 top-2" size="small" @click="copyUrl(gatewayPortsVerifyCommand)">{{ t('settings.mobileAccess.copy') }}</el-button>
+            <GdButton class="!absolute right-2 top-2" size="small" @click="copyUrl(gatewayPortsVerifyCommand)">{{ t('settings.mobileAccess.copy') }}</GdButton>
           </div>
         </div>
 
@@ -193,13 +193,14 @@
         </div>
       </div>
       <template #footer>
-        <el-button type="primary" @click="gatewayPortsDialogVisible = false">{{ t('settings.mobileAccess.gatewayPortsGotIt') }}</el-button>
+        <GdButton type="primary" @click="gatewayPortsDialogVisible = false">{{ t('settings.mobileAccess.gatewayPortsGotIt') }}</GdButton>
       </template>
     </GdDialog>
   </div>
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'

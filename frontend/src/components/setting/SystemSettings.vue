@@ -10,7 +10,7 @@
                 <div class="px-3 pt-3 pb-2">
                     <div @click="goBack"
                         class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover) transition-all duration-200">
-                        <ArrowBackIosNewTwotone class="w-4 h-4" />
+                        <ChevronLeft16Regular class="w-4 h-4" />
                         <span>{{ t('settings.system.backToApp') }}</span>
                     </div>
                 </div>
@@ -163,9 +163,10 @@ import {
     ChartMultiple24Regular,
     Desktop24Regular,
     Phone20Regular,
+    ChevronLeft16Regular,
+    Person16Regular,
+    ShieldCheckmark20Regular,
 } from '@vicons/fluent'
-
-import { ArrowBackIosNewTwotone, PersonOutlineOutlined, VerifiedUserOutlined } from '@vicons/material'
 
 import PageHeader from '@/components/PageHeader.vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -304,12 +305,12 @@ const sidebarItems = computed(() => [
     {
         label: t('settings.system.tabs.profile'),
         path: 'profile',
-        icon: PersonOutlineOutlined,
+        icon: Person16Regular,
     },
     {
         label: t('settings.system.tabs.security'),
         path: 'security',
-        icon: VerifiedUserOutlined,
+        icon: ShieldCheckmark20Regular,
     },
 ])
 

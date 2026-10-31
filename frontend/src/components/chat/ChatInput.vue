@@ -148,7 +148,7 @@
         size="md" :close-on-click-modal="false" destroy-on-close @close="closeFilePreview">
         <pre class="pasted-preview-text">{{ previewContent }}</pre>
         <template #footer>
-          <el-button @click="closeFilePreview">{{ t('common.close') }}</el-button>
+          <GdButton @click="closeFilePreview">{{ t('common.close') }}</GdButton>
         </template>
       </GdDialog>
     </div>
@@ -160,7 +160,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElButton, ElTag, ElMessage } from 'element-plus';
+import { ElTag, ElMessage } from 'element-plus';
 import type { Model, ModelProvider } from '@/types/api'
 import type { UploadResponse } from '@/types/service'
 import type { ChatFileView } from '@/types/session'
@@ -191,6 +191,8 @@ import {
 } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService';
 import { useCapabilitiesStore } from '@/stores/capabilities';
+import GdButton from '@/components/ui/GdButton.vue';
+
 
 /** File object managed by ChatInput (created via createFileObject) */
 interface ChatFile {
@@ -1759,10 +1761,6 @@ defineExpose({ insertText, insertBadge });
 .left-tools {
   display: flex;
   align-items: center;
-}
-
-:deep(.el-button+.el-button) {
-  margin-left: 0;
 }
 
 .right-actions {

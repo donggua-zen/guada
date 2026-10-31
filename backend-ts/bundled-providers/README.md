@@ -3,6 +3,9 @@
 本目录是**模型供应商与模型的唯一权威配置**（供应商就是数据）。每个 YAML 文件
 是一个供应商实例，AI 助手与用户都可直接读写本目录，后端监听文件变化热加载。
 
+> 类型卡除本目录随应用分发外，也可由「供应商包」插件动态贡献（声明式 YAML 或代码协议适配器），
+> 见 [`docs/provider-packs.md`](../../docs/provider-packs.md)。
+
 ## 文件命名
 
 - 文件名（去 `.yaml`）= **实例 id**，同时是模型 id 的前缀：`{实例id}:{模型名}`（如 `openai:gpt-4o`）。
@@ -15,7 +18,8 @@ id: openai            # = 文件名；不可与目录内其他实例重复
 type: openai          # 类型键（决定协议默认值与展示信息）；同类型可建多个实例
 name: OpenAI          # 显示名
 enabled: true         # 启用/禁用（false = 不进入模型选择器，调用直接报错）
-protocol: openai      # wire 协议：openai | openai-response | anthropic | gemini | mock
+protocol: openai      # wire 协议：内置 openai | openai-response | anthropic | gemini | mock，
+                      # 或供应商包通过 registerProtocolAdapter 注册的协议（如 ollama-native）
 apiUrl: https://api.openai.com/v1/
 apiKey: sk-xxx        # 明文（与旧 DB 存储同级）；请勿提交到版本库
 headers:              # 可选，附加请求头

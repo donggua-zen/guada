@@ -1,6 +1,5 @@
 import type { ApiContext } from "./api-context";
 import type {
-  CronPreset,
   ScheduledTask,
   ScheduledTaskLog,
   ScheduledTaskLogListResponse,
@@ -23,7 +22,6 @@ export interface SchedulerApi {
     cursor?: string,
     limit?: number,
   ): Promise<{ items: ScheduledTaskLog[]; hasMore: boolean; nextCursor: string | null }>;
-  fetchCronPresets(): Promise<CronPreset[]>;
 }
 
 export const schedulerApi: SchedulerApi = {
@@ -82,9 +80,5 @@ export const schedulerApi: SchedulerApi = {
     return await this._request<{ items: ScheduledTaskLog[]; hasMore: boolean; nextCursor: string | null }>(
       `/scheduler/logs${query ? `?${query}` : ""}`,
     );
-  },
-
-  async fetchCronPresets(this: ApiContext) {
-    return await this._request<CronPreset[]>("/scheduler/cron-presets");
   },
 };

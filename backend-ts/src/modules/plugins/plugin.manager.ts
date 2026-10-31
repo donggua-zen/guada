@@ -22,6 +22,7 @@ import { CommandProviderRegistry } from "../commands/command-provider-registry.s
 import { NlsService } from "./i18n/nls.service";
 import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
 import { isToolkitAllowedByRoleConfig } from "./utils/role-toolkit-filter";
+import { ProviderContributionCoordinator } from "../llm-core/provider-contribution.coordinator";
 
 // ──
 
@@ -69,6 +70,9 @@ export class PluginManager {
     /** 每轮提醒注册表；由 PluginApi 转发给插件（测试可省略） */
     @Optional()
     private readonly turnReminderRegistry?: TurnReminderRegistry,
+    /** 供应商包贡献协调器；llm-core 提供（测试可省略） */
+    @Optional()
+    private readonly providerCoordinator?: ProviderContributionCoordinator,
   ) {}
 
   // ── 生命周期 ──
@@ -93,7 +97,10 @@ export class PluginManager {
           await this.settingsStorage.getSettings(SG_PLUGINS);
         finalEnabled = this.readGlobalEnabled(globalCfg, plugin.manifest);
       } catch {
-        finalEnabled = plugin.manifest.category === "core";
+        finalEnabled =
+          plugin.manifest.category === "core" ||
+          !!plugin.manifest.providerApi ||
+          !!plugin.manifest.provides;
       }
     }
 
@@ -107,9 +114,18 @@ export class PluginManager {
       this.turnReminderRegistry,
     );
     if (plugin.onLoad) {
+      let onLoadError: any = null;
       await plugin.onLoad(api).catch((err) => {
+        onLoadError = err;
         this.logger.error(`Plugin ${id} onLoad failed: ${err.message}`);
       });
+      // 供应商包要求贡献完整：onLoad 失败意味着类型卡/适配器可能缺失，
+      // 继续注册会留下「模板存在但协议不可用」的半状态，直接整包失败。
+      if (onLoadError && (plugin.manifest.providerApi || plugin.manifest.provides)) {
+        throw new Error(
+          `Provider pack ${id} onLoad failed: ${onLoadError?.message || onLoadError}`,
+        );
+      }
     }
 
     // 执行 ToolKit onLoad 回调（支持二级注册）
@@ -124,6 +140,19 @@ export class PluginManager {
     }
 
     api.flush();
+
+    // 供应商包贡献（协议适配器 / 类型卡）：app 级注册，随插件启停联动。
+    // 校验失败视为整包失败：清掉已写入 PluginRegistry 的工具/提示词后抛出，
+    // 避免留下「插件已装但供应商能力不可用」的半状态。
+    try {
+      this.commitProviderContributions(id, api, finalEnabled);
+    } catch (err: any) {
+      PluginRegistry.clearPlugin(id);
+      this.logger.error(
+        `Plugin ${id} provider contribution rejected: ${err?.message || err}`,
+      );
+      throw err;
+    }
 
     // 启用时调用 onStart
     if (finalEnabled && plugin.onStart) {
@@ -158,6 +187,23 @@ export class PluginManager {
   }
 
   /**
+   * 把 PluginApi 收集到的供应商贡献提交到 app 级注册表。
+   * 无贡献时跳过（普通工具插件零开销）。
+   */
+  private commitProviderContributions(
+    pluginId: string,
+    api: PluginApiImpl,
+    enabled: boolean,
+  ): void {
+    if (!this.providerCoordinator) return;
+    const contributions = api.getProviderContributions();
+    const hasAdapters = (contributions.adapters?.length || 0) > 0;
+    const hasTypes = (contributions.types?.length || 0) > 0;
+    if (!hasAdapters && !hasTypes) return;
+    this.providerCoordinator.commit(pluginId, contributions, enabled);
+  }
+
+  /**
    * 卸载插件
    */
   async unregisterPlugin(pluginId: string): Promise<void> {
@@ -176,6 +222,7 @@ export class PluginManager {
       });
     }
     PluginRegistry.clearPlugin(pluginId);
+    this.providerCoordinator?.remove(pluginId);
     this.instances.delete(pluginId);
     this.logger.log(`Plugin unregistered: ${pluginId}`);
     this.eventBus.emit("plugins.changed", { pluginId, action: "unregistered" });
@@ -238,6 +285,8 @@ export class PluginManager {
       instance.plugin._enabled = true;
       this.logger.log(`Plugin ${pluginId} enabled`);
     } else if (!enabled && instance.enabled) {
+      // 先摘掉供应商能力，再执行可能耗时的 onStop，避免停用窗口内继续路由新请求
+      this.providerCoordinator?.setActive(pluginId, false);
       if (instance.plugin.onStop) {
         await instance.plugin.onStop().catch((err) => {
           this.logger.error(`Plugin ${pluginId} onStop failed: ${err.message}`);
@@ -247,6 +296,9 @@ export class PluginManager {
       instance.plugin._enabled = false;
       this.logger.log(`Plugin ${pluginId} disabled`);
     }
+
+    // 供应商包：协议路由/类型卡随插件启停即时切换（保留定义，不重新 require）
+    this.providerCoordinator?.setActive(pluginId, enabled);
 
     // 插件启停状态变化 → 通知前端刷新 slot 清单
     this.eventBus.emit("plugins.changed", { pluginId, action: enabled ? "enabled" : "disabled" });
@@ -415,6 +467,12 @@ export class PluginManager {
     manifest: PluginManifest,
   ): boolean {
     if (manifest.essential || manifest.category === "system") return true;
+    // 供应商包默认启用：安装即生效（类型卡/协议可用），用户显式禁用仍以持久化配置为准。
+    // 代码包在装载阶段已经 require，禁用只影响能力可见性，不改变执行面。
+    const defaultEnabled =
+      manifest.category === "core" ||
+      !!manifest.providerApi ||
+      !!manifest.provides;
     // 持久化可能是遗留的布尔直存或新格式对象，先按 unknown 收窄再判断
     const pluginVal: unknown = globalCfg[manifest.id];
     if (pluginVal === true || pluginVal === false) {
@@ -423,7 +481,7 @@ export class PluginManager {
     if (pluginVal && typeof pluginVal === "object" && "enabled" in pluginVal) {
       return (pluginVal as GlobalPluginEntryConfig).enabled !== false;
     }
-    return manifest.category === "core";
+    return defaultEnabled;
   }
 
   /**

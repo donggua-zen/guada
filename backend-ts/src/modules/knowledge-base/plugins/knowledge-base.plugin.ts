@@ -23,6 +23,7 @@ export class KnowledgeBasePlugin extends PluginBase {
     description: "%knowledgeBase.description%",
     version: "1.0.0",
     category: "core" as const,
+    icon: "images/plugins/knowledge_base.svg",
   };
 
   constructor(

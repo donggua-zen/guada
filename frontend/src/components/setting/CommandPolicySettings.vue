@@ -56,9 +56,9 @@
             <el-tag size="small" :type="row.builtin ? 'info' : 'warning'" effect="plain">
               {{ row.builtin ? t('settings.policy.tagBuiltin') : t('settings.policy.tagMine') }}
             </el-tag>
-            <el-button link type="danger" size="small" @click="removeReadOnlyRow(row)">
+            <GdButton link type="danger" size="small" @click="removeReadOnlyRow(row)">
               {{ t('settings.policy.remove') }}
-            </el-button>
+            </GdButton>
           </span>
         </div>
         <div v-if="filteredReadOnlyRows.length === 0" class="px-2 py-3 text-xs text-gray-400 text-center">
@@ -73,9 +73,9 @@
           :placeholder="t('settings.policy.readOnlyAddPlaceholder')"
           @keyup.enter="addReadOnly"
         />
-        <el-button size="small" :disabled="!newReadOnly.trim()" @click="addReadOnly">
+        <GdButton size="small" :disabled="!newReadOnly.trim()" @click="addReadOnly">
           {{ t('settings.policy.add') }}
-        </el-button>
+        </GdButton>
       </div>
       <p class="text-xs text-gray-400">{{ t('settings.policy.readOnlyCustomWarn') }}</p>
     </div>
@@ -97,9 +97,9 @@
             <el-tag size="small" :type="row.builtin ? 'info' : 'warning'" effect="plain">
               {{ row.builtin ? t('settings.policy.tagBuiltin') : t('settings.policy.tagMine') }}
             </el-tag>
-            <el-button link type="danger" size="small" @click="removeAskRow(row)">
+            <GdButton link type="danger" size="small" @click="removeAskRow(row)">
               {{ t('settings.policy.remove') }}
-            </el-button>
+            </GdButton>
           </span>
         </div>
         <div v-if="askRows.length === 0" class="px-2 py-3 text-xs text-gray-400 text-center">
@@ -122,12 +122,12 @@
             <el-tag size="small" :type="row.allowed ? 'success' : 'info'" effect="plain">
               {{ row.allowed ? t('settings.policy.allowed') : t('settings.policy.askOnce') }}
             </el-tag>
-            <el-button v-if="!row.allowed" link type="primary" size="small" @click="allowSensitiveRow(row)">
+            <GdButton v-if="!row.allowed" link type="primary" size="small" @click="allowSensitiveRow(row)">
               {{ t('settings.policy.allowThis') }}
-            </el-button>
-            <el-button v-else link type="danger" size="small" @click="removePathRule(row.label)">
+            </GdButton>
+            <GdButton v-else link type="danger" size="small" @click="removePathRule(row.label)">
               {{ t('settings.policy.revoke') }}
-            </el-button>
+            </GdButton>
           </span>
         </div>
       </div>
@@ -144,9 +144,9 @@
           :placeholder="t('settings.policy.rulePlaceholder')"
           @keyup.enter="addRule"
         />
-        <el-button size="small" :disabled="!newRule.trim()" @click="addRule">
+        <GdButton size="small" :disabled="!newRule.trim()" @click="addRule">
           {{ t('settings.policy.add') }}
-        </el-button>
+        </GdButton>
       </div>
     </div>
 
@@ -167,9 +167,9 @@
             <el-tag size="small" :type="row.builtin ? 'info' : 'warning'" effect="plain">
               {{ row.builtin ? t('settings.policy.tagBuiltin') : t('settings.policy.tagMine') }}
             </el-tag>
-            <el-button link type="danger" size="small" @click="removeWriteRootRow(row)">
+            <GdButton link type="danger" size="small" @click="removeWriteRootRow(row)">
               {{ row.builtin ? t('settings.policy.askInstead') : t('settings.policy.remove') }}
-            </el-button>
+            </GdButton>
           </span>
         </div>
       </div>
@@ -181,20 +181,20 @@
           :placeholder="t('settings.policy.writeRootPlaceholder')"
           @keyup.enter="addWriteRoot"
         />
-        <el-button size="small" :disabled="!newWriteRoot.trim()" @click="addWriteRoot">
+        <GdButton size="small" :disabled="!newWriteRoot.trim()" @click="addWriteRoot">
           {{ t('settings.policy.add') }}
-        </el-button>
+        </GdButton>
       </div>
       <p class="text-xs text-gray-400">{{ t('settings.policy.writeRootsWarn') }}</p>
     </div>
 
     <div class="flex items-center gap-2 pt-1">
-      <el-button type="primary" :loading="saving" @click="save">
+      <GdButton type="primary" :loading="saving" @click="save">
         {{ t('settings.policy.save') }}
-      </el-button>
-      <el-button :disabled="saving" @click="resetUser">
+      </GdButton>
+      <GdButton :disabled="saving" @click="resetUser">
         {{ t('settings.policy.reset') }}
-      </el-button>
+      </GdButton>
       <span class="text-xs text-gray-400">{{ t('settings.policy.resetHint') }}</span>
     </div>
   </div>
@@ -203,7 +203,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import { ShieldCheckmark16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'

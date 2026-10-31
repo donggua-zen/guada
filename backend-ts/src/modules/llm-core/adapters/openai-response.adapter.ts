@@ -57,6 +57,15 @@ import { resolveEffectiveThinkingCompat } from "./openai.adapter";
 @Injectable()
 export class OpenAIResponseAdapter implements IProtocolAdapter {
   readonly protocol = "openai-response";
+  readonly displayName = "OpenAI Responses";
+  readonly capabilities = {
+    streaming: true,
+    tools: true,
+    vision: true,
+    reasoning: true,
+    promptCaching: true,
+    modelDiscovery: true,
+  };
 
   constructor(private readonly capability: ModelCapabilityService) {}
 

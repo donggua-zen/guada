@@ -112,7 +112,6 @@ export interface LoadError {
 }
 
 const MODEL_TYPES = new Set(['text', 'embedding', 'image']);
-const PROTOCOLS = new Set(['openai', 'openai-response', 'anthropic', 'gemini', 'mock']);
 
 /**
  * 供应商配置文件存储（对齐 DSH「供应商就是数据」）
@@ -204,7 +203,8 @@ export class ProviderFileStore {
   /**
    * 解析并校验单个 YAML 文档（输入宽容）：
    * - id 缺省用文件名补齐；off→none 归一在 thinkingEfforts 解析时进行
-   * - protocol/thinkingStyle 未知值回退（不拒载）
+   * - protocol 原样保留（插件协议可动态注册，未知协议由运行时 fail-loud）；
+   *   thinkingStyle 未知值仍回退协议默认（不拒载）
    */
   private parse(content: string, fileId: string): ProviderFileConfig {
     const doc = yaml.load(content);
@@ -225,15 +225,13 @@ export class ProviderFileStore {
     }
 
     const type = typeof raw.type === 'string' && raw.type.trim() ? raw.type.trim() : id;
+    // 协议不在存储层校验：插件可贡献新协议，且加载顺序不保证适配器已注册。
+    // 未知协议保留原值，由 LLMService 在请求时给出可操作的 UnsupportedProtocol 错误；
+    // 静默回退 openai 会把请求（含密钥）发往错误地址，必须禁止。
     const protocol =
-      typeof raw.protocol === 'string' && PROTOCOLS.has(raw.protocol)
-        ? raw.protocol
+      typeof raw.protocol === 'string' && raw.protocol.trim()
+        ? raw.protocol.trim()
         : 'openai';
-    if (typeof raw.protocol === 'string' && !PROTOCOLS.has(raw.protocol)) {
-      this.logger.warn(
-        `Provider "${id}" declares unknown protocol "${raw.protocol}", falling back to "openai"`,
-      );
-    }
 
     const thinking = this.parseThinking(raw.thinking);
     // legacy：thinking.style 归一到 compat.thinkingFormat（显式 compat 优先）

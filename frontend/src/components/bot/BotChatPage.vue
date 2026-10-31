@@ -9,7 +9,7 @@
           :title="t('bot.chat.back')"
           @click="handleBack"
         >
-          <el-icon :size="18"><ArrowLeft /></el-icon>
+          <el-icon :size="18"><ArrowLeft16Regular /></el-icon>
         </button>
         <span v-if="activeSessionId && !isNarrow" class="title-divider"></span>
         <BotConversationTitleInfo
@@ -73,7 +73,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useStorage } from '@vueuse/core'
 import { ElIcon, ElMessage } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowLeft16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { useSessionStore } from '@/stores/session'
 import { useBotStore } from '@/stores/bot'

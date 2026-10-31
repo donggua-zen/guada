@@ -14,6 +14,7 @@ export class TimePlugin extends PluginBase {
     description: "%time.description%",
     version: "1.0.0",
     category: "core" as const,
+    icon: "images/plugins/time.svg",
   };
 
   async onLoad(api: PluginApi) {

@@ -7,6 +7,7 @@
  */
 import { LLMService } from '../../src/modules/llm-core/llm.service';
 import { AdapterRegistry } from '../../src/modules/llm-core/adapter-registry.service';
+import { ProtocolDisabledError, UnsupportedProtocolError } from '../../src/modules/llm-core/provider-errors';
 import { OpenAIAdapter } from '../../src/modules/llm-core/adapters/openai.adapter';
 import { OpenAIResponseAdapter } from '../../src/modules/llm-core/adapters/openai-response.adapter';
 import { AnthropicAdapter } from '../../src/modules/llm-core/adapters/anthropic.adapter';
@@ -20,13 +21,12 @@ function makeService(): LLMService {
     resolveThinkingWireValue: () => undefined,
     resolveThinkingEffort: (_p: any, _m: any, effort: any) => effort,
   } as any;
-  const registry = new AdapterRegistry(
-    new OpenAIAdapter(capability),
-    new OpenAIResponseAdapter(capability),
-    new AnthropicAdapter(),
-    new GeminiAdapter(),
-    new MockAdapter(),
-  );
+  const registry = new AdapterRegistry();
+  registry.registerBuiltin(new OpenAIAdapter(capability));
+  registry.registerBuiltin(new OpenAIResponseAdapter(capability));
+  registry.registerBuiltin(new AnthropicAdapter());
+  registry.registerBuiltin(new GeminiAdapter());
+  registry.registerBuiltin(new MockAdapter());
   const settings = { getSettingValue: jest.fn(async () => null) } as any;
   // 本套件只验证 providerConfig 守卫：usage 观测替身即可（守卫在写 usage 之前抛错）
   const usage = {
@@ -56,6 +56,31 @@ describe('LLMService 供应商配置守卫', () => {
         messages: [],
         providerConfig: { id: 'inst1', type: 'custom', protocol: 'no-such-protocol' },
       } as any),
-    ).rejects.toThrow(/Unsupported protocol: no-such-protocol/);
+    ).rejects.toThrow(UnsupportedProtocolError);
+  });
+
+  it('插件协议被禁用 → 明确报 PROTOCOL_DISABLED（不是未注册）', async () => {
+    const capability = {
+      resolveThinkingWireValue: () => undefined,
+      resolveThinkingEffort: (_p: any, _m: any, effort: any) => effort,
+    } as any;
+    const registry = new AdapterRegistry();
+    registry.registerBuiltin(new OpenAIAdapter(capability));
+    registry.registerPluginAdapters('provider-acme', [
+      { protocol: 'acme-wire', chatCompletion: async () => [] } as any,
+    ]);
+    registry.setPluginActive('provider-acme', false);
+
+    const settings = { getSettingValue: jest.fn(async () => null) } as any;
+    const usage = { resolveSource: jest.fn(() => 'other'), recordSafely: jest.fn() } as any;
+    const service = new LLMService(registry, settings, capability, usage);
+
+    await expect(
+      service.completions({
+        model: 'm1',
+        messages: [],
+        providerConfig: { id: 'inst1', type: 'custom', protocol: 'acme-wire' },
+      } as any),
+    ).rejects.toThrow(ProtocolDisabledError);
   });
 });

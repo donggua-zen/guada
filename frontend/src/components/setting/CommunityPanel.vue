@@ -14,7 +14,7 @@
                         <div class="text-xs text-(--gd-color-text-secondary)">{{ feedbackLink.url }}</div>
                     </div>
                 </div>
-                <el-icon class="text-(--gd-color-text-secondary)"><Link /></el-icon>
+                <el-icon class="text-(--gd-color-text-secondary)"><Link16Regular /></el-icon>
             </div>
             <div class="flex flex-wrap justify-center gap-8">
                 <!-- QQ 群 -->
@@ -40,15 +40,15 @@
             <div class="text-center">
                 <p class="text-sm text-(--gd-color-text-secondary)">{{ t('settings.system.community.starPrompt') }}</p>
                 <div class="mt-3 flex justify-center gap-3">
-                    <el-button size="small" @click="openLink('https://gitee.com/zhendongdong/guada_ai')">
+                    <GdButton size="small" @click="openLink('https://gitee.com/zhendongdong/guada_ai')">
                         ⭐ Gitee
-                    </el-button>
-                    <el-button size="small" @click="openLink('https://github.com/donggua-zen/guada')">
+                    </GdButton>
+                    <GdButton size="small" @click="openLink('https://github.com/donggua-zen/guada')">
                         ⭐ GitHub
-                    </el-button>
-                    <el-button size="small" @click="openLink('https://atomgit.com/donggua_sherlock/GuaDaAI')">
+                    </GdButton>
+                    <GdButton size="small" @click="openLink('https://atomgit.com/donggua_sherlock/GuaDaAI')">
                         ⭐ GitCode
-                    </el-button>
+                    </GdButton>
                 </div>
             </div>
         </div>
@@ -58,8 +58,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon, ElButton } from 'element-plus'
-import { Link } from '@element-plus/icons-vue'
+import { ElIcon } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
+import { Link16Regular } from '@vicons/fluent'
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 

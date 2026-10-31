@@ -8,7 +8,11 @@ describe("LLMService usage observation", () => {
 
   beforeEach(() => {
     adapter = { chatCompletion: jest.fn() };
-    const registry = { getAdapter: jest.fn(() => adapter) };
+    const registry = {
+      getEntry: jest.fn(() => ({ adapter, active: true, source: "builtin" })),
+      getAdapter: jest.fn(() => adapter),
+      listProtocols: jest.fn(() => []),
+    };
     const settings = {
       getSettingValue: jest.fn(
         async (_group: string, _key: string, fallback: unknown) => fallback,

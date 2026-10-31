@@ -2,12 +2,12 @@
   <div class="flex-1">
     <PluginTabHeader :title="t('plugins.localTools.title')" :subtitle="t('plugins.localTools.subtitle')">
       <template #actions>
-        <el-button circle :loading="loading" :title="t('common.refresh')" @click="loadGlobalTools">
+        <GdButton circle :loading="loading" :title="t('common.refresh')" @click="loadGlobalTools">
           <template #icon>
-            <RefreshOutlined />
+            <ArrowClockwise16Regular />
           </template>
-        </el-button>
-        <el-button type="primary" @click="startInstallDialog">{{ t('plugins.localTools.installPlugin') }}</el-button>
+        </GdButton>
+        <GdButton type="primary" @click="startInstallDialog">{{ t('plugins.localTools.installPlugin') }}</GdButton>
       </template>
     </PluginTabHeader>
 
@@ -24,16 +24,17 @@
           clearable
           @keyup.enter="beginInstall"
         />
-        <el-button type="primary" :loading="installing" @click="beginInstall">{{ t('plugins.localTools.installBtn') }}</el-button>
+        <GdButton type="primary" :loading="installing" @click="beginInstall">{{ t('plugins.localTools.installBtn') }}</GdButton>
       </div>
       <!-- 假终端（常驻） -->
       <div ref="installLogBox" class="install-terminal">
         <pre class="install-log">{{ installLog || t('plugins.localTools.installWaiting') }}</pre>
         <span v-if="installing" class="terminal-cursor"></span>
       </div>
+      <div class="text-xs text-gray-400 mt-2">{{ t('plugins.localTools.providerPackHint') }}</div>
       <template #footer>
-        <el-button v-if="installing" @click="cancelInstallDialog">{{ t('common.cancel') }}</el-button>
-        <el-button v-else @click="installDialogVisible = false">{{ t('common.close') }}</el-button>
+        <GdButton v-if="installing" @click="cancelInstallDialog">{{ t('common.cancel') }}</GdButton>
+        <GdButton v-else @click="installDialogVisible = false">{{ t('common.close') }}</GdButton>
       </template>
     </GdDialog>
 
@@ -49,17 +50,20 @@
           :key="tool.pluginId"
           :name="tool.displayName || tool.name || tool.pluginId"
           :description="tool.description || t('plugins.localTools.noDescription')"
-          :icon-src="tool.icon ? `/api/v1/plugins/${tool.pluginId}/icon` : null"
+          :icon-src="tool.icon ? resolvePluginIconUrl(tool.pluginId, tool.iconRev) : null"
           :menu-items="getPluginMenuItems(tool)"
           @click="showDetail(tool)"
           @command="(command) => handlePluginCommand(command, tool)"
         >
           <template #badges>
+            <el-tag v-if="tool.provides" size="small" type="primary" effect="plain">{{ t('plugins.localTools.sourceProvider') }}</el-tag>
             <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
             <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
           </template>
           <template #actions>
+            <!-- 系统插件恒启用、后端拒绝禁用，不提供启停控件 -->
             <el-switch
+              v-if="!isPluginLocked(tool)"
               :model-value="tool.enabled"
               :loading="updatingTools.has(tool.pluginId)"
               @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
@@ -83,9 +87,10 @@
     <GdDialog v-model="detailVisible" size="sm" align-center destroy-on-close>
       <template #header>
         <div class="flex items-center gap-3">
-          <CardAvatar :src="currentTool?.icon ? `/api/v1/plugins/${currentTool?.pluginId}/icon` : null" :name="currentTool?.displayName" size="md" />
+          <CardAvatar :src="currentTool?.icon ? resolvePluginIconUrl(currentTool?.pluginId, currentTool?.iconRev) : null" :name="currentTool?.displayName" size="md" tray />
           <div class="flex items-center gap-2">
             <span class="text-base font-semibold text-gray-900 dark:text-[#e8e9ed]">{{ currentTool?.displayName }}</span>
+            <el-tag v-if="currentTool?.provides" size="small" type="primary" effect="plain">{{ t('plugins.localTools.sourceProvider') }}</el-tag>
             <el-tag v-if="currentTool?.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
             <el-tag v-else-if="currentTool?.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
           </div>
@@ -113,7 +118,7 @@
       </div>
 
       <template #footer>
-        <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
+        <GdButton @click="detailVisible = false">{{ t('common.close') }}</GdButton>
       </template>
     </GdDialog>
   </div>
@@ -123,12 +128,15 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
-import { RefreshOutlined } from '@vicons/material'
+import { ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
+import { ArrowClockwise16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
 import { usePopup } from '@/composables/usePopup'
-import { groupPlugins } from '@/utils/pluginGroups'
+import { groupPlugins, isPluginLocked } from '@/utils/pluginGroups'
+import { resolvePluginIconUrl } from '@/utils/pluginIcon'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
@@ -159,6 +167,9 @@ function showDetail(tool: PluginQueryPlugin) {
 }
 
 function getPluginMenuItems(tool: PluginQueryPlugin): PluginRowMenuItem[] {
+  // 系统插件不可卸载：dev 模式下 source 会是 'dev'（从仓库 plugins/ 目录加载），
+  // 但后端 uninstall 只拦 builtin，不拦 dev —— 这里必须先挡住，避免删掉仓库目录。
+  if (isPluginLocked(tool)) return []
   if (tool.source !== 'dev' && tool.source !== 'user') return []
   return [{ command: 'uninstall', label: t('plugins.localTools.uninstall'), danger: true }]
 }
@@ -244,7 +255,8 @@ async function loadGlobalTools() {
   error.value = null
 
   try {
-    const response = await apiService.queryPlugins(undefined, getLocale())
+    // 插件管理页需要看到系统插件（只读展示，无启停控件）
+    const response = await apiService.queryPlugins(undefined, getLocale(), { includeSystem: true })
     globalTools.value = response.plugins
   } catch (err) {
     console.error('加载全局工具失败:', err)

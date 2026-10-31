@@ -7,16 +7,17 @@
           <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.models.providers') }}</h1>
           <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('settings.models.providersDesc') }}</p>
         </div>
-        <el-button type="primary" @click="handleCreateGroup">
-          <template #icon><PlusOutlined /></template>
+        <GdButton type="primary" @click="handleCreateGroup">
+          <template #icon><Add16Regular /></template>
           {{ t('settings.models.addCustom') }}
-        </el-button>
+        </GdButton>
       </div>
 
       <!-- 内容区（独立滚动，满屏宽度） -->
       <div class="flex-1 overflow-auto" style="scrollbar-gutter: stable both-edges;">
         <div class="px-4 pb-4 w-full md:max-w-220 md:mx-auto">
           <ModelsProviderList :items="providers" :templates="availableTemplates"
+            :protocols="providerProtocols"
             @item-click="handleItemClick"
             @item-toggle="handleToggleProvider"
             @item-edit="handleEditProvider"
@@ -48,11 +49,16 @@
           <el-form-item :label="t('settings.models.protocol')" prop="protocol">
             <el-select v-model="currentProviderEdit.protocol" :placeholder="t('settings.models.selectProtocol')" style="width: 100%"
               :disabled="!isProtocolEditable">
-              <el-option label="OpenAI" value="openai" />
-              <el-option label="OpenAI-Response" value="openai-response" />
-              <el-option label="Gemini" value="gemini" />
-              <el-option label="Anthropic" value="anthropic" />
+              <el-option v-for="p in protocolSelectOptions" :key="p.protocol" :label="p.displayName" :value="p.protocol" />
             </el-select>
+            <div v-if="currentProtocolUnavailable" class="text-xs text-orange-500 mt-1">
+              {{ t('settings.models.protocolUnavailable') }}
+            </div>
+            <div v-if="currentProtocolCapabilities.length" class="flex flex-wrap gap-1 mt-1">
+              <el-tag v-for="cap in currentProtocolCapabilities" :key="cap" size="small" type="info" effect="plain">
+                {{ cap }}
+              </el-tag>
+            </div>
           </el-form-item>
           <el-form-item :label="t('settings.models.apiUrl')" prop="apiUrl">
             <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
@@ -60,16 +66,16 @@
           <el-form-item :label="t('settings.models.apiKey')" prop="apiKey">
             <div class="api-key-input-wrapper">
               <el-input v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
-              <el-button type="primary" @click="handleTestConnection" :loading="testingConnection"
+              <GdButton type="primary" @click="handleTestConnection" :loading="testingConnection"
                 :disabled="!currentProviderEdit.apiUrl || !currentProviderEdit.apiKey">
                 {{ t('settings.models.test') }}
-              </el-button>
+              </GdButton>
             </div>
             <!-- API Key 获取链接（仅非自定义供应商显示） -->
             <div v-if="currentProviderEdit.provider !== 'custom'" class="mt-2">
               <el-link type="primary" :underline="false" @click="handleOpenApiKeyUrl" class="text-xs">
                 <el-icon class="mr-1">
-                  <LinkOutlined />
+                  <Link16Regular />
                 </el-icon>
                 {{ t('settings.models.getApiKey') }}
               </el-link>
@@ -89,10 +95,10 @@
         </el-form>
       </div>
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="showProviderModal = false">{{ t('common.cancel') }}</el-button>
-          <el-button type="primary" @click="handleSaveProvider">{{ t('common.ok') }}</el-button>
-        </span>
+        <div class="flex justify-end gap-2">
+          <GdButton @click="showProviderModal = false">{{ t('common.cancel') }}</GdButton>
+          <GdButton type="primary" @click="handleSaveProvider">{{ t('common.ok') }}</GdButton>
+        </div>
       </template>
     </GdDialog>
   </div>
@@ -103,18 +109,17 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ModelsProviderList from './ModelsProviderList.vue'
 import ModelsProviderDetail from '../models/ModelsProviderDetail.vue'
-import {
-  PlusOutlined,
-  LinkOutlined
-} from '@vicons/material'
+import { Add16Regular, Link16Regular } from '@vicons/fluent'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
-import type { Model, ModelPreset, ModelProvider, ProviderTemplate } from '@/types/api'
+import type { Model, ModelPreset, ModelProvider, ProviderProtocol, ProviderTemplate } from '@/types/api'
 import type { CreateProviderPayload, UpdateProviderPayload } from '../../services/modules/model.api'
 
 // Element Plus 组件导入
-import { ElInput, ElFormItem, ElForm, ElButton, ElSelect, ElOption } from 'element-plus'
+import { ElInput, ElFormItem, ElForm, ElSelect, ElOption, ElTag } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 import type { FormInstance, FormItemRule } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
 
@@ -134,6 +139,47 @@ const showDetail = ref(false)
 
 // 供应商模板相关
 const providerTemplates = ref<ProviderTemplateRow[]>([])
+// 可用 wire 协议（内置 + 插件贡献；接口失败时回退内置四项）
+const providerProtocols = ref<ProviderProtocol[]>([])
+const FALLBACK_PROTOCOLS: ProviderProtocol[] = [
+  { protocol: 'openai', displayName: 'OpenAI', capabilities: {}, source: 'builtin' },
+  { protocol: 'openai-response', displayName: 'OpenAI-Response', capabilities: {}, source: 'builtin' },
+  { protocol: 'gemini', displayName: 'Gemini', capabilities: {}, source: 'builtin' },
+  { protocol: 'anthropic', displayName: 'Anthropic', capabilities: {}, source: 'builtin' },
+]
+const activeProtocols = computed(() =>
+  providerProtocols.value.length > 0 ? providerProtocols.value : FALLBACK_PROTOCOLS
+)
+// 下拉选项：接口协议 + 当前实例协议（插件被禁用/卸载时仍可看到原值并得到警告）
+const protocolSelectOptions = computed(() => {
+  const list = [...activeProtocols.value]
+  const current = currentProviderEdit.value.protocol
+  if (current && !list.some((p) => p.protocol === current)) {
+    list.push({ protocol: current, displayName: current, capabilities: {}, source: 'builtin' })
+  }
+  return list
+})
+const currentProtocolUnavailable = computed(() => {
+  const current = currentProviderEdit.value.protocol
+  return !!current && !activeProtocols.value.some((p) => p.protocol === current)
+})
+// 协议能力标记（用于提示该协议支持的工具/视觉/思考等；streaming 是基线，不展示）
+const PROTOCOL_CAPABILITY_LABELS: Record<string, string> = {
+  tools: 'Tools',
+  vision: 'Vision',
+  reasoning: 'Reasoning',
+  embeddings: 'Embedding',
+  promptCaching: 'Prompt cache',
+  modelDiscovery: 'Model discovery',
+}
+const currentProtocolCapabilities = computed(() => {
+  const current = currentProviderEdit.value.protocol
+  const info = activeProtocols.value.find((p) => p.protocol === current)
+  if (!info?.capabilities) return []
+  return Object.entries(info.capabilities)
+    .filter(([key, value]) => key !== 'streaming' && value === true)
+    .map(([key]) => PROTOCOL_CAPABILITY_LABELS[key] || key)
+})
 // 模型预设库
 const modelPresets = ref<ModelPreset[]>([])
 
@@ -557,6 +603,12 @@ onMounted(() => {
     providerTemplates.value = templates
   }).catch(error => {
     console.error('获取供应商模板失败:', error)
+  })
+  // 获取可用协议（内置 + 插件贡献）
+  apiService.getProviderProtocols().then(protocols => {
+    providerProtocols.value = protocols
+  }).catch(error => {
+    console.error('获取供应商协议失败:', error)
   })
   // 获取模型预设库
   apiService.getModelPresets().then(presets => {

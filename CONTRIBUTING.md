@@ -317,8 +317,10 @@ export default class MyPlugin extends PluginBase {
 
 - `api.registerTool()` — 注册工具（LLM 可调用）
 - `api.registerPrompt()` — 注入提示词
-- `api.registerInterceptor()` — 注册回合拦截器
 - `api.registerNls()` — 注册本地化语言包
+- `api.registerProviderType()` / `api.registerProtocolAdapter()` — 供应商包贡献类型卡/协议适配器，
+  详见 [`docs/provider-packs.md`](docs/provider-packs.md)
+- 回合拦截请使用事件总线（`HOOKS.TURN_STOPPING` 等），旧的 `registerInterceptor` 已移除
 - 工具描述、错误信息、返回值用**英文**（供 LLM 消费）
 - manifest 的 name/description 用**中文**（供 UI 展示）
 - 工具文案使用 `%key%` 引用语言包，详见 NLS 系统

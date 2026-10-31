@@ -46,7 +46,7 @@
                   :placeholder="t('settings.userSecurity.confirmPasswordPlaceholder')" />
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" @click="handleChangePassword">{{ t('settings.userSecurity.confirmChange') }}</el-button>
+                <GdButton type="primary" @click="handleChangePassword">{{ t('settings.userSecurity.confirmChange') }}</GdButton>
               </el-form-item>
             </el-form>
           </div>
@@ -65,13 +65,9 @@ import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils/errorMessage'
 import { getPasswordErrorCode, evaluatePasswordStrength } from '@/utils/passwordStrength'
 // Element Plus 组件导入
-import {
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElButton,
-  ElSwitch
-} from 'element-plus'
+import { ElForm, ElFormItem, ElInput, ElSwitch } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
 
 const { t } = useI18n()
 const { toast, notify, prompt, confirm } = usePopup()

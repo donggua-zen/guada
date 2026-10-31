@@ -398,9 +398,9 @@ html.dark[data-theme="wandering-earth"] .markdown-text .custom-code-block pre.hl
 }
 
 /* ============================================================
-   Element Plus 组件：方形 + 琥珀指令键
+   按钮：方形 + 琥珀指令键（GdButton）
    ============================================================ */
-html.dark[data-theme="wandering-earth"] .el-button {
+html.dark[data-theme="wandering-earth"] .gd-button {
   border-radius: 0;
   font-family: var(--we-condensed);
   font-size: 0.9em;

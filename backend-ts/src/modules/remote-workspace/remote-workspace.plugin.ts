@@ -38,6 +38,7 @@ export class RemoteWorkspacePlugin extends PluginBase {
     description: "%remoteWorkspace.description%",
     category: "system" as const,
     essential: true,
+    icon: "images/plugins/remote-workspace.svg",
   };
 
   constructor(

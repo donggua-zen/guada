@@ -36,6 +36,7 @@ import { usePluginSlots } from '@/stores/pluginSlots'
 import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
 import { useSessionEvents } from '@/composables/useSessionEvents'
+import { useSchedulerNotifications } from '@/composables/useSchedulerNotifications'
 import { setPluginToolDisplays } from '@/utils/toolDisplay'
 import SidebarLayout from './ui/SidebarLayout.vue'
 import GlobalSidebar from './GlobalSidebar.vue'
@@ -49,6 +50,8 @@ const route = useRoute()
 const router = useRouter()
 
 const { init: initSessionEvents, cleanup: cleanupSessionEvents } = useSessionEvents()
+// 定时任务完成/失败通知（SSE 事件 + Electron 系统通知）
+useSchedulerNotifications()
 
 const isSettingsRoute = computed(() => route.name === 'SystemSettings')
 

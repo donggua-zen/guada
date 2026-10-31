@@ -1,10 +1,10 @@
 <template>
   <div
-    class="group flex min-w-0 cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-(--gd-color-surface-subtle-hover)"
+    class="plugin-list-row group flex min-w-0 cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-(--gd-color-surface-subtle-hover)"
     @click="emit('click')"
   >
     <div class="shrink-0" :class="{ 'opacity-60': muted }">
-      <CardAvatar :src="iconSrc" :name="name" size="md" />
+      <CardAvatar :src="iconSrc" :name="name" size="md" tray />
     </div>
 
     <div class="min-w-0 flex-1" :class="{ 'opacity-60': muted }">
@@ -96,5 +96,25 @@ const { t } = useI18n()
 .row-menu-trigger:hover {
   background-color: var(--gd-color-sidebar-bg-hover);
   color: var(--gd-color-text);
+}
+
+/* ── 市场行动作钮的显隐 ──
+   更新类与进行中的动作长存，安装/添加类只在扫过该行或键盘落到行内时出现。
+   用 opacity 而不是 display：位置一开始就占住，hover 不会让右侧列宽抖动。
+   这里显式列了颜色过渡项，否则会覆盖掉 GdButton 自带的 transition-colors */
+.plugin-list-row :deep(.market-action) {
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.plugin-list-row:hover :deep(.market-action),
+.plugin-list-row:focus-within :deep(.market-action),
+.plugin-list-row :deep(.market-action.is-persistent) {
+  opacity: 1;
+}
+
+/* 触屏没有 hover，只在 hover 出现的动作在移动端一律常驻 */
+html.mobile .plugin-list-row :deep(.market-action) {
+  opacity: 1;
 }
 </style>

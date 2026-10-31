@@ -12,17 +12,17 @@
             <div class="flex items-center gap-2 shrink-0">
               <el-input v-model="searchKeyword" :placeholder="t('knowledge.page.searchPlaceholder')" clearable size="small" style="width: 160px;">
                 <template #prefix>
-                  <el-icon><Search /></el-icon>
+                  <el-icon><Search16Regular /></el-icon>
                 </template>
               </el-input>
-              <el-button @click="handleOpenDocs">
-                <template #icon><Document /></template>
+              <GdButton @click="handleOpenDocs">
+                <template #icon><Document16Regular /></template>
                 {{ t('knowledge.page.docs') }}
-              </el-button>
-              <el-button type="primary" @click="handleOpenCreate">
-                <template #icon><Plus /></template>
+              </GdButton>
+              <GdButton type="primary" @click="handleOpenCreate">
+                <template #icon><Add16Regular /></template>
                 {{ t('knowledge.page.createKb') }}
-              </el-button>
+              </GdButton>
             </div>
           </div>
 
@@ -49,9 +49,9 @@
 
               <!-- Footer: edit/delete + enter button -->
               <div class="flex items-center justify-end gap-2 mt-3">
-                <el-button link size="small" @click.stop="handleEdit(kb)">{{ t('common.edit') }}</el-button>
-                <el-button link size="small" type="danger" @click.stop="handleDelete(kb)">{{ t('common.delete') }}</el-button>
-                <el-button link size="small" type="primary" @click.stop="handleSelectKB(kb)">{{ t('knowledge.page.enter') }}</el-button>
+                <GdButton link size="small" @click.stop="handleEdit(kb)">{{ t('common.edit') }}</GdButton>
+                <GdButton link size="small" type="danger" @click.stop="handleDelete(kb)">{{ t('common.delete') }}</GdButton>
+                <GdButton link size="small" type="primary" @click.stop="handleSelectKB(kb)">{{ t('knowledge.page.enter') }}</GdButton>
               </div>
             </div>
           </div>
@@ -59,7 +59,7 @@
           <!-- 空状态 -->
           <div v-else-if="!store.loading" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
             <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
-              <MenuBookOutlined />
+              <BookOpen48Regular />
             </el-icon>
             <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? t('knowledge.page.notFound') : t('knowledge.page.empty') }}</p>
             <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? t('knowledge.page.notFoundHint') : t('knowledge.page.emptyHint') }}</p>
@@ -73,13 +73,13 @@
       <!-- 顶部导航栏 -->
       <div class="sticky top-0 z-10 flex flex-col max-w-260 mx-auto w-full">
         <div class="px-2 py-3 flex items-center gap-3 w-full">
-          <el-button link @click="backToList"
+          <GdButton link @click="backToList"
             class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--gd-color-primary) font-medium">
             <el-icon :size="22">
               <ArrowLeft24Filled />
             </el-icon>
             <span class="text-base">{{ t('knowledge.page.backToList') }}</span>
-          </el-button>
+          </GdButton>
           <el-divider direction="vertical" />
           <span class="font-semibold text-gray-800 dark:text-[#e8e9ed] text-base">{{ currentKB?.name }}</span>
         </div>
@@ -212,10 +212,10 @@
 
     <template #footer>
       <div class="flex justify-end gap-3">
-        <el-button @click="showKbDialog = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="handleKbSave" :loading="store.loading">
+        <GdButton @click="showKbDialog = false">{{ t('common.cancel') }}</GdButton>
+        <GdButton type="primary" @click="handleKbSave" :loading="store.loading">
           {{ dialogMode === 'create' ? t('common.create') : t('common.save') }}
-        </el-button>
+        </GdButton>
       </div>
     </template>
   </GdDialog>
@@ -229,10 +229,10 @@
 </template>
 
 <script setup lang="ts">
+import GdButton from '@/components/ui/GdButton.vue';
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Search, Document } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { useFileUploadStore } from '@/stores/fileUpload'
@@ -243,8 +243,7 @@ import type { KBSearchResult, KBSearchResultMetadata } from '@/services/modules/
 import type ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import { FileChunksViewer, KBFileUploader, KBFileTree, KBSearchPanel, UploadTaskModal } from './index'
 import { usePopup } from '@/composables/usePopup'
-import { BookOpen24Regular, Search24Regular, ArrowLeft24Filled } from '@vicons/fluent'
-import { MenuBookOutlined } from '@vicons/material'
+import { BookOpen24Regular, BookOpen48Regular, Search24Regular, ArrowLeft24Filled, Add16Regular, Search16Regular, Document16Regular } from '@vicons/fluent'
 import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '@/services/ApiService'
 import { openInExternalBrowser } from '@/utils/browserUtils'

@@ -70,14 +70,6 @@ export interface ScheduledTaskLog {
 }
 
 /**
- * Cron 预设项
- */
-export interface CronPreset {
-  label: string
-  value: string
-}
-
-/**
  * 创建任务请求
  */
 export interface CreateTaskRequest {

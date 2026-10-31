@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Cube Pets · 3D → 序列帧烘焙</title>
+<style>
+  html, body { margin: 0; background: #12161d; color: #e6e9ef;
+    font: 13px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  #wrap { padding: 16px 20px; max-width: 980px; }
+  h1 { font-size: 14px; margin: 0 0 4px; }
+  p { margin: 0 0 12px; color: #8fa3ba; font-size: 12px; }
+  .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  label { color: #8fa3ba; }
+  select, input { font: inherit; padding: 4px 8px; border-radius: 8px;
+    border: 1px solid #333c4d; background: #1b2130; color: #dbe3ef; }
+  input[type=number] { width: 72px; }
+  button { font: inherit; padding: 6px 14px; border-radius: 8px; border: 1px solid #2f6fed;
+    background: #2f6fed; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  #log { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+    background: #0d1117; border: 1px solid #2a3140; border-radius: 10px; padding: 10px;
+    height: 260px; overflow: auto; white-space: pre-wrap; }
+  .ok { color: #7fd4a0; } .warn { color: #ffb454; } .err { color: #ff6b6b; }
+  #preview { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  #preview img { background: #1b2130; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>Cube Pets · 3D 模型 → PNG 序列帧烘焙</h1>
+  <p>用 three.js 离线逐帧渲染（<code>mixer.setTime(t)</code> + <code>toDataURL</code>），产出透明 PNG 序列与雪碧图。
+     渲染后 3D 运行时可以完全不要，桌宠只需一张图集。</p>
+
+  <div class="row">
+    <label>动物</label>
+    <select id="animal"></select>
+    <label>像素高</label>
+    <input id="px" type="number" value="120" min="32" max="400" step="2" />
+    <label>帧率</label>
+    <input id="fps" type="number" value="12" min="6" max="30" step="1" />
+    <label>格式</label>
+    <select id="fmt">
+      <option value="png">PNG（无损，体积大）</option>
+      <option value="webp">WebP（推荐，体积小）</option>
+    </select>
+    <button id="go">开始烘焙</button>
+  </div>
+
+  <div id="log"></div>
+  <div id="preview"></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const ANIMALS = ['beaver','bee','bunny','cat','caterpillar','chick','cow','crab','deer','dog',
+  'elephant','fish','fox','giraffe','hog','koala','lion','monkey','panda','parrot',
+  'penguin','pig','polar','tiger'];
+
+const FOV = 26;
+const logEl = document.getElementById('log');
+const previewEl = document.getElementById('preview');
+const log = (msg, cls = '') => {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+};
+
+/* ---------- 场景（与实时 demo 完全一致的取景参数） ---------- */
+const canvas = document.createElement('canvas');
+const renderer = new THREE.WebGLRenderer({
+  canvas, antialias: true, alpha: true, preserveDrawingBuffer: true,
+});
+renderer.setPixelRatio(1);                       // 烘焙必须 1:1，避免 DPR 放大
+renderer.setClearColor(0x000000, 0);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(FOV, 1, 0.01, 200);
+scene.add(new THREE.HemisphereLight(0xdff0ff, 0x2a3240, 2.0));
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(3, 6, 4); scene.add(key);
+const fill = new THREE.DirectionalLight(0xbcd8ff, 0.8); fill.position.set(-4, 2, -3); scene.add(fill);
+
+/* ---------- 载入模型 ---------- */
+let model = null, mixer = null, clips = [], modelH = 1.7;
+
+function load(animal) {
+  return new Promise((resolve, reject) => {
+    if (model) { scene.remove(model); model = null; }
+    new GLTFLoader().load(`models/animal-${animal}.glb`, (gltf) => {
+      model = gltf.scene;
+      model.traverse(o => {
+        if (!o.isMesh) return;
+        o.material.side = THREE.DoubleSide;
+        const map = o.material.map;
+        if (map) {
+          map.magFilter = THREE.NearestFilter;      // 调色板图集：必须最近邻
+          map.minFilter = THREE.NearestFilter;
+          map.generateMipmaps = false;
+          map.needsUpdate = true;
+        }
+      });
+      scene.add(model);
+      const box = new THREE.Box3().setFromObject(model);
+      modelH = box.max.y - box.min.y;
+      clips = gltf.animations;
+      for (const c of clips) c.tracks = c.tracks.filter(t => t.name !== 'root.position');
+      mixer = new THREE.AnimationMixer(model);
+      resolve({ clips, modelH });
+    }, undefined, reject);
+  });
+}
+
+/* ---------- 按像素高取景 ---------- */
+function frame(px) {
+  const pad = Math.round(px * 0.55);
+  const board = px + pad * 2;
+  renderer.setSize(board, board, false);
+  camera.aspect = 1;
+  const tan = Math.tan((FOV / 2) * Math.PI / 180);
+  const dist = (modelH * board) / (2 * px * tan);
+  camera.position.copy(new THREE.Vector3(0.62, 0.30, 0.85).normalize().multiplyScalar(dist));
+  camera.lookAt(0, modelH * 0.5, 0);
+  camera.updateProjectionMatrix();
+  return board;
+}
+
+/* ---------- 烘焙一段动画 ---------- */
+async function bakeClip(clip, px, fps, mime, animal) {
+  const board = frame(px);
+  const dur = clip.duration;
+  const frames = Math.max(2, Math.round(dur * fps));
+  mixer.stopAllAction();
+  const action = mixer.clipAction(clip);
+  action.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+
+  const out = [];
+  for (let i = 0; i < frames; i++) {
+    const t = (i / frames) * dur;                 // 循环首尾不重复，避免抖动
+    mixer.setTime(t);
+    renderer.render(scene, camera);
+    out.push({ name: `${animal}/${clip.name}_${String(i).padStart(3, '0')}.${mime === 'image/png' ? 'png' : 'webp'}`,
+               data: canvas.toDataURL(mime, mime === 'image/webp' ? 0.92 : undefined) });
+  }
+  return { board, frames: out, dur, count: frames };
+}
+
+/* ---------- 拼雪碧图（横向一排） ---------- */
+function makeSheet(frames, board, mime) {
+  const c = document.createElement('canvas');
+  c.width = board * frames.length;
+  c.height = board;
+  const ctx = c.getContext('2d');
+  frames.forEach((f, i) => {
+    const img = new Image();
+    // 同步拼图：先用 canvas 逐帧画，这里需要已解码的 ImageData
+    // 用 createImageBitmap 是异步的，改成在下面异步拼
+  });
+  return c;
+}
+
+/* ---------- 主流程 ---------- */
+document.getElementById('go').onclick = async () => {
+  const btn = document.getElementById('go');
+  btn.disabled = true;
+  logEl.innerHTML = '';
+  const animal = document.getElementById('animal').value;
+  const px = +document.getElementById('px').value;
+  const fps = +document.getElementById('fps').value;
+  const fmt = document.getElementById('fmt').value;
+  const mime = fmt === 'webp' ? 'image/webp' : 'image/png';
+
+  try {
+    log(`载入 ${animal}.glb …`);
+    const info = await load(animal);
+    log(`模型高度 ${info.modelH.toFixed(2)}，${info.clips.length} 段动画`, 'ok');
+
+    const payload = {};
+    let totalFrames = 0, totalBytes = 0;
+    let boardPx = 0;
+    const sheetInputs = [];
+
+    for (const clip of info.clips) {
+      const res = await bakeClip(clip, px, fps, mime, animal);
+      boardPx = res.board;
+      totalFrames += res.count;
+      for (const f of res.frames) {
+        payload[f.name] = f.data;
+        totalBytes += Math.round((f.data.length - 22) * 0.75);   // base64 → 字节粗估
+      }
+      sheetInputs.push({ name: clip.name, frames: res.frames, dur: res.dur });
+      log(`  ${clip.name.padEnd(18)} ${String(res.count).padStart(3)} 帧 × ${res.dur.toFixed(2)}s`, 'ok');
+    }
+
+    /* 拼雪碧图：逐段横向排开 */
+    const bitmaps = [];
+    for (const s of sheetInputs) {
+      const imgs = [];
+      for (const f of s.frames) {
+        const r = await fetch(f.data);
+        imgs.push(await createImageBitmap(await r.blob()));
+      }
+      bitmaps.push({ name: s.name, imgs, dur: s.dur });
+    }
+
+    for (const s of bitmaps) {
+      const c = document.createElement('canvas');
+      c.width = boardPx * s.imgs.length;
+      c.height = boardPx;
+      const ctx = c.getContext('2d');
+      s.imgs.forEach((bmp, i) => ctx.drawImage(bmp, i * boardPx, 0));
+      const url = c.toDataURL(mime, mime === 'image/webp' ? 0.92 : undefined);
+      payload[`${animal}/sheet_${s.name}.${fmt}`] = url;
+      // 预览（只放前 3 段，避免页面太挤）
+      if (previewEl.children.length < 3) {
+        const im = new Image();
+        im.src = url;
+        im.height = 90;
+        previewEl.appendChild(im);
+      }
+      log(`  雪碧图 sheet_${s.name}: ${c.width}×${c.height}`, 'ok');
+    }
+
+    /* 元数据 */
+    payload[`${animal}/meta.json`] = 'data:application/json;base64,' +
+      btoa(unescape(encodeURIComponent(JSON.stringify({
+        animal, figurePx: px, boardPx, fps, format: fmt,
+        clips: bitmaps.map(s => ({ name: s.name, frames: s.imgs.length, duration: +s.dur.toFixed(3) })),
+      }, null, 2))));
+
+    log(`共 ${totalFrames} 帧，估算 ${(totalBytes / 1024).toFixed(0)} KB（未压缩前）`, 'ok');
+
+    /* 上传落盘 */
+    log('上传到本地接收服务 …');
+    const res = await fetch('http://127.0.0.1:8900/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    log(`完成：已写入 bake_out/${animal}/`, 'ok');
+    document.title = 'bake done';
+  } catch (e) {
+    log('失败：' + e.message, 'err');
+    document.title = 'bake error';
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+const sel = document.getElementById('animal');
+ANIMALS.forEach(a => { const o = document.createElement('option'); o.value = o.textContent = a; sel.appendChild(o); });
+sel.value = 'fox';
+window.__ready = true;
+</script>
+</body>
+</html>

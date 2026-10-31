@@ -565,6 +565,7 @@
     namePlaceholder: 'Enter group name',
     protocol: 'Protocol Type',
     selectProtocol: 'Please select a protocol type',
+    protocolUnavailable: 'This protocol is unavailable: the plugin providing it is disabled or uninstalled. Please choose another protocol.',
     apiUrl: 'API URL',
     apiKey: 'API KEY',
     test: 'Test',

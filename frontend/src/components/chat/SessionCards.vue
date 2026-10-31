@@ -93,13 +93,13 @@
           <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
             <span class="ask-hint">{{ t('chat.ask.keyboardHint') }}</span>
             <div class="flex items-center gap-2">
-              <el-button size="small" :disabled="busy" :title="t('chat.ask.ignoreTip')" @click="ignoreAsk">
+              <GdButton size="small" :disabled="busy" :title="t('chat.ask.ignoreTip')" @click="ignoreAsk">
                 {{ t('chat.ask.ignore') }}
-              </el-button>
-              <el-button type="primary" size="small" :loading="busy" :disabled="busy || !hasAnswer"
+              </GdButton>
+              <GdButton type="primary" size="small" :loading="busy" :disabled="busy || !hasAnswer"
                 @click="primaryAction">
                 {{ isLast ? t('chat.ask.submit') : t('chat.ask.next') }}
-              </el-button>
+              </GdButton>
             </div>
           </div>
         </div>
@@ -111,12 +111,14 @@
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, nextTick, ref, watch } from "vue";
-import { ElButton, ElIcon } from "element-plus";
+import { ElIcon } from 'element-plus';
 import { ChevronLeft20Regular, ChevronRight20Regular } from "@vicons/fluent";
 import { useI18n } from "vue-i18n";
 import { apiService } from "@/services/ApiService";
 import { useSessionStore } from "@/stores/session";
 import { usePopup } from "../../composables/usePopup";
+import GdButton from '@/components/ui/GdButton.vue';
+
 
 const props = defineProps<{
   sessionId?: string;
@@ -286,7 +288,8 @@ function onOptionsKeydown(e: KeyboardEvent) {
   if (e.key === "Enter") {
     // 输入法组合中的回车不当作提交
     if (e.isComposing || e.keyCode === 229) return;
-    if (target.closest(".el-button") || target.closest(".ask-page-btn")) return;
+    // 焦点在按钮上时 Enter 是按钮点击，不触发卡片级提交
+    if (target.closest("button") || target.closest(".ask-page-btn")) return;
     e.preventDefault();
     submitCurrent();
     return;
@@ -400,7 +403,7 @@ async function submit() {
    键盘可见性不因此丢失：单选上下键移动即选、选中态自带反馈，输入行有光标。
    全局 `* { outline: none !important }` 已禁原生焦点环，此处刻意不再自绘。 */
 .ask-page-btn:focus,
-.ask-card :deep(.el-button:focus) {
+.ask-card :deep(button:focus) {
   box-shadow: 0 0 0 1px var(--gd-color-primary);
 }
 

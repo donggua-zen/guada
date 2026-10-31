@@ -3,28 +3,28 @@
     <!-- 新建智能体与使用说明 -->
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-2">
-        <el-button type="primary" @click="$emit('createAgent')" class="flex items-center">
+        <GdButton type="primary" @click="$emit('createAgent')" class="flex items-center">
           <template #icon>
-            <PlusOutlined />
+            <Add16Regular />
           </template>
           {{ t('agents.list.create') }}
-        </el-button>
-        <el-button @click="triggerImport" class="flex items-center">
+        </GdButton>
+        <GdButton @click="triggerImport" class="flex items-center">
           <template #icon>
-            <UploadOutlined />
+            <ArrowUpload16Regular />
           </template>
           {{ t('agents.list.import') }}
-        </el-button>
+        </GdButton>
         <input ref="fileInputRef" type="file" accept=".md,.markdown" multiple class="hidden" @change="handleFileSelect" />
       </div>
-      <el-button link type="primary" class="text-sm" @click="$emit('openDocs')">
+      <GdButton link type="primary" class="text-sm" @click="$emit('openDocs')">
         <template #icon>
           <el-icon :size="16">
-            <QuestionCircleOutlined />
+            <QuestionCircle16Regular />
           </el-icon>
         </template>
         {{ t('agents.list.docs') }}
-      </el-button>
+      </GdButton>
     </div>
 
     <!-- 智能体列表 -->
@@ -51,13 +51,13 @@
                   <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="agent.name">
                     {{ agent.name }}
                   </div>
-                  <el-button v-if="canDelete(agent)" link size="small" type="danger"
+                  <GdButton v-if="canDelete(agent)" link size="small" type="danger"
                     class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
                     @click.stop="$emit('deleteAgent', agent)">
                     <el-icon :size="18">
-                      <DeleteOutlineOutlined />
+                      <Delete20Regular />
                     </el-icon>
-                  </el-button>
+                  </GdButton>
                 </div>
                 <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5 font-mono truncate" :title="agent.id">
                   {{ agent.id }}
@@ -72,12 +72,12 @@
           <!-- 悬停按钮 -->
           <div class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white dark:from-[#232428] via-white/90 dark:via-[#232428]/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg"></div>
           <div class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
-            <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="$emit('startNewChat', agent)">
+            <GdButton type="primary" size="small" class="flex-1 shadow-sm" @click.stop="$emit('startNewChat', agent)">
               {{ t('agents.list.useAgent') }}
-            </el-button>
-            <el-button size="small" class="flex-1 shadow-sm" @click.stop="$emit('editAgent', agent)">
+            </GdButton>
+            <GdButton size="small" class="flex-1 shadow-sm" @click.stop="$emit('editAgent', agent)">
               {{ t('agents.list.agentSettings') }}
-            </el-button>
+            </GdButton>
           </div>
         </div>
 
@@ -85,7 +85,7 @@
         <div v-if="!loading && agents.length === 0"
           class="col-span-full text-center py-12 text-gray-500 dark:text-[#8b8d95]">
           <el-icon size="48" class="text-gray-300 dark:text-[#5a5c63] mb-3">
-            <People />
+            <People32Regular />
           </el-icon>
           <p class="text-lg">{{ t('agents.list.empty') }}</p>
           <p class="text-sm mt-1">{{ t('agents.list.emptyHint') }}</p>
@@ -99,10 +99,10 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon, ElButton, ElMessage } from 'element-plus'
-import { People } from '@vicons/ionicons5'
-import { PlusOutlined, DeleteOutlineOutlined, UploadOutlined } from '@vicons/material'
-import { QuestionCircleOutlined } from '@vicons/antd'
+import { ElIcon, ElMessage } from 'element-plus';
+import GdButton from '@/components/ui/GdButton.vue';
+
+import { Add16Regular, Delete20Regular, ArrowUpload16Regular, QuestionCircle16Regular, People32Regular } from '@vicons/fluent'
 import { Avatar } from '../ui'
 import { apiService } from '../../services/ApiService'
 import type { Agent } from '@/types/agent'

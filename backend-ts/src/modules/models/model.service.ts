@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { randomBytes } from "crypto";
 import { ProviderFileStore, ProviderFileConfig, ProviderFileModel } from "../llm-core/provider-file.store";
 import { AdapterRegistry } from "../llm-core/adapter-registry.service";
+import { ProtocolDisabledError } from "../llm-core/provider-errors";
 import { BundledCatalogService } from "../llm-core/bundled-catalog.service";
 import { findModelPreset, getAllPresets } from "../llm-core/model-preset-library";
 import { createPaginatedResponse } from "../../common/types/pagination";
@@ -48,6 +49,10 @@ export class ModelService {
     const items = providers.map((provider) => {
       const card = this.bundledCatalog.getType(provider.type);
       const isKnownType = this.bundledCatalog.hasType(provider.type);
+      const typeSource = this.bundledCatalog.getTypeSource(provider.type);
+      const protocolInfo = this.adapterRegistry
+        .listAllProtocols()
+        .find((p) => p.protocol === provider.protocol);
 
       const models = this.resolveProviderModels(provider, includeInactive);
 
@@ -63,11 +68,18 @@ export class ModelService {
         protocol: provider.protocol,
         apiUrl: provider.apiUrl,
         apiKey: provider.apiKey,
-        avatarUrl: card?.avatarUrl,
+        avatarUrl: this.resolveCardAvatarUrl(card || {}),
         attributes: provider.headers ? { headers: provider.headers } : {},
         enabled: provider.enabled,
         description: card?.description,
         apiKeyUrl: card?.apiKeyUrl,
+        // 类型来源快照：插件包禁用/卸载后卡片消失，实例文件保留。
+        // typeAvailable=false 表示「类型来源已不可用」（custom 恒为 true）。
+        typeAvailable: provider.type === "custom" ? true : !!typeSource?.active,
+        typeSource: typeSource?.source,
+        typePluginId: typeSource?.pluginId,
+        // 协议可用性：插件协议被禁用/卸载时，实例仍存在但无法发起请求
+        protocolAvailable: !!protocolInfo?.active,
         // 实例级 compat 覆盖（原始声明；编辑弹窗回填/清除用）
         compat: provider.compat,
         models,
@@ -137,17 +149,62 @@ export class ModelService {
       });
   }
 
-  /** 供应商模板列表（bundled 类型卡全量，不过滤已添加类型——同类型可多实例） */
+  /** 供应商模板列表（bundled + 启用插件包的可用类型卡） */
   getProviderTemplates() {
-    return this.bundledCatalog.listTypes().map((card) => ({
-      id: card.type,
-      name: card.name,
-      protocol: card.protocol,
-      defaultApiUrl: card.defaultApiUrl,
-      description: card.description,
-      apiKeyUrl: card.apiKeyUrl,
-      avatarUrl: card.avatarUrl,
+    return this.bundledCatalog.listTypes().map((card) => {
+      const protocolInfo = this.adapterRegistry
+        .listAllProtocols()
+        .find((p) => p.protocol === card.protocol);
+      return {
+        id: card.type,
+        name: card.name,
+        protocol: card.protocol,
+        defaultApiUrl: card.defaultApiUrl,
+        description: card.description,
+        apiKeyUrl: card.apiKeyUrl,
+        avatarUrl: this.resolveCardAvatarUrl(card),
+        // 来源元信息：前端据此显示「供应商包」徽标/来源提示
+        source: card.source || "builtin",
+        pluginId: card.pluginId,
+        protocolDisplayName: protocolInfo?.displayName || card.protocol,
+        capabilities: protocolInfo?.capabilities,
+        // 类型卡引用的协议当前是否可用（插件协议被禁用/卸载时为 false）
+        protocolAvailable: protocolInfo?.active === true,
+      };
+    });
+  }
+
+  /** 全部可用协议（前端协议下拉/标签的数据源；含能力标记与来源） */
+  getProtocols() {
+    return this.adapterRegistry.listProtocols().map((p) => ({
+      protocol: p.protocol,
+      displayName: p.displayName || p.protocol,
+      capabilities: p.capabilities || {},
+      source: p.source,
+      pluginId: p.pluginId,
     }));
+  }
+
+  /**
+   * 类型卡头像地址：
+   * - 插件卡：相对插件根的路径 → `plugin:<pluginId>/<path>`，前端按 api base 拼 assets 地址；
+   * - 内置卡：保持原值（裸文件名由前端按类型名回退到静态图标）。
+   */
+  private resolveCardAvatarUrl(card: {
+    avatarUrl?: string;
+    source?: "builtin" | "plugin";
+    pluginId?: string;
+  }): string | undefined {
+    if (!card.avatarUrl) return undefined;
+    const raw = card.avatarUrl.trim();
+    if (!raw) return undefined;
+    if (/^https?:\/\//i.test(raw) || raw.startsWith("data:")) return raw;
+    if (card.source === "plugin" && card.pluginId) {
+      // 插件 assets 路由形如 /plugins/<id>/assets/<相对插件根的路径>；
+      // marker 里保留 assets 路由段，前端只需按 api base 拼 /plugins/。
+      return `plugin:${card.pluginId}/assets/${raw.replace(/^\.?\//, "")}`;
+    }
+    return raw;
   }
 
   /**
@@ -183,9 +240,19 @@ export class ModelService {
     };
 
     try {
-      const adapter = this.adapterRegistry.getAdapter(config.protocol!);
-      if (!adapter) {
+      const entry = this.adapterRegistry.getEntry(config.protocol!);
+      if (!entry) {
         throw new Error(`Unsupported protocol: ${config.protocol}`);
+      }
+      if (!entry.active) {
+        throw new ProtocolDisabledError(config.protocol!, entry.pluginId);
+      }
+      const adapter = entry.adapter;
+      if (!adapter.testConnection) {
+        return {
+          success: false,
+          message: `协议 ${config.protocol} 的适配器未实现连接测试`,
+        };
       }
       return await adapter.testConnection(config);
     } catch (error: any) {
@@ -418,12 +485,16 @@ export class ModelService {
     if (!provider) throw new Error("Provider not found");
 
     const adapter = this.adapterRegistry.getAdapter(provider.protocol);
-    if (!adapter) return createPaginatedResponse([], 0);
+    if (!adapter || !adapter.syncRemoteModels) return createPaginatedResponse([], 0);
 
     const remoteModels = await adapter.syncRemoteModels({
+      id: provider.id,
+      type: provider.type,
       apiUrl: provider.apiUrl || "",
       apiKey: provider.apiKey || "",
       protocol: provider.protocol,
+      headers: provider.headers,
+      compat: provider.compat,
     });
 
     const catalogModels = this.bundledCatalog.getCatalogModels(provider.type);

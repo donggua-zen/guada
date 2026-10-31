@@ -13,6 +13,7 @@ import {
   UserQueueChangedEvent,
   BotStatusChangedEvent,
   BotChangedEvent,
+  SchedulerTaskFinishedEvent,
   toSessionEvent,
 } from "../../common/events/stream.events";
 import {
@@ -45,7 +46,8 @@ export type SessionEventType =
   | "queue_updated"
   | "queues_snapshot"
   | "bot_status_changed"
-  | "bot_changed";
+  | "bot_changed"
+  | "scheduler_task_finished";
 
 /**
  * 会话事件
@@ -414,6 +416,21 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     this.broadcastToAllClients({
       type: "bot_changed",
       sessionId: "*",
+      timestamp: event.timestamp,
+      payload: event,
+    });
+  }
+
+  /**
+   * 定时任务执行终态：前端据此弹桌面通知。
+   *
+   * sessionId 为空（执行前就失败）时用 "*" 作为宿主级事件，与 plugins_changed 同一惯例。
+   */
+  @OnEvent("scheduler.task_finished")
+  handleSchedulerTaskFinished(event: SchedulerTaskFinishedEvent) {
+    this.broadcastToAllClients({
+      type: "scheduler_task_finished",
+      sessionId: event.sessionId || "*",
       timestamp: event.timestamp,
       payload: event,
     });

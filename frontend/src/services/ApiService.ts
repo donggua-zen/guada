@@ -48,6 +48,7 @@ import { settingsApi, type SettingsApi } from "./modules/settings.api";
 import { policyApi, type PolicyApi } from "./modules/policy.api";
 import { capabilitiesApi, type CapabilitiesApi } from "./modules/capabilities.api";
 import { mcpApi, type McpApi } from "./modules/mcp.api";
+import { mcpMarketApi, type McpMarketApi } from "./modules/mcpMarket.api";
 import { skillsApi, type SkillsApi } from "./modules/skills.api";
 import { knowledgeBaseApi, type KnowledgeBaseApi } from "./modules/knowledge-base.api";
 import { botApi, type BotApi } from "./modules/bot.api";
@@ -79,6 +80,7 @@ interface ApiService
     PolicyApi,
     CapabilitiesApi,
     McpApi,
+    McpMarketApi,
     SkillsApi,
     KnowledgeBaseApi,
     BotApi,
@@ -414,6 +416,7 @@ Object.assign(
   policyApi,
   capabilitiesApi,
   mcpApi,
+  mcpMarketApi,
   skillsApi,
   knowledgeBaseApi,
   botApi,

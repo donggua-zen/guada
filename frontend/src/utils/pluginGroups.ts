@@ -2,7 +2,7 @@
  * 插件 / 技能列表分区工具（纯函数，UI 只负责渲染）。
  *
  * 分区 key 与 i18n 文案一一对应：
- * - 插件：plugins.localTools.groups.{core|extended|user|other}
+ * - 插件：plugins.localTools.groups.{system|core|extended|user|other}
  * - 技能：plugins.skills.groups.{builtin|plugin|user|shared|workspace}
  */
 
@@ -15,12 +15,23 @@ export interface ItemGroup<T> {
 }
 
 /**
+ * 插件是否被锁定（不可启停）。
+ *
+ * 与后端 `PluginManager.setPluginEnabled` 的保护条件保持一致：
+ * `category === "system"` 或 `essential === true` 的插件拒绝禁用。
+ */
+export function isPluginLocked(plugin: PluginQueryPlugin): boolean {
+  return plugin.category === 'system' || plugin.essential === true
+}
+
+/**
  * 插件按 category 分区：
- * core → 核心；extended → 扩展；category=user 或 source=user/dev → 用户安装；其余 → 其他。
- * 空分区不返回，分区顺序固定。
+ * system → 系统；core → 核心；extended → 扩展；category=user 或 source=user/dev → 用户安装；其余 → 其他。
+ * 空分区不返回，分区顺序固定（system 置顶，因为其恒启用且不可操作）。
  */
 export function groupPlugins(plugins: PluginQueryPlugin[]): ItemGroup<PluginQueryPlugin>[] {
   const buckets: Record<string, PluginQueryPlugin[]> = {
+    system: [],
     core: [],
     extended: [],
     user: [],
@@ -28,7 +39,9 @@ export function groupPlugins(plugins: PluginQueryPlugin[]): ItemGroup<PluginQuer
   }
 
   for (const plugin of plugins) {
-    if (plugin.category === 'core') {
+    if (plugin.category === 'system') {
+      buckets.system.push(plugin)
+    } else if (plugin.category === 'core') {
       buckets.core.push(plugin)
     } else if (plugin.category === 'extended') {
       buckets.extended.push(plugin)

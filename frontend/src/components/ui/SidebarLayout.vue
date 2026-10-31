@@ -61,9 +61,9 @@
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from "vue";
 import {
-  ArrowBackIosNewTwotone as ArrowLeftTwotone,
-  ArrowForwardIosTwotone as ArrowRightTwotone
-} from "@vicons/material";
+  ChevronLeft16Regular as ArrowLeftTwotone,
+  ChevronRight16Regular as ArrowRightTwotone
+} from "@vicons/fluent";
 import { isMobileDevice } from '@/composables/useDevice'
 
 /** 移动设备（手机/平板浏览器）：侧栏改为覆盖内容区的悬浮抽屉。
