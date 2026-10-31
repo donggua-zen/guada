@@ -147,6 +147,7 @@
     doodle: 'Doodle',
     cyberpunk: 'Cyberpunk (dark only)',
     wanderingEarth: 'Wandering Earth (dark only)',
+    magpie: 'Magpie (light only)',
   },
 
   // ── Confirmation Dialogs ──

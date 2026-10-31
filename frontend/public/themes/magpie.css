@@ -1,0 +1,206 @@
+/* ============================================================
+   主题：喜鹊（magpie）【仅浅色】
+   风格：对照 yetone/magpie 的默认浅色主题——中性灰白页面底
+        (#f4f4f6) + 纯白卡片、近黑主色(#1c1c21，黑底白字按钮)、
+        靛蓝强调(#4f46e5)、细线边框(#e3e3e8)、白底浮起式选中态、
+        三段软阴影。代码高亮取 magpie 的 --tk-* 调色板。
+   说明：本主题仅针对浅色模式设计，暗色模式不落任何变量，
+        完全回落到 style.css 的 html.dark 基础样式。
+   ============================================================ */
+
+[data-theme="magpie"] {
+  /* ---------- 主色：靛蓝（tailwind indigo，#4f46e5 = indigo-600） ---------- */
+  /* ---------- 主色：近黑（magpie --fg #1c1c21，其按钮/强调均为黑底白字） ---------- */
+  --gd-color-primary: #1c1c21;
+  --gd-color-primary-0f: #1c1c210f;
+  --gd-color-primary-hover: #34343c;
+  --gd-color-primary-active: #4b4b53;
+  --gd-color-primary-disabled: #b9b9c2;
+  --gd-color-primary-text: #ffffff;
+  --gd-color-primary-text-disabled: rgba(255, 255, 255, 0.6);
+  --gd-color-primary-50:  #f4f4f6;
+  --gd-color-primary-100: #e9e9ee;
+  --gd-color-primary-200: #d3d3d9;
+  --gd-color-primary-300: #b9b9c2;
+  --gd-color-primary-400: #85858d;
+  --gd-color-primary-500: #63636b;
+  --gd-color-primary-600: #4b4b53;
+  --gd-color-primary-700: #34343c;
+  --gd-color-primary-800: #1c1c21;
+  --gd-color-primary-900: #141418;
+  --gd-color-primary-950: #0c0c0f;
+
+  /* ---------- 副色：靛蓝（magpie --accent #4f46e5，链接/图表强调） ---------- */
+  --gd-color-secondary: #4f46e5;
+  --gd-color-secondary-hover: #4338ca;
+  --gd-color-secondary-active: #3730a3;
+  --gd-color-secondary-disabled: #c7d2fe;
+  --gd-color-secondary-text: #ffffff;
+  --gd-color-secondary-text-disabled: rgba(255, 255, 255, 0.6);
+  --gd-color-secondary-50:  #eef2ff;
+  --gd-color-secondary-100: #e0e7ff;
+  --gd-color-secondary-200: #c7d2fe;
+  --gd-color-secondary-300: #a5b4fc;
+  --gd-color-secondary-400: #818cf8;
+  --gd-color-secondary-500: #6366f1;
+  --gd-color-secondary-600: #4f46e5;
+  --gd-color-secondary-700: #4338ca;
+  --gd-color-secondary-800: #3730a3;
+  --gd-color-secondary-900: #312e81;
+  --gd-color-secondary-950: #1e1b4b;
+
+  /* ---------- 文本：magpie --fg / --fg-2 / --muted / --faint ---------- */
+  --gd-color-text: #1c1c21;
+  --gd-color-text-gray: #4b4b53;
+  --gd-color-text-disabled: #b9b9c2;
+
+  /* ---------- 表面与背景：--bg #f4f4f6 + --card #ffffff ---------- */
+  --gd-color-surface: #ffffff;
+  --gd-color-surface-border: #ececf0;
+  --gd-color-bg: #f4f4f6;
+  --gd-color-border: #e3e3e8;
+  --gd-color-app-backdrop: #f4f4f6;
+  --gd-plugin-icon-tray-bg: #f4f4f6;
+
+  /* ---------- 侧栏：底同页面灰白，选中态白底浮起（--seg-thumb） ---------- */
+  --gd-color-sidebar-bg: #f4f4f6;
+  --gd-color-sidebar-bg-active: #ffffff;
+  --gd-color-sidebar-bg-hover: #e9e9ee;
+  --gd-color-sidebar-text: var(--gd-color-text);
+  --gd-color-sidebar-text-hover: var(--gd-color-text);
+  --gd-color-sidebar-text-active: var(--gd-color-text);
+
+  /* ---------- 标题栏：融入侧栏灰白 ---------- */
+  --gd-color-titlebar-bg: #f4f4f6;
+  --gd-color-titlebar-border: #ececf0;
+
+  /* ---------- 会话列表：同侧栏语义 ---------- */
+  --gd-color-conversation-bg: #f4f4f6;
+  --gd-color-conversation-bg-active: #ffffff;
+  --gd-color-conversation-bg-hover: #e9e9ee;
+  --gd-color-conversation-text: var(--gd-color-text);
+  --gd-color-conversation-text-active: var(--gd-color-text);
+  --gd-color-conversation-text-hover: var(--gd-color-text);
+
+  /* ---------- 消息气泡：用户气泡淡靛蓝（--accent-soft） ---------- */
+  --gd-color-bubble-user-bg: #ffffff;
+  --gd-color-bubble-user-text: #1c1c21;
+  --gd-color-bubble-user-border: #e3e3e8;
+  --gd-color-bubble-assitant-bg: transparent;
+  --gd-color-bubble-assitant-text: #1c1c21;
+  --gd-color-bubble-assitant-border: none;
+
+  /* ---------- 输入框 ---------- */
+  --gd-color-input-bg: #ffffff;
+  --gd-color-input-border: #e3e3e8;
+
+  /* ---------- 弹窗：白卡 + magpie 三段软阴影 ---------- */
+  --gd-color-overlay-bg: #ffffff;
+  --gd-color-dialog-bg: #ffffff;
+  --gd-color-dialog-border: #ececf0;
+  --gd-dialog-shadow:
+    0 16px 44px rgba(20, 22, 30, 0.16),
+    0 2px 8px rgba(20, 22, 30, 0.06),
+    0 0 0 0.5px rgba(20, 22, 30, 0.1);
+
+  /* ---------- 语义色：magpie --red / --green / --amber / slate ---------- */
+  --gd-color-danger: #d64545;
+  --gd-color-success: #189a58;
+  --gd-color-warning: #b45309;
+  --gd-color-info: #64748b;
+
+  /* ---------- 圆角：卡片 12px / 控件 7px ---------- */
+  --gd-size-surface-radius: 12px;
+  --gd-size-dialog-rounded-radius: 12px;
+  --gd-layout-card-radius: 12px;
+  --gd-size-rounded-radius: 8px;
+
+  /* ---------- 布局卡片：无缝隙满铺、无边框无阴影（对照 magpie 平铺式内容区） ---------- */
+  --gd-layout-card-gap: 0px;
+  --gd-layout-card-border: transparent;
+  --gd-layout-card-shadow: none;
+  --gd-overview-panel-bg: #ffffff;
+  --gd-overview-panel-border-color: #ececf0;
+  --gd-overview-panel-shadow: 0 2px 8px rgba(20, 22, 30, 0.06);
+
+  /* ---------- Markdown ---------- */
+  --gd-md-accent: var(--gd-color-secondary);
+  --gd-md-fill-secondary: #f1f1f4;
+  --gd-md-fill-tertiary: #f9f9fb;
+  --gd-md-strong-weight: 600;
+  --gd-md-divider: #ececf0;
+  --gd-md-border: #e3e3e8;
+
+  /* ---------- 语法高亮：magpie --tk-* 调色板 ---------- */
+  --gd-md-syntax-text: #1c1c21;
+  --gd-md-syntax-comment: #85858d;
+  --gd-md-syntax-keyword: #7c3aed;
+  --gd-md-syntax-string: #1a7f45;
+  --gd-md-syntax-number: #b45309;
+  --gd-md-syntax-function: #1d4ed8;
+  --gd-md-syntax-type: #0e7490;
+  --gd-md-syntax-property: #a21caf;
+  --gd-md-syntax-tag: #1a7f45;
+  --gd-md-syntax-punctuation: #6b6b66;
+
+  /* ---------- 字体：magpie --font ---------- */
+  --gd-font-sans:
+    "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont,
+    "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+/* ---------- 组件微调 ---------- */
+
+/* 侧栏右边框：对照 magpie .sidebar { border-right: 1px solid var(--line) }。
+   Windows(Electron) 有独立标题栏行（侧栏在其下方），边框顶部若直接顶到窗口顶
+   会在标题栏与侧栏交界处生硬——改为两端各渐隐 36px 的渐变竖线（与标题栏等高），
+   视觉上由标题栏自然过渡；mac/web 无标题栏，用普通实线。 */
+[data-theme="magpie"].platform-win .global-sidebar {
+  position: relative;
+}
+
+[data-theme="magpie"].platform-win .global-sidebar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    #e3e3e8 36px,
+    #e3e3e8 calc(100% - 36px),
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+[data-theme="magpie"]:not(.platform-win) .global-sidebar {
+  border-right: 1px solid #e3e3e8;
+}
+
+/* 侧栏选中态：白底浮起（对照 magpie body.side-nav button.on 规则——
+   background: var(--card) + box-shadow: var(--seg-edge)，实测值：
+   0 1px 2px rgba(0,0,0,.14) 下坠影 + 0 0 0 .5px rgba(0,0,0,.08) 细描边。
+   白底由 --gd-color-sidebar-bg-active 变量提供，这里只补阴影形态 */
+[data-theme="magpie"] .nav-item-active,
+[data-theme="magpie"] .session-item-active {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.14),
+    0 0 0 0.5px rgba(0, 0, 0, 0.08);
+}
+
+/* 滚动条：magpie 灰阶 */
+[data-theme="magpie"] *::-webkit-scrollbar-thumb {
+  background: rgba(28, 28, 33, 0.18);
+}
+[data-theme="magpie"] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(28, 28, 33, 0.28);
+}
+
+/* 文本选区：--sel #ecebfb */
+[data-theme="magpie"] ::selection {
+  background: #ecebfb;
+}

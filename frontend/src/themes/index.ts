@@ -33,10 +33,10 @@ export interface ThemePresetInfo {
 }
 
 /**
- * 内置主题注册表（仅 default）。
- * 其余主题（brutalist/blueprint/steampunk/y2k/pop-comic/famicom/e-ink/
- * doodle/cyberpunk/wandering-earth）已迁移至 plugins/guada-themes，
- * 由插件注册下发——id 与原内置一致，用户持久化设置无缝衔接。
+ * 内置主题注册表。
+ * default 无 CSS；magpie 为静态内置浅色主题，CSS 位于 frontend/public/themes/
+ * （经 getThemeCssUrl 的 fallback 路径加载）。其余主题已迁移至
+ * plugins/guada-themes，由插件注册下发——id 与原内置一致，用户持久化设置无缝衔接。
  */
 const builtinThemes: ThemePresetInfo[] = [
   {
@@ -45,6 +45,14 @@ const builtinThemes: ThemePresetInfo[] = [
     nameKey: "common.theme.default",
     primaryColor: "#fb7299",
     secondaryColor: "#5b8def",
+  },
+  {
+    id: "magpie",
+    name: "喜鹊",
+    nameKey: "common.theme.magpie",
+    primaryColor: "#1c1c21",
+    secondaryColor: "#4f46e5",
+    mode: "light",
   },
 ];
 
@@ -142,9 +150,9 @@ export function replaceThemesByPlugin(
 
 /**
  * 获取主题 CSS URL
- * 主题（除 default）均由插件注册，externalThemeUrls 必有值（pluginSlots
- * 按 apiService.baseURL 拼 assets 地址）；fallback 保留仅为兜底，
- * 正常路径不可达（未知 id 在 applyThemePreset 已置 pending 拦截）。
+ * 插件主题走 externalThemeUrls（pluginSlots 按 apiService.baseURL 拼 assets
+ * 地址）；静态内置主题（magpie）与历史兜底走 public/themes/{id}.css——
+ * dev 由 vite public 目录直出，Electron 生产经 base:'./' + loadFile 相对解析。
  */
 function getThemeCssUrl(themeId: string): string {
   if (externalThemeUrls[themeId]) return externalThemeUrls[themeId];

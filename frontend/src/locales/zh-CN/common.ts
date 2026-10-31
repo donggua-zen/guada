@@ -147,6 +147,7 @@ export default {
     doodle: '涂鸦本',
     cyberpunk: '赛博朋克（仅暗色）',
     wanderingEarth: '小破球（仅暗色）',
+    magpie: '喜鹊（仅浅色）',
   },
 
   // ── 确认弹窗 ──
