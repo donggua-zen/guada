@@ -29,6 +29,7 @@ import {
   UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
+import { normalizeTransportError } from "../utils/retry-on-error.util";
 import {
   ProviderConfig,
   ConnectionTestResult,
@@ -568,7 +569,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     }
 
     // 其他错误原样抛出
-    throw error;
+    throw normalizeTransportError(error);
   }
 
   /**

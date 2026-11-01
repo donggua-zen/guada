@@ -23,6 +23,8 @@ import {
   ToolResultData,
   TurnDeleteData,
   MessagePruneData,
+  ToolImagePruneData,
+  ContextStatsData,
   CompactionSummaryData,
   MessageFile,
   PRUNE_STRATEGY_USER_EDIT,
@@ -217,6 +219,36 @@ export function foldEvent(
       break;
     }
 
+    // ─── 工具截图批量移出请求上下文（用户手动裁剪）───
+    case 'tool_image/prune': {
+      // 展示链路保留原图；仅 LLM 链路把 images 迁到 prunedImages，
+      // 请求组装时再转成带路径的文案（模型仍可 image_view 回看）。
+      if (opts?.applyCompressionPrune === false) break;
+      const data = (event.data as unknown) as ToolImagePruneData;
+      for (const node of state.messages) {
+        if (node.seq >= data.keepFromSeq) continue;
+        let moved = false;
+        for (const block of node.content) {
+          if (block.type !== 'tool-result' || !block.images?.length) continue;
+          block.prunedImages = [...(block.prunedImages ?? []), ...block.images];
+          block.images = [];
+          moved = true;
+        }
+        if (moved) {
+          node.metadata = {
+            ...node.metadata,
+            pruneInfo: {
+              strategy: 'tool_image_drop',
+              keepTurns: data.keepTurns,
+              keepFromSeq: data.keepFromSeq,
+              imageCount: data.imageCount,
+            },
+          };
+        }
+      }
+      break;
+    }
+
     // ─── 压缩括号（对齐 DSH compaction/*）───
     case 'compaction/start':
       // 搜索等全量内容链路：整段忽略压缩括号（被压缩消息保留参与检索）
@@ -332,9 +364,22 @@ export function foldEvent(
     case 'command/done':
       break;
 
-    // ─── 小轮次上下文占用锚点：只供前端冷启动扫描，不参与消息 surface / 回合游标折叠 ───
-    case 'context/stats':
+    // ─── 小轮次上下文占用锚点：普通 stats 只供前端冷启动扫描；
+    //     带 heuristicTokens 的锚点 stats 才参与 OccupancyAnchor（裁剪后修正占用）───
+    case 'context/stats': {
+      const data = (event.data as unknown) as ContextStatsData;
+      if (
+        isNonNegativeNumber(data?.usedTokens) &&
+        isNonNegativeNumber(data?.heuristicTokens)
+      ) {
+        state.occupancyAnchor = {
+          kind: 'compaction',
+          usedTokens: data.usedTokens,
+          heuristicTokens: data.heuristicTokens,
+        };
+      }
       break;
+    }
 
     default:
       break;

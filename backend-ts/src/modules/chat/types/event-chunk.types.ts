@@ -290,6 +290,19 @@ export interface PlanModeChangedEvent {
   toolCallId?: string;
 }
 
+/** 工具截图裁剪完成（用户手动维护操作；前端渲染时间线事件卡） */
+export interface ToolImagePruneEvent {
+  type: "tool_image_prune";
+  /** 已落库的 tool_image/prune 事件 seq（live / persisted 双路径去重键） */
+  seq: number;
+  keepTurns: number;
+  keepFromSeq: number;
+  boundaryMessageId?: string;
+  imageCount: number;
+  prunedBytes: number;
+  prunedTokens: number;
+}
+
 export type MessageChunkEvent = StreamChunk & {
   /** 所属 assistant 消息 id（= 落库消息 id） */
   messageId: string;
@@ -317,6 +330,7 @@ export type SessionStreamEvent =
   | WorkflowEvent
   | SubAgentLinkEvent
   | PlanModeChangedEvent
+  | ToolImagePruneEvent
   | MessageChunkEvent;
 
 /** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */

@@ -40,6 +40,7 @@ import { TokenMeterService } from "./token-meter.service";
 import { MemorySyncService } from "./memory-sync.service";
 import { CompactionCoordinatorService } from "./compaction/compaction-coordinator.service";
 import { CompactionService } from "./compaction/compaction.service";
+import { ToolImagePruneService } from "./compaction/tool-image-prune.service";
 import { SessionReplayService } from "./session-replay.service";
 import { PlanHistoryService } from "./plan-history.service";
 import { SessionModelBackfillService } from "./session-model-backfill.service";
@@ -70,6 +71,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     MemorySyncService,
     CompactionService,
     CompactionCoordinatorService,
+    ToolImagePruneService,
 
     SessionStreamManager,
     UploadPathService,

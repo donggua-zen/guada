@@ -389,3 +389,145 @@ describe('replayer v1.4 分界点 id 遮蔽（shadowedCount 主表示）', () =>
     expect(state.messages.map((n) => n.id)).toEqual(['c_01ARZ3NDEKTSV4RRFFQ69G5FBZ']);
   });
 });
+
+describe('replayer tool_image/prune（工具截图批量移出上下文）', () => {
+  const imageRef = (name: string) => ({
+    mediaType: 'image/jpeg',
+    bytes: 1024,
+    name,
+    url: `sessions/s1/images/${name}`,
+    refType: 'session' as const,
+  });
+
+  function twoTurnEvents(): BaseEvent[] {
+    return [
+      { type: 'turn/start', seq: 1, time: 1, data: { turnId: 't1', kind: 'turn', metadata: {} } },
+      {
+        type: 'user/message',
+        seq: 2,
+        time: 2,
+        data: {
+          messageId: 'u1',
+          kind: 'user',
+          blocks: [
+            { type: 'text', contentId: 'u1', text: 'first' },
+            { type: 'image', contentId: 'u1-img', attachment: imageRef('user.jpg') },
+          ],
+          metadata: {},
+        },
+      },
+      {
+        type: 'assistant/message',
+        seq: 3,
+        time: 3,
+        data: {
+          messageId: 'a1',
+          content: [
+            { type: 'tool-call', contentId: 'a1', toolCallId: 'call_1', name: 'browser', arguments: '{}' },
+          ],
+          metadata: {},
+        },
+      },
+      {
+        type: 'tool/result',
+        seq: 4,
+        time: 4,
+        data: {
+          messageId: 'r1',
+          toolCallId: 'call_1',
+          name: 'browser',
+          content: 'old screenshot',
+          images: [imageRef('old.jpg')],
+          metadata: {},
+        },
+      },
+      { type: 'turn/start', seq: 5, time: 5, data: { turnId: 't2', kind: 'turn', metadata: {} } },
+      {
+        type: 'user/message',
+        seq: 6,
+        time: 6,
+        data: {
+          messageId: 'u2',
+          kind: 'user',
+          blocks: [{ type: 'text', contentId: 'u2', text: 'second' }],
+          metadata: {},
+        },
+      },
+      {
+        type: 'assistant/message',
+        seq: 7,
+        time: 7,
+        data: {
+          messageId: 'a2',
+          content: [
+            { type: 'tool-call', contentId: 'a2', toolCallId: 'call_2', name: 'browser', arguments: '{}' },
+          ],
+          metadata: {},
+        },
+      },
+      {
+        type: 'tool/result',
+        seq: 8,
+        time: 8,
+        data: {
+          messageId: 'r2',
+          toolCallId: 'call_2',
+          name: 'browser',
+          content: 'new screenshot',
+          images: [imageRef('new.jpg')],
+          metadata: {},
+        },
+      },
+      {
+        type: 'tool_image/prune',
+        seq: 9,
+        time: 9,
+        data: {
+          keepTurns: 1,
+          keepFromSeq: 5,
+          boundaryMessageId: 'u2',
+          imageCount: 1,
+          prunedBytes: 1368,
+          prunedTokens: 1500,
+        },
+      },
+    ];
+  }
+
+  function toolBlock(state: ReturnType<typeof foldEvents>, id: string) {
+    const node = state.messages.find((n) => n.id === id)!;
+    return node.content.find((b) => b.type === 'tool-result') as {
+      images?: unknown[];
+      prunedImages?: Array<{ name?: string }>;
+    };
+  }
+
+  it('边界之前的 tool-result.images 迁到 prunedImages；边界及之后不动', () => {
+    const state = foldEvents(twoTurnEvents());
+    const oldBlock = toolBlock(state, 'r1');
+    expect(oldBlock.images).toEqual([]);
+    expect(oldBlock.prunedImages?.map((i) => i.name)).toEqual(['old.jpg']);
+
+    const newBlock = toolBlock(state, 'r2');
+    expect(newBlock.images).toHaveLength(1);
+    expect(newBlock.prunedImages).toBeUndefined();
+
+    const oldNode = state.messages.find((n) => n.id === 'r1')!;
+    expect((oldNode.metadata.pruneInfo as any)?.strategy).toBe('tool_image_drop');
+  });
+
+  it('用户上传的 image 块不受影响', () => {
+    const state = foldEvents(twoTurnEvents());
+    const userNode = state.messages.find((n) => n.id === 'u1')!;
+    expect(userNode.content.some((b) => b.type === 'image')).toBe(true);
+  });
+
+  it('展示链路（applyCompressionPrune=false）保留 images、不写 prunedImages', () => {
+    const state = foldEvents(twoTurnEvents(), undefined, { applyCompressionPrune: false });
+    const oldBlock = toolBlock(state, 'r1');
+    expect(oldBlock.images).toHaveLength(1);
+    expect(oldBlock.prunedImages).toBeUndefined();
+    const oldNode = state.messages.find((n) => n.id === 'r1')!;
+    expect(oldNode.metadata.pruneInfo).toBeUndefined();
+  });
+});

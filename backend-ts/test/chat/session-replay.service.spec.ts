@@ -200,6 +200,22 @@ describe('SessionReplayService 压缩历史聚合（getCompactionHistory）', ()
     expect(items[1].compressionStats).toEqual({ beforeTokenCount: 900, afterTokenCount: 500 });
   });
 
+  it('anchor-stats（context/stats + heuristicTokens）→ pruned_only 条目；普通 stats 不产条目', async () => {
+    const events: BaseEvent[] = [
+      { type: 'turn/finish', seq: 1, time: 1000, data: { turnId: 'T1', usedTokens: 900 } },
+      // 普通小轮 stats：只作 before 回退锚点，不产历史
+      { type: 'context/stats', seq: 2, time: 2000, data: { turnId: 'T1', usedTokens: 880, effectiveContextWindow: 8000 } },
+      // 裁剪后的 anchor-stats：产出一条 pruned_only
+      { type: 'context/stats', seq: 3, time: 3000, data: { turnId: 'T1', usedTokens: 480, heuristicTokens: 300, beforeTokens: 880, effectiveContextWindow: 8000 } },
+    ];
+    const { items, total } = await service(events).getCompactionHistory('s1');
+    expect(total).toBe(1);
+    expect(items[0].id).toBe('prune_3');
+    expect(items[0].cleaningStrategy).toBe('pruned_only');
+    expect(items[0].summaryContent).toBeNull();
+    expect(items[0].compressionStats).toEqual({ beforeTokenCount: 880, afterTokenCount: 480 });
+  });
+
   it('旧事件无 beforeTokens → before 回退上一占用锚点；DISABLED 空摘要 → discarded；limit 截断', async () => {
     const events: BaseEvent[] = [
       { type: 'turn/finish', seq: 1, time: 1000, data: { turnId: 'T1', usedTokens: 900 } },

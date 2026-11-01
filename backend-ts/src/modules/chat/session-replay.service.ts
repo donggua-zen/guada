@@ -123,7 +123,8 @@ export class SessionReplayService {
    *
    * 扫描规则：
    * - 摘要括号（compaction/start → summary → end）→ summarized（有摘要文本）/ discarded（空摘要）
-   * - 孤立 compaction/end（无 start，纯裁剪路径锚点）→ pruned_only 条目
+   * - 孤立 compaction/end（无 start，旧纯裁剪路径锚点）→ pruned_only 条目
+   * - 带 heuristicTokens 的 context/stats（新纯裁剪路径锚点）→ pruned_only 条目
    * - before/after：end.beforeTokens 实测优先；旧事件无此字段时回退"上一占用锚点"
    *   （context/stats.usedTokens、turn/finish.usedTokens 或上一 compaction/end.usedTokens）近似
    * - 未闭合括号（进行中的压缩）不产出条目
@@ -146,8 +147,38 @@ export class SessionReplayService {
     } | null = null;
 
     for (const e of events) {
-      // 占用锚点：小轮次 context/stats（异常终止也有）与回合收尾 turn/finish 同口径
-      if (e.type === "turn/finish" || e.type === "context/stats") {
+      // 占用锚点：小轮次 context/stats（异常终止也有）与回合收尾 turn/finish 同口径。
+      // 带 heuristicTokens 的 anchor-stats 是“裁剪后修正占用”的锚点，同时产出一条 pruned_only 历史。
+      if (e.type === "context/stats") {
+        const d = e.data as {
+          usedTokens?: number;
+          beforeTokens?: number;
+          heuristicTokens?: number;
+        };
+        const previousAnchorTokens = lastAnchorTokens;
+        if (typeof d.usedTokens === "number") lastAnchorTokens = d.usedTokens;
+        if (
+          typeof d.usedTokens === "number" &&
+          typeof d.heuristicTokens === "number"
+        ) {
+          items.push({
+            id: `prune_${e.seq}`,
+            createdAt: new Date(e.time).toISOString(),
+            summaryContent: null,
+            shadowedCount: 0,
+            cleaningStrategy: "pruned_only",
+            compressionStats: {
+              beforeTokenCount:
+                typeof d.beforeTokens === "number"
+                  ? d.beforeTokens
+                  : previousAnchorTokens,
+              afterTokenCount: d.usedTokens,
+            },
+          });
+        }
+        continue;
+      }
+      if (e.type === "turn/finish") {
         const used = (e.data as { usedTokens?: number })?.usedTokens;
         if (typeof used === "number") lastAnchorTokens = used;
         continue;

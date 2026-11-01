@@ -26,6 +26,7 @@ import {
   SessionModeChangedData,
   ContextStatsData,
   CompactionDegradationData,
+  ToolImagePruneData,
 } from './types';
 import { generateOrderedMessageId } from '../utils/ordered-id.util';
 import { isVisionImageMediaType } from '../utils/media-type.util';
@@ -1136,6 +1137,32 @@ export class JsonlMessageService implements IMessageStore {
     return seq;
   }
 
+  /** 工具截图批量移出请求上下文：一次操作写一条事件（前缀分界 keepFromSeq）。 */
+  async appendToolImagePrune(
+    sessionId: string,
+    data: ToolImagePruneData,
+  ): Promise<number> {
+    return this.runExclusive(sessionId, async () => {
+      const seq = await this.getNextSeq(sessionId);
+      await this.append(sessionId, {
+        type: 'tool_image/prune',
+        seq,
+        time: Date.now(),
+        data: {
+          keepTurns: data.keepTurns,
+          keepFromSeq: data.keepFromSeq,
+          ...(data.boundaryMessageId === undefined
+            ? {}
+            : { boundaryMessageId: data.boundaryMessageId }),
+          imageCount: data.imageCount,
+          prunedBytes: data.prunedBytes,
+          prunedTokens: data.prunedTokens,
+        },
+      });
+      return seq;
+    });
+  }
+
   /** 追加命令执行括号事件(command/run + command/done,事件类消息)。
    *  当前项目尚无命令来源,此方法为预留写入点;有来源后调用即可落库。 */
   async appendCommand(sessionId: string, data: {
@@ -1461,6 +1488,12 @@ export class JsonlMessageService implements IMessageStore {
             ? {}
             : { breakdown: data.breakdown }),
           ...(data.request === undefined ? {} : { request: data.request }),
+          ...(data.heuristicTokens === undefined
+            ? {}
+            : { heuristicTokens: data.heuristicTokens }),
+          ...(data.beforeTokens === undefined
+            ? {}
+            : { beforeTokens: data.beforeTokens }),
         },
       });
       return seq;

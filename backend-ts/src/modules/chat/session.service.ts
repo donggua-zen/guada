@@ -28,6 +28,7 @@ import {
   MESSAGE_STORE_TOKEN,
 } from "../../common/persistence/message-store.interface";
 import { CompactionCoordinatorService } from "./compaction/compaction-coordinator.service";
+import { ToolImagePruneService } from "./compaction/tool-image-prune.service";
 import { SessionGroupService } from "./session-group.service";
 import {
   createPaginatedResponse,
@@ -76,6 +77,8 @@ export class SessionService {
     private sessionGroupService: SessionGroupService,
     // 允许直接 new 的测试/嵌入场景不挂 Registry；生产由 ChatModule imports JobsModule 注入。
     @Optional() private readonly jobRegistry?: JobRegistryService,
+    // 工具截图裁剪：纯 JSONL 写入 + 快照重建，无外部依赖；测试可省略。
+    @Optional() private readonly toolImagePruneService?: ToolImagePruneService,
   ) {}
 
   /**
@@ -1481,19 +1484,7 @@ ${diffText}
 
     this.logger.log(`Manual compression started (async maintenance stream) for session ${sessionId}`);
 
-    const emitStatus = (
-      status: "running" | "completed" | "error",
-      extra?: Partial<StreamStatusChangedEvent["payload"]>,
-    ) => {
-      const statusEvent: StreamStatusChangedEvent = {
-        sessionId,
-        timestamp: new Date().toISOString(),
-        payload: { status, kind: "maintenance", ...extra },
-      };
-      this.eventBus.emit("stream.status_changed", statusEvent);
-    };
-
-    emitStatus("running");
+    this.emitMaintenanceStatus(sessionId, "running");
 
     void this.compactionCoordinator
       .maybeCompress(context, {
@@ -1506,7 +1497,7 @@ ${diffText}
       })
       .then(() => {
         this.streamManager.stopStream(sessionId, "completed");
-        emitStatus("completed");
+        this.emitMaintenanceStatus(sessionId, "completed");
       })
       .catch((error: any) => {
         // coordinator 内部已捕获压缩错误并广播 compression_error；此处兜底流生命周期
@@ -1514,10 +1505,88 @@ ${diffText}
           `Manual compression failed for session ${sessionId}: ${error?.message ?? error}`,
         );
         this.streamManager.stopStream(sessionId, "error");
-        emitStatus("error", { reason: "error", error: error?.message });
+        this.emitMaintenanceStatus(sessionId, "error", {
+          reason: "error",
+          error: error?.message,
+        });
       });
 
     return { success: true, started: true };
+  }
+
+  /** 维护伪流的运行状态广播（手动压缩 / 工具截图裁剪共用） */
+  private emitMaintenanceStatus(
+    sessionId: string,
+    status: "running" | "completed" | "error",
+    extra?: Partial<StreamStatusChangedEvent["payload"]>,
+  ): void {
+    const statusEvent: StreamStatusChangedEvent = {
+      sessionId,
+      timestamp: new Date().toISOString(),
+      payload: { status, kind: "maintenance", ...extra },
+    };
+    this.eventBus.emit("stream.status_changed", statusEvent);
+  }
+
+  /**
+   * 工具截图裁剪：保留最近 N 个用户轮，把更早轮次的 tool-result.images
+   * 移出后续请求上下文（不删文件、不改 UI）。
+   *
+   * 与手动压缩一样用 maintenance 伪流持会话锁；操作只是 JSONL 写入 + 快照重建，
+   * 同步完成后返回，裁剪结果与新的 context_stats 已落库/广播。
+   */
+  async pruneToolImages(sessionId: string, keepTurns: number) {
+    const session = await this.hydrateSession(sessionId);
+    if (!session) {
+      throw new HttpException(
+        { error: "Session not found or unauthorized", code: "SESSION_NOT_FOUND" },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (!this.toolImagePruneService) {
+      throw new HttpException(
+        { error: "Tool image prune service unavailable", code: "INTERNAL_ERROR" },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (this.streamManager.hasActiveStream(sessionId)) {
+      throw new HttpException(
+        {
+          error: "当前会话正在流式输出，请等待结束后再裁剪",
+          code: "SESSION_STREAMING",
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const context = await this.sessionContextFactory.createFromSession(session);
+    const abortController = new AbortController();
+    if (!this.streamManager.startStream(sessionId, abortController, "maintenance")) {
+      throw new HttpException(
+        { error: "当前会话已有任务进行中", code: "SESSION_BUSY" },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    this.emitMaintenanceStatus(sessionId, "running");
+    let ok = false;
+    try {
+      const result = await this.toolImagePruneService.prune(context, keepTurns);
+      ok = true;
+      return { success: true, ...result };
+    } catch (error: any) {
+      this.logger.error(
+        `Tool image prune failed for session ${sessionId}: ${error?.message ?? error}`,
+      );
+      throw error;
+    } finally {
+      this.streamManager.stopStream(sessionId, ok ? "completed" : "error");
+      this.emitMaintenanceStatus(
+        sessionId,
+        ok ? "completed" : "error",
+        ok ? undefined : { reason: "error", error: "tool_image_prune_failed" },
+      );
+    }
   }
 
   /**

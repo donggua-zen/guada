@@ -515,6 +515,8 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       case "subagent_link": return EVENT_METHOD.STREAM_SUBAGENT_LINK;
       // 计划模式变更（协作状态；事实源 session.settings，本帧驱动指示器与多窗口同步）
       case "plan_mode_changed": return EVENT_METHOD.STREAM_PLAN_MODE_CHANGED;
+      // 工具截图裁剪完成（维护操作事件卡）
+      case "tool_image_prune": return EVENT_METHOD.STREAM_TOOL_IMAGE_PRUNE;
       // 消息级:StreamChunk 直通
       case "block_start": return EVENT_METHOD.STREAM_BLOCK_START;
       case "text_delta": return EVENT_METHOD.STREAM_TEXT_DELTA;

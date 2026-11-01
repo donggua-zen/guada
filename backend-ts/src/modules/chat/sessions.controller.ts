@@ -269,6 +269,21 @@ export class SessionsController {
     );
   }
 
+  @Post("sessions/:id/prune-tool-images")
+  async pruneToolImages(
+    @Param("id") id: string,
+    @Body() body?: { keepTurns?: number },
+  ) {
+    const keepTurns = Number(body?.keepTurns);
+    if (!Number.isInteger(keepTurns) || keepTurns < 1 || keepTurns > 1000) {
+      throw new BadRequestException({
+        error: "keepTurns must be an integer in 1..1000",
+        code: "INVALID_KEEP_TURNS",
+      });
+    }
+    return this.sessionService.pruneToolImages(id, keepTurns);
+  }
+
   @Get("sessions/:id/workspace-path")
   async getWorkspacePath(@Param("id") id: string) {
     // 验证会话归属权

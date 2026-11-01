@@ -114,6 +114,11 @@ export interface ToolResultBlock {
    */
   images?: FileRef[];
   /**
+   * 被 tool_image/prune 移出请求上下文的图片（仅 LLM 视图；不落 tool/result 事件）。
+   * 请求组装时转为路径文案；UI 展示链路不应用裁剪事件，仍读 images。
+   */
+  prunedImages?: FileRef[];
+  /**
    * UI 渲染元数据（仅前端消费，不进 LLM 上下文）。
    * card 标识结果卡片类型（terminal/diff/read/...），其余为该卡片的结构化字段。
    */

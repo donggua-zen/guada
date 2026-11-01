@@ -9,6 +9,12 @@ function buildController(opts?: { session?: any; plans?: any[] }) {
     getSessionById: jest.fn(async () =>
       opts && 'session' in opts ? opts.session : { id: 's1' },
     ),
+    pruneToolImages: jest.fn(async () => ({
+      success: true,
+      keptTurns: 1,
+      prunedImages: 2,
+      prunedBytes: 100,
+    })),
   };
   const workspaceService = {
     resolveSessionWorkspaceDir: jest.fn(async () => WORKSPACE),
@@ -65,5 +71,29 @@ describe('SessionsController - 计划历史（GET sessions/:id/plans）', () => 
       'Session not found or unauthorized',
     );
     expect(planHistoryService.listPlans).not.toHaveBeenCalled();
+  });
+});
+
+describe('SessionsController - 裁剪工具截图（POST sessions/:id/prune-tool-images）', () => {
+  it('合法 keepTurns 透传给 SessionService', async () => {
+    const { controller, sessionService } = buildController();
+    await expect(
+      controller.pruneToolImages('s1', { keepTurns: 2 }),
+    ).resolves.toMatchObject({ success: true, prunedImages: 2 });
+    expect(sessionService.pruneToolImages).toHaveBeenCalledWith('s1', 2);
+  });
+
+  it('非法 keepTurns（0 / 小数 / 缺失）返回 400，不调用服务', async () => {
+    const { controller, sessionService } = buildController();
+    await expect(
+      controller.pruneToolImages('s1', { keepTurns: 0 }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      controller.pruneToolImages('s1', { keepTurns: 1.5 }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(controller.pruneToolImages('s1', {})).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(sessionService.pruneToolImages).not.toHaveBeenCalled();
   });
 });

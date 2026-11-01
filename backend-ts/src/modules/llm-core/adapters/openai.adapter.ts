@@ -50,6 +50,7 @@ import {
   UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
+import { normalizeTransportError } from "../utils/retry-on-error.util";
 import {
   DEFAULT_REQUEST_TIMEOUT_MS,
 } from "../utils/stream-timeout.util";
@@ -666,7 +667,8 @@ export class OpenAIAdapter implements IProtocolAdapter {
       // 其他 APIError 原样抛出（status 保留供 classifyError 判断）
       throw error;
     }
-    throw error;
+    // 传输层裸错误（undici 流中断 TypeError "terminated" 等）按错误码归一化
+    throw normalizeTransportError(error);
   }
 
   /**

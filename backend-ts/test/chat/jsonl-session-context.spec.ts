@@ -484,14 +484,16 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
     expect(typeof passed.usedTokens).toBe('number');
   });
 
-  it('recordContextAnchor：写独立 compaction/end 携带当前占用', async () => {
+  it('recordContextAnchor：写 context/stats 锚点（带 heuristicTokens）', async () => {
     const { ctx, messageStore } = createContext();
-    messageStore.recordContextAnchor = jest.fn(async () => 5);
+    messageStore.appendContextStats = jest.fn(async () => 5);
     await ctx.initialize();
     await ctx.recordContextAnchor();
-    const [sid, data] = (messageStore.recordContextAnchor as jest.Mock).mock.calls[0];
+    const [sid, data] = (messageStore.appendContextStats as jest.Mock).mock.calls[0];
     expect(sid).toBe('s1');
+    expect(data.turnId).toBe('maintenance');
     expect(typeof data.usedTokens).toBe('number');
+    expect(typeof data.heuristicTokens).toBe('number');
     expect(data.effectiveContextWindow).toBe(6000);
   });
 
@@ -521,7 +523,7 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
 
   it('recordContextAnchor：扣减被 provider 锚点抵消的裁剪节省（锚点之后的节省不重复扣）', async () => {
     const { ctx, messageStore } = createContext();
-    messageStore.recordContextAnchor = jest.fn(async () => 5);
+    messageStore.appendContextStats = jest.fn(async () => 5);
     await ctx.initialize();
     messageStore.loadContext.mockResolvedValue([
       makeMsg('u1', 'user', { metadata: { _t: 100 } }),
@@ -538,7 +540,7 @@ describe('JsonlSessionContext 上下文占用锚点', () => {
         { index: 2, tokens: 70 }, // 锚点之后 → 增量已吸收，不再扣
       ],
     });
-    const data = (messageStore.recordContextAnchor as jest.Mock).mock.calls[0][1];
+    const data = (messageStore.appendContextStats as jest.Mock).mock.calls[0][1];
     expect(data.usedTokens).toBe(1050);
     expect(data.heuristicTokens).toBe(400); // prelude(0) + 视图前缀和(400)
     expect(data.beforeTokens).toBe(1100);

@@ -205,4 +205,90 @@ describe("expandToolResultImages", () => {
     });
     expect(derived.content[1]).toEqual({ type: "image", attachment: ref });
   });
+
+  it("prunedImages：不生成 image 块，路径文案追加到 tool-result.content", () => {
+    const pruned = imageRef("old.png");
+    const tool = prunedToolMessage("t1", "call_1", "browser", undefined, [pruned]);
+    const messages = [
+      textMessage("u1", "go"),
+      assistantMessage("a1"),
+      tool,
+      assistantMessage("a2"),
+    ];
+
+    const out = expandToolResultImages(messages, ctx);
+    // 只有 prunedImages：不派生隐藏 user 消息
+    expect(out).toHaveLength(messages.length);
+    const block = out.find((m) => m.id === "t1")!.content[0] as {
+      type: "tool-result";
+      content: string;
+      images?: FileRef[];
+      prunedImages?: FileRef[];
+    };
+    expect(block.images).toEqual([]);
+    expect("prunedImages" in block).toBe(false);
+    expect(block.content).toContain("[Image pruned from context");
+    expect(block.content).toContain(pruned.url);
+    expect(block.content).toContain("image_view");
+  });
+
+  it("retained + pruned 混合：保留图照常派生，裁剪图只留路径文案", () => {
+    const keep = imageRef("keep.png");
+    const pruned = imageRef("old.png");
+    const tool = prunedToolMessage("t1", "call_1", "browser", [keep], [pruned]);
+    const messages = [
+      textMessage("u1", "go"),
+      assistantMessage("a1"),
+      tool,
+      assistantMessage("a2"),
+    ];
+
+    const out = expandToolResultImages(messages, ctx);
+    expect(out).toHaveLength(messages.length + 1);
+
+    const toolBlock = out.find((m) => m.id === "t1")!.content[0] as {
+      content: string;
+      prunedImages?: FileRef[];
+    };
+    expect("prunedImages" in toolBlock).toBe(false);
+    expect(toolBlock.content).toContain(pruned.url);
+
+    const derived = out.find((m) => m.metadata?.hidden)!;
+    expect(
+      derived.content.some(
+        (b) => b.type === "image" && b.attachment.name === "keep.png",
+      ),
+    ).toBe(true);
+    expect(
+      derived.content.some(
+        (b) => b.type === "text" && b.text.includes("old.png"),
+      ),
+    ).toBe(false);
+  });
 });
+
+function prunedToolMessage(
+  id: string,
+  toolCallId: string,
+  name: string,
+  images: FileRef[] | undefined,
+  prunedImages: FileRef[] | undefined,
+): Message {
+  return {
+    id,
+    role: "tool",
+    kind: "model",
+    source: { kind: "tool", toolCallId },
+    metadata: {},
+    content: [
+      {
+        type: "tool-result",
+        toolCallId,
+        name,
+        content: "ok",
+        images: images ?? [],
+        ...(prunedImages ? { prunedImages } : {}),
+      },
+    ],
+  };
+}

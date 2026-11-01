@@ -14,3 +14,21 @@ export interface RequestMetrics {
   /** 实际保留的图片数 */
   retainedImages?: number;
 }
+
+/** builder 媒体投影结果的最小结构（避免 common 反向依赖 llm-core 类型） */
+export interface RequestMediaStatsLike {
+  attachedBytes: number;
+  retainedImages: number;
+  budgetBytes: number;
+  omittedImages: number;
+}
+
+/** 媒体投影结果 → context_stats.request 展示负载 */
+export function toRequestMetrics(media: RequestMediaStatsLike): RequestMetrics {
+  return {
+    mediaBytes: media.attachedBytes,
+    mediaBudgetBytes: media.budgetBytes,
+    omittedImages: media.omittedImages,
+    retainedImages: media.retainedImages,
+  };
+}

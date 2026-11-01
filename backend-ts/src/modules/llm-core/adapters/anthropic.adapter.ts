@@ -43,6 +43,7 @@ import {
   UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
+import { normalizeTransportError } from "../utils/retry-on-error.util";
 
 /**
  * Anthropic 协议适配器
@@ -743,6 +744,6 @@ export class AnthropicAdapter implements IProtocolAdapter {
     }
 
     // 其他错误原样抛出
-    throw error;
+    throw normalizeTransportError(error);
   }
 }

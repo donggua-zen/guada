@@ -39,6 +39,7 @@ import {
   UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
+import { normalizeTransportError } from "../utils/retry-on-error.util";
 
 // @Injectable() 不可省：emitDecoratorMetadata 只在类上有装饰器时才产出
 // design:paramtypes。当前无构造参数故暂无实害，但缺装饰器会让"将来加依赖"
@@ -201,7 +202,8 @@ export class GeminiAdapter implements IProtocolAdapter {
       }
 
       this.logger.error("Gemini API error:", err);
-      throw err;
+      // 码表兜底漏网的传输层错误（如 UND_ERR_SOCKET）统一归一化
+      throw normalizeTransportError(err);
     }
   }
 

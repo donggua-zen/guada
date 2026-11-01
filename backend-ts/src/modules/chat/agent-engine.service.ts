@@ -46,6 +46,7 @@ import {
 import {
   UpstreamRateLimitError,
   UpstreamTimeoutError,
+  UpstreamNetworkError,
   UpstreamRequestError,
 } from "../llm-core/utils/upstream-errors";
 import { LLMService } from "../llm-core/llm.service";
@@ -54,7 +55,7 @@ import type {
   LLMRequestMediaStats,
   StreamChunk,
 } from "../llm-core/types/llm.types";
-import type { RequestMetrics } from "../../common/types/request-metrics.types";
+import { toRequestMetrics } from "../../common/types/request-metrics.types";
 import {
   classifyError,
   computeRetryDelayMs,
@@ -78,14 +79,6 @@ function inlineDataRef(mediaType: string, base64: string, byteLength: number): F
 }
 
 /** 请求媒体投影统计 → context_stats 的展示负载（媒体字节为精确值） */
-function toRequestMetrics(media: LLMRequestMediaStats): RequestMetrics {
-  return {
-    mediaBytes: media.attachedBytes,
-    mediaBudgetBytes: media.budgetBytes,
-    omittedImages: media.omittedImages,
-    retainedImages: media.retainedImages,
-  };
-}
 
 /**
  * data: URL 兜底的单图字节上限（512KB）。
@@ -725,6 +718,9 @@ export class AgentEngine {
             finalError = streamError.message;
           } else if (streamError instanceof UpstreamRateLimitError) {
             businessReason = "rate_limited";
+            finalError = streamError.message;
+          } else if (streamError instanceof UpstreamNetworkError) {
+            businessReason = "network_error";
             finalError = streamError.message;
           } else {
             businessReason = "error";

@@ -16,7 +16,7 @@ import type {
   FileRef,
   TokenUsage,
 } from '../types/conversation.types';
-import type { BaseEvent, ContextStatsData, OccupancyAnchor, SessionMeta } from './types';
+import type { BaseEvent, ContextStatsData, OccupancyAnchor, SessionMeta, ToolImagePruneData } from './types';
 
 // ============================================================================
 // 参数类型定义
@@ -190,6 +190,11 @@ export interface IMessageStore {
       /** 影子价格：被裁剪内容的估算 token 数 */
       prunedTokens?: number;
     },
+  ): Promise<number>;
+  /** 工具截图批量移出请求上下文（一次操作一条事件；@returns 写入后版本号） */
+  appendToolImagePrune(
+    sessionId: string,
+    data: ToolImagePruneData,
   ): Promise<number>;
   /** 二级压缩（摘要）：遮蔽头部连续前缀 + 写摘要（compaction 括号事件）。
    *  @returns 摘要消息 id + 写入后版本号 + 折叠后的摘要节点（供快照播种） */

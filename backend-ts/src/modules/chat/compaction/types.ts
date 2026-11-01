@@ -15,6 +15,7 @@ import type { Message } from '../../../common/types/conversation.types';
 import type { ToolDefinition } from '../../tools/interfaces/tool-provider.interface';
 import type { ModelConfig } from '../session-context';
 import type { SummaryDegradation, SummaryMode } from './compression-engine';
+import type { ToolImagePruneData } from '../../../common/persistence/types';
 
 /** 合并后的压缩配置（档位折算产物；对齐 DSH thresholdRatio + retainRatio） */
 export interface CompactionConfig {
@@ -133,6 +134,10 @@ export interface CompactionDataSource {
   // ─── 压缩写（v1.4：写路径与读路径同层解耦，引擎不再直插持久化）───
   /** 微压缩写入（工具结果裁剪 / 思考剥离）：落库 + 快照 revision 推进（惰性全量重建） */
   appendPrune(data: PruneWrite): Promise<void>;
+  /** 工具截图批量移出请求上下文（一次操作一条事件；落库 + 快照 revision 推进）。
+   *  后端实现为 JsonlSessionContext；不支持该能力的测试数据源可缺省。
+   *  @returns 写入后事件 seq（live 事件卡去重键） */
+  appendToolImagePrune?(data: ToolImagePruneData): Promise<number>;
   /** 二级遮蔽写入：落库 + 快照增量播种（splice view 前 shadowedCount 条为摘要节点）。
    *  @returns 摘要消息 id + 写入后版本号 */
   appendCompact(

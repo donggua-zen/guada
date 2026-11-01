@@ -30,6 +30,7 @@ export type EventType =
   | 'tool/result'
   | 'turn/delete'
   | 'message/prune'
+  | 'tool_image/prune'
   | 'compaction/start'
   | 'compaction/summary'
   | 'compaction/end'
@@ -127,6 +128,14 @@ export interface ContextStatsData {
   };
   /** 本次请求的媒体负载（图片 base64 字节/预算/张数；旧锚点缺省） */
   request?: RequestMetrics;
+  /**
+   * 可选：与 usedTokens 配套的启发式总量。
+   * 仅“裁剪后修正占用”的锚点 stats 携带；普通每次请求的 stats 不带，
+   * replayer 只有看到该字段才把事件当作 OccupancyAnchor。
+   */
+  heuristicTokens?: number;
+  /** 可选：裁剪前实测占用（压缩历史 before/after 对比） */
+  beforeTokens?: number;
 }
 
 // ─── 消息级三事件（对齐 DSH：user/message、assistant/message、tool/result）───
@@ -246,6 +255,28 @@ export interface MessagePruneData {
   strategy: string;           // 策略，见 PRUNE_STRATEGY_*
   /** 影子价格：被裁剪内容的估算 token 数（供 token 计量消费方减去被遮蔽价格，对齐 DSH compaction/prune） */
   prunedTokens?: number;
+}
+
+/**
+ * 工具截图批量移出请求上下文（用户手动触发）。
+ *
+ * 与 message/prune 的区别：只改 LLM 视图里 tool-result 的 images → prunedImages，
+ * 不改 content、不删文件；展示链路不应用。一次操作一条事件，用 keepFromSeq 做前缀分界，
+ * 不携带 messageIds 列表（避免事件随消息数增长）。
+ */
+export interface ToolImagePruneData {
+  /** 本次保留的最近用户轮数（审计/UI） */
+  keepTurns: number;
+  /** 保留边界：seq >= keepFromSeq 的消息保留；seq < keepFromSeq 的工具图移出上下文 */
+  keepFromSeq: number;
+  /** 边界首条消息 id（仅审计/可读性；重放不依赖） */
+  boundaryMessageId?: string;
+  /** 被移出上下文的截图张数 */
+  imageCount: number;
+  /** 被移出图片的 base64 字节数（与媒体预算口径一致） */
+  prunedBytes: number;
+  /** 影子 token：imageCount * 1500 */
+  prunedTokens: number;
 }
 
 // ─── 压缩（括号式，对齐 DSH compaction/*）───

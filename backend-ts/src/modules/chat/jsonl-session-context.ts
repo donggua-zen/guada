@@ -40,7 +40,7 @@ import {
   PruneWrite,
   TokenDiagnostics,
 } from './compaction/types';
-import type { OccupancyAnchor } from '../../common/persistence/types';
+import type { OccupancyAnchor, ToolImagePruneData } from '../../common/persistence/types';
 import {
   COMPRESSION_TIER_PRESETS,
   resolveCompressionTier,
@@ -949,6 +949,12 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       turnId,
       usedTokens: stats.usedTokens,
       effectiveContextWindow: stats.effectiveContextWindow,
+      ...(stats.totalContextWindow === undefined
+        ? {}
+        : { totalContextWindow: stats.totalContextWindow }),
+      ...(stats.outputReserveTokens === undefined
+        ? {}
+        : { outputReserveTokens: stats.outputReserveTokens }),
       ...(stats.messageCount === undefined
         ? {}
         : { messageCount: stats.messageCount }),
@@ -1029,6 +1035,16 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
    */
   async appendPrune(data: PruneWrite): Promise<void> {
     await this.messageStore.appendPrune(this.sessionId, data);
+  }
+
+  /**
+   * 工具截图批量移出请求上下文：写一条 tool_image/prune 事件。
+   *
+   * 与 appendPrune 同范式：裁剪语义只在 replayer 折叠时应用（单一事实源），
+   * 写入后 store revision 推进 → 下次 getSnapshot 全量重建。
+   */
+  async appendToolImagePrune(data: ToolImagePruneData): Promise<number> {
+    return this.messageStore.appendToolImagePrune(this.sessionId, data);
   }
 
   /**
@@ -1160,7 +1176,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     return sum;
   }
 
-  /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end 携带当前占用。
+  /** 纯裁剪（无括号）压缩路径的占用锚点：写一条带 heuristicTokens 的 context/stats。
    *  compacted 路径的锚点已由 appendCompact 的 compaction/end 承载，无需此调用。
    *  @param opts.beforeTokens 压缩前实测占用（压缩历史 before/after 对比）；
    *         opts.savings 本次裁剪节省（锚点之前者被显式扣减，否则 provider 锚点会抵消裁剪收益） */
@@ -1179,7 +1195,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         ? snap.prefixTokens[snap.prefixTokens.length - 1]
         : 0;
     const heuristicTokens = snap.preludeTokens + historyTokens;
-    const revision = await this.messageStore.recordContextAnchor(this.sessionId, {
+    const revision = await this.messageStore.appendContextStats(this.sessionId, {
+      turnId: this.currentTurnId ?? 'maintenance',
       usedTokens,
       heuristicTokens,
       effectiveContextWindow: this.getEffectiveContextWindow(),
@@ -1187,9 +1204,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       outputReserveTokens: this.getOutputReserveTokens(),
       messageCount: snap.view.length,
       breakdown: await this.getTokenBreakdown(),
-      ...(opts?.beforeTokens !== undefined
-        ? { beforeTokens: opts.beforeTokens }
-        : {}),
+      ...(opts?.beforeTokens === undefined
+        ? {}
+        : { beforeTokens: opts.beforeTokens }),
     });
     // 不改变消息视图，仅版本号前进 → 续期快照 revision；并把新锚点写进缓存快照，
     // 避免紧随其后的 getContextStats()/getTokenCount() 又读回被抵消的旧值

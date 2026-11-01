@@ -243,6 +243,47 @@ describe('replayer 折叠 - 视图占用锚点（OccupancyAnchor）', () => {
     expect(state.occupancyAnchor).toEqual({ kind: 'usage' });
   });
 
+  it('context/stats 带 heuristicTokens（anchor-stats）→ 设置占用锚点', () => {
+    const state = foldEvents([
+      turnStart('t1', 1),
+      assistantWithUsage('a1', 2, 1000),
+      {
+        type: 'context/stats' as const,
+        seq: 3,
+        time: 3,
+        data: {
+          turnId: 't1',
+          usedTokens: 500,
+          heuristicTokens: 300,
+          effectiveContextWindow: 8000,
+        },
+      },
+    ]);
+    expect(state.occupancyAnchor).toEqual({
+      kind: 'compaction',
+      usedTokens: 500,
+      heuristicTokens: 300,
+    });
+  });
+
+  it('普通 context/stats（无 heuristicTokens）不覆盖 usage 锚点', () => {
+    const state = foldEvents([
+      turnStart('t1', 1),
+      assistantWithUsage('a1', 2, 1000),
+      {
+        type: 'context/stats' as const,
+        seq: 3,
+        time: 3,
+        data: {
+          turnId: 't1',
+          usedTokens: 500,
+          effectiveContextWindow: 8000,
+        },
+      },
+    ]);
+    expect(state.occupancyAnchor).toEqual({ kind: 'usage' });
+  });
+
   it('压缩锚点之后的新回合 usage 消息接管锚点（顺序由回放保证）', () => {
     const state = foldEvents([
       turnStart('t1', 1),

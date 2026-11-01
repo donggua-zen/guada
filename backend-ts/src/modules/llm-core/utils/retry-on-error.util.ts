@@ -10,6 +10,7 @@
 
 import { Logger } from "@nestjs/common";
 import {
+  UpstreamError,
   UpstreamTimeoutError,
   UpstreamRateLimitError,
   UpstreamNetworkError,
@@ -71,6 +72,39 @@ const NETWORK_MESSAGE_RE =
   /ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|fetch failed|connection (?:error|failed|refused|reset)/i;
 
 // ==================== Shared utilities ====================
+
+/**
+ * 归一化传输层裸错误（adapter 兜底入口）。
+ *
+ * 流中断时 undici 抛裸 TypeError（如 "terminated"，cause.code=UND_ERR_SOCKET），
+ * 不经过 OpenAI SDK 的 APIError 包装，adapter 的 instanceof 分支接不住会原样上抛，
+ * 最终以 message="terminated" 透传到前端。这里按 error.code / cause.code 命中
+ * 传输错误码集合，包成类型化的 Upstream* 错误；无法识别的错误原样返回。
+ */
+export function normalizeTransportError(error: any): any {
+  if (!error || typeof error !== "object") return error;
+  if (error instanceof UpstreamError) return error;
+
+  // 用户中止（含 SDK 的 APIUserAbortError）不是传输故障，不能标成网络错误
+  if (error.name === "AbortError" || /abort/i.test(error.message ?? "")) {
+    return error;
+  }
+
+  const code = error.code ?? error.cause?.code;
+  if (typeof code === "string" && TIMEOUT_ERROR_CODES.has(code)) {
+    return new UpstreamTimeoutError(
+      `LLM API 连接超时: ${error.cause?.message || error.message}`,
+      error,
+    );
+  }
+  if (typeof code === "string" && NETWORK_ERROR_CODES.has(code)) {
+    return new UpstreamNetworkError(
+      `LLM API 连接中断: ${error.cause?.message || error.message}`,
+      error,
+    );
+  }
+  return error;
+}
 
 /**
  * Exponential backoff delay with ±20% jitter.

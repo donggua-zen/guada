@@ -12,7 +12,10 @@
  * - 无思考元数据的消息剥离后 metadata 引用不变（不额外复制）
  * - 纯函数契约：入参消息对象不被修改
  */
+import * as os from 'os';
+import * as path from 'path';
 import {
+  imageProjectionStep,
   reasoningPolicyStep,
   type TransformContext,
 } from '../../src/modules/chat/message-transform.pipeline';
@@ -111,5 +114,48 @@ describe('reasoningPolicyStep', () => {
     expect(msg.metadata.signature).toBe('sig-1');
     expect(msg.metadata.redactedData).toBe('enc-1');
     expect(msg.content.some((b) => b.type === 'reasoning')).toBe(true);
+  });
+});
+
+describe('imageProjectionStep', () => {
+  it('非多模态：prunedImages 与 images 一起投影为路径文案并删除字段', () => {
+    const ref = {
+      mediaType: 'image/png',
+      bytes: 10,
+      name: 'old.png',
+      url: path.join(os.tmpdir(), 'old.png'),
+      refType: 'local' as const,
+    };
+    const msg: Message = {
+      id: 't1',
+      role: 'tool',
+      kind: 'model',
+      source: { kind: 'tool', toolCallId: 'c1' },
+      metadata: {},
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'c1',
+          name: 'browser',
+          content: 'ok',
+          images: [],
+          prunedImages: [ref],
+        },
+      ],
+    };
+
+    const out = imageProjectionStep.apply([msg], {
+      ...baseCtx,
+      supportsImageInput: false,
+    });
+    const block = out[0].content[0] as {
+      content: string;
+      images?: unknown;
+      prunedImages?: unknown;
+    };
+    expect(block.prunedImages).toBeUndefined();
+    expect(block.images).toBeUndefined();
+    expect(block.content).toContain('old.png');
+    expect(block.content).toContain('image_recognize');
   });
 });

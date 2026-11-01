@@ -117,7 +117,8 @@ export const imageProjectionStep: TransformStep = {
       const hasImage = msg.content.some(
         (b) =>
           b.type === 'image' ||
-          (b.type === 'tool-result' && (b.images?.length ?? 0) > 0),
+          (b.type === 'tool-result' &&
+            ((b.images?.length ?? 0) > 0 || (b.prunedImages?.length ?? 0) > 0)),
       );
       if (!hasImage) return msg;
       return {
@@ -129,14 +130,22 @@ export const imageProjectionStep: TransformStep = {
               text: imageOmissionText(block.attachment, ctx),
             };
           }
-          if (block.type === 'tool-result' && block.images?.length) {
-            const omissions = block.images
+          if (
+            block.type === 'tool-result' &&
+            ((block.images?.length ?? 0) > 0 ||
+              (block.prunedImages?.length ?? 0) > 0)
+          ) {
+            const omissions = [
+              ...(block.images ?? []),
+              ...(block.prunedImages ?? []),
+            ]
               .map((attachment) => imageOmissionText(attachment, ctx))
               .join('\n');
-            // 从视图副本移除 images：adapter 只读 content，保留会让 fail-loud
+            // 从视图副本移除 images/prunedImages：adapter 只读 content，保留会让 fail-loud
             // 断言误判；存储层不受影响
             const rest = { ...block };
             delete rest.images;
+            delete rest.prunedImages;
             return {
               ...rest,
               content: `${rest.content}${rest.content ? '\n' : ''}${omissions}`,

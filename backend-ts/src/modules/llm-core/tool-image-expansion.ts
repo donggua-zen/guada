@@ -40,6 +40,9 @@ interface ImageGroup {
  * 每个带图工具先输出 `[Image returned by <toolName>]` 标签，再逐个输出 image 块
  * 与只读绝对路径注解（与 imagePathAnnotationStep 同文案），使模型能把图片与
  * 具体工具对应起来。无图片时原样返回入参（零拷贝）。
+ *
+ * 被 tool_image/prune 移出上下文的图片（`prunedImages`）不生成 image 块：
+ * 路径文案直接追加到对应 tool-result.content，模型仍可按路径调用 image_view。
  */
 export function expandToolResultImages(
   messages: readonly Message[],
@@ -66,11 +69,14 @@ export function expandToolResultImages(
     let lastToolMessage: Message | undefined;
     while (i < messages.length && messages[i].source.kind === 'tool') {
       const toolMessage = messages[i];
-      out.push(toolMessage);
-      lastToolMessage = toolMessage;
-      const block = toolMessage.content.find(
+      const sanitized = appendPrunedImagePaths(toolMessage, ctx);
+      if (sanitized !== toolMessage) changed = true;
+      out.push(sanitized);
+      lastToolMessage = sanitized;
+      const block = sanitized.content.find(
         (b): b is ToolResultBlock => b.type === 'tool-result',
       );
+      // 仅保留仍在上下文里的图片；prunedImages 已在 sanitize 时转成路径文案
       if (block?.images?.length) {
         groups.push({
           toolCallId: block.toolCallId,
@@ -87,6 +93,47 @@ export function expandToolResultImages(
   }
 
   return changed ? out : (messages as Message[]);
+}
+
+/**
+ * 把工具结果里被裁掉的图片（prunedImages）转成路径文案，追加到 tool-result.content。
+ * 返回新对象时一定已剥离 prunedImages，避免未知字段进入 wire JSON。
+ */
+function appendPrunedImagePaths(
+  message: Message,
+  ctx: ToolImageExpansionContext,
+): Message {
+  let changed = false;
+  const content = message.content.map((block) => {
+    if (block.type !== 'tool-result' || !block.prunedImages?.length) return block;
+    changed = true;
+    const { prunedImages, ...rest } = block;
+    const pathText = prunedImages
+      .map((image) => {
+        const imagePath = resolveModelVisiblePath(image, {
+          workspaceDir: ctx.workspaceDir,
+        });
+        const fallback =
+          image.name ??
+          (image.url?.startsWith('data:') ? 'inline image' : image.url) ??
+          'inline image';
+        return imagePath ?? fallback;
+      })
+      .join(', ');
+    const label =
+      prunedImages.length === 1
+        ? `Image file path: ${pathText}.`
+        : `Paths: ${pathText}.`;
+    const subject = prunedImages.length === 1 ? 'Image pruned' : 'Images pruned';
+    const placeholder =
+      `[${subject} from context to save space. ${label} ` +
+      `Call image_view with a path if you need to look at them again.]`;
+    return {
+      ...rest,
+      content: `${rest.content}${rest.content ? '\n' : ''}${placeholder}`,
+    };
+  });
+  return changed ? { ...message, content } : message;
 }
 
 /** 一组工具结果 → 一条隐藏 user 消息（标签 + image 块 + 只读路径注解） */
