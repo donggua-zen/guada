@@ -71,8 +71,9 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NEW_SESSION_ID } from '@/constants'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
 
 import { useI18n } from 'vue-i18n'
 import { Dismiss16Regular, QuestionCircle16Filled, Checkmark12Regular } from '@vicons/fluent'
@@ -291,7 +292,7 @@ function finishGuide(navigate = true): void {
   localStorage.setItem('hasCompletedSetup', 'true')
   localStorage.removeItem('setupGuideStep')
   visible.value = false
-  ElMessage.success(t('ui.setupGuide.completed'))
+  toast.success(t('ui.setupGuide.completed'))
   if (navigate) {
     router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
   }

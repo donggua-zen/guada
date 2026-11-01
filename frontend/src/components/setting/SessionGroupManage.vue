@@ -7,7 +7,7 @@
         </div>
         <!-- 新建分组 -->
         <div class="flex gap-2">
-            <el-input v-model="newGroupName" placeholder="输入新分组名称" maxlength="20" show-word-limit
+            <GdInput v-model="newGroupName" placeholder="输入新分组名称" maxlength="20" show-word-limit
                 @keyup.enter="handleCreateGroup" />
             <GdButton type="primary" @click="handleCreateGroup" :disabled="!newGroupName.trim()">
                 新建
@@ -76,17 +76,21 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInput from '@/components/ui/GdInput.vue';
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import draggable from 'vuedraggable'
 import { useSessionGroupStore } from '@/stores/sessionGroup'
 import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { ReOrderDotsHorizontal20Regular, Edit16Regular, Delete20Regular } from '@vicons/fluent'
 import GroupEditDialog from '@/components/session/GroupEditDialog.vue'
 import GroupIcon from '@/components/session/GroupIcon.vue'
 import type { SessionGroup } from '@/types/session'
 
 const sessionGroupStore = useSessionGroupStore()
-const { toast, confirm } = usePopup()
+const { t } = useI18n()
+const { confirm } = usePopup()
 
 const newGroupName = ref('')
 const localGroups = ref<SessionGroup[]>([])
@@ -117,17 +121,17 @@ const startEdit = (group: SessionGroup) => {
 }
 
 const handleDeleteGroup = async (group: SessionGroup) => {
-    const confirmed = await confirm('删除分组', `确定要删除分组 "${group.name}" 吗？该分组下的会话将自动归入未分组。`, {
+    const confirmed = await confirm(t('session.group.deleteTitle'), t('session.group.deleteConfirm', { name: group.name }), {
         type: 'warning',
-        confirmText: '删除',
-        cancelText: '取消'
+        confirmText: t('common.delete'),
+        cancelText: t('common.cancel')
     })
     if (confirmed) {
         const success = await sessionGroupStore.deleteGroup(group.id)
         if (success) {
-            toast.success('分组已删除')
+            toast.success(t('session.group.deleteSuccess'))
         } else {
-            toast.error('删除失败')
+            toast.error(t('session.group.deleteFailed'))
         }
     }
 }

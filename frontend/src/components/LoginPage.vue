@@ -12,23 +12,23 @@
 
       <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="flex flex-col gap-5" @keyup.enter="handleLogin">
         <el-form-item prop="username">
-          <el-input v-model="form.username" :placeholder="t('ui.login.username')" size="large" clearable>
+          <GdInput v-model="form.username" :placeholder="t('ui.login.username')" size="large" clearable>
             <template #prefix>
               <el-icon class="text-gray-400">
                 <UserIcon />
               </el-icon>
             </template>
-          </el-input>
+          </GdInput>
         </el-form-item>
 
         <el-form-item prop="password">
-          <el-input v-model="form.password" type="password" show-password :placeholder="t('ui.login.password')" size="large">
+          <GdInput v-model="form.password" type="password" show-password :placeholder="t('ui.login.password')" size="large">
             <template #prefix>
               <el-icon class="text-gray-400">
                 <LockIcon />
               </el-icon>
             </template>
-          </el-input>
+          </GdInput>
         </el-form-item>
 
         <div class="flex justify-between items-center">
@@ -57,18 +57,18 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { NetworkError } from '@/utils/errors'
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
-import { usePopup } from '../composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import CustomTitlebar from './CustomTitlebar.vue'
 
 // Element Plus 组件导入
-import { ElForm, ElFormItem, ElInput, ElIcon, ElCheckbox } from 'element-plus';
+import { ElForm, ElFormItem, ElIcon, ElCheckbox } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInput from '@/components/ui/GdInput.vue';
 
 import type { FormInstance } from 'element-plus'
 
 const authStore = useAuthStore()
 // 消息提示
-const { toast } = usePopup()
 const { t } = useI18n()
 
 const router = useRouter()

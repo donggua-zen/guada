@@ -7,7 +7,7 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock('@/services/ApiService', () => ({ apiService: apiMocks }))
 
 const messageMocks = vi.hoisted(() => ({ error: vi.fn() }))
-vi.mock('element-plus', () => ({ ElMessage: messageMocks }))
+vi.mock('@/components/ui/toastService', () => ({ toast: messageMocks }))
 
 vi.mock('@/locales', () => ({ t: (key: string) => key }))
 

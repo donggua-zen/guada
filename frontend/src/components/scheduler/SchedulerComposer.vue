@@ -49,12 +49,12 @@
         </button>
 
         <div v-if="outputTarget === 'existing'" class="session-picker">
-          <el-input :model-value="sessionKeyword" size="small" :placeholder="t('scheduler.composer.searchSession')"
+          <GdInput :model-value="sessionKeyword" size="small" :placeholder="t('scheduler.composer.searchSession')"
             clearable @update:model-value="handleSessionSearch">
             <template #prefix>
               <el-icon :size="14"><Search16Regular /></el-icon>
             </template>
-          </el-input>
+          </GdInput>
           <div class="session-list">
             <button v-for="session in sessionOptions" :key="session.id" type="button" class="session-row"
               :class="{ active: session.id === modelValue.targetSessionId }" @click="selectSession(session)">
@@ -86,7 +86,7 @@
           @update:attachments="patch({ attachments: $event })" />
       </div>
 
-      <el-input class="composer-textarea" type="textarea" resize="none" :model-value="modelValue.prompt"
+      <GdInput class="composer-textarea" type="textarea" resize="none" :model-value="modelValue.prompt"
         :autosize="{ minRows: 4, maxRows: 12 }" :placeholder="t('scheduler.composer.placeholder')"
         @update:model-value="patch({ prompt: $event })" />
       <p v-if="promptError" class="composer-prompt-error">{{ promptError }}</p>
@@ -155,7 +155,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElInput, ElIcon } from 'element-plus'
+import { ElIcon } from 'element-plus';
 import {
   Checkmark16Filled,
   ChevronDown16Regular,
@@ -184,6 +184,7 @@ import {
 import type { Agent } from '@/types/agent'
 import type { Session } from '@/types/session'
 import type { SchedulerComposerValue } from './composer.types'
+import GdInput from '@/components/ui/GdInput.vue';
 
 const DEFAULT_AGENT_ID = 'assistant-agent'
 

@@ -398,6 +398,13 @@ function applyDomainEvent(
       }, mode);
       return;
     }
+    case "tool_image/prune": {
+      upsertToolImagePruneCard(sessionStore, sessionId, {
+        seq: ev.seq,
+        ...ev.data,
+      });
+      return;
+    }
     case "user/message": {
       // 构造 user 消息束（复用 messageToBundle：text 块 + 附件块；消息级字段挂 bundle）
       const data = ev.data;
@@ -671,6 +678,85 @@ function upsertCompressResultPlaceholder(
 
 
 /**
+ * 工具截图裁剪完成 → 时间线事件卡。
+ *
+ * persisted domain event（tool_image/prune）与 live wire event（tool_image_prune）
+ * 共用本 helper；messageId 用落库 seq，保证刷新重放与实时帧只留一张卡。
+ */
+function upsertToolImagePruneCard(
+  sessionStore: ProjectorSessionStore,
+  sessionId: string,
+  payload: {
+    seq: number;
+    keepTurns: number;
+    keepFromSeq: number;
+    boundaryMessageId?: string;
+    imageCount: number;
+    prunedBytes: number;
+    prunedTokens: number;
+  },
+): void {
+  const turns = sessionStore.getTurns(sessionId) || [];
+  const messageId = `__tool_image_prune_${payload.seq}`;
+  for (const turn of turns) {
+    if (Array.isArray(turn.messages) && turn.messages.some((m) => m.messageId === messageId)) {
+      return;
+    }
+  }
+
+  const now = new Date().toISOString();
+  const metadata = {
+    eventType: "tool-image-prune",
+    toolImagePrune: {
+      keepTurns: payload.keepTurns,
+      keepFromSeq: payload.keepFromSeq,
+      boundaryMessageId: payload.boundaryMessageId,
+      imageCount: payload.imageCount,
+      prunedBytes: payload.prunedBytes,
+      prunedTokens: payload.prunedTokens,
+      pruneSeq: payload.seq,
+    },
+  };
+  const eventBundle: MessageBundle = {
+    messageId,
+    role: "event",
+    metadata,
+    blocks: [
+      {
+        id: messageId,
+        role: "event",
+        messageId,
+        content: "",
+        reasoningContent: null,
+        additionalKwargs: [],
+        metadata,
+        createdAt: now,
+        updatedAt: now,
+        thinkingStartedAt: null,
+        thinkingDurationMs: null,
+        state: { isStreaming: false, isThinking: false },
+      },
+    ],
+  };
+  const currentTurnId = getCurrentTurn(sessionId);
+  const hostTurn = currentTurnId
+    ? turns.find((t) => t.id === currentTurnId)
+    : undefined;
+  if (hostTurn) {
+    if (!Array.isArray(hostTurn.messages)) hostTurn.messages = [];
+    hostTurn.messages.push(eventBundle);
+  } else {
+    turns.push({
+      id: eventBundle.messageId,
+      kind: "event",
+      metadata,
+      visible: true,
+      messages: [eventBundle],
+    });
+  }
+}
+
+/**
  * 上下文窗口变化提示（模型切换 / 会话 token 上限调整）。
  *
  * 纯 UI 事件、不落库：对话流内只保留最近一条，刷新后消失；
@@ -786,6 +872,11 @@ export function applyChunkToStore(
     return;
   }
   // 引擎级附属（上下文压缩）
+  // 工具截图裁剪完成：维护操作事件卡（live 与 replay 共用 helper，按 seq 去重）
+  if (chunk.type === "tool_image_prune") {
+    upsertToolImagePruneCard(sessionStore, sessionId, chunk);
+    return;
+  }
   // 上下文窗口变化提示（模型切换/会话上限调整）：对话流内只保留最近一条
   if (chunk.type === "context_window_changed") {
     upsertContextNotice(sessionStore, sessionId, chunk);

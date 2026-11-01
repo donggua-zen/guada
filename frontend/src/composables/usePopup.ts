@@ -1,14 +1,6 @@
 // src/composables/usePopup.ts
-import { type VNode } from 'vue'
-import {
-    ElMessage,
-    ElNotification,
-    type MessageHandler,
-    type NotificationOptions
-} from 'element-plus'
 import { t } from '@/locales'
 import {
-    closeAllModals,
     openModal,
     type DialogSize
 } from '@/components/ui/modalService'
@@ -23,8 +15,10 @@ export interface ConfirmOptions {
     /** 内容是否按 HTML 渲染。默认 false；只有可信内容才应显式开启。 */
     html?: boolean
     size?: DialogSize
-    /** 确认按钮使用危险色（删除类操作）。 */
+    /** 确认按钮使用危险色（删除类操作，type='error' 时默认 true）。 */
     danger?: boolean
+    /** 显式层级（浮层内打开、且浮层保持打开时传 3500） */
+    zIndex?: number
 }
 
 /**
@@ -36,10 +30,8 @@ export interface PromptOptions {
     confirmText?: string
     cancelText?: string
     required?: boolean
-    /** 返回 true 表示通过；返回字符串表示失败并展示该文案。 */
-    validation?: (value: string) => boolean | string
-    /** validation 返回 false 时展示的提示。 */
-    validationMessage?: string
+    /** 校验器：通过返回 null，失败返回错误文案（与 modalService 的 ModalInputOptions.validator 同签名）。 */
+    validation?: (value: string) => string | null
     inputType?: 'text' | 'password'
     size?: DialogSize
 }
@@ -59,66 +51,26 @@ export interface EditTextOptions {
 }
 
 /**
- * 单按钮提示框配置
- */
-export interface AlertOptions {
-    type?: 'info' | 'success' | 'warning' | 'error'
-    confirmText?: string
-    html?: boolean
-    size?: DialogSize
-}
-
-/**
- * Toast 消息接口
- */
-export interface ToastApi {
-    success: (content: string, duration?: number) => void
-    error: (content: string, duration?: number) => void
-    warning: (content: string, duration?: number) => void
-    info: (content: string, duration?: number) => void
-    /** ElMessage.loading 的返回句柄（带 .close()；运行时始终有值，类型上保留 undefined 余地） */
-    loading: (content: string, duration?: number) => MessageHandler | undefined
-}
-
-/**
- * 通知消息接口
- */
-export interface NotifyApi {
-    success: (title: string, content: string, options?: Partial<NotificationOptions>) => void
-    error: (title: string, content: string, options?: Partial<NotificationOptions>) => void
-    warning: (title: string, content: string, options?: Partial<NotificationOptions>) => void
-    info: (title: string, content: string, options?: Partial<NotificationOptions>) => void
-}
-
-/**
- * 加载状态接口
- */
-export interface LoadingApi {
-    /** 返回 ElMessage.loading 的句柄（MessageHandler.close） */
-    start: (text?: string) => MessageHandler | undefined
-    wrap: <T>(promiseFn: Promise<T>, loadingText?: string) => Promise<T>
-}
-
-/**
  * usePopup 返回值类型
+ *
+ * 轻提示（toast/notify/loading）不在此处——统一走模块级 toastService：
+ * `import { toast, notify } from '@/components/ui/toastService'`。
+ * hook 门面在 store/utils 等非组件环境够不着，模块级单例才是全场景平权入口。
  */
 export interface UsePopupReturn {
     confirm: (title: string, content: string, options?: ConfirmOptions) => Promise<boolean>
-    confirmSuccess: (title: string, content: string, options?: ConfirmOptions) => Promise<boolean>
-    confirmError: (title: string, content: string, options?: ConfirmOptions) => Promise<boolean>
     prompt: (title: string, options?: PromptOptions) => Promise<string | null>
     editText: (options?: EditTextOptions) => Promise<string | null>
-    dialog: (options: { title: string; content: VNode | string; confirmText?: string; cancelText?: string }) => Promise<boolean>
-    alert: (title: string, content: string, options?: AlertOptions) => Promise<boolean>
-    toast: ToastApi
-    notify: NotifyApi
-    loading: LoadingApi
-    closeAll: () => void
 }
 
 /**
  * 常用弹窗 Hook
- * 命令式弹窗统一委托给 GdDialogHost（底层 GdDialog），保证与声明式弹窗同源。
+ *
+ * 命令式弹窗统一委托给 GdDialogHost（底层 GdDialog + modalService），保证与声明式弹窗同源。
+ * 职责边界（照 zcode 对照评估的结论）：
+ * - 零状态一次性确认/输入 → 本门面（confirm/prompt/editText）
+ * - 有状态、表单校验、自定义插槽内容 → 声明式 <GdDialog>
+ * - 轻提示 → 直连 toastService（toast/notify）
  */
 export function usePopup(): UsePopupReturn {
     /**
@@ -135,7 +87,8 @@ export function usePopup(): UsePopupReturn {
             cancelText = t('common.cancel'),
             html = false,
             size = 'xs',
-            danger = type === 'error'
+            danger = type === 'error',
+            zIndex
         } = options
 
         const result = await openModal({
@@ -148,23 +101,10 @@ export function usePopup(): UsePopupReturn {
             confirmText,
             cancelText,
             danger,
-            closeOnClickModal: false
+            closeOnClickModal: false,
+            ...(zIndex === undefined ? {} : { zIndex })
         })
         return result.action === 'confirm'
-    }
-
-    /**
-     * 成功确认对话框
-     */
-    const confirmSuccess = (title: string, content: string, options: ConfirmOptions = {}): Promise<boolean> => {
-        return confirm(title, content, { ...options, type: 'success' })
-    }
-
-    /**
-     * 危险操作确认对话框
-     */
-    const confirmError = (title: string, content: string, options: ConfirmOptions = {}): Promise<boolean> => {
-        return confirm(title, content, { ...options, type: 'error', danger: true })
     }
 
     /**
@@ -178,7 +118,6 @@ export function usePopup(): UsePopupReturn {
             cancelText = t('common.cancel'),
             required = true,
             validation,
-            validationMessage = t('session.popup.invalidInput'),
             inputType = 'text',
             size = 'xs'
         } = options
@@ -195,18 +134,12 @@ export function usePopup(): UsePopupReturn {
                 defaultValue,
                 placeholder,
                 required,
-                requiredMessage: t('session.popup.contentRequired'),
                 validator: validation
-                    ? (value: string) => {
-                        const result = validation(value)
-                        if (result === true) return null
-                        return typeof result === 'string' ? result : validationMessage
-                    }
-                    : undefined
             }
         })
 
-        return result.action === 'confirm' ? (result.value ?? '').trim() : null
+        // trim 已由 modalService.submitModal 收口（rawValue.trim()），此处直接透传
+        return result.action === 'confirm' ? (result.value ?? '') : null
     }
 
     /**
@@ -235,205 +168,17 @@ export function usePopup(): UsePopupReturn {
                 defaultValue,
                 placeholder,
                 rows,
-                required,
-                requiredMessage: t('session.popup.contentRequired')
+                required
             }
         })
 
-        return result.action === 'confirm' ? (result.value ?? '').trim() : null
-    }
-
-    /**
-     * 通用自定义对话框
-     */
-    const dialog = async (options: {
-        title: string
-        content: VNode | string
-        confirmText?: string
-        cancelText?: string
-    }): Promise<boolean> => {
-        const result = await openModal({
-            title: options.title,
-            content: options.content,
-            size: 'sm',
-            showCancel: true,
-            confirmText: options.confirmText || t('common.confirm'),
-            cancelText: options.cancelText || t('common.cancel'),
-            closeOnClickModal: false
-        })
-        return result.action === 'confirm'
-    }
-
-    /**
-     * 单按钮提示框
-     */
-    const alert = async (
-        title: string,
-        content: string,
-        options: AlertOptions = {}
-    ): Promise<boolean> => {
-        const {
-            type = 'info',
-            confirmText = t('common.ok'),
-            html = false,
-            size = 'xs'
-        } = options
-
-        const result = await openModal({
-            title,
-            content,
-            icon: type,
-            html,
-            size,
-            showCancel: false,
-            confirmText,
-            closeOnClickModal: false
-        })
-        return result.action === 'confirm'
-    }
-
-    /**
-     * Toast 消息提示
-     */
-    const toast: ToastApi = {
-        success: (content: string, duration: number = 2000): void => {
-            ElMessage.success({
-                message: content,
-                duration,
-                showClose: true
-            })
-        },
-
-        error: (content: string, duration: number = 3000): void => {
-            ElMessage.error({
-                message: content,
-                duration,
-                showClose: true
-            })
-        },
-
-        warning: (content: string, duration: number = 2500): void => {
-            ElMessage.warning({
-                message: content,
-                duration,
-                showClose: true
-            })
-        },
-
-        info: (content: string, duration: number = 2000): void => {
-            ElMessage.info({
-                message: content,
-                duration,
-                showClose: true
-            })
-        },
-
-        loading: (content: string, duration: number = 0): MessageHandler | undefined => {
-            // ElMessage.loading 不在 Element Plus 类型定义中，但运行时可用
-            const messageFn = ElMessage as typeof ElMessage & {
-                loading(opts: Record<string, unknown>): MessageHandler
-            };
-            return messageFn.loading({
-                message: content,
-                duration,
-                showClose: true
-            })
-        }
-    }
-
-    /**
-     * 通知消息
-     */
-    const notify: NotifyApi = {
-        success: (title: string, content: string, options: Partial<NotificationOptions> = {}): void => {
-            ElNotification.success({
-                title,
-                message: content,
-                duration: 3000,
-                ...options
-            })
-        },
-
-        error: (title: string, content: string, options: Partial<NotificationOptions> = {}): void => {
-            ElNotification.error({
-                title,
-                message: content,
-                duration: 5000,
-                ...options
-            })
-        },
-
-        warning: (title: string, content: string, options: Partial<NotificationOptions> = {}): void => {
-            ElNotification.warning({
-                title,
-                message: content,
-                duration: 4000,
-                ...options
-            })
-        },
-
-        info: (title: string, content: string, options: Partial<NotificationOptions> = {}): void => {
-            ElNotification.info({
-                title,
-                message: content,
-                duration: 3000,
-                ...options
-            })
-        }
-    }
-
-    /**
-     * 加载状态管理
-     */
-    const loading: LoadingApi = {
-        start: (text?: string): MessageHandler | undefined => {
-            return toast.loading(text || t('session.popup.processing'))
-        },
-
-        wrap: async <T>(promiseFn: Promise<T>, loadingText: string = t('session.popup.processing')): Promise<T> => {
-            const handler = loading.start(loadingText)
-            try {
-                const result = await promiseFn
-                handler?.close()
-                return result
-            } catch (error) {
-                handler?.close()
-                throw error
-            }
-        }
-    }
-
-    /**
-     * 关闭所有轻提示与命令式弹窗
-     */
-    const closeAll = (): void => {
-        ElMessage.closeAll()
-        closeAllModals()
+        return result.action === 'confirm' ? (result.value ?? '') : null
     }
 
     return {
-        // 确认对话框
         confirm,
-        confirmSuccess,
-        confirmError,
-
-        // 输入弹窗
         prompt,
         editText,
-        dialog,
-        alert,
-
-        // 消息提示
-        toast,
-
-        // 通知
-        notify,
-
-        // 加载状态
-        loading,
-
-        // 工具方法
-        closeAll,
     }
 }
 

@@ -58,7 +58,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { writeTextToClipboard } from '@/utils/clipboard'
 import { ref, computed, watch, nextTick } from 'vue';
-import { ElMessage } from 'element-plus';
+
 import { useI18n } from 'vue-i18n';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
@@ -67,6 +67,7 @@ import { VsCode, WindowsExplorer, Finder } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
+import { toast } from '@/components/ui/toastService';
 import TreeView, { type TreeViewRow } from './TreeView.vue';
 import type { WorkspaceNode } from '@/types/workspace';
 import { useWorkspaceTreeStore } from '@/stores/workspaceTree';
@@ -312,7 +313,7 @@ function closeContextMenu() {
  */
 async function writeToClipboard(text: string): Promise<void> {
     const ok = await writeTextToClipboard(text);
-    if (!ok) ElMessage.error(t('chat.workspace.copyFailed'));
+    if (!ok) toast.error(t('chat.workspace.copyFailed'));
 }
 
 /**
@@ -323,7 +324,7 @@ async function handleCopyFileName() {
     if (!node) return;
 
     await writeToClipboard(node.name);
-    ElMessage.success(t('chat.workspace.fileNameCopied'));
+    toast.success(t('chat.workspace.fileNameCopied'));
     closeContextMenu();
 }
 
@@ -338,7 +339,7 @@ async function handleCopyFilePath() {
         // 走 store 的会话级缓存（目录树加载时已解析过，通常 0 请求）
         const workspacePath = await treeStore.ensureWorkspacePath(props.sessionId);
         if (!workspacePath) {
-            ElMessage.error(t('chat.workspace.workspacePathError'));
+            toast.error(t('chat.workspace.workspacePathError'));
             closeContextMenu();
             return;
         }
@@ -349,10 +350,10 @@ async function handleCopyFilePath() {
         const fullPath = workspacePath + separator + relativePath;
 
         await writeToClipboard(fullPath);
-        ElMessage.success(t('chat.workspace.pathCopied'));
+        toast.success(t('chat.workspace.pathCopied'));
     } catch (error) {
         console.error('Failed to get workspace path for copy:', error);
-        ElMessage.error(t('common.copyFailed'));
+        toast.error(t('common.copyFailed'));
     }
     closeContextMenu();
 }
@@ -368,7 +369,7 @@ async function handleOpenInExplorer() {
         // 走 store 的会话级缓存（目录树加载时已解析过，通常 0 请求）
         const workspacePath = await treeStore.ensureWorkspacePath(props.sessionId);
         if (!workspacePath) {
-            ElMessage.error(t('chat.workspace.workspacePathError'));
+            toast.error(t('chat.workspace.workspacePathError'));
             closeContextMenu();
             return;
         }
@@ -387,7 +388,7 @@ async function handleOpenInExplorer() {
         }
     } catch (error) {
         console.error('Failed to open in explorer:', error);
-        ElMessage.error(t('chat.workspace.openFailed'));
+        toast.error(t('chat.workspace.openFailed'));
     }
     closeContextMenu();
 }
@@ -413,7 +414,7 @@ async function handleOpenInVSCode() {
         // 走 store 的会话级缓存（目录树加载时已解析过，通常 0 请求）
         const workspacePath = await treeStore.ensureWorkspacePath(props.sessionId);
         if (!workspacePath) {
-            ElMessage.error(t('chat.workspace.workspacePathError'));
+            toast.error(t('chat.workspace.workspacePathError'));
             closeContextMenu();
             return;
         }
@@ -423,10 +424,10 @@ async function handleOpenInVSCode() {
         const fullPath = workspacePath + separator + relativePath;
 
         await window.electronAPI!.openWithEditor(fullPath, 'vscode');
-        ElMessage.success(t('chat.workspace.openedInVSCode'));
+        toast.success(t('chat.workspace.openedInVSCode'));
     } catch (error) {
         console.error('Failed to open in VSCode:', error);
-        ElMessage.error(t('chat.workspace.openVSCodeFailed'));
+        toast.error(t('chat.workspace.openVSCodeFailed'));
     }
     closeContextMenu();
 }
@@ -449,7 +450,7 @@ async function handleRename() {
         validation: (val: string) => {
             if (!val || !val.trim()) return t('chat.workspace.nameRequired');
             if (val.includes('/') || val.includes('\\')) return t('chat.workspace.nameNoSeparator');
-            return true;
+            return null;
         },
     });
 
@@ -466,7 +467,7 @@ async function handleRename() {
         );
 
         if (result.success) {
-            ElMessage.success(t('chat.workspace.renameSuccess'));
+            toast.success(t('chat.workspace.renameSuccess'));
             // 本地更新节点名称，避免重新加载整棵树
             const oldPath = node.path;
             node.name = newName.trim();
@@ -495,7 +496,7 @@ async function handleRename() {
         }
     } catch (error) {
         console.error('[WorkspaceTreePanel] Rename failed:', error);
-        ElMessage.error(getErrorMessage(error) || t('chat.workspace.renameFailed'));
+        toast.error(getErrorMessage(error) || t('chat.workspace.renameFailed'));
     }
     closeContextMenu();
 }
@@ -536,7 +537,7 @@ async function handleDelete() {
         );
 
         if (result.success) {
-            ElMessage.success(t('common.deleteSuccess'));
+            toast.success(t('common.deleteSuccess'));
             // 如果删除的是已打开的文件标签，关闭对应标签
             const deleteTabKey = `file:${node.path}`;
             const deleteTab = tabStore.tabs.find(t => t.key === deleteTabKey);
@@ -546,7 +547,7 @@ async function handleDelete() {
         }
     } catch (error) {
         console.error('[WorkspaceTreePanel] Delete failed:', error);
-        ElMessage.error(getErrorMessage(error) || t('chat.workspace.deleteFailed'));
+        toast.error(getErrorMessage(error) || t('chat.workspace.deleteFailed'));
     }
     closeContextMenu();
 }

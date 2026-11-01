@@ -134,6 +134,18 @@ export type DomainEvent =
       };
     }
   | { type: "message/prune"; seq: number; data: { messageId: string; newContent: string; strategy?: string; prunedBytes?: number } }
+  | {
+      type: "tool_image/prune";
+      seq: number;
+      data: {
+        keepTurns: number;
+        keepFromSeq: number;
+        boundaryMessageId?: string;
+        imageCount: number;
+        prunedBytes: number;
+        prunedTokens: number;
+      };
+    }
   | { type: "command/run"; seq: number; data: Record<string, unknown> }
   | { type: "command/done"; seq: number; data: Record<string, unknown> }
   | { type: "compaction/start"; seq: number; data: Record<string, unknown> }
@@ -170,6 +182,10 @@ export type DomainEvent =
         };
         /** 本次请求携带的媒体负载（旧数据缺省） */
         request?: RequestMetrics;
+        /** 可选：与 usedTokens 配套的启发式总量（裁剪后占用锚点） */
+        heuristicTokens?: number;
+        /** 可选：裁剪前占用（压缩历史 before） */
+        beforeTokens?: number;
       };
     }
   | { type: "workflow/event"; seq: number; data: import("./workflow.types").WorkflowEventData }

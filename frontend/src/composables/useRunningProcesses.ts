@@ -1,6 +1,6 @@
 import { computed, nextTick, ref, toValue, watch, watchEffect } from "vue";
 import type { MaybeRefOrGetter } from "vue";
-import { ElMessage } from "element-plus";
+
 import { apiService, type UiJobInfo } from "@/services/ApiService";
 import { useJobsStore } from "@/stores/jobs";
 import { useTabStore } from "@/stores/tab";
@@ -8,6 +8,7 @@ import { useLayoutStore } from "@/stores/layout";
 import { getApiErrorStatus } from "@/utils/errorMessage";
 import { formatProcessDuration } from "@/utils/processDisplay";
 import { t } from "@/locales";
+import { toast } from '@/components/ui/toastService';
 
 /** 运行时胶囊只展示有日志面板的进程类 job；子 Agent/Workflow 有各自的 UI。 */
 const PROCESS_KINDS = new Set(["shell", "remote-shell", "pty"]);
@@ -49,12 +50,12 @@ export function useRunningProcesses(sessionId: MaybeRefOrGetter<string | undefin
     if (!sid) return;
     try {
       await apiService.killSessionJob(sid, job.id);
-      ElMessage.success(t("chat.workspace.processKilledToast"));
+      toast.success(t("chat.workspace.processKilledToast"));
     } catch (e) {
       // 404 = 已自然结束；快照会把它移出 running 列表
       if (getApiErrorStatus(e) !== 404) {
         console.error("Failed to kill job:", e);
-        ElMessage.error(t("chat.workspace.processKillFailed"));
+        toast.error(t("chat.workspace.processKillFailed"));
       }
     }
     void load(true);

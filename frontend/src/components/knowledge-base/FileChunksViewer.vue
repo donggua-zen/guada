@@ -53,7 +53,7 @@ import { ArrowSync16Regular, Document24Regular } from '@vicons/fluent'
 import type { KBFile } from '@/stores/knowledgeBase'
 import type { KBChunk } from '@/services/modules/knowledge-base.api'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
-import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { apiService } from '@/services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
 
@@ -69,7 +69,6 @@ const emit = defineEmits<{
 
 const store = useKnowledgeBaseStore()
 const { t } = useI18n()
-const { toast } = usePopup()
 
 // 状态
 const showModal = ref(false)

@@ -26,11 +26,12 @@ import AgentListTab from './AgentListTab.vue'
 import AgentModal from './AgentModal.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useSelectedAgent } from '../../composables/useSelectedAgent'
 import type { Agent } from '@/types/agent'
 
-const { confirm, toast } = usePopup()
+const { confirm } = usePopup()
 const { t } = useI18n()
 const router = useRouter()
 const { setSelectedAgent } = useSelectedAgent()

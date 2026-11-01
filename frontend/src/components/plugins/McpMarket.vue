@@ -257,9 +257,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElAlert, ElIcon, ElMessage, ElTag } from 'element-plus'
+import { ElAlert, ElIcon, ElTag } from 'element-plus';
 import { MailInbox24Regular } from '@vicons/fluent'
 import GdButton from '@/components/ui/GdButton.vue'
+import { toast } from '@/components/ui/toastService';
 import GdDialog from '@/components/ui/GdDialog.vue'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import PluginListRow from './PluginListRow.vue'
@@ -455,7 +456,7 @@ async function handleImport() {
         )
         const changed = result.imported.length + result.updated.length
         if (changed > 0) {
-            ElMessage.success(t('plugins.mcpMarket.importSuccess', { count: changed }))
+            toast.success(t('plugins.mcpMarket.importSuccess', { count: changed }))
             showAddDialog.value = false
             emit('imported')
         }

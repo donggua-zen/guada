@@ -23,16 +23,14 @@
           <GdButton type="primary" :loading="saving" @click="handleSave">
             {{ t('scheduler.edit.save') }}
           </GdButton>
-          <el-dropdown v-if="isEdit" trigger="click" @command="handleCommand">
+          <DropdownMenu v-if="isEdit" @command="handleCommand">
             <button type="button" class="icon-btn" :aria-label="t('scheduler.edit.moreActions')">
               <el-icon :size="18"><MoreHorizontal20Filled /></el-icon>
             </button>
             <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="delete">{{ t('scheduler.edit.delete') }}</el-dropdown-item>
-              </el-dropdown-menu>
+              <DropdownMenuItem command="delete">{{ t('scheduler.edit.delete') }}</DropdownMenuItem>
             </template>
-          </el-dropdown>
+          </DropdownMenu>
         </div>
       </div>
     </div>
@@ -55,7 +53,7 @@
         <!-- 标题 -->
         <section class="field">
           <label class="field-label">{{ t('scheduler.edit.titleLabel') }}</label>
-          <el-input class="title-input" :model-value="form.name" maxlength="100"
+          <GdInput class="title-input" :model-value="form.name" maxlength="100"
             :placeholder="t('scheduler.edit.titlePlaceholder')" @update:model-value="onNameUpdate" />
           <p v-if="errors.name" class="field-error">{{ errors.name }}</p>
         </section>
@@ -100,7 +98,7 @@
                 <span class="setting-label">{{ t('scheduler.edit.retryCount') }}</span>
                 <span class="setting-desc">{{ t('scheduler.edit.retryCountHint') }}</span>
               </div>
-              <el-input-number v-model="form.maxRetries" :min="0" :max="10" controls-position="right"
+              <GdInputNumber v-model="form.maxRetries" :min="0" :max="10"
                 class="setting-control" />
             </div>
             <div class="setting-row">
@@ -109,7 +107,7 @@
                 <span class="setting-desc">{{ t('scheduler.edit.retryIntervalHint') }}</span>
               </div>
               <div class="interval-control">
-                <el-input-number v-model="form.retryInterval" :min="10" :max="3600" controls-position="right"
+                <GdInputNumber v-model="form.retryInterval" :min="10" :max="3600"
                   class="setting-control" />
                 <span class="setting-unit">{{ t('scheduler.edit.seconds') }}</span>
               </div>
@@ -125,19 +123,16 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  ElInput,
-  ElDatePicker,
-  ElInputNumber,
-  ElIcon,
-  ElDropdown,
-  ElDropdownMenu,
-  ElDropdownItem,
-} from 'element-plus'
+import { ElDatePicker, ElIcon } from 'element-plus';
 import { ArrowLeft24Filled, ChevronDown16Regular, MoreHorizontal20Filled } from '@vicons/fluent'
 import GdButton from '@/components/ui/GdButton.vue'
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdInput from '@/components/ui/GdInput.vue'
+import DropdownMenu from '@/components/ui/DropdownMenu.vue'
+import DropdownMenuItem from '@/components/ui/DropdownMenuItem.vue'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { getErrorMessage } from '@/utils/errorMessage'
 import ScheduleSentence from './ScheduleSentence.vue'
 import SchedulerComposer from './SchedulerComposer.vue'
@@ -173,7 +168,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const { toast, confirm } = usePopup()
+const { confirm } = usePopup()
 
 const bodyRef = ref<HTMLElement | null>(null)
 const saving = ref(false)

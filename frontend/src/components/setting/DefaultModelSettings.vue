@@ -13,7 +13,7 @@
                         </div>
                         <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('title')"
                             @keydown="(e) => onTriggerKeydown(e, 'title')">
-                            <el-input :model-value="titleSummaryModelName" :placeholder="t('settings.defaultModel.selectModel')"
+                            <GdInput :model-value="titleSummaryModelName" :placeholder="t('settings.defaultModel.selectModel')"
                                 readonly class="w-full">
                                 <template #prefix>
                                     <OpenAI class="w-4 h-4" />
@@ -27,7 +27,7 @@
                                         <ChevronDown20Regular />
                                     </el-icon>
                                 </template>
-                            </el-input>
+                            </GdInput>
                         </div>
                     </div>
                 </div>
@@ -44,7 +44,7 @@
                         </div>
                         <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('visual')"
                             @keydown="(e) => onTriggerKeydown(e, 'visual')">
-                            <el-input :model-value="visualAssistantModelName" :placeholder="t('settings.defaultModel.selectVisualModel')"
+                            <GdInput :model-value="visualAssistantModelName" :placeholder="t('settings.defaultModel.selectVisualModel')"
                                 readonly class="w-full">
                                 <template #prefix>
                                     <OpenAI class="w-4 h-4" />
@@ -58,7 +58,7 @@
                                         <ChevronDown20Regular />
                                     </el-icon>
                                 </template>
-                            </el-input>
+                            </GdInput>
                         </div>
                     </div>
                 </div>
@@ -75,7 +75,7 @@
                         </div>
                         <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('compression')"
                             @keydown="(e) => onTriggerKeydown(e, 'compression')">
-                            <el-input :model-value="historyCompressionModelName" :placeholder="t('settings.defaultModel.selectModel')"
+                            <GdInput :model-value="historyCompressionModelName" :placeholder="t('settings.defaultModel.selectModel')"
                                 readonly class="w-full">
                                 <template #prefix>
                                     <OpenAI class="w-4 h-4" />
@@ -89,7 +89,7 @@
                                         <ChevronDown20Regular />
                                     </el-icon>
                                 </template>
-                            </el-input>
+                            </GdInput>
                         </div>
                     </div>
                 </div>
@@ -100,13 +100,13 @@
         <GdDialog v-model="modelDialogVisible" :title="t('settings.defaultModel.selectModelTitle')" :size="isMobile ? 'full' : 'md'" :append-to-body="true"
             destroy-on-close>
             <div class="mb-4">
-                <el-input v-model="modelSearchText" :placeholder="t('settings.defaultModel.searchModel')" clearable>
+                <GdInput v-model="modelSearchText" :placeholder="t('settings.defaultModel.searchModel')" clearable>
                     <template #prefix>
                         <el-icon>
                             <Search20Filled />
                         </el-icon>
                     </template>
-                </el-input>
+                </GdInput>
             </div>
             <div class="model-list max-h-[60vh] overflow-y-auto">
                 <template v-for="provider in filteredProviders" :key="provider.id">
@@ -204,7 +204,7 @@ import {
 
 import { apiService } from '@/services/ApiService'
 
-import { usePopup } from '@/composables/usePopup'
+import { notify } from '@/components/ui/toastService';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 
@@ -215,12 +215,12 @@ import {
 } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import GdButton from '@/components/ui/GdButton.vue'
+import GdInput from '@/components/ui/GdInput.vue';
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px
 
 const { t } = useI18n()
-const { notify } = usePopup()
 
 // 表单引用（已移除 el-form，保留变量以便后续扩展）
 const chatFormRef = ref(null)

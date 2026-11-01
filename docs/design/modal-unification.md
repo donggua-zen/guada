@@ -76,9 +76,12 @@
 |---|---|---|
 | `--gd-z-modal` | 2000 | 弹窗遮罩 |
 | `--gd-z-popover` | 3000 | `GdPopover` / `DropdownMenu` |
+| 显式 `zIndex: 3500` | — | 从 `GdPopover` 内部打开、且浮层保持打开的 `GdDialog` |
 | `--gd-z-element` | 4000 | Element 浮层（`app.use(ElementPlus, { zIndex: 4000 })`） |
 | `--gd-z-context-menu` | 4500 | 右键菜单 |
 | `--gd-z-drag-mask` | 9000 | 拖拽遮罩 |
+
+> 浮层内弹窗：`GdDialog` 默认从 2000 起自动递增，低于 `GdPopover`(3000)。从浮层内部打开且浮层保持打开时（如 MemoPanel 的裁剪/历史/压缩确认），必须显式传 `:z-index="3500"`；这样既盖住浮层，又低于 Element 浮层(4000)，弹窗内的 `el-select` 等下拉仍能正常置顶。
 
 ## 命令式 API
 

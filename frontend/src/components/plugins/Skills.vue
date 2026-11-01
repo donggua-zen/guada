@@ -31,7 +31,7 @@
                     </GdButton>
                 </template>
                 <template v-else>
-                    <el-input
+                    <GdInput
                         v-model="marketKeyword"
                         :placeholder="t('plugins.skills.marketSearchPlaceholder')"
                         clearable
@@ -41,7 +41,7 @@
                         <template #prefix>
                             <el-icon><Search16Regular /></el-icon>
                         </template>
-                    </el-input>
+                    </GdInput>
                     <GdButton link size="small" :loading="marketLoading" @click="handleMarketRefresh">
                         <template #icon>
                             <el-icon :class="{ 'is-loading': marketLoading }">
@@ -96,9 +96,9 @@
                     </template>
                     <template #actions>
                         <GdTooltip v-if="skill.provider" :content="t('plugins.skills.pluginManaged')" placement="top">
-                            <el-switch :model-value="skill.enabled !== false" disabled size="small" />
+                            <GdSwitch :model-value="skill.enabled !== false" disabled size="small" />
                         </GdTooltip>
-                        <el-switch
+                        <GdSwitch
                             v-else
                             :model-value="skill.enabled !== false"
                             :loading="updatingSkills.has(skill.id)"
@@ -242,8 +242,11 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElTag, ElIcon, ElInput, ElUpload, ElSwitch } from 'element-plus';
+import { ElTag, ElIcon, ElUpload } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdInput from '@/components/ui/GdInput.vue';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 import type { UploadFile } from 'element-plus'
 import { ArrowSync16Regular, ArrowUpload16Regular, ArrowUpload24Regular, ArrowUpRight16Regular, Document16Regular, Dismiss16Regular, ArrowClockwise16Regular, Info24Regular, MailInbox24Regular, Search16Regular } from '@vicons/fluent'
@@ -449,7 +452,7 @@ async function loadSkills() {
     } catch (err) {
         console.error('加载 Skills 失败:', err)
         const errorMsg = getErrorMessage(err) || t('plugins.skills.loadFailed')
-        ElMessage.error(errorMsg)
+        toast.error(errorMsg)
         skills.value = []
     } finally {
         loading.value = false
@@ -478,7 +481,7 @@ async function handleToggleSkill(skillId: string, enabled: boolean) {
         // 失败回滚
         skill.enabled = previousState
         console.error('切换技能状态失败:', err)
-        ElMessage.error(getErrorMessage(err) || t('plugins.skills.toggleFailed'))
+        toast.error(getErrorMessage(err) || t('plugins.skills.toggleFailed'))
     } finally {
         updatingSkills.value.delete(skillId)
     }
@@ -524,13 +527,13 @@ async function handleScan() {
 
     try {
         await apiService.scanSkills()
-        ElMessage.success(t('plugins.skills.scanSuccess'))
+        toast.success(t('plugins.skills.scanSuccess'))
         // 扫描后重新加载列表
         await loadSkills()
     } catch (err) {
         console.error('扫描 Skills 失败:', err)
         const errorMsg = getErrorMessage(err) || t('plugins.skills.scanFailed')
-        ElMessage.error(errorMsg)
+        toast.error(errorMsg)
     } finally {
         scanning.value = false
     }
@@ -543,13 +546,13 @@ async function handleReloadSkill(skillId: string) {
     try {
         reloadingSkills.value.add(skillId)
         await apiService.reloadSkill(skillId)
-        ElMessage.success(t('plugins.skills.reloadSuccess'))
+        toast.success(t('plugins.skills.reloadSuccess'))
         // 重载后重新加载列表
         await loadSkills()
     } catch (err) {
         console.error('重载 Skill 失败:', err)
         const errorMsg = getErrorMessage(err) || t('plugins.skills.reloadFailed')
-        ElMessage.error(errorMsg)
+        toast.error(errorMsg)
     } finally {
         reloadingSkills.value.delete(skillId)
     }
@@ -576,7 +579,7 @@ async function handleViewDocumentation(skillId: string) {
         console.error('获取 Skill 文档失败:', err)
         const errorMsg: string = getErrorMessage(err) || t('plugins.skills.docLoadFailed')
         docError.value = errorMsg
-        ElMessage.error(errorMsg)
+        toast.error(errorMsg)
     } finally {
         loadingDoc.value = false
     }
@@ -625,7 +628,7 @@ function formatFileSize(bytes: number): string {
  */
 async function handleInstallSkill() {
     if (!selectedFile.value) {
-        ElMessage.warning(t('plugins.skills.installSelectWarning'))
+        toast.warning(t('plugins.skills.installSelectWarning'))
         return
     }
 
@@ -635,18 +638,18 @@ async function handleInstallSkill() {
         const response = await apiService.installSkill(selectedFile.value, forceOverwrite.value)
 
         if (response.success) {
-            ElMessage.success(response.message || t('common.createSuccess'))
+            toast.success(response.message || t('common.createSuccess'))
             showInstallDialog.value = false
             selectedFile.value = null
             forceOverwrite.value = false
             // 重新加载列表
             await loadSkills()
         } else {
-            ElMessage.error(response.message || t('plugins.skills.installFailed'))
+            toast.error(response.message || t('plugins.skills.installFailed'))
         }
     } catch (err) {
         console.error('安装 Skill 失败:', err)
-        ElMessage.error(getErrorMessage(err) || t('plugins.skills.installFailed'))
+        toast.error(getErrorMessage(err) || t('plugins.skills.installFailed'))
     } finally {
         installing.value = false
     }
@@ -673,15 +676,15 @@ async function handleUninstallSkill(skillId: string) {
         const response = await apiService.uninstallSkill(skillId)
 
         if (response.success) {
-            ElMessage.success(response.message || t('plugins.skills.uninstallSuccess'))
+            toast.success(response.message || t('plugins.skills.uninstallSuccess'))
             // 重新加载列表
             await loadSkills()
         } else {
-            ElMessage.error(response.message || t('plugins.skills.uninstallFailed'))
+            toast.error(response.message || t('plugins.skills.uninstallFailed'))
         }
     } catch (err) {
         console.error('卸载 Skill 失败:', err)
-        ElMessage.error(getErrorMessage(err) || t('plugins.skills.uninstallFailed'))
+        toast.error(getErrorMessage(err) || t('plugins.skills.uninstallFailed'))
     } finally {
         uninstallingSkills.value.delete(skillId)
     }

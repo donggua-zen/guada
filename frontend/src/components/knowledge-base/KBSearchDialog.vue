@@ -6,18 +6,18 @@
         <div class="search-input-section mb-4">
             <el-form :model="searchForm" label-width="80px">
                 <el-form-item :label="t('knowledge.search.kbLabel')">
-                    <el-select v-model="searchForm.kbId" :placeholder="t('knowledge.search.kbPlaceholder')" class="w-full" @change="handleKBChange">
-                        <el-option v-for="kb in knowledgeBases" :key="kb.id" :label="kb.name" :value="kb.id" />
-                    </el-select>
+                    <GdSelect v-model="searchForm.kbId" :placeholder="t('knowledge.search.kbPlaceholder')" class="w-full" @change="handleKBChange">
+                        <GdOption v-for="kb in knowledgeBases" :key="kb.id" :label="kb.name" :value="kb.id" />
+                    </GdSelect>
                 </el-form-item>
 
                 <el-form-item :label="t('knowledge.search.contentLabel')">
-                    <el-input v-model="searchForm.query" type="textarea" :rows="3" :placeholder="t('knowledge.search.contentPlaceholder')"
+                    <GdInput v-model="searchForm.query" type="textarea" :rows="3" :placeholder="t('knowledge.search.contentPlaceholder')"
                         @keyup.enter.ctrl="handleSearch" />
                 </el-form-item>
 
                 <el-form-item :label="t('knowledge.search.resultCount')">
-                    <el-slider v-model="searchForm.topK" :min="1" :max="20" :step="1" show-input />
+                    <GdSlider v-model="searchForm.topK" :min="1" :max="20" :step="1" show-input />
                 </el-form-item>
             </el-form>
 
@@ -133,18 +133,21 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdSlider from '@/components/ui/GdSlider.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Search16Regular, Search48Regular, ArrowSync16Regular } from '@vicons/fluent'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import type { KBSearchResult } from '@/services/modules/knowledge-base.api'
-import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { apiService } from '@/services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
 
 const { t } = useI18n()
-
 
 interface Props {
     modelValue: boolean
@@ -158,8 +161,6 @@ const emit = defineEmits<{
     'update:modelValue': [value: boolean]
     resultClick: [result: KBSearchResult]
 }>()
-
-const { toast } = usePopup()
 
 // 对话框可见性
 const dialogVisible = computed({

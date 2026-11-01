@@ -17,6 +17,11 @@ export { default as SegmentedToggle } from './SegmentedToggle.vue'
 export { default as MarkdownContent } from './MarkdownContent.vue'
 export { default as GdSplitpanes } from './GdSplitpanes.vue'
 export { default as GdPane } from './GdPane.vue'
+export { default as GdInput } from './GdInput.vue'
+export { default as GdSwitch } from './GdSwitch.vue'
+export { default as GdSelect } from './GdSelect.vue'
+export { default as GdInputNumber } from './GdInputNumber.vue'
+export { default as GdSlider } from './GdSlider.vue'
 
 // 异步组件版本，用于路由级别或条件渲染
 // import { defineAsyncComponent, DefineComponent } from 'vue'

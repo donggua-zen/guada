@@ -59,7 +59,7 @@ import { ArrowRight16Regular, Copy16Regular, Notepad20Regular } from '@vicons/fl
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
-import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { useThrottledValue } from '@/composables/useThrottledValue'
 import { openSessionPlanPanel } from '@/utils/sessionPlan'
 import { writeTextToClipboard } from '@/utils/clipboard'
@@ -80,7 +80,6 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const { toast } = usePopup()
 
 /** 预览用节流值：正文每个 token 都变，直接喂给 MarkdownContent 会每个 token
  *  重新 parse 整篇 + 全量 DOM diff（代价随文档长度增长）。复制仍取完整的 props.content。 */

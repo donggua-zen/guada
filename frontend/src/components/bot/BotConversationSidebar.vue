@@ -2,7 +2,7 @@
   <aside class="bot-chat-sidebar h-full flex flex-col">
     <!-- 搜索 -->
     <div class="shrink-0 px-3 pt-3 pb-2">
-      <el-input
+      <GdInput
         v-model="keyword"
         size="small"
         clearable
@@ -12,7 +12,7 @@
         <template #prefix>
           <el-icon><Search16Regular /></el-icon>
         </template>
-      </el-input>
+      </GdInput>
     </div>
 
     <!-- 加载 / 错误 / 无机器人 -->
@@ -309,8 +309,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElInput, ElIcon, ElMessage } from 'element-plus';
+import { ElIcon } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdInput from '@/components/ui/GdInput.vue';
 
 import { ChevronDown12Regular, ChevronRight12Regular, Chat20Regular, Document16Regular, Add16Regular, Search16Regular } from '@vicons/fluent'
 import { ScrollContainer } from '@/components/ui'
@@ -531,7 +533,7 @@ async function togglePin(conv: BotChatConversation) {
   try {
     await apiService.updateSession(conv.sessionId, { pinned: !conv.pinned })
   } catch (error) {
-    ElMessage.error(getErrorMessage(error) || t('bot.chat.pinFailed'))
+    toast.error(getErrorMessage(error) || t('bot.chat.pinFailed'))
     pendingPinKey.value = null
     return
   }

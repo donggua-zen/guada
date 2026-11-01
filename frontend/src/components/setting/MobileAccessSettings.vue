@@ -25,7 +25,7 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.mobileAccess.lanDesc') }}</span>
             </div>
             <div class="shrink-0">
-              <el-switch v-model="config.lanEnabled" :disabled="!config.passwordSet || savingLan" :loading="savingLan" @change="handleLanToggle" />
+              <GdSwitch v-model="config.lanEnabled" :disabled="!config.passwordSet || savingLan" :loading="savingLan" @change="handleLanToggle" />
             </div>
           </div>
           <div v-if="config.lanEnabled" class="px-4 py-3.5 border-t border-gray-100 dark:border-[#2e3035]">
@@ -63,7 +63,7 @@
                 <span :class="['w-1.5 h-1.5 rounded-full', publicStatusDotClass]"></span>
                 {{ publicStatusLabel }}
               </span>
-              <el-switch v-model="config.publicEnabled" :disabled="!config.passwordSet || savingPublic" :loading="savingPublic" @change="handlePublicToggle" />
+              <GdSwitch v-model="config.publicEnabled" :disabled="!config.passwordSet || savingPublic" :loading="savingPublic" @change="handlePublicToggle" />
             </div>
           </div>
 
@@ -94,15 +94,15 @@
             <div class="px-4 py-3.5 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.sshHost') }}</span>
-                <el-input v-model="sshForm.host" :placeholder="t('settings.mobileAccess.sshHostPlaceholder')" clearable />
+                <GdInput v-model="sshForm.host" :placeholder="t('settings.mobileAccess.sshHostPlaceholder')" clearable />
               </div>
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.sshPort') }}</span>
-                <el-input-number v-model="sshForm.port" :min="1" :max="65535" controls-position="right" class="w-full" />
+                <GdInputNumber v-model="sshForm.port" :min="1" :max="65535" class="w-full" />
               </div>
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.sshUsername') }}</span>
-                <el-input v-model="sshForm.username" placeholder="root" clearable />
+                <GdInput v-model="sshForm.username" placeholder="root" clearable />
               </div>
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.authMethod') }}</span>
@@ -114,23 +114,23 @@
 
               <div v-if="sshForm.authMethod === 'password'" class="flex flex-col gap-1.5 md:col-span-2">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.sshPassword') }}</span>
-                <el-input v-model="sshForm.password" type="password" show-password clearable
+                <GdInput v-model="sshForm.password" type="password" show-password clearable
                   :placeholder="config.hasPassword ? t('settings.mobileAccess.passwordKept') : ''" />
               </div>
               <div v-else class="flex flex-col gap-1.5 md:col-span-2">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.privateKeyPath') }}</span>
                 <div class="flex gap-2">
-                  <el-input v-model="sshForm.privateKeyPath" :placeholder="t('settings.mobileAccess.privateKeyPathPlaceholder')" clearable />
+                  <GdInput v-model="sshForm.privateKeyPath" :placeholder="t('settings.mobileAccess.privateKeyPathPlaceholder')" clearable />
                   <GdButton v-if="isElectronEnv" @click="selectPrivateKey">{{ t('settings.mobileAccess.selectFile') }}</GdButton>
                 </div>
               </div>
 
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.remoteBind') }}</span>
-                <el-select v-model="sshForm.remoteBindAddress" @change="handleRemoteBindChange">
-                  <el-option value="127.0.0.1" :label="t('settings.mobileAccess.remoteBindLoopback')" />
-                  <el-option value="0.0.0.0" :label="t('settings.mobileAccess.remoteBindAll')" />
-                </el-select>
+                <GdSelect v-model="sshForm.remoteBindAddress" @change="handleRemoteBindChange">
+                  <GdOption value="127.0.0.1" :label="t('settings.mobileAccess.remoteBindLoopback')" />
+                  <GdOption value="0.0.0.0" :label="t('settings.mobileAccess.remoteBindAll')" />
+                </GdSelect>
                 <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
                   {{ t('settings.mobileAccess.remoteBindHint') }}
                   <button type="button" class="text-blue-600 dark:text-blue-400 hover:underline ml-1" @click="gatewayPortsDialogVisible = true">
@@ -140,12 +140,12 @@
               </div>
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.remotePort') }}</span>
-                <el-input-number v-model="sshForm.remotePort" :min="1" :max="65535" controls-position="right" class="w-full" />
+                <GdInputNumber v-model="sshForm.remotePort" :min="1" :max="65535" class="w-full" />
               </div>
 
               <div class="flex flex-col gap-1.5 md:col-span-2">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.publicUrl') }}</span>
-                <el-input v-model="sshForm.publicUrl" :placeholder="t('settings.mobileAccess.publicUrlPlaceholder')" clearable />
+                <GdInput v-model="sshForm.publicUrl" :placeholder="t('settings.mobileAccess.publicUrlPlaceholder')" clearable />
                 <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.mobileAccess.publicUrlHint') }}</span>
               </div>
 
@@ -201,10 +201,15 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { usePopup } from '@/composables/usePopup'
+import { notify } from '@/components/ui/toastService';
 import { getErrorMessage } from '@/utils/errorMessage'
 import { writeTextToClipboard } from '@/utils/clipboard'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -217,7 +222,6 @@ import type {
 
 const { t } = useI18n()
 const router = useRouter()
-const { notify } = usePopup()
 
 const isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI
 
@@ -262,7 +266,7 @@ const gatewayPortsDialogVisible = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 /** 选择 0.0.0.0 时提醒服务器需开启 GatewayPorts（多数服务器默认关闭） */
-function handleRemoteBindChange(val: string | number | boolean | undefined) {
+function handleRemoteBindChange(val: string | number | (string | number)[]) {
   if (val === '0.0.0.0') {
     gatewayPortsDialogVisible.value = true
   }

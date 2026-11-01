@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ElMessage } from 'element-plus'
+import * as toastService from './toastService'
 import {
   cancelModal,
   closeAllModals,
@@ -53,7 +53,7 @@ describe('modalService', () => {
   })
 
   it('必填输入为空时保持打开并提示', async () => {
-    const errorSpy = vi.spyOn(ElMessage, 'error').mockReturnValue(undefined as never)
+    const errorSpy = vi.spyOn(toastService.toast, 'error').mockReturnValue({ id: 0, close: () => {} } as never)
     const promise = openModal({ title: 'input', input: { required: true } })
     const entry = modalStack[0]
 
@@ -83,6 +83,73 @@ describe('modalService', () => {
     cancelModal(entry)
     finishModal(entry)
     await promise
+  })
+
+  it('validator 返回错误文案时保持打开并提示该文案', async () => {
+    const errorSpy = vi.spyOn(toastService.toast, 'error').mockReturnValue({ id: 0, close: () => {} } as never)
+    const promise = openModal({
+      title: 'validated',
+      input: { validator: (v: string) => (v.includes('/') ? '不能包含路径分隔符' : null) },
+    })
+    const entry = modalStack[0]
+    entry.inputValue.value = 'a/b'
+
+    await submitModal(entry)
+
+    expect(errorSpy).toHaveBeenCalledWith('不能包含路径分隔符')
+    expect(entry.visible.value).toBe(true)
+    expect(entry.pendingResult).toBeNull()
+
+    // 合法值通过
+    entry.inputValue.value = 'ok'
+    await submitModal(entry)
+    finishModal(entry)
+    await expect(promise).resolves.toEqual({ action: 'confirm', value: 'ok' })
+  })
+
+  it('beforeConfirm 抛错时保持打开并提示兜底文案', async () => {
+    const errorSpy = vi.spyOn(toastService.toast, 'error').mockReturnValue({ id: 0, close: () => {} } as never)
+    const promise = openModal({
+      title: 'throwing',
+      beforeConfirm: async () => {
+        throw new Error('boom')
+      },
+    })
+    const entry = modalStack[0]
+
+    await submitModal(entry)
+
+    expect(errorSpy).toHaveBeenCalled()
+    expect(entry.visible.value).toBe(true)
+    expect(entry.pendingResult).toBeNull()
+    expect(entry.loading.value).toBe(false)
+
+    cancelModal(entry)
+    finishModal(entry)
+    await promise
+  })
+
+  it('input 与 textarea 共存时共用 inputValue（input 默认值优先，互斥场景由调用方保证）', async () => {
+    const promise = openModal({
+      title: 'both',
+      input: { defaultValue: 'single' },
+      textarea: { defaultValue: 'multi' },
+    })
+    const entry = modalStack[0]
+    expect(entry.inputValue.value).toBe('single')
+
+    await submitModal(entry)
+    finishModal(entry)
+    await expect(promise).resolves.toEqual({ action: 'confirm', value: 'single' })
+  })
+
+  it('confirm 结果值为 trim 后的文本（trim 收口在提交口）', async () => {
+    const promise = openModal({ title: 'trim', input: { defaultValue: '  hello  ' } })
+    const entry = modalStack[0]
+
+    await submitModal(entry)
+    finishModal(entry)
+    await expect(promise).resolves.toEqual({ action: 'confirm', value: 'hello' })
   })
 
   it('closeAllModals 关闭队列中的所有弹窗', async () => {

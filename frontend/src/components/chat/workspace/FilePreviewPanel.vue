@@ -181,8 +181,9 @@
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { decidePreviewRefresh } from '@/utils/previewRefresh'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
 
 import { useI18n } from 'vue-i18n'
 import { apiService } from '@/services/ApiService'
@@ -677,10 +678,10 @@ async function handleSaveFile(content: string): Promise<void> {
         await apiService.saveWorkspaceFile(props.sessionId, filePath, content)
         saveStatus.value = 'saved'
         externalConflict.value = false
-        ElMessage.success(t('chat.workspace.saveSuccess'))
+        toast.success(t('chat.workspace.saveSuccess'))
     } catch (e) {
         saveStatus.value = 'unsaved'
-        ElMessage.error(getErrorMessage(e) || t('chat.workspace.saveFailed'))
+        toast.error(getErrorMessage(e) || t('chat.workspace.saveFailed'))
     }
 }
 
@@ -718,7 +719,7 @@ async function resolveAbsolutePath(relativePath: string): Promise<string | null>
     if (!props.sessionId) return null
     const wsPath = await treeStore.ensureWorkspacePath(props.sessionId)
     if (!wsPath) {
-        ElMessage.error(t('chat.workspace.workspacePathError'))
+        toast.error(t('chat.workspace.workspacePathError'))
         return null
     }
     const rel = relativePath.replace(/\\/g, '/')
@@ -732,8 +733,8 @@ async function handleCopyFilePath(): Promise<void> {
     const fullPath = await resolveAbsolutePath(selectedFile.value.path)
     if (!fullPath) return
     const ok = await writeTextToClipboard(fullPath)
-    if (ok) ElMessage.success(t('chat.workspace.pathCopied'))
-    else ElMessage.error(t('chat.workspace.copyFailed'))
+    if (ok) toast.success(t('chat.workspace.pathCopied'))
+    else toast.error(t('chat.workspace.copyFailed'))
 }
 
 /** 在系统文件管理器中打开并选中当前文件（Windows 资源管理器 / macOS 访达） */
@@ -745,7 +746,7 @@ async function handleOpenInFileManager(): Promise<void> {
         await window.electronAPI!.showItemInFolder(fullPath)
     } catch (error) {
         console.error('[FilePreviewPanel] Open in file manager failed:', error)
-        ElMessage.error(t('chat.workspace.openFailed'))
+        toast.error(t('chat.workspace.openFailed'))
     }
 }
 

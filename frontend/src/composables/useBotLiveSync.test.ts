@@ -26,8 +26,8 @@ vi.mock("@/services/ApiService", () => ({
   },
 }));
 
-vi.mock("element-plus", () => ({
-  ElMessage: { success: vi.fn(), error: vi.fn() },
+vi.mock("@/components/ui/toastService", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("@/locales", () => ({ t: (key: string) => key }));

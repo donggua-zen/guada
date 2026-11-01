@@ -10,12 +10,13 @@
  *   把定时器节流导致“改了但没发出去”；
  * - 发送前用 flushSession 等待落盘；失败时保留 pending，下一次变更或发送重试。
  */
-import { ElMessage } from 'element-plus'
+
 import { apiService } from '@/services/ApiService'
 import { useSessionStore } from '@/stores/session'
 import { t } from '@/locales'
 import { getApiErrorStatus } from '@/utils/errorMessage'
 import type { SessionSettings } from '@/types/session'
+import { toast } from '@/components/ui/toastService';
 
 export interface SessionSettingsSavePayload {
   modelId?: string | null
@@ -64,7 +65,7 @@ function cloneSettings(settings: SessionSettings): SessionSettings {
 function notifySaveFailedOnce(sessionId: string): void {
   if (errorNotified.has(sessionId)) return
   errorNotified.add(sessionId)
-  ElMessage.error(t('common.saveFailed'))
+  toast.error(t('common.saveFailed'))
 }
 
 

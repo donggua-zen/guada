@@ -195,6 +195,7 @@ import { apiService } from "@/services/ApiService";
 import { NEW_SESSION_ID } from "@/constants";
 import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
+import { toast } from '@/components/ui/toastService';
 import { useSessionStore } from "@/stores/session";
 import { useNewSessionDraftStore } from "@/stores/newSessionDraft";
 import { useAuthStore } from "@/stores/auth";
@@ -223,7 +224,7 @@ import {
   Delete16Regular, Copy16Regular, WindowConsole20Regular,
 } from "@vicons/fluent";
 import { VsCode, WindowsExplorer, Finder } from "@/components/icons";
-import { ElMessage } from "element-plus";
+
 import { useStorage } from '@vueuse/core';
 
 // 仅 WorkspaceSidebar 影响「展开工作区」的首次停顿（v-if 懒加载）→ 同步 import；
@@ -446,7 +447,7 @@ function openSubagentListById(sessionId?: string) {
 provide('workspace:openSubagentList', openSubagentListById);
 
 // 组合式函数
-const { toast, confirm } = usePopup();
+const { confirm } = usePopup();
 const router = useRouter();
 const route = useRoute();
 const title = useTitle();
@@ -626,7 +627,7 @@ async function openWorkspaceWith(mode: OpenWithMode) {
   } catch (error) {
     console.error(`Failed to open workspace with ${mode}:`, error);
     // openVSCodeFailed 只对 VSCode 成立（提示装 code 命令），其余用通用文案
-    ElMessage.error(t(mode === 'vscode' ? 'chat.workspace.openVSCodeFailed' : 'chat.workspace.openFailed'));
+    toast.error(t(mode === 'vscode' ? 'chat.workspace.openVSCodeFailed' : 'chat.workspace.openFailed'));
   }
 }
 

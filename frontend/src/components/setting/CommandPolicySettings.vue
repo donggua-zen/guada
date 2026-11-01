@@ -44,7 +44,7 @@
           {{ t('settings.policy.count', { n: readOnlyRows.length }) }}
         </span>
       </div>
-      <el-input v-model="readOnlySearch" clearable size="small" :placeholder="t('settings.policy.searchPlaceholder')" />
+      <GdInput v-model="readOnlySearch" clearable size="small" :placeholder="t('settings.policy.searchPlaceholder')" />
       <div class="max-h-56 overflow-y-auto rounded border border-(--gd-color-surface-border) dark:border-gray-700 divide-y divide-(--gd-color-surface-border) dark:divide-gray-700">
         <div
           v-for="row in filteredReadOnlyRows"
@@ -66,7 +66,7 @@
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <el-input
+        <GdInput
           v-model="newReadOnly"
           size="small"
           class="flex-1 min-w-0"
@@ -133,11 +133,11 @@
       </div>
 
       <div class="flex items-center gap-2 pt-1">
-        <el-select v-model="newRuleAction" size="small" style="width: 96px" class="shrink-0">
-          <el-option value="ask" :label="t('settings.policy.action.ask')" />
-          <el-option value="deny" :label="t('settings.policy.action.deny')" />
-        </el-select>
-        <el-input
+        <GdSelect v-model="newRuleAction" size="small" style="width: 96px" class="shrink-0">
+          <GdOption value="ask" :label="t('settings.policy.action.ask')" />
+          <GdOption value="deny" :label="t('settings.policy.action.deny')" />
+        </GdSelect>
+        <GdInput
           v-model="newRule"
           size="small"
           class="flex-1 min-w-0"
@@ -174,7 +174,7 @@
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <el-input
+        <GdInput
           v-model="newWriteRoot"
           size="small"
           class="flex-1 min-w-0"
@@ -203,8 +203,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
 
 import { ShieldCheckmark16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
@@ -295,7 +299,7 @@ async function load() {
   try {
     applyEffective(await apiService.fetchPolicyRules())
   } catch (e) {
-    ElMessage.error(`${t('settings.policy.loadFailed')}: ${(e as Error).message || e}`)
+    toast.error(`${t('settings.policy.loadFailed')}: ${(e as Error).message || e}`)
   }
 }
 
@@ -305,7 +309,7 @@ function addReadOnly() {
   const match = norm(newReadOnly.value)
   if (!match) return
   if (userRules.value.some((r) => !isPathRule(r) && r.action === 'allow' && r.match === match)) {
-    ElMessage.warning(t('settings.policy.duplicate'))
+    toast.warning(t('settings.policy.duplicate'))
     return
   }
   userRules.value.push({ action: 'allow', match })
@@ -323,7 +327,7 @@ function addWriteRoot() {
   const path = norm(newWriteRoot.value)
   if (!path) return
   if (userRules.value.some((r) => isPathRule(r) && r.path === path)) {
-    ElMessage.warning(t('settings.policy.duplicate'))
+    toast.warning(t('settings.policy.duplicate'))
     return
   }
   userRules.value.push({ action: 'allow', path })
@@ -381,9 +385,9 @@ async function save() {
         content: { rules: userRules.value, readOnlyRemove: readOnlyRemove.value },
       }),
     )
-    ElMessage.success(t('common.saveSuccess'))
+    toast.success(t('common.saveSuccess'))
   } catch (e) {
-    ElMessage.error(`${t('settings.policy.saveFailed')}: ${(e as Error).message || e}`)
+    toast.error(`${t('settings.policy.saveFailed')}: ${(e as Error).message || e}`)
   } finally {
     saving.value = false
   }
@@ -398,9 +402,9 @@ async function resetUser() {
   saving.value = true
   try {
     applyEffective(await apiService.resetPolicyRules())
-    ElMessage.success(t('common.saveSuccess'))
+    toast.success(t('common.saveSuccess'))
   } catch (e) {
-    ElMessage.error(`${t('settings.policy.saveFailed')}: ${(e as Error).message || e}`)
+    toast.error(`${t('settings.policy.saveFailed')}: ${(e as Error).message || e}`)
   } finally {
     saving.value = false
   }

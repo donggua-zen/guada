@@ -1,14 +1,15 @@
 <template>
   <Teleport to="body">
     <!-- 菜单面板 -->
-    <div
-      v-if="visible"
-      ref="menuRef"
-      class="fixed z-(--gd-z-context-menu) bg-(--gd-color-surface) dark:bg-[#232428] rounded-lg shadow-lg border border-(--gd-color-surface-border) py-1 min-w-40"
-      :style="{ left: adjustedX + 'px', top: adjustedY + 'px' }"
-      @click.stop
-      @contextmenu.prevent
-    >
+    <Transition name="context-menu-pop">
+      <div
+        v-if="visible"
+        ref="menuRef"
+        class="fixed z-(--gd-z-context-menu) bg-(--gd-color-surface) dark:bg-[#232428] rounded-lg shadow-lg border border-(--gd-color-surface-border) py-1 min-w-40"
+        :style="{ left: adjustedX + 'px', top: adjustedY + 'px' }"
+        @click.stop
+        @contextmenu.prevent
+      >
       <div
         v-for="(item, index) in items"
         :key="index"
@@ -22,8 +23,25 @@
         <span>{{ item.label }}</span>
       </div>
     </div>
+    </Transition>
   </Teleport>
 </template>
+
+<style scoped>
+/* 右键菜单弹出：从触发点方向轻微缩放+上浮，快节奏（fast 档） */
+.context-menu-pop-enter-active,
+.context-menu-pop-leave-active {
+  transition: opacity var(--gd-motion-duration-fast) var(--gd-motion-ease-out),
+    transform var(--gd-motion-duration-fast) var(--gd-motion-ease-out);
+  transform-origin: top left;
+}
+
+.context-menu-pop-enter-from,
+.context-menu-pop-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(-2px);
+}
+</style>
 
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'

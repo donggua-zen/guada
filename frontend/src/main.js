@@ -163,6 +163,12 @@ const routes = [
     component: () => import("./components/test/ui.vue"),
   },
   {
+    path: "/forms-test",
+    name: "FormsTest",
+    meta: { title: "表单控件测试" },
+    component: () => import("./components/test/forms.vue"),
+  },
+  {
     path: "/splitpanes-test",
     name: "SplitpanesTest",
     meta: { title: "Splitpanes 性能测试" },

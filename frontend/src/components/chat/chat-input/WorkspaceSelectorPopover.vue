@@ -85,11 +85,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon, ElMessage } from 'element-plus'
+import { ElIcon } from 'element-plus';
 import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import DirectoryBrowserDialog from '../../DirectoryBrowserDialog.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { toast } from '@/components/ui/toastService';
 
 const props = defineProps<{
   visible: boolean
@@ -139,7 +140,7 @@ async function handleOpenFolder() {
       }
     } catch (error) {
       console.error('选择文件夹失败:', error)
-      ElMessage.error(t('chat.input.selectFolderFailed'))
+      toast.error(t('chat.input.selectFolderFailed'))
     } finally {
       emit('update:visible', false)
     }

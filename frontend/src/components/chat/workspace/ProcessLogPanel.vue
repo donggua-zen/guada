@@ -44,9 +44,10 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ElMessage } from 'element-plus';
+
 import { ArrowClockwise16Regular, Dismiss16Filled } from '@vicons/fluent';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
+import { toast } from '@/components/ui/toastService';
 import { apiService, type UiJobOutput } from '@/services/ApiService';
 import { useJobsStore } from '@/stores/jobs';
 import { getApiErrorStatus } from '@/utils/errorMessage';
@@ -253,12 +254,12 @@ watch(
 async function killProcess(): Promise<void> {
     try {
         await apiService.killSessionJob(props.sessionId, props.jobId);
-        ElMessage.success(t('chat.workspace.processKilledToast'));
+        toast.success(t('chat.workspace.processKilledToast'));
         await fetchLog('incremental');
     } catch (e) {
         if (getApiErrorStatus(e) !== 404) {
             console.error('[ProcessLogPanel] Failed to kill job:', e);
-            ElMessage.error(t('chat.workspace.processKillFailed'));
+            toast.error(t('chat.workspace.processKillFailed'));
         }
     }
 }

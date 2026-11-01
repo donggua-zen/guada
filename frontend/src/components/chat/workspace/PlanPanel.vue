@@ -74,7 +74,7 @@ import GdTooltip from '@/components/ui/GdTooltip.vue'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
 import { useSessionStore } from '@/stores/session'
-import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { useThrottledValue } from '@/composables/useThrottledValue'
 import { findPlanDraft, refreshSessionPlans } from '@/utils/sessionPlan'
 import type { SessionPlanItem, SessionPlanStatus } from '@/types/session'
@@ -85,7 +85,6 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const { toast } = usePopup()
 const sessionStore = useSessionStore()
 
 /** 列表来自会话 store 缓存（刷新触发见 streamProjector / 面板打开时主动拉取） */

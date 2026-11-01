@@ -2,11 +2,12 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { defineStore } from "pinia";
 import { computed, ref, shallowRef } from "vue";
-import { ElMessage } from "element-plus";
+
 import { apiService } from "@/services/ApiService";
 import type { GitStatus, GitBranch } from "@/services/modules/git.api";
 import type { FileChangeEvent } from "@/services/modules/WorkspaceWatcherService";
 import { t } from "@/locales";
+import { toast } from '@/components/ui/toastService';
 
 /**
  * Git 全局 Store —— 工作区概览（OverviewPanel）与 Git 变更面板（GitChangesPanel）
@@ -184,7 +185,7 @@ export const useGitStore = defineStore("git", () => {
     } catch {
       if (sessionId.value !== sid) return; // 切走后的失败不属于当前会话，不弹提示
       status.value = null;
-      ElMessage.error(t("git.loadFailed"));
+      toast.error(t("git.loadFailed"));
     } finally {
       if (refreshingSid === sid) {
         refreshingSid = null;
@@ -238,11 +239,11 @@ export const useGitStore = defineStore("git", () => {
     markGitWrite();
     try {
       await apiService.gitCheckout(sessionId.value, branch);
-      ElMessage.success(t("git.checkoutSuccess", { branch }));
+      toast.success(t("git.checkoutSuccess", { branch }));
       selectedBranch.value = branch;
       await refresh();
     } catch (e) {
-      ElMessage.error(t("git.checkoutFailed", { msg: getErrorMessage(e) || "" }));
+      toast.error(t("git.checkoutFailed", { msg: getErrorMessage(e) || "" }));
     }
   }
 
@@ -255,7 +256,7 @@ export const useGitStore = defineStore("git", () => {
   async function submitCommit(push: boolean): Promise<void> {
     const message = commitMessage.value.trim();
     if (!message) {
-      ElMessage.warning(t("git.commitMessageEmpty"));
+      toast.warning(t("git.commitMessageEmpty"));
       return;
     }
     if (!sessionId.value || committing.value) return;
@@ -269,12 +270,12 @@ export const useGitStore = defineStore("git", () => {
       }
       await apiService.gitCommit(sessionId.value, message);
       if (push) await apiService.gitPush(sessionId.value);
-      ElMessage.success(t(push ? "git.commitPushSuccess" : "git.commitSuccess"));
+      toast.success(t(push ? "git.commitPushSuccess" : "git.commitSuccess"));
       commitMessage.value = "";
       commitDialogVisible.value = false;
       await refresh();
     } catch (e) {
-      ElMessage.error(t(push ? "git.pushFailed" : "git.commitFailed", { msg: getErrorMessage(e) || "" }));
+      toast.error(t(push ? "git.pushFailed" : "git.commitFailed", { msg: getErrorMessage(e) || "" }));
       await refresh();
     } finally {
       committing.value = false;
@@ -289,11 +290,11 @@ export const useGitStore = defineStore("git", () => {
     commitAction.value = "push";
     try {
       await apiService.gitPush(sessionId.value);
-      ElMessage.success(t("git.pushSuccess"));
+      toast.success(t("git.pushSuccess"));
       commitDialogVisible.value = false;
       await refresh();
     } catch (e) {
-      ElMessage.error(t("git.pushFailed", { msg: getErrorMessage(e) || "" }));
+      toast.error(t("git.pushFailed", { msg: getErrorMessage(e) || "" }));
     } finally {
       committing.value = false;
     }
@@ -309,7 +310,7 @@ export const useGitStore = defineStore("git", () => {
   async function generateCommitMessage(): Promise<void> {
     if (!sessionId.value || generatingMessage.value) return;
     if (!status.value?.isGitRepo) {
-      ElMessage.warning(t("git.notGitRepo"));
+      toast.warning(t("git.notGitRepo"));
       return;
     }
     generatingMessage.value = true;
@@ -325,11 +326,11 @@ export const useGitStore = defineStore("git", () => {
         },
         generateAbortController.signal,
       );
-      ElMessage.success(t("git.generateMessageSuccess"));
+      toast.success(t("git.generateMessageSuccess"));
     } catch (e) {
       // 用户主动取消：保留已生成内容，不报错
       if ((e instanceof Error && e.name === "AbortError") || generateAbortController?.signal.aborted) {
-        ElMessage.info(t("git.generateMessageCancelled"));
+        toast.info(t("git.generateMessageCancelled"));
         return;
       }
       // skipped 事件：错误 message 即 reason 键（如 no_model_configured）
@@ -343,14 +344,14 @@ export const useGitStore = defineStore("git", () => {
         "error",
       ] as const;
       if ((knownReasons as readonly string[]).includes(reason)) {
-        ElMessage.warning(
+        toast.warning(
           t("git.generateMessageFailed", {
             // includes 判定后 reason 必为已知键之一，收窄以满足 i18n 键类型
             reason: t(`git.generateReason.${reason as (typeof knownReasons)[number]}`),
           }),
         );
       } else {
-        ElMessage.error(
+        toast.error(
           t("git.generateMessageError", { msg: reason }),
         );
       }
@@ -376,7 +377,7 @@ export const useGitStore = defineStore("git", () => {
       constraintContent.value = res.content || "";
     } catch (e) {
       constraintContent.value = "";
-      ElMessage.error(t("git.constraintLoadFailed", { msg: getErrorMessage(e) || "" }));
+      toast.error(t("git.constraintLoadFailed", { msg: getErrorMessage(e) || "" }));
     }
   }
 
@@ -390,9 +391,9 @@ export const useGitStore = defineStore("git", () => {
         constraintContent.value,
       );
       constraintDialogVisible.value = false;
-      ElMessage.success(t("git.constraintSaveSuccess"));
+      toast.success(t("git.constraintSaveSuccess"));
     } catch (e) {
-      ElMessage.error(t("git.constraintSaveFailed", { msg: getErrorMessage(e) || "" }));
+      toast.error(t("git.constraintSaveFailed", { msg: getErrorMessage(e) || "" }));
     } finally {
       constraintSaving.value = false;
     }

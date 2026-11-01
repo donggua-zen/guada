@@ -1,16 +1,18 @@
 <template>
     <div class="flex w-full gap-4">
-        <el-slider v-model="sliderValue" :min="sliderMin" :max="sliderMax" :step="step" :size="size"
+        <GdSlider v-model="sliderValue" :min="sliderMin" :max="sliderMax" :step="step" :size="size === 'small' ? 'small' : 'medium'"
             :format-tooltip="formatTooltip" />
-        <el-input v-model="inputValue" :style="{ width: `${inputWidth}px` }" placeholder="Please Input"
-            @change="handleInputChange" :size="size" clearable>
-        </el-input>
+        <GdInput v-model="inputValue" :style="{ width: `${inputWidth}px` }" placeholder="Please Input"
+            @change="handleInputChange" :size="size === 'small' ? 'small' : 'medium'" clearable>
+        </GdInput>
     </div>
 </template>
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { computed } from 'vue';
-// const value = ref(50);
+import GdSlider from './GdSlider.vue';
+import GdInput from './GdInput.vue';
+
 const inputValue = ref<number | string>(50);
 
 // Emits 类型化
@@ -20,7 +22,7 @@ const emits = defineEmits<{
 
 // Props 类型化
 const props = defineProps<{
-    modelValue?: number;
+    modelValue?: number | null;
     min?: number;
     max?: number;
     step?: number;
@@ -74,7 +76,6 @@ const sliderValue = computed({
 })
 
 watch(sliderValue, (newValue: number | null) => {
-    console.log('sliderValue', newValue);
     if (newValue == null || newValue < (props.min ?? 0) || newValue > (props.max ?? 100)) {
         inputValue.value = props.optionalText ?? 'Auto';
         return;

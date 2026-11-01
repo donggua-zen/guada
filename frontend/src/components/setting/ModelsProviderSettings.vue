@@ -44,13 +44,13 @@
         <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
           label-position="left" hide-required-asterisk>
           <el-form-item :label="t('settings.models.name')" prop="name">
-            <el-input v-model="currentProviderEdit.name" :placeholder="t('settings.models.namePlaceholder')" :disabled="!isNameEditable" />
+            <GdInput v-model="currentProviderEdit.name" :placeholder="t('settings.models.namePlaceholder')" :disabled="!isNameEditable" />
           </el-form-item>
           <el-form-item :label="t('settings.models.protocol')" prop="protocol">
-            <el-select v-model="currentProviderEdit.protocol" :placeholder="t('settings.models.selectProtocol')" style="width: 100%"
+            <GdSelect v-model="currentProviderEdit.protocol" :placeholder="t('settings.models.selectProtocol')" style="width: 100%"
               :disabled="!isProtocolEditable">
-              <el-option v-for="p in protocolSelectOptions" :key="p.protocol" :label="p.displayName" :value="p.protocol" />
-            </el-select>
+              <GdOption v-for="p in protocolSelectOptions" :key="p.protocol" :label="p.displayName" :value="p.protocol" />
+            </GdSelect>
             <div v-if="currentProtocolUnavailable" class="text-xs text-orange-500 mt-1">
               {{ t('settings.models.protocolUnavailable') }}
             </div>
@@ -61,11 +61,11 @@
             </div>
           </el-form-item>
           <el-form-item :label="t('settings.models.apiUrl')" prop="apiUrl">
-            <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
+            <GdInput v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
           </el-form-item>
           <el-form-item :label="t('settings.models.apiKey')" prop="apiKey">
             <div class="api-key-input-wrapper">
-              <el-input v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
+              <GdInput v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
               <GdButton type="primary" @click="handleTestConnection" :loading="testingConnection"
                 :disabled="!currentProviderEdit.apiUrl || !currentProviderEdit.apiKey">
                 {{ t('settings.models.test') }}
@@ -83,7 +83,7 @@
           </el-form-item>
           <!-- 自定义请求头（仅自定义供应商可编辑） -->
           <el-form-item :label="t('settings.models.customHeaders')" prop="headers">
-            <el-input
+            <GdInput
               v-model="currentProviderEdit.headers"
               type="textarea"
               :rows="4"
@@ -112,13 +112,17 @@ import ModelsProviderDetail from '../models/ModelsProviderDetail.vue'
 import { Add16Regular, Link16Regular } from '@vicons/fluent'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
+import { notify } from '@/components/ui/toastService';
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import type { Model, ModelPreset, ModelProvider, ProviderProtocol, ProviderTemplate } from '@/types/api'
 import type { CreateProviderPayload, UpdateProviderPayload } from '../../services/modules/model.api'
 
 // Element Plus 组件导入
-import { ElInput, ElFormItem, ElForm, ElSelect, ElOption, ElTag } from 'element-plus';
+import { ElFormItem, ElForm, ElTag } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
 
 import type { FormInstance, FormItemRule } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -129,7 +133,7 @@ type ProviderRow = ModelProvider & { enabled?: boolean }
 type ProviderTemplateRow = ProviderTemplate & { apiKeyUrl?: string }
 
 const { t } = useI18n()
-const { notify, confirm } = usePopup()
+const { confirm } = usePopup()
 const currentProviderId = ref<string | null>(null)
 
 // 使用响应式数据替代伪数据
@@ -620,14 +624,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 统一输入框内容左对齐 */
-:deep(.el-input__inner),
-:deep(.el-textarea__inner),
-:deep(.el-input-number__decrease),
-:deep(.el-input-number__increase) {
-  text-align: left !important;
-}
-
 /* API Key 输入框和按钮布局 */
 .api-key-input-wrapper {
   display: flex;

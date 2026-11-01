@@ -1,5 +1,5 @@
 import { ref, shallowReactive, type Ref, type VNode } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from './toastService'
 import { t } from '@/locales'
 import { getErrorMessage } from '@/utils/errorMessage'
 
@@ -41,6 +41,8 @@ export interface ModalOptions {
   beforeConfirm?: (value: string) => boolean | Promise<boolean>
   closeOnClickModal?: boolean
   closeOnPressEscape?: boolean
+  /** 显式层级（浮层内打开、且浮层保持打开时传 3500；缺省走 GdDialog 自动序列） */
+  zIndex?: number
 }
 
 export interface ModalResult {
@@ -117,20 +119,20 @@ export async function submitModal(entry: ModalEntry): Promise<void> {
 
   if (options.input) {
     if (options.input.required && !value) {
-      ElMessage.error(options.input.requiredMessage || t('session.popup.contentRequired'))
+      toast.error(options.input.requiredMessage || t('session.popup.contentRequired'))
       return
     }
     if (options.input.validator) {
       const message = options.input.validator(value)
       if (message) {
-        ElMessage.error(message)
+        toast.error(message)
         return
       }
     }
   }
 
   if (options.textarea && options.textarea.required && !value) {
-    ElMessage.error(options.textarea.requiredMessage || t('session.popup.contentRequired'))
+    toast.error(options.textarea.requiredMessage || t('session.popup.contentRequired'))
     return
   }
 
@@ -140,14 +142,16 @@ export async function submitModal(entry: ModalEntry): Promise<void> {
       const allowed = await options.beforeConfirm(rawValue)
       if (!allowed) return
     } catch (error) {
-      ElMessage.error(getErrorMessage(error) || t('session.popup.invalidInput'))
+      toast.error(getErrorMessage(error) || t('session.popup.invalidInput'))
       return
     } finally {
       entry.loading.value = false
     }
   }
 
-  requestCloseModal(entry, { action: 'confirm', value: rawValue })
+  // trim 在提交口收口：所有消费者（usePopup.prompt/editText、直调 openModal 的
+  // utils/workspacePreview 等）拿到的 confirm value 都是去首尾空白的
+  requestCloseModal(entry, { action: 'confirm', value })
 }
 
 export function closeAllModals(): void {

@@ -97,7 +97,7 @@
                     </span>
                   </div>
                   <div class="card-actions" @click.stop>
-                    <el-switch v-model="task.enabled" :active-value="true" :inactive-value="false"
+                    <GdSwitch v-model="task.enabled" :active-value="true" :inactive-value="false"
                       size="small" @change="handleToggleTask(task)" />
                   </div>
                 </div>
@@ -240,8 +240,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { NEW_SESSION_ID } from '@/constants'
-import { ElSwitch, ElIcon } from 'element-plus'
+import { ElIcon } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue'
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 import GdDialog from '@/components/ui/GdDialog.vue'
 import DropdownMenu from '@/components/ui/DropdownMenu.vue'
 import DropdownMenuItem from '@/components/ui/DropdownMenuItem.vue'
@@ -260,6 +261,7 @@ import {
 import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { usePrefillInput } from '@/composables/usePrefillInput'
 import type { ScheduledTask, ScheduledTaskLog } from '@/types/scheduler'
 import TaskLogDrawer from './TaskLogDrawer.vue'
@@ -270,7 +272,7 @@ import { TASK_TEMPLATES, type TaskTemplate } from './templates'
 const router = useRouter()
 const { t, locale } = useI18n()
 const { setPrefill } = usePrefillInput()
-const { toast, confirm } = usePopup()
+const { confirm } = usePopup()
 
 const activeTab = ref<'tasks' | 'templates' | 'history'>('tasks')
 const templates = TASK_TEMPLATES

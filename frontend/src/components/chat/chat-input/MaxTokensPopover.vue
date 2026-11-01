@@ -7,7 +7,7 @@
       </div>
     </template>
     <div class="px-3 pb-3 pt-1">
-      <el-slider v-model="localValue" :min="0" :max="8" :step="1" :show-tooltip="false" @input="onInput" @change="onChange" />
+      <GdSlider v-model="localValue" :min="0" :max="8" :step="1" :show-tooltip="false" @input="onInput" @change="onChange" />
       <div class="flex justify-between mt-2 px-1">
         <span class="text-xs text-gray-400 dark:text-gray-500">{{ t('chat.input.unlimited') }}</span>
         <span class="text-xs text-gray-400 dark:text-gray-500">1M</span>
@@ -19,8 +19,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElSlider } from 'element-plus'
+
 import GdPopover from '../../ui/GdPopover.vue'
+import GdSlider from '@/components/ui/GdSlider.vue';
 
 const { t } = useI18n()
 

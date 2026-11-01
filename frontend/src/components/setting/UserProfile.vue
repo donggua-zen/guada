@@ -7,10 +7,10 @@
         <AvatarPreview :src="userForm.avatarUrl" :type="'user'" @avatar-changed="handleAvaterChanged" />
       </el-form-item>
       <el-form-item :label="t('settings.userProfile.nickname')" prop="nickname">
-        <el-input v-model="userForm.nickname" :placeholder="t('settings.userProfile.nickname')" />
+        <GdInput v-model="userForm.nickname" :placeholder="t('settings.userProfile.nickname')" />
       </el-form-item>
       <el-form-item :label="t('settings.userProfile.username')" prop="username">
-        <el-input v-model="userForm.username" :placeholder="t('settings.userProfile.username')" />
+        <GdInput v-model="userForm.username" :placeholder="t('settings.userProfile.username')" />
       </el-form-item>
       <el-form-item>
         <GdButton type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">{{ t('settings.userProfile.saveInfo') }}</GdButton>
@@ -24,16 +24,15 @@ import { ref, computed, onMounted, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AvatarPreview } from '../ui'
 import { useAuthStore } from '../../stores/auth'
-import { usePopup } from '../../composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { apiService } from '../../services/ApiService'
 
 // Element Plus 组件导入
-import { ElForm, ElFormItem, ElInput } from 'element-plus';
+import { ElForm, ElFormItem } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
-
+import GdInput from '@/components/ui/GdInput.vue';
 
 const { t } = useI18n()
-const { toast } = usePopup()
 const authStore = useAuthStore()
 
 const basicFormRef = ref(null)

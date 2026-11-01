@@ -160,7 +160,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElTag, ElMessage } from 'element-plus';
+import { ElTag } from 'element-plus';
 import type { Model, ModelProvider } from '@/types/api'
 import type { UploadResponse } from '@/types/service'
 import type { ChatFileView } from '@/types/session'
@@ -192,6 +192,7 @@ import {
 import { apiService } from '@/services/ApiService';
 import { useCapabilitiesStore } from '@/stores/capabilities';
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
 
 
 /** File object managed by ChatInput (created via createFileObject) */
@@ -1079,12 +1080,12 @@ const processFiles = (files: File[]) => {
   }
 
   if (oversize.length > 0) {
-    ElMessage.error(
+    toast.error(
       t('chat.input.fileTooLarge', { names: oversize.join('、'), max: CHAT_UPLOAD_MAX_MB }),
     );
   }
   if (emptyCount > 0) {
-    ElMessage.warning(t('chat.input.emptyFilesSkipped', { count: emptyCount }));
+    toast.warning(t('chat.input.emptyFilesSkipped', { count: emptyCount }));
   }
   if (added.length > 0) {
     commitFiles([...localFiles.value, ...added]);
@@ -1271,7 +1272,7 @@ const sendMessage = async () => {
     if (failed.length > 0) {
       // 有附件没传上去就不发消息：否则用户以为附件发出去了，实际只发出半条。
       // 列表与正文都保留，用户可按发送键重试（失败项会重新上传）。
-      ElMessage.error(t('chat.input.uploadFailed'));
+      toast.error(t('chat.input.uploadFailed'));
       return;
     }
 

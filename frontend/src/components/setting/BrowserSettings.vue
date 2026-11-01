@@ -10,11 +10,11 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.browser.markdownLinkOpenMode') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.browser.markdownLinkOpenModeDesc') }}</span>
             </div>
-            <el-select v-model="linkOpenMode" @change="onLinkOpenModeChange" style="width: 140px">
-              <el-option :label="t('settings.browser.internalBrowser')" value="internal" />
-              <el-option :label="t('settings.browser.externalBrowser')" value="external" />
-              <el-option :label="t('settings.browser.askEveryTime')" value="ask" />
-            </el-select>
+            <GdSelect v-model="linkOpenMode" @change="onLinkOpenModeChange" style="width: 140px">
+              <GdOption :label="t('settings.browser.internalBrowser')" value="internal" />
+              <GdOption :label="t('settings.browser.externalBrowser')" value="external" />
+              <GdOption :label="t('settings.browser.askEveryTime')" value="ask" />
+            </GdSelect>
           </div>
 
           <!-- AI 浏览器侧边栏自动展开 -->
@@ -23,7 +23,7 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.browser.autoExpandSidebar') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.browser.autoExpandSidebarDesc') }}</span>
             </div>
-            <el-switch v-model="autoShowSidebar" @change="onAutoShowSidebarChange" />
+            <GdSwitch v-model="autoShowSidebar" @change="onAutoShowSidebarChange" />
           </div>
         </div>
       </div>
@@ -38,16 +38,16 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.browser.viewportSize') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.browser.viewportSizeDesc') }}</span>
             </div>
-            <el-select v-model="selectedPreset" @change="onPresetChange" style="width: 150px">
-              <el-option :label="t('settings.browser.viewportAdaptive')" value="adaptive" />
-              <el-option
+            <GdSelect v-model="selectedPreset" @change="onPresetChange" style="width: 150px">
+              <GdOption :label="t('settings.browser.viewportAdaptive')" value="adaptive" />
+              <GdOption
                 v-for="p in VIEWPORT_PRESETS"
                 :key="`${p.width}x${p.height}`"
                 :label="`${p.width} × ${p.height}`"
                 :value="`${p.width}x${p.height}`"
               />
-              <el-option :label="t('settings.browser.viewportCustom')" value="custom" />
-            </el-select>
+              <GdOption :label="t('settings.browser.viewportCustom')" value="custom" />
+            </GdSelect>
           </div>
 
           <!-- 自定义尺寸 -->
@@ -57,17 +57,15 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.browser.viewportCustomSizeDesc') }}</span>
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
-              <el-input-number
+              <GdInputNumber
                 v-model="customWidth"
-                :min="VIEWPORT_MIN.width" :max="VIEWPORT_MAX.width" :step="10"
-                controls-position="right" style="width: 110px"
+                :min="VIEWPORT_MIN.width" :max="VIEWPORT_MAX.width" :step="10" style="width: 110px"
                 @change="onCustomSizeChange"
               />
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">×</span>
-              <el-input-number
+              <GdInputNumber
                 v-model="customHeight"
-                :min="VIEWPORT_MIN.height" :max="VIEWPORT_MAX.height" :step="10"
-                controls-position="right" style="width: 110px"
+                :min="VIEWPORT_MIN.height" :max="VIEWPORT_MAX.height" :step="10" style="width: 110px"
                 @change="onCustomSizeChange"
               />
             </div>
@@ -108,8 +106,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
@@ -150,11 +153,11 @@ async function persistViewport(width: number, height: number): Promise<void> {
   try {
     await saveDefaultViewport(width, height)
   } catch {
-    ElMessage.error(t('common.error.saveFailed'))
+    toast.error(t('common.error.saveFailed'))
   }
 }
 
-async function onPresetChange(val: string | number | boolean | undefined): Promise<void> {
+async function onPresetChange(val: string | number | (string | number)[]): Promise<void> {
   const key = String(val ?? '')
   if (key === 'custom') {
     // 切到"自定义"：固定模式下保持当前尺寸不变，等用户在输入框调整；
@@ -170,7 +173,7 @@ async function onPresetChange(val: string | number | boolean | undefined): Promi
     try {
       await saveDefaultViewportMode('adaptive')
     } catch {
-      ElMessage.error(t('common.error.saveFailed'))
+      toast.error(t('common.error.saveFailed'))
     }
     return
   }
@@ -217,14 +220,14 @@ async function loadSettings(): Promise<void> {
 }
 
 // 保存链接打开方式设置
-async function onLinkOpenModeChange(val: string | number | boolean | undefined): Promise<void> {
+async function onLinkOpenModeChange(val: string | number | (string | number)[]): Promise<void> {
   const mode = val as LinkOpenMode
   setLinkOpenMode(mode)
   try {
     await apiService.updateGroupSettings('browser', { linkOpenMode: mode })
   } catch (error) {
     console.error('保存链接打开方式失败:', error)
-    ElMessage.error(t('common.error.saveFailed'))
+    toast.error(t('common.error.saveFailed'))
   }
 }
 
@@ -236,13 +239,13 @@ async function onAutoShowSidebarChange(val: string | number | boolean | undefine
     await apiService.updateGroupSettings('browser', { autoShowSidebar: enabled })
   } catch (error) {
     console.error('保存侧边栏设置失败:', error)
-    ElMessage.error(t('common.error.saveFailed'))
+    toast.error(t('common.error.saveFailed'))
   }
 }
 
 async function handleClearData(): Promise<void> {
   if (!isElectron || !window.electronAPI?.clearBrowserData) {
-    ElMessage.warning(t('settings.browser.desktopOnly'))
+    toast.warning(t('settings.browser.desktopOnly'))
     return
   }
 
@@ -261,13 +264,13 @@ async function handleClearData(): Promise<void> {
   try {
     const result = await window.electronAPI.clearBrowserData()
     if (result.success) {
-      ElMessage.success(t('settings.browser.dataCleared'))
+      toast.success(t('settings.browser.dataCleared'))
     } else {
-      ElMessage.error(result.error || t('common.deleteFailed'))
+      toast.error(result.error || t('common.deleteFailed'))
     }
   } catch (error) {
     console.error('Failed to clear browser data:', error)
-    ElMessage.error(t('common.deleteFailed'))
+    toast.error(t('common.deleteFailed'))
   } finally {
     clearing.value = false
   }

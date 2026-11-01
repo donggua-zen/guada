@@ -398,6 +398,21 @@ export interface PlanModeChangedEvent {
   toolCallId?: string;
 }
 
+/**
+ * 工具截图裁剪完成（用户手动维护操作；时间线事件卡）。
+ * seq = 已落库 tool_image/prune 的 seq，live 与 replay 双路径用它去重。
+ */
+export interface ToolImagePruneEvent {
+  type: "tool_image_prune";
+  seq: number;
+  keepTurns: number;
+  keepFromSeq: number;
+  boundaryMessageId?: string;
+  imageCount: number;
+  prunedBytes: number;
+  prunedTokens: number;
+}
+
 // ==================== 联合 ====================
 
 export type SessionStreamEvent =
@@ -418,6 +433,7 @@ export type SessionStreamEvent =
   | WorkflowEvent
   | SubAgentLinkEvent
   | PlanModeChangedEvent
+  | ToolImagePruneEvent
   | MessageChunkEvent;
 
 /** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */

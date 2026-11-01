@@ -302,6 +302,16 @@ export interface SessionApi {
     sessionId: string,
     instructions?: string,
   ): Promise<{ success: boolean; started: boolean }>;
+  /** 工具截图裁剪：保留最近 keepTurns 个用户轮，更早轮次的工具图移出后续请求上下文 */
+  pruneToolImages(
+    sessionId: string,
+    keepTurns: number,
+  ): Promise<{
+    success: boolean;
+    keptTurns: number;
+    prunedImages: number;
+    prunedBytes: number;
+  }>;
   fetchSessionSummaries(
     sessionId: string,
     limit?: number,
@@ -591,6 +601,13 @@ export const sessionApi: SessionApi = {
     return await this._request(`/sessions/${sessionId}/compress`, {
       method: "POST",
       data: instructions === undefined ? {} : { instructions },
+    });
+  },
+
+  async pruneToolImages(this: ApiContext, sessionId: string, keepTurns: number) {
+    return await this._request(`/sessions/${sessionId}/prune-tool-images`, {
+      method: "POST",
+      data: { keepTurns },
     });
   },
 

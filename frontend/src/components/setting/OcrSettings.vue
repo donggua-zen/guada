@@ -11,11 +11,11 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.ocr.provider') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.providerDesc') }}<span class="text-[#409eff] cursor-pointer hover:underline" @click="openOcrDocs">{{ t('settings.ocr.viewDocs') }}</span></span>
             </div>
-            <el-select v-model="settingsForm.provider" :placeholder="t('settings.ocr.selectProvider')" style="width: 200px;" class="shrink-0">
-              <el-option :label="t('settings.ocr.disabled')" value="none" />
-              <el-option :label="t('settings.ocr.umiLocal')" value="umi" />
-              <el-option :label="t('settings.ocr.baiduCloud')" value="baidu" />
-            </el-select>
+            <GdSelect v-model="settingsForm.provider" :placeholder="t('settings.ocr.selectProvider')" style="width: 200px;" class="shrink-0">
+              <GdOption :label="t('settings.ocr.disabled')" value="none" />
+              <GdOption :label="t('settings.ocr.umiLocal')" value="umi" />
+              <GdOption :label="t('settings.ocr.baiduCloud')" value="baidu" />
+            </GdSelect>
           </div>
 
           <!-- 扫描件识别策略 -->
@@ -24,10 +24,10 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.ocr.scanStrategy') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.scanStrategyDesc') }}</span>
             </div>
-            <el-select v-model="settingsForm.ocrMode" style="width: 200px;" class="shrink-0">
-              <el-option :label="t('settings.ocr.strategyAuto')" value="auto" />
-              <el-option :label="t('settings.ocr.strategyForce')" value="force" />
-            </el-select>
+            <GdSelect v-model="settingsForm.ocrMode" style="width: 200px;" class="shrink-0">
+              <GdOption :label="t('settings.ocr.strategyAuto')" value="auto" />
+              <GdOption :label="t('settings.ocr.strategyForce')" value="force" />
+            </GdSelect>
           </div>
 
           <!-- UMI-OCR 配置 -->
@@ -37,7 +37,7 @@
                 <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.ocr.serviceHost') }}</span>
                 <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.serviceHostDesc') }}</span>
               </div>
-              <el-input v-model="settingsForm.umiHost" placeholder="127.0.0.1" style="width: 200px;" class="shrink-0" />
+              <GdInput v-model="settingsForm.umiHost" placeholder="127.0.0.1" style="width: 200px;" class="shrink-0" />
             </div>
 
             <div class="px-4 py-3.5 flex items-center justify-between gap-4">
@@ -45,7 +45,7 @@
                 <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.ocr.servicePort') }}</span>
                 <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.servicePortDesc') }}</span>
               </div>
-              <el-input-number v-model="settingsForm.umiPort" :min="1" :max="65535" placeholder="1224" class="shrink-0" />
+              <GdInputNumber v-model="settingsForm.umiPort" :min="1" :max="65535" placeholder="1224" class="shrink-0" />
             </div>
           </template>
 
@@ -56,7 +56,7 @@
                 <span class="text-base text-gray-900 dark:text-[#e8e9ed]">API Key</span>
                 <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.baiduApiKeyDesc') }}</span>
               </div>
-              <el-input v-model="settingsForm.baiduApiKey" :placeholder="t('settings.ocr.enterApiKey')" style="width: 320px;" class="shrink-0" />
+              <GdInput v-model="settingsForm.baiduApiKey" :placeholder="t('settings.ocr.enterApiKey')" style="width: 320px;" class="shrink-0" />
             </div>
 
             <div class="px-4 py-3.5 flex items-center justify-between gap-4">
@@ -64,7 +64,7 @@
                 <span class="text-base text-gray-900 dark:text-[#e8e9ed]">Secret Key</span>
                 <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.baiduSecretKeyDesc') }}</span>
               </div>
-              <el-input v-model="settingsForm.baiduSecretKey" :placeholder="t('settings.ocr.enterSecretKey')" type="password" show-password style="width: 320px;" class="shrink-0" />
+              <GdInput v-model="settingsForm.baiduSecretKey" :placeholder="t('settings.ocr.enterSecretKey')" type="password" show-password style="width: 320px;" class="shrink-0" />
             </div>
           </template>
 
@@ -97,13 +97,16 @@ import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
-import { usePopup } from '@/composables/usePopup'
+import { notify } from '@/components/ui/toastService';
 import type { OcrGroupSettings } from '@/types/service'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useI18n } from 'vue-i18n'
+import GdInput from '@/components/ui/GdInput.vue';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
 
 const { t } = useI18n()
-const { notify } = usePopup()
 
 // 表单数据
 const settingsForm = reactive({

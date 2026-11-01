@@ -29,7 +29,7 @@
                 t('chat.memo.messages', { count: tokenStats.messageCount }) }}
             </span>
             <GdButton v-if="tokenStats.breakdown" size="small" text @click="showBreakdown = !showBreakdown"
-              class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 !px-1 !py-0 !h-auto !text-xs">
+              :class="memoTextButtonClass" :style="memoTextButtonStyle">
               {{ t('chat.memo.details') }}
             </GdButton>
           </div>
@@ -79,7 +79,7 @@
             </span>
           </div>
           <el-progress :percentage="mediaUsagePercent" :color="mediaColor" :stroke-width="6" :show-text="false" />
-          <div class="flex items-center gap-2 mt-1.5">
+          <div class="flex items-center justify-between gap-2 mt-1.5">
             <span class="text-xs text-gray-400 dark:text-[#8b8d95]">
               {{ formatBytes(requestStats.mediaBytes) }} / {{ formatBytes(requestStats.mediaBudgetBytes) }} ·
               {{ t('chat.memo.imagesRetained', { count: requestStats.retainedImages ?? 0 }) }}
@@ -87,6 +87,10 @@
                 · {{ t('chat.memo.imagesOmitted', { count: requestStats.omittedImages }) }}
               </template>
             </span>
+            <GdButton size="small" text @click="openPruneDialog" :class="memoTextButtonClass"
+              :style="memoTextButtonStyle">
+              {{ t('chat.memo.pruneToolImages') }}
+            </GdButton>
           </div>
         </div>
 
@@ -184,9 +188,36 @@
       </template>
     </div>
 
+    <!-- 裁剪旧截图对话框 -->
+    <GdDialog v-model="pruneDialogVisible" :title="t('chat.memo.pruneDialogTitle')" size="xs" append-to-body
+      :z-index="MEMO_DIALOG_Z_INDEX" :close-on-click-modal="!isPruning" :close-on-press-escape="!isPruning"
+      :show-close="!isPruning">
+      <div class="space-y-3">
+        <p class="text-sm text-gray-600 dark:text-[#a8aab0]">{{ t('chat.memo.pruneDialogDesc') }}</p>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-700 dark:text-[#e8e9ed]">{{ t('chat.memo.pruneKeepTurns') }}</span>
+          <GdInputNumber v-model="keepTurns" :min="1" :max="1000" :step="1" :disabled="isPruning" />
+          <span class="text-xs text-gray-400 dark:text-[#8b8d95]">{{ t('chat.memo.pruneKeepTurnsUnit') }}</span>
+        </div>
+        <p class="text-xs text-gray-400 dark:text-[#8b8d95]">
+          {{ t('chat.memo.pruneDialogHint', { count: loadedTurnCount }) }}
+        </p>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <GdButton @click="pruneDialogVisible = false" :disabled="isPruning">
+            {{ t('common.cancel') }}
+          </GdButton>
+          <GdButton type="primary" :loading="isPruning" @click="handlePruneToolImages">
+            {{ t('chat.memo.pruneDialogConfirm') }}
+          </GdButton>
+        </div>
+      </template>
+    </GdDialog>
+
     <!-- 压缩历史记录对话框 -->
     <GdDialog v-model="historyDialogVisible" :title="t('chat.memo.compressHistoryTitle')" size="lg"
-      append-to-body>
+      :z-index="MEMO_DIALOG_Z_INDEX" append-to-body>
       <template v-if="summaries.length > 0">
         <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4 last:mb-0">
           <div class="rounded-lg border border-gray-200 dark:border-[#2a2c30] bg-white dark:bg-[#232428] p-4">
@@ -271,13 +302,15 @@ import type { SessionSummaryItem } from '@/services/modules/session.api';
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage';
 import { formatBytes } from '@/utils/formatBytes';
 import { usePopup } from '@/composables/usePopup';
+import { toast } from '@/components/ui/toastService';
 import { ArrowClockwise16Regular, QuestionCircle16Filled, Wand16Regular, List16Regular } from '@vicons/fluent';
 import dayjs from 'dayjs';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 
 
-const { confirm, toast } = usePopup();
+const { confirm } = usePopup();
 const { t } = useI18n();
 const sessionStore = useSessionStore();
 
@@ -294,12 +327,17 @@ const summaries = ref<SessionSummaryItem[]>([]);
 const summaryTotal = ref(0);
 const showBreakdown = ref(false);
 const historyDialogVisible = ref(false);
+const pruneDialogVisible = ref(false);
+const keepTurns = ref(5);
+const isPruning = ref(false);
+/** 高于 GdPopover(3000)、低于 Element Plus 浮层(4000)：浮层内弹窗需显式抬层 */
+const MEMO_DIALOG_Z_INDEX = 3500;
 const sessionIdRef = computed(() => props.sessionId);
 const { tokenStats } = useSessionTokenStats(sessionIdRef);
 
 // 内部子弹窗/确认框是否打开：打开期间父级 popover 冻结"点击外部/Esc 关闭"
 const confirmActive = ref(false);
-const subDialogOpen = computed(() => historyDialogVisible.value);
+const subDialogOpen = computed(() => historyDialogVisible.value || pruneDialogVisible.value);
 const overlayActive = computed(() => subDialogOpen.value || confirmActive.value);
 watch(overlayActive, (active) => emit('overlayActive', active));
 onBeforeUnmount(() => emit('overlayActive', false));
@@ -307,6 +345,12 @@ onBeforeUnmount(() => emit('overlayActive', false));
 // 使用 Store 中的会话级压缩状态
 const isCompressing = computed(() => {
   return props.sessionId ? sessionStore.sessionIsCompressing(props.sessionId) : false;
+});
+
+/** 已加载的对话轮数（仅作弹窗提示；后端按真实轮数 clamp） */
+const loadedTurnCount = computed(() => {
+  if (!props.sessionId) return 0;
+  return sessionStore.getTurns(props.sessionId).filter((turn) => turn.kind === 'turn').length;
 });
 
 // 计算进度条颜色
@@ -326,6 +370,12 @@ const usageColorClass = computed(() => {
   if (percentage < 80) return 'text-yellow-600';
   return 'text-red-600';
 });
+
+/** 媒体区块内联文字按钮：与「详情」同一套字号/内边距；hover 只改文字色，不加背景 */
+const memoTextButtonClass =
+  'text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 ' +
+  'hover:!bg-transparent active:!bg-transparent !px-1 !py-0 !h-auto !leading-none';
+const memoTextButtonStyle = { fontSize: '12px' };
 
 /** 最近一次请求携带的媒体负载（旧锚点缺省 → 不渲染卡片） */
 const requestStats = computed(() => tokenStats.value?.request);
@@ -471,7 +521,11 @@ async function handleCompress() {
   }
 
   confirmActive.value = true;
-  const compressConfirmed = await confirm(t('chat.memo.compressConfirmTitle'), t('chat.memo.compressConfirmDesc'));
+  const compressConfirmed = await confirm(
+    t('chat.memo.compressConfirmTitle'),
+    t('chat.memo.compressConfirmDesc'),
+    { zIndex: MEMO_DIALOG_Z_INDEX },
+  );
   confirmActive.value = false;
   if (!compressConfirmed) return;
 
@@ -493,6 +547,64 @@ async function handleCompress() {
     } else {
       toast.error(msg || t('chat.memo.compressFailed'));
     }
+  }
+}
+
+// 打开“裁剪旧截图”弹窗
+function openPruneDialog() {
+  if (!props.sessionId) return;
+  if (isCompressing.value) {
+    toast.warning(t('chat.memo.compressingWarning'));
+    return;
+  }
+  if (sessionStore.sessionIsStreaming(props.sessionId)) {
+    toast.warning(t('chat.memo.streamingWarning'));
+    return;
+  }
+  keepTurns.value = Math.min(5, Math.max(1, loadedTurnCount.value || 5));
+  pruneDialogVisible.value = true;
+}
+
+// 提交工具截图裁剪（同步 REST；完成后 context_stats SSE 会刷新媒体卡片）
+async function handlePruneToolImages() {
+  if (!props.sessionId || isPruning.value) return;
+  if (isCompressing.value) {
+    toast.warning(t('chat.memo.compressingWarning'));
+    return;
+  }
+  if (sessionStore.sessionIsStreaming(props.sessionId)) {
+    toast.warning(t('chat.memo.streamingWarning'));
+    return;
+  }
+
+  isPruning.value = true;
+  try {
+    const res = await apiService.pruneToolImages(props.sessionId, keepTurns.value);
+    if (res?.prunedImages > 0) {
+      toast.success(
+        t('chat.memo.pruneSuccess', {
+          count: res.prunedImages,
+          size: formatBytes(res.prunedBytes),
+        }),
+      );
+      pruneDialogVisible.value = false;
+      // 媒体卡片由 context_stats SSE 更新；eventLog 已追加，这里再兜底重算一次
+      loadTokenStats();
+      await loadSummaries();
+    } else {
+      toast.info(t('chat.memo.pruneEmpty'));
+      pruneDialogVisible.value = false;
+    }
+  } catch (error) {
+    console.error('裁剪旧截图失败:', error);
+    const msg = getErrorMessage(error);
+    if (getApiErrorStatus(error) === 409 || msg.includes('busy') || msg.includes('STREAMING')) {
+      toast.warning(t('chat.memo.streamingWarning'));
+    } else {
+      toast.error(msg || t('chat.memo.pruneFailed'));
+    }
+  } finally {
+    isPruning.value = false;
   }
 }
 

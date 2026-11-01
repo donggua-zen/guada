@@ -38,6 +38,8 @@ interface Props {
     alignItemSelector?: string
     /** 为 true 时暂停"点击外部/Esc 关闭"（面板内有 teleport 到 body 的子弹窗/确认框时使用） */
     pauseAutoClose?: boolean
+    /** 水平对齐方式：center 以锚点居中（默认，原有行为）；start 左缘对齐锚点（GdSelect 等选择面板用） */
+    align?: 'center' | 'start'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -49,6 +51,7 @@ const props = withDefaults(defineProps<Props>(), {
     position: null,
     alignItemSelector: '',
     pauseAutoClose: false,
+    align: 'center',
 })
 
 const emit = defineEmits<{
@@ -107,8 +110,10 @@ const updatePosition = () => {
         const popoverWidth = typeof props.width === 'number' ? props.width : 320
         const spacing = 8
 
-        // 计算水平位置：以按钮为中心对齐
-        let left = rect.left + (rect.width / 2) - (popoverWidth / 2)
+        // 计算水平位置：start 左缘对齐锚点，center 以按钮为中心对齐（默认）
+        let left = props.align === 'start'
+            ? rect.left
+            : rect.left + (rect.width / 2) - (popoverWidth / 2)
 
         // 边界检查：确保不超出视口左右边界
         const viewportWidth = window.innerWidth
@@ -131,6 +136,9 @@ const updatePosition = () => {
         } else {
             showAbove = spaceAbove > spaceBelow
         }
+
+        // 方向暴露给模板：进出场动画按弹出方向反演位移（下方弹出→从上 4px 落下；上方→从下 4px 升起）
+        popoverElement.dataset.showAbove = showAbove ? 'true' : 'false'
 
         if (showAbove) {
             // 上方：用 bottom 定位，高度变化时底部不变，不跳动
@@ -257,17 +265,31 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 淡入淡出动画 - 只动画透明度，不动画位置 */
+/* 进出场：opacity + 按弹出方向的 4px 位移（方向由 updatePosition 写入 data-show-above）。
+   只过渡这两个属性，定位用的 left/top/bottom 不参与 */
 .popover-fade-enter-active,
 .popover-fade-leave-active {
-    transition: opacity 0.2s ease-out;
+    transition: opacity var(--gd-motion-duration-base) var(--gd-motion-ease-out),
+        transform var(--gd-motion-duration-base) var(--gd-motion-ease-out);
 }
 
-.popover-fade-enter-from {
+/* 下方弹出：从锚点方向（上方 -4px）落下；leave 反向收回 */
+.popover-fade-enter-from[data-show-above="false"],
+.popover-fade-leave-to[data-show-above="false"] {
     opacity: 0;
+    transform: translateY(-4px);
 }
 
-.popover-fade-leave-to {
+/* 上方弹出：从锚点方向（下方 +4px）升起 */
+.popover-fade-enter-from[data-show-above="true"],
+.popover-fade-leave-to[data-show-above="true"] {
+    opacity: 0;
+    transform: translateY(4px);
+}
+
+/* position 模式（级联菜单）未标 data-show-above：退化为纯淡入淡出 */
+.popover-fade-enter-from:not([data-show-above]),
+.popover-fade-leave-to:not([data-show-above]) {
     opacity: 0;
 }
 

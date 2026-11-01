@@ -25,11 +25,10 @@ import { useI18n } from 'vue-i18n'
 
 import AgentSettingPanel from './AgentSettingPanel.vue'
 import { apiService } from '../../services/ApiService'
-import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import GdDialog from '@/components/ui/GdDialog.vue'
 import type { Agent } from '@/types/agent'
 
-const { toast } = usePopup()
 const { t } = useI18n()
 
 // Props

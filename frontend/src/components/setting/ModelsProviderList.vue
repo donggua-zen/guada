@@ -16,7 +16,7 @@
           </h3>
           <span v-if="provider.typeAvailable === false" class="text-[10px] text-orange-500 shrink-0" title="贡献该类型的插件已卸载或禁用">类型不可用</span>
           <span v-else-if="provider.protocolAvailable === false" class="text-[10px] text-orange-500 shrink-0" title="该协议适配器已禁用或卸载">协议不可用</span>
-          <el-switch
+          <GdSwitch
             :model-value="provider.enabled !== false"
             size="small"
             @click.stop
@@ -83,10 +83,11 @@
 </template>
 
 <script setup>
-import { ElSwitch, ElTag } from 'element-plus'
+import { ElTag } from 'element-plus';
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { apiService } from '@/services/ApiService'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 const props = defineProps({
   items: {

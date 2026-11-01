@@ -40,13 +40,13 @@
               </span>
             </div>
             <div class="shrink-0 w-52">
-              <el-select
+              <GdSelect
                 v-model="selectedThemePreset"
                 @change="handleThemePresetChange"
                 placeholder="选择主题"
                 size="default"
               >
-                <el-option
+                <GdOption
                   v-for="theme in themePresetList"
                   :key="theme.id"
                   :label="themeName(theme)"
@@ -64,7 +64,7 @@
                     />
                     <span>{{ themeName(theme) }}</span>
                   </div>
-                </el-option>
+                </GdOption>
                 <template #prefix>
                   <span
                     v-if="currentThemeInfo"
@@ -72,7 +72,7 @@
                     :style="{ backgroundColor: currentThemeInfo.primaryColor }"
                   />
                 </template>
-              </el-select>
+              </GdSelect>
             </div>
           </div>
         </div>
@@ -156,7 +156,7 @@
               </span>
             </div>
             <div class="flex items-center gap-3 shrink-0 w-48">
-              <el-slider
+              <GdSlider
                 v-model="settingsForm.sidebarOpacity"
                 :min="0"
                 :max="100"
@@ -179,7 +179,7 @@
               </span>
             </div>
             <div class="flex items-center gap-3 shrink-0 w-48">
-              <el-slider
+              <GdSlider
                 v-model="settingsForm.contentOpacity"
                 :min="0"
                 :max="100"
@@ -209,7 +209,7 @@
                 最小化到托盘时显示任务运行和未读统计
               </span>
             </div>
-            <el-switch v-model="settingsForm.floatWidgetEnabled" size="large" @change="handleFloatWidgetChange" />
+            <GdSwitch v-model="settingsForm.floatWidgetEnabled" size="large" @change="handleFloatWidgetChange" />
           </div>
 
           <!-- 透明度调节 -->
@@ -221,7 +221,7 @@
               </span>
             </div>
             <div class="flex items-center gap-3 shrink-0 w-48">
-              <el-slider
+              <GdSlider
                 v-model="settingsForm.floatWidgetOpacity"
                 :min="30"
                 :max="100"
@@ -248,8 +248,13 @@
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, watch, markRaw, computed } from 'vue'
-import { ElMessage, ElUpload, ElSlider, ElSwitch, ElIcon, ElSelect, ElOption } from 'element-plus';
+import { ElUpload, ElIcon } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdSlider from '@/components/ui/GdSlider.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 import type { UploadFile } from 'element-plus'
 import { Add24Regular, Delete16Regular, WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
@@ -291,8 +296,9 @@ watch(activeThemePreset, (val) => {
   selectedThemePreset.value = val
 })
 
-const handleThemePresetChange = (val: string) => {
-  setActiveThemePreset(val)
+const handleThemePresetChange = (val: string | number | (string | number)[]) => {
+  const preset = String(val)
+  setActiveThemePreset(preset)
   handleSave()
 }
 
@@ -417,7 +423,7 @@ const handleSave = async () => {
     pushFloatWidgetSettings()
   } catch (error) {
     console.error('保存外观设置失败:', error)
-    ElMessage.error('保存失败: ' + (getErrorMessage(error) || '未知错误'))
+    toast.error('保存失败: ' + (getErrorMessage(error) || '未知错误'))
   }
 }
 
@@ -429,14 +435,14 @@ const handleFileChange = async (uploadFile: UploadFile) => {
   // 验证文件类型
   const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
   if (!allowedTypes.includes(file.type)) {
-    ElMessage.error('不支持的文件类型，请上传 JPG、PNG 或 WebP 格式图片')
+    toast.error('不支持的文件类型，请上传 JPG、PNG 或 WebP 格式图片')
     return
   }
 
   // 验证文件大小（最大 10MB）
   const maxSize = 10 * 1024 * 1024
   if (file.size > maxSize) {
-    ElMessage.error('图片大小不能超过 10MB')
+    toast.error('图片大小不能超过 10MB')
     return
   }
 
@@ -444,10 +450,10 @@ const handleFileChange = async (uploadFile: UploadFile) => {
     const response = await apiService.uploadWallpaper(file)
     previewUrl.value = resolveWallpaperUrl(extractRelativePath(response.url))
     await handleSave()
-    ElMessage.success('壁纸上传成功')
+    toast.success('壁纸上传成功')
   } catch (error) {
     console.error('壁纸上传失败:', error)
-    ElMessage.error('壁纸上传失败: ' + (getErrorMessage(error) || '未知错误'))
+    toast.error('壁纸上传失败: ' + (getErrorMessage(error) || '未知错误'))
   }
 }
 
@@ -457,10 +463,10 @@ const handleRemoveWallpaper = async () => {
     await apiService.deleteWallpaper()
     previewUrl.value = null
     await handleSave()
-    ElMessage.success('壁纸已删除')
+    toast.success('壁纸已删除')
   } catch (error) {
     console.error('壁纸删除失败:', error)
-    ElMessage.error('壁纸删除失败: ' + (getErrorMessage(error) || '未知错误'))
+    toast.error('壁纸删除失败: ' + (getErrorMessage(error) || '未知错误'))
   }
 }
 
@@ -511,7 +517,7 @@ const handleReset = async () => {
   }
 
   await handleSave()
-  ElMessage.success('已恢复默认设置')
+  toast.success('已恢复默认设置')
 }
 
 // 生命周期

@@ -140,7 +140,7 @@
 
     <!-- 重命名对话框 -->
     <GdDialog v-model="showRenameDialog" :title="t('knowledge.tree.renameTitle')" size="xs" :close-on-click-modal="false" append-to-body>
-      <el-input v-model="renameForm.newName" :placeholder="t('knowledge.tree.newNamePlaceholder')" @keyup.enter="confirmRename" />
+      <GdInput v-model="renameForm.newName" :placeholder="t('knowledge.tree.newNamePlaceholder')" @keyup.enter="confirmRename" />
       <template #footer>
         <GdButton @click="showRenameDialog = false">{{ t('common.cancel') }}</GdButton>
         <GdButton type="primary" @click="confirmRename" :loading="renameLoading">{{ t('common.ok') }}</GdButton>
@@ -185,8 +185,10 @@ import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Folder16Regular, ArrowClockwise16Regular, Delete16Regular, ArrowSync16Regular, Edit16Regular, Location16Regular } from '@vicons/fluent'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdInput from '@/components/ui/GdInput.vue';
 
 import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
@@ -961,7 +963,7 @@ async function confirmRename() {
   // 前端验证
   const validation = validateFileName(renameForm.value.newName)
   if (!validation.valid) {
-    ElMessage.warning(validation.message)
+    toast.warning(validation.message || '')
     return
   }
 
@@ -972,14 +974,14 @@ async function confirmRename() {
       renamingFileId.value,
       renameForm.value.newName,
     )
-    ElMessage.success(t('common.renameSuccess'))
+    toast.success(t('common.renameSuccess'))
     showRenameDialog.value = false
 
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
   } catch (error) {
     console.error('[DEBUG] 重命名失败:', error)
-    ElMessage.error(getErrorMessage(error) || t('common.renameFailed'))
+    toast.error(getErrorMessage(error) || t('common.renameFailed'))
   } finally {
     renameLoading.value = false
   }
@@ -1085,14 +1087,14 @@ async function confirmMove() {
       movingFileId.value,
       selectedTargetFolderId.value,
     )
-    ElMessage.success(t('knowledge.tree.moveSuccess'))
+    toast.success(t('knowledge.tree.moveSuccess'))
     showMoveDialog.value = false
 
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
   } catch (error) {
     console.error('[DEBUG] 移动失败:', error)
-    ElMessage.error(getErrorMessage(error) || t('knowledge.tree.moveFailed'))
+    toast.error(getErrorMessage(error) || t('knowledge.tree.moveFailed'))
   } finally {
     moveLoading.value = false
   }

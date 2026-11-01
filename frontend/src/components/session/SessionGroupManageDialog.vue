@@ -4,7 +4,7 @@
     <div class="flex flex-col gap-3">
       <!-- 新建分组 -->
       <div class="flex gap-2">
-        <el-input v-model="newGroupName" :placeholder="t('session.group.newPlaceholder')" maxlength="20" show-word-limit
+        <GdInput v-model="newGroupName" :placeholder="t('session.group.newPlaceholder')" maxlength="20" show-word-limit
           @keyup.enter="handleCreateGroup" />
         <GdButton type="primary" @click="handleCreateGroup" :disabled="!newGroupName.trim()">
           {{ t('session.group.create') }}
@@ -32,7 +32,7 @@
 
                 <!-- 分组名称（编辑模式） -->
                 <template v-if="editingId === element.id">
-                  <el-input v-model="editingName" size="small" maxlength="20" class="flex-1"
+                  <GdInput v-model="editingName" size="small" maxlength="20" class="flex-1"
                     @keyup.enter="saveEdit" @keyup.esc="cancelEdit" />
                   <GdButton type="primary" size="small" @click="saveEdit">{{ t('session.group.save') }}</GdButton>
                   <GdButton size="small" @click="cancelEdit">{{ t('session.group.cancel') }}</GdButton>
@@ -78,11 +78,13 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInput from '@/components/ui/GdInput.vue';
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import draggable from 'vuedraggable'
 import { useSessionGroupStore } from '@/stores/sessionGroup'
 import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { ReOrderDotsHorizontal20Regular, Edit16Regular, Delete20Regular } from '@vicons/fluent'
 import type { SessionGroup } from '@/types/session'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -97,7 +99,7 @@ const emit = defineEmits<{
 }>()
 
 const sessionGroupStore = useSessionGroupStore()
-const { toast, confirm } = usePopup()
+const { confirm } = usePopup()
 const { t } = useI18n()
 
 // 弹窗可见性

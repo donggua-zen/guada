@@ -32,7 +32,7 @@ export function toggleConnectionBinding(
  * （WorkingDirBar / WorkspaceSelectorPopover）共享，任何一处的增删改都同步同一份列表。
  *
  * 错误约定：ensureConnections 失败静默（console.error，未加载成功可重试）；
- * CRUD 失败原样抛出，由调用方 catch 并用 ElMessage 呈现具体错误（如名称冲突）。
+ * CRUD 失败原样抛出，由调用方 catch 并用 toast 呈现具体错误（如名称冲突）。
  */
 export const useRemoteWorkspaceStore = defineStore('remoteWorkspace', () => {
   // ========== 状态 ==========
@@ -101,7 +101,7 @@ export const useRemoteWorkspaceStore = defineStore('remoteWorkspace', () => {
   }
 
   /**
-   * 创建连接；失败抛出（调用方负责 ElMessage）
+   * 创建连接；失败抛出（调用方负责 toast 呈现）
    */
   const createConnection = async (name: string, config: RemoteConnectionConfig): Promise<RemoteConnection> => {
     const conn = await apiService.createConnection(name, config)
@@ -110,7 +110,7 @@ export const useRemoteWorkspaceStore = defineStore('remoteWorkspace', () => {
   }
 
   /**
-   * 更新连接；失败抛出（调用方负责 ElMessage）
+   * 更新连接；失败抛出（调用方负责 toast 呈现）
    */
   const updateConnection = async (
     id: string,
@@ -122,7 +122,7 @@ export const useRemoteWorkspaceStore = defineStore('remoteWorkspace', () => {
   }
 
   /**
-   * 删除连接；失败抛出（调用方负责 ElMessage）
+   * 删除连接；失败抛出（调用方负责 toast 呈现）
    */
   const deleteConnection = async (id: string): Promise<{ success: boolean }> => {
     const result = await apiService.deleteConnection(id)

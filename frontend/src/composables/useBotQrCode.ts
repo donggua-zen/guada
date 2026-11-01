@@ -1,8 +1,9 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+
 import { apiService } from '@/services/ApiService'
 import { getErrorMessage } from '@/utils/errorMessage'
+import { toast } from '@/components/ui/toastService';
 
 export type QrStatus = 'qr_ready' | 'logged_in' | 'verify_code_required' | 'pending' | 'unavailable'
 
@@ -38,7 +39,7 @@ export function useBotQrCode() {
       if (result.status === 'qr_ready') codeUrl.value = result.qrCodeUrl
       else message.value = result.message || ''
     } catch (error) {
-      ElMessage.error(getErrorMessage(error) || t('bot.card.getQrFailed'))
+      toast.error(getErrorMessage(error) || t('bot.card.getQrFailed'))
     }
   }
 
@@ -74,21 +75,21 @@ export function useBotQrCode() {
     const code = verifyCode.value.trim()
     if (!id) return
     if (!/^\d{4,8}$/.test(code)) {
-      ElMessage.warning(t('bot.card.qrVerifyCodeInvalid'))
+      toast.warning(t('bot.card.qrVerifyCodeInvalid'))
       return
     }
     verifySubmitting.value = true
     try {
       const result = await apiService.submitBotVerification(id, code)
       if (result.success) {
-        ElMessage.success(result.message)
+        toast.success(result.message)
         verifyCode.value = ''
         await fetchStatus()
       } else {
-        ElMessage.warning(result.message)
+        toast.warning(result.message)
       }
     } catch (error) {
-      ElMessage.error(getErrorMessage(error) || t('bot.card.qrVerifyCodeFailed'))
+      toast.error(getErrorMessage(error) || t('bot.card.qrVerifyCodeFailed'))
     } finally {
       verifySubmitting.value = false
     }
@@ -100,14 +101,14 @@ export function useBotQrCode() {
     try {
       const result = await apiService.logoutBot(id)
       if (result.success) {
-        ElMessage.success(result.message)
+        toast.success(result.message)
         close()
         await apiService.stopBotInstance(id)
         return true
       }
-      ElMessage.warning(result.message)
+      toast.warning(result.message)
     } catch (error) {
-      ElMessage.error(getErrorMessage(error) || t('bot.card.logoutFailed'))
+      toast.error(getErrorMessage(error) || t('bot.card.logoutFailed'))
     }
     return false
   }

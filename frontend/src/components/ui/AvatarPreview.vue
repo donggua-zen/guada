@@ -33,7 +33,7 @@ import GdDialog from '@/components/ui/GdDialog.vue'
 import GdButton from '@/components/ui/GdButton.vue'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
-import { usePopup } from '../../composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 
 // 禁用属性继承，避免警告
 defineOptions({
@@ -58,8 +58,6 @@ const props = defineProps<{
     type?: 'user' | 'assistant';
     name?: string;  // 用于生成首字头像的名称
 }>()
-
-const { toast } = usePopup()
 
 // 监听 src 变化 - 类型化
 watch(() => props.src, (newValue: string | undefined) => {

@@ -19,7 +19,7 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.computerUse.enable') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.computerUse.enableDesc') }}</span>
             </div>
-            <el-switch v-model="enabled" :disabled="!isElectron" @change="onEnabledChange" />
+            <GdSwitch v-model="enabled" :disabled="!isElectron" @change="onEnabledChange" />
           </div>
 
           <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
@@ -59,11 +59,11 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ row.label }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ row.description }}</span>
             </div>
-            <el-select v-model="actions[row.key]" :disabled="!isElectron" style="width: 130px">
-              <el-option :label="t('settings.computerUse.allow')" value="allow" />
-              <el-option :label="t('settings.computerUse.ask')" value="ask" />
-              <el-option :label="t('settings.computerUse.deny')" value="deny" />
-            </el-select>
+            <GdSelect v-model="actions[row.key]" :disabled="!isElectron" style="width: 130px">
+              <GdOption :label="t('settings.computerUse.allow')" value="allow" />
+              <GdOption :label="t('settings.computerUse.ask')" value="ask" />
+              <GdOption :label="t('settings.computerUse.deny')" value="deny" />
+            </GdSelect>
           </div>
         </div>
       </div>
@@ -101,8 +101,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 import { apiService } from '@/services/ApiService'
 import {
@@ -196,9 +200,9 @@ async function onEnabledChange(value: boolean | string | number): Promise<void> 
   enabled.value = value === true
   try {
     await persist()
-    ElMessage.success(t('settings.computerUse.saved'))
+    toast.success(t('settings.computerUse.saved'))
   } catch {
-    ElMessage.error(t('common.saveFailed'))
+    toast.error(t('common.saveFailed'))
   }
 }
 
@@ -206,9 +210,9 @@ async function save(): Promise<void> {
   saving.value = true
   try {
     await persist()
-    ElMessage.success(t('settings.computerUse.saved'))
+    toast.success(t('settings.computerUse.saved'))
   } catch {
-    ElMessage.error(t('common.saveFailed'))
+    toast.error(t('common.saveFailed'))
   } finally {
     saving.value = false
   }

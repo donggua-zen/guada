@@ -18,7 +18,7 @@ import { useAuthStore } from "@/stores/auth";
 import { apiService } from "@/services/ApiService";
 import { streamReceiver } from "@/services/modules/StreamReceiver";
 import { projectChunk, resetSessionTurnsTransientState } from "@/services/modules/streamProjector";
-import { usePopup } from "@/composables/usePopup";
+import { toast } from '@/components/ui/toastService';
 import { emitSessionResync } from "@/utils/sessionResync";
 import type { UserQueueSnapshot } from "@/types/session";
 
@@ -26,7 +26,7 @@ export function useSessionEvents() {
   const sessionStore = useSessionStore();
   const router = useRouter();
   const route = useRoute();
-  const { toast } = usePopup();
+  ;
 
   const windowHidden = ref(false);
   const unsubscribers: Array<() => void> = [];

@@ -386,7 +386,16 @@ onUnmounted(() => {
   flex-shrink: 0;
   width: 1px;
   cursor: col-resize;
-  background-color: var(--gd-color-border, #f5f5f5);
+  /* 竖线两端各渐隐 36px（与 Windows 标题栏行等高）：面板贴窗口顶/底时
+     线头生硬，渐隐后由窗口边缘自然过渡。hover/拖拽高亮走 background-color
+     （实色叠加在渐变之上，见下方两处规则），渐变本体保留在 background-image */
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    var(--gd-color-border, #f5f5f5) 36px,
+    var(--gd-color-border, #f5f5f5) calc(100% - 36px),
+    transparent 100%
+  );
   transition: background-color 0.2s ease;
   position: relative;
   z-index: 10;
@@ -402,12 +411,31 @@ onUnmounted(() => {
   width: 4px;
 }
 
+/* hover 高亮：实色画在渐变之上（background-color 位于 background-image 下层，
+   直接改 background-color 会被渐变盖住，因此用 ::after 覆盖整条线） */
+.lite-splitpanes__splitter::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+  pointer-events: none;
+}
+
 .lite-splitpanes__splitter:hover {
+  background-color: transparent;
+}
+
+.lite-splitpanes__splitter:hover::after {
   background-color: var(--el-color-primary-light-8, #d9ecff);
 }
 
 /* 拖拽中持续高亮分割线，即使鼠标移出分割条区域 */
 .lite-splitpanes--resizing .lite-splitpanes__splitter {
+  background-color: transparent;
+}
+
+.lite-splitpanes--resizing .lite-splitpanes__splitter::after {
   background-color: var(--el-color-primary-light-8, #d9ecff);
 }
 
@@ -424,10 +452,20 @@ onUnmounted(() => {
 
 /* 暗色模式适配 */
 .dark .lite-splitpanes__splitter {
-  background-color: #25262a;
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #25262a 36px,
+    #25262a calc(100% - 36px),
+    transparent 100%
+  );
 }
 
 .dark .lite-splitpanes__splitter:hover {
+  background-color: transparent;
+}
+
+.dark .lite-splitpanes__splitter:hover::after {
   background-color: var(--el-color-primary-light-8, #4a4d55);
 }
 

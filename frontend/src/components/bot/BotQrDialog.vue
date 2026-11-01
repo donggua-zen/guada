@@ -45,7 +45,7 @@
         <p class="text-xs text-gray-500 mt-3 text-center">
           {{ message || t('bot.card.qrVerifyCodeHint') }}
         </p>
-        <el-input
+        <GdInput
           v-model="verifyCode"
           class="mt-3"
           maxlength="8"
@@ -76,8 +76,9 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { CheckmarkCircle48Regular, Timer32Regular, Power20Regular, ArrowSync16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
-import { ElIcon, ElInput } from 'element-plus';
+import { ElIcon } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInput from '@/components/ui/GdInput.vue';
 
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { useBotQrCode } from '@/composables/useBotQrCode'

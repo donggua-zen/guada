@@ -548,6 +548,10 @@ html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog::a
 html.dark[data-theme="wandering-earth"] .el-message-box .el-input__wrapper {
   border-radius: 0;
 }
+/* 自研输入框（usePopup 输入弹窗已迁 GdInput）：同上方形 */
+html.dark[data-theme="wandering-earth"] .el-message-box .gd-input {
+  border-radius: 0;
+}
 /* 按钮区：虚线刻度分隔 */
 html.dark[data-theme="wandering-earth"] .el-message-box__btns {
   border-top: 1px dashed var(--gd-color-border);

@@ -2,18 +2,18 @@
     <div class="flex flex-col gap-3">
         <!-- 搜索 + 筛选栏 -->
         <div class="flex items-center gap-2">
-            <el-input v-model="searchKeyword" :placeholder="t('settings.archived.searchPlaceholder')" clearable size="small"
+            <GdInput v-model="searchKeyword" :placeholder="t('settings.archived.searchPlaceholder')" clearable size="small"
                 class="flex-1 min-w-40" @keyup.enter="handleSearch" @clear="handleSearch">
                 <template #prefix>
                     <Search16Regular class="w-4 h-4 text-gray-400" />
                 </template>
-            </el-input>
-            <el-select v-model="filterGroupId" :placeholder="t('settings.archived.allGroups')" size="small" clearable
+            </GdInput>
+            <GdSelect v-model="filterGroupId" :placeholder="t('settings.archived.allGroups')" size="small" clearable
                 style="width: 128px; flex-shrink: 0" @change="handleSearch">
-                <el-option :label="t('settings.archived.allGroups')" :value="''" />
-                <el-option v-for="g in sessionGroupStore.sortedGroups" :key="g.id" :label="g.name" :value="g.id" />
-                <el-option :label="t('settings.archived.ungrouped')" :value="UNGROUPED_ID" />
-            </el-select>
+                <GdOption :label="t('settings.archived.allGroups')" :value="''" />
+                <GdOption v-for="g in sessionGroupStore.sortedGroups" :key="g.id" :label="g.name" :value="g.id" />
+                <GdOption :label="t('settings.archived.ungrouped')" :value="UNGROUPED_ID" />
+            </GdSelect>
             <GdButton size="small" :loading="isLoading" @click="loadArchivedSessions" circle>
                 <el-icon class="w-4 h-4">
                     <ArrowClockwise20Regular />
@@ -77,6 +77,9 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
 import { ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Archive20Regular, ArrowUndo20Regular, ArrowClockwise20Regular, Search16Regular, ArrowSync16Regular } from '@vicons/fluent'
@@ -86,13 +89,14 @@ import { useSessionGroupStore } from '@/stores/sessionGroup'
 import { useSessionStore } from '@/stores/session'
 import { UNGROUPED_ID } from '@/stores/session'
 import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import type { Session } from '@/types/session'
 
 const { t } = useI18n()
 
 const sessionGroupStore = useSessionGroupStore()
 const sessionStore = useSessionStore()
-const { toast, confirm } = usePopup()
+const { confirm } = usePopup()
 
 const isLoading = ref(false)
 const batchLoading = ref(false)

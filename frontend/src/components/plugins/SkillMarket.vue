@@ -183,8 +183,9 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElTag, ElIcon, ElAlert, ElPagination } from 'element-plus';
+import { ElTag, ElIcon, ElAlert, ElPagination } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
 
 import { ArrowDownload16Regular, ArrowUpRight16Regular, MailInbox24Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
@@ -273,7 +274,7 @@ function handleShowMarketInstallDialog(marketSkill: MarketSkillWithStatus) {
 async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
     const zipUrl = getInstallUrl(marketSkill, 'zip')
     if (!zipUrl) {
-        ElMessage.warning(t('plugins.skills.marketNoZip'))
+        toast.warning(t('plugins.skills.marketNoZip'))
         return
     }
 
@@ -283,7 +284,7 @@ async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
     try {
         const response = await apiService.installSkillFromUrl(zipUrl)
         if (response.success) {
-            ElMessage.success(response.message || t('common.createSuccess'))
+            toast.success(response.message || t('common.createSuccess'))
             showMarketInstallDialog.value = false
             selectedMarketSkill.value = null
             emit('installed')
@@ -304,7 +305,7 @@ async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
 function handleViewSourceCode(marketSkill: MarketSkillWithStatus) {
     const gitUrl = getInstallUrl(marketSkill, 'git')
     if (!gitUrl) {
-        ElMessage.warning(t('plugins.skills.marketNoGit'))
+        toast.warning(t('plugins.skills.marketNoGit'))
         return
     }
     openInExternalBrowser(gitUrl)
@@ -315,7 +316,7 @@ function handleViewSourceCode(marketSkill: MarketSkillWithStatus) {
  */
 function handleOpenDetailUrl(marketSkill: MarketSkillWithStatus) {
     if (!marketSkill.detailUrl) {
-        ElMessage.warning(t('plugins.skills.marketNoDetail'))
+        toast.warning(t('plugins.skills.marketNoDetail'))
         return
     }
     openInExternalBrowser(marketSkill.detailUrl)

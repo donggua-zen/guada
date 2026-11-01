@@ -252,8 +252,7 @@
     <!-- 底部：头像 + 设置 -->
     <div class="px-3 py-1.5 flex items-center justify-between gap-2">
       <!-- 用户头像+名字 下拉 -->
-      <el-dropdown trigger="hover" placement="top-start" @command="handleUserMenuCommand"
-        popper-class="user-menu-dropdown" style="flex: 1 1 0%; min-width: 0;">
+      <DropdownMenu class="w-full min-w-0 flex-1" @command="handleUserMenuCommand">
         <div
           class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer min-w-0 w-full hover:bg-(--gd-color-sidebar-bg-hover) transition-all duration-200">
           <Avatar class="w-7 h-7 shrink-0" type="user" :round="true" :src="authStore.user?.avatarUrl"
@@ -263,36 +262,34 @@
           </span>
         </div>
         <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="profile">
-              <Person16Regular class="w-4 h-4 mr-2" />
-              {{ t('ui.sidebar.profile') }}
-            </el-dropdown-item>
-            <!-- 颜色主题：内联三态切换 -->
-            <div class="px-5 py-2 flex items-center gap-2">
-              <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">{{ t('ui.sidebar.colorTheme') }}</span>
-              <div class="flex items-center gap-0.5 p-0.5 rounded-md bg-(--gd-color-sidebar-bg-active) dark:bg-[#1a1b1e]">
-                <button v-for="option in themeOptions" :key="option.value" @click="setTheme(option.value)"
-                  class="px-2 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
-                  :class="themeMode === option.value
-                    ? 'bg-(--gd-color-surface) dark:bg-[#3a3b3f] text-gray-900 dark:text-[#e8e9ed] shadow-sm'
-                    : 'text-gray-500 dark:text-[#8b8d95] hover:text-gray-700 dark:hover:text-[#c0c1c5]'">
-                  <component :is="option.icon" class="w-3.5 h-3.5" />
-                  {{ option.label }}
-                </button>
-              </div>
+          <DropdownMenuItem command="profile">
+            <Person16Regular class="w-4 h-4 mr-2" />
+            {{ t('ui.sidebar.profile') }}
+          </DropdownMenuItem>
+          <!-- 颜色主题：内联三态切换 -->
+          <div class="px-5 py-2 flex items-center gap-2">
+            <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">{{ t('ui.sidebar.colorTheme') }}</span>
+            <div class="flex items-center gap-0.5 p-0.5 rounded-md bg-(--gd-color-sidebar-bg-active) dark:bg-[#1a1b1e]">
+              <button v-for="option in themeOptions" :key="option.value" @click="setTheme(option.value)"
+                class="px-2 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
+                :class="themeMode === option.value
+                  ? 'bg-(--gd-color-surface) dark:bg-[#3a3b3f] text-gray-900 dark:text-[#e8e9ed] shadow-sm'
+                  : 'text-gray-500 dark:text-[#8b8d95] hover:text-gray-700 dark:hover:text-[#c0c1c5]'">
+                <component :is="option.icon" class="w-3.5 h-3.5" />
+                {{ option.label }}
+              </button>
             </div>
-            <el-dropdown-item command="settings">
-              <Settings16Filled class="w-4 h-4 mr-2" />
-              {{ t('ui.sidebar.settingsCenter') }}
-            </el-dropdown-item>
-            <el-dropdown-item v-if="authStore.passwordSet" command="logout" divided>
-              <DoorArrowLeft16Regular class="w-4 h-4 mr-2" />
-              {{ t('ui.sidebar.logout') }}
-            </el-dropdown-item>
-          </el-dropdown-menu>
+          </div>
+          <DropdownMenuItem command="settings">
+            <Settings16Filled class="w-4 h-4 mr-2" />
+            {{ t('ui.sidebar.settingsCenter') }}
+          </DropdownMenuItem>
+          <DropdownMenuItem v-if="authStore.passwordSet" command="logout" class="border-t border-(--gd-color-border)">
+            <DoorArrowLeft16Regular class="w-4 h-4 mr-2" />
+            {{ t('ui.sidebar.logout') }}
+          </DropdownMenuItem>
         </template>
-      </el-dropdown>
+      </DropdownMenu>
 
       <!-- 移动访问：手机端远程控制入口（仅桌面端） -->
       <GdTooltip v-if="isElectron" :content="t('ui.sidebar.mobileAccess')" placement="bottom">
@@ -390,6 +387,7 @@ import { UNGROUPED_ID } from '../stores/session'
 import { useTheme, type ThemeMode } from '../composables/useTheme'
 import { isMobileDevice } from '../composables/useDevice'
 import { usePopup } from '../composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { useFullscreen } from '../composables/useFullscreen'
 import { Avatar, ScrollContainer, SegmentedToggle } from './ui'
 import SessionTitle from './SessionTitle.vue'
@@ -593,7 +591,7 @@ const themeOptions = computed(() => [
   { label: t('ui.sidebar.themeDark'), value: 'dark' as ThemeMode, icon: markRaw(WeatherMoon20Filled) },
   { label: t('ui.sidebar.themeSystem'), value: 'system' as ThemeMode, icon: markRaw(Desktop16Regular) },
 ])
-const { toast, prompt, confirm } = usePopup()
+const { prompt, confirm } = usePopup()
 
 // 删除会话确认对话框状态
 const deleteDialogVisible = ref(false)
@@ -1477,22 +1475,21 @@ const confirmDeleteSession = async () => {
 }
 
 // 处理用户菜单命令
-const handleUserMenuCommand = (command: string) => {
+const handleUserMenuCommand = async (command: string) => {
   if (command === 'profile') {
     router.replace({ name: 'SystemSettings', params: { tab: 'profile' } })
   } else if (command === 'settings') {
     router.replace({ name: 'SystemSettings' })
   } else if (command === 'logout') {
-    confirm(t('ui.sidebar.logoutTitle'), t('ui.sidebar.logoutConfirm'), {
+    const confirmed = await confirm(t('ui.sidebar.logoutTitle'), t('ui.sidebar.logoutConfirm'), {
       type: 'warning',
       confirmText: t('common.ok'),
       cancelText: t('common.cancel')
-    }).then((confirmed) => {
-      if (confirmed) {
-        authStore.logout()
-        router.replace({ name: 'Login' })
-      }
     })
+    if (confirmed) {
+      authStore.logout()
+      router.replace({ name: 'Login' })
+    }
   }
 }
 

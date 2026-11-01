@@ -12,7 +12,7 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.search.webSearchPlugin') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.webSearchPluginDesc') }}</span>
             </div>
-            <el-switch v-model="pluginEnabled" :loading="pluginLoading" @update:model-value="handlePluginToggle"
+            <GdSwitch v-model="pluginEnabled" :loading="pluginLoading" @update:model-value="handlePluginToggle"
               size="large" />
           </div>
 
@@ -23,14 +23,14 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.search.provider') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.providerDesc') }}</span>
             </div>
-            <el-select v-model="selectedProvider" @update:model-value="handleProviderChange" style="width: 220px;"
+            <GdSelect v-model="selectedProvider" @update:model-value="handleProviderChange" style="width: 220px;"
               class="shrink-0">
-              <el-option :label="t('settings.search.bocha')" value="bocha" />
-              <el-option label="Tavily" value="tavily" />
-              <el-option :label="t('settings.search.metaso')" value="metaso" />
-              <el-option :label="t('settings.search.deepseek')" value="deepseek" />
-              <el-option :label="t('settings.search.agenthome')" value="agenthome" />
-            </el-select>
+              <GdOption :label="t('settings.search.bocha')" value="bocha" />
+              <GdOption label="Tavily" value="tavily" />
+              <GdOption :label="t('settings.search.metaso')" value="metaso" />
+              <GdOption :label="t('settings.search.deepseek')" value="deepseek" />
+              <GdOption :label="t('settings.search.agenthome')" value="agenthome" />
+            </GdSelect>
           </div>
 
           <!-- 秘塔 API Key -->
@@ -41,7 +41,7 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.metasoApiKeyDesc') }}<span
                   class="text-[#409eff] cursor-pointer hover:underline" @click="openMetasoUrl">{{ t('settings.search.getApiKey') }}</span></span>
             </div>
-            <el-input v-model="providerKeys.metaso" type="password" show-password placeholder="mk-..."
+            <GdInput v-model="providerKeys.metaso" type="password" show-password placeholder="mk-..."
               style="width: 360px;" class="shrink-0" clearable />
           </div>
 
@@ -53,7 +53,7 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.bochaApiKeyDesc') }}<span
                   class="text-[#409eff] cursor-pointer hover:underline" @click="openBochaUrl">{{ t('settings.search.getApiKey') }}</span></span>
             </div>
-            <el-input v-model="providerKeys.bocha" type="password" show-password placeholder="sk-..."
+            <GdInput v-model="providerKeys.bocha" type="password" show-password placeholder="sk-..."
               style="width: 360px;" class="shrink-0" clearable />
           </div>
 
@@ -65,7 +65,7 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.tavilyApiKeyDesc') }}<span
                   class="text-[#409eff] cursor-pointer hover:underline" @click="openTavilyUrl">{{ t('settings.search.getApiKey') }}</span></span>
             </div>
-            <el-input v-model="providerKeys.tavily" type="password" show-password placeholder="tvly-..."
+            <GdInput v-model="providerKeys.tavily" type="password" show-password placeholder="tvly-..."
               style="width: 360px;" class="shrink-0" clearable />
           </div>
 
@@ -78,7 +78,7 @@
                   class="text-[#409eff] cursor-pointer hover:underline" @click="openDeepSeekUrl">{{ t('settings.search.getApiKey') }}</span></span>
             </div>
             <div class="flex flex-col items-end gap-1.5 shrink-0">
-              <el-input v-model="providerKeys.deepseek" type="password" show-password
+              <GdInput v-model="providerKeys.deepseek" type="password" show-password
                 :placeholder="deepseekUseProviderKey ? t('settings.search.deepseekUseProviderKeyPlaceholder') : 'sk-...'"
                 :disabled="deepseekUseProviderKey" style="width: 360px;" clearable />
               <el-checkbox v-model="deepseekUseProviderKey" size="small"
@@ -95,7 +95,7 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.search.agenthomeApiKey') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.search.agenthomeApiKeyDesc') }}</span>
             </div>
-            <el-input v-model="providerKeys.agenthome" type="password" show-password placeholder="sk-..."
+            <GdInput v-model="providerKeys.agenthome" type="password" show-password placeholder="sk-..."
               style="width: 360px;" class="shrink-0" clearable />
           </div>
 
@@ -133,11 +133,14 @@ import { getLocale } from '@/locales'
 import { useDebounceFn } from '@vueuse/core'
 import type { SearchGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'
-import { usePopup } from '@/composables/usePopup'
 import { openInExternalBrowser } from '@/utils/browserUtils'
-import { ElMessage } from 'element-plus'
 
-const { notify } = usePopup()
+import GdInput from '@/components/ui/GdInput.vue';
+import { toast, notify } from '@/components/ui/toastService';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
+
 const { t } = useI18n()
 
 // 当前选中的供应商
@@ -179,8 +182,8 @@ const openTavilyUrl = () => openInExternalBrowser('https://app.tavily.com')
 const openDeepSeekUrl = () => openInExternalBrowser('https://platform.deepseek.com/api_keys')
 
 // 切换供应商即时保存 + 触发插件重载以重新注册工具
-const handleProviderChange = async (val: string) => {
-  selectedProvider.value = val
+const handleProviderChange = async (val: string | number | (string | number)[]) => {
+  selectedProvider.value = String(val) as typeof selectedProvider.value
   await handleSave()
   try {
     await apiService.reloadPlugin('web-search')
@@ -269,7 +272,7 @@ const handlePluginToggle = async (val: string | number | boolean) => {
     const res = await apiService.updateGlobalToolStatus('web-search', enabled)
     if (res?.success) {
       pluginEnabled.value = enabled
-      ElMessage.success(enabled ? t('settings.search.pluginEnabled') : t('settings.search.pluginDisabled'))
+      toast.success(enabled ? t('settings.search.pluginEnabled') : t('settings.search.pluginDisabled'))
     }
   } catch (error) {
     pluginEnabled.value = !enabled

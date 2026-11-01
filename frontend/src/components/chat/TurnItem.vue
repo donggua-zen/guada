@@ -143,8 +143,16 @@
      若在门内则错误提示永不显示。finishReason/errorDetail
      来自 turn.metadata（streamProjector.turn_end 写入，持久化后同样可用）。 -->
     <template v-if="assistantMetadata?.finishReason">
-      <!-- 错误提示 -->
-      <el-alert v-if="assistantMetadata.finishReason === 'error'" :title="t('chat.turn.apiError')" type="error"
+      <!-- 错误提示（network_error 为新归一化原因；历史遗留的 terminated 裸错误走 errorAlertKind 兜底） -->
+      <el-alert v-if="errorAlertKind === 'network'" :title="t('chat.turn.networkError')" type="warning"
+        :closable="false" class="mt-2">
+        <div>{{ t('chat.turn.networkErrorHint') }}</div>
+        <div v-if="assistantMetadata.errorDetail" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+          {{ assistantMetadata.errorDetail }}
+        </div>
+      </el-alert>
+
+      <el-alert v-else-if="assistantMetadata.finishReason === 'error'" :title="t('chat.turn.apiError')" type="error"
         :closable="false" class="mt-2">
         {{ assistantMetadata.errorDetail }}
       </el-alert>
@@ -649,6 +657,18 @@ const assistantMetadata = computed<Record<string, unknown> | null>(() => {
   return {
     ...turnMeta,
   };
+});
+
+// 错误卡片形态：网络中断类（新 finishReason=network_error，或历史遗留的裸传输错误
+// errorDetail="terminated"/UND_ERR_*）显示友好提示，其余走通用 API 错误卡
+const errorAlertKind = computed<"network" | "generic">(() => {
+  const meta = assistantMetadata.value;
+  if (!meta) return "generic";
+  if (meta.finishReason === "network_error") return "network";
+  const detail = String(meta.errorDetail ?? "");
+  return /^terminated$|^fetch failed$|ECONNRESET|UND_ERR_SOCKET/i.test(detail)
+    ? "network"
+    : "generic";
 });
 
 const streamingState = computed(() => ({

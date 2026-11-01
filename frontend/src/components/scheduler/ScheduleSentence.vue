@@ -2,26 +2,26 @@
   <div class="schedule-sentence">
     <!-- 一句话调度：频率 + 条件 + 于 + 时间 + 时区 -->
     <div class="sentence-shell" :class="{ 'has-error': !!error }">
-      <el-select v-model="frequency" class="sched-pill freq-pill" :teleported="true">
-        <el-option v-for="option in frequencyOptions" :key="option.value" :label="option.label"
+      <GdSelect v-model="frequency" class="sched-pill freq-pill" :teleported="true">
+        <GdOption v-for="option in frequencyOptions" :key="option.value" :label="option.label"
           :value="option.value" />
-      </el-select>
+      </GdSelect>
 
       <!-- 每小时 / 每 N 小时：分钟 -->
       <template v-if="draft.frequency === 'every_hours'">
-        <el-select :model-value="draft.intervalHours" class="sched-pill num-pill" :teleported="true"
+        <GdSelect :model-value="draft.intervalHours" class="sched-pill num-pill" :teleported="true"
           @update:model-value="emitDraft({ intervalHours: Number($event) })">
-          <el-option v-for="n in 23" :key="n" :label="String(n)" :value="n" />
-        </el-select>
+          <GdOption v-for="n in 23" :key="n" :label="String(n)" :value="n" />
+        </GdSelect>
         <span class="sentence-text">{{ t('scheduler.schedule.hourUnit') }}</span>
       </template>
 
       <template v-if="draft.frequency === 'hourly' || draft.frequency === 'every_hours'">
         <span class="sentence-text">{{ t('scheduler.schedule.minutePrefix') }}</span>
-        <el-select :model-value="draft.minute" class="sched-pill num-pill" :teleported="true"
+        <GdSelect :model-value="draft.minute" class="sched-pill num-pill" :teleported="true"
           @update:model-value="emitDraft({ minute: Number($event) })">
-          <el-option v-for="m in minuteOptions" :key="m" :label="pad2(m)" :value="m" />
-        </el-select>
+          <GdOption v-for="m in minuteOptions" :key="m" :label="pad2(m)" :value="m" />
+        </GdSelect>
         <span class="sentence-text">{{ t('scheduler.schedule.minuteUnit') }}</span>
       </template>
 
@@ -83,7 +83,7 @@
       </template>
 
       <template v-if="draft.frequency === 'custom'">
-        <el-input :model-value="draft.cronExpression" class="sched-cron" placeholder="0 9 * * *" spellcheck="false"
+        <GdInput :model-value="draft.cronExpression" class="sched-cron" placeholder="0 9 * * *" spellcheck="false"
           @update:model-value="emitDraft({ cronExpression: $event })" />
       </template>
 
@@ -101,9 +101,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElSelect, ElOption, ElTimePicker, ElDatePicker, ElInput, ElIcon } from 'element-plus'
+import { ElTimePicker, ElDatePicker, ElIcon } from 'element-plus';
 import { ChevronDown16Regular } from '@vicons/fluent'
 import GdPopover from '@/components/ui/GdPopover.vue'
+import GdInput from '@/components/ui/GdInput.vue'
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
 import {
   SCHEDULE_TIMEZONE_LABEL,
   computeNextRun,

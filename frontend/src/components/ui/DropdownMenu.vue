@@ -7,8 +7,8 @@
   </div>
   <!-- 下拉菜单使用 Teleport 避免被父元素裁剪；data-dropdown-menu 供"点击外部收起"类逻辑豁免菜单内点击 -->
   <Teleport to="body">
-    <Transition name="dropdown-fade">
-      <div v-if="visible" ref="menuRef" data-dropdown-menu class="fixed z-(--gd-z-popover) bg-(--gd-color-surface) rounded-(--gd-size-dialog-rounded-radius) shadow-lg border border-(--gd-color-surface-border) py-1 min-w-30 overflow-clip" :style="menuStyle" @click.stop>
+    <Transition name="dropdown-pop">
+      <div v-if="visible" ref="menuRef" data-dropdown-menu :data-above="menuAbove ? 'true' : 'false'" class="fixed z-(--gd-z-popover) bg-(--gd-color-surface) rounded-(--gd-size-dialog-rounded-radius) shadow-lg border border-(--gd-color-surface-border) py-1 min-w-30 overflow-clip" :style="menuStyle" @click.stop>
         <slot name="dropdown"></slot>
       </div>
     </Transition>
@@ -27,6 +27,8 @@ const emit = defineEmits<{
 }>();
 
 const visible = ref(false);
+/** 弹出方向（updatePosition 判定）：进出场位移按方向反演 */
+const menuAbove = ref(false);
 
 const dropdownRef = ref<HTMLElement | null>(null);
 const menuRef = ref<HTMLElement | null>(null);
@@ -63,6 +65,7 @@ const updatePosition = () => {
 
   if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
     // 下方空间不足且上方空间更大，改为向上弹出
+    menuAbove.value = true;
     menuStyle.value = {
       top: `${Math.max(MARGIN, rect.top - menuHeight)}px`,
       left: `${rect.left + rect.width / 2}px`,
@@ -70,6 +73,7 @@ const updatePosition = () => {
     };
   } else {
     // 默认向下弹出
+    menuAbove.value = false;
     menuStyle.value = {
       top: `${rect.bottom + 4}px`,
       left: `${rect.left + rect.width / 2}px`,
@@ -161,15 +165,28 @@ defineExpose({
 </script>
 
 <style scoped>
-.dropdown-fade-enter-active,
-.dropdown-fade-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+/* 进出场保留定位锚 translateX(-50%)，叠加方向感缩放：
+   向下弹出从上方 -4px 落下，向上弹出从下方 +4px 升起（data-above 由 updatePosition 写入） */
+.dropdown-pop-enter-active,
+.dropdown-pop-leave-active {
+  transition: opacity var(--gd-motion-duration-base) var(--gd-motion-ease-out),
+    transform var(--gd-motion-duration-base) var(--gd-motion-ease-out);
 }
 
-.dropdown-fade-enter-from,
-.dropdown-fade-leave-to {
+.dropdown-pop-enter-from,
+.dropdown-pop-leave-to {
   opacity: 0;
-  transform: translateX(-50%) scale(0.95);
+  transform: translateX(-50%) scale(0.96);
+}
+
+.dropdown-pop-enter-from[data-above="false"],
+.dropdown-pop-leave-to[data-above="false"] {
+  transform: translateX(-50%) translateY(-4px) scale(0.96);
+}
+
+.dropdown-pop-enter-from[data-above="true"],
+.dropdown-pop-leave-to[data-above="true"] {
+  transform: translateX(-50%) translateY(4px) scale(0.96);
 }
 </style>
 

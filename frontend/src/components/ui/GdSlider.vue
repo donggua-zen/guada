@@ -1,0 +1,128 @@
+<template>
+    <div :class="rootClasses" :data-size="resolvedSize">
+        <div class="relative flex min-w-0 flex-1 items-center" @mouseenter="hovered = true" @mouseleave="hovered = false">
+            <!-- 视觉层：轨道 + 主色填充 -->
+            <div class="pointer-events-none absolute inset-x-0 top-1/2 h-[6px] -translate-y-1/2 overflow-hidden rounded-full bg-[var(--gd-color-field-bg-hover)]">
+                <div class="h-full rounded-full bg-[var(--gd-color-primary)] transition-[width] duration-75"
+                    :style="{ width: `${percent * 100}%` }"></div>
+            </div>
+            <!-- thumb 视觉层：跟随百分比（与 input 命中区按同一公式对齐，首尾不越界） -->
+            <div class="pointer-events-none absolute top-1/2 size-[14px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--gd-color-surface)] shadow-[0_1px_3px_rgba(0,0,0,0.25)] ring-1 ring-[var(--gd-color-border)] transition-[left] duration-75"
+                :style="{ left: `calc(${thumbLeftPx}px + ${percent * thumbTravelPx}px)` }"></div>
+            <!-- tooltip：拖动/悬停时显示 -->
+            <div v-if="showTooltip && tooltipShown"
+                class="pointer-events-none absolute -top-7 z-(--gd-z-popover) -translate-x-1/2 whitespace-nowrap rounded-md border border-[var(--gd-color-border)] bg-[var(--gd-color-surface)] px-1.5 py-0.5 text-[12px] leading-none text-[var(--gd-color-text)] shadow-sm"
+                :style="{ left: `calc(${thumbLeftPx}px + ${percent * thumbTravelPx}px)` }">
+                {{ tooltipText }}
+            </div>
+            <!-- 交互层：原生 range，thumb 透明放大占满命中区 -->
+            <input ref="rangeRef" type="range" class="relative z-1 h-[24px] w-full cursor-pointer appearance-none bg-transparent
+                [&::-webkit-slider-runnable-track]:h-[24px] [&::-webkit-slider-runnable-track]:bg-transparent
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-[24px] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-transparent"
+                :min="min" :max="max" :step="step" :value="modelValue" :disabled="disabled"
+                :aria-valuenow="modelValue" aria-orientation="horizontal"
+                @input="handleRangeInput" @change="emit('change', modelValue!)"
+                @pointerdown="dragging = true" @pointerup="endDrag" @pointercancel="endDrag"
+                @focus="tooltipVisible = true" @blur="tooltipVisible = false">
+        </div>
+        <GdInputNumber v-if="showInput" :model-value="modelValue" :min="min" :max="max" :step="step"
+            :disabled="disabled" :size="resolvedSize" :controls="false" class="w-[90px] shrink-0"
+            @update:model-value="handleNumberInput" @change="(v: number | null) => v !== null && emit('change', v)" />
+    </div>
+</template>
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import GdInputNumber from "./GdInputNumber.vue";
+
+defineOptions({ name: "GdSlider" });
+
+const props = withDefaults(defineProps<{
+    modelValue?: number;
+    min?: number;
+    max?: number;
+    step?: number;
+    disabled?: boolean;
+    /** 右侧并置数字输入框（联动） */
+    showInput?: boolean;
+    /** 拖动/悬停时的值提示浮层 */
+    showTooltip?: boolean;
+    /** 提示文案格式化（如 GdSliderOptional 的「界外 = Auto」） */
+    formatTooltip?: (value: number) => string | number;
+    size?: "small" | "medium" | "default";
+}>(), {
+    modelValue: 0,
+    min: 0,
+    max: 100,
+    step: 1,
+    showTooltip: true,
+    size: "medium",
+});
+
+const emit = defineEmits<{
+    "update:modelValue": [value: number];
+    input: [value: number];
+    change: [value: number];
+}>();
+
+const rangeRef = ref<HTMLInputElement | null>(null);
+const hovered = ref(false);
+const dragging = ref(false);
+const tooltipVisible = ref(false);
+// thumb 视觉层用的像素行程（原生 thumb 宽 24px，视觉 thumb 14px，行程 = 宽 - thumb 宽）
+const thumbTravelPx = ref(0);
+const thumbLeftPx = 12; // 原生 thumb 半径，视觉 thumb 左缘起点
+let resizeObserver: ResizeObserver | null = null;
+
+const percent = computed(() => {
+    const span = props.max - props.min;
+    if (span <= 0) return 0;
+    return (props.modelValue - props.min) / span;
+});
+
+const resolvedSize = computed(() => (props.size === "small" ? "small" : "medium"));
+
+const tooltipText = computed((): string | number => {
+    const fn = props.formatTooltip ?? ((v: number) => v);
+    return fn(props.modelValue);
+});
+
+const handleRangeInput = (e: Event): void => {
+    const value = Number((e.target as HTMLInputElement).value);
+    emit("update:modelValue", value);
+    emit("input", value);
+};
+const handleNumberInput = (value: number | null): void => {
+    if (value === null) return;
+    emit("update:modelValue", value);
+    emit("input", value);
+};
+const endDrag = (): void => {
+    dragging.value = false;
+};
+
+// tooltip 显示时机：拖动中、或悬停
+const syncTooltip = computed(() => dragging.value || hovered.value);
+// Vue 模板里 tooltipVisible 由 focus/blur 控制 + hover/drag 合成：
+// 用一个合并态驱动渲染
+const tooltipShown = computed(() => tooltipVisible.value || syncTooltip.value);
+
+const rootClasses = computed((): string => [
+    // gd-slider 基类是主题插件的稳定定位钩子，配合 data-size 换肤，不要改名
+    "gd-slider",
+    "flex min-w-0 items-center gap-3",
+].join(" "));
+
+onMounted(() => {
+    if (rangeRef.value) {
+        resizeObserver = new ResizeObserver(() => {
+            thumbTravelPx.value = Math.max(0, rangeRef.value!.clientWidth - 24);
+        });
+        resizeObserver.observe(rangeRef.value);
+        thumbTravelPx.value = Math.max(0, rangeRef.value.clientWidth - 24);
+    }
+});
+onBeforeUnmount(() => {
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+});
+</script>

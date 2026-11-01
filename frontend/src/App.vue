@@ -9,6 +9,7 @@
         <el-config-provider :locale="elLocale">
             <RouterView></RouterView>
             <GdDialogHost />
+            <GdToastHost />
         </el-config-provider>
     </div>
 
@@ -33,6 +34,7 @@ import { i18n, getLocale } from './locales'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
 import SetupGuide from './components/SetupGuide.vue'
 import GdDialogHost from './components/ui/GdDialogHost.vue'
+import GdToastHost from './components/ui/GdToastHost.vue'
 import ContextMenuManager from './utils/ContextMenuManager'
 
 const router = useRouter()

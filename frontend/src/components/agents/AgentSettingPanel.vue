@@ -1,5 +1,5 @@
 <template>
-  <div class="agent-setting-panel-root h-full" v-loading="pageLoading" :element-loading-text="t('agents.setting.loading')">
+  <div class="agent-setting-panel-root h-full">
     <div class="flex h-full overflow-hidden">
       <!-- 侧边栏 -->
       <div class="w-40 shrink-0 overflow-y-auto py-3">
@@ -47,7 +47,7 @@
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.titleHint') }}</span>
                     </div>
                     <div class="w-1/2 flex justify-end">
-                      <el-input v-model="agentForm.name" :placeholder="t('agents.setting.titlePlaceholder')" class="w-full" />
+                      <GdInput v-model="agentForm.name" :placeholder="t('agents.setting.titlePlaceholder')" class="w-full" />
                     </div>
                   </div>
                 </el-form-item>
@@ -59,7 +59,7 @@
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.descHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-input v-model="agentForm.description" type="textarea" :placeholder="t('agents.setting.descPlaceholder')"
+                      <GdInput v-model="agentForm.description" type="textarea" :placeholder="t('agents.setting.descPlaceholder')"
                         :autosize="{ minRows: 3, maxRows: 5 }" class="w-full" />
                     </div>
                   </div>
@@ -77,7 +77,7 @@
                       </span>
                     </div>
                     <div class="w-1/2">
-                      <el-input v-model="agentForm.id" :readonly="!props.isNew"
+                      <GdInput v-model="agentForm.id" :readonly="!props.isNew"
                         :placeholder="t('agents.setting.idPlaceholder')" class="w-full font-mono" />
                     </div>
                   </div>
@@ -93,7 +93,7 @@
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.modelHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-select v-model="agentForm.modelId" :options="modelOptions" :placeholder="t('agents.setting.modelPlaceholder')" clearable
+                      <GdSelect v-model="agentForm.modelId" :options="modelOptions" :placeholder="t('agents.setting.modelPlaceholder')" clearable
                         class="w-full" />
                     </div>
                   </div>
@@ -110,13 +110,13 @@
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.compressionTierHint') }}</span>
                     </div>
                     <div class="w-1/2">
-                      <el-select v-model="agentForm.compressionTier" :placeholder="t('agents.setting.compressionTierPlaceholder')" class="w-full">
-                        <el-option v-for="opt in COMPRESSION_TIER_OPTIONS" :key="opt.value" :label="t(opt.labelKey)" :value="opt.value">
+                      <GdSelect v-model="agentForm.compressionTier" :placeholder="t('agents.setting.compressionTierPlaceholder')" class="w-full">
+                        <GdOption v-for="opt in COMPRESSION_TIER_OPTIONS" :key="opt.value" :label="t(opt.labelKey)" :value="opt.value">
                           <span class="flex items-center gap-2">
                             <span>{{ t(opt.descKey) }}</span>
                           </span>
-                        </el-option>
-                      </el-select>
+                        </GdOption>
+                      </GdSelect>
                     </div>
                   </div>
                 </el-form-item>
@@ -147,7 +147,7 @@
                 <!-- 详细设定 -->
                 <el-form-item prop="systemPrompt" :show-label="false"
                   class="flex-1 min-h-40 prompt-form-item no-border-item">
-                  <el-input v-model="agentForm.systemPrompt" type="textarea" :placeholder="t('agents.setting.systemPromptPlaceholder')" resize="none" />
+                  <GdInput v-model="agentForm.systemPrompt" type="textarea" :placeholder="t('agents.setting.systemPromptPlaceholder')" resize="none" />
                 </el-form-item>
 
               </el-form>
@@ -165,7 +165,7 @@
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
-                      <el-switch :model-value="!allDisabled" @update:model-value="(v) => handleAllDisabledToggle(!v)" />
+                      <GdSwitch :model-value="!allDisabled" @update:model-value="(v) => handleAllDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allDisabled }]">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.newPluginLabel') }}</span>
@@ -190,7 +190,7 @@
                     class="tool-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] bg-gray-50/60 dark:bg-[#242629]/60">
                     <div class="flex items-start justify-between gap-2 mb-1">
                       <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ card.kit.name || card.kit.id }}</div>
-                      <el-switch :model-value="isKitEnabled(card.pluginId, card.kit.id)"
+                      <GdSwitch :model-value="isKitEnabled(card.pluginId, card.kit.id)"
                         @update:model-value="(val) => handleKitToggle(card.pluginId, card.kit.id, !!val)"
                         :disabled="allDisabled" size="small" inline-prompt />
                     </div>
@@ -228,7 +228,7 @@
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
-                      <el-switch :model-value="!allMcpDisabled" @update:model-value="(v) => handleAllMcpDisabledToggle(!v)" />
+                      <GdSwitch :model-value="!allMcpDisabled" @update:model-value="(v) => handleAllMcpDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allMcpDisabled }]">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.newMcpLabel') }}</span>
@@ -270,7 +270,7 @@
                       </div>
 
                       <!-- 启用/禁用开关 -->
-                      <el-switch :model-value="isMcpServerEnabled(server.id)"
+                      <GdSwitch :model-value="isMcpServerEnabled(server.id)"
                         @update:model-value="(val) => handleMcpServerToggle(server.id, !!val)"
                         :disabled="allMcpDisabled" />
                     </div>
@@ -291,7 +291,7 @@
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
-                      <el-switch :model-value="!allSkillsDisabled" @update:model-value="(v) => handleAllSkillsDisabledToggle(!v)" />
+                      <GdSwitch :model-value="!allSkillsDisabled" @update:model-value="(v) => handleAllSkillsDisabledToggle(!v)" />
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allSkillsDisabled }]">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.newSkillLabel') }}</span>
@@ -323,7 +323,7 @@
                     <div class="flex items-start justify-between gap-2 mb-2">
                       <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ getSkillDisplayName(skill.manifest, skill.id) }}</div>
                       <div class="flex items-center gap-1.5 shrink-0">
-                        <el-switch :model-value="getSkillEffectiveEnabled(skill)"
+                        <GdSwitch :model-value="getSkillEffectiveEnabled(skill)"
                           :loading="updatingSkills.has(skill.id)"
                           @update:model-value="(val) => handleSkillToggle(skill.id, !!val)" :disabled="allSkillsDisabled"
                           size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
@@ -351,7 +351,7 @@
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
-                      <el-switch :model-value="!allAgentsDisabled" @update:model-value="(v) => handleAllAgentsDisabledToggle(!v)" />
+                      <GdSwitch :model-value="!allAgentsDisabled" @update:model-value="(v) => handleAllAgentsDisabledToggle(!v)" />
                     </div>
                   </div>
                 </el-form-item>
@@ -378,7 +378,7 @@
                     <div class="flex items-start justify-between gap-2 mb-1">
                       <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ char.name }}</div>
                       <div class="flex items-center gap-1.5 shrink-0">
-                        <el-switch :model-value="getAgentEffectiveEnabled(char)"
+                        <GdSwitch :model-value="getAgentEffectiveEnabled(char)"
                           @update:model-value="(val) => handleAgentToggle(char.id, !!val)" :disabled="allAgentsDisabled"
                           size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
                       </div>
@@ -399,16 +399,7 @@
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocale } from '@/locales'
-import {
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElSelect,
-  ElIcon,
-  ElAlert,
-  ElTag,
-  ElSwitch
-} from 'element-plus'
+import { ElForm, ElFormItem, ElIcon, ElAlert, ElTag } from 'element-plus';
 import {
   Code24Regular, Bot24Regular, Wrench16Regular, TextDescription20Regular,
   Info24Regular, ArrowSync16Regular, Person16Regular, Chat16Regular, PlugConnected20Regular
@@ -421,11 +412,15 @@ import type { PluginQueryPlugin } from '../../services/modules/settings.api'
 import type { FormInstance } from 'element-plus'
 import type { CompressionTier } from '@/constants'
 
-import { usePopup } from '../../composables/usePopup'
 import { getSkillDisplayName, getSkillDisplayDescription } from '@/utils/skillDisplay'
 import AvatarPreview from '../ui/AvatarPreview.vue'
 import SegmentedToggle from '../ui/SegmentedToggle.vue'
 import { DEFAULT_COMPRESSION_TIER, COMPRESSION_TIER_OPTIONS } from '@/constants'
+import GdInput from '@/components/ui/GdInput.vue'
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
+import { toast, type ToastHandle } from '@/components/ui/toastService';
 import {
   buildPluginConfig,
   effectiveKitEnabled,
@@ -438,7 +433,6 @@ import {
   type UnrenderedRefs,
 } from '../../utils/agentPluginConfig'
 
-const { toast } = usePopup()
 const { t } = useI18n()
 
 // 工具栏目"全部禁用/自定义"分段按钮选项
@@ -483,7 +477,19 @@ const props = defineProps({
 const emit = defineEmits(['update:data', 'update:tab', 'saved'])
 
 // 响应式数据
-const pageLoading = ref(false)
+// 页面级加载：常驻 loading toast（原 v-loading 指令，去 Element 化后改用 GdToast）
+const pageLoadingHandle = ref<ToastHandle | null>(null)
+const pageLoading = computed({
+  get: () => pageLoadingHandle.value !== null,
+  set: (v: boolean) => {
+    if (v && pageLoadingHandle.value === null) {
+      pageLoadingHandle.value = toast.loading(t('agents.setting.loading')) ?? null
+    } else if (!v && pageLoadingHandle.value) {
+      pageLoadingHandle.value.close()
+      pageLoadingHandle.value = null
+    }
+  },
+})
 
 // 模型数据
 const models = ref<Model[]>([]);
@@ -719,9 +725,6 @@ interface PresetAgent {
 }
 const presetAgents = ref<PresetAgent[]>([]);
 const loadingAgents = ref(false);
-
-
-
 
 // 能力包 key 构造
 const kitKey = (pluginId: string, kitId: string) => `${pluginId}::${kitId}`;
@@ -1132,8 +1135,6 @@ onUnmounted(() => {
   }
 })
 
-
-
 // 获取表单数据
 const getFormData = () => {
   let finalData = {
@@ -1373,7 +1374,6 @@ defineExpose({
   height: 100%;
 }
 
-
 /* 提示词输入框样式 - 禁止resize并占满flex空间（高度下限由模板的 min-h-40 提供） */
 .prompt-form-item {
   display: flex;
@@ -1417,6 +1417,5 @@ defineExpose({
 .el-form-item {
   margin-bottom: 0 !important;
 }
-
 
 </style>

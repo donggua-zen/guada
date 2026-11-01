@@ -218,6 +218,7 @@ import {
 
 import { useUsageStats } from '@/composables/useUsageStats'
 import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { apiService } from '@/services/ApiService'
 import type {
     UsageDailyPoint,
@@ -235,7 +236,7 @@ import {
 type TrendPoint = UsageDailyPoint | UsageMonthlyPoint
 
 const { t, locale } = useI18n()
-const { confirm, toast } = usePopup()
+const { confirm } = usePopup()
 const clearing = ref(false)
 const {
     range,

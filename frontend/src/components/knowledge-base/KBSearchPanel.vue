@@ -5,7 +5,7 @@
     <div class="search-input-section mb-4 bg-white dark:bg-gray-800 rounded-lg p-4">
       <el-form :model="searchForm" label-width="80px">
         <el-form-item :label="t('knowledge.search.contentLabel')">
-          <el-input v-model="searchForm.query" type="textarea" :rows="3" :placeholder="t('knowledge.search.contentPlaceholder')"
+          <GdInput v-model="searchForm.query" type="textarea" :rows="3" :placeholder="t('knowledge.search.contentPlaceholder')"
             @keyup.enter.ctrl="handleSearch" />
         </el-form-item>
 
@@ -13,7 +13,7 @@
         <div class="flex items-center gap-4 mt-2">
           <div class="flex-1 flex items-center">
             <span class="text-sm text-gray-600 dark:text-gray-400 mr-3 shrink-0" style="width: 80px;">{{ t('knowledge.search.resultCount') }}</span>
-            <el-slider v-model="searchForm.topK" :min="1" :max="20" :step="1" show-input class="flex-1" />
+            <GdSlider v-model="searchForm.topK" :min="1" :max="20" :step="1" show-input class="flex-1" />
           </div>
           <GdButton type="primary" @click="handleSearch" :loading="isSearching" :disabled="!canSearch"
             class="shrink-0" size="default">
@@ -120,15 +120,16 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdSlider from '@/components/ui/GdSlider.vue';
+import GdInput from '@/components/ui/GdInput.vue';
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Search16Regular, Search48Regular, ArrowSync16Regular } from '@vicons/fluent'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import type { KBSearchResult } from '@/services/modules/knowledge-base.api'
-import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { apiService } from '@/services/ApiService'
-
 
 interface Props {
   knowledgeBases: KnowledgeBase[]
@@ -142,7 +143,6 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const { toast } = usePopup()
 
 // 搜索表单
 const searchForm = ref({

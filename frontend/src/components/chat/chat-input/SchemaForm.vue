@@ -8,7 +8,7 @@
         </label>
 
         <!-- text / password -->
-        <el-input
+        <GdInput
           v-if="field.type === 'text' || field.type === 'password'"
           :type="field.type === 'password' ? 'password' : 'text'"
           :model-value="modelValue[field.key] ?? field.default ?? ''"
@@ -18,32 +18,31 @@
         />
 
         <!-- number -->
-        <el-input-number
+        <GdInputNumber
           v-else-if="field.type === 'number'"
           :model-value="modelValue[field.key] ?? field.default ?? 0"
           :placeholder="field.placeholder"
-          controls-position="right"
           class="w-full"
           @update:model-value="updateField(field.key, $event)"
         />
 
         <!-- select -->
-        <el-select
+        <GdSelect
           v-else-if="field.type === 'select'"
           :model-value="modelValue[field.key] ?? field.default"
           :placeholder="field.placeholder"
           @update:model-value="updateField(field.key, $event)"
         >
-          <el-option
+          <GdOption
             v-for="opt in field.options"
             :key="String(opt.value)"
             :label="opt.label"
-            :value="(opt.value as string | number | boolean | object)"
+            :value="(opt.value as string | number)"
           />
-        </el-select>
+        </GdSelect>
 
         <!-- textarea -->
-        <el-input
+        <GdInput
           v-else-if="field.type === 'textarea'"
           type="textarea"
           :model-value="modelValue[field.key] ?? field.default ?? ''"
@@ -59,6 +58,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ConfigField } from '@/services/modules/plugin.api'
+import GdInput from '@/components/ui/GdInput.vue';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
 
 const props = defineProps<{
   fields: ConfigField[]

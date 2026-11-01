@@ -3,13 +3,13 @@
     :anchor-el="anchorEl" popper-class="kb-popover compact-popover">
     <template #header>
       <div class="mb-3">
-        <el-input v-model="searchText" :placeholder="t('chat.input.searchKnowledgeBase')" clearable size="small">
+        <GdInput v-model="searchText" :placeholder="t('chat.input.searchKnowledgeBase')" clearable size="small">
           <template #prefix>
             <el-icon>
               <Search12Regular />
             </el-icon>
           </template>
-        </el-input>
+        </GdInput>
       </div>
     </template>
     <div class="popover-content">
@@ -45,9 +45,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElInput, ElCheckbox, ElIcon } from 'element-plus'
+import { ElCheckbox, ElIcon } from 'element-plus';
 import { Search12Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
+import GdInput from '@/components/ui/GdInput.vue';
 
 const { t } = useI18n()
 

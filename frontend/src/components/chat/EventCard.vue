@@ -113,6 +113,23 @@
       </div>
     </div>
 
+    <!-- 工具截图裁剪完成（维护操作；原文件与路径保留） -->
+    <div v-else-if="eventType === 'tool-image-prune'" class="event-card__compaction">
+      <div class="event-card__divider">
+        <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
+        <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
+          <el-icon size="14">
+            <Cut20Regular />
+          </el-icon>
+          <span class="event-card__compaction-text">{{ toolImagePruneLabel }}</span>
+        </span>
+        <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
+      </div>
+      <div class="event-card__result">
+        {{ toolImagePruneDetail }}
+      </div>
+    </div>
+
     <!-- 其他事件类消息：通用兜底（workflow 进度不落 JSONL，改由 workflow_run 工具行原地渲染，
          历史事件不再渲染卡片） -->
     <div v-else class="text-xs text-gray-400 dark:text-gray-500">
@@ -132,10 +149,12 @@ import {
   PanelRightExpand20Filled,
   ArrowSync16Regular,
   Warning16Regular,
+  Cut20Regular,
 } from "@vicons/fluent";
 import GdTooltip from "@/components/ui/GdTooltip.vue";
 import { stripSystemReminder } from "@/utils/messageUtils";
 import { resolveNoticeEventType } from "@/utils/jobNotice";
+import { formatBytes } from "@/utils/formatBytes";
 import type { Turn, MessageBundle } from "@/types/message";
 
 const props = defineProps<{
@@ -198,6 +217,24 @@ const compressResult = computed(() => props.event?.metadata?.compressResult ?? n
 const commandName = computed(() => props.event?.metadata?.commandName ?? "");
 const outcome = computed(() => props.event?.metadata?.commandOutcome ?? null);
 const compactInfo = computed(() => props.event?.metadata?.compactInfo ?? null);
+const toolImagePrune = computed(
+  () => props.event?.metadata?.toolImagePrune ?? null,
+);
+const toolImagePruneLabel = computed(() => {
+  const info = toolImagePrune.value;
+  if (!info) return "";
+  return t("chat.turn.toolImagePruned", {
+    count: info.imageCount ?? 0,
+    size: formatBytes(info.prunedBytes ?? 0),
+  });
+});
+const toolImagePruneDetail = computed(() => {
+  const info = toolImagePrune.value;
+  if (!info) return "";
+  return t("chat.turn.toolImagePrunedDetail", {
+    turns: info.keepTurns ?? 0,
+  });
+});
 const shadowedCount = computed(
   () =>
     compactInfo.value?.shadowedCount ??

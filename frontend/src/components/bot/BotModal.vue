@@ -6,13 +6,13 @@
 
       <!-- 平台选择（仅创建时显示） -->
       <el-form-item v-if="!isEdit" :label="t('bot.modal.platformLabel')" prop="platform">
-        <el-select v-model="formData.platform" :placeholder="t('bot.modal.platformPlaceholder')" style="width: 100%" @change="handlePlatformChange">
-          <el-option v-for="platform in botStore.platforms" :key="platform.platform" :label="platform.displayName"
+        <GdSelect v-model="formData.platform" :placeholder="t('bot.modal.platformPlaceholder')" style="width: 100%" @change="handlePlatformChange">
+          <GdOption v-for="platform in botStore.platforms" :key="platform.platform" :label="platform.displayName"
             :value="platform.platform">
             <span>{{ platform.displayName }}</span>
             <span class="text-gray-400 dark:text-[#6b6d75] text-xs ml-2">{{ platform.description }}</span>
-          </el-option>
-        </el-select>
+          </GdOption>
+        </GdSelect>
         <div class="mt-2">
           <GdButton link type="primary" size="small" @click="openConfigDoc">
             {{ configDocButtonText }}
@@ -22,19 +22,19 @@
 
       <!-- 机器人名称 -->
       <el-form-item :label="t('bot.modal.nameLabel')" prop="name">
-        <el-input v-model="formData.name" :placeholder="t('bot.modal.namePlaceholder')" maxlength="50" show-word-limit />
+        <GdInput v-model="formData.name" :placeholder="t('bot.modal.namePlaceholder')" maxlength="50" show-word-limit />
       </el-form-item>
 
       <!-- 默认智能体选择（必填） -->
       <el-form-item :label="t('bot.modal.agentLabel')" prop="defaultAgentId">
-        <el-select v-model="formData.defaultAgentId" :placeholder="t('bot.modal.agentPlaceholder')" style="width: 100%" filterable>
-          <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
+        <GdSelect v-model="formData.defaultAgentId" :placeholder="t('bot.modal.agentPlaceholder')" style="width: 100%" filterable>
+          <GdOption v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
             <div class="flex items-center gap-2">
               <img v-if="agent.avatarUrl" :src="agent.avatarUrl" class="w-6 h-6 rounded object-cover" />
               <span>{{ agent.name }}</span>
             </div>
-          </el-option>
-        </el-select>
+          </GdOption>
+        </GdSelect>
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
           {{ t('bot.modal.agentHint') }}
         </div>
@@ -42,14 +42,14 @@
 
       <!-- 模型选择（可选，不选则继承自智能体/全局设置） -->
       <el-form-item :label="t('bot.modal.modelLabel')">
-        <el-select v-model="formData.defaultModelId" :placeholder="t('bot.modal.modelPlaceholder')" style="width: 100%" filterable clearable>
-          <el-option v-for="model in availableModels" :key="model.id" :label="model.modelName" :value="model.id">
+        <GdSelect v-model="formData.defaultModelId" :placeholder="t('bot.modal.modelPlaceholder')" style="width: 100%" filterable clearable>
+          <GdOption v-for="model in availableModels" :key="model.id" :label="model.modelName" :value="model.id">
             <div class="flex items-center gap-2">
               <span>{{ model.modelName }}</span>
               <span class="text-gray-400 text-xs">{{ model.providerName }}</span>
             </div>
-          </el-option>
-        </el-select>
+          </GdOption>
+        </GdSelect>
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
           {{ t('bot.modal.modelHint') }}
         </div>
@@ -57,10 +57,10 @@
 
       <!-- 思考强度选择（仅当选中模型支持思考时显示） -->
       <el-form-item v-if="thinkingEffortOptions.length > 0" :label="t('bot.modal.thinkingLabel')">
-        <el-select v-model="formData.defaultThinkingEffort" :placeholder="t('bot.modal.thinkingPlaceholder')" style="width: 100%">
-          <el-option v-for="effort in thinkingEffortOptions" :key="effort" :label="getThinkingEffortLabelWithKey(effort)"
+        <GdSelect v-model="formData.defaultThinkingEffort" :placeholder="t('bot.modal.thinkingPlaceholder')" style="width: 100%">
+          <GdOption v-for="effort in thinkingEffortOptions" :key="effort" :label="getThinkingEffortLabelWithKey(effort)"
             :value="effort" />
-        </el-select>
+        </GdSelect>
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
           {{ t('bot.modal.thinkingHint') }}
         </div>
@@ -68,15 +68,15 @@
 
       <!-- 引用知识库选择（多选） -->
       <el-form-item :label="t('bot.modal.kbLabel')">
-        <el-select v-model="formData.knowledgeBaseIds" :placeholder="t('bot.modal.kbPlaceholder')" style="width: 100%" multiple
+        <GdSelect v-model="formData.knowledgeBaseIds" :placeholder="t('bot.modal.kbPlaceholder')" style="width: 100%" multiple
           filterable>
-          <el-option v-for="kb in knowledgeBases" :key="kb.id" :label="kb.name" :value="kb.id">
+          <GdOption v-for="kb in knowledgeBases" :key="kb.id" :label="kb.name" :value="kb.id">
             <div class="flex items-center gap-2">
               <span>{{ kb.name }}</span>
               <span v-if="kb.description" class="text-gray-400 text-xs">{{ kb.description }}</span>
             </div>
-          </el-option>
-        </el-select>
+          </GdOption>
+        </GdSelect>
         <div class="text-xs text-gray-500 mt-1">
           {{ t('bot.modal.kbHint') }}
         </div>
@@ -87,10 +87,10 @@
 
       <!-- 管理员用户 ID（多选标签输入） -->
       <el-form-item :label="t('bot.modal.adminUserIdsLabel')">
-        <el-select v-model="formData.adminUserIds" :placeholder="t('bot.modal.adminUserIdsPlaceholder')" style="width: 100%"
+        <GdSelect v-model="formData.adminUserIds" :placeholder="t('bot.modal.adminUserIdsPlaceholder')" style="width: 100%"
           multiple filterable allow-create default-first-option no-data-text="">
-          <el-option v-for="id in formData.adminUserIds" :key="id" :label="id" :value="id" />
-        </el-select>
+          <GdOption v-for="id in formData.adminUserIds" :key="id" :label="id" :value="id" />
+        </GdSelect>
         <div class="text-xs text-gray-500 mt-1">
           {{ t('bot.modal.adminUserIdsHint') }}
         </div>
@@ -104,26 +104,26 @@
           :prop="`platformConfig.${field.key}`">
 
           <!-- 文本输入 -->
-          <el-input v-if="field.type === 'text'" v-model="formData.platformConfig[field.key]"
+          <GdInput v-if="field.type === 'text'" v-model="formData.platformConfig[field.key]"
             :placeholder="field.placeholder" />
 
           <!-- 密码输入 -->
-          <el-input v-else-if="field.type === 'password'" v-model="formData.platformConfig[field.key]" type="password"
+          <GdInput v-else-if="field.type === 'password'" v-model="formData.platformConfig[field.key]" type="password"
             :placeholder="field.placeholder" show-password />
 
           <!-- 数字输入 -->
-          <el-input-number v-else-if="field.type === 'number'" v-model="formData.platformConfig[field.key]"
+          <GdInputNumber v-else-if="field.type === 'number'" v-model="formData.platformConfig[field.key]"
             :placeholder="field.placeholder" style="width: 100%" />
 
           <!-- 下拉选择 -->
-          <el-select v-else-if="field.type === 'select'" v-model="formData.platformConfig[field.key]"
+          <GdSelect v-else-if="field.type === 'select'" v-model="formData.platformConfig[field.key]"
             :placeholder="field.placeholder" style="width: 100%">
-            <el-option v-for="option in field.options" :key="option.value" :label="option.label"
+            <GdOption v-for="option in field.options" :key="option.value" :label="option.label"
               :value="option.value" />
-          </el-select>
+          </GdSelect>
 
           <!-- 开关 -->
-          <el-switch v-else-if="field.type === 'boolean'" v-model="formData.platformConfig[field.key]" />
+          <GdSwitch v-else-if="field.type === 'boolean'" v-model="formData.platformConfig[field.key]" />
 
           <!-- 字段描述 -->
           <div v-if="field.description" class="text-xs text-gray-500 mt-1">
@@ -144,16 +144,16 @@
 
           <!-- 重连配置 -->
           <el-form-item :label="t('bot.modal.reconnectLabel')">
-            <el-switch v-model="formData.reconnectConfig.enabled" />
+            <GdSwitch v-model="formData.reconnectConfig.enabled" />
           </el-form-item>
 
           <template v-if="formData.reconnectConfig.enabled">
             <el-form-item :label="t('bot.modal.maxRetries')">
-              <el-input-number v-model="formData.reconnectConfig.maxRetries" :min="1" :max="20" style="width: 100%" />
+              <GdInputNumber v-model="formData.reconnectConfig.maxRetries" :min="1" :max="20" style="width: 100%" />
             </el-form-item>
 
             <el-form-item :label="t('bot.modal.retryInterval')">
-              <el-input-number v-model="formData.reconnectConfig.retryInterval" :min="1000" :max="60000" :step="1000"
+              <GdInputNumber v-model="formData.reconnectConfig.retryInterval" :min="1000" :max="60000" :step="1000"
                 style="width: 100%" />
             </el-form-item>
           </template>
@@ -162,7 +162,7 @@
 
       <!-- 自动启动（仅创建时） -->
       <el-form-item v-if="!isEdit" :label="t('bot.modal.autoStartLabel')">
-        <el-switch v-model="formData.autoStart" />
+        <GdSwitch v-model="formData.autoStart" />
         <div class="text-xs text-gray-500 mt-1">
           {{ t('bot.modal.autoStartHint') }}
         </div>
@@ -181,8 +181,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 import type { FormInstance, FormRules } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -290,7 +296,7 @@ const formData = ref({
   defaultThinkingEffort: null as string | null,
   knowledgeBaseIds: [] as string[],
   adminUserIds: [] as string[],
-  // 动态边界：键由后端平台元数据定义，同一键多态绑定 el-input/el-input-number/el-select/el-switch，
+  // 动态边界：键由后端平台元数据定义，同一键多态绑定 GdInput/GdInputNumber/GdSelect/GdSwitch，
   // 各组件 modelValue 契约互斥（string|number / number|null / boolean|...），值类型无法收窄为单一形状
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
   platformConfig: {} as Record<string, any>,
@@ -404,8 +410,9 @@ watch(dialogVisible, (visible) => {
 })
 
 // 平台改变时，初始化默认配置
-const handlePlatformChange = (platform: string) => {
-  const metadata = botStore.platforms.find(p => p.platform === platform)
+const handlePlatformChange = (platform: string | number | (string | number)[]) => {
+  const key = String(platform)
+  const metadata = botStore.platforms.find(p => p.platform === key)
   if (metadata) {
     formData.value.platformConfig = {}
     // 设置默认值
@@ -453,7 +460,7 @@ const loadAgents = async () => {
     agents.value = response.items || []
   } catch (error) {
     console.error('获取智能体列表失败:', error)
-    ElMessage.error(t('bot.modal.loadAgentsFailed'))
+    toast.error(t('bot.modal.loadAgentsFailed'))
   }
 }
 
@@ -464,7 +471,7 @@ const loadKnowledgeBases = async () => {
     knowledgeBases.value = knowledgeBaseStore.knowledgeBases
   } catch (error) {
     console.error('获取知识库列表失败:', error)
-    ElMessage.error(t('bot.modal.loadKbFailed'))
+    toast.error(t('bot.modal.loadKbFailed'))
   }
 }
 
@@ -482,7 +489,7 @@ const loadModels = async () => {
     )
   } catch (error) {
     console.error('获取模型列表失败:', error)
-    ElMessage.error(t('bot.modal.loadModelsFailed'))
+    toast.error(t('bot.modal.loadModelsFailed'))
   }
 }
 
@@ -502,7 +509,7 @@ const handleSubmit = async () => {
 
     // 全局默认模型已移除：Bot 未选模型时必须能继承到智能体模型
     if (!formData.value.defaultModelId && !selectedAgent.value?.modelId) {
-      ElMessage.error(t('bot.modal.modelRequired'))
+      toast.error(t('bot.modal.modelRequired'))
       return
     }
 

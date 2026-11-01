@@ -31,7 +31,7 @@
                     </GdButton>
                 </template>
                 <template v-else>
-                    <el-input
+                    <GdInput
                         v-model="marketKeyword"
                         :placeholder="t('plugins.mcpMarket.searchPlaceholder')"
                         clearable
@@ -41,7 +41,7 @@
                         <template #prefix>
                             <el-icon><Search16Regular /></el-icon>
                         </template>
-                    </el-input>
+                    </GdInput>
                     <GdButton circle size="small" :loading="marketLoading" :title="t('plugins.mcpMarket.refresh')" @click="handleMarketRefresh">
                         <template #icon>
                             <ArrowClockwise16Regular />
@@ -70,7 +70,7 @@
                         </el-tag>
                     </template>
                     <template #actions>
-                        <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
+                        <GdSwitch v-model="server.enabled" :active-value="true" :inactive-value="false"
                             @change="handleToggleServer(server)" @click.stop size="small" />
                     </template>
                 </PluginListRow>
@@ -107,17 +107,17 @@
                     <el-form ref="formRef" :model="serverForm" :rules="formRules" label-position="left"
                         label-width="120px" size="large">
                         <el-form-item :label="t('plugins.mcp.nameLabel')" prop="name">
-                            <el-input v-model="serverForm.name" :placeholder="t('plugins.mcp.namePlaceholder')" />
+                            <GdInput v-model="serverForm.name" :placeholder="t('plugins.mcp.namePlaceholder')" />
                         </el-form-item>
 
                         <!-- HTTP 协议配置 (sse/streamableHttp) -->
                         <template v-if="serverForm.type !== 'stdio'">
                             <el-form-item :label="t('plugins.mcp.urlLabel')" prop="url">
-                                <el-input v-model="serverForm.url" placeholder="https://example.com/mcp" />
+                                <GdInput v-model="serverForm.url" placeholder="https://example.com/mcp" />
                             </el-form-item>
 
                             <el-form-item :label="t('plugins.mcp.headersLabel')" prop="headers">
-                                <el-input v-model="serverForm.headers" type="textarea" :rows="5"
+                                <GdInput v-model="serverForm.headers" type="textarea" :rows="5"
                                     :placeholder="t('plugins.mcp.headersPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
                                     {{ t('plugins.mcp.headersHint') }}
@@ -128,14 +128,14 @@
                         <!-- Stdio 协议配置 -->
                         <template v-if="serverForm.type === 'stdio'">
                             <el-form-item :label="t('plugins.mcp.commandLabel')" prop="command">
-                                <el-input v-model="serverForm.command" :placeholder="t('plugins.mcp.commandPlaceholder')" />
+                                <GdInput v-model="serverForm.command" :placeholder="t('plugins.mcp.commandPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
                                     {{ t('plugins.mcp.commandHint') }}
                                 </div>
                             </el-form-item>
 
                             <el-form-item :label="t('plugins.mcp.argsLabel')" prop="args">
-                                <el-input v-model="serverForm.args" type="textarea" :rows="3"
+                                <GdInput v-model="serverForm.args" type="textarea" :rows="3"
                                     :placeholder="t('plugins.mcp.argsPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
                                     {{ t('plugins.mcp.argsHint') }}
@@ -143,7 +143,7 @@
                             </el-form-item>
 
                             <el-form-item :label="t('plugins.mcp.envLabel')" prop="env">
-                                <el-input v-model="serverForm.env" type="textarea" :rows="5"
+                                <GdInput v-model="serverForm.env" type="textarea" :rows="5"
                                     :placeholder="t('plugins.mcp.envPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
                                     {{ t('plugins.mcp.envHint') }}
@@ -151,31 +151,31 @@
                             </el-form-item>
 
                             <el-form-item :label="t('plugins.mcp.cwdLabel')" prop="cwd">
-                                <el-input v-model="serverForm.cwd" :placeholder="t('plugins.mcp.cwdPlaceholder')" />
+                                <GdInput v-model="serverForm.cwd" :placeholder="t('plugins.mcp.cwdPlaceholder')" />
                             </el-form-item>
                         </template>
 
                         <el-form-item label="协议类型" prop="type">
-                            <el-select v-model="serverForm.type" placeholder="选择协议类型" clearable style="width: 100%">
-                                <el-option label="标准输入 / 输出 (stdio)" value="stdio" />
-                                <el-option label="服务器发送事件 (sse)" value="sse" />
-                                <el-option label="可流式传输的 HTTP (streamableHttp)" value="streamableHttp" />
-                            </el-select>
+                            <GdSelect v-model="serverForm.type" placeholder="选择协议类型" clearable style="width: 100%">
+                                <GdOption label="标准输入 / 输出 (stdio)" value="stdio" />
+                                <GdOption label="服务器发送事件 (sse)" value="sse" />
+                                <GdOption label="可流式传输的 HTTP (streamableHttp)" value="streamableHttp" />
+                            </GdSelect>
                         </el-form-item>
 
                         <el-form-item :label="t('plugins.mcp.descLabel')" prop="description">
-                            <el-input v-model="serverForm.description" type="textarea" :rows="3"
+                            <GdInput v-model="serverForm.description" type="textarea" :rows="3"
                                 :placeholder="t('plugins.mcp.descPlaceholder')" />
                         </el-form-item>
 
                         <el-form-item :label="t('plugins.mcp.timeoutLabel')">
-                            <el-input v-model="serverForm.timeoutMs" type="number"
+                            <GdInput v-model="serverForm.timeoutMs" type="number"
                                 :placeholder="t('plugins.mcp.timeoutPlaceholder')" />
                             <div class="text-xs text-gray-400 mt-1">{{ t('plugins.mcp.timeoutHint') }}</div>
                         </el-form-item>
 
                         <el-form-item :label="t('plugins.mcp.enabledLabel')">
-                            <el-switch v-model="serverForm.enabled" inline-prompt :active-text="t('plugins.mcp.enabledOn')" :inactive-text="t('plugins.mcp.enabledOff')"
+                            <GdSwitch v-model="serverForm.enabled" inline-prompt :active-text="t('plugins.mcp.enabledOn')" :inactive-text="t('plugins.mcp.enabledOff')"
                                 size="large" />
                         </el-form-item>
                     </el-form>
@@ -280,7 +280,7 @@
                 </ul>
             </div>
 
-            <el-input v-model="importJsonText" type="textarea" :rows="15" :placeholder="t('plugins.mcp.importPlaceholder')" />
+            <GdInput v-model="importJsonText" type="textarea" :rows="15" :placeholder="t('plugins.mcp.importPlaceholder')" />
 
             <template #footer>
                 <div class="flex justify-end gap-2">
@@ -295,11 +295,15 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane } from 'element-plus';
+import { ElForm, ElFormItem, ElTag, ElTabs, ElTabPane } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 import { ArrowClockwise16Regular, Add16Regular, ArrowUpload16Regular, MailInbox24Regular, Info24Regular, PlugConnected24Regular, Search16Regular } from '@vicons/fluent'
-import { usePopup } from '../../composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { usePluginViewQuery } from '../../composables/usePluginViewQuery'
 import { apiService } from '../../services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -308,7 +312,6 @@ import PluginListRow from './PluginListRow.vue'
 import PluginViewSwitch from './PluginViewSwitch.vue'
 import McpMarket from './McpMarket.vue'
 
-const { toast } = usePopup()
 const { t } = useI18n()
 
 // 响应式数据

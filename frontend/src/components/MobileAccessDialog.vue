@@ -77,7 +77,7 @@ import QRCode from 'qrcode'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { Phone24Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
-import { usePopup } from '@/composables/usePopup'
+import { notify } from '@/components/ui/toastService';
 import { writeTextToClipboard } from '@/utils/clipboard'
 import type { MobileAccessStatusView } from '@/services/modules/mobile-access.api'
 
@@ -86,7 +86,6 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
 const { t } = useI18n()
 const router = useRouter()
-const { notify } = usePopup()
 
 const status = ref<MobileAccessStatusView | null>(null)
 const qrDataUrl = ref('')

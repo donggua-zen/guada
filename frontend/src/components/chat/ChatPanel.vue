@@ -211,6 +211,7 @@ import { useRouter } from "vue-router";
 const { t } = useI18n()
 import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
+import { toast, notify } from '@/components/ui/toastService';
 import { useSessionStore } from "../../stores/session";
 import { useAuthStore } from "../../stores/auth"
 import { useLayoutStore } from "@/stores/layout"
@@ -270,7 +271,7 @@ import GdPopover from '@/components/ui/GdPopover.vue'
 
 
 // 弹出层工具
-const { confirm, editText, toast, notify } = usePopup();
+const { confirm, editText } = usePopup();
 // 队列补发：打开会话时若后端已空闲但队列非空（错过终态事件）则补一次消费
 const { refreshQueue } = useSessionEvents();
 const authStore = useAuthStore()
@@ -1757,7 +1758,7 @@ async function editMessage(block: MessageActionTarget) {
       defaultValue: block.content || "",
       confirmText: t('common.save'),
       cancelText: t('common.cancel')
-    }) as string | null;
+    });
 
     if (result != null && currentSessionId.value) {
       // 块对象即回合树内的响应式引用,就地改写即已更新 UI;

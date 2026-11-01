@@ -97,7 +97,7 @@
                 </div>
               </div>
               <div class="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity shrink-0">
-                <el-switch v-model="model.isActive" :active-text="t('common.enabled')" :inactive-text="t('common.disabled')"
+                <GdSwitch v-model="model.isActive" :active-text="t('common.enabled')" :inactive-text="t('common.disabled')"
                   @change="handleToggleModelActive(model)" inline-prompt size="small" />
                 <GdButton link style="font-size: 18px; color: var(--el-text-color-secondary)"
                   @click="handleEditClick(model)">
@@ -123,7 +123,7 @@
           <div class="form-section">
             <el-form-item :label="t('settings.providerDetail.modelName')" prop="modelName">
               <div class="api-key-input-wrapper">
-                <el-input v-model="editModelForm.modelName" :placeholder="t('settings.providerDetail.modelNamePlaceholder')" clearable
+                <GdInput v-model="editModelForm.modelName" :placeholder="t('settings.providerDetail.modelNamePlaceholder')" clearable
                   :disabled="isEditMode" />
                 <GdButton v-if="!isEditMode" type="primary" @click="handleFetchModels"
                   :loading="fetchingModels">
@@ -275,14 +275,14 @@
                     <div class="text-xs font-medium text-gray-500 dark:text-[#8b8d95] mt-3 mb-2">
                       {{ t('settings.providerDetail.thinkingTemplateLabel') }}
                     </div>
-                    <el-select v-model="templateSelection" filterable
+                    <GdSelect v-model="templateSelection" filterable
                       :placeholder="t('settings.providerDetail.thinkingTemplateDefault')"
                       style="max-width: 240px;" @change="onTemplateSelect">
-                      <el-option v-for="tpl in curatedTemplates" :key="tpl.format"
+                      <GdOption v-for="tpl in curatedTemplates" :key="tpl.format"
                         :label="templateLabel(tpl.format)" :value="tpl.format" />
-                      <el-option :label="t('settings.providerDetail.thinkingTemplateCustom')"
+                      <GdOption :label="t('settings.providerDetail.thinkingTemplateCustom')"
                         :value="PATCH_TEMPLATE_CUSTOM" />
-                    </el-select>
+                    </GdSelect>
                     <div v-if="formatSuggestion" class="preset-hint">
                       <el-icon class="mr-1"><Wand16Regular /></el-icon>
                       {{ t('settings.providerDetail.thinkingTemplateSuggested', formatSuggestion) }}
@@ -367,17 +367,15 @@
             </el-form-item>
 
             <el-form-item :label="t('settings.providerDetail.contextWindow')" prop="config.contextWindow">
-              <el-input-number v-model="editModelForm.config.contextWindow" placeholder="128000"
-                controls-position="right" style="width: 240px;">
+              <GdInputNumber v-model="editModelForm.config.contextWindow" placeholder="128000" style="width: 240px;">
                 <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
-              </el-input-number>
+              </GdInputNumber>
             </el-form-item>
 
             <el-form-item :label="t('settings.providerDetail.maxOutputTokens')" prop="config.maxOutputTokens">
-              <el-input-number v-model="editModelForm.config.maxOutputTokens" placeholder="4096"
-                controls-position="right" style="width: 240px;">
+              <GdInputNumber v-model="editModelForm.config.maxOutputTokens" placeholder="4096" style="width: 240px;">
                 <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
-              </el-input-number>
+              </GdInputNumber>
             </el-form-item>
 
             <el-divider content-position="left" class="!my-4 text-xs text-gray-400">
@@ -394,22 +392,22 @@
             <!-- 默认折叠：这些参数绝大多数情况不需要设置；条目已有值时自动展开，不隐藏存量配置 -->
             <div v-show="defaultParamsExpanded">
               <el-form-item :label="t('settings.providerDetail.temperature')" prop="config.temperature">
-                <el-input-number v-model="editModelForm.config.temperature" :min="0" :max="2" :step="0.1"
-                  :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
+                <GdInputNumber v-model="editModelForm.config.temperature" :min="0" :max="2" :step="0.1"
+                  :placeholder="t('settings.providerDetail.modelDefault')" style="width: 240px;" />
               </el-form-item>
 
               <el-form-item label="Top P" prop="config.topP">
-                <el-input-number v-model="editModelForm.config.topP" :min="0" :max="1" :step="0.05"
-                  :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
+                <GdInputNumber v-model="editModelForm.config.topP" :min="0" :max="1" :step="0.05"
+                  :placeholder="t('settings.providerDetail.modelDefault')" style="width: 240px;" />
               </el-form-item>
 
               <el-form-item :label="t('settings.providerDetail.frequencyPenalty')" prop="config.frequencyPenalty">
-                <el-input-number v-model="editModelForm.config.frequencyPenalty" :min="-2" :max="2" :step="0.1"
-                  :placeholder="t('settings.providerDetail.modelDefault')" controls-position="right" style="width: 240px;" />
+                <GdInputNumber v-model="editModelForm.config.frequencyPenalty" :min="-2" :max="2" :step="0.1"
+                  :placeholder="t('settings.providerDetail.modelDefault')" style="width: 240px;" />
               </el-form-item>
 
               <el-form-item :label="t('settings.providerDetail.customParameters')" prop="config.customParameters">
-                <el-input v-model="customParamsStr" type="textarea" :rows="3"
+                <GdInput v-model="customParamsStr" type="textarea" :rows="3"
                   placeholder='{ "temperature": 0.7, "top_p": 1 }' class="font-mono text-xs" />
               </el-form-item>
             </div>
@@ -418,8 +416,8 @@
           <!-- 嵌入模型配置 -->
           <div v-else-if="editModelForm.modelType === 'embedding'" class="transition-all">
             <el-form-item :label="t('settings.providerDetail.vectorDimensions')" prop="config.vectorDimensions">
-              <el-input-number v-model="editModelForm.config.vectorDimensions" :placeholder="t('settings.providerDetail.vectorDimensionsPlaceholder')"
-                style="width: 240px;" controls-position="right" />
+              <GdInputNumber v-model="editModelForm.config.vectorDimensions" :placeholder="t('settings.providerDetail.vectorDimensionsPlaceholder')"
+                style="width: 240px;" />
               <div class="text-xs text-gray-400 mt-1">{{ t('settings.providerDetail.vectorDimensionsDesc') }}</div>
             </el-form-item>
           </div>
@@ -438,13 +436,13 @@
       class="model-fetch-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
         <div class="mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">
-          <el-input v-model="searchModelName" :placeholder="t('settings.providerDetail.searchModelName')" clearable @input="handleSearchModel">
+          <GdInput v-model="searchModelName" :placeholder="t('settings.providerDetail.searchModelName')" clearable @input="handleSearchModel">
             <template #prefix>
               <el-icon>
                 <Search16Regular />
               </el-icon>
             </template>
-          </el-input>
+          </GdInput>
         </div>
 
         <div v-if="fetchingModels" class="flex justify-center items-center py-12">
@@ -497,6 +495,11 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDebounceFn } from '@vueuse/core'
@@ -508,6 +511,7 @@ import {
 } from '@vicons/fluent'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
+import { notify } from '@/components/ui/toastService';
 import {
   getModelDisplayName,
   getModelAvatarPath,
@@ -540,7 +544,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const { notify, confirm } = usePopup()
+const { confirm } = usePopup()
 
 // ========== 编辑/新增模型信息 ==========
 const showEditModal = ref(false)
@@ -731,9 +735,10 @@ const templateSelection = computed(() => {
 })
 
 /** 选模板 → 回填表达式；清除选择 = 清空回落默认 openai；自定义 = 保持文本不动（焦点交给编辑器） */
-const onTemplateSelect = (value: string) => {
-  if (value === PATCH_TEMPLATE_CUSTOM) return
-  const tpl = patchTemplates.value.find((x) => x.format === value)
+const onTemplateSelect = (value: string | number | (string | number)[]) => {
+  const v = String(value)
+  if (v === PATCH_TEMPLATE_CUSTOM) return
+  const tpl = patchTemplates.value.find((x) => x.format === v)
   editModelForm.value.thinkingPatchExpr = tpl ? tpl.expression : ''
 }
 
@@ -1166,14 +1171,6 @@ const handleFetchModels = async () => {
 </script>
 
 <style scoped>
-/* 统一输入框内容左对齐 */
-:deep(.el-input__inner),
-:deep(.el-textarea__inner),
-:deep(.el-input-number__decrease),
-:deep(.el-input-number__increase) {
-  text-align: left !important;
-}
-
 /* el-divider 的文本自带一层实色背景（用来遮住分隔横线），底色是 Element 的
    --el-bg-color，暗色下与 GdDialog 表面色不一致，会显出一条异色带——
    对齐对话框底色（变量与 GdDialog.vue 的面板背景同源） */

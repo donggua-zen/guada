@@ -108,14 +108,14 @@
             <div class="viewport-custom">
               <span class="viewport-custom-label">{{ t('chat.workspace.viewportCustom') }}</span>
               <div class="viewport-custom-inputs">
-                <el-input-number
+                <GdInputNumber
                   v-model="customWidth"
                   :min="VIEWPORT_MIN.width" :max="VIEWPORT_MAX.width" :step="10"
                   :controls="false" size="small" style="width: 60px"
                   @change="applyCustomViewport"
                 />
                 <span>×</span>
-                <el-input-number
+                <GdInputNumber
                   v-model="customHeight"
                   :min="VIEWPORT_MIN.height" :max="VIEWPORT_MAX.height" :step="10"
                   :controls="false" size="small" style="width: 60px"
@@ -169,6 +169,7 @@ import { useBrowserWebviewStore } from '@/stores/browserWebview'
 import {
   VIEWPORT_PRESETS, VIEWPORT_MIN, VIEWPORT_MAX, isValidViewportSize,
 } from '@/utils/browserViewport'
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 
 const { t } = useI18n()
 const store = useBrowserWebviewStore()

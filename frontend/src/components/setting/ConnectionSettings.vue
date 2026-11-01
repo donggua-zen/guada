@@ -86,7 +86,7 @@
           <div v-if="currentStep === 0" class="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto pr-2 mt-3">
             <div>
               <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.connectionName') }} <span class="text-red-500">*</span></label>
-              <el-input v-model="editName" placeholder="my-server" />
+              <GdInput v-model="editName" placeholder="my-server" />
             </div>
 
             <!-- 连接类型：SSH 远程主机 / 本机（或远程 daemon）上的 Docker 容器 / 本机 WSL 发行版（仅 Windows） -->
@@ -115,35 +115,35 @@
               <div class="flex gap-3 items-end">
                 <div class="flex-1 min-w-0">
                   <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Host <span class="text-red-500">*</span></label>
-                  <el-input v-model="editConfig.host" placeholder="192.168.1.100" />
+                  <GdInput v-model="editConfig.host" placeholder="192.168.1.100" />
                 </div>
                 <div class="shrink-0" style="width: 110px;">
                   <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Port</label>
-                  <el-input-number v-model="editConfig.port" :min="1" :max="65535" controls-position="right" style="width: 110px;" />
+                  <GdInputNumber v-model="editConfig.port" :min="1" :max="65535" style="width: 110px;" />
                 </div>
               </div>
 
               <div class="flex gap-3 items-end">
                 <div class="flex-1 min-w-0">
                   <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Username <span class="text-red-500">*</span></label>
-                  <el-input v-model="editConfig.username" placeholder="root" />
+                  <GdInput v-model="editConfig.username" placeholder="root" />
                 </div>
                 <div class="shrink-0" style="width: 130px;">
                   <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Auth</label>
-                  <el-select v-model="editConfig.authMethod" style="width: 130px;">
-                    <el-option v-for="opt in authOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-                  </el-select>
+                  <GdSelect v-model="editConfig.authMethod" style="width: 130px;">
+                    <GdOption v-for="opt in authOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+                  </GdSelect>
                 </div>
               </div>
 
               <div v-if="editConfig.authMethod === 'password'">
                 <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.passwordLabel') }}</label>
-                <el-input v-model="editConfig.password" type="password" show-password />
+                <GdInput v-model="editConfig.password" type="password" show-password />
               </div>
               <div v-if="editConfig.authMethod === 'privateKey'">
                 <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.privateKeyPathLabel') }}</label>
                 <div class="flex gap-2">
-                  <el-input v-model="editConfig.privateKeyPath" class="flex-1 min-w-0"
+                  <GdInput v-model="editConfig.privateKeyPath" class="flex-1 min-w-0"
                     :placeholder="isElectron ? t('settings.connection.privateKeyPathPlaceholderElectron') : t('settings.connection.privateKeyPathPlaceholderWeb')" />
                   <GdButton v-if="isElectron" @click="selectPrivateKeyFile">
                     {{ t('settings.connection.browse') }}
@@ -160,14 +160,14 @@
               <div>
                 <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.containerLabel') }} <span class="text-red-500">*</span></label>
                 <div class="flex gap-2">
-                  <el-select v-model="editConfig.container" filterable allow-create default-first-option
+                  <GdSelect v-model="editConfig.container" filterable allow-create default-first-option
                     class="flex-1 min-w-0" :placeholder="t('settings.connection.containerPlaceholder')"
                     :loading="containersLoading" @visible-change="onContainerDropdown">
-                    <el-option v-for="c in runningContainers" :key="c.name" :label="c.name" :value="c.name">
+                    <GdOption v-for="c in runningContainers" :key="c.name" :label="c.name" :value="c.name">
                       <span class="text-sm">{{ c.name }}</span>
                       <span class="text-xs text-gray-400 ml-2">{{ c.image }}</span>
-                    </el-option>
-                  </el-select>
+                    </GdOption>
+                  </GdSelect>
                   <GdButton :loading="containersLoading" @click="loadContainers()">
                     {{ t('settings.connection.refreshContainers') }}
                   </GdButton>
@@ -180,7 +180,7 @@
 
               <div>
                 <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.dockerHostLabel') }}</label>
-                <el-input v-model="editConfig.dockerHost" :placeholder="t('settings.connection.dockerHostPlaceholder')" />
+                <GdInput v-model="editConfig.dockerHost" :placeholder="t('settings.connection.dockerHostPlaceholder')" />
                 <div class="text-xs text-gray-400 dark:text-[#8b8d95] mt-1">
                   {{ t('settings.connection.dockerHostDesc') }}
                 </div>
@@ -192,14 +192,14 @@
               <div>
                 <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.distroLabel') }}</label>
                 <div class="flex gap-2">
-                  <el-select v-model="editConfig.distro" filterable allow-create default-first-option clearable
+                  <GdSelect v-model="editConfig.distro" filterable allow-create default-first-option clearable
                     class="flex-1 min-w-0" :placeholder="t('settings.connection.distroPlaceholder')"
                     :loading="distrosLoading" @visible-change="onDistroDropdown">
-                    <el-option v-for="d in wslDistros" :key="d.name" :label="d.name" :value="d.name">
+                    <GdOption v-for="d in wslDistros" :key="d.name" :label="d.name" :value="d.name">
                       <span class="text-sm">{{ d.name }}</span>
                       <span class="text-xs text-gray-400 ml-2">{{ d.isDefault ? t('settings.connection.distroDefaultTag') + ' · ' : '' }}{{ d.state || '' }}</span>
-                    </el-option>
-                  </el-select>
+                    </GdOption>
+                  </GdSelect>
                   <GdButton :loading="distrosLoading" @click="loadDistros()">
                     {{ t('settings.connection.refreshDistros') }}
                   </GdButton>
@@ -270,7 +270,7 @@
             </div>
             <!-- 路径栏 -->
             <div class="flex gap-2 shrink-0">
-              <el-input v-model="browserPath" placeholder="/" @keyup.enter="navigateBrowser()" size="small" />
+              <GdInput v-model="browserPath" placeholder="/" @keyup.enter="navigateBrowser()" size="small" />
               <GdButton size="small" @click="navigateBrowser()" :loading="browserLoading">{{ t('settings.connection.goTo') }}</GdButton>
             </div>
             <!-- 目录不存在提示:空列表会让用户误以为目录是空的 -->
@@ -364,8 +364,13 @@
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
 
 import { useI18n } from 'vue-i18n'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -709,7 +714,7 @@ async function goToBrowse() {
   const saved = editConfig.value.path
   await navigateBrowser(saved || '')
   if (saved && !browserExists.value) {
-    ElMessage.warning(t('settings.connection.pathMissingFallback'))
+    toast.warning(t('settings.connection.pathMissingFallback'))
     await navigateBrowser('')
   }
 }
@@ -745,14 +750,14 @@ function goUp() {
 }
 
 async function saveConn() {
-  if (!editName.value.trim()) { ElMessage.warning(t('settings.connection.nameRequired')); return }
+  if (!editName.value.trim()) { toast.warning(t('settings.connection.nameRequired')); return }
   saving.value = true
   try {
     // 路径栏里的内容可能未点「前往」生效:保存前按当前路径再校验一次存在性,
     // 避免把不存在的工作目录存进连接配置。
     const checked = await apiService.browsePath(editConfig.value, browserPath.value)
     if (!checked.exists) {
-      ElMessage.error(t('settings.connection.dirNotExist'))
+      toast.error(t('settings.connection.dirNotExist'))
       return
     }
     editConfig.value.path = checked.path
@@ -765,9 +770,9 @@ async function saveConn() {
       await remoteWorkspaceStore.createConnection(editName.value, editConfig.value)
     }
     editing.value = false
-    ElMessage.success(t('common.saveSuccess'))
+    toast.success(t('common.saveSuccess'))
   } catch (e) {
-    ElMessage.error(t('common.saveFailed') + ': ' + (getErrorMessage(e)))
+    toast.error(t('common.saveFailed') + ': ' + (getErrorMessage(e)))
   } finally {
     saving.value = false
   }
@@ -776,9 +781,9 @@ async function saveConn() {
 async function deleteConn(id: string) {
   try {
     await remoteWorkspaceStore.deleteConnection(id)
-    ElMessage.success(t('common.deleteSuccess'))
+    toast.success(t('common.deleteSuccess'))
   } catch (e) {
-    ElMessage.error(t('common.deleteFailed') + ': ' + (getErrorMessage(e)))
+    toast.error(t('common.deleteFailed') + ': ' + (getErrorMessage(e)))
   }
 }
 </script>

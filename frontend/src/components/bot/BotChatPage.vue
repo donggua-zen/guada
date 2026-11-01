@@ -72,7 +72,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useStorage } from '@vueuse/core'
-import { ElIcon, ElMessage } from 'element-plus'
+import { ElIcon } from 'element-plus';
 import { ArrowLeft16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { useSessionStore } from '@/stores/session'
@@ -91,6 +91,7 @@ import BotQrDialog from './BotQrDialog.vue'
 import type { BotChatConversation, BotChatGroup, BotInstance, BotSessionDetail } from '@/types/bot'
 import type { Session } from '@/types/session'
 import type { ChatStreamParams, ChatStreamResponse } from '@/services/modules/ChatStreamService'
+import { toast } from '@/components/ui/toastService';
 
 const { t } = useI18n()
 const sessionStore = useSessionStore()
@@ -321,14 +322,14 @@ async function handleClear(conversation?: BotChatConversation) {
 
   try {
     await apiService.clearSessionMessages(sessionId)
-    ElMessage.success(t('bot.chat.clearSuccess'))
+    toast.success(t('bot.chat.clearSuccess'))
     if (sessionId === activeSessionId.value) {
       await conversationPanelRef.value?.reload()
     }
     await loadGroups(false)
   } catch (err) {
     console.error('清空 Bot 会话消息失败:', err)
-    ElMessage.error(t('bot.chat.clearFailed'))
+    toast.error(t('bot.chat.clearFailed'))
   }
 }
 
@@ -352,7 +353,7 @@ async function handleToggleAdmin(conversation: BotChatConversation) {
   try {
     await apiService.updateBotInstance(botId, { adminUserIds: next })
     await botStore.loadBotInstances({ silent: true })
-    ElMessage.success(
+    toast.success(
       isAdmin ? t('bot.chat.unsetAdminSuccess') : t('bot.chat.setAdminSuccess'),
     )
     // 打开中的会话头部可能展示管理员徽标，重读一次
@@ -361,7 +362,7 @@ async function handleToggleAdmin(conversation: BotChatConversation) {
     }
   } catch (err) {
     console.error('更新 Bot 管理员失败:', err)
-    ElMessage.error(getErrorMessage(err) || t('bot.chat.setAdminFailed'))
+    toast.error(getErrorMessage(err) || t('bot.chat.setAdminFailed'))
   }
 }
 
@@ -391,11 +392,11 @@ async function handleDelete(conversation?: BotChatConversation) {  const session
     if (activeSessionId.value === sessionId) {
       handleBack()
     }
-    ElMessage.success(t('bot.chat.deleteSuccess'))
+    toast.success(t('bot.chat.deleteSuccess'))
     await loadGroups(false)
   } catch (err) {
     console.error('删除 Bot 会话失败:', err)
-    ElMessage.error(t('bot.chat.deleteFailed'))
+    toast.error(t('bot.chat.deleteFailed'))
   }
 }
 
@@ -468,7 +469,7 @@ async function handleReorder(orderedIds: string[]) {
     await apiService.reorderBotInstances(orderedIds)
   } catch (err) {
     groups.value = previous
-    ElMessage.error(getErrorMessage(err) || t('bot.chat.reorderFailed'))
+    toast.error(getErrorMessage(err) || t('bot.chat.reorderFailed'))
   }
 }
 

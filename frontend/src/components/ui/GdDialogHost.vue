@@ -7,6 +7,7 @@
     :size="entry.options.size || 'xs'"
     :close-on-click-modal="entry.options.closeOnClickModal ?? false"
     :close-on-press-escape="entry.options.closeOnPressEscape ?? true"
+    :z-index="entry.options.zIndex"
     append-to-body
     @update:model-value="(value: boolean) => handleModalVisibility(entry, value)"
     @closed="finishModal(entry)"
@@ -21,24 +22,24 @@
       </el-icon>
 
       <div class="gd-modal-main">
-        <el-input
+        <GdInput
           v-if="entry.options.input"
           :model-value="entry.inputValue.value"
           :type="entry.options.input.type || 'text'"
           :show-password="entry.options.input.type === 'password'"
           :placeholder="entry.options.input.placeholder || ''"
-          autofocus
           @update:model-value="(value: string) => (entry.inputValue.value = value)"
           @keyup.enter="submitModal(entry)"
+          v-focus
         />
-        <el-input
+        <GdInput
           v-else-if="entry.options.textarea"
           :model-value="entry.inputValue.value"
           type="textarea"
           :rows="entry.options.textarea.rows || 6"
           :placeholder="entry.options.textarea.placeholder || ''"
-          autofocus
           @update:model-value="(value: string) => (entry.inputValue.value = value)"
+          v-focus
         />
         <component
           :is="RenderVNode"
@@ -82,6 +83,7 @@ import {
 } from '@vicons/fluent'
 import GdDialog from './GdDialog.vue'
 import GdButton from './GdButton.vue'
+import GdInput from './GdInput.vue'
 import {
   cancelModal,
   finishModal,
@@ -90,6 +92,11 @@ import {
   submitModal,
 } from './modalService'
 import { t } from '@/locales'
+
+/** el-input 的 autofocus 是弹窗挂载后聚焦；原生 autofocus 在 Teleport 场景不稳定，用指令等价实现 */
+const vFocus = {
+  mounted: (el: HTMLElement) => (el.querySelector('input, textarea') as HTMLInputElement | null)?.focus(),
+}
 
 const iconMap = {
   info: Info16Filled,

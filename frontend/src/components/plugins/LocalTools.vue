@@ -18,7 +18,7 @@
       </template>
       <!-- 输入 + 安装按钮（并排） -->
       <div class="install-row">
-        <el-input
+        <GdInput
           v-model="installSource"
           placeholder="github:owner/repo#ref / gitee:owner/repo / git:https://…#ref / local:path"
           clearable
@@ -62,7 +62,7 @@
           </template>
           <template #actions>
             <!-- 系统插件恒启用、后端拒绝禁用，不提供启停控件 -->
-            <el-switch
+            <GdSwitch
               v-if="!isPluginLocked(tool)"
               :model-value="tool.enabled"
               :loading="updatingTools.has(tool.pluginId)"
@@ -128,8 +128,11 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdInput from '@/components/ui/GdInput.vue';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 import { ArrowClockwise16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
@@ -262,7 +265,7 @@ async function loadGlobalTools() {
     console.error('加载全局工具失败:', err)
     const errorMsg = getErrorMessage(err) || t('plugins.localTools.loadFailed')
     error.value = errorMsg
-    ElMessage.error(errorMsg)
+    toast.error(errorMsg)
   } finally {
     loading.value = false
   }
@@ -279,7 +282,7 @@ async function updateGlobalToolStatus(pluginId: string, enabled: boolean) {
     }
   } catch (err) {
     console.error('更新全局工具状态失败:', err)
-    ElMessage.error(getErrorMessage(err) || t('plugins.localTools.updateFailed'))
+    toast.error(getErrorMessage(err) || t('plugins.localTools.updateFailed'))
     throw err
   }
 }
@@ -312,11 +315,11 @@ async function handleUninstall(pluginId: string) {
   try {
     const response = await apiService._request(`/plugins/${pluginId}`, { method: 'DELETE' })
     if (response.success) {
-      ElMessage.success(t('plugins.localTools.uninstallSuccess'))
+      toast.success(t('plugins.localTools.uninstallSuccess'))
       await loadGlobalTools()
     }
   } catch (err) {
-    ElMessage.error(getErrorMessage(err) || t('plugins.localTools.uninstallFailed'))
+    toast.error(getErrorMessage(err) || t('plugins.localTools.uninstallFailed'))
   }
 }
 

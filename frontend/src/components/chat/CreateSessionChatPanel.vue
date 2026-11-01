@@ -71,7 +71,7 @@ import { getErrorMessage } from '@/utils/errorMessage';
 import type { Agent } from '@/types/agent';
 import type { Model } from '@/types/api';
 import type { Session, CreateSessionRequest, InputMessageState, ChatFileView } from '@/types/session';
-import { usePopup } from "../../composables/usePopup";
+import { notify } from '@/components/ui/toastService';
 import { useTitle } from "../../composables/useTitle";
 import { useRouter, useRoute } from 'vue-router';
 import { fixFrontendAssetUrl } from '@/utils/url'
@@ -86,9 +86,8 @@ import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
 
 import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 
-
 // 弹出层工具
-const { notify } = usePopup();
+;
 const router = useRouter();
 const route = useRoute();
 const capabilities = useCapabilitiesStore();
@@ -261,8 +260,6 @@ watch(currentSession, (value) => {
 //   return null
 // });
 
-
-
 // 当前选中的智能体
 const currentAgent = computed(() => {
   if (currentSession.value.agentId) {
@@ -354,7 +351,6 @@ const emit = defineEmits<{
   'update:session': [session: Session]
   'create-session': [sessionData: CreateSessionRequest, messageData: InputMessageState]
 }>();
-
 
 const chatInputButtons = computed(() => {
   return {
@@ -766,7 +762,6 @@ const sendMessage = async (payload?: { content?: string; files?: ChatFileView[];
     isWaiting: false
   });
 }
-
 
 // 设置操作
 

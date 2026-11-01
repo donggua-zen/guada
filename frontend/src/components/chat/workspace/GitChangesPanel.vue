@@ -332,7 +332,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, reactive, onUnmounted } from "vue";
-import { ElMessage } from "element-plus";
+
 import { useI18n } from "vue-i18n";
 import { useStorage } from "@vueuse/core";
 import { Branch20Regular, BranchFork16Regular, Search20Regular, Add16Regular, Subtract16Regular, CalendarAgenda20Regular, DualScreen20Regular, TextboxAlignTopRotate9020Regular, ArrowClockwise16Regular, ChevronDown12Regular, ArrowUp12Regular, ArrowDown12Regular, Dismiss12Regular } from "@vicons/fluent";
@@ -348,6 +348,7 @@ import type { DiffLine, SplitDiffLine, DisplaySplitLine } from "./git-diff-types
 import { useGitStore } from "@/stores/git";
 import { useHighlight } from "@/composables/useHighlight";
 import { getApiErrorStatus, getErrorMessage } from "@/utils/errorMessage";
+import { toast } from '@/components/ui/toastService';
 
 const { t } = useI18n();
 const { highlightCodeLines, getLanguageFromExtension, escapeHtml } = useHighlight();
@@ -1740,7 +1741,7 @@ async function loadDiff(row: GitRow, silent = false): Promise<void> {
     }
     // 刷新重载失败：保留旧内容（silent），不打断用户预览
     if (seq === diffLoadSeq && selectedKey.value === key && !silent) {
-      ElMessage.error(t("git.loadFailed"));
+      toast.error(t("git.loadFailed"));
       diffLines.value = { [key]: [] };
       fullHighlight.value = null;
     }
@@ -1826,7 +1827,7 @@ async function loadGapRows(idx: number): Promise<void> {
     });
     gapRows.value = { ...gapRows.value, [idx]: lines };
   } catch {
-    ElMessage.error(t("git.loadFailed"));
+    toast.error(t("git.loadFailed"));
     // 加载失败自动收起
     const s = new Set(gapExpanded.value);
     s.delete(idx);
@@ -2022,7 +2023,7 @@ async function stageFile(row: GitRow): Promise<void> {
     await apiService.gitStage(props.sessionId, [row.file.path]);
     await refresh();
   } catch {
-    ElMessage.error(t("git.stageFailed"));
+    toast.error(t("git.stageFailed"));
   }
 }
 
@@ -2033,7 +2034,7 @@ async function unstageFile(row: GitRow): Promise<void> {
     await apiService.gitUnstage(props.sessionId, [row.file.path]);
     await refresh();
   } catch {
-    ElMessage.error(t("git.unstageFailed"));
+    toast.error(t("git.unstageFailed"));
   }
 }
 
@@ -2055,7 +2056,7 @@ async function stageDir(group: GitGroup, trow: GitTreeRow): Promise<void> {
     await apiService.gitStage(props.sessionId, paths);
     await refresh();
   } catch {
-    ElMessage.error(t("git.stageFailed"));
+    toast.error(t("git.stageFailed"));
   }
 }
 
@@ -2071,7 +2072,7 @@ async function unstageDir(group: GitGroup, trow: GitTreeRow): Promise<void> {
     await apiService.gitUnstage(props.sessionId, paths);
     await refresh();
   } catch {
-    ElMessage.error(t("git.unstageFailed"));
+    toast.error(t("git.unstageFailed"));
   }
 }
 

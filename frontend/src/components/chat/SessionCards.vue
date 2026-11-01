@@ -116,9 +116,8 @@ import { ChevronLeft20Regular, ChevronRight20Regular } from "@vicons/fluent";
 import { useI18n } from "vue-i18n";
 import { apiService } from "@/services/ApiService";
 import { useSessionStore } from "@/stores/session";
-import { usePopup } from "../../composables/usePopup";
+import { toast } from '@/components/ui/toastService';
 import GdButton from '@/components/ui/GdButton.vue';
-
 
 const props = defineProps<{
   sessionId?: string;
@@ -130,7 +129,7 @@ const emit = defineEmits<{
 }>();
 
 const sessionStore = useSessionStore();
-const { toast } = usePopup();
+;
 const { t } = useI18n();
 
 // ── 会话级统一交互卡（ask_requested 标记；ask_resolved / turn_end 清除）──

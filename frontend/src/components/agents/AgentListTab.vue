@@ -99,8 +99,9 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon, ElMessage } from 'element-plus';
+import { ElIcon } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
 
 import { Add16Regular, Delete20Regular, ArrowUpload16Regular, QuestionCircle16Regular, People32Regular } from '@vicons/fluent'
 import { Avatar } from '../ui'
@@ -149,14 +150,14 @@ const handleFileSelect = async (event: Event) => {
     const okCount = results.filter(r => r.status === 'ok').length
     const failCount = results.filter(r => r.status !== 'ok').length
     if (okCount > 0) {
-      ElMessage.success(t('agents.list.importSuccess', { count: okCount }))
+      toast.success(t('agents.list.importSuccess', { count: okCount }))
     }
     if (failCount > 0) {
-      ElMessage.warning(t('agents.list.importPartial', { count: failCount }))
+      toast.warning(t('agents.list.importPartial', { count: failCount }))
     }
     emit('imported')
   } catch (err) {
-    ElMessage.error(getErrorMessage(err) || t('agents.list.importFailed'))
+    toast.error(getErrorMessage(err) || t('agents.list.importFailed'))
   }
 
   // 重置 input 以便重复选择同一文件

@@ -7,7 +7,7 @@
         <label class="text-sm font-medium text-(--gd-color-text)">
           {{ t('ui.sidebar.groupNameLabel') }}
         </label>
-        <el-input v-model="name" maxlength="50" show-word-limit autofocus clearable
+        <GdInput v-model="name" maxlength="50" show-word-limit autofocus clearable
           :placeholder="t('ui.sidebar.inputGroupName')" @keyup.enter="handleSave" />
       </div>
 
@@ -25,7 +25,7 @@
           {{ t('ui.sidebar.projectPathLabel') }}
         </label>
         <div class="flex items-center gap-2">
-          <el-input :model-value="projectPath" readonly class="flex-1" />
+          <GdInput :model-value="projectPath" readonly class="flex-1" />
           <GdButton :disabled="!projectPath" @click="handleCopyPath">
             {{ t('ui.sidebar.copyProjectPath') }}
           </GdButton>
@@ -46,12 +46,13 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInput from '@/components/ui/GdInput.vue';
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import GroupIconPicker from '@/components/session/GroupIconPicker.vue'
 import { useSessionGroupStore } from '@/stores/sessionGroup'
-import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { writeTextToClipboard } from '@/utils/clipboard'
 import type { ProjectGroup, SessionGroup } from '@/types/session'
 
@@ -77,7 +78,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const sessionGroupStore = useSessionGroupStore()
-const { toast } = usePopup()
 
 const dialogVisible = computed({
   get: () => props.modelValue,

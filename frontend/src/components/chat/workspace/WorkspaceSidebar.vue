@@ -834,7 +834,8 @@ onUnmounted(() => {
 /* ── 浏览器标签 ── */
 .browser-tabs-scroll {
     scrollbar-width: none;
-    padding: 0 2px;
+    /* 8px：与 .browser-tab 的水平内边距呼应，避免激活标签的圆角白底贴住面板左缘/分割线 */
+    padding: 0 8px;
 }
 
 .browser-tabs-scroll::-webkit-scrollbar {

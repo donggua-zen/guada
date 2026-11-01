@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { markRaw, defineAsyncComponent, type Component } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
 import {
@@ -10,6 +10,7 @@ import {
 import { useTheme } from '@/composables/useTheme'
 import type { GuaDaModuleLoader } from '@/types/plugin-runtime'
 import type { PluginThemeManifest } from '@/services/modules/plugin.api'
+import { toast } from '@/components/ui/toastService';
 
 // 主应用内置组件 import map：'builtin:xxx' 从这里解析
 import ConnectionSettings from '@/components/setting/ConnectionSettings.vue'
@@ -180,7 +181,7 @@ export const usePluginSlots = defineStore('pluginSlots', {
       const { activeThemePreset, lightThemePreset, darkThemePreset, setActiveThemePreset } = useTheme()
       if (removedIds.includes(activeThemePreset.value)) {
         setActiveThemePreset('default')
-        ElMessage.warning('当前主题已被插件移除，已回退到默认主题')
+        toast.warning('当前主题已被插件移除，已回退到默认主题')
         // 同步回退结果到后端与缓存，否则启动期“后端优先”恢复会把已移除的主题 id 再次拉起
         apiService
           .updateGroupSettings('appearance', {

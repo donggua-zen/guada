@@ -6,12 +6,13 @@
 </template>
 <script setup lang="ts">
 import { watch, ref, onMounted, onBeforeUnmount } from 'vue';
-import { ElMessage } from 'element-plus';
+
 import { useI18n } from 'vue-i18n';
 import { useMarkdown, delegateMarkdownCodeClick } from "../../composables/useMarkdown";
 import { useDiffDOM } from "../../composables/useDiffDOM";
 import { DiffDOM } from 'diff-dom';
 import { perfStart } from '../../utils/perf';
+import { toast } from '@/components/ui/toastService';
 
 const { marked } = useMarkdown()
 const { t } = useI18n()
@@ -20,8 +21,8 @@ const { t } = useI18n()
 // （对话流、思考区、插件文档…）都不必各写一遍委托，也不会出现"按钮按了没反应"。
 const handleCodeBlockClick = (event: MouseEvent) => {
     delegateMarkdownCodeClick(event, (ok) => {
-        if (ok) ElMessage.success(t('chat.turn.codeCopied'));
-        else ElMessage.error(t('common.copyFailed'));
+        if (ok) toast.success(t('chat.turn.codeCopied'));
+        else toast.error(t('common.copyFailed'));
     });
 };
 

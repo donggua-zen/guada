@@ -10,11 +10,11 @@
               <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('knowledge.page.subtitle') }}</p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <el-input v-model="searchKeyword" :placeholder="t('knowledge.page.searchPlaceholder')" clearable size="small" style="width: 160px;">
+              <GdInput v-model="searchKeyword" :placeholder="t('knowledge.page.searchPlaceholder')" clearable size="small" style="width: 160px;">
                 <template #prefix>
                   <el-icon><Search16Regular /></el-icon>
                 </template>
-              </el-input>
+              </GdInput>
               <GdButton @click="handleOpenDocs">
                 <template #icon><Document16Regular /></template>
                 {{ t('knowledge.page.docs') }}
@@ -145,21 +145,21 @@
   <GdDialog v-model="showKbDialog" :title="dialogMode === 'create' ? t('knowledge.page.createTitle') : t('knowledge.page.editTitle')" size="md" :close-on-click-modal="false" append-to-body>
     <el-form :model="dialogForm" label-width="140px" size="large">
       <el-form-item :label="t('knowledge.page.kbName')" required>
-        <el-input v-model="dialogForm.name" :placeholder="t('knowledge.page.kbNamePlaceholder')" maxlength="255" show-word-limit />
+        <GdInput v-model="dialogForm.name" :placeholder="t('knowledge.page.kbNamePlaceholder')" maxlength="255" show-word-limit />
       </el-form-item>
 
       <el-form-item :label="t('common.description')">
-        <el-input v-model="dialogForm.description" type="textarea" :rows="3" :placeholder="t('knowledge.page.descriptionPlaceholder')"
+        <GdInput v-model="dialogForm.description" type="textarea" :rows="3" :placeholder="t('knowledge.page.descriptionPlaceholder')"
           maxlength="2000" show-word-limit />
       </el-form-item>
 
       <el-form-item :label="t('knowledge.page.embeddingModel')" required>
-        <el-select v-model="dialogForm.embeddingModelId" :placeholder="t('knowledge.page.embeddingModelPlaceholder')" class="w-full">
+        <GdSelect v-model="dialogForm.embeddingModelId" :placeholder="t('knowledge.page.embeddingModelPlaceholder')" class="w-full">
           <template v-for="provider in embeddingProviders" :key="provider.id">
-            <el-option :label="provider.name" :value="''" disabled />
-            <el-option v-for="model in provider.models" :key="model.id" :label="model.modelName" :value="model.id" />
+            <GdOption :label="provider.name" :value="''" disabled />
+            <GdOption v-for="model in provider.models" :key="model.id" :label="model.modelName" :value="model.id" />
           </template>
-        </el-select>
+        </GdSelect>
       </el-form-item>
 
       <el-divider />
@@ -169,21 +169,21 @@
         <template #label>
           <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.chunkMaxSize') }}</span>
         </template>
-        <el-input-number v-model="dialogForm.chunkMaxSize" :min="100" :max="5000" :step="100" class="w-full" />
+        <GdInputNumber v-model="dialogForm.chunkMaxSize" :min="100" :max="5000" :step="100" class="w-full" />
       </el-form-item>
 
       <el-form-item>
         <template #label>
           <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.chunkOverlapSize') }}</span>
         </template>
-        <el-input-number v-model="dialogForm.chunkOverlapSize" :min="0" :max="500" :step="10" class="w-full" />
+        <GdInputNumber v-model="dialogForm.chunkOverlapSize" :min="0" :max="500" :step="10" class="w-full" />
       </el-form-item>
 
       <el-form-item>
         <template #label>
           <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.chunkMinSize') }}</span>
         </template>
-        <el-input-number v-model="dialogForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
+        <GdInputNumber v-model="dialogForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
       </el-form-item>
 
       <el-divider />
@@ -193,16 +193,14 @@
         <template #label>
           <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.semanticWeight') }}</span>
         </template>
-        <el-slider v-model="dialogForm.semanticWeight" :min="0" :max="1" :step="0.05" show-input
-          :show-input-controls="false" />
+        <GdSlider v-model="dialogForm.semanticWeight" :min="0" :max="1" :step="0.05" show-input />
       </el-form-item>
 
       <el-form-item>
         <template #label>
           <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.keywordWeight') }}</span>
         </template>
-        <el-slider v-model="dialogForm.keywordWeight" :min="0" :max="1" :step="0.05" show-input
-          :show-input-controls="false" />
+        <GdSlider v-model="dialogForm.keywordWeight" :min="0" :max="1" :step="0.05" show-input />
       </el-form-item>
 
       <div class="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-2 pl-[140px]">
@@ -230,6 +228,11 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdSlider from '@/components/ui/GdSlider.vue';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -243,6 +246,7 @@ import type { KBSearchResult, KBSearchResultMetadata } from '@/services/modules/
 import type ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import { FileChunksViewer, KBFileUploader, KBFileTree, KBSearchPanel, UploadTaskModal } from './index'
 import { usePopup } from '@/composables/usePopup'
+import { toast } from '@/components/ui/toastService';
 import { BookOpen24Regular, BookOpen48Regular, Search24Regular, ArrowLeft24Filled, Add16Regular, Search16Regular, Document16Regular } from '@vicons/fluent'
 import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '@/services/ApiService'
@@ -251,7 +255,7 @@ import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 
 // 初始化组合式函数
-const { confirm, toast } = usePopup()
+const { confirm } = usePopup()
 const { t } = useI18n()
 const store = useKnowledgeBaseStore()
 const uploadStore = useFileUploadStore()

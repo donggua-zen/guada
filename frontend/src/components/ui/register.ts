@@ -15,6 +15,11 @@ import GdTooltip from "./GdTooltip.vue";
 import GdPopover from "./GdPopover.vue";
 import GdPane from "./GdPane.vue";
 import GdSplitpanes from "./GdSplitpanes.vue";
+import GdInput from "./GdInput.vue";
+import GdSwitch from "./GdSwitch.vue";
+import GdSelect from "./GdSelect.vue";
+import GdInputNumber from "./GdInputNumber.vue";
+import GdSlider from "./GdSlider.vue";
 
 export function registerUiPrimitives(app: App): void {
   app.component("GdButton", GdButton);
@@ -23,4 +28,9 @@ export function registerUiPrimitives(app: App): void {
   app.component("GdPopover", GdPopover);
   app.component("GdPane", GdPane);
   app.component("GdSplitpanes", GdSplitpanes);
+  app.component("GdInput", GdInput);
+  app.component("GdSwitch", GdSwitch);
+  app.component("GdSelect", GdSelect);
+  app.component("GdInputNumber", GdInputNumber);
+  app.component("GdSlider", GdSlider);
 }

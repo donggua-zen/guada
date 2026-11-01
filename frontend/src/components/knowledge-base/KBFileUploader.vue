@@ -35,7 +35,7 @@
 
         <!-- 新建文件夹对话框 -->
         <GdDialog v-model="showCreateFolderDialog" :title="t('knowledge.upload.newFolderTitle')" size="xs" :close-on-click-modal="false" append-to-body>
-            <el-input
+            <GdInput
                 v-model="newFolderName"
                 :placeholder="t('knowledge.upload.folderNamePlaceholder')"
                 @keyup.enter="confirmCreateFolder"
@@ -107,8 +107,10 @@ import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DocumentAdd16Regular, FolderAdd16Regular, ArrowUpload16Regular, Folder20Regular, Document20Regular } from '@vicons/fluent'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast } from '@/components/ui/toastService';
+import GdInput from '@/components/ui/GdInput.vue';
 
 import { useFileUploadStore } from '@/stores/fileUpload'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
@@ -401,16 +403,16 @@ async function handleFileSelect(event: Event) {
     const filteredCount = input.files.length - filesWithPath.length
 
     if (filesWithPath.length === 0) {
-        ElMessage.warning(t('knowledge.upload.unsupportedFormat'))
+        toast.warning(t('knowledge.upload.unsupportedFormat'))
         input.value = ''
         return
     }
 
     if (filteredCount > 0) {
-        // ElMessage.info(`检测到 ${input.files.length} 个文件，其中 ${filteredCount} 个不支持的格式已过滤，将上传 ${filesWithPath.length} 个文件...`)
+        // toast.info(`检测到 ${input.files.length} 个文件，其中 ${filteredCount} 个不支持的格式已过滤，将上传 ${filesWithPath.length} 个文件...`)
         console.log(`检测到 ${input.files.length} 个文件，其中 ${filteredCount} 个不支持的格式已过滤，将上传 ${filesWithPath.length} 个文件...`)
     } else {
-        // ElMessage.info(`检测到 ${filesWithPath.length} 个文件，开始依次上传...`)
+        // toast.info(`检测到 ${filesWithPath.length} 个文件，开始依次上传...`)
         console.log(`检测到 ${filesWithPath.length} 个文件，开始依次上传...`)
     }
 
@@ -455,16 +457,16 @@ async function handleFolderSelect(event: Event) {
     const filteredCount = input.files.length - filesWithPath.length
 
     if (filesWithPath.length === 0) {
-        ElMessage.warning(t('knowledge.upload.unsupportedFormat'))
+        toast.warning(t('knowledge.upload.unsupportedFormat'))
         input.value = ''
         return
     }
 
     if (filteredCount > 0) {
-        // ElMessage.info(`检测到 ${input.files.length} 个文件，其中 ${filteredCount} 个不支持的格式已过滤，将上传 ${filesWithPath.length} 个文件...`)
+        // toast.info(`检测到 ${input.files.length} 个文件，其中 ${filteredCount} 个不支持的格式已过滤，将上传 ${filesWithPath.length} 个文件...`)
         console.log(`检测到 ${input.files.length} 个文件，其中 ${filteredCount} 个不支持的格式已过滤，将上传 ${filesWithPath.length} 个文件...`)
     } else {
-        // ElMessage.info(`检测到 ${filesWithPath.length} 个文件，开始依次上传...`)
+        // toast.info(`检测到 ${filesWithPath.length} 个文件，开始依次上传...`)
         console.log(`检测到 ${filesWithPath.length} 个文件，开始依次上传...`)
     }
 
@@ -517,7 +519,7 @@ async function executeUpload(
             // 验证文件大小
             const maxSize = 1024 * 1024 * 1024 // 1GB
             if (file.size > maxSize) {
-                ElMessage.warning(t('knowledge.upload.fileTooLarge', { path: relativePath }))
+                toast.warning(t('knowledge.upload.fileTooLarge', { path: relativePath }))
                 failCount++
                 continue
             }
@@ -531,18 +533,18 @@ async function executeUpload(
                 (task) => {
                     // 进度更新回调
                     if (task.status === 'uploaded') {
-                        // ElMessage.success(`${task.fileName} 处理完成`)
+                        // toast.success(`${task.fileName} 处理完成`)
                         emit('uploaded', task)
                         successCount++
                     } else if (task.status === 'failed') {
-                        ElMessage.error(`${task.fileName} 处理失败：${task.errorMessage}`)
+                        toast.error(`${task.fileName} 处理失败：${task.errorMessage}`)
                         failCount++
                     }
                 }
             )
         } catch (error) {
             console.error(`${relativePath} 上传失败:`, error)
-            ElMessage.error(t('knowledge.upload.uploadFailed', { path: relativePath }))
+            toast.error(t('knowledge.upload.uploadFailed', { path: relativePath }))
             failCount++
         }
     }
@@ -583,14 +585,14 @@ async function handleConflictConfirm() {
  */
 async function confirmCreateFolder() {
     if (!newFolderName.value || !newFolderName.value.trim()) {
-        ElMessage.warning(t('knowledge.upload.folderNameEmpty'))
+        toast.warning(t('knowledge.upload.folderNameEmpty'))
         return
     }
 
     // 前端验证
     const validation = validateFileName(newFolderName.value.trim())
     if (!validation.valid) {
-        ElMessage.warning(validation.message)
+        toast.warning(validation.message || '')
         return
     }
 
@@ -604,14 +606,14 @@ async function confirmCreateFolder() {
             null, // TODO: 需要根据 currentFolderPath 获取 parentFolderId
         )
         
-        ElMessage.success(t('knowledge.upload.folderCreateSuccess'))
+        toast.success(t('knowledge.upload.folderCreateSuccess'))
         showCreateFolderDialog.value = false
         newFolderName.value = ''
         
         // 通知父组件刷新
         emit('folder-created')
     } catch (error) {
-        ElMessage.error(getErrorMessage(error) || t('knowledge.upload.folderCreateFailed'))
+        toast.error(getErrorMessage(error) || t('knowledge.upload.folderCreateFailed'))
     } finally {
         createFolderLoading.value = false
     }

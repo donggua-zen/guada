@@ -10,7 +10,7 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.userSecurity.accessPassword') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.userSecurity.accessPasswordDesc') }}</span>
             </div>
-            <el-switch :model-value="authStore.passwordSet" size="large" @change="handlePasswordToggle" />
+            <GdSwitch :model-value="authStore.passwordSet" size="large" @change="handlePasswordToggle" />
           </div>
         </div>
       </div>
@@ -23,11 +23,11 @@
             <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-position="left"
               label-width="80px" size="large" class="max-w-128">
               <el-form-item :label="t('settings.userSecurity.oldPassword')" prop="oldPassword">
-                <el-input v-model="passwordForm.oldPassword" type="password" show-password
+                <GdInput v-model="passwordForm.oldPassword" type="password" show-password
                   :placeholder="t('settings.userSecurity.oldPasswordPlaceholder')" />
               </el-form-item>
               <el-form-item :label="t('settings.userSecurity.newPassword')" prop="newPassword">
-                <el-input v-model="passwordForm.newPassword" type="password" show-password
+                <GdInput v-model="passwordForm.newPassword" type="password" show-password
                   :placeholder="t('settings.userSecurity.newPasswordPlaceholder')" />
                 <!-- 实时强度指示条：3 段对应 弱/中/强 -->
                 <div v-if="passwordForm.newPassword" class="flex items-center gap-2 mt-2 w-full">
@@ -42,7 +42,7 @@
                 </div>
               </el-form-item>
               <el-form-item :label="t('settings.userSecurity.confirmPassword')" prop="confirmPassword">
-                <el-input v-model="passwordForm.confirmPassword" type="password" show-password
+                <GdInput v-model="passwordForm.confirmPassword" type="password" show-password
                   :placeholder="t('settings.userSecurity.confirmPasswordPlaceholder')" />
               </el-form-item>
               <el-form-item>
@@ -60,17 +60,20 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePopup } from '@/composables/usePopup'
+import { toast, notify } from '@/components/ui/toastService';
 import { apiService } from '@/services/ApiService'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils/errorMessage'
 import { getPasswordErrorCode, evaluatePasswordStrength } from '@/utils/passwordStrength'
 // Element Plus 组件导入
-import { ElForm, ElFormItem, ElInput, ElSwitch } from 'element-plus';
+import { ElForm, ElFormItem } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInput from '@/components/ui/GdInput.vue';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 
 const { t } = useI18n()
-const { toast, notify, prompt, confirm } = usePopup()
+const { prompt, confirm } = usePopup()
 const authStore = useAuthStore()
 
 const passwordFormRef = ref(null)
@@ -92,7 +95,8 @@ function validatePasswordInput(password) {
     requireStrong: requireStrongPassword.value,
     username: authStore.user?.username,
   })
-  return code ? t(PASSWORD_ERROR_KEYS[code]) : true
+  // validation 新签名：通过返回 null，失败返回错误文案
+  return code ? t(PASSWORD_ERROR_KEYS[code]) : null
 }
 
 async function loadMobileAccessRequirement() {

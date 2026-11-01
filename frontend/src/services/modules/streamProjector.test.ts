@@ -771,6 +771,65 @@ describe("StreamProjector 折叠器", () => {
     expect(store.state.eventLog.map((e: any) => e.type)).toContain("context_stats");
   });
 
+  it("tool_image/prune：生成独立事件卡（保留计数/字节/轮数）", () => {
+    foldEvents(store as any, "s1", [
+      ...turnPage("T1", "你好", "回答"),
+      {
+        type: "tool_image/prune",
+        seq: 9,
+        data: {
+          keepTurns: 3,
+          keepFromSeq: 100,
+          boundaryMessageId: "T1_u",
+          imageCount: 7,
+          prunedBytes: 2_000_000,
+          prunedTokens: 10_500,
+        },
+      } as any,
+    ]);
+
+    const eventTurn = store.state.turns.find((t: any) => t.kind === "event");
+    expect(eventTurn?.metadata?.eventType).toBe("tool-image-prune");
+    expect(eventTurn?.messages?.[0]?.metadata?.toolImagePrune).toMatchObject({
+      keepTurns: 3,
+      imageCount: 7,
+      prunedBytes: 2_000_000,
+      prunedTokens: 10_500,
+      pruneSeq: 9,
+    });
+  });
+
+  it("tool_image_prune live：同一 seq 重复帧只保留一张卡", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    const chunk = {
+      type: "tool_image_prune",
+      seq: 9,
+      keepTurns: 2,
+      keepFromSeq: 100,
+      imageCount: 4,
+      prunedBytes: 1024,
+      prunedTokens: 6000,
+    } as any;
+
+    applyLiveChunk(store as any, "s1", chunk);
+    applyLiveChunk(store as any, "s1", chunk);
+
+    const cards = store.state.turns.flatMap((t: any) =>
+      (t.messages ?? []).filter(
+        (m: any) => m.metadata?.eventType === "tool-image-prune",
+      ),
+    );
+    expect(cards).toHaveLength(1);
+    expect(cards[0].metadata.toolImagePrune).toMatchObject({
+      keepTurns: 2,
+      imageCount: 4,
+      pruneSeq: 9,
+    });
+    expect(store.state.eventLog.map((e: any) => e.type)).toContain(
+      "tool_image_prune",
+    );
+  });
+
   it("context_stats 不影响回合工作态（只更新占用）", () => {
     foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
     applyLiveChunk(store as any, "s1", { type: "turn_start", turnId: "T2" } as any);

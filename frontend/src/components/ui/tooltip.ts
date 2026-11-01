@@ -28,7 +28,7 @@ function ensureEl(): HTMLDivElement {
   tipEl.className = 'l-tooltip'
   tipEl.setAttribute('role', 'tooltip')
   tipEl.style.cssText =
-    'position:fixed;z-index:9999;pointer-events:none;display:none;'
+    'position:fixed;z-index:9999;pointer-events:none;'
 
   contentEl = document.createElement('span')
   contentEl.className = 'l-tooltip__content'
@@ -109,8 +109,9 @@ export function showTooltip(
     if (contentEl) contentEl.textContent = content
     tip.setAttribute('data-effect', effect)
 
-    // Show at origin first to measure size
-    tip.style.display = 'block'
+    // Show at origin first to measure size（隐藏态不参与布局测量，用 visibility 而非 display）
+    tip.style.visibility = 'hidden'
+    tip.classList.add('l-tooltip--visible')
     tip.style.left = '0px'
     tip.style.top = '0px'
 
@@ -121,6 +122,10 @@ export function showTooltip(
     tip.style.left = `${x}px`
     tip.style.top = `${y}px`
     tip.setAttribute('data-placement', actual)
+    // 位置就绪后再进入可见态，过渡从锚点方向播放
+    requestAnimationFrame(() => {
+      tip.style.visibility = 'visible'
+    })
   }, SHOW_DELAY)
 }
 
@@ -131,7 +136,7 @@ export function hideTooltip(): void {
   }
   currentTrigger = null
   if (tipEl) {
-    tipEl.style.display = 'none'
+    tipEl.classList.remove('l-tooltip--visible')
   }
 }
 
@@ -145,7 +150,7 @@ export function refreshTooltip(
   placement: TooltipPlacement = 'top',
   effect: TooltipEffect = 'dark',
 ): void {
-  if (currentTrigger !== trigger || !content || !tipEl || tipEl.style.display === 'none') {
+  if (currentTrigger !== trigger || !content || !tipEl || !tipEl.classList.contains('l-tooltip--visible')) {
     return
   }
   if (contentEl) contentEl.textContent = content
@@ -163,8 +168,8 @@ export function refreshTooltip(
 // passive:true avoids blocking the scroll thread.
 // The handler only does a style write (no layout read) — zero reflow.
 function onScrollOrResize(): void {
-  if (tipEl && tipEl.style.display !== 'none') {
-    tipEl.style.display = 'none'
+  if (tipEl && tipEl.classList.contains('l-tooltip--visible')) {
+    tipEl.classList.remove('l-tooltip--visible')
     currentTrigger = null
   }
 }

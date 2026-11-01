@@ -130,9 +130,32 @@
   --gd-color-conversation-bg-hover: var(--gd-color-conversation-bg-active);
   --gd-color-conversation-text-hover: var(--gd-color-conversation-text-active);
 
-  /* 输入框背景 */
+  /* 输入框背景（容器级：ChatInput 等大面积输入容器消费，11 套插件主题已覆盖） */
   --gd-color-input-bg: #ffffff;
   --gd-color-input-border: #e1e1e1;
+
+  /* ====================
+       表单控件 token（GdInput / GdSelect 触发器）
+       filled 灰底无边框为默认形态，全部由 text/surface 派生（亮暗主题自动跟随）；
+       outline 白底描边形态引用 --gd-color-input-*，主题覆盖 input token 即换肤
+       ==================== */
+  --gd-color-field-bg: color-mix(in srgb, var(--gd-color-text) 5.5%, var(--gd-color-surface));
+  --gd-color-field-bg-hover: color-mix(in srgb, var(--gd-color-text) 8%, var(--gd-color-surface));
+  --gd-color-field-bg-focus: var(--gd-color-surface);
+  --gd-color-field-bg-disabled: color-mix(in srgb, var(--gd-color-text) 2.5%, var(--gd-color-surface));
+  --gd-color-field-text: var(--gd-color-text);
+  --gd-color-field-text-placeholder: color-mix(in srgb, var(--gd-color-text) 40%, transparent);
+  --gd-color-field-text-disabled: var(--gd-color-text-disabled);
+  --gd-color-field-outline-bg: var(--gd-color-input-bg);
+  --gd-color-field-outline-border: var(--gd-color-input-border);
+  --gd-color-field-outline-border-hover: color-mix(in srgb, var(--gd-color-text) 24%, var(--gd-color-input-border));
+  --gd-color-field-focus-border: var(--gd-color-primary);
+  /* GdSelect 下拉面板列表项 */
+  --gd-color-field-option-bg-hover: color-mix(in srgb, var(--gd-color-text) 7%, var(--gd-color-surface));
+  --gd-color-field-option-bg-selected: var(--gd-color-primary-100);
+  /* GdSwitch 开关轨道 */
+  --gd-switch-track-off: color-mix(in srgb, var(--gd-color-text) 18%, transparent);
+  --gd-switch-thumb: #fff;
 
   /* 模态框：默认继承，主题可覆盖 */
   --gd-color-overlay-bg: var(--gd-color-surface);
@@ -164,6 +187,15 @@
 
   --gd-motion-duration-dialog: 0.2s;
   --gd-motion-ease-dialog: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* 动效阶梯：所有 Gd* 组件的过渡统一消费这套 token，主题可整体调节奏 */
+  --gd-motion-duration-fast: 120ms;  /* tooltip、小控件反馈 */
+  --gd-motion-duration-base: 200ms;  /* popover / dropdown / switch 默认 */
+  --gd-motion-duration-slow: 300ms;  /* 大面板 */
+  --gd-motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);       /* 入场（快速启动柔和减速） */
+  --gd-motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);    /* 双向对称 */
+  --gd-motion-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* 回弹（switch thumb 等短行程） */
+  --gd-motion-ease-toast: cubic-bezier(0.77, 0, 0.175, 1);    /* toast 进出场 */
 
   --gd-color-warning: #e6a23c;
   --gd-color-success: #67c23a;
@@ -397,6 +429,15 @@ html.dark {
   /* 输入框背景 */
   --gd-color-input-bg: #2d2d2d;
   --gd-color-input-border: #404040;
+
+  /* 表单控件 token（暗色）：灰底由 text(#d3d3d3) 混入 surface(#222) 派生 */
+  --gd-color-field-text-placeholder: color-mix(in srgb, var(--gd-color-text) 40%, transparent);
+  --gd-color-field-outline-bg: var(--gd-color-input-bg);
+  --gd-color-field-outline-border: var(--gd-color-input-border);
+  --gd-color-field-outline-border-hover: color-mix(in srgb, var(--gd-color-text) 24%, var(--gd-color-input-border));
+  --gd-color-field-bg-hover: color-mix(in srgb, var(--gd-color-text) 10%, var(--gd-color-surface));
+  --gd-color-field-option-bg-hover: color-mix(in srgb, var(--gd-color-text) 12%, var(--gd-color-surface));
+  --gd-color-field-option-bg-selected: var(--gd-color-primary-100);
 
   /* 模态框：默认继承，主题可覆盖 */
   --gd-color-overlay-bg: var(--gd-color-surface);
@@ -890,6 +931,15 @@ html.dark .terminal-panel .xterm-viewport {
 .l-tooltip {
   --gd-tooltip-bg: #303133;
   --gd-tooltip-text: #fff;
+  /* 进出场：默认隐藏态，--visible 切换（show/hide 由 tooltip.ts 驱动 class 而非 display） */
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity var(--gd-motion-duration-fast) var(--gd-motion-ease-out),
+    transform var(--gd-motion-duration-fast) var(--gd-motion-ease-out);
+}
+.l-tooltip--visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 .l-tooltip[data-effect="light"] {
   --gd-tooltip-bg: #fff;
@@ -978,7 +1028,8 @@ html.mobile .md\:max-w-260.flex.items-center.justify-between > .shrink-0 {
   justify-content: flex-start;
 }
 
-html.mobile .md\:max-w-260.flex.items-center.justify-between .el-input {
+html.mobile .md\:max-w-260.flex.items-center.justify-between .el-input,
+html.mobile .md\:max-w-260.flex.items-center.justify-between .gd-input {
   width: 100% !important;
   flex: 1 1 120px;
 }
@@ -997,7 +1048,8 @@ html.mobile .skills-page .flex.items-center.justify-between.gap-4 > .shrink-0 {
   justify-content: flex-start;
 }
 
-html.mobile .md\:max-w-260 .flex.items-center.justify-between.gap-4 .el-input {
+html.mobile .md\:max-w-260 .flex.items-center.justify-between.gap-4 .el-input,
+html.mobile .md\:max-w-260 .flex.items-center.justify-between.gap-4 .gd-input {
   width: 100% !important;
   flex: 1 1 120px;
 }
@@ -1145,4 +1197,20 @@ html.mobile .content-card {
 
 html.mobile .content-card::after {
   border: none;
+}
+
+/* ====================
+   动效可及性兜底：系统开启「减少动态效果」时全部过渡/动画即时到位。
+   统一兜底优于逐组件 motion-reduce（覆盖第三方/未来新增也无需记得处理）
+   ==================== */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

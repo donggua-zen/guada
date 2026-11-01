@@ -14,7 +14,7 @@
 
         <!-- 搜索框 -->
         <div class="search-box px-3.5 py-3">
-            <el-input 
+            <GdInput 
                 v-model="searchKeyword"
                 :placeholder="t('knowledge.sidebar.searchPlaceholder')" 
                 clearable 
@@ -57,25 +57,23 @@
                             </div>
                         </div>
                         <div class="kb-actions flex items-center opacity-0 group-hover:opacity-100">
-                            <el-dropdown trigger="click" @command="(command) => handleDropdownCommand(command, kb)">
+                            <DropdownMenu @command="(command: string) => handleDropdownCommand(command, kb)">
                                 <template #dropdown>
-                                    <el-dropdown-menu>
-                                        <el-dropdown-item command="edit">
-                                            <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
-                                            {{ t('knowledge.sidebar.edit') }}
-                                        </el-dropdown-item>
-                                        <el-dropdown-item command="delete">
-                                            <Delete16Regular class="w-4 h-4 mr-2 inline-block" />
-                                            {{ t('knowledge.sidebar.delete') }}
-                                        </el-dropdown-item>
-                                    </el-dropdown-menu>
+                                    <DropdownMenuItem command="edit">
+                                        <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
+                                        {{ t('knowledge.sidebar.edit') }}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem command="delete">
+                                        <Delete16Regular class="w-4 h-4 mr-2 inline-block" />
+                                        {{ t('knowledge.sidebar.delete') }}
+                                    </DropdownMenuItem>
                                 </template>
                                 <div @click.stop class="kb-action-trigger">
                                     <el-icon class="w-4 h-4">
                                         <MoreHorizontal16Filled />
                                     </el-icon>
                                 </div>
-                            </el-dropdown>
+                            </DropdownMenu>
                         </div>
                     </div>
                 </template>
@@ -88,8 +86,10 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Add16Regular, Add24Regular, Edit16Regular, Delete16Regular, MoreHorizontal16Filled } from '@vicons/fluent'
-import { ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdInput from '@/components/ui/GdInput.vue';
+import DropdownMenu from '@/components/ui/DropdownMenu.vue';
+import DropdownMenuItem from '@/components/ui/DropdownMenuItem.vue';
 
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'

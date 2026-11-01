@@ -286,4 +286,22 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
     expect(tokenStats.value?.usedTokens).toBe(100);
     expect(tokenStats.value?.request).toBeUndefined();
   });
+
+  it("anchor-stats（context/stats + heuristicTokens）可作为最新占用锚点", () => {
+    const events = [
+      {
+        type: "context/stats",
+        data: {
+          turnId: "t1",
+          usedTokens: 480,
+          effectiveContextWindow: 8000,
+          heuristicTokens: 300,
+          beforeTokens: 900,
+        },
+      },
+    ];
+    expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
+    expect(tokenStats.value?.usedTokens).toBe(480);
+    expect(tokenStats.value?.totalTokens).toBe(8000);
+  });
 });

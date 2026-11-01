@@ -20,7 +20,7 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("@/services/ApiService", () => ({ apiService: apiMocks }));
 
 const messageMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-vi.mock("element-plus", () => ({ ElMessage: messageMocks }));
+vi.mock("@/components/ui/toastService", () => ({ toast: messageMocks }));
 
 const layoutMocks = vi.hoisted(() => ({ setWorkspaceVisible: vi.fn() }));
 vi.mock("@/stores/layout", () => ({ useLayoutStore: () => layoutMocks }));

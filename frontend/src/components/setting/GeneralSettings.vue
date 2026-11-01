@@ -11,10 +11,10 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.languageDesc') }}</span>
             </div>
             <div class="shrink-0 w-52">
-              <el-select v-model="selectedLanguage" @change="handleLanguageChange" size="default">
-                <el-option label="简体中文" value="zh-CN" />
-                <el-option label="English" value="en-US" />
-              </el-select>
+              <GdSelect v-model="selectedLanguage" @change="handleLanguageChange" size="default">
+                <GdOption label="简体中文" value="zh-CN" />
+                <GdOption label="English" value="en-US" />
+              </GdSelect>
             </div>
           </div>
         </div>
@@ -32,7 +32,7 @@
                 class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.workspaceBaseDirDesc') }}</span>
             </div>
             <div class="flex gap-2 shrink-0 max-w-md w-full">
-              <el-input v-model="settingsForm.workspaceBaseDir" :placeholder="t('settings.general.workspaceBaseDirPlaceholder')" clearable />
+              <GdInput v-model="settingsForm.workspaceBaseDir" :placeholder="t('settings.general.workspaceBaseDirPlaceholder')" clearable />
               <GdButton @click="selectFolder()" type="primary" plain>
                 {{ t('settings.general.selectFolder') }}
               </GdButton>
@@ -44,7 +44,7 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.chatUploadSubdirDesc') }}</span>
             </div>
             <div class="shrink-0 max-w-md w-full">
-              <el-input v-model="settingsForm.chatUploadSubdir"
+              <GdInput v-model="settingsForm.chatUploadSubdir"
                 :placeholder="t('settings.general.chatUploadSubdirPlaceholder')" clearable />
             </div>
           </div>
@@ -63,7 +63,7 @@
                 class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.kbStorageRootDesc') }}</span>
             </div>
             <div class="flex gap-2 shrink-0 max-w-md w-full">
-              <el-input v-model="settingsForm.kbStorageRoot" :placeholder="t('settings.general.kbStorageRootPlaceholder')" clearable />
+              <GdInput v-model="settingsForm.kbStorageRoot" :placeholder="t('settings.general.kbStorageRootPlaceholder')" clearable />
               <GdButton @click="selectFolder('kbStorageRoot')" type="primary" plain>
                 {{ t('settings.general.selectFolder') }}
               </GdButton>
@@ -86,9 +86,9 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.llmRequestTimeoutDesc') }}</span>
             </div>
             <div class="shrink-0">
-              <el-input-number v-model="settingsForm.llmRequestTimeoutMs" :min="10" :max="3600" :step="10" size="default" controls-position="right">
+              <GdInputNumber v-model="settingsForm.llmRequestTimeoutMs" :min="10" :max="3600" :step="10" size="default">
                 <template #suffix>{{ t('settings.general.secondsUnit') }}</template>
-              </el-input-number>
+              </GdInputNumber>
             </div>
           </div>
           <!-- 空闲超时 -->
@@ -98,9 +98,9 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.llmIdleTimeoutDesc') }}</span>
             </div>
             <div class="shrink-0">
-              <el-input-number v-model="settingsForm.llmIdleTimeoutMs" :min="5" :max="600" :step="5" size="default" controls-position="right">
+              <GdInputNumber v-model="settingsForm.llmIdleTimeoutMs" :min="5" :max="600" :step="5" size="default">
                 <template #suffix>{{ t('settings.general.secondsUnit') }}</template>
-              </el-input-number>
+              </GdInputNumber>
             </div>
           </div>
         </div>
@@ -138,23 +138,26 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import { toast, notify } from '@/components/ui/toastService';
+import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdSelect from '@/components/ui/GdSelect.vue';
+import GdOption from '@/components/ui/GdSelectOption';
+import GdInput from '@/components/ui/GdInput.vue';
 
 import { useDebounceFn } from '@vueuse/core'
 import type { SystemGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'
-import { usePopup } from '@/composables/usePopup'
 import { useLanguage } from '@/composables/useLanguage'
 import DirectoryBrowserDialog from '@/components/DirectoryBrowserDialog.vue'
 
-const { notify } = usePopup()
 const { t } = useI18n()
 const { locale: currentLocale, setLanguage } = useLanguage()
 const selectedLanguage = ref(currentLocale.value)
 
-function handleLanguageChange(val: string) {
-  setLanguage(val as 'zh-CN' | 'en-US')
+function handleLanguageChange(val: string | number | (string | number)[]) {
+  setLanguage(String(val) as 'zh-CN' | 'en-US')
 }
 
 // 表单数据
@@ -233,10 +236,10 @@ const selectFolder = async (target: 'workspaceBaseDir' | 'kbStorageRoot' = 'work
       const selectedPath = await window.electronAPI.selectFolder()
       if (selectedPath) {
         settingsForm[target] = selectedPath
-        ElMessage.success(t('settings.general.folderSelected'))
+        toast.success(t('settings.general.folderSelected'))
       }
     } catch (error) {
-      ElMessage.error(t('settings.general.selectFolderFailed'))
+      toast.error(t('settings.general.selectFolderFailed'))
     }
     return
   }
@@ -246,7 +249,7 @@ const selectFolder = async (target: 'workspaceBaseDir' | 'kbStorageRoot' = 'work
 
 function handleBrowserSelect(path: string) {
   settingsForm[browserTarget.value] = path
-  ElMessage.success(t('settings.general.folderSelected'))
+  toast.success(t('settings.general.folderSelected'))
 }
 
 // 保存设置
@@ -257,7 +260,7 @@ const handleSave = async () => {
     if (path) {
       const isAbsolute = /^[a-zA-Z]:\\/.test(path) || path.startsWith('/')
       if (!isAbsolute) {
-        ElMessage.error(t('settings.general.pathMustBeAbsolute'))
+        toast.error(t('settings.general.pathMustBeAbsolute'))
         return
       }
     }
@@ -269,7 +272,7 @@ const handleSave = async () => {
       // UNC 网络路径必须挡掉：SQLite WAL 在网络共享上锁不可靠
       const isUnc = /^[\\/]{2}[^\\/]/.test(kbRoot)
       if (!isAbsolute || isUnc) {
-        ElMessage.error(t('settings.general.kbStorageRootMustBeAbsolute'))
+        toast.error(t('settings.general.kbStorageRootMustBeAbsolute'))
         return
       }
     }
@@ -277,7 +280,7 @@ const handleSave = async () => {
     // 验证附件子目录名：只能是单层目录名（后端也会拒，这里先给即时反馈）
     const subdir = settingsForm.chatUploadSubdir.trim()
     if (subdir && (/[\\/:]/.test(subdir) || subdir === '.' || subdir === '..')) {
-      ElMessage.error(t('settings.general.chatUploadSubdirInvalid'))
+      toast.error(t('settings.general.chatUploadSubdirInvalid'))
       return
     }
 
