@@ -5,6 +5,8 @@
         @keydown.left.prevent="move(-1)"
         @keydown.right.prevent="move(1)"
     >
+        <!-- 滑动指示器：跟随选中项平移，切换时平滑滑过去（定位/测量见下方 measure） -->
+        <span class="plugins-view-switch__indicator" :style="indicatorStyle" aria-hidden="true"></span>
         <button
             v-for="(item, index) in items"
             :key="item.value"
@@ -23,13 +25,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, type ComponentPublicInstance } from 'vue'
+import { onBeforeUnmount, onMounted, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
 import type { PluginViewSwitchItem } from './pluginList.types'
 
 // 插件页二级视图切换（已安装 / 市场）。
 //
-// 刻意与一级 el-tabs 拉开一档：高度 44→32、字号 15→14、active 走正文色而非品牌色，
-// 否则两层下划线同权，看不出谁包着谁。
+// 胶囊分段风格 + 滑动指示器（与侧边栏颜色主题切换同款视觉，但补上了位移动画）：
+// 容器浅底圆角，选中项是浮起的表面色小块，切换时小块滑过去而不是瞬间跳变。
 const props = defineProps<{
     modelValue: string
     items: PluginViewSwitchItem[]
@@ -38,10 +40,48 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const buttons = ref<HTMLElement[]>([])
+// 初始不可见，首次测量后淡入（避免从 0 位置滑入的怪动画）
+const indicatorStyle = ref<Record<string, string>>({ opacity: '0' })
 
 function setButton(index: number, el: Element | ComponentPublicInstance | null) {
     buttons.value[index] = el as HTMLElement
 }
+
+function measure() {
+    const index = props.items.findIndex(item => item.value === props.modelValue)
+    const el = buttons.value[index]
+    if (!el) return
+    indicatorStyle.value = {
+        width: `${el.offsetWidth}px`,
+        transform: `translateX(${el.offsetLeft}px)`,
+        opacity: '1',
+    }
+}
+
+// 字体加载/容器尺寸变化都可能改变按钮几何，resize 时重测
+function handleResize() {
+    measure()
+}
+
+onMounted(async () => {
+    await nextTick()
+    measure()
+    window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', handleResize)
+})
+
+watch(() => props.modelValue, async () => {
+    await nextTick()
+    measure()
+})
+
+watch(() => props.items, async () => {
+    await nextTick()
+    measure()
+})
 
 /**
  * 方向键只在焦点落在切换钮时生效：不挂全局监听，就不会和搜索框、全局快捷键抢键。
@@ -58,26 +98,47 @@ function move(step: number) {
 
 <style scoped>
 .plugins-view-switch {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 4px;
-    /* 与列表行图标同列：行有 -mx-2 + px-2，切换钮同样左移 8px 再补回 8px 内边距 */
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background-color: var(--gd-color-sidebar-bg-active);
+    /* 与列表行图标对位：行有 -mx-2 + px-2，切换条同样左移 8px 再补回 8px 内边距 */
     margin-left: -8px;
 }
 
+.plugins-view-switch__indicator {
+    position: absolute;
+    top: 2px;
+    left: 0;
+    height: 26px;
+    border-radius: 6px;
+    background-color: var(--gd-color-surface);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+    transition:
+        transform var(--gd-motion-duration-base) var(--gd-motion-ease-spring),
+        width var(--gd-motion-duration-base) var(--gd-motion-ease-spring),
+        opacity var(--gd-motion-duration-fast) ease;
+}
+
 .plugins-view-switch__item {
+    position: relative;
+    z-index: 1;
     display: inline-flex;
     align-items: center;
-    height: 32px;
-    padding: 0 8px;
+    height: 26px;
+    padding: 0 10px;
     border: 0;
-    border-bottom: 2px solid transparent;
+    border-radius: 6px;
     background: transparent;
     cursor: pointer;
     font-size: var(--gd-size-text-sm);
-    line-height: 20px;
+    line-height: 18px;
     color: var(--gd-color-text-gray);
-    transition: color 0.15s, border-color 0.15s;
+    transition: color 0.15s;
 }
 
 .plugins-view-switch__item:hover {
@@ -86,8 +147,7 @@ function move(step: number) {
 
 .plugins-view-switch__item.is-active {
     color: var(--gd-color-text);
-    font-weight: 600;
-    border-bottom-color: var(--gd-color-text);
+    font-weight: 500;
 }
 </style>
 

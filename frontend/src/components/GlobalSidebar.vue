@@ -263,14 +263,16 @@
             <Person16Regular class="w-4 h-4 mr-2" />
             {{ t('ui.sidebar.profile') }}
           </DropdownMenuItem>
-          <!-- 颜色主题：内联三态切换 -->
+          <!-- 颜色主题：内联三态切换（滑动指示器跟随选中项） -->
           <div class="px-5 py-2 flex items-center gap-2">
             <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">{{ t('ui.sidebar.colorTheme') }}</span>
-            <div class="flex items-center gap-0.5 p-0.5 rounded-md bg-(--gd-color-sidebar-bg-active) dark:bg-[#1a1b1e]">
-              <button v-for="option in themeOptions" :key="option.value" @click="setTheme(option.value)"
-                class="px-2 py-1 rounded text-xs font-medium transition-all duration-200 flex items-center gap-1"
+            <div ref="themeRailRef" class="relative flex items-center gap-0.5 p-0.5 rounded-md bg-(--gd-color-sidebar-bg-active) dark:bg-[#1a1b1e]">
+              <span class="theme-indicator" :style="themeIndicatorStyle" aria-hidden="true"></span>
+              <button v-for="(option, i) in themeOptions" :key="option.value" :ref="el => setThemeButton(i, el)"
+                @click="setTheme(option.value)"
+                class="relative z-[1] px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1"
                 :class="themeMode === option.value
-                  ? 'bg-(--gd-color-surface) dark:bg-[#3a3b3f] text-gray-900 dark:text-[#e8e9ed] shadow-sm'
+                  ? 'text-gray-900 dark:text-[#e8e9ed]'
                   : 'text-gray-500 dark:text-[#8b8d95] hover:text-gray-700 dark:hover:text-[#c0c1c5]'">
                 <component :is="option.icon" class="w-3.5 h-3.5" />
                 {{ option.label }}
@@ -372,7 +374,7 @@
 <script setup lang="ts">
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { NEW_SESSION_ID } from '@/constants'
-import { ref, computed, watch, onMounted, markRaw } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, markRaw, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
@@ -589,6 +591,49 @@ const themeOptions = computed(() => [
   { label: t('ui.sidebar.themeDark'), value: 'dark' as ThemeMode, icon: markRaw(WeatherMoon20Filled) },
   { label: t('ui.sidebar.themeSystem'), value: 'system' as ThemeMode, icon: markRaw(Desktop16Regular) },
 ])
+
+// ── 颜色主题切换的滑动指示器：跟随选中项平移/改宽，切换时平滑滑过 ──
+const themeRailRef = ref<HTMLElement | null>(null)
+const themeButtons = ref<HTMLElement[]>([])
+const themeIndicatorStyle = ref<Record<string, string>>({ opacity: '0' })
+
+function setThemeButton(index: number, el: Element | ComponentPublicInstance | null) {
+  themeButtons.value[index] = el as HTMLElement
+}
+
+function measureThemeIndicator() {
+  const index = themeOptions.value.findIndex((option) => option.value === themeMode.value)
+  const el = themeButtons.value[index]
+  if (!el) return
+  themeIndicatorStyle.value = {
+    width: `${el.offsetWidth}px`,
+    height: `${el.offsetHeight}px`,
+    transform: `translateX(${el.offsetLeft}px)`,
+    opacity: '1',
+  }
+}
+
+onMounted(async () => {
+  await nextTick()
+  measureThemeIndicator()
+  window.addEventListener('resize', measureThemeIndicator)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', measureThemeIndicator)
+})
+
+watch(themeMode, async () => {
+  await nextTick()
+  measureThemeIndicator()
+})
+
+// 下拉菜单是 v-if 渲染：每次打开时轨道才会挂载，出现后立即测一次（否则指示器停在 opacity:0）
+watch(themeRailRef, async (el) => {
+  if (!el) return
+  await nextTick()
+  measureThemeIndicator()
+})
 const { prompt, confirm } = usePopup()
 
 // 删除会话确认对话框状态
@@ -1563,5 +1608,25 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
 /* macOS：红绿灯按钮占左上角约 70px，标题行左侧留白避免遮挡 */
 .mac-sidebar-title-padding {
   padding-left: 78px;
+}
+
+/* 颜色主题切换的滑动指示器（尺寸/位移由 measureThemeIndicator 注入） */
+.theme-indicator {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  border-radius: 4px;
+  background-color: var(--gd-color-surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  transition:
+    transform var(--gd-motion-duration-base) var(--gd-motion-ease-spring),
+    width var(--gd-motion-duration-base) var(--gd-motion-ease-spring),
+    height var(--gd-motion-duration-fast) ease,
+    opacity var(--gd-motion-duration-fast) ease;
+}
+
+html.dark .theme-indicator {
+  background-color: #3a3b3f;
 }
 </style>

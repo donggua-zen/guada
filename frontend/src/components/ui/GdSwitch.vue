@@ -4,15 +4,17 @@
         <span v-if="labelContent" class="gd-switch__label block leading-none select-none" :class="labelTextClass">
             {{ labelContent }}
         </span>
-        <span v-if="loading" class="gd-switch__spinner flex items-center justify-center leading-none"
-            :class="spinnerClass">
-            <svg class="animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <!-- 滑块常驻（loading 时也不卸载）：否则 loading 切换会销毁/重建滑块，
+             translate 过渡永远没有起点，表现为"开关没有动画"（plugins 列表的异步开关） -->
+        <span class="gd-switch__thumb flex items-center justify-center rounded-full bg-[var(--gd-switch-thumb)] shadow-sm transition-[translate] duration-[var(--gd-motion-duration-base)] ease-[var(--gd-motion-ease-spring)]"
+            :class="[sizeSpec.thumb, thumbClass]"></span>
+        <!-- spinner 叠在轨道上，不参与布局 -->
+        <span v-if="loading" class="gd-switch__spinner absolute inset-0 flex items-center justify-center leading-none pointer-events-none">
+            <svg class="animate-spin" :class="spinnerClass" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
                 <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
             </svg>
         </span>
-        <span v-else class="gd-switch__thumb block rounded-full bg-[var(--gd-switch-thumb)] shadow-sm transition-[translate] duration-[var(--gd-motion-duration-base)] ease-[var(--gd-motion-ease-spring)]"
-            :class="[sizeSpec.thumb, thumbClass]"></span>
     </button>
 </template>
 <script setup lang="ts">

@@ -1,7 +1,7 @@
 <template>
-  <div ref="dropdownRef" class="inline-flex" @click.stop="toggleDropdown">
-    <!-- 触发区域 -->
-    <div class="inline-flex">
+  <div ref="dropdownRef" :class="rootClass" @click.stop="toggleDropdown">
+    <!-- 触发区域：w-full 让 slot 内容（如侧边栏底部用户行）能撑满根容器 -->
+    <div class="inline-flex w-full min-w-0">
       <slot></slot>
     </div>
   </div>
@@ -20,11 +20,17 @@ export const dropdownKey = Symbol('dropdown');
 </script>
 
 <script setup lang="ts">
-import { ref, nextTick, onBeforeUnmount, provide } from 'vue';
+import { ref, nextTick, onBeforeUnmount, provide, useAttrs, computed } from 'vue';
 
 const emit = defineEmits<{
   command: [command: string];
 }>();
+
+// 双根组件（div + Teleport）Vue 不透传 attrs：显式接住外部 class（如 w-full flex-1），
+// 与根元素 inline-flex 合并，否则侧边栏底部"用户菜单撑满、图标右对齐"的布局失效
+const attrs = useAttrs();
+const rootClass = computed(() => ['inline-flex', attrs.class]);
+defineOptions({ inheritAttrs: false });
 
 const visible = ref(false);
 /** 弹出方向（updatePosition 判定）：进出场位移按方向反演 */
@@ -58,25 +64,35 @@ const updatePosition = () => {
   const rect = dropdownRef.value?.getBoundingClientRect();
   if (!rect) return;
 
-  const menuHeight = menuRef.value?.offsetHeight || 160;
+  const menuEl = menuRef.value;
+  const menuWidth = menuEl?.offsetWidth || 160;
+  const menuHeight = menuEl?.offsetHeight || 160;
   const spaceBelow = window.innerHeight - rect.bottom;
   const spaceAbove = rect.top;
   const MARGIN = 8;
+
+  // 水平：优先与触发器中心对齐，但钳制在视口内（侧边栏贴左缘时菜单不被窗口裁掉）
+  const halfWidth = menuWidth / 2;
+  const rawLeft = rect.left + rect.width / 2;
+  const left = Math.min(
+    Math.max(rawLeft, MARGIN + halfWidth),
+    window.innerWidth - MARGIN - halfWidth,
+  );
 
   if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
     // 下方空间不足且上方空间更大，改为向上弹出
     menuAbove.value = true;
     menuStyle.value = {
       top: `${Math.max(MARGIN, rect.top - menuHeight)}px`,
-      left: `${rect.left + rect.width / 2}px`,
+      left: `${left}px`,
       transform: 'translateX(-50%)'
     };
   } else {
     // 默认向下弹出
     menuAbove.value = false;
     menuStyle.value = {
-      top: `${rect.bottom + 4}px`,
-      left: `${rect.left + rect.width / 2}px`,
+      top: `${Math.min(rect.bottom + 4, window.innerHeight - MARGIN - menuHeight)}px`,
+      left: `${left}px`,
       transform: 'translateX(-50%)'
     };
   }
