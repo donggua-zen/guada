@@ -272,6 +272,10 @@ const nativeInputClasses = computed((): string => [
 
 const textareaClasses = computed((): string => [
     "min-w-0 flex-1 border-0 bg-transparent p-0 outline-none",
+    // self-stretch 而非 h-full：壳是 flex 容器（textarea 变体 items-start），
+    // 交叉轴拉伸是 flex 自身机制，不依赖百分比高度；h-full 在「壳高度由 flex 拉伸得来」
+    // 的场景下没有确定基准，会回落成 auto（rows 高度）。壳高度为 auto 时 stretch 也不改变布局
+    "self-stretch",
     "text-[14px] leading-[20px] text-[var(--gd-color-field-text)]",
     "placeholder:text-[var(--gd-color-field-text-placeholder)]",
     props.disabled ? "cursor-not-allowed text-[var(--gd-color-field-text-disabled)]" : "",

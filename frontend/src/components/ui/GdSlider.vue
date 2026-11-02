@@ -25,8 +25,11 @@
                 @pointerdown="dragging = true" @pointerup="endDrag" @pointercancel="endDrag"
                 @focus="tooltipVisible = true" @blur="tooltipVisible = false">
         </div>
+        <!-- 宽度用内联样式而非 class：GdInput 壳自带 w-full，
+             同元素上 w-full 与 w-[90px] 谁生效取决于 Tailwind 产物顺序，
+             这里 w-full 胜出会把数字框撑满整行、反把轨道挤成 0 宽 -->
         <GdInputNumber v-if="showInput" :model-value="modelValue" :min="min" :max="max" :step="step"
-            :disabled="disabled" :size="resolvedSize" :controls="false" class="w-[90px] shrink-0"
+            :disabled="disabled" :size="resolvedSize" :controls="false" class="shrink-0" style="width: 90px"
             @update:model-value="handleNumberInput" @change="(v: number | null) => v !== null && emit('change', v)" />
     </div>
 </template>
