@@ -188,7 +188,12 @@
   },
 
   // ── 大纲 ──
-  outline: {},
+  outline: {
+    label: 'Message navigation',
+    jumpTo: 'Jump to query {index}',
+    emptyAssistant: '(no text reply)',
+    runningAssistant: 'Generating reply…',
+  },
 
   // ── 欢迎页 ──
   welcome: {

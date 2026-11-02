@@ -2176,6 +2176,7 @@ defineExpose({
   sendMessage: handleSendMessage,
   loadMessages,
   visibleTurns,
+  isStreaming,
   scrollToMessage,
   getScrollElement: () => scrollContainerRef.value?.getScrollElement?.() || null, // 提供获取滚动元素的方法
   insertText: (text: string) => chatInputRef.value?.insertText(text),
@@ -2193,6 +2194,10 @@ defineExpose({
  * 且每新展开一行都会再把目标推走一次，单轮校正不足以收敛。
  */
 const SCROLL_TO_MESSAGE_MAX_CORRECTIONS = 4
+
+/** 系统「减少动态效果」：跳转不做平滑滚动（对齐 ZCode 的 behavior 回落 auto） */
+const prefersReducedMotion = () =>
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
 
 async function scrollToMessage(messageId: string) {
   // 大纲跳转是明确的导航：挂载/滚动期间不要让旧锚点做补偿
@@ -2222,6 +2227,7 @@ async function scrollToMessage(messageId: string) {
   }
 
   const anchor = scrollContainerRef.value
+  const behavior = prefersReducedMotion() ? 'auto' : 'smooth'
   // 目标相对容器顶部的实测偏移；跳转落地后用它校正（屏外回合展开会推走目标）
   const driftToTarget = () =>
     targetElement.getBoundingClientRect().top - container.getBoundingClientRect().top
@@ -2229,7 +2235,7 @@ async function scrollToMessage(messageId: string) {
   // 先取走滚动权，再用容器级滚动（避免 scrollIntoView 导致整个页面位移）。
   // 消息锚点元素是 TurnItem 根 div（HTMLElement），offsetTop 仅存在于 HTMLElement 上
   anchor?.markUserIntent?.('awayFromBottom')
-  container.scrollTo({ top: (targetElement as HTMLElement).offsetTop, behavior: 'smooth' })
+  container.scrollTo({ top: (targetElement as HTMLElement).offsetTop, behavior })
 
   let corrections = 0
   const correct = () => {
@@ -2238,11 +2244,14 @@ async function scrollToMessage(messageId: string) {
     if (corrections >= SCROLL_TO_MESSAGE_MAX_CORRECTIONS) return
     corrections += 1
     anchor?.markUserIntent?.('awayFromBottom')
-    container.scrollBy({ top: drift, behavior: 'smooth' })
+    container.scrollBy({ top: drift, behavior })
     // 每轮等滚动再次停稳后重测，直到落在容差内或用尽轮次
     container.addEventListener('scrollend', correct, { once: true })
+    // 瞬时滚动可能在监听器挂上之前就结束了，补一次定时器重测
+    if (behavior === 'auto') window.setTimeout(correct, 0)
   }
   container.addEventListener('scrollend', correct, { once: true })
+  if (behavior === 'auto') window.setTimeout(correct, 0)
 }
 
 </script>

@@ -919,5 +919,10 @@ onUnmounted(() => {
 
 .chat-pane-content {
   contain: layout style;
+  /* 消息导航条的显示门槛挂在这个容器上（宽 ≥ 864px 才淡入，见 ChatOutline）。
+     layout containment 本来就有；inline-size 只额外做行内尺寸 containment，
+     而本元素宽度由 flex 给定、不靠内容撑开 */
+  container-type: inline-size;
+  container-name: conversation;
 }
 </style>

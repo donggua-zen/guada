@@ -188,7 +188,12 @@ export default {
   },
 
   // ── 大纲 ──
-  outline: {},
+  outline: {
+    label: '消息导航',
+    jumpTo: '跳转到第 {index} 条提问',
+    emptyAssistant: '（无文字回复）',
+    runningAssistant: '正在生成回复…',
+  },
 
   // ── 欢迎页 ──
   welcome: {
