@@ -2,7 +2,7 @@
     <!-- 外层包一层 gd-input-number 主题钩子（winxp 等主题可定位数字输入整体）；
          内部 GdInput 的 gd-input 壳自动继承主题对输入域的规则 -->
     <div class="gd-input-number contents" :data-size="(size === 'default' || size === 'large' ? 'medium' : size)">
-        <GdInput ref="inputRef" :model-value="inputText" type="text" :variant="variant" :size="size"
+        <GdInput ref="inputRef" :model-value="inputText" type="text" :variant="variant" :size="size" :shape="shape"
             :placeholder="placeholder" :disabled="disabled" :error="error" inputmode="decimal"
             :class="attrs.class" :style="[attrs.style, stepperReserveStyle]" @update:model-value="handleInput" @focus="emit('focus', $event)"
             @blur="handleBlur" @keyup.enter="handleEnter">
@@ -12,7 +12,8 @@
             <!-- 步进钮贴右缘：绝对定位脱离内容流（wrapper 是 relative），
                  左侧 1px 分隔线 + 满高两等分，右侧圆角贴合壳的内圆角 -->
             <span v-if="controls && !disabled"
-                class="absolute inset-y-0 right-0 flex w-4 flex-col overflow-hidden rounded-r-[5px] border-l border-[var(--gd-color-border)]">
+                class="absolute inset-y-0 right-0 flex w-4 flex-col overflow-hidden border-l border-[var(--gd-color-border)]"
+                :class="shape === 'pill' ? 'rounded-r-full' : 'rounded-r-[5px]'">
                 <button type="button" :tabindex="-1" aria-label="增加" :disabled="atMax"
                     class="flex min-h-0 w-full flex-1 cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-[var(--gd-color-field-text-placeholder)] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 md:hover:bg-[var(--gd-color-field-option-bg-hover)] md:hover:text-[var(--gd-color-field-text)]"
                     @click.stop="stepBy(1)" @mousedown.prevent>
@@ -50,6 +51,8 @@ const props = withDefaults(defineProps<{
     controls?: boolean;
     variant?: "filled" | "outline";
     size?: "tiny" | "small" | "medium" | "default" | "large";
+    /** 圆角形态：rounded 矩形圆角（默认）；pill 全圆角胶囊（透传给 GdInput） */
+    shape?: "rounded" | "pill";
     placeholder?: string;
     disabled?: boolean;
     error?: boolean;
@@ -59,6 +62,7 @@ const props = withDefaults(defineProps<{
     max: Infinity,
     step: 1,
     controls: true,
+    shape: "rounded",
     variant: "filled",
     size: "medium",
 });

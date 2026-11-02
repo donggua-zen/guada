@@ -566,7 +566,9 @@ async function togglePin(conv: BotChatConversation) {
   cursor: not-allowed;
 }
 
-.bot-chat-sidebar :deep(.bot-search .el-input__wrapper) {
+/* 搜索框：GdInput 的 attrs.class 落在壳元素上，.bot-search 就是壳本身。
+   选择器带上 .gd-input 提高特指度，才能压过组件内置的 md:hover:bg-* / focus-within:bg-*（0,2,0） */
+.bot-chat-sidebar :deep(.bot-search.gd-input) {
   height: 30px;
   padding: 0 9px;
   border-radius: 8px;
@@ -576,18 +578,18 @@ async function togglePin(conv: BotChatConversation) {
     box-shadow var(--bot-duration) var(--bot-ease);
 }
 
-.bot-chat-sidebar :deep(.bot-search .el-input__wrapper:hover) {
+.bot-chat-sidebar :deep(.bot-search.gd-input:hover) {
   background: color-mix(in srgb, var(--gd-color-text) 9%, transparent);
   box-shadow: 0 0 0 1px transparent inset;
 }
 
-.bot-chat-sidebar :deep(.bot-search .el-input__wrapper.is-focus) {
+.bot-chat-sidebar :deep(.bot-search.gd-input:focus-within) {
   background: var(--gd-color-surface);
   box-shadow: 0 0 0 1px var(--bot-focus) inset;
 }
 
-.bot-chat-sidebar :deep(.bot-search .el-input__prefix),
-.bot-chat-sidebar :deep(.bot-search .el-input__suffix) {
+.bot-chat-sidebar :deep(.bot-search .gd-input__prefix),
+.bot-chat-sidebar :deep(.bot-search .gd-input__suffix) {
   color: var(--gd-color-text-gray);
 }
 

@@ -125,13 +125,13 @@
                                         <!-- 特性图标组 -->
                                         <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95]">
                                             <span
-                                                class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#2a2c30] font-medium text-[10px]">
+                                                class="model-item-tag px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#2a2c30] font-medium text-[10px]">
                                                 {{ model.modelType === 'text' ? t('settings.defaultModel.chatType') : t('settings.defaultModel.embeddingType') }}
                                             </span>
 
                                             <!-- 输入/输出能力箭头组 -->
                                             <div v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
-                                                class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-[#2a2c30] border border-gray-100 dark:border-[#2e3035]">
+                                                class="model-item-tag flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-[#2a2c30] border border-gray-100 dark:border-[#2e3035]">
                                                 <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
                                                     :key="'in-' + cap">
                                                     <span class="w-3.5 h-3.5"><TextT24Regular v-if="cap === 'text'" />
@@ -564,9 +564,9 @@ onMounted(async () => {
     margin-bottom: 0.5rem;
 }
 
-/* 移动端特性标签隐藏 */
+/* 移动端特性标签隐藏（原挂 .el-tag，Element Plus 卸载后改挂本地 .model-item-tag 钩子） */
 @media (max-width: 768px) {
-    :deep(.model-item .el-tag) {
+    :deep(.model-item .model-item-tag) {
         display: none;
     }
 }

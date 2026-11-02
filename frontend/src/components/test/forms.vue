@@ -78,6 +78,14 @@
             </div>
         </div>
 
+        <h2 class="mt-6 mb-2 font-semibold">GdSelect · shape（rounded 矩形圆角 / pill 胶囊）</h2>
+        <div class="grid grid-cols-2 gap-3">
+            <GdSelect v-model="selVal" :options="fruitOptions" shape="rounded" placeholder="rounded（默认）" />
+            <GdSelect v-model="selVal" :options="fruitOptions" shape="pill" placeholder="pill 胶囊" />
+            <GdInput v-model="inputVal" shape="rounded" placeholder="GdInput rounded（默认）" />
+            <GdInput v-model="inputVal" shape="pill" placeholder="GdInput pill 胶囊" />
+        </div>
+
         <h2 class="mt-6 mb-2 font-semibold">GdSelect · filterable / allow-create / multiple</h2>
         <div class="grid grid-cols-2 gap-3">
             <GdSelect v-model="selVal" :options="fruitOptions" filterable clearable placeholder="filterable" />

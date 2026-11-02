@@ -2,7 +2,7 @@
     <Teleport to="body">
         <!-- 顶部居中堆叠容器：z 走 --gd-z-element（与原 ElMessage 4000 同值） -->
         <div class="gd-toast-host fixed left-1/2 top-4 z-(--gd-z-element) flex -translate-x-1/2 flex-col items-center gap-2 pointer-events-none">
-            <TransitionGroup name="gd-toast">
+            <TransitionGroup name="gd-toast" @before-leave="freezeToastWidth">
                 <!-- 出队即播 leave：service dismissToast 直接 splice，TransitionGroup 对被移除元素
                      自动播 gd-toast-leave-* 动画，transitionend 后移除 DOM。子元素不要用 v-show
                      （display:none 不参与 transition，leave 永远播不完） -->
@@ -40,6 +40,18 @@
 <script setup lang="ts">
 import { toastStack, dismissToast } from './toastService';
 import { semanticIconClass, semanticIconPaths } from './semanticIcons';
+
+/**
+ * 离场前冻结实际宽度。
+ * .gd-toast-leave-active 会把条目改成 position: absolute 脱离布局流，
+ * 此时它不再参与 .gd-toast-host 的宽度计算：若它是最后一条，host 宽度塌成 0，
+ * abs 元素的 shrink-to-fit 可用宽度也随之变成 0 —— 文字当场被压成一列。
+ * 提前把当前像素宽写成内联样式，离场期间宽度就与在场时完全一致（换行位置也不变）。
+ */
+function freezeToastWidth(el: Element): void {
+    const node = el as HTMLElement;
+    node.style.width = `${node.offsetWidth}px`;
+}
 </script>
 <style scoped>
 /* 进出场：从上方 8px 落下 / 收回，堆栈上移用 move 过渡 */
@@ -57,8 +69,8 @@ import { semanticIconClass, semanticIconPaths } from './semanticIcons';
 }
 
 .gd-toast-leave-active {
-    /* leave 时脱离布局流，让下方条目平滑上移 */
+    /* leave 时脱离布局流，让下方条目平滑上移。
+       宽度由 freezeToastWidth 在 before-leave 时以内联样式冻结，这里不再声明 */
     position: absolute;
-    width: var(--gd-toast-width, auto);
 }
 </style>

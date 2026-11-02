@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 
-// workspacePreview 会拖进 element-plus（node 环境不需要），只保留本组应用时要调的 setter
+// workspacePreview 会拖进浏览器侧依赖链（node 环境不需要），只保留本组应用时要调的 setter
 vi.mock("@/utils/workspacePreview", () => ({
   setLinkOpenMode: vi.fn(),
   setAutoShowSidebar: vi.fn(),

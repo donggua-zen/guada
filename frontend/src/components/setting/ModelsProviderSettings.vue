@@ -255,21 +255,26 @@ const initData = async () => {
 }
 
 // 重新加载供应商和模型数据
+// 先请求、后原子替换：不能先清空再填——清空的瞬间 currentModels 变空，
+// 详情页会闪一下空状态（切开关时整个列表「灭掉再亮」）
 const reloadProvidersAndModels = async () => {
-  providers.value = []
-  models.value = []
-
   const response = await apiService.fetchAllModels()
+
+  const nextModels: Model[] = []
+  const nextProviders: ModelProvider[] = []
   response.items.forEach(provider => {
     if (provider.models && provider.models.length > 0) {
-      models.value.push(...provider.models.map(model => ({
+      nextModels.push(...provider.models.map(model => ({
         ...model,
         isActive: model.isActive !== undefined ? model.isActive : true
       })))
     }
     delete provider.models
-    providers.value.push(provider)
+    nextProviders.push(provider)
   })
+
+  models.value = nextModels
+  providers.value = nextProviders
 }
 
 const currentProvider = computed<ModelProvider>(() => {

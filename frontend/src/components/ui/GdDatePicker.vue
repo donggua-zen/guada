@@ -1,6 +1,8 @@
 <template>
     <!-- 触发器：与 GdSelect/GdInput 同一视觉壳（filled 灰底无边框），胶囊圆角由消费方按需覆盖 -->
-    <div ref="triggerRef" :class="triggerClasses" :data-open="show" data-variant="filled" :data-size="resolvedSize"
+    <!-- v-bind="$attrs"：fragment 根（触发器 + Teleport 面板）不会自动继承外部 class/style，
+         缺这一句消费方的 class="sched-date" / "setting-control wide" 会被静默丢弃 -->
+    <div ref="triggerRef" v-bind="$attrs" :class="triggerClasses" :data-open="show" data-variant="filled" :data-size="resolvedSize"
         role="combobox" :aria-expanded="show" aria-haspopup="dialog" tabindex="0"
         @click="togglePanel" @keydown="handleTriggerKeydown" @mouseenter="hovered = true" @mouseleave="hovered = false">
         <CalendarLtr16Regular class="shrink-0 text-[var(--gd-color-field-text-placeholder)]" :class="sizeSpec.icon" />
@@ -100,11 +102,14 @@ const props = withDefaults(defineProps<{
     clearable?: boolean;
     placeholder?: string;
     size?: "small" | "default";
+    /** 圆角形态：rounded 矩形圆角（默认，与 GdInput 一致）；pill 全圆角胶囊 */
+    shape?: "rounded" | "pill";
 }>(), {
     modelValue: "",
     clearable: false,
     placeholder: "",
     size: "default",
+    shape: "rounded",
 });
 
 const emit = defineEmits<{
@@ -218,7 +223,8 @@ function handleTriggerKeydown(e: KeyboardEvent) {
 
 // ==================== 样式（触发器壳与 GdSelect 同一 token 套路） ====================
 const sizeMap = {
-    small: { height: "h-[26px]", paddingX: "px-2", icon: "size-3.5" },
+    // small 与 GdSelect/GdInput 的 small 档保持一致（同排摆放时高度对齐，都是 28px）
+    small: { height: "h-[28px]", paddingX: "px-2", icon: "size-3.5" },
     default: { height: "h-[32px]", paddingX: "px-2.5", icon: "size-4" },
 } as const;
 const sizeSpec = computed(() => sizeMap[props.size] ?? sizeMap.default);
@@ -229,7 +235,9 @@ const triggerClasses = computed((): string => {
     return [
         // gd-date-picker 基类是主题插件的稳定定位钩子，配合 data-open / data-size 换肤，不要改名
         "gd-date-picker",
-        "group relative flex w-full min-w-0 cursor-pointer box-border items-center rounded-md border leading-none",
+        "group relative flex w-full min-w-0 cursor-pointer box-border items-center border leading-none",
+        // 圆角形态：默认矩形圆角（与 GdInput 表单控件一致），pill = 全圆角胶囊
+        props.shape === "pill" ? "rounded-full" : "rounded-md",
         "transition-colors duration-200",
         s.height,
         s.paddingX,

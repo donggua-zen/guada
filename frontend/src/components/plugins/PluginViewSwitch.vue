@@ -293,31 +293,6 @@ function move(step: number) {
     }
 }
 
-/* ── 标签统一（原先 Skills 页把标签全压平成灰、MCP 页保留 Element 彩色，同一页两种语言）
-   中性标签走文字色派生的浅底，状态标签走状态色浅底；两档都随主题翻转，无需 .dark 分支 */
-.plugin-list-row .el-tag,
-.market-install .el-tag,
-.mcp-market__dialog .el-tag {
-    height: 20px;
-    padding: 0 7px;
-    border: none;
-    background-color: var(--gd-color-surface-subtle);
-    color: var(--gd-color-text-gray);
-    font-size: calc(var(--gd-size-text-base) - 3px);
-    line-height: 18px;
-}
-
-.plugin-list-row .el-tag--success,
-.market-install .el-tag--success,
-.mcp-market__dialog .el-tag--success {
-    background-color: color-mix(in srgb, var(--gd-color-success) 12%, transparent);
-    color: var(--gd-color-success);
-}
-
-.plugin-list-row .el-tag--warning,
-.market-install .el-tag--warning,
-.mcp-market__dialog .el-tag--warning {
-    background-color: color-mix(in srgb, var(--gd-color-warning) 14%, transparent);
-    color: var(--gd-color-warning);
-}
+/* 标签统一规则原先挂在 .el-tag 上（Element Plus 卸载后恒不匹配）。
+   GdTag 自带 data-type/data-effect 三态配方，这里不再重复定义。 */
 </style>

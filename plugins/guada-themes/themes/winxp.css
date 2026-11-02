@@ -406,16 +406,16 @@ html[data-theme="winxp"] .gd-button[data-variant="primary"] {
 html[data-theme="winxp"] .gd-button[data-variant="primary"]:hover {
   filter: brightness(1.1);
 }
-html[data-theme="winxp"] .el-tag {
+html[data-theme="winxp"] .gd-tag {
   border-radius: 3px;
 }
-html[data-theme="winxp"] .el-popper.is-light {
+html[data-theme="winxp"] .gd-popover {
   border-radius: 3px;
   border-color: #aca899;
   box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.25);
 }
-/* 消息框：XP 对话框——米色底 + 蓝框 */
-html[data-theme="winxp"] .el-message-box {
+/* 对话框：XP 对话框——米色底 + 蓝框（确认/输入弹窗已迁 GdDialog） */
+html[data-theme="winxp"] .gd-dialog {
   background: #ece9d8;
   border: 1px solid #0058e6;
   border-radius: 8px;
@@ -554,38 +554,27 @@ html[data-theme="winxp"] *:focus-visible {
   outline: 1px dotted #1a1a1a !important;
   outline-offset: 0;
 }
-/* 复选框：直角白底蓝灰边 */
-html[data-theme="winxp"] .el-checkbox__inner {
+/* 复选框：直角白底蓝灰边（GdCheckbox 自绘方块，选中态走 data-checked 钩子） */
+html[data-theme="winxp"] .gd-checkbox__box {
   border-radius: 0;
   border-color: #7f9db9;
   background: #ffffff;
 }
-html[data-theme="winxp"] .el-checkbox__input.is-checked .el-checkbox__inner {
+html[data-theme="winxp"] .gd-checkbox[data-checked="true"] .gd-checkbox__box {
   background: #ffffff;
   border-color: #316ac5;
 }
-html[data-theme="winxp"] .el-checkbox__input.is-checked .el-checkbox__inner::after {
-  border-color: #316ac5;
+html[data-theme="winxp"] .gd-checkbox[data-checked="true"] .gd-checkbox__box svg {
+  color: #316ac5;
 }
-/* 输入域：直角 + 内凹阴影 */
-html[data-theme="winxp"] .el-input__wrapper,
-html[data-theme="winxp"] .el-textarea__inner {
-  border-radius: 0;
-  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.1) !important;
-}
-/* 自研表单控件（GdInput / GdSelect 触发器）：直角 + 内凹阴影，同上 */
+/* 输入域：直角 + 内凹阴影（GdInput / GdSelect 触发器 / GdInputNumber） */
 html[data-theme="winxp"] .gd-input,
 html[data-theme="winxp"] .gd-select {
   border-radius: 0;
   box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.1) !important;
 }
-/* 下拉菜单项 hover：经典 #316AC5 */
-html[data-theme="winxp"] .el-dropdown-menu__item:not(.is-disabled):hover {
-  background: #316ac5;
-  color: #ffffff;
-}
-html[data-theme="winxp"] .el-select-dropdown__item.is-hovering,
-html[data-theme="winxp"] .el-select-dropdown__item:hover {
+/* 下拉菜单项 hover：经典 #316AC5（DropdownMenuItem） */
+html[data-theme="winxp"] .gd-dropdown-menu__item:not(.cursor-not-allowed):hover {
   background: #316ac5;
   color: #ffffff;
 }

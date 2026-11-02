@@ -451,10 +451,10 @@ html.dark[data-theme="cyberpunk"] .l-dialog {
   border: 1px solid var(--gd-color-border);
   box-shadow: 0 0 28px rgba(0, 229, 255, 0.18);
 }
-html.dark[data-theme="cyberpunk"] .el-tag {
+html.dark[data-theme="cyberpunk"] .gd-tag {
   border-radius: 0;
 }
-html.dark[data-theme="cyberpunk"] .el-popper.is-light {
+html.dark[data-theme="cyberpunk"] .gd-popover {
   border-radius: 0;
   border-color: var(--gd-color-border);
   box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);

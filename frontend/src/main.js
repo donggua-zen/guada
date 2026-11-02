@@ -310,8 +310,8 @@ if (vuePerfEnabled) app.config.performance = true;
 // i18n：插件语言包注册表（{ zh, en } 字典）
 window.__GuaDaShared__ = {
   // 共享依赖：主应用同一个 Vue 实例（插件产物从这里取，不 import）。
-  // element-plus 已于 2026-11 整体卸载（主应用与插件均零消费），
-  // 旧插件产物若仍读取该键会得到 undefined——需同步更新插件产物。
+  // element-plus 已于 2026-11 整体卸载（依赖、样式、组件零残留），
+  // 插件产物请改用 Gd* 组件，不要再从本对象读取 element-plus。
   vue: Vue,
   runtime: reactive({
     user: undefined,

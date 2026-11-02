@@ -2,7 +2,7 @@
     <teleport to="body">
         <transition name="popover-fade">
             <div v-if="show" ref="popoverRef"
-                class="fixed rounded-(--gd-size-dialog-rounded-radius) border border-white/40 dark:border-white/10 shadow-[0_0_16px_rgba(0,0,0,0.10)] dark:shadow-[0_0_8px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col z-(--gd-z-popover) pointer-events-auto px-1 py-1 bg-(--gd-color-surface)/70 backdrop-blur-xl backdrop-saturate-150"
+                class="gd-popover fixed rounded-(--gd-size-dialog-rounded-radius) border border-white/40 dark:border-white/10 shadow-[0_0_16px_rgba(0,0,0,0.10)] dark:shadow-[0_0_8px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col z-(--gd-z-popover) pointer-events-auto px-1 py-1 bg-(--gd-color-surface)/70 backdrop-blur-xl backdrop-saturate-150"
                 :class="popperClass" :style="popoverStyle" @click.stop
                 @mouseenter="$emit('mouseenter', $event)" @mouseleave="$emit('mouseleave', $event)">
                 <!-- Header 槽位 -->
@@ -40,6 +40,12 @@ interface Props {
     pauseAutoClose?: boolean
     /** 水平对齐方式：center 以锚点居中（默认，原有行为）；start 左缘对齐锚点（GdSelect 等选择面板用） */
     align?: 'center' | 'start'
+    /** 垂直方向偏好：默认 false=优先向上（输入区工具菜单的历史行为）；
+     *  true=优先向下（GdSelect 等表单选择面板，与原生 select 阅读方向一致），
+     *  仅在下方空间不足时才向上翻转 */
+    preferBelow?: boolean
+    /** 与锚点的垂直间距（px），默认 8；表单选择面板可收紧到 4 */
+    spacing?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -52,6 +58,8 @@ const props = withDefaults(defineProps<Props>(), {
     alignItemSelector: '',
     pauseAutoClose: false,
     align: 'center',
+    preferBelow: false,
+    spacing: 8,
 })
 
 const emit = defineEmits<{
@@ -104,11 +112,13 @@ const updatePosition = () => {
     const rect = props.anchorEl.getBoundingClientRect()
     const popoverElement = popoverRef.value
 
-    // 等待下一帧确保元素已渲染
-    requestAnimationFrame(() => {
+    // 同步测量并定位：调用方已 await nextTick，DOM 已挂载，offsetHeight 可直接读。
+    // 不能用 requestAnimationFrame 包裹——后台/节流标签页 rAF 会被挂起，
+    // 面板会停在未定位的默认位置（视口底部）
+    {
         const actualHeight = popoverElement.offsetHeight
         const popoverWidth = typeof props.width === 'number' ? props.width : 320
-        const spacing = 8
+        const spacing = props.spacing
 
         // 计算水平位置：start 左缘对齐锚点，center 以按钮为中心对齐（默认）
         let left = props.align === 'start'
@@ -123,13 +133,22 @@ const updatePosition = () => {
             left = viewportWidth - popoverWidth - 10
         }
 
-        // 计算垂直位置：优先显示在按钮上方
+        // 计算垂直位置：preferBelow=false 时优先向上（输入区工具菜单的历史行为），
+        // =true 时优先向下（GdSelect 表单面板）；两侧都放不下时取空间更大的一侧
         const spaceAbove = rect.top
         const spaceBelow = window.innerHeight - rect.bottom
 
         let showAbove: boolean
 
-        if (spaceAbove >= actualHeight + spacing) {
+        if (props.preferBelow) {
+            if (spaceBelow >= actualHeight + spacing) {
+                showAbove = false
+            } else if (spaceAbove >= actualHeight + spacing) {
+                showAbove = true
+            } else {
+                showAbove = spaceBelow < spaceAbove
+            }
+        } else if (spaceAbove >= actualHeight + spacing) {
             showAbove = true
         } else if (spaceBelow >= actualHeight + spacing) {
             showAbove = false
@@ -157,7 +176,7 @@ const updatePosition = () => {
                 bottom: 'auto'
             }
         }
-    })
+    }
 }
 
 // 处理全局点击事件 - 点击外部关闭弹窗

@@ -1,10 +1,13 @@
 <template>
-    <label class="gd-checkbox inline-flex shrink-0 cursor-pointer items-start gap-2"
+    <!-- items-center：方块与 label 视觉中线对齐。
+         之前用 items-start + mt-0.5（为两行富文本「标题+描述」准备），
+         单行文字场景下方块会明显偏上 -->
+    <label class="gd-checkbox inline-flex shrink-0 cursor-pointer items-center gap-2"
         :class="disabled ? 'cursor-not-allowed opacity-60' : ''" :data-checked="isChecked ? 'true' : 'false'">
         <!-- 原生 checkbox 视觉隐藏（可访问性保留），自绘方块 -->
         <input type="checkbox" class="peer sr-only" :checked="isChecked" :disabled="disabled"
             @change="handleChange" @click.stop>
-        <span class="gd-checkbox__box mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-150"
+        <span class="gd-checkbox__box flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-150"
             :class="isChecked
                 ? 'border-[var(--gd-color-primary)] bg-[var(--gd-color-primary)]'
                 : 'border-[var(--gd-color-field-outline-border-hover)] bg-[var(--gd-color-field-outline-bg)]'">
@@ -13,7 +16,8 @@
                 <path d="m5 13 4 4L19 7" />
             </svg>
         </span>
-        <!-- label prop 或默认插槽（富文本两行内容） -->
+        <!-- label prop 或默认插槽（富文本可多行）。min-h 与方块等高：
+             两行内容时方块居中于整体，单行时也与文字中线对齐 -->
         <span v-if="label || $slots.default" class="gd-checkbox__label min-w-0 text-[13px] leading-[18px] text-(--gd-color-text)">
             <template v-if="label">{{ label }}</template>
             <slot v-else></slot>

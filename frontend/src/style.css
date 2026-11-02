@@ -795,10 +795,6 @@ html.platform-mac .content-card.sidebar-collapsed::after {
   border-left-color: var(--gd-color-primary) !important;
 }
 
-.el-message-box__message {
-  width: 100%;
-}
-
 /* 动画效果 */
 @keyframes fadeIn {
   from {
@@ -889,8 +885,7 @@ html.dark .terminal-panel .xterm-viewport {
   background-color: var(--gd-color-bg, #1e1e1e) !important;
 }
 
-/* GdDialog styles are scoped in GdDialog.vue.
-   el-message-box overrides kept for usePopup (legacy, being phased out). */
+/* GdDialog styles are scoped in GdDialog.vue. */
 
 /* ===== GdTooltip — lightweight singleton tooltip ===== */
 .l-tooltip {
@@ -993,7 +988,6 @@ html.mobile .md\:max-w-260.flex.items-center.justify-between > .shrink-0 {
   justify-content: flex-start;
 }
 
-html.mobile .md\:max-w-260.flex.items-center.justify-between .el-input,
 html.mobile .md\:max-w-260.flex.items-center.justify-between .gd-input {
   width: 100% !important;
   flex: 1 1 120px;
@@ -1013,7 +1007,6 @@ html.mobile .skills-page .flex.items-center.justify-between.gap-4 > .shrink-0 {
   justify-content: flex-start;
 }
 
-html.mobile .md\:max-w-260 .flex.items-center.justify-between.gap-4 .el-input,
 html.mobile .md\:max-w-260 .flex.items-center.justify-between.gap-4 .gd-input {
   width: 100% !important;
   flex: 1 1 120px;

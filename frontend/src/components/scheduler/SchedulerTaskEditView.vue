@@ -1,4 +1,5 @@
 <template>
+  <!-- 弹窗模式下不加高度/滚动约束：滚动由外层 GdDialog 的 .l-dialog__body 承担 -->
   <div :class="inDialog ? 'dialog-form-root' : 'h-full flex flex-col overflow-hidden'">
     <!-- 顶部操作栏（整页模式；弹窗模式由 GdDialog 头部与 footer 承载） -->
     <div v-if="!inDialog" class="edit-header shrink-0">
@@ -281,7 +282,13 @@ function clearErrors() {
 }
 
 function scrollToTop() {
-  if (bodyRef.value) bodyRef.value.scrollTop = 0
+  const el = bodyRef.value
+  if (!el) return
+  // 弹窗模式：本组件不再是滚动容器（滚动交给 GdDialog 的 .l-dialog__body），
+  // 往上找真正的滚动宿主；整页模式回落为自身
+  const scroller = el.closest('.l-dialog__body') as HTMLElement | null
+  if (scroller) scroller.scrollTop = 0
+  else el.scrollTop = 0
 }
 
 function onNameUpdate(value: string) {
@@ -617,13 +624,10 @@ defineExpose({
   padding: 24px 16px 32px;
 }
 
-/* 弹窗模式：外层 GdDialog 已有内边距，这里只负责滚动与紧凑间距 */
-.dialog-form-root {
-  max-height: 62vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 2px;
-}
+/* 弹窗模式：高度与滚动全部交给外层 GdDialog（.l-dialog max-height:85vh +
+   .l-dialog__body 自身 overflow-y:auto）。这里刻意不再设 max-height/overflow——
+   嵌套滚动容器会把滚动条收进内层、还白占一截右侧内边距，上下空间也浪费。
+   （只删 overflow-y 会因 overflow-x:hidden 触发「visible 折算 auto」，两个方向必须一起删） */
 
 .dialog-form-body {
   padding: 2px 0 4px;
@@ -766,12 +770,15 @@ defineExpose({
   color: var(--gd-color-text-gray);
 }
 
-.setting-control {
+/* 控件宽度：类落在子组件内部元素上（GdDatePicker/GdTimePicker 触发器、GdInputNumber 转发给
+   GdInput），普通 scoped 选择器带 [data-v] 匹配不到，必须 :deep——否则内部 w-full 生效、
+   控件撑满整行 */
+:deep(.setting-control) {
   width: 120px;
   flex-shrink: 0;
 }
 
-.setting-control.wide {
+:deep(.setting-control.wide) {
   width: 200px;
 }
 
@@ -793,8 +800,8 @@ defineExpose({
     align-items: flex-start;
   }
 
-  .setting-control,
-  .setting-control.wide {
+  :deep(.setting-control),
+  :deep(.setting-control.wide) {
     width: 100%;
   }
 }

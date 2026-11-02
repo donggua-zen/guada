@@ -111,9 +111,11 @@
     <GdDialog v-model="showEditModal" :title="isEditMode ? t('settings.providerDetail.editModelInfo') : t('settings.providerDetail.newModel')" size="md" align-center
       class="model-edit-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
+        <!-- 行距统一由容器 gap 提供：GdFormField 自身无外边距，
+             之前靠各字段手写 mb-3/mb-4，漏写的（模型名称/模型类型、上下文长度/最大输出长度）就贴在一起了 -->
         <div class="flex flex-col gap-3">
 
-          <div class="form-section">
+          <div class="form-section flex flex-col gap-3">
             <GdFormField :label="t('settings.providerDetail.modelName')" label-width="120px" :error="errors.modelName">
               <div class="api-key-input-wrapper">
                 <GdInput v-model="editModelForm.modelName" :placeholder="t('settings.providerDetail.modelNamePlaceholder')" clearable
@@ -139,8 +141,8 @@
           </div>
 
           <!-- 对话模型配置 -->
-          <div v-if="editModelForm.modelType === 'text'" class="transition-all">
-            <GdFormField :label="t('settings.providerDetail.inputCapabilities')" label-width="120px" class="mb-3" :error="errors.config_inputCapabilities">
+          <div v-if="editModelForm.modelType === 'text'" class="transition-all flex flex-col gap-3">
+            <GdFormField :label="t('settings.providerDetail.inputCapabilities')" label-width="120px" :error="errors.config_inputCapabilities">
               <GdCheckboxGroup v-model="editModelForm.config.inputCapabilities">
                 <GdCheckbox :model-value="editModelForm.config.inputCapabilities?.includes('text')" disabled>
                   <span class="flex items-center gap-2">
@@ -160,7 +162,7 @@
               </GdCheckboxGroup>
             </GdFormField>
 
-            <GdFormField :label="t('settings.providerDetail.outputCapabilities')" label-width="120px" class="mb-3" :error="errors.config_outputCapabilities">
+            <GdFormField :label="t('settings.providerDetail.outputCapabilities')" label-width="120px" :error="errors.config_outputCapabilities">
               <GdCheckboxGroup v-model="editModelForm.config.outputCapabilities">
                 <GdCheckbox :model-value="editModelForm.config.outputCapabilities?.includes('text')" disabled>
                   <span class="flex items-center gap-2">
@@ -180,7 +182,7 @@
               </GdCheckboxGroup>
             </GdFormField>
 
-            <GdFormField :label="t('settings.providerDetail.advancedFeatures')" label-width="120px" class="mb-4" :error="errors.config_features">
+            <GdFormField :label="t('settings.providerDetail.advancedFeatures')" label-width="120px" :error="errors.config_features">
               <GdCheckboxGroup v-model="editModelForm.config.features">
                 <GdCheckbox :model-value="editModelForm.config.features?.includes('tools')">
                   <span class="flex items-center gap-2">
@@ -193,7 +195,7 @@
 
             <!-- 思考调节：自动判断（跟随继承链）/ 不支持 / 支持。
                  只声明能力，不勾档位——档位由类型卡 / preset / 通用兜底决定 -->
-            <GdFormField :label="t('settings.providerDetail.thinkingTuning')" label-width="120px" class="mb-4">
+            <GdFormField :label="t('settings.providerDetail.thinkingTuning')" label-width="120px">
               <div class="w-full">
                 <GdSegmented v-model="editModelForm.thinkingMode" :options="thinkingModeOptions" />
 
@@ -332,7 +334,8 @@
               </GdInputNumber>
             </GdFormField>
 
-            <GdDivider content-position="left" class="!my-4 text-xs text-gray-400">
+            <!-- 间距由父级 gap-3 提供（GdDivider 本身无外边距，不要再加 my） -->
+            <GdDivider content-position="left" class="text-xs text-gray-400">
               <button type="button"
                 class="inline-flex items-center gap-1 cursor-pointer whitespace-nowrap hover:text-gray-600 dark:hover:text-[#b8bac1]"
                 @click="defaultParamsExpanded = !defaultParamsExpanded">
@@ -344,7 +347,7 @@
             </GdDivider>
 
             <!-- 默认折叠：这些参数绝大多数情况不需要设置；条目已有值时自动展开，不隐藏存量配置 -->
-            <div v-show="defaultParamsExpanded">
+            <div v-show="defaultParamsExpanded" class="flex flex-col gap-3">
               <GdFormField :label="t('settings.providerDetail.temperature')" label-width="120px" :error="errors.config_temperature">
                 <GdInputNumber v-model="editModelForm.config.temperature" :min="0" :max="2" :step="0.1"
                   :placeholder="t('settings.providerDetail.modelDefault')" style="width: 240px;" />

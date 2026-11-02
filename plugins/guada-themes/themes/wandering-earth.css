@@ -544,118 +544,12 @@ html.dark[data-theme="wandering-earth"] .l-dialog-fade-enter-active .l-dialog::a
   }
 }
 
-/* 输入框：方形终端输入 */
-html.dark[data-theme="wandering-earth"] .el-message-box .el-input__wrapper {
+/* 输入框：方形终端输入（usePopup 输入弹窗已迁 GdDialog + GdInput） */
+html.dark[data-theme="wandering-earth"] .l-dialog .gd-input {
   border-radius: 0;
 }
-/* 自研输入框（usePopup 输入弹窗已迁 GdInput）：同上方形 */
-html.dark[data-theme="wandering-earth"] .el-message-box .gd-input {
-  border-radius: 0;
-}
-/* 按钮区：虚线刻度分隔 */
-html.dark[data-theme="wandering-earth"] .el-message-box__btns {
-  border-top: 1px dashed var(--gd-color-border);
-  padding-top: 12px !important;
-}
-
-/* MessageBox 入场动画：与 Dialog 一致的「面板启动」。
-   msgbox-fade-in 同名覆盖（leave 时 element-plus 用 reverse
-   播放，自然得到缩小淡出） */
-@keyframes msgbox-fade-in {
-  0%   { opacity: 0; transform: scale(0.85); }
-  60%  { opacity: 1; transform: scale(1.02); }
-  100% { opacity: 1; transform: scale(1); }
-}
-html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-overlay-message-box {
-  animation-duration: 0.28s;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-}
-html.dark[data-theme="wandering-earth"] .fade-in-linear-leave-active .el-overlay-message-box {
-  animation-duration: 0.16s;
-}
-html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-message-box__header,
-html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-message-box__content,
-html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-message-box__btns {
-  animation: we-content-in 0.22s ease-out 0.14s backwards;
-}
-html.dark[data-theme="wandering-earth"] .fade-in-linear-enter-active .el-message-box::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 40%;
-  background: linear-gradient(180deg, transparent, rgba(217, 154, 78, 0.14), transparent);
-  animation: we-scan 0.45s ease-out 0.05s backwards;
-  pointer-events: none;
-}
-/* ============================================================
-   MessageBox（确认 / 输入框）：与 Dialog 同一套授权面板语言。
-   注意 EP 对 .el-message-box 默认 overflow:hidden（会裁掉
-   悬浮标题牌），必须显式改回 visible。
-   ============================================================ */
-html.dark[data-theme="wandering-earth"] .el-message-box {
-  position: relative;
-  overflow: visible;
-  /* style.css 的边框带 !important，这里必须同级对抗 */
-  border: 1px solid var(--gd-color-primary) !important;
-  border-top: 3px solid var(--gd-color-primary) !important;
-  border-radius: 0 !important;
-  background: var(--gd-color-surface) !important;
-  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55) !important;
-}
-/* header 压缩：标题牌与关闭键均脱离文档流，仅留 6px 呼吸缝 */
-html.dark[data-theme="wandering-earth"] .el-message-box__header:has(.el-message-box__title) {
-  padding: 0 16px !important;
-  height: 6px;
-  box-sizing: border-box;
-}
-/* 标题牌：同 Dialog——实心琥珀牌 dock 在顶边上方左侧 */
-html.dark[data-theme="wandering-earth"] .el-message-box__title {
-  position: absolute;
-  top: -23px;
-  left: -1px;
-  background: var(--gd-color-primary);
-  color: var(--gd-color-primary-text);
-  font-family: var(--we-condensed);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  line-height: 1.5;
-  padding: 1px 10px;
-}
-/* 无标题消息框：不渲染空琥珀牌 */
-html.dark[data-theme="wandering-earth"] .el-message-box__title:empty {
-  display: none;
-}
-/* 关闭键：dock 在顶边上方右侧，与标题牌齐平——但无框无底，
-   只是一个漂浮的琥珀 X（带边框会和标题牌凑成"兔子耳朵"） */
-html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn {
-  top: -23px !important;
-  right: -1px !important;
-  width: 24px !important;
-  height: 20px !important;
-  margin: 0 !important;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  background: transparent;
-  border: none;
-}
-html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn .el-message-box__close {
-  color: var(--gd-color-primary);
-  transition: color 0.15s ease;
-}
-html.dark[data-theme="wandering-earth"] .el-message-box__headerbtn:hover .el-message-box__close {
-  color: var(--gd-color-primary-hover);
-}
-html.dark[data-theme="wandering-earth"] .el-tag {
-  border-radius: 0;
-}
-html.dark[data-theme="wandering-earth"] .el-popper.is-light {
+/* 按钮区：虚线刻度分隔（确认/输入弹窗已迁 GdDialog，样式由上方 .l-dialog__footer 承接） */
+html.dark[data-theme="wandering-earth"] .gd-popover {
   border-radius: 0;
   border-color: var(--gd-color-border);
 }

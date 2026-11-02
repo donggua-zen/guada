@@ -1,5 +1,7 @@
 <template>
-    <div class="avatar-upload-container flex flex-col items-center justify-center">
+    <!-- v-bind="$attrs"：fragment 根（容器 + 裁剪弹窗）不会自动继承外部 class，
+         缺这一句消费方的 class="w-10" 会被静默丢弃 -->
+    <div v-bind="$attrs" class="avatar-upload-container flex flex-col items-center justify-center">
         <GdTooltip content="点击可更换头像" placement="top">
             <Avatar class="avatar-preview w-20 h-20 cursor-pointer hover:opacity-80 transition-opacity"
                 @click="triggerAvatarUpload" :src="previewUrl" :type="type" :name="name"></Avatar>

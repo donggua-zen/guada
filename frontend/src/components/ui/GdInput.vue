@@ -2,7 +2,7 @@
     <div ref="wrapperRef" :class="wrapperClasses" :style="wrapperStyle" :data-variant="variant"
         :data-size="resolvedSize" @focusin="handleFocusin" @focusout="handleFocusout" @click="handleWrapperClick">
         <!-- prefix 插槽（el 同名）：mousedown.prevent 防止点击图标时输入框失焦 -->
-        <span v-if="$slots.prefix && !isTextarea" :class="prefixClasses" @mousedown.prevent>
+        <span v-if="$slots.prefix && !isTextarea" class="gd-input__prefix" :class="prefixClasses" @mousedown.prevent>
             <slot name="prefix"></slot>
         </span>
         <textarea v-if="isTextarea" v-bind="nativeAttrs" ref="inputRef" :class="textareaClasses" :style="textareaStyle"
@@ -14,7 +14,7 @@
             :class="isTextarea ? 'pointer-events-none absolute right-2 bottom-1.5' : 'ml-1.5'">
             {{ (displayValue ?? '').length }}/{{ maxlength }}
         </span>
-        <span v-if="hasSuffix" :class="suffixClasses" @mousedown.prevent>
+        <span v-if="hasSuffix" class="gd-input__suffix" :class="suffixClasses" @mousedown.prevent>
             <button v-if="showClear" type="button" :tabindex="-1" aria-label="清空"
                 class="gd-input__clear flex size-4 shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-[var(--gd-color-field-text-placeholder)] transition-colors duration-150 md:hover:text-[var(--gd-color-field-text)]"
                 @click.stop="handleClear">
@@ -70,8 +70,10 @@ const props = withDefaults(defineProps<{
     autosize?: boolean | { minRows?: number; maxRows?: number };
     /** 手动设置 textarea 的 resize 行为（默认 vertical） */
     resize?: "none" | "both" | "horizontal" | "vertical";
-    /** 错误态红描边。el-form 的 :rules 样式钩在 .el-form-item.is-error 上（本轮不动 el-form），带校验的字段迁移时手动接线 */
+    /** 错误态红描边。表单校验态由 GdFormField 显式传 error，不再依赖 el-form 的 .is-error 钩子 */
     error?: boolean;
+    /** 圆角形态：rounded 矩形圆角（默认，表单统一语言）；pill 全圆角胶囊 */
+    shape?: "rounded" | "pill";
 }>(), {
     modelValue: "",
     type: "text",
@@ -81,6 +83,7 @@ const props = withDefaults(defineProps<{
     autosize: false,
     resize: undefined,
     maxlength: undefined,
+    shape: "rounded",
 });
 
 const emits = defineEmits<{
@@ -212,7 +215,9 @@ const wrapperClasses = computed((): string => {
         "group",
         "relative flex w-full min-w-0 items-center box-border",
         // 边框常驻 1px（filled 用透明色）：error/focus 切换描边时几何不跳动
-        "border rounded-md",
+        "border",
+        // 圆角形态：默认矩形圆角（表单统一语言），pill = 全圆角胶囊
+        props.shape === "pill" ? "rounded-full" : "rounded-md",
         // 行高显式 1：不能继承 preflight 的 1.5（14×1.5=21px 行盒在整数高度里落出半像素偏移）
         "leading-none",
         "transition-colors duration-200",

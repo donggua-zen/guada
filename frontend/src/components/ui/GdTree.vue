@@ -1,5 +1,6 @@
 <template>
-    <div class="gd-tree" role="tree">
+    <!-- v-bind="$attrs"：外部 class（如 KBFileTree 的 mt-2）需显式落到根节点 -->
+    <div v-bind="$attrs" class="gd-tree" role="tree">
         <GdTreeBranch :nodes="data" :depth="0" />
         <div v-if="data.length === 0 && emptyText"
             class="px-2 py-3 text-center text-[12px] leading-none text-[var(--gd-color-field-text-disabled)]">

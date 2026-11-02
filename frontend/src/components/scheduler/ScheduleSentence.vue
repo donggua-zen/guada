@@ -2,14 +2,14 @@
   <div class="schedule-sentence">
     <!-- 一句话调度：频率 + 条件 + 于 + 时间 + 时区 -->
     <div class="sentence-shell" :class="{ 'has-error': !!error }">
-      <GdSelect v-model="frequency" class="sched-pill freq-pill" :teleported="true">
+      <GdSelect v-model="frequency" class="sched-pill freq-pill" size="small" :teleported="true">
         <GdOption v-for="option in frequencyOptions" :key="option.value" :label="option.label"
           :value="option.value" />
       </GdSelect>
 
       <!-- 每小时 / 每 N 小时：分钟 -->
       <template v-if="draft.frequency === 'every_hours'">
-        <GdSelect :model-value="draft.intervalHours" class="sched-pill num-pill" :teleported="true"
+        <GdSelect :model-value="draft.intervalHours" class="sched-pill num-pill" size="small" :teleported="true"
           @update:model-value="emitDraft({ intervalHours: Number($event) })">
           <GdOption v-for="n in 23" :key="n" :label="String(n)" :value="n" />
         </GdSelect>
@@ -18,7 +18,7 @@
 
       <template v-if="draft.frequency === 'hourly' || draft.frequency === 'every_hours'">
         <span class="sentence-text">{{ t('scheduler.schedule.minutePrefix') }}</span>
-        <GdSelect :model-value="draft.minute" class="sched-pill num-pill" :teleported="true"
+        <GdSelect :model-value="draft.minute" class="sched-pill num-pill" size="small" :teleported="true"
           @update:model-value="emitDraft({ minute: Number($event) })">
           <GdOption v-for="m in minuteOptions" :key="m" :label="pad2(m)" :value="m" />
         </GdSelect>
@@ -301,16 +301,16 @@ function pad2(value: number): string {
   width: 104px;
 }
 
+/* 调度条内所有控件统一 6px 矩形圆角（与左侧「每天」GdSelect 同一语言），
+   不用胶囊——一行多控件时胶囊显得松散。需要胶囊时传 shape="pill" */
 .sentence-shell :deep(.sched-time) {
   width: 96px;
   flex: 0 0 auto;
-  border-radius: 999px;
 }
 
 .sentence-shell :deep(.sched-date) {
   width: 198px;
   flex: 0 0 auto;
-  border-radius: 999px;
 }
 
 .sentence-shell :deep(.sched-cron) {
@@ -330,11 +330,13 @@ function pad2(value: number): string {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 26px;
+  /* 与同排 GdSelect/GdTimePicker/GdDatePicker 的 small 档同高（28px） */
+  height: 28px;
   max-width: 220px;
   padding: 0 10px;
   border: none;
-  border-radius: 999px;
+  /* 与调度条内 GdSelect/GdTimePicker/GdDatePicker 的 rounded-md 对齐 */
+  border-radius: 6px;
   background: var(--gd-color-field-bg);
   color: var(--gd-color-text);
   font-size: 13px;

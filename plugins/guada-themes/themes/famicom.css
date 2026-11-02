@@ -512,11 +512,11 @@ html[data-theme="famicom"] .l-dialog {
   border: 2px solid var(--gd-color-border);
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.2);
 }
-html[data-theme="famicom"] .el-tag {
+html[data-theme="famicom"] .gd-tag {
   border-radius: 0;
   border-width: 2px;
 }
-html[data-theme="famicom"] .el-popper.is-light {
+html[data-theme="famicom"] .gd-popover {
   border-radius: 0;
   border-width: 2px;
   border-color: var(--gd-color-border);

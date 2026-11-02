@@ -49,8 +49,10 @@
         <slot></slot>
     </div>
 
-    <!-- 下拉面板：GdPopover 承担定位/翻转/点击外部关闭/Esc -->
-    <GdPopover v-model:show="show" :anchor-el="triggerRef" :width="popoverWidth" :max-height="274" align="start"
+    <!-- 下拉面板：GdPopover 承担定位/翻转/点击外部关闭/Esc。
+         prefer-below：表单选择面板默认向下（原生 select 阅读方向），下方不足才上翻；
+         spacing=4：面板贴近输入框 -->
+    <GdPopover v-model:show="show" :anchor-el="triggerRef" :width="popoverWidth" :max-height="274" align="start" prefer-below :spacing="4"
         popper-class="gd-select__panel">
         <div :id="`${uid}-listbox`" role="listbox" :aria-busy="loading || undefined" class="flex flex-col gap-0.5">
             <!-- loading 态 -->
@@ -74,12 +76,11 @@
                     @mouseenter="highlightIndex = flattenIndex(index)" @click="selectEntry(entry)">
                     <!-- GdOption 子组件的自定义内容优先，否则显示 label 文本 -->
                     <component :is="slotOf(entry.value)!" v-if="slotOf(entry.value)" />
-                    <template v-else>
-                        <span class="min-w-0 flex-1 truncate">{{ entry.label }}</span>
-                        <svg v-if="isSelected(entry.value)" class="size-3.5 shrink-0 text-[var(--gd-color-primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M20 6 9 17l-5-5" />
-                        </svg>
-                    </template>
+                    <span v-else class="min-w-0 flex-1 truncate">{{ entry.label }}</span>
+                    <!-- 选中对钩：与对话输入区下拉统一风格（fluent Checkmark16Filled + 主色，钉在行尾）。
+                         放在两个分支之外，带自定义插槽的 GdOption 也能显示当前选中 -->
+                    <Checkmark16Filled v-if="isSelected(entry.value)"
+                        class="ml-auto shrink-0 text-[var(--gd-color-primary)] w-3.5 h-3.5" />
                 </div>
                 <!-- 空态 -->
                 <div v-if="!filteredEntries.length && !createItem" class="px-2 py-3 text-center text-[12px] leading-none text-[var(--gd-color-field-text-disabled)]">
@@ -91,6 +92,7 @@
 </template>
 <script setup lang="ts">
 import { computed, nextTick, provide, ref, watch } from "vue";
+import { Checkmark16Filled } from "@vicons/fluent";
 import GdPopover from "./GdPopover.vue";
 import { gdSelectKey } from "./gdSelectContext";
 
@@ -158,12 +160,15 @@ const props = withDefaults(defineProps<{
     noDataText?: string;
     /** 错误态红描边（表单校验行内错误时由 GdFormField 调用方接线） */
     error?: boolean;
+    /** 圆角形态：rounded 矩形圆角（默认，与 GdInput 一致）；pill 全圆角胶囊 */
+    shape?: "rounded" | "pill";
 }>(), {
     modelValue: "",
     options: () => [],
     size: "medium",
     variant: "filled",
     noDataText: "无数据",
+    shape: "rounded",
 });
 
 const emits = defineEmits<{
@@ -320,7 +325,12 @@ const selectEntry = (entry: FlatEntry): void => {
         emits("update:modelValue", next);
         emits("change", next);
         query.value = ""; // el 行为：多选选择后清空查询，面板保持打开
-        highlightIndex.value = Math.max(0, firstSelectableIndex());
+        // 清空查询会触发 [query] watcher 把高亮重置到首个可选——多选要连续勾选，
+        // 这里在下一拍把高亮放回刚点的选项，避免"点一个就跳回第一项"
+        nextTick(() => {
+            const i = flatEntries.value.findIndex((e) => e.value === entry.value);
+            highlightIndex.value = i >= 0 ? i : Math.max(0, firstSelectableIndex());
+        });
     } else {
         const changed = props.modelValue !== entry.value;
         emits("update:modelValue", entry.value);
@@ -375,7 +385,9 @@ const triggerClasses = computed((): string => {
     const classes: string[] = [
         // gd-select 基类是主题插件的稳定定位钩子，配合 data-variant / data-size 换肤，不要改名
         "gd-select",
-        "group relative flex w-full min-w-0 box-border rounded-md border",
+        "group relative flex w-full min-w-0 box-border border",
+        // 圆角形态：默认矩形圆角（与 GdInput 表单控件一致），pill = 全圆角胶囊
+        props.shape === "pill" ? "rounded-full" : "rounded-md",
         // 多选 chips 换行需要撑开高度；单选固定档位高度
         multiple.value ? "min-h-[32px] flex-wrap items-center py-1" : "items-center",
         "leading-none",

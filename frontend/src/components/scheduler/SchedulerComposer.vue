@@ -471,15 +471,25 @@ onMounted(() => {
   color: var(--gd-color-text);
 }
 
-/* 远程目录按钮自带 primary 文字色，这里统一成和工作目录一致的次要色 */
+/* 远程目录按钮：与左侧「工作目录」context-pill 同一套几何与交互语言
+   （RemoteDirButton 在聊天页另有调用，故只在本容器内覆盖，不改组件本身） */
 .composer-context :deep(.workspace-btn) {
   color: var(--gd-color-text-gray);
   font-size: 12px;
   font-weight: 500;
+  height: 24px;
+  padding: 0 6px;
+  gap: 4px;
+  border-radius: 6px;
+  background: transparent;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.composer-context :deep(.workspace-btn:hover) {
+/* hover / active 与 context-pill 一致（GdButton text 变体自带 --btn-hover，需覆盖） */
+.composer-context :deep(.workspace-btn:hover),
+.composer-context :deep(.workspace-btn:active) {
   color: var(--gd-color-text);
+  background: var(--gd-color-field-bg);
 }
 
 .composer-shell {
@@ -493,6 +503,18 @@ onMounted(() => {
 
 .composer-shell:focus-within {
   border-color: var(--gd-color-primary);
+}
+
+/* 指令输入框：跟随 composer-shell 底色（浅色主题即白底），不用表单默认灰底；
+   聚焦描边也交给外层 .composer-shell:focus-within，内层不再重复画一圈主色边框。
+   仅覆盖本处实例——GdInput 的 filled 默认风格保持不变。
+   hover 一并锁成透明：GdInput 自带的 md:hover:bg-* 与本规则同为 0,2,0，
+   显式列出可避免依赖样式注入顺序 */
+.composer-shell :deep(.composer-textarea),
+.composer-shell :deep(.composer-textarea:hover),
+.composer-shell :deep(.composer-textarea:focus-within) {
+  background: transparent;
+  border-color: transparent;
 }
 
 .composer-shell.has-error {
