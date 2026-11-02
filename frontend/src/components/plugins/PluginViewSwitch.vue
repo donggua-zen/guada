@@ -106,7 +106,7 @@ function move(step: number) {
     border-radius: 8px;
     background-color: var(--gd-color-sidebar-bg-active);
     /* 与列表行图标对位：行有 -mx-2 + px-2，切换条同样左移 8px 再补回 8px 内边距 */
-    margin-left: -8px;
+    /* margin-left: -8px; */
 }
 
 .plugins-view-switch__indicator {

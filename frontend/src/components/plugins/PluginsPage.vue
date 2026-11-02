@@ -2,11 +2,11 @@
     <div class="h-full overflow-hidden flex flex-col">
         <PageHeader :title="t('plugins.page.title')" />
         <div class="flex-1 flex flex-col overflow-hidden">
-            <div class="shrink-0 px-4 w-full md:max-w-260 md:mx-auto">
+            <div class="shrink-0 px-2 w-full md:max-w-260 md:mx-auto">
                 <GdTabs v-model="currentTabValue" :tabs="gdTabs" @change="handleTabChange" />
             </div>
             <div class="flex-1 overflow-auto pb-4" style="scrollbar-gutter: stable both-edges;">
-                <div class="py-3 px-4 w-full md:max-w-260 md:mx-auto">
+                <div class="py-3 px-2 w-full md:max-w-260 md:mx-auto">
                     <template v-if="currentTabValue === 'mcp'">
                         <MCPServers />
                     </template>
