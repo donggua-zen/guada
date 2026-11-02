@@ -5,14 +5,18 @@ import Database from "better-sqlite3";
 import { normalizeWorkspaceKey } from "../../common/utils/workspace-key.util";
 import {
   META_DB_FILE,
-  SESSION_ID_PREFIX,
-  SessionMetaStore,
   importSessionMetaRows,
   openMetaDb,
   readMetaRow,
   replaceAllGroups,
+  toRow,
   upsertMetaRow,
 } from "./session-meta.store";
+import { ID_PREFIXES } from "../../common/utils/id.util";
+import { createTestSessionStore } from "./test-session-store.helper";
+import type { TestSessionStore } from "./test-session-store.helper";
+
+const SESSION_ID_PREFIX = ID_PREFIXES.session;
 
 /**
  * 会话元数据存储（sessions/_meta.db）契约测试
@@ -24,7 +28,7 @@ import {
 describe("SessionMetaStore", () => {
   let tmpRoot: string;
   let sessionsBase: string;
-  let store: SessionMetaStore;
+  let store: TestSessionStore;
 
   const sessionDir = (id: string) => path.join(sessionsBase, id);
   const dbPath = () => path.join(sessionsBase, META_DB_FILE);
@@ -99,7 +103,7 @@ describe("SessionMetaStore", () => {
     };
   };
 
-  const newStore = () => new SessionMetaStore();
+  const newStore = () => createTestSessionStore();
 
   beforeEach(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "session-meta-spec-"));
@@ -143,18 +147,18 @@ describe("SessionMetaStore", () => {
       fs.mkdirSync(sessionDir("sess-child"), { recursive: true });
 
       await store.initialize();
-      expect(store.query({}).length).toBe(2);
-      const child = store.getMeta("sess-child")!;
+      expect(((await store.query({}))).length).toBe(2);
+      const child = (await store.getMeta("sess-child"))!;
       expect(child.parentId).toBe("sess-parent");
       expect(child.rootId).toBe("sess-parent");
       expect(child.closedAt).toBe("2026-01-03T00:00:00.000Z");
-      expect(store.getMeta("sess-parent")!.rootId).toBeNull();
+      expect(((await store.getMeta("sess-parent")))!.rootId).toBeNull();
       // settings 折入 data.settings
-      expect(store.getMeta("sess-parent")!.settings).toEqual({ thinkingEnabled: true });
+      expect(((await store.getMeta("sess-parent")))!.settings).toEqual({ thinkingEnabled: true });
       // 分组随批量写入落库
-      expect((await store.listGroups()).map((g) => g.id)).toEqual(["grp-1"]);
+      expect(((await store.listGroups())).map((g) => g.id)).toEqual(["grp-1"]);
       // 行视图 Date 形状（兼容既有调用方）
-      expect(store.get("sess-parent")!.createdAt).toBeInstanceOf(Date);
+      expect(toRow((await store.get("sess-parent"))!).createdAt).toBeInstanceOf(Date);
     });
 
     it("库文件被删后重开实例得到空库", async () => {
@@ -170,7 +174,7 @@ describe("SessionMetaStore", () => {
 
       store = newStore();
       await store.initialize();
-      expect(store.query({}).length).toBe(0);
+      expect(((await store.query({}))).length).toBe(0);
     });
   });
 
@@ -181,9 +185,9 @@ describe("SessionMetaStore", () => {
 
     it("create：目录与行同时落，lastActiveAt 默认当前时间", async () => {
       const row = await store.create({ title: "新会话", sessionType: "web" });
-      expect(row.createdAt).toBeInstanceOf(Date);
+      expect(toRow(row).createdAt).toBeInstanceOf(Date);
       expect(fs.existsSync(sessionDir(String(row.id)))).toBe(true);
-      expect(store.getMeta(String(row.id))!.lastActiveAt).toBeTruthy();
+      expect(((await store.getMeta(String(row.id))))!.lastActiveAt).toBeTruthy();
     });
 
     it("不传 id 时铸造 session-<uuid v4>（绝不落 sessions/undefined）", async () => {
@@ -194,7 +198,7 @@ describe("SessionMetaStore", () => {
 
       const second = await store.create({ title: "第二个" });
       expect(second.id).not.toBe(row.id);
-      expect(store.query({}).length).toBe(2);
+      expect(((await store.query({}))).length).toBe(2);
     });
 
     it("显式 id 保留原值（主库 cuid 形状）", async () => {
@@ -226,7 +230,7 @@ describe("SessionMetaStore", () => {
         sessionType: "sub_agent",
         parentId: parent.id,
       });
-      expect(store.getMeta(String(child.id))!.rootId).toBe(String(parent.id));
+      expect(((await store.getMeta(String(child.id))))!.rootId).toBe(String(parent.id));
     });
 
     it("listWebSessionsWithMissingModel 只列 web 会话；backfillModelId 不触碰时间戳", async () => {
@@ -249,16 +253,16 @@ describe("SessionMetaStore", () => {
         modelId: "p:m",
       });
 
-      expect(store.listWebSessionsWithMissingModel()).toEqual([
+      expect(await store.listWebSessionsWithMissingModel()).toEqual([
         { id: "w1", agentId: null },
       ]);
 
-      const before = store.getMeta("w1")!;
+      const before = (await store.getMeta("w1"))!;
       await store.backfillModelId("w1", "p:first");
-      const after = store.getMeta("w1")!;
+      const after = (await store.getMeta("w1"))!;
       expect(after.modelId).toBe("p:first");
       expect(after.updatedAt).toBe(before.updatedAt);
-      expect(store.listWebSessionsWithMissingModel()).toEqual([]);
+      expect(await store.listWebSessionsWithMissingModel()).toEqual([]);
     });
 
     it("update：undefined 保持原值，null 显式置空", async () => {
@@ -269,7 +273,7 @@ describe("SessionMetaStore", () => {
       })) as any;
 
       await store.update(String(row.id), { title: undefined, groupId: null });
-      const meta = store.getMeta(String(row.id))!;
+      const meta = (await store.getMeta(String(row.id)))!;
       expect(meta.title).toBe("原题");
       expect(meta.groupId).toBeNull();
       expect(meta.settings).toEqual({ thinkingEnabled: true });
@@ -282,7 +286,7 @@ describe("SessionMetaStore", () => {
         data: { pinned: true, note: "自定义" },
       })) as any;
 
-      const meta = store.getMeta(String(row.id))!;
+      const meta = (await store.getMeta(String(row.id)))!;
       expect(meta.settings).toEqual({ thinkingEnabled: false });
       expect(meta.data).toEqual({
         pinned: true,
@@ -292,17 +296,17 @@ describe("SessionMetaStore", () => {
 
       // data 整体替换语义；settings 键仍以 meta.settings 为准
       await store.update(String(row.id), { data: { pinned: false } });
-      const next = store.getMeta(String(row.id))!;
+      const next = (await store.getMeta(String(row.id)))!;
       expect(next.data).toEqual({ pinned: false, settings: { thinkingEnabled: false } });
       expect(next.settings).toEqual({ thinkingEnabled: false });
     });
 
     it("updateLastActiveAt：单字段更新（updatedAt 与 lastActiveAt 同步刷新）", async () => {
       const row = await store.create({ title: "热写" });
-      const before = store.getMeta(String(row.id))!;
+      const before = (await store.getMeta(String(row.id)))!;
       await new Promise((r) => setTimeout(r, 10));
       await store.updateLastActiveAt(String(row.id));
-      const after = store.getMeta(String(row.id))!;
+      const after = (await store.getMeta(String(row.id)))!;
       expect(after.lastActiveAt! > before.lastActiveAt!).toBe(true);
       expect(after.updatedAt > before.updatedAt).toBe(true);
     });
@@ -312,7 +316,7 @@ describe("SessionMetaStore", () => {
       const id = String(row.id);
       expect(await store.deleteSession(id)).toBe(true);
       expect(fs.existsSync(sessionDir(id))).toBe(false);
-      expect(store.has(id)).toBe(false);
+      expect(await store.has(id)).toBe(false);
       expect(await store.deleteSession(id)).toBe(false);
     });
 
@@ -322,7 +326,7 @@ describe("SessionMetaStore", () => {
 
       store = newStore();
       await store.initialize();
-      expect(store.get(String(row.id))?.title).toBe("重启后仍在");
+      expect((await store.get(String(row.id)))?.title).toBe("重启后仍在");
     });
 
     /**
@@ -361,7 +365,7 @@ describe("SessionMetaStore", () => {
       store = newStore();
       await store.initialize();
 
-      const meta = store.getMeta("legacy-1")!;
+      const meta = (await store.getMeta("legacy-1"))!;
       expect(meta.settings).toEqual({ thinkingEnabled: true });
       expect(meta.data).toEqual({ settings: { thinkingEnabled: true } });
 
@@ -459,113 +463,113 @@ describe("SessionMetaStore", () => {
       await store.create({ id: "s2", title: "frozen", sessionType: "sub_agent", parentId: "a1", closedAt: "2026-01-02T00:00:00.000Z", closeReason: "done" });
     });
 
-    it("sessionType + archived 组合过滤", () => {
-      const ids = store.query({ sessionType: "web", archived: false }).map((m) => m.id);
+    it("sessionType + archived 组合过滤", async () => {
+      const ids = ((await store.query({ sessionType: "web", archived: false }))).map((m) => m.id);
       expect(ids).toEqual(["a1", "a3"]); // lastActiveDesc
     });
 
-    it("groupId tri-state：null 仅未分组，undefined 不过滤", () => {
-      expect(store.query({ sessionType: "web", groupId: null }).map((m) => m.id)).toEqual(["a3"]);
-      expect(store.query({ sessionType: "web", groupId: "g1" }).map((m) => m.id)).toEqual(["a1", "a2"]);
-      expect(store.query({ sessionType: "web" })).toHaveLength(3);
+    it("groupId tri-state：null 仅未分组，undefined 不过滤", async () => {
+      expect(((await store.query({ sessionType: "web", groupId: null }))).map((m) => m.id)).toEqual(["a3"]);
+      expect(((await store.query({ sessionType: "web", groupId: "g1" }))).map((m) => m.id)).toEqual(["a1", "a2"]);
+      expect((await store.query({ sessionType: "web" }))).toHaveLength(3);
     });
 
-    it("keyword 大小写不敏感子串匹配标题", () => {
-      expect(store.query({ sessionType: "web", keyword: "ALPHA" }).map((m) => m.id)).toEqual(["a1"]);
-      expect(store.query({ sessionType: "web", keyword: "会话" }).map((m) => m.id)).toEqual(["a3"]);
+    it("keyword 大小写不敏感子串匹配标题", async () => {
+      expect(((await store.query({ sessionType: "web", keyword: "ALPHA" }))).map((m) => m.id)).toEqual(["a1"]);
+      expect(((await store.query({ sessionType: "web", keyword: "会话" }))).map((m) => m.id)).toEqual(["a3"]);
     });
 
-    it("LIKE 通配符不注入（% 与 _ 按字面匹配）", () => {
-      expect(store.query({ keyword: "%" })).toHaveLength(0);
-      expect(store.query({ keyword: "_" })).toHaveLength(0);
+    it("LIKE 通配符不注入（% 与 _ 按字面匹配）", async () => {
+      expect((await store.query({ keyword: "%" }))).toHaveLength(0);
+      expect((await store.query({ keyword: "_" }))).toHaveLength(0);
     });
 
-    it("parentId 过滤与 childrenOf（升序，Date 行形状）", () => {
+    it("parentId 过滤与 childrenOf（升序，Date 行形状）", async () => {
       expect(
-        store.query({ parentId: "a1" }, "createdAsc").map((m) => m.id),
+        ((await store.query({ parentId: "a1" }, "createdAsc"))).map((m) => m.id),
       ).toEqual(["s1", "s2"]);
-      const children = store.childrenOf("a1");
+      const children = await store.childrenOf("a1");
       expect(children.map((c) => c.id)).toEqual(["s1", "s2"]);
-      expect(children[0].createdAt).toBeInstanceOf(Date);
+      expect(toRow(children[0]).createdAt).toBeInstanceOf(Date);
     });
 
-    it("countByParentId 排除已冻结（closedAt 非空）子会话", () => {
-      expect(store.countByParentId("a1")).toBe(1);
+    it("countByParentId 排除已冻结（closedAt 非空）子会话", async () => {
+      expect(await store.countByParentId("a1")).toBe(1);
     });
 
-    it("updatedDesc 排序（归档列表用）", () => {
-      const ids = store
-        .query({ sessionType: "web", archived: true }, "updatedDesc")
-        .map((m) => m.id);
+    it("updatedDesc 排序（归档列表用）", async () => {
+      const ids = (
+        (await store.query({ sessionType: "web", archived: true }, "updatedDesc")
+      )).map((m) => m.id);
       expect(ids).toEqual(["a2"]);
     });
 
-    it("listWebSessionIds 排除归档；getManyByIds 保序", () => {
-      expect(store.listWebSessionIds()).toEqual(["a1", "a3"]);
-      expect(store.listWebSessionIds(true)).toEqual(["a1", "a2", "a3"]);
-      expect(store.getManyByIds(["a3", "a1", "missing"]).map((r) => r.id)).toEqual(["a3", "a1"]);
+    it("listWebSessionIds 排除归档；getManyByIds 保序", async () => {
+      expect(await store.listWebSessionIds()).toEqual(["a1", "a3"]);
+      expect(await store.listWebSessionIds(true)).toEqual(["a1", "a2", "a3"]);
+      expect(((await store.getManyByIds(["a3", "a1", "missing"]))).map((r) => r.id)).toEqual(["a3", "a1"]);
     });
 
     it("findByBotAndExternalId 走复合索引语义", async () => {
       await store.create({ id: "b1", title: "bot 会话", sessionType: "bot", botId: "bot-x", platform: "wecom", externalId: "ext-1" });
-      expect(store.findByBotAndExternalId("bot-x", "ext-1")?.id).toBe("b1");
-      expect(store.findByBotAndExternalId("bot-x", "other")).toBeNull();
+      expect((await store.findByBotAndExternalId("bot-x", "ext-1"))?.id).toBe("b1");
+      expect(await store.findByBotAndExternalId("bot-x", "other")).toBeNull();
     });
 
-    it("queryPaged：页切片与全量同序，total 只计过滤后行数", () => {
-      const full = store.query({ sessionType: "web", archived: false }).map((m) => m.id);
-      const p0 = store.queryPaged({ sessionType: "web", archived: false }, "lastActiveDesc", { skip: 0, limit: 1 });
-      const p1 = store.queryPaged({ sessionType: "web", archived: false }, "lastActiveDesc", { skip: 1, limit: 1 });
+    it("queryPaged：页切片与全量同序，total 只计过滤后行数", async () => {
+      const full = ((await store.query({ sessionType: "web", archived: false }))).map((m) => m.id);
+      const p0 = await store.queryPaged({ sessionType: "web", archived: false }, "lastActiveDesc", { skip: 0, limit: 1 });
+      const p1 = await store.queryPaged({ sessionType: "web", archived: false }, "lastActiveDesc", { skip: 1, limit: 1 });
       expect(p0.total).toBe(full.length);
       expect(p0.rows.map((m) => m.id)).toEqual(full.slice(0, 1));
       expect(p1.rows.map((m) => m.id)).toEqual(full.slice(1, 2));
     });
 
-    it("queryPaged：keyword/过滤与分页组合；越界页空行不空 total", () => {
-      const kw = store.queryPaged({ sessionType: "web", keyword: "会话" }, "lastActiveDesc", { skip: 0, limit: 10 });
+    it("queryPaged：keyword/过滤与分页组合；越界页空行不空 total", async () => {
+      const kw = await store.queryPaged({ sessionType: "web", keyword: "会话" }, "lastActiveDesc", { skip: 0, limit: 10 });
       expect(kw.total).toBe(1);
       expect(kw.rows.map((m) => m.id)).toEqual(["a3"]);
-      const oob = store.queryPaged({ sessionType: "web" }, "lastActiveDesc", { skip: 99, limit: 10 });
+      const oob = await store.queryPaged({ sessionType: "web" }, "lastActiveDesc", { skip: 99, limit: 10 });
       expect(oob.rows).toEqual([]);
       expect(oob.total).toBe(3);
     });
 
-    it("queryPaged：省略 limit = 不分页，rows 等同 query 全量", () => {
-      const all = store.queryPaged({ sessionType: "web" }, "lastActiveDesc", {});
-      expect(all.rows.map((m) => m.id)).toEqual(store.query({ sessionType: "web" }).map((m) => m.id));
+    it("queryPaged：省略 limit = 不分页，rows 等同 query 全量", async () => {
+      const all = await store.queryPaged({ sessionType: "web" }, "lastActiveDesc", {});
+      expect(all.rows.map((m) => m.id)).toEqual(((await store.query({ sessionType: "web" }))).map((m) => m.id));
       expect(all.total).toBe(3);
     });
 
     it("pinned：默认 false，update 可置顶/取消，query 双向过滤", async () => {
       // 默认不置顶
-      expect(store.getMeta("a1")!.pinned).toBe(false);
+      expect(((await store.getMeta("a1")))!.pinned).toBe(false);
 
       await store.update("a1", { pinned: true });
-      expect(store.getMeta("a1")!.pinned).toBe(true);
+      expect(((await store.getMeta("a1")))!.pinned).toBe(true);
 
       // 仅置顶 / 排除置顶（tri-state）
       expect(
-        store.query({ sessionType: "web", pinned: true }).map((m) => m.id),
+        ((await store.query({ sessionType: "web", pinned: true }))).map((m) => m.id),
       ).toEqual(["a1"]);
       expect(
-        store.query({ sessionType: "web", archived: false, pinned: false }).map((m) => m.id),
+        ((await store.query({ sessionType: "web", archived: false, pinned: false }))).map((m) => m.id),
       ).toEqual(["a3"]);
       // undefined = 不过滤
-      expect(store.query({ sessionType: "web" })).toHaveLength(3);
+      expect((await store.query({ sessionType: "web" }))).toHaveLength(3);
 
       // 取消置顶
       await store.update("a1", { pinned: false });
-      expect(store.getMeta("a1")!.pinned).toBe(false);
-      expect(store.query({ sessionType: "web", pinned: true })).toHaveLength(0);
+      expect(((await store.getMeta("a1")))!.pinned).toBe(false);
+      expect((await store.query({ sessionType: "web", pinned: true }))).toHaveLength(0);
     });
 
     it("create 支持显式置顶；pinned 不参与排序（仍按 lastActiveDesc）", async () => {
       await store.create({ id: "p1", sessionType: "web", pinned: true, lastActiveAt: "2026-01-01T00:00:00.000Z" });
-      expect(store.getMeta("p1")!.pinned).toBe(true);
+      expect(((await store.getMeta("p1")))!.pinned).toBe(true);
       // 置顶不改变 SORT_SQL：p1 最旧 → 排在最后（置顶靠分区互斥，不靠排序）
-      const ids = store.query({ sessionType: "web", archived: false, pinned: true }).map((m) => m.id);
+      const ids = ((await store.query({ sessionType: "web", archived: false, pinned: true }))).map((m) => m.id);
       expect(ids).toEqual(["p1"]);
-      const all = store.query({ sessionType: "web", archived: false }).map((m) => m.id);
+      const all = ((await store.query({ sessionType: "web", archived: false }))).map((m) => m.id);
       expect(all[all.length - 1]).toBe("p1");
     });
   });
@@ -581,8 +585,8 @@ describe("SessionMetaStore", () => {
 
       await store.initialize();
 
-      expect(store.getMeta("orphan-1")?.title).toBe("孤儿会话");
-      expect(store.has("empty-shell")).toBe(false);
+      expect((await store.getMeta("orphan-1"))?.title).toBe("孤儿会话");
+      expect(await store.has("empty-shell")).toBe(false);
     });
 
     it("库有行而目录无 → 删行（被绕过存储删除的幽灵）", async () => {
@@ -593,7 +597,7 @@ describe("SessionMetaStore", () => {
       store.onModuleDestroy(); // 先释放句柄（Windows 下打开中的 db 会锁目录）
       store = newStore();
       await store.initialize();
-      expect(store.has(id)).toBe(false);
+      expect(await store.has(id)).toBe(false);
     });
   });
 
@@ -609,7 +613,7 @@ describe("SessionMetaStore", () => {
 
       const row = await store.create({ title: "会话", groupId: group.id });
       expect(await store.clearGroup(group.id)).toBe(1);
-      expect(store.getMeta(String(row.id))!.groupId).toBeNull();
+      expect(((await store.getMeta(String(row.id))))!.groupId).toBeNull();
 
       const updated = await store.updateGroup(group.id, { name: "改名" });
       expect(updated?.name).toBe("改名");
@@ -626,7 +630,7 @@ describe("SessionMetaStore", () => {
         groups.map((g, i) => ({ id: g.id, sortOrder: 10 - i })),
       );
       expect(updated).toHaveLength(1);
-      expect((await store.listGroups())[0].sortOrder).toBe(10);
+      expect(((await store.listGroups())[0].sortOrder)).toBe(10);
     });
 
     it("分组 data 扩展字段往返（updateGroup 写入、listGroups 读出、转换写入）", async () => {
@@ -698,7 +702,7 @@ describe("SessionMetaStore", () => {
         prepend: false,
       });
       expect(second.id).toBe(first.id);
-      expect(await store.listProjectGroups()).toHaveLength(1);
+      expect((await store.listProjectGroups())).toHaveLength(1);
 
       // 改名后再次注册不得覆盖（bootstrap 语义）
       await store.updateProjectGroup(first.id, { name: "自定义名字" });
@@ -740,7 +744,7 @@ describe("SessionMetaStore", () => {
       const a = await store.ensureProjectGroup({ path: path.resolve("/proj/a") });
       const b = await store.ensureProjectGroup({ path: path.resolve("/proj/b") });
       const c = await store.ensureProjectGroup({ path: path.resolve("/proj/c") });
-      expect((await store.listProjectGroups()).map((g) => g.id)).toEqual([c.id, b.id, a.id]);
+      expect(((await store.listProjectGroups())).map((g) => g.id)).toEqual([c.id, b.id, a.id]);
     });
 
     it("拖拽排序写 dense position，非法 id 集合拒绝", async () => {
@@ -767,15 +771,15 @@ describe("SessionMetaStore", () => {
       expect(created.workspaceKey).toBe(projectPathKey);
 
       const group = await store.ensureProjectGroup({ path: projectPath, prepend: false });
-      expect(store.query({ workspaceKey: projectPathKey }).map((m) => m.id)).toEqual(["p1"]);
-      expect(store.query({ workspaceKey: null }).map((m) => m.id)).toEqual([]);
+      expect(((await store.query({ workspace: { scope: "exact", workspaceKey: projectPathKey } }))).map((m) => m.id)).toEqual(["p1"]);
+      expect(((await store.query({ workspace: { scope: "general" } }))).map((m) => m.id)).toEqual([]);
 
       await store.deleteProjectGroup(group.id);
 
-      expect(store.getMeta("p1")).toBeTruthy(); // 会话行仍在，未被回写
-      expect(await store.listProjectGroups()).toEqual([]);
+      expect(await store.getMeta("p1")).toBeTruthy(); // 会话行仍在，未被回写
+      expect((await store.listProjectGroups())).toEqual([]);
       // 未注册后，该目录的会话落入通用桶
-      expect(store.query({ workspaceKey: null }).map((m) => m.id)).toEqual(["p1"]);
+      expect(((await store.query({ workspace: { scope: "general" } }))).map((m) => m.id)).toEqual(["p1"]);
     });
 
     it("workspaceKey tri-state：null = 空路径 + 未注册目录，undefined = 不过滤", async () => {
@@ -787,11 +791,11 @@ describe("SessionMetaStore", () => {
 
       await store.ensureProjectGroup({ path: projectPath, prepend: false });
 
-      expect(store.query({ workspaceKey: projectPathKey }).map((m) => m.id)).toEqual(["registered"]);
+      expect(((await store.query({ workspace: { scope: "exact", workspaceKey: projectPathKey } }))).map((m) => m.id)).toEqual(["registered"]);
       expect(
-        store.query({ workspaceKey: null }).map((m) => m.id).sort(),
+        ((await store.query({ workspace: { scope: "general" } }))).map((m) => m.id).sort(),
       ).toEqual(["auto", "nopath", "unregistered"]);
-      expect(store.query({}).length).toBe(4);
+      expect(((await store.query({}))).length).toBe(4);
     });
 
     it("excludeSessionTypes 生效（目录侧栏排除 bot/sub_agent）", async () => {
@@ -800,9 +804,9 @@ describe("SessionMetaStore", () => {
       await store.create({ id: "b", sessionType: "bot", workspacePath: projectPath });
       await store.create({ id: "s", sessionType: "sub_agent", workspacePath: projectPath });
 
-      const ids = store
-        .query({ workspaceKey: projectPathKey, excludeSessionTypes: ["bot", "sub_agent"] })
-        .map((m) => m.id);
+      const ids = (
+        (await store.query({ workspace: { scope: "exact", workspaceKey: projectPathKey }, excludeSessionTypes: ["bot", "sub_agent"] })
+      )).map((m) => m.id);
       expect(ids).toEqual(["w"]);
     });
   });

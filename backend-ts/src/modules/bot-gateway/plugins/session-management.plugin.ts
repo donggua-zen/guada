@@ -1,8 +1,9 @@
-import { Logger, Injectable } from "@nestjs/common";
+import { Inject, Logger, Injectable } from '@nestjs/common';
 import { z } from "zod";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
-import { SessionMetaStore } from "../../chat/session-meta.store";
+import { SESSION_STORE_TOKEN } from '../../chat/session-store.facade';
+import type { SessionStoreFacade } from '../../chat/session-store.facade';
 import { appendResetMarker } from "../utils/external-id";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import langZh from "./session-management.lang.zh.json";
@@ -21,7 +22,7 @@ export class SessionManagementPlugin extends PluginBase {
   };
 
   constructor(
-    private sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
   ) {
     super();
   }
@@ -56,7 +57,7 @@ export class SessionManagementPlugin extends PluginBase {
         if (!args.confirm)
           throw new Error("需要设置 confirm: true 来确认清空操作");
 
-        const session = this.sessionStore.get(sessionId);
+        const session = await this.sessionStore.get(sessionId);
         if (!session) throw new Error(`会话不存在: ${sessionId}`);
         if (session.sessionType !== "bot")
           throw new Error("此工具仅在机器人会话中可用");

@@ -1,6 +1,13 @@
 /**
  * JSONL 持久化 — 文件后端实现
- * PoC 阶段：最小可用版本
+ *
+ * 实现 `MessageEventLog`（传输无关端口）：对外只暴露「追加事件 / 读事件 / 尾 seq」，
+ * manifest、分卷、torn 尾、快照等物理细节全部收在内部（`maintenance` / `snapshot`
+ * 两个可选能力里）。数据库与 HTTP 驱动不需要这些概念。
+ *
+ * seq 分配：`appendEvents` 接收不带 seq 的事件，内部按「活跃段末 seq + 1」连续分配
+ * 并返回定稿事件。写路径由上层 `JsonlMessageService` 的每会话写互斥串行化，
+ * 因此这里的「读末 seq → 分配 → 落盘」在同一临界区内不会撞号。
  */
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -13,7 +20,14 @@ import {
   PersistenceBackend,
   SessionMeta,
   SegmentMeta,
+  SEGMENT_MAX_BYTES,
 } from './types';
+import type {
+  EventLogMaintenance,
+  EventLogSnapshot,
+  MessageEventLog,
+  PendingEvent,
+} from './event-log.port';
 import { CorruptSessionLogError } from './errors';
 // 会话数据根解析（sessions/ 的父级选择）见 common/utils/session-path.util.ts（单一真相）
 import { resolveSessionsBasePath } from '../utils/session-path.util';
@@ -28,12 +42,27 @@ interface ActiveSegment {
 }
 
 @Injectable()
-export class JsonlBackend implements PersistenceBackend {
+export class JsonlBackend implements MessageEventLog {
   private readonly logger = new Logger(JsonlBackend.name);
   private basePath: string;
 
   // 内存缓存活跃段信息（避免频繁读 manifest）
   private activeSegments = new Map<string, ActiveSegment>();
+
+  /** 快照能力（可选端口能力，见 event-log.port.ts） */
+  readonly snapshot: EventLogSnapshot = {
+    read: (sessionId) => this.readSnapshot(sessionId),
+    write: (sessionId, snapshotSeq, state) =>
+      this.writeSnapshot(sessionId, snapshotSeq, state),
+  };
+
+  /** 物理维护能力（可选端口能力）：分卷 / torn 尾扫描 / 截断 */
+  readonly maintenance: EventLogMaintenance = {
+    compact: (sessionId) => this.maybeCompact(sessionId),
+    repair: (sessionId) => this.scanActiveSegment(sessionId),
+    truncate: (sessionId, truncateTo, lastSeq, bytes) =>
+      this.truncateActiveSegment(sessionId, truncateTo, lastSeq, bytes),
+  };
 
   constructor() {
     this.basePath = resolveSessionsBasePath();
@@ -140,9 +169,23 @@ export class JsonlBackend implements PersistenceBackend {
         fs.writeFile(segPath, initLine, { flag: 'wx', encoding: 'utf-8' }),
       );
       const seg = this.activeSegments.get(sessionId);
-      if (seg) seg.bytes = Buffer.byteLength(initLine, 'utf-8');
+      if (seg) {
+        seg.bytes = Buffer.byteLength(initLine, 'utf-8');
+        // init 占住 seq=0：必须同步游标。否则 tailSeq() 仍报 -1，
+        // 下一次 appendEvents 会再分配一次 seq 0 → 重复 seq，加载端判损坏。
+        seg.endSeq = 0;
+      }
     } catch (e: any) {
       if (e?.code !== 'EEXIST') throw e;
+      // 文件已存在（并发 / 半初始化）：游标以文件末条为准
+      const seg = this.activeSegments.get(sessionId);
+      if (seg && seg.endSeq === null) {
+        seg.endSeq = await this.readTailSeqFromFile(segPath);
+        seg.bytes = Buffer.byteLength(
+          await fs.readFile(segPath, 'utf-8'),
+          'utf-8',
+        );
+      }
     }
 
     // manifest 最后写：hasSession()（= manifest 存在）为 true 时保证 init 已落盘，
@@ -206,36 +249,86 @@ export class JsonlBackend implements PersistenceBackend {
 
   // ─── 事件 ───
 
-  async appendEvent(sessionId: string, event: BaseEvent): Promise<void> {
-    const seg = await this.ensureActiveSegment(sessionId);
-    const file = seg ? seg.file : 'seg-0000.jsonl';
-    const filePath = this.getSegmentPath(sessionId, file);
-
-    // append-only 写入。EMFILE/ENFILE 是 open 阶段失败（尚未写入字节），
-    // 退避重试可等结束进程的句柄释放后自愈，不会产生重复行。
-    const line = JSON.stringify(event) + '\n';
-    await withTransientFsRetry(() => fs.appendFile(filePath, line, 'utf-8'));
-
-    // 更新活跃段
-    if (seg) {
-      seg.endSeq = event.seq;
-      seg.bytes += Buffer.byteLength(line, 'utf-8');
-    }
+  /**
+   * 端口方法：追加一批**不带 seq**的事件，返回带 seq 的定稿事件。
+   *
+   * seq 基准 = 活跃段末 seq + 1（`ensureActiveSegment` 从 manifest 懒恢复，
+   * 重启后也可靠）。调用方（`JsonlMessageService`）已按会话串行化写入，
+   * 故「读末 seq → 连续分配 → 一次落盘」在同一临界区内不会撞号。
+   */
+  async appendEvents(
+    sessionId: string,
+    events: PendingEvent[],
+  ): Promise<BaseEvent[]> {
+    if (events.length === 0) return [];
+    const base = (await this.tailSeq(sessionId)) + 1;
+    const finalized: BaseEvent[] = events.map((e, i) => ({
+      ...e,
+      seq: base + i,
+    }));
+    await this.writeEvents(sessionId, finalized);
+    return finalized;
   }
 
-  async appendEvents(sessionId: string, events: BaseEvent[]): Promise<void> {
+  /** 当前最后一条事件的 seq；空日志返回 -1 */
+  async tailSeq(sessionId: string): Promise<number> {
+    const seg = await this.ensureActiveSegment(sessionId);
+    return seg?.endSeq ?? -1;
+  }
+
+  /** 从段文件末尾回扫最后一个完整行的 seq（无完整行返回 -1） */
+  private async readTailSeqFromFile(filePath: string): Promise<number> {
+    if (!existsSync(filePath)) return -1;
+    const content = await fs.readFile(filePath, 'utf-8');
+    const lines = content.split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      try {
+        const ev = JSON.parse(line) as BaseEvent;
+        if (typeof ev.seq === 'number') return ev.seq;
+      } catch {
+        // torn 尾/坏行：继续向前找最后一个完整行
+      }
+    }
+    return -1;
+  }
+
+  /** 端口内部写入原语：已带 seq 的事件直接落盘 */
+  private async writeEvents(
+    sessionId: string,
+    events: BaseEvent[],
+  ): Promise<void> {
     if (events.length === 0) return;
     const seg = await this.ensureActiveSegment(sessionId);
     const file = seg ? seg.file : 'seg-0000.jsonl';
     const filePath = this.getSegmentPath(sessionId, file);
 
-    const lines = events.map(e => JSON.stringify(e) + '\n').join('');
+    const lines = events.map((e) => JSON.stringify(e) + '\n').join('');
     await withTransientFsRetry(() => fs.appendFile(filePath, lines, 'utf-8'));
 
     if (seg) {
       seg.endSeq = events[events.length - 1].seq;
       seg.bytes += Buffer.byteLength(lines, 'utf-8');
     }
+  }
+
+  /** 内部写入单条（分卷 rotate 事件等需要显式 seq 的场景） */
+  private async writeEvent(sessionId: string, event: BaseEvent): Promise<void> {
+    await this.writeEvents(sessionId, [event]);
+  }
+
+  /**
+   * 单条写入（物理测试与分卷路径用）。
+   *
+   * 与端口方法 `appendEvents` 的区别：调用方**自带 seq**（物理层断言需要精确控制
+   * seq 值，如手工造缺口/重复）。正式写路径一律走 `appendEvents` 由后端分配。
+   */
+  async appendEvent(
+    sessionId: string,
+    event: BaseEvent,
+  ): Promise<void> {
+    await this.writeEvent(sessionId, event);
   }
 
   async readEvents(sessionId: string, fromSeq = 0): Promise<BaseEvent[]> {
@@ -467,6 +560,21 @@ export class JsonlBackend implements PersistenceBackend {
 
   // ─── 分卷 ───
 
+  /**
+   * 维护能力：活跃段超过体积阈值时归档并开新段。
+   * 端口层的 `maintenance.compact` 指向这里（无此概念的驱动不实现）。
+   */
+  private async maybeCompact(sessionId: string): Promise<void> {
+    const seg = await this.ensureActiveSegment(sessionId);
+    if (!seg) return;
+    if (seg.bytes < SEGMENT_MAX_BYTES) return;
+    await this.splitSegment(sessionId);
+  }
+
+  /**
+   * 归档当前写入段并开新段（JSONL 物理维护；端口层经 `maintenance.compact` 暴露）。
+   * 保留 public 供迁移脚本与物理测试直接驱动分卷。
+   */
   async splitSegment(sessionId: string): Promise<void> {
     const manifest = await this.readManifest(sessionId).catch(() => null);
     if (!manifest) return;

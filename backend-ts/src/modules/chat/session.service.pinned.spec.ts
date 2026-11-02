@@ -2,7 +2,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { SessionService } from "./session.service";
-import { SessionMetaStore } from "./session-meta.store";
+import { createTestSessionStore } from './test-session-store.helper';
+import type { TestSessionStore } from './test-session-store.helper';
 
 /**
  * 置顶（pin）在侧边栏聚合层的契约：
@@ -13,7 +14,7 @@ import { SessionMetaStore } from "./session-meta.store";
 describe("SessionService 侧边栏置顶聚合", () => {
   let tmpRoot: string;
   let sessionsBase: string;
-  let store: SessionMetaStore;
+  let store: TestSessionStore;
   let service: SessionService;
   let streaming: Set<string>;
 
@@ -34,13 +35,13 @@ describe("SessionService 侧边栏置顶聚合", () => {
   beforeEach(async () => {
     fs.rmSync(sessionsBase, { recursive: true, force: true });
     fs.mkdirSync(sessionsBase, { recursive: true });
-    store = new SessionMetaStore();
+    store = createTestSessionStore();
     await store.initialize();
 
     streaming = new Set();
 
     service = new SessionService(
-      store,
+      store as any,
       { findById: async () => null, findManyByIds: async () => new Map() } as any, // agentStore
       {} as any, // modelStore
       {} as any, // settingsStorage
@@ -152,7 +153,7 @@ describe("SessionService 侧边栏置顶聚合", () => {
 
   it("updateSession 白名单接受 pinned", async () => {
     await service.updateSession("u-pinned", { pinned: false });
-    expect(store.getMeta("u-pinned")!.pinned).toBe(false);
+    expect((await store.getMeta("u-pinned"))!.pinned).toBe(false);
     expect((await service.getPinnedSessions()).items.map((i: any) => i.id)).toEqual([
       "g-pinned",
     ]);

@@ -1,7 +1,10 @@
 /**
- * JSONL 持久化 — 消息服务（JSONL 版，回合制三事件模型）
+ * JSONL 持久化 — 消息服务（事件溯源三事件模型）
  *
- * 实现 IMessageStore，底层由 PersistenceBackend（JsonlBackend）+ Replayer 驱动。
+ * 实现 IMessageStore，底层由 `MessageEventLog`（默认 JsonlBackend）+ Replayer 驱动。
+ * 换存储后端（数据库/HTTP）**不产生第二套实现**：seq 分配、折叠、快照、写互斥
+ * 这些业务语义都留在这里，只有「介质」被端口抽象掉。
+ *
  * 回放产出扁平消息 surface（MessageNode IS-A Message，即可视消息序列）：
  * - LLM 链路（缓存折叠）：applyCompressionPrune 默认 true（压缩裁剪就地应用省 token）；
  *   compaction 遮蔽前缀移除 + 摘要置消息头
@@ -14,13 +17,9 @@ import {
   createInitialState,
 } from './replayer';
 import {
-  PERSISTENCE_BACKEND_TOKEN,
-  PersistenceBackend,
   BaseEvent,
   OccupancyAnchor,
   ReplayState,
-  SessionMeta,
-  SEGMENT_MAX_BYTES,
   AskAskedData,
   AskAnsweredData,
   SessionModeChangedData,
@@ -28,6 +27,8 @@ import {
   CompactionDegradationData,
   ToolImagePruneData,
 } from './types';
+import { MESSAGE_EVENT_LOG, PendingEvent } from './event-log.port';
+import type { MessageEventLog } from './event-log.port';
 import { generateOrderedMessageId } from '../utils/ordered-id.util';
 import { isVisionImageMediaType } from '../utils/media-type.util';
 import { SYNTHETIC_TOOL_INTERRUPTED_TEXT } from '../utils/tool-pairing.util';
@@ -76,16 +77,18 @@ export class JsonlMessageService implements IMessageStore {
   /** ensureSession 串行化队列：同一会话的并发 ensure 排队执行，消除"检查-创建"之间的 TOCTOU 窗口 */
   private ensureChains = new Map<string, Promise<void>>();
   /**
-   * 每会话写互斥队列：seq 分配（getNextSeq 读缓存游标）→ 构建事件 → 落盘（appendEvent）→
-   * 游标推进（applyToCache）必须整体原子。游标只在落盘完成后推进，任何两个并发写入方
-   * （如 workflow 尾事件与父循环 tool/result）都会读到同一旧游标而分配出重复 seq——
+   * 每会话写互斥队列：构建事件（不带 seq）→ 后端原子分配 seq 并落盘 →
+   * 游标推进（applyToCache）必须整体原子。任何两个并发写入方
+   * （如 workflow 尾事件与父循环 tool/result）若各自读游标会分配出重复 seq——
    * 重复 seq 会被加载端连续性校验判为损坏，会话永久无法加载。
+   * seq 由 `MessageEventLog.appendEvents` 在介质侧原子分配，本队列保证同一会话
+   * 的「构建→落盘→折叠」不交错。
    * 与 ensureChains 同款排队模式：公开写方法经 runExclusive 排队，错误仍抛给各自调用方。
    */
   private writeChains = new Map<string, Promise<unknown>>();
 
   constructor(
-    @Inject(PERSISTENCE_BACKEND_TOKEN) private readonly backend: PersistenceBackend,
+    @Inject(MESSAGE_EVENT_LOG) private readonly backend: MessageEventLog,
   ) {
     // 周期清扫过期缓存（unref：不阻止进程退出，jest/脚本可正常结束）
     this.cacheSweepTimer = setInterval(() => this.sweepExpiredCache(), JsonlMessageService.CACHE_SWEEP_INTERVAL_MS);
@@ -159,6 +162,21 @@ export class JsonlMessageService implements IMessageStore {
   }
 
   /**
+   * 写入前置：确保回放态已就绪且「首次冷加载收口」已发生。
+   *
+   * 为什么写路径必须先调它：收口逻辑（`closeInterruptedTurn`）只在进程对该会话的
+   * **首次** `rebuildState` 时执行。旧实现里每次写入都先 `getNextSeq()` → `getState()`，
+   * 天然把这次冷加载发生在「写入之前」；seq 改由后端分配后这条隐式路径消失，
+   * 若首次 `getState` 发生在「已开了回合、还没写 finish」的中间态，收口会把
+   * 在途回合误判为中断并补写一条 `turn/finish(interrupted)`——历史里出现两条 finish。
+   *
+   * 因此所有公开写方法在构建事件前都要先 await 一次本方法（幂等、命中缓存即返回）。
+   */
+  private async ensureReplayReady(sessionId: string): Promise<void> {
+    await this.getState(sessionId);
+  }
+
+  /**
    * 恢复路径：有快照 → 快照 + 跨卷增量（snapshotSeq+1 起）；无快照/衔接不符 → 全量重放。
    * 快照每轮结束（turn/finish 落盘后）写入，与分卷解耦：
    * - 增量可能跨多个分卷（快照 seq 落后于分卷边界时按 manifest 段范围跨卷定位）
@@ -193,7 +211,10 @@ export class JsonlMessageService implements IMessageStore {
   private async readStateFromSnapshotOrReplay(
     sessionId: string,
   ): Promise<ReplayState> {
-    const snapshot = await this.backend.readSnapshot(sessionId);
+    // 快照是可选能力：无此能力的驱动（数据库/HTTP）直接全量重放。
+    const snapshot = this.backend.snapshot
+      ? await this.backend.snapshot.read(sessionId)
+      : null;
     if (!snapshot) {
       const events = await this.backend.getAllEvents(sessionId);
       return foldEvents(events, createInitialState());
@@ -208,7 +229,10 @@ export class JsonlMessageService implements IMessageStore {
       return foldEvents(events, createInitialState());
     }
     // 快照 + 跨卷增量（首条 session/rotate 由 replayer no-op 忽略）
-    const tail = await this.backend.readEventsFrom(sessionId, snapshot.snapshotSeq + 1);
+    const tail = await this.backend.readEvents(
+      sessionId,
+      snapshot.snapshotSeq + 1,
+    );
     if (tail.length === 0) {
       // 快照即最新：无后续事件，直接采用快照折叠态
       return snapshotState as ReplayState;
@@ -234,9 +258,14 @@ export class JsonlMessageService implements IMessageStore {
    * - seq 缺口（parse 成功但跳号）→ 抛 CorruptSessionLogError：整消息粒度下
    *   缺口 = 中间事件物理丢失，无法安全修复，拒绝加载（fail-fast）
    * 仅冷加载（无活跃写）路径调用；修复后文件干净、幂等。
+   *
+   * 无 `maintenance` 能力的驱动（数据库事务/HTTP 原子写入）天然不会出现 torn 尾，直接跳过。
    */
   private async repairActiveSegmentIfNeeded(sessionId: string): Promise<void> {
-    const { events, truncateTo, gap } = await this.backend.scanActiveSegment(sessionId);
+    const maintenance = this.backend.maintenance;
+    if (!maintenance?.repair) return;
+
+    const { events, truncateTo, gap } = await maintenance.repair(sessionId);
     if (gap) {
       const detail =
         gap.got < gap.expected
@@ -255,7 +284,9 @@ export class JsonlMessageService implements IMessageStore {
 
     // 1. 物理截断活跃段（同步内存 endSeq/bytes）
     const lastSeq = events.length > 0 ? events[events.length - 1].seq : -1;
-    await this.backend.truncateActiveSegment(sessionId, truncateTo, lastSeq, truncateTo);
+    if (maintenance.truncate) {
+      await maintenance.truncate(sessionId, truncateTo, lastSeq, truncateTo);
+    }
 
     // 2. 未闭合回合 → 合成 tool 错误结果 + turn/finish(interrupted)（append 走正常写路径：落盘 + 增量 fold 缓存）
     const state = foldEvents(events, createInitialState());
@@ -283,7 +314,7 @@ export class JsonlMessageService implements IMessageStore {
     if (!state.currentTurnId) return [];
     const turnId = state.currentTurnId;
 
-    const pending: Array<Pick<BaseEvent, "type" | "data">> = [];
+    const pending: PendingEvent[] = [];
     const currentTurnMessages = state.messages.filter((n) => n.turnId === turnId);
     if (currentTurnMessages.length > 0) {
       const paired = new Set<string>();
@@ -299,6 +330,7 @@ export class JsonlMessageService implements IMessageStore {
           if (b.type !== 'tool-call' || paired.has(b.toolCallId)) continue;
           pending.push({
             type: 'tool/result',
+            time: Date.now(),
             data: {
               messageId: generateOrderedMessageId('m'),
               toolCallId: b.toolCallId,
@@ -313,24 +345,15 @@ export class JsonlMessageService implements IMessageStore {
     }
     pending.push({
       type: 'turn/finish',
+      time: Date.now(),
       data: {
         turnId,
         finishReason: 'interrupted',
       },
     });
 
-    const appended: BaseEvent[] = [];
-    let nextSeq = await this.getNextSeq(sessionId);
-    for (const item of pending) {
-      const event: BaseEvent = {
-        type: item.type,
-        seq: nextSeq++,
-        time: Date.now(),
-        data: item.data,
-      };
-      await this.append(sessionId, event);
-      appended.push(event);
-    }
+    // 整批一次追加：后端连续分配 seq，闭合事件与合成结果相邻落盘
+    const appended = await this.appendBatch(sessionId, pending);
     this.logger.warn(
       `[jsonl] synthesized interrupted turn close for ${sessionId} turn=${turnId} ` +
         `(${appended.length - 1} synthesized tool/result, reason=interrupted)`,
@@ -373,11 +396,10 @@ export class JsonlMessageService implements IMessageStore {
       }
       if (dangling.length === 0) return 0;
 
-      let nextSeq = await this.getNextSeq(sessionId);
+      const events: PendingEvent[] = [];
       for (const call of dangling) {
-        await this.append(sessionId, {
+        events.push({
           type: 'tool/result',
-          seq: nextSeq++,
           time: Date.now(),
           data: {
             messageId: generateOrderedMessageId('m'),
@@ -389,6 +411,7 @@ export class JsonlMessageService implements IMessageStore {
           },
         });
       }
+      await this.appendBatch(sessionId, events);
       this.logger.warn(
         `[jsonl] repaired ${dangling.length} dangling tool call(s) on open turn ${turnId} of ${sessionId} ` +
           `(calls=${dangling.map((d) => d.toolCallId).join(',')})`,
@@ -398,26 +421,26 @@ export class JsonlMessageService implements IMessageStore {
   }
 
   /**
-   * 分卷判断（由 ISessionContext.persist 调用）：
-   * 活跃段 bytes 超阈值 → 分卷写新文件。与快照解耦——快照由每轮结束（finalizeTurn）独立写入。
+   * 分卷判断（由 ISessionContext.persist 调用）：活跃段超体积阈值 → 归档开新段。
+   * 无 `maintenance.compact` 能力的驱动（数据库/HTTP）实现为 no-op。
    */
   async maybeSplit(sessionId: string): Promise<void> {
     return this.runExclusive(sessionId, async () => {
-      const info = await this.backend.getActiveSegmentInfo(sessionId);
-      if (!info) return;
-      if (info.bytes < SEGMENT_MAX_BYTES) return;
-      await this.backend.splitSegment(sessionId);
+      await this.backend.maintenance?.compact?.(sessionId);
     });
   }
 
   /**
    * 每轮结束写快照：当前 LLM 折叠态 + 最新 seq（= turn/finish 落盘后的 lastProcessedSeq）。
    * 写失败仅告警（保留旧快照；manifest.snapshot 不更新），下次轮末自愈。
+   * 无 `snapshot` 能力的驱动（数据库/HTTP）跳过——它们冷加载本就走全量读。
    */
   private async maybeSnapshot(sessionId: string): Promise<void> {
+    const snapshot = this.backend.snapshot;
+    if (!snapshot) return;
     try {
       const state = await this.getState(sessionId);
-      await this.backend.writeSnapshot(sessionId, state.lastProcessedSeq, state);
+      await snapshot.write(sessionId, state.lastProcessedSeq, state);
     } catch (e: any) {
       this.logger.warn(
         `[jsonl] snapshot write failed for ${sessionId}: ${e?.message ?? e}`,
@@ -432,7 +455,10 @@ export class JsonlMessageService implements IMessageStore {
    * 否则新会话首屏并行请求会在 manifest 落盘前同时通过检查，写出两条 session/init(seq=0)，
    * 重复 seq 会被连续性校验判为缺口，会话永久无法加载。
    */
-  async ensureSession(sessionId: string, meta?: Partial<SessionMeta>): Promise<void> {
+  async ensureSession(
+    sessionId: string,
+    meta?: { title?: string | null },
+  ): Promise<void> {
     const prev = this.ensureChains.get(sessionId) ?? Promise.resolve();
     // 前序结果就地吞掉（成功/失败都不阻断本任务）；错误仍会抛给各自的调用方
     const task = prev.catch(() => {}).then(async () => {
@@ -497,20 +523,21 @@ export class JsonlMessageService implements IMessageStore {
    * 无锁私有原语：仅限 runExclusive 持有者的内部路径或冷加载修复路径
    * （repairActiveSegmentIfNeeded，无并发写窗口）调用，公开入口一律经 runExclusive。
    */
-  private async append(sessionId: string, event: BaseEvent): Promise<void> {
-    await this.backend.appendEvent(sessionId, event);
-    this.applyToCache(sessionId, [event]);
+  private async append(sessionId: string, event: PendingEvent): Promise<BaseEvent> {
+    const [finalized] = await this.backend.appendEvents(sessionId, [event]);
+    this.applyToCache(sessionId, [finalized]);
+    return finalized;
   }
 
-  private async getNextSeq(sessionId: string): Promise<number> {
-    const state = await this.getState(sessionId);
-    const stateSeq = state.lastProcessedSeq;
-    // backend 直写路径（分卷 session/rotate 事件）不经过 applyToCache，热路径
-    // 内存游标会落后于文件真实末条 seq——若只读游标，下一条事件会与 rotate 撞号。
-    // 取「内存游标 / 活跃段末条 seq」较大值：任何 backend 级写入都即时占号生效。
-    const info = await this.backend.getActiveSegmentInfo(sessionId);
-    const diskSeq = info?.endSeq ?? stateSeq;
-    return Math.max(stateSeq, diskSeq) + 1;
+  /** 批量追加：一次分配 seq、一次落盘、一次折叠 */
+  private async appendBatch(
+    sessionId: string,
+    events: PendingEvent[],
+  ): Promise<BaseEvent[]> {
+    if (events.length === 0) return [];
+    const finalized = await this.backend.appendEvents(sessionId, events);
+    this.applyToCache(sessionId, finalized);
+    return finalized;
   }
 
   // ─── 读取 ───
@@ -558,27 +585,22 @@ export class JsonlMessageService implements IMessageStore {
       modelName?: string;
     },
   ): Promise<{ turnId: string; revision: number }> {
-    const seq = await this.getNextSeq(sessionId);
+    await this.ensureReplayReady(sessionId);
     // turnId 与主路径（agent-engine 的 preGenAssistantId）同基座：m_<ULID> 有序 id
     const turnId = generateOrderedMessageId('m');
 
-    const events: BaseEvent[] = [];
-    // 整轮次重答：先删除旧轮次（按回合 id 遮蔽），再开新回合
-    // 【seq 连续】turn/start 必须使用 getNextSeq 返回的空闲 seq（此前无 replaceTurnId 时
-    // 误用 seq+1 导致每个回合开头永久空缺一格 seq，破坏事件流的 seq 连续性）
-    let nextSeq = seq;
+    const events: PendingEvent[] = [];
+    // 整轮次重答：先删除旧轮次（按回合 id 遮蔽），再开新回合。
+    // seq 由后端按批连续分配，两事件必相邻，不会出现回合开头永久缺格的旧缺陷。
     if (options?.replaceTurnId) {
       events.push({
         type: 'turn/delete',
-        seq: nextSeq,
         time: Date.now(),
         data: { turnId: options.replaceTurnId },
       });
-      nextSeq++;
     }
     events.push({
       type: 'turn/start',
-      seq: nextSeq,
       time: Date.now(),
       data: {
         turnId,
@@ -589,9 +611,8 @@ export class JsonlMessageService implements IMessageStore {
       },
     });
 
-    await this.backend.appendEvents(sessionId, events);
-    this.applyToCache(sessionId, events);
-    return { turnId, revision: events[events.length - 1].seq };
+    const finalized = await this.appendBatch(sessionId, events);
+    return { turnId, revision: finalized[finalized.length - 1].seq };
   }
 
   /**
@@ -632,7 +653,7 @@ export class JsonlMessageService implements IMessageStore {
       source?: import('../types/conversation.types').MessageSource;
     },
   ): Promise<{ messageId: string; userMessage: Message; revision: number }> {
-    const seq = await this.getNextSeq(sessionId);
+    await this.ensureReplayReady(sessionId);
     const messageId = generateOrderedMessageId('m');
     // 统一 blocks：显式 blocks 优先，否则 content（→text 块）+ files（→image/file 块）合成；
     // 注入块一律追加在尾部（novel 区，KV 前缀零损失）
@@ -665,10 +686,9 @@ export class JsonlMessageService implements IMessageStore {
     if (options?.injectedBlocks?.length) {
       blocks.push(...options.injectedBlocks);
     }
-    const events: BaseEvent[] = [
+    const events: PendingEvent[] = [
       {
         type: 'user/message',
-        seq,
         time: Date.now(),
         data: {
           messageId,
@@ -679,8 +699,7 @@ export class JsonlMessageService implements IMessageStore {
         },
       },
     ];
-    await this.backend.appendEvents(sessionId, events);
-    this.applyToCache(sessionId, events);
+    const finalized = await this.appendBatch(sessionId, events);
 
     // 返回三层 user 消息(供广播 user_message 事件)与写入后版本号
     const state = await this.getState(sessionId);
@@ -694,7 +713,11 @@ export class JsonlMessageService implements IMessageStore {
         metadata: options?.metadata ?? {},
         content: blocks,
       } as unknown as Message);
-    return { messageId, userMessage, revision: events[events.length - 1].seq };
+    return {
+      messageId,
+      userMessage,
+      revision: finalized[finalized.length - 1].seq,
+    };
   }
 
 
@@ -719,12 +742,11 @@ export class JsonlMessageService implements IMessageStore {
     sessionId: string,
     messages: Message[],
   ): Promise<{ added: Message[]; revision: number }> {
+    await this.ensureReplayReady(sessionId);
     if (!messages || messages.length === 0) {
       return { added: [], revision: await this.getLastProcessedSeq(sessionId) };
     }
-    let seq = await this.getNextSeq(sessionId);
-    const startSeq = seq;
-    const events: BaseEvent[] = [];
+    const events: PendingEvent[] = [];
 
     for (const message of messages) {
       const messageId = message.id || generateOrderedMessageId('m');
@@ -738,7 +760,6 @@ export class JsonlMessageService implements IMessageStore {
       if (isTool) {
         events.push({
           type: 'tool/result',
-          seq: seq++,
           time: Date.now(),
           data: {
             messageId,
@@ -762,7 +783,6 @@ export class JsonlMessageService implements IMessageStore {
       if (message.role === 'assistant') {
         events.push({
           type: 'assistant/message',
-          seq: seq++,
           time: Date.now(),
           data: {
             messageId,
@@ -777,7 +797,6 @@ export class JsonlMessageService implements IMessageStore {
       // P6：content 原生存 ContentBlock[]（与 assistant/message 一致），不再平铺 content/files
       events.push({
         type: 'user/message',
-        seq: seq++,
         time: Date.now(),
         data: {
           messageId,
@@ -788,21 +807,21 @@ export class JsonlMessageService implements IMessageStore {
       });
     }
 
-    if (events.length > 0) {
-      await this.backend.appendEvents(sessionId, events);
-      this.applyToCache(sessionId, events);
+    if (events.length === 0) {
+      return { added: [], revision: await this.getLastProcessedSeq(sessionId) };
     }
-
-    // S1'：返回本次实际折叠出的节点（seq >= startSeq 从尾部回扫，O(k)）。
+    const finalized = await this.appendBatch(sessionId, events);
+    // S1'：返回本次实际折叠出的节点（seq >= 本批首条 seq，从尾部回扫，O(k)）。
     // 用 seq 判定而非按条数取尾部：可容忍 fold 时跳过的事件（如回合未开的 user/message）。
     // revision 由写入时确定（本批次最后事件的 seq），不做事后查询（版本号契约）。
+    const startSeq = finalized[0].seq;
     const state = await this.getState(sessionId);
     const out: Message[] = [];
     for (let i = state.messages.length - 1; i >= 0; i--) {
       if (state.messages[i].seq < startSeq) break;
       out.unshift(state.messages[i]);
     }
-    return { added: out, revision: events[events.length - 1].seq };
+    return { added: out, revision: finalized[finalized.length - 1].seq };
   }
 
   /**
@@ -826,12 +845,11 @@ export class JsonlMessageService implements IMessageStore {
     durationMs: number,
     finish: TurnFinish,
   ): Promise<number> {
+    await this.ensureReplayReady(sessionId);
     const usage = (finish.usage || {}) as Record<string, any>;
     const cached = usage.cachedTokens;
-    const seq = await this.getNextSeq(sessionId);
-    await this.append(sessionId, {
+    const finalized = await this.append(sessionId, {
       type: 'turn/finish',
-      seq,
       time: Date.now(),
       data: {
         turnId,
@@ -862,7 +880,7 @@ export class JsonlMessageService implements IMessageStore {
     // 每轮结束立即写快照（与分卷解耦）：冷加载 = 快照 + seq 增量。
     // 必须位于 turn/finish 落盘之后——快照永不超前于日志。
     await this.maybeSnapshot(sessionId);
-    return seq;
+    return finalized.seq;
   }
 
   /**
@@ -905,10 +923,8 @@ export class JsonlMessageService implements IMessageStore {
    */
   async deleteTurn(sessionId: string, turnId: string): Promise<void> {
     return this.runExclusive(sessionId, async () => {
-      const seq = await this.getNextSeq(sessionId);
       await this.append(sessionId, {
         type: 'turn/delete',
-        seq,
         time: Date.now(),
         data: { turnId },
       });
@@ -962,11 +978,13 @@ export class JsonlMessageService implements IMessageStore {
 
     for (const turn of turns) {
       const turnId = turn.id || generateOrderedMessageId('m');
+      // 本回合要写的全部事件先攒齐，最后一次性追加（后端按批连续分配 seq，
+      // 避免逐条往返——HTTP 驱动下逐条 append 会是每事件一次网络请求）
+      const turnEvents: PendingEvent[] = [];
       // 建首回合外壳（若无）
       if (!existingTurnIds.has(turnId)) {
-        await this.append(sessionId, {
+        turnEvents.push({
           type: 'turn/start',
-          seq: await this.getNextSeq(sessionId),
           time: Date.now(),
           data: {
             turnId,
@@ -983,9 +1001,8 @@ export class JsonlMessageService implements IMessageStore {
           (b): b is Extract<ContentBlock, { type: 'tool-result' }> => b.type === 'tool-result',
         );
         if (isTool) {
-          await this.append(sessionId, {
+          turnEvents.push({
             type: 'tool/result',
-            seq: await this.getNextSeq(sessionId),
             time: Date.now(),
             data: {
               messageId: message.id || generateOrderedMessageId('m'),
@@ -998,9 +1015,8 @@ export class JsonlMessageService implements IMessageStore {
             },
           });
         } else if (message.role === 'assistant') {
-          await this.append(sessionId, {
+          turnEvents.push({
             type: 'assistant/message',
-            seq: await this.getNextSeq(sessionId),
             time: Date.now(),
             data: {
               messageId: message.id || generateOrderedMessageId('m'),
@@ -1009,9 +1025,8 @@ export class JsonlMessageService implements IMessageStore {
             },
           });
         } else {
-          await this.append(sessionId, {
+          turnEvents.push({
             type: 'user/message',
-            seq: await this.getNextSeq(sessionId),
             time: Date.now(),
             data: {
               messageId: message.id || generateOrderedMessageId('m'),
@@ -1043,9 +1058,8 @@ export class JsonlMessageService implements IMessageStore {
               (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0),
           )
         : surfaceTokens;
-      await this.append(sessionId, {
+      turnEvents.push({
         type: 'turn/finish',
-        seq: await this.getNextSeq(sessionId),
         time: Date.now(),
         data: {
           turnId,
@@ -1061,6 +1075,7 @@ export class JsonlMessageService implements IMessageStore {
             : {}),
         },
       });
+      await this.appendBatch(sessionId, turnEvents);
     }
     return { imported: count };
   }
@@ -1084,18 +1099,21 @@ export class JsonlMessageService implements IMessageStore {
   ): Promise<{ imported: number }> {
     if (!events || events.length === 0) return { imported: 0 };
     return this.runExclusive(sessionId, async () => {
-      let seq = await this.getNextSeq(sessionId);
-      const startSeq = seq;
       // 分批落盘：单批有界，避免超大前缀一次性 stringify 占内存；事件保留原 time（分支历史时间戳不变）
       const BATCH = 500;
+      let startSeq = -1;
+      let endSeq = -1;
       for (let i = 0; i < events.length; i += BATCH) {
-        const batch = events.slice(i, i + BATCH).map((e) => ({ ...e, seq: seq++ }));
-        await this.backend.appendEvents(sessionId, batch);
-        this.applyToCache(sessionId, batch);
+        const batch = events
+          .slice(i, i + BATCH)
+          .map((e) => ({ type: e.type, time: e.time, data: e.data }));
+        const finalized = await this.appendBatch(sessionId, batch);
+        if (startSeq < 0) startSeq = finalized[0].seq;
+        endSeq = finalized[finalized.length - 1].seq;
       }
       await this.maybeSnapshot(sessionId);
       this.logger.log(
-        `[jsonl] imported ${events.length} events into ${sessionId} (seq ${startSeq}..${seq - 1})`,
+        `[jsonl] imported ${events.length} events into ${sessionId} (seq ${startSeq}..${endSeq})`,
       );
       return { imported: events.length };
     });
@@ -1121,10 +1139,9 @@ export class JsonlMessageService implements IMessageStore {
     strategy?: string;
     prunedTokens?: number;
   }): Promise<number> {
-    const seq = await this.getNextSeq(sessionId);
-    await this.append(sessionId, {
+    await this.ensureReplayReady(sessionId);
+    const finalized = await this.append(sessionId, {
       type: 'message/prune',
-      seq,
       time: Date.now(),
       data: {
         messageId: data.messageId,
@@ -1134,7 +1151,7 @@ export class JsonlMessageService implements IMessageStore {
         ...data.prunedTokens === undefined ? {} : { prunedTokens: data.prunedTokens },
       },
     });
-    return seq;
+    return finalized.seq;
   }
 
   /** 工具截图批量移出请求上下文：一次操作写一条事件（前缀分界 keepFromSeq）。 */
@@ -1143,10 +1160,8 @@ export class JsonlMessageService implements IMessageStore {
     data: ToolImagePruneData,
   ): Promise<number> {
     return this.runExclusive(sessionId, async () => {
-      const seq = await this.getNextSeq(sessionId);
-      await this.append(sessionId, {
+      const finalized = await this.append(sessionId, {
         type: 'tool_image/prune',
-        seq,
         time: Date.now(),
         data: {
           keepTurns: data.keepTurns,
@@ -1159,7 +1174,7 @@ export class JsonlMessageService implements IMessageStore {
           prunedTokens: data.prunedTokens,
         },
       });
-      return seq;
+      return finalized.seq;
     });
   }
 
@@ -1180,12 +1195,10 @@ export class JsonlMessageService implements IMessageStore {
     args?: unknown;
     result?: { kind: 'success' | 'error' | 'rejected'; text?: string };
   }): Promise<void> {
-    const seq = await this.getNextSeq(sessionId);
     const base = { commandId: data.commandId, name: data.name };
-    const events: BaseEvent[] = [
+    const events: PendingEvent[] = [
       {
         type: 'command/run',
-        seq,
         time: Date.now(),
         data: {
           ...base,
@@ -1196,7 +1209,6 @@ export class JsonlMessageService implements IMessageStore {
     if (data.result !== undefined) {
       events.push({
         type: 'command/done',
-        seq: seq + 1,
         time: Date.now(),
         data: {
           ...base,
@@ -1205,8 +1217,7 @@ export class JsonlMessageService implements IMessageStore {
         },
       });
     }
-    await this.backend.appendEvents(sessionId, events);
-    this.applyToCache(sessionId, events);
+    await this.appendBatch(sessionId, events);
   }
 
   /** 追加交互请求事件（ask/asked，统一 Ask 审计；无超时语义） */
@@ -1215,10 +1226,8 @@ export class JsonlMessageService implements IMessageStore {
   }
 
   private async appendAskAskedInternal(sessionId: string, data: AskAskedData): Promise<void> {
-    const seq = await this.getNextSeq(sessionId);
     await this.append(sessionId, {
       type: 'ask/asked',
-      seq,
       time: Date.now(),
       data: {
         requestId: data.requestId,
@@ -1236,10 +1245,8 @@ export class JsonlMessageService implements IMessageStore {
   }
 
   private async appendAskAnsweredInternal(sessionId: string, data: AskAnsweredData): Promise<void> {
-    const seq = await this.getNextSeq(sessionId);
     await this.append(sessionId, {
       type: 'ask/answered',
-      seq,
       time: Date.now(),
       data: {
         requestId: data.requestId,
@@ -1261,10 +1268,8 @@ export class JsonlMessageService implements IMessageStore {
     sessionId: string,
     data: SessionModeChangedData,
   ): Promise<void> {
-    const seq = await this.getNextSeq(sessionId);
     await this.append(sessionId, {
       type: 'session/mode_changed',
-      seq,
       time: Date.now(),
       data: {
         planEnabled: data.planEnabled,
@@ -1335,19 +1340,16 @@ export class JsonlMessageService implements IMessageStore {
     /** 压缩前实测占用（压缩历史 before/after 对比） */
     beforeTokens?: number;
   }): Promise<{ summaryMessageId: string; endSeq: number; summaryNode: Message | null }> {
-    const seq = await this.getNextSeq(sessionId);
     const summaryMessageId =
       data.summaryMessageId ?? generateOrderedMessageId('c');
-    const events: BaseEvent[] = [
+    const events: PendingEvent[] = [
       {
         type: 'compaction/start',
-        seq,
         time: Date.now(),
         data: { sourceCommandId: data.mode },
       },
       {
         type: 'compaction/summary',
-        seq: seq + 1,
         time: Date.now(),
         data: {
           shadowedEndId: data.shadowedEndId,
@@ -1360,7 +1362,6 @@ export class JsonlMessageService implements IMessageStore {
       },
       {
         type: 'compaction/end',
-        seq: seq + 2,
         time: Date.now(),
         data: {
           sourceCommandId: data.mode,
@@ -1383,12 +1384,15 @@ export class JsonlMessageService implements IMessageStore {
         },
       },
     ];
-    await this.backend.appendEvents(sessionId, events);
-    this.applyToCache(sessionId, events);
+    const finalized = await this.appendBatch(sessionId, events);
     // 返回折叠后的摘要节点（与 appendMessages 返回权威节点一致），供会话层快照播种
     const state = await this.getState(sessionId);
     const summaryNode = state.messages.find((n) => n.id === summaryMessageId) ?? null;
-    return { summaryMessageId, endSeq: seq + 2, summaryNode };
+    return {
+      summaryMessageId,
+      endSeq: finalized[finalized.length - 1].seq,
+      summaryNode,
+    };
   }
 
   /** 纯裁剪（无括号）压缩路径的上下文占用锚点：写一条独立 compaction/end（无 start/summary）。
@@ -1429,10 +1433,9 @@ export class JsonlMessageService implements IMessageStore {
       beforeTokens?: number;
     },
   ): Promise<number> {
-    const seq = await this.getNextSeq(sessionId);
-    await this.append(sessionId, {
+    await this.ensureReplayReady(sessionId);
+    const finalized = await this.append(sessionId, {
       type: 'compaction/end',
-      seq,
       time: Date.now(),
       data: {
         usedTokens: data.usedTokens,
@@ -1451,7 +1454,7 @@ export class JsonlMessageService implements IMessageStore {
         ...data.beforeTokens === undefined ? {} : { beforeTokens: data.beforeTokens },
       },
     });
-    return seq;
+    return finalized.seq;
   }
 
   /**
@@ -1466,10 +1469,8 @@ export class JsonlMessageService implements IMessageStore {
     data: ContextStatsData,
   ): Promise<number> {
     return this.runExclusive(sessionId, async () => {
-      const seq = await this.getNextSeq(sessionId);
-      await this.append(sessionId, {
+      const finalized = await this.append(sessionId, {
         type: 'context/stats',
-        seq,
         time: Date.now(),
         data: {
           turnId: data.turnId,
@@ -1496,7 +1497,7 @@ export class JsonlMessageService implements IMessageStore {
             : { beforeTokens: data.beforeTokens }),
         },
       });
-      return seq;
+      return finalized.seq;
     });
   }
 }

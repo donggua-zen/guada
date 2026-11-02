@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from "@nestjs/event-emitter";
 import { Subject, Observable, Subscription, defer, concat, from } from "rxjs";
 import { MessageEvent } from "@nestjs/common";
@@ -23,7 +23,8 @@ import {
 } from "../../common/events/unified-event.types";
 import type { SessionStreamEvent } from "./types/event-chunk.types";
 import { SessionStreamManager } from "./session-stream.manager";
-import { SessionMetaStore } from "./session-meta.store";
+import { SESSION_STORE_TOKEN } from './session-store.facade';
+import type { SessionStoreFacade } from './session-store.facade';
 import { HOOKS } from "./types/hooks.contract";
 import type { JobsSnapshotEvent } from "../jobs/job.types";
 import { UserInputQueueService } from "./user-input-queue.service";
@@ -100,7 +101,7 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly streamManager: SessionStreamManager,
-    private readonly sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private readonly sessionStore: SessionStoreFacade,
     private readonly userInputQueue: UserInputQueueService,
   ) {}
 
@@ -174,6 +175,8 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       if (this.subscribers.get(connectionId)?.subject !== subject) {
         return subject.asObservable();
       }
+      // 补发是同步计算：sessionType 已随 ActiveStream 携带（startStream 时确定），
+      // 因此不需要 await 元信息端口——否则会破坏下面「补发与 live 订阅无缝隙」的时序保证。
       return concat(from(this.buildCatchupEvents()), subject.asObservable());
     });
 
@@ -236,8 +239,9 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     // useSessionEvents 的 isSubOrBot 判定失效，子会话状态会误穿主会话分支
     // （污染主会话 isStreaming / 侧边栏 working）。ActiveStream 不含 sessionType，按 sessionId 查。
     for (const stream of activeStreams) {
-      const sessionType =
-        this.sessionStore.getSessionType(stream.sessionId) ?? "web";
+      // 会话类型随流记录携带（startStream 时确定）：补发必须同步完成，
+      // 不能在这里 await 元信息端口。
+      const sessionType = stream.sessionType ?? "web";
       events.push({
         data: JSON.stringify(
           toSessionEvent("stream_status_changed", {

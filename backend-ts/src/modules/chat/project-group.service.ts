@@ -1,7 +1,8 @@
-import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
+import { Inject, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import * as fs from "fs";
 import * as path from "path";
-import { SessionMetaStore } from "./session-meta.store";
+import { SESSION_STORE_TOKEN } from './session-store.facade';
+import type { SessionStoreFacade } from './session-store.facade';
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { qualifiesForProjectGroup } from "../../common/utils/workspace-key.util";
@@ -10,7 +11,7 @@ import { parseGroupIcon } from "../../common/utils/group-icon.util";
 /**
  * 目录分组服务（按工作目录分组，单账户）。
  *
- * 权威来源 = `sessions/_meta.db` 的 `project_groups` 表（见 SessionMetaStore）。
+ * 权威来源 = `sessions/_meta.db` 的 `project_groups` 表（见 SessionStoreFacade）。
  * 成员关系是派生的（`sessions.workspace_key = path_key`），所以「归档/删除项目」
  * 是按目录键批量操作会话，再由本服务删除分组行；会话生命周期（流式护栏、
  * 子会话级联、JSONL 清理、watcher 停止）全部委托给 SessionService。
@@ -23,14 +24,14 @@ export class ProjectGroupService {
   private readonly logger = new Logger(ProjectGroupService.name);
 
   constructor(
-    private sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
     private sessionService: SessionService,
     private workspaceService: WorkspaceService,
   ) {}
 
   /** 获取所有目录分组（按 position 升序） */
   async getGroups() {
-    return this.sessionStore.listProjectGroups();
+    return await this.sessionStore.listProjectGroups();
   }
 
   /**
@@ -63,7 +64,7 @@ export class ProjectGroupService {
       );
     }
 
-    return this.sessionStore.ensureProjectGroup({
+    return await this.sessionStore.ensureProjectGroup({
       path: resolved,
       prepend: true,
     });
@@ -91,7 +92,7 @@ export class ProjectGroupService {
     if (Object.keys(updateData).length === 0) {
       throw new HttpException("没有可更新的字段", HttpStatus.BAD_REQUEST);
     }
-    return this.sessionStore.updateProjectGroup(group.id, updateData);
+    return await this.sessionStore.updateProjectGroup(group.id, updateData);
   }
 
   /** 批量更新排序（要求完整 id 集合） */
@@ -108,7 +109,7 @@ export class ProjectGroupService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    return this.sessionStore.reorderProjectGroups(groupIds);
+    return await this.sessionStore.reorderProjectGroups(groupIds);
   }
 
   /** 统计该目录下的会话数量（删除/归档确认弹窗用） */

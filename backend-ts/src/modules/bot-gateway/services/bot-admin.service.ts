@@ -1,9 +1,8 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { AgentFileStore } from '../../agents/agent-file.store';
-import {
-  SessionMetaStore,
-  toRow,
-} from '../../chat/session-meta.store';
+import { toRow } from '../../chat/session-meta.store';
+import { SESSION_STORE_TOKEN } from '../../chat/session-store.facade';
+import type { SessionStoreFacade } from '../../chat/session-store.facade';
 import { ChatRunnerService } from '../../chat/chat-runner.service';
 import { normalizeTurnSettingsOverride } from '../../chat/types/turn-settings-override';
 import { BotFileInstance, BotFileStore } from '../bot-file.store';
@@ -30,7 +29,7 @@ export class BotAdminService {
     private instanceManager: BotInstanceManager,
     private modelStore: ProviderFileStore,
     private agentStore: AgentFileStore,
-    private sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
     private botStore: BotFileStore,
     private sessionMapper: SessionMapperService,
     private chatRunner: ChatRunnerService,
@@ -101,7 +100,7 @@ export class BotAdminService {
    * 获取 Bot 会话列表
    */
   async getBotSessions(skip: number, limit: number, botId?: string) {
-    const { rows, total } = this.sessionStore.queryPaged(
+    const { rows, total } = await this.sessionStore.queryPaged(
       { sessionType: "bot", ...(botId ? { botId } : {}) },
       "lastActiveDesc",
       { skip, limit },
@@ -131,7 +130,7 @@ export class BotAdminService {
   async getChatGroups(perBotLimit = 200) {
     await this.sessionStore.initialize();
 
-    const sessions = this.sessionStore.query(
+    const sessions = await this.sessionStore.query(
       { sessionType: 'bot' },
       'lastActiveDesc',
     );
@@ -164,7 +163,7 @@ export class BotAdminService {
    * 单个 Bot 会话详情：带动态挂载的 agent/model，供右侧 ChatPanel 复用。
    */
   async getSessionDetail(sessionId: string) {
-    const raw = this.sessionStore.get(sessionId);
+    const raw = await this.sessionStore.get(sessionId);
     if (!raw) {
       throw new NotFoundException(`Session ${sessionId} not found`);
     }
@@ -173,7 +172,9 @@ export class BotAdminService {
     }
 
     const instance = raw.botId ? this.botStore.findById(raw.botId) : null;
-    const session = { ...raw };
+    // enrichSession 会在内存中挂载 agent/model/modelSource（不落库），
+    // 因此工作副本需要可扩展类型；持久行本身仍是严格形状。
+    const session: Record<string, any> = { ...raw };
     let warning: string | null = null;
     let canReply = false;
     let bot: {
@@ -235,7 +236,7 @@ export class BotAdminService {
    * forwardToPlatform 预留给后续版本。
    */
   async sendSessionMessage(sessionId: string, dto: SendBotSessionMessageDto) {
-    const raw = this.sessionStore.get(sessionId);
+    const raw = await this.sessionStore.get(sessionId);
     if (!raw) {
       throw new NotFoundException(`Session ${sessionId} not found`);
     }

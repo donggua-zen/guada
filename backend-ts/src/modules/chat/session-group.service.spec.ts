@@ -2,7 +2,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { SessionGroupService } from "./session-group.service";
-import { SessionMetaStore } from "./session-meta.store";
+import { createTestSessionStore } from './test-session-store.helper';
+import type { TestSessionStore } from './test-session-store.helper';
 
 /**
  * 手工分组「归档本分组」契约：
@@ -13,7 +14,7 @@ import { SessionMetaStore } from "./session-meta.store";
 describe("SessionGroupService 归档本分组", () => {
   let tmpRoot: string;
   let sessionsBase: string;
-  let store: SessionMetaStore;
+  let store: TestSessionStore;
   let service: SessionGroupService;
   let groupId: string;
   const streaming = new Set<string>();
@@ -37,11 +38,11 @@ describe("SessionGroupService 归档本分组", () => {
   beforeEach(async () => {
     fs.rmSync(sessionsBase, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     fs.mkdirSync(sessionsBase, { recursive: true });
-    store = new SessionMetaStore();
+    store = createTestSessionStore();
     await store.initialize();
     streaming.clear();
 
-    service = new SessionGroupService(store, {
+    service = new SessionGroupService(store as any, {
       hasActiveStream: (id: string) => streaming.has(id),
     } as any);
 
@@ -73,16 +74,16 @@ describe("SessionGroupService 归档本分组", () => {
     expect(result.archived).toBe(2);
     expect(result.skipped).toBe(1);
     expect(result.sessionIds.sort()).toEqual(["a1", "a2"]);
-    expect(store.getMeta("a1")!.archived).toBe(true);
-    expect(store.getMeta("a2")!.archived).toBe(true);
-    expect(store.getMeta("stream")!.archived).toBe(false);
-    expect(store.getMeta("arch")!.archived).toBe(true);
+    expect((await store.getMeta("a1"))!.archived).toBe(true);
+    expect((await store.getMeta("a2"))!.archived).toBe(true);
+    expect((await store.getMeta("stream"))!.archived).toBe(false);
+    expect((await store.getMeta("arch"))!.archived).toBe(true);
   });
 
   it("归档本分组不影响组外会话，分组行保留", async () => {
     await service.archiveGroup(groupId);
 
-    expect(store.getMeta("other")!.archived).toBe(false);
+    expect((await store.getMeta("other"))!.archived).toBe(false);
     expect(await store.findGroupById(groupId)).toBeTruthy();
   });
 

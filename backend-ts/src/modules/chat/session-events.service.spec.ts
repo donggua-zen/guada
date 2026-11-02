@@ -10,7 +10,7 @@
  *
  * session-meta.store 依赖 better-sqlite3 原生模块，测试中以空类 mock（仅作构造器类型）。
  */
-jest.mock("./session-meta.store", () => ({ SessionMetaStore: class {} }));
+jest.mock("./session-meta.store", () => ({ TestSessionStore: class {} }));
 
 import { SessionEventsService } from "./session-events.service";
 import { SessionStreamManager } from "./session-stream.manager";

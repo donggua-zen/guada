@@ -8,7 +8,7 @@
  * - 运行模式切换检测（system 注入块）、reasoning content 策略、KIMI 兼容
  * - 压缩接入统一 CompressionEngine（一级裁剪 prune）
  */
-import { Inject, Logger } from '@nestjs/common';
+import { Inject, Logger, Optional } from '@nestjs/common';
 import {
   ISessionContext,
   ModelConfig,
@@ -59,7 +59,8 @@ import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import type { ToolPolicy } from '../../common/types/tool-policy';
 import { applyToolPolicy } from '../plugins/utils/tool-policy.util';
 import { RemoteBindingStateService } from '../remote-workspace/remote-binding-state.service';
-import { SessionMetaStore } from './session-meta.store';
+import { SESSION_STORE_TOKEN } from './session-store.facade';
+import type { SessionStoreFacade } from './session-store.facade';
 import { mintPlanModeEpoch } from '../../common/utils/plan-mode-epoch.util';
 import { normalizeSandboxMode } from '../../common/services/sandbox-policy';
 import { wrapSystemReminder } from '../../common/utils/system-reminder.util';
@@ -211,8 +212,9 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     private readonly streamManager: SessionStreamManager,
     private readonly knowledgeBaseService: KnowledgeBaseService,
     private readonly bindingState: RemoteBindingStateService,
-    /** 会话元数据存储（可选）：仅用于持久化运行期需要落库的会话设置（计划模式开关） */
-    private readonly sessionMetaStore?: SessionMetaStore,
+    /** 会话存储门面（可选）：仅用于持久化运行期需要落库的会话设置（计划模式开关） */
+    @Optional() @Inject(SESSION_STORE_TOKEN)
+    private readonly sessionMetaStore?: SessionStoreFacade,
     /**
      * "有人能应答审批"的探针（可选，由 SessionEventsService 提供：前端 SSE 是否有在线连接）。
      * 用回调而不是直接注入服务，避免上下文对事件服务的直接依赖与潜在循环。
@@ -812,13 +814,13 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /**
    * 持久化 planEnabled + planModeEpoch。
    *
-   * SessionMetaStore.update 是顶层浅合并（settings 整体替换），因此必须读改写——
+   * SessionStoreFacade.update 是顶层浅合并（settings 整体替换），因此必须读改写——
    * 只传 { planEnabled } 会抹掉同一会话的其它设置。
    */
   private async persistPlanModeSettings(): Promise<void> {
     if (!this.sessionMetaStore) return;
     try {
-      const current = this.sessionMetaStore.getMeta(this.sessionId);
+      const current = await this.sessionMetaStore.get(this.sessionId);
       const settings: Record<string, any> = {
         ...((current?.settings as Record<string, any>) ?? this.session?.settings ?? {}),
       };
@@ -838,12 +840,12 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /**
    * 持久化归一化后的 sandboxMode（仅历史 read-only / 非法值触发一次）。
    *
-   * SessionMetaStore.update 是顶层浅合并（settings 整体替换），因此同样读改写。
+   * SessionStoreFacade.update 是顶层浅合并（settings 整体替换），因此同样读改写。
    */
   private async persistSandboxModeSettings(): Promise<void> {
     if (!this.sessionMetaStore) return;
     try {
-      const current = this.sessionMetaStore.getMeta(this.sessionId);
+      const current = await this.sessionMetaStore.get(this.sessionId);
       const settings: Record<string, any> = {
         ...((current?.settings as Record<string, any>) ?? this.session?.settings ?? {}),
         sandboxMode: this.sandboxMode,

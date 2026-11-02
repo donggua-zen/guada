@@ -442,7 +442,8 @@ describe("SubAgentManager", () => {
       await until(() => sessionStore.updateCalls.length > 0);
 
       expect(sessionStore.updateCalls[0]).toMatchObject({ id: "sub-1" });
-      expect(sessionStore.updateCalls[0].patch.closedAt).toBeInstanceOf(Date);
+      // 端口层统一 ISO 字符串（跨介质一致）；Date 形状只在出口处按需转换
+      expect(typeof sessionStore.updateCalls[0].patch.closedAt).toBe("string");
       expect(eventBus.of("subagent.closed")[0]).toMatchObject({
         sessionId: "parent-1",
         payload: { subSessionId: "sub-1", stopReason: "completed" },
@@ -809,7 +810,8 @@ describe("SubAgentManager", () => {
       expect(chatRunner.enqueued).toHaveLength(0);
       // 该路径绕过 executeSubAgentStream / settle，必须自己冻结（commit c11e8155 修复的正是这里）
       expect(sessionStore.updateCalls[0]).toMatchObject({ id: "sub-1" });
-      expect(sessionStore.updateCalls[0].patch.closedAt).toBeInstanceOf(Date);
+      // 端口层统一 ISO 字符串（跨介质一致）；Date 形状只在出口处按需转换
+      expect(typeof sessionStore.updateCalls[0].patch.closedAt).toBe("string");
       expect(sessionStore.updateCalls[0].patch.closeReason).toBe("completed");
       expect(eventBus.of("subagent.closed")).toHaveLength(1);
     });
@@ -914,7 +916,8 @@ describe("SubAgentManager", () => {
       chatRunner.enqueued[0].onConsumed();
       await until(() => sessionStore.updateCalls.length > 0);
 
-      expect(sessionStore.updateCalls[0].patch.closedAt).toBeInstanceOf(Date);
+      // 端口层统一 ISO 字符串（跨介质一致）；Date 形状只在出口处按需转换
+      expect(typeof sessionStore.updateCalls[0].patch.closedAt).toBe("string");
     });
   });
 
@@ -945,7 +948,8 @@ describe("SubAgentManager", () => {
       // jobId 路径不再写信箱，避免双通知
       expect(chatRunner.enqueued).toHaveLength(0);
       await until(() => sessionStore.updateCalls.length > 0);
-      expect(sessionStore.updateCalls[0].patch.closedAt).toBeInstanceOf(Date);
+      // 端口层统一 ISO 字符串（跨介质一致）；Date 形状只在出口处按需转换
+      expect(typeof sessionStore.updateCalls[0].patch.closedAt).toBe("string");
     });
 
     it("subagent_manager wait 取走结果后 job reported，不再投递信箱", async () => {

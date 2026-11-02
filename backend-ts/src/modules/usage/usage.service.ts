@@ -11,9 +11,11 @@
  * - cacheHitRate = cacheRead / inputTokens（分母不再叠加 cache，避免命中率被压低）
  */
 
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import type { UsageSource } from "../llm-core/types/llm.types";
+import { SESSION_META_PORT } from "../../common/store/ports/session-meta.port";
+import type { SessionMetaPort } from "../../common/store/ports/session-meta.port";
 import { UsageStore, DAY_MS } from "./usage.store";
 import type {
   ModelUsageRecordInput,
@@ -46,7 +48,10 @@ const HEATMAP_DAYS = HEATMAP_WEEKS * 7;
 export class UsageService {
   private readonly logger = new Logger(UsageService.name);
 
-  constructor(private readonly store: UsageStore) {}
+  constructor(
+    private readonly store: UsageStore,
+    @Inject(SESSION_META_PORT) private readonly sessionMeta: SessionMetaPort,
+  ) {}
 
   /** 用途 → 统计来源；显式 source 优先 */
   resolveSource(input: {
@@ -88,9 +93,9 @@ export class UsageService {
     }
   }
 
-  deleteBySession(sessionId: string): number {
+  async deleteBySession(sessionId: string): Promise<number> {
     try {
-      return this.store.deleteBySession(sessionId);
+      return await this.store.deleteBySession(sessionId);
     } catch (error: any) {
       this.logger.warn(`删除会话用量失败（session=${sessionId}）：${error?.message ?? error}`);
       return 0;
@@ -98,21 +103,21 @@ export class UsageService {
   }
 
   /** 清空全部用量明细（所有会话、全部时间） */
-  clearAll(): number {
+  async clearAll(): Promise<number> {
     try {
-      return this.store.clearAll();
+      return await this.store.clearAll();
     } catch (error: any) {
       this.logger.warn(`清空用量失败：${error?.message ?? error}`);
       return 0;
     }
   }
 
-  pruneOrphans(): number {
+  async pruneOrphans(): Promise<number> {
     return this.store.pruneOrphans();
   }
 
-  getSnapshot(input: UsageQueryInput): UsageSnapshot {
-    const rows = this.store.query(input);
+  async getSnapshot(input: UsageQueryInput): Promise<UsageSnapshot> {
+    const rows = await this.store.query(input);
     const offsetMs = clampOffsetMinutes(input.tzOffsetMinutes) * 60_000;
     const endDayIndex = Math.floor((rows.until + offsetMs) / DAY_MS);
 
@@ -293,15 +298,36 @@ export class UsageService {
       heatmap: buildHeatmap(heatmapPoints, heatmapStartDayIndex, endDayIndex),
       models,
       sources,
-      sessions: rows.sessions.map((row) => ({
+      sessions: await this.decorateSessionRows(rows.sessions),
+    };
+  }
+
+  /**
+   * 补齐会话行的展示字段（标题/类型）。
+   *
+   * 用量聚合**不再 JOIN sessions**（那是「同库同进程」的假设）；改为经
+   * `SessionMetaPort` 批量取行。多一次往返换来跨介质一致（数据库分库 / HTTP
+   * 后端同样成立）。取不到的会话（已删除/无权访问）保持 null，前端按 id 兜底显示。
+   */
+  private async decorateSessionRows(
+    rows: UsageQueryRows['sessions'],
+  ): Promise<UsageSnapshot['sessions']> {
+    const ids = rows.map((row) => row.sessionId);
+    const metas = ids.length
+      ? await this.sessionMeta.getManyByIds(ids)
+      : [];
+    const byId = new Map(metas.map((m) => [m.id, m]));
+    return rows.map((row) => {
+      const meta = byId.get(row.sessionId);
+      return {
         sessionId: row.sessionId,
-        title: row.title ?? null,
-        sessionType: row.sessionType ?? null,
+        title: meta?.title ?? null,
+        sessionType: meta?.sessionType ?? null,
         totalTokens: Number(row.totalTokens),
         requestCount: Number(row.requestCount),
         lastUsedAt: Number(row.lastUsedAt),
-      })),
-    };
+      };
+    });
   }
 }
 

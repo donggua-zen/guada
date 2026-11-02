@@ -150,15 +150,16 @@ describe("每会话写互斥：并发写入 seq 连续性", () => {
     // 先建立会话游标
     await store.beginTurn(sid);
 
-    // backend 层故障注入：临时替换 appendEvent 使其第一次调用抛错
-    const originalAppendEvent = (backend as any).appendEvent.bind(backend);
+    // backend 层故障注入：临时替换端口方法 appendEvents 使其第一次调用抛错
+    // （写路径已统一走 appendEvents 由后端分配 seq；appendEvent 仅用于物理测试）
+    const originalAppendEvents = (backend as any).appendEvents.bind(backend);
     let failFirst = true;
-    (backend as any).appendEvent = async (...args: unknown[]) => {
+    (backend as any).appendEvents = async (...args: unknown[]) => {
       if (failFirst) {
         failFirst = false;
         throw new Error("disk full");
       }
-      return originalAppendEvent(...args);
+      return originalAppendEvents(...args);
     };
 
     const failing = store.appendAskAsked(sid, {
@@ -169,7 +170,7 @@ describe("每会话写互斥：并发写入 seq 连续性", () => {
     const following = store.appendMessages(sid, [toolMessage("call_ok")]);
     await expect(failing).rejects.toThrow("disk full");
     await following; // 不应被前序失败卡死
-    (backend as any).appendEvent = originalAppendEvent;
+    (backend as any).appendEvents = originalAppendEvents;
 
     const seqs = await readSeqs(backend, sid);
     for (let i = 1; i < seqs.length; i++) {

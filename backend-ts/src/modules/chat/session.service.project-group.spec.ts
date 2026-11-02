@@ -2,10 +2,9 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { SessionService } from "./session.service";
-import {
-  GENERAL_PROJECT_GROUP_ID,
-  SessionMetaStore,
-} from "./session-meta.store";
+import { GENERAL_PROJECT_GROUP_ID } from './session-meta.store';
+import { createTestSessionStore } from './test-session-store.helper';
+import type { TestSessionStore } from './test-session-store.helper';
 import { normalizeWorkspaceKey } from "../../common/utils/workspace-key.util";
 
 /**
@@ -17,7 +16,7 @@ import { normalizeWorkspaceKey } from "../../common/utils/workspace-key.util";
 describe("SessionService 侧栏目录分组", () => {
   let tmpRoot: string;
   let sessionsBase: string;
-  let store: SessionMetaStore;
+  let store: TestSessionStore;
   let service: SessionService;
   let streaming: Set<string>;
 
@@ -45,13 +44,13 @@ describe("SessionService 侧栏目录分组", () => {
   beforeEach(async () => {
     fs.rmSync(sessionsBase, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     fs.mkdirSync(sessionsBase, { recursive: true });
-    store = new SessionMetaStore();
+    store = createTestSessionStore();
     await store.initialize();
 
     streaming = new Set();
 
     service = new SessionService(
-      store,
+      store as any,
       { findById: async () => null, findManyByIds: async () => new Map() } as any,
       {} as any,
       {} as any,
@@ -211,7 +210,7 @@ describe("SessionService 侧栏目录分组", () => {
 
     // 行仍在：取消归档后目录会自动重新出现在侧栏
     expect(
-      (await store.listProjectGroups()).some((g) => g.path === archivedDir),
+      ((await store.listProjectGroups())).some((g) => g.path === archivedDir),
     ).toBe(true);
   });
 
@@ -237,10 +236,10 @@ describe("SessionService 侧栏目录分组", () => {
     expect(result.archived).toBe(2);
     expect(result.skipped).toBe(1);
     expect(result.sessionIds.sort()).toEqual(["a1", "pinned1"].sort());
-    expect(store.getMeta("a1")!.archived).toBe(true);
-    expect(store.getMeta("pinned1")!.archived).toBe(true);
-    expect(store.getMeta("a2")!.archived).toBe(false);
-    expect(store.getMeta("archived1")!.archived).toBe(true);
+    expect((await store.getMeta("a1"))!.archived).toBe(true);
+    expect((await store.getMeta("pinned1"))!.archived).toBe(true);
+    expect((await store.getMeta("a2"))!.archived).toBe(false);
+    expect((await store.getMeta("archived1"))!.archived).toBe(true);
   });
 
   it("删除项目：删除该目录全部 web 会话（含归档/置顶）并级联子会话，其他目录不受影响", async () => {
@@ -258,10 +257,10 @@ describe("SessionService 侧栏目录分组", () => {
     expect(result.sessionIds.sort()).toEqual(
       ["a1", "a2", "archived1", "pinned1"].sort(),
     );
-    expect(store.getMeta("a1")).toBeUndefined();
-    expect(store.getMeta("child1")).toBeUndefined(); // 随父会话级联
-    expect(store.getMeta("b1")).toBeTruthy(); // 其他目录不受影响
-    expect(store.getMeta("none1")).toBeTruthy();
+    expect(await store.getMeta("a1")).toBeUndefined();
+    expect(await store.getMeta("child1")).toBeUndefined(); // 随父会话级联
+    expect(await store.getMeta("b1")).toBeTruthy(); // 其他目录不受影响
+    expect(await store.getMeta("none1")).toBeTruthy();
   });
 
   it("删除预检：任一会话或子会话流式 → 409 且一条未删", async () => {
@@ -279,10 +278,10 @@ describe("SessionService 侧栏目录分组", () => {
       service.deleteProjectGroupSessions(group.pathKey),
     ).rejects.toMatchObject({ status: 409 });
 
-    expect(store.getMeta("a1")).toBeTruthy();
-    expect(store.getMeta("child2")).toBeTruthy();
-    expect(store.getMeta("a2")).toBeTruthy();
-    expect(store.getMeta("pinned1")).toBeTruthy();
+    expect(await store.getMeta("a1")).toBeTruthy();
+    expect(await store.getMeta("child2")).toBeTruthy();
+    expect(await store.getMeta("a2")).toBeTruthy();
+    expect(await store.getMeta("pinned1")).toBeTruthy();
   });
 
   it("删除项目保留工作目录与文件", async () => {
@@ -302,7 +301,7 @@ describe("SessionService 侧栏目录分组", () => {
 
     await service.deleteProjectGroupSessions(group.pathKey);
 
-    expect(store.getMeta("ws1")).toBeUndefined();
+    expect(await store.getMeta("ws1")).toBeUndefined();
     expect(fs.existsSync(path.join(workspaceDir, "keep.txt"))).toBe(true);
   });
 });

@@ -31,6 +31,7 @@ import { RuntimeModule } from './modules/runtime/runtime.module';
 import { GitModule } from './modules/git/git.module';
 import { TerminalModule } from './modules/terminal/terminal.module';
 import { PersistenceModule } from './common/persistence/persistence.module';
+import { StoreModule } from './common/store/store.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsageModule } from './modules/usage/usage.module';
 import { MobileAccessModule } from './modules/mobile-access/mobile-access.module';
@@ -46,9 +47,12 @@ import { MobileAccessModule } from './modules/mobile-access/mobile-access.module
       maxListeners: 20,
     }),
     LlmCoreModule, // LLM 核心模块（全局）
-    // 持久化机制层（@Global）：只提供 JSONL 后端与 MESSAGE_STORE_TOKEN。
+    // 持久化机制层（@Global）：事件日志介质（MESSAGE_EVENT_LOG）+ 业务存储（MESSAGE_STORE_TOKEN）。
     // 各域 store 的初始化顺序由所属模块的 onModuleInit 自行负责。
     PersistenceModule,
+    // 存储端口层（@Global）：会话元信息/分组/目录分组/用量/资产 → 按驱动装配门面。
+    // 必须先于 UsageModule：UsageModule 的 UsageService 依赖 USAGE_PORT 与 SESSION_META_PORT。
+    StoreModule,
     UsageModule, // Token 用量统计（@Global；LLMService 经全局导出注入 UsageService）
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     WorkspaceModule, // 全局 WorkspaceProvider 抽象层

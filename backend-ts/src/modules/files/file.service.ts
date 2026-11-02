@@ -1,8 +1,9 @@
-import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
+import { Inject, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { SessionMetaStore } from "../chat/session-meta.store";
+import { SESSION_STORE_TOKEN } from '../chat/session-store.facade';
+import type { SessionStoreFacade } from '../chat/session-store.facade';
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { FileNamingService } from "../../common/services/file-naming.service";
 import { FileRef } from "../../common/types/conversation.types";
@@ -37,7 +38,7 @@ export class FileService {
 
   constructor(
     private fileNamingService: FileNamingService,
-    private sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
     private workspaceService: WorkspaceService,
   ) { }
 
@@ -101,7 +102,7 @@ export class FileService {
 
   /** 会话存在性校验（单账户：无归属校验） */
   private async assertSessionExists(sessionId: string) {
-    const session = this.sessionStore.get(sessionId);
+    const session = await this.sessionStore.get(sessionId);
     if (!session) {
       throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
     }

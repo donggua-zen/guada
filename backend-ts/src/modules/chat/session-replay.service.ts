@@ -12,11 +12,9 @@
  *   turn/delete / compaction/summary 自行消解，本服务零转码、零过滤、零重建
  */
 import { Injectable, Inject } from "@nestjs/common";
-import {
-  PERSISTENCE_BACKEND_TOKEN,
-  PersistenceBackend,
-  BaseEvent,
-} from "../../common/persistence/types";
+import { MESSAGE_EVENT_LOG } from "../../common/persistence/event-log.port";
+import type { MessageEventLog } from "../../common/persistence/event-log.port";
+import type { BaseEvent } from "../../common/persistence/types";
 
 export interface EventPageResult {
   /** 领域事件原样（seq 序，前端折叠器消费） */
@@ -51,7 +49,7 @@ export interface CompactionHistoryItem {
 @Injectable()
 export class SessionReplayService {
   constructor(
-    @Inject(PERSISTENCE_BACKEND_TOKEN) private readonly backend: PersistenceBackend,
+    @Inject(MESSAGE_EVENT_LOG) private readonly backend: MessageEventLog,
   ) {}
 
   /**

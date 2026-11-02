@@ -18,7 +18,8 @@ import { TokenMeterService } from './token-meter.service';
 import { SessionStreamManager } from './session-stream.manager';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { RemoteBindingStateService } from '../remote-workspace/remote-binding-state.service';
-import { SessionMetaStore } from './session-meta.store';
+import { SESSION_STORE_TOKEN } from './session-store.facade';
+import type { SessionStoreFacade } from './session-store.facade';
 import { SessionEventsService } from './session-events.service';
 
 @Injectable()
@@ -33,7 +34,7 @@ export class JsonlSessionContextFactory {
     private readonly streamManager: SessionStreamManager,
     private readonly knowledgeBaseService: KnowledgeBaseService,
     private readonly bindingState: RemoteBindingStateService,
-    private readonly sessionMetaStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private readonly sessionMetaStore: SessionStoreFacade,
     /** 前端 SSE 在线探测（命令策略层"有人能应答审批"的判据；见 JsonlSessionContext.hasAnswerSurface） */
     private readonly sessionEvents: SessionEventsService,
   ) {}

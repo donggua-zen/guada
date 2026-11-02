@@ -1,3 +1,5 @@
+import type { SessionMetaPort } from "../../common/store/ports/session-meta.port";
+import type { SessionRow } from "../../common/store/ports/types";
 import { UsageService } from "./usage.service";
 import type { UsageStore } from "./usage.store";
 import type { UsageQueryRows } from "./usage.types";
@@ -101,13 +103,21 @@ describe("UsageService", () => {
     };
   }
 
-  function service(): UsageService {
-    const store = { query: jest.fn(() => buildRows()) } as unknown as UsageStore;
-    return new UsageService(store);
+  function sessionMeta(): SessionMetaPort {
+    // 会话标题/类型原由 SQL JOIN 提供，现改为经 SessionMetaPort 批量补齐
+    const row = { id: "s1", title: "会话", sessionType: "web" } as SessionRow;
+    return {
+      getManyByIds: jest.fn(async () => [row]),
+    } as unknown as SessionMetaPort;
   }
 
-  it("组装 7 天连续日序列、热力图与核心指标", () => {
-    const snapshot = service().getSnapshot({
+  function service(): UsageService {
+    const store = { query: jest.fn(() => buildRows()) } as unknown as UsageStore;
+    return new UsageService(store, sessionMeta());
+  }
+
+  it("组装 7 天连续日序列、热力图与核心指标", async () => {
+    const snapshot = await service().getSnapshot({
       range: "7d",
       tzOffsetMinutes: 0,
       now,
@@ -164,10 +174,10 @@ describe("UsageService", () => {
     ).toBe("subagent");
   });
 
-  it("all 范围固定返回 12 个月，当前月在最右侧", () => {
+  it("all 范围固定返回 12 个月，当前月在最右侧", async () => {
     const rows = buildRows();
     const store = { query: jest.fn(() => rows) } as unknown as UsageStore;
-    const snapshot = new UsageService(store).getSnapshot({
+    const snapshot = await new UsageService(store, sessionMeta()).getSnapshot({
       range: "all",
       tzOffsetMinutes: 0,
       now,
@@ -184,7 +194,7 @@ describe("UsageService", () => {
     });
   });
 
-  it("all 范围图表窗口最多 366 天，但汇总仍取全量 rows", () => {
+  it("all 范围图表窗口最多 366 天，但汇总仍取全量 rows", async () => {
     const oldRows = buildRows();
     const oldDay = Math.floor((todayStart - 500 * DAY) / DAY);
     oldRows.daily.unshift({
@@ -196,7 +206,7 @@ describe("UsageService", () => {
     });
     oldRows.totals.totalTokens = 1399;
     const store = { query: jest.fn(() => oldRows) } as unknown as UsageStore;
-    const snapshot = new UsageService(store).getSnapshot({
+    const snapshot = await new UsageService(store, sessionMeta()).getSnapshot({
       range: "all",
       tzOffsetMinutes: 0,
       now,

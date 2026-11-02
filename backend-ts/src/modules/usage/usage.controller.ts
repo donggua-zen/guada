@@ -20,12 +20,12 @@ export class UsageController {
   ) {}
 
   @Get("stats")
-  getStats(
+  async getStats(
     @Query("range") range: string = "7d",
     @Query("tzOffsetMinutes") tzOffsetMinutes: string = "0",
     @Query("timeZone") timeZone?: string,
   ) {
-    const snapshot = this.usageService.getSnapshot({
+    const snapshot = await this.usageService.getSnapshot({
       range: normalizeRange(range),
       tzOffsetMinutes: parseOffset(tzOffsetMinutes),
       timeZone,
@@ -53,8 +53,8 @@ export class UsageController {
 
   /** 清空全部本地用量明细（不影响会话消息/元数据） */
   @Delete("stats")
-  clearAll() {
-    return { success: true, deleted: this.usageService.clearAll() };
+  async clearAll() {
+    return { success: true, deleted: await this.usageService.clearAll() };
   }
 }
 

@@ -170,7 +170,7 @@ describe("快照恢复链路（finalizeTurn 每轮快照 + 跨卷增量）", () 
   it("每轮 finalizeTurn 后快照 seq = 最新事件 seq（含 turn/finish）", async () => {
     const s1 = new JsonlMessageService(new JsonlBackend());
     await appendRounds(s1, 2);
-    const snap = await s1["backend"].readSnapshot(sid) as { snapshotSeq: number; state: unknown };
+    const snap = await (s1["backend"] as JsonlBackend).readSnapshot(sid) as { snapshotSeq: number; state: unknown };
     const lastSeq = await s1.getLastProcessedSeq(sid);
     expect(snap.snapshotSeq).toBe(lastSeq);
   });

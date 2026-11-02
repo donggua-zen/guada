@@ -37,7 +37,7 @@ describe("UsageStore", () => {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   });
 
-  it("按时间范围聚合总量/模型/来源/会话", () => {
+  it("按时间范围聚合总量/模型/来源/会话", async () => {
     const now = Date.UTC(2026, 9, 18, 12, 0, 0);
     record(store, {
       sessionId: "s1",
@@ -70,7 +70,7 @@ describe("UsageStore", () => {
       totalTokens: 70,
     });
 
-    const rows = store.query({ range: "7d", tzOffsetMinutes: 0, now });
+    const rows = await store.query({ range: "7d", tzOffsetMinutes: 0, now });
 
     expect(rows.totals).toMatchObject({
       totalTokens: 520,
@@ -95,23 +95,24 @@ describe("UsageStore", () => {
         expect.objectContaining({ source: "compaction", totalTokens: 70 }),
       ]),
     );
+    // 端口层不再 JOIN sessions：会话行只含 sessionId 与用量列。
+    // 标题/类型的补齐由 UsageService.decorateSessionRows 经 SessionMetaPort 完成
+    // （见 usage.service.spec.ts 的 getSnapshot 用例）。
     expect(rows.sessions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           sessionId: "s1",
-          title: "会话一",
           totalTokens: 450,
         }),
         expect.objectContaining({
           sessionId: "s2",
-          sessionType: "sub_agent",
           totalTokens: 70,
         }),
       ]),
     );
   });
 
-  it("回填模式遇到同一 message/attempt 时保留已有记录", () => {
+  it("回填模式遇到同一 message/attempt 时保留已有记录", async () => {
     const first = record(store, {
       id: "live-1",
       assistantMessageId: "m-1",
@@ -138,7 +139,7 @@ describe("UsageStore", () => {
     }, { ignoreExisting: true });
 
     expect(duplicate).toBe(false);
-    const rows = store.query({
+    const rows = await store.query({
       range: "all",
       tzOffsetMinutes: 0,
       now: 2_000,
@@ -147,7 +148,7 @@ describe("UsageStore", () => {
     expect(rows.totals.requestCount).toBe(1);
   });
 
-  it("删除会话时清理该会话的用量", () => {
+  it("删除会话时清理该会话的用量", async () => {
     record(store, {
       sessionId: "s1",
       modelId: "m1",
@@ -165,13 +166,13 @@ describe("UsageStore", () => {
       totalTokens: 30,
     });
 
-    expect(store.deleteBySession("s1")).toBe(1);
-    const rows = store.query({ range: "all", tzOffsetMinutes: 0, now: 2_000 });
+    expect(await store.deleteBySession("s1")).toBe(1);
+    const rows = await store.query({ range: "all", tzOffsetMinutes: 0, now: 2_000 });
     expect(rows.totals.requestCount).toBe(1);
     expect(rows.sessions.map((row) => row.sessionId)).toEqual(["s2"]);
   });
 
-  it("clearAll 清空全部用量", () => {
+  it("clearAll 清空全部用量", async () => {
     record(store, {
       sessionId: "s1",
       modelId: "m1",
@@ -189,8 +190,8 @@ describe("UsageStore", () => {
       totalTokens: 30,
     });
 
-    expect(store.clearAll()).toBe(2);
-    const rows = store.query({ range: "all", tzOffsetMinutes: 0, now: 2_000 });
+    expect(await store.clearAll()).toBe(2);
+    const rows = await store.query({ range: "all", tzOffsetMinutes: 0, now: 2_000 });
     expect(rows.totals.requestCount).toBe(0);
     expect(rows.totals.totalTokens).toBe(0);
     expect(rows.daily).toEqual([]);
@@ -199,14 +200,14 @@ describe("UsageStore", () => {
     expect(rows.sessions).toEqual([]);
   });
 
-  it("供应商未返回 usage 时仍记录请求并标记 usage_missing", () => {
+  it("供应商未返回 usage 时仍记录请求并标记 usage_missing", async () => {
     record(store, {
       sessionId: "s1",
       modelId: "m1",
       startedAt: 1_000,
       usageMissing: true,
     });
-    const rows = store.query({ range: "all", tzOffsetMinutes: 0, now: 2_000 });
+    const rows = await store.query({ range: "all", tzOffsetMinutes: 0, now: 2_000 });
     expect(rows.totals.requestCount).toBe(1);
     expect(rows.totals.usageMissingCount).toBe(1);
     expect(rows.totals.totalTokens).toBe(0);

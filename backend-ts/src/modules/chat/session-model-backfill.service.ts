@@ -1,5 +1,6 @@
-import { Injectable, Logger, OnApplicationBootstrap } from "@nestjs/common";
-import { SessionMetaStore } from "./session-meta.store";
+import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { SESSION_STORE_TOKEN } from './session-store.facade';
+import type { SessionStoreFacade } from './session-store.facade';
 import { AgentFileStore } from "../agents/agent-file.store";
 import { ProviderFileStore } from "../llm-core/provider-file.store";
 
@@ -19,7 +20,7 @@ export class SessionModelBackfillService implements OnApplicationBootstrap {
   private readonly logger = new Logger(SessionModelBackfillService.name);
 
   constructor(
-    private readonly sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private readonly sessionStore: SessionStoreFacade,
     private readonly agentStore: AgentFileStore,
     private readonly modelStore: ProviderFileStore,
   ) {}
@@ -27,7 +28,7 @@ export class SessionModelBackfillService implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     await this.sessionStore.initialize();
 
-    const sessions = this.sessionStore.listWebSessionsWithMissingModel();
+    const sessions = await this.sessionStore.listWebSessionsWithMissingModel();
     if (sessions.length === 0) return;
 
     const fallbackModel = this.modelStore

@@ -3,11 +3,9 @@ import * as os from "os";
 import * as path from "path";
 import Database from "better-sqlite3";
 import { ProjectGroupBootstrapService } from "./project-group-bootstrap.service";
-import {
-  META_DB_FILE,
-  PROJECT_GROUPS_BOOTSTRAPPED_KEY,
-  SessionMetaStore,
-} from "./session-meta.store";
+import { META_DB_FILE, PROJECT_GROUPS_BOOTSTRAPPED_KEY } from './session-meta.store';
+import { createTestSessionStore } from './test-session-store.helper';
+import type { TestSessionStore } from './test-session-store.helper';
 import { normalizeWorkspaceKey } from "../../common/utils/workspace-key.util";
 
 /**
@@ -21,12 +19,13 @@ describe("ProjectGroupBootstrapService", () => {
   let sessionsBase: string;
   let baseDir: string;
   let bootstrap: ProjectGroupBootstrapService;
+  let bootstrapStore: TestSessionStore;
 
   const projectA = path.resolve("/proj/alpha");
   const projectB = path.resolve("/proj/beta");
   const autoDir = path.resolve("/work/WORK-2026-07-28-XvZL");
 
-  const newStore = () => new SessionMetaStore();
+  const newStore = () => createTestSessionStore();
 
   beforeAll(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "project-group-bootstrap-"));
@@ -36,19 +35,32 @@ describe("ProjectGroupBootstrapService", () => {
     fs.mkdirSync(baseDir, { recursive: true });
     process.env.SESSION_DATA_DIR = tmpRoot;
 
-    bootstrap = new ProjectGroupBootstrapService({
-      getEffectiveBaseDir: async () => baseDir,
-    } as any);
+    bootstrapStore = createTestSessionStore();
+    bootstrap = new ProjectGroupBootstrapService(
+      { getEffectiveBaseDir: async () => baseDir } as any,
+      bootstrapStore,
+      bootstrapStore,
+    );
   });
 
   afterAll(() => {
+    // bootstrap 持有的端口连接必须先关：否则 Windows 下临时目录删不掉（EPERM）
+    bootstrapStore.onModuleDestroy();
     delete process.env.SESSION_DATA_DIR;
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   });
 
   beforeEach(() => {
+    // 上一用例可能让 bootstrapStore 开了连接：先关掉再删目录，
+    // 否则 Windows 上 SQLite 句柄会让 rmSync 报 EPERM。
+    bootstrapStore.onModuleDestroy();
     fs.rmSync(sessionsBase, { recursive: true, force: true });
     fs.mkdirSync(sessionsBase, { recursive: true });
+  });
+
+  afterEach(() => {
+    // 用例结束即释放连接（驱动是懒开库，下次 run 会重新打开）
+    bootstrapStore.onModuleDestroy();
   });
 
   const seedSessions = async () => {
@@ -97,7 +109,7 @@ describe("ProjectGroupBootstrapService", () => {
 
     const store = newStore();
     await store.initialize();
-    expect(await store.listProjectGroups()).toHaveLength(2);
+    expect((await store.listProjectGroups())).toHaveLength(2);
     store.onModuleDestroy();
   });
 
@@ -107,7 +119,7 @@ describe("ProjectGroupBootstrapService", () => {
 
     const store = newStore();
     await store.initialize();
-    const before = (await store.listProjectGroups()).find(
+    const before = ((await store.listProjectGroups())).find(
       (g) => g.pathKey === normalizeWorkspaceKey(projectA),
     )!;
     await store.updateProjectGroup(before.id, { name: "我的 alpha" });

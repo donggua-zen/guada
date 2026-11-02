@@ -3,7 +3,8 @@ import * as os from "os";
 import * as path from "path";
 import { HttpException } from "@nestjs/common";
 import { SessionService } from "./session.service";
-import { SessionMetaStore } from "./session-meta.store";
+import { createTestSessionStore } from './test-session-store.helper';
+import type { TestSessionStore } from './test-session-store.helper';
 import type { BaseEvent } from "../../common/persistence/types";
 import { TODO_META_CARD } from "../../common/utils/todo-store.util";
 
@@ -241,7 +242,7 @@ describe("SessionService.branchSession", () => {
   let tmpRoot: string;
   let sessionsBase: string;
   let workspaceRoot: string;
-  let store: SessionMetaStore;
+  let store: TestSessionStore;
   let service: SessionService;
   let messages: FakeMessageStore;
   let streaming = new Set<string>();
@@ -271,7 +272,7 @@ describe("SessionService.branchSession", () => {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
     fs.mkdirSync(sessionsBase, { recursive: true });
     fs.mkdirSync(workspaceRoot, { recursive: true });
-    store = new SessionMetaStore();
+    store = createTestSessionStore();
     await store.initialize();
 
     messages = new FakeMessageStore();
@@ -279,7 +280,7 @@ describe("SessionService.branchSession", () => {
     failWorkspaceResolve = false;
 
     service = new SessionService(
-      store,
+      store as any,
       { findById: async () => null } as any, // agentStore
       {} as any, // modelStore
       {} as any, // settingsStorage
@@ -413,9 +414,9 @@ describe("SessionService.branchSession", () => {
       turnId: "turn-a",
     });
 
-    expect(store.childrenOf(branched.id)).toEqual([]);
+    expect((await store.childrenOf(branched.id))).toEqual([]);
     // 除分支自身外不产生新会话行（源 + 子代理 + 分支 = 3）
-    expect(store.query({}, "createdAsc").length).toBe(3);
+    expect((await store.query({}, "createdAsc")).length).toBe(3);
     // 源子代理目录原样保留
     expect(
       fs.existsSync(path.join(sessionDir("session-child"), "seg-0000.jsonl")),
@@ -622,7 +623,7 @@ describe("SessionService.branchSession", () => {
     });
 
     expect(branched.id).toBeTruthy();
-    expect(store.getMeta(String(branched.id))).toBeDefined();
+    expect(await store.getMeta(String(branched.id))).toBeDefined();
     expect(
       messages.importCalls.some((c) => c.sessionId === branched.id),
     ).toBe(true);
@@ -636,7 +637,7 @@ describe("SessionService.branchSession", () => {
     );
     expect(err.getStatus()).toBe(400);
     // 未产生任何分支
-    expect(store.query({}, "createdAsc").length).toBe(2);
+    expect((await store.query({}, "createdAsc")).length).toBe(2);
   });
 
   it("非 web 会话 → 400", async () => {
@@ -677,7 +678,7 @@ describe("SessionService.branchSession", () => {
     ).rejects.toThrow("import boom");
 
     // 分支 meta 行与事件目录都被清掉；源会话与子代理不受影响
-    const remaining = store.query({}, "createdAsc").map((s) => s.id);
+    const remaining = (await store.query({}, "createdAsc")).map((s) => s.id);
     expect(remaining.sort()).toEqual(["session-child", SOURCE_ID].sort());
     expect(messages.has(SOURCE_ID)).toBe(true);
   });

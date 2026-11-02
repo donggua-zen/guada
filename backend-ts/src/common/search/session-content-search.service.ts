@@ -18,10 +18,8 @@
  */
 
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import {
-  PERSISTENCE_BACKEND_TOKEN,
-  PersistenceBackend,
-} from "../persistence/types";
+import { MESSAGE_EVENT_LOG } from "../persistence/event-log.port";
+import type { MessageEventLog } from "../persistence/event-log.port";
 import { createInitialState, foldEvents } from "../persistence/replayer";
 import type { MessageNode } from "../persistence/types";
 
@@ -37,7 +35,7 @@ export class SessionContentSearchService {
   private readonly logger = new Logger(SessionContentSearchService.name);
 
   constructor(
-    @Inject(PERSISTENCE_BACKEND_TOKEN) private readonly backend: PersistenceBackend,
+    @Inject(MESSAGE_EVENT_LOG) private readonly backend: MessageEventLog,
   ) {}
 
   /**

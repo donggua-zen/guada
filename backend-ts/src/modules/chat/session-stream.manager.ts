@@ -32,6 +32,13 @@ interface ActiveStream {
   stopReason?: "user_cancel" | "completed" | "error";
   /** 流类型：chat=对话回合；maintenance=维护任务（手动压缩等伪流，buffer 无回合历史） */
   kind: "chat" | "maintenance";
+  /**
+   * 会话类型（web/bot/sub_agent/team）。
+   *
+   * 随流记录携带而不是按 sessionId 现查：SSE 连接补发必须在订阅发生的**同步栈**内
+   * 完成（见 SessionEventsService 的 defer+concat 说明），而元信息端口是 async 的。
+   */
+  sessionType: string;
 }
 
 /**
@@ -91,6 +98,8 @@ export class SessionStreamManager {
     sessionId: string,
     abortController: AbortController,
     kind: "chat" | "maintenance" = "chat",
+    /** 会话类型（web/bot/sub_agent/team）；缺省按 web（补发 running 状态用） */
+    sessionType: string = "web",
   ): boolean {
     if (this.activeStreams.has(sessionId)) {
       const existing = this.activeStreams.get(sessionId)!;
@@ -111,6 +120,7 @@ export class SessionStreamManager {
       isRunning: true,
       startedAt: new Date(),
       kind,
+      sessionType,
     };
 
     this.activeStreams.set(sessionId, stream);

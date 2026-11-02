@@ -919,8 +919,9 @@ describe('Windows 档位迁移（用户 read-only 已取消）', () => {
     const update = jest.fn(
       async (_sessionId: string, _patch: Record<string, any>) => undefined,
     );
+    // 门面方法名是 get（旧名 getMeta 已收敛）
     const metaStore = {
-      getMeta: jest.fn(() => ({
+      get: jest.fn(async () => ({
         settings: { systemPrompt: 'sys', sandboxMode: 'read-only' },
       })),
       update,
@@ -943,7 +944,7 @@ describe('Windows 档位迁移（用户 read-only 已取消）', () => {
     const { ctx, messageStore } = createContext({
       session: { settings: { systemPrompt: 'sys', sandboxMode: 'read-only' } },
       sessionMetaStore: {
-        getMeta: jest.fn(() => ({ settings: { sandboxMode: 'read-only' } })),
+        get: jest.fn(async () => ({ settings: { sandboxMode: 'read-only' } })),
         update: jest.fn(async () => undefined),
       },
       messageStore: {

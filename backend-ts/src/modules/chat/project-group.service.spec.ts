@@ -2,7 +2,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { ProjectGroupService } from "./project-group.service";
-import { SessionMetaStore } from "./session-meta.store";
+import { createTestSessionStore } from './test-session-store.helper';
+import type { TestSessionStore } from './test-session-store.helper';
 import { normalizeWorkspaceKey } from "../../common/utils/workspace-key.util";
 
 /**
@@ -15,7 +16,7 @@ describe("ProjectGroupService 手动注册项目", () => {
   let tmpRoot: string;
   let sessionsBase: string;
   let baseDir: string;
-  let store: SessionMetaStore;
+  let store: TestSessionStore;
   let service: ProjectGroupService;
 
   beforeAll(() => {
@@ -39,10 +40,10 @@ describe("ProjectGroupService 手动注册项目", () => {
   beforeEach(async () => {
     fs.rmSync(sessionsBase, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     fs.mkdirSync(sessionsBase, { recursive: true });
-    store = new SessionMetaStore();
+    store = createTestSessionStore();
     await store.initialize();
 
-    service = new ProjectGroupService(store, {} as any, {
+    service = new ProjectGroupService(store as any, {} as any, {
       getEffectiveBaseDir: async () => baseDir,
     } as any);
   });
@@ -53,7 +54,7 @@ describe("ProjectGroupService 手动注册项目", () => {
 
     expect(group.pathKey).toBe(normalizeWorkspaceKey(dir));
     expect(group.name).toBe(path.basename(dir));
-    expect(await store.listProjectGroups()).toHaveLength(1);
+    expect((await store.listProjectGroups())).toHaveLength(1);
   });
 
   it("同路径重复注册幂等，且不覆盖用户改名", async () => {
@@ -65,7 +66,7 @@ describe("ProjectGroupService 手动注册项目", () => {
 
     expect(second.id).toBe(first.id);
     expect(second.name).toBe("我的项目");
-    expect(await store.listProjectGroups()).toHaveLength(1);
+    expect((await store.listProjectGroups())).toHaveLength(1);
   });
 
   it("公共目录拒绝注册", async () => {
@@ -75,7 +76,7 @@ describe("ProjectGroupService 手动注册项目", () => {
     await expect(
       service.createGroup({ path: publicDir }),
     ).rejects.toMatchObject({ status: 400 });
-    expect(await store.listProjectGroups()).toHaveLength(0);
+    expect((await store.listProjectGroups())).toHaveLength(0);
   });
 
   it("不存在的目录 / 相对路径 / 文件 均拒绝", async () => {

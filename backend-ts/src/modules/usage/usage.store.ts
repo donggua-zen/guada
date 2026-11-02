@@ -1,17 +1,22 @@
 /**
  * 用量账本存储（`sessions/_meta.db` 的 `model_usage` 表）。
  *
- * 与 SessionMetaStore 共用同一个 SQLite 文件：会话标题/类型可直接 JOIN，
- * 删除会话也能在同一连接里清理用量。写路径是单行 INSERT，WAL + busy_timeout
- * 已由 openMetaDb 配好；任何异常由调用方（LLMService）捕获，不影响对话。
+ * 实现 `UsagePort`：与 SessionMetaStore 共用同一个 SQLite 文件（删除会话可在
+ * 同一连接里清理用量），但**聚合查询不再 JOIN sessions**——标题/会话类型由
+ * `UsageService` 经 `SessionMetaPort.getManyByIds` 补齐。这是为了让端口在
+ * 数据库分库或 HTTP 后端下同样成立（JOIN 假设了「同库同进程」）。
+ *
+ * 写路径是单行 INSERT，WAL + busy_timeout 已由 openMetaDb 配好；
+ * 任何异常由调用方（LLMService）捕获，不影响对话。
  */
 
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import { randomUUID } from "crypto";
-import Database from "better-sqlite3";
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import Database from 'better-sqlite3';
 
 import { resolveSessionsBasePath } from "../../common/utils/session-path.util";
-import { openMetaDb } from "../chat/session-meta.store";
+import { openMetaDb } from "../../common/store/drivers/sqlite/meta-schema";
+import type { UsagePort } from "../../common/store/ports/usage.port";
 import type {
   ModelUsageRecordInput,
   UsageDailyRow,
@@ -29,7 +34,7 @@ const MAX_SESSION_ROWS = 50;
 const MAX_ERROR_MESSAGE_CHARS = 500;
 
 @Injectable()
-export class UsageStore implements OnModuleDestroy {
+export class UsageStore implements UsagePort, OnModuleDestroy {
   private readonly logger = new Logger(UsageStore.name);
   private db: Database.Database | null = null;
 
@@ -42,6 +47,14 @@ export class UsageStore implements OnModuleDestroy {
   private ensureDb(): Database.Database {
     this.db ??= openMetaDb(resolveSessionsBasePath());
     return this.db;
+  }
+
+  /**
+   * 端口方法：启动期收敛（删除会话已不存在的孤儿用量行）。
+   * 与 meta 驱动的 startup 解耦，可独立调用（幂等）。
+   */
+  async startup(): Promise<void> {
+    await this.pruneOrphans();
   }
 
   /**
@@ -133,7 +146,7 @@ export class UsageStore implements OnModuleDestroy {
     return result.changes > 0;
   }
 
-  deleteBySession(sessionId: string): number {
+  async deleteBySession(sessionId: string): Promise<number> {
     const db = this.ensureDb();
     return db
       .prepare(`DELETE FROM model_usage WHERE session_id = ?`)
@@ -141,13 +154,13 @@ export class UsageStore implements OnModuleDestroy {
   }
 
   /** 清空全部用量明细（所有会话、全部时间） */
-  clearAll(): number {
+  async clearAll(): Promise<number> {
     const db = this.ensureDb();
     return db.prepare(`DELETE FROM model_usage`).run().changes;
   }
 
   /** 启动收敛：删除会话已不存在（被绕过本存储手删）的用量行 */
-  pruneOrphans(): number {
+  async pruneOrphans(): Promise<number> {
     const db = this.ensureDb();
     try {
       return db
@@ -163,7 +176,7 @@ export class UsageStore implements OnModuleDestroy {
     }
   }
 
-  query(input: UsageQueryInput): UsageQueryRows {
+  async query(input: UsageQueryInput): Promise<UsageQueryRows> {
     const db = this.ensureDb();
     const now = input.now ?? Date.now();
     const offsetMs = clampOffsetMinutes(input.tzOffsetMinutes) * 60_000;
@@ -274,13 +287,10 @@ export class UsageStore implements OnModuleDestroy {
       .prepare(
         `SELECT
            u.session_id AS sessionId,
-           s.title AS title,
-           s.session_type AS sessionType,
            COALESCE(SUM(u.computed_total_tokens), 0) AS totalTokens,
            COUNT(*) AS requestCount,
            MAX(u.started_at) AS lastUsedAt
          FROM model_usage u
-         LEFT JOIN sessions s ON s.id = u.session_id
          WHERE u.started_at >= ? AND u.started_at <= ?
            AND u.session_id IS NOT NULL
          GROUP BY u.session_id

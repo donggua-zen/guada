@@ -1,7 +1,8 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { SessionMetaStore } from "../chat/session-meta.store";
+import { createTestSessionStore } from '../chat/test-session-store.helper';
+import type { TestSessionStore } from '../chat/test-session-store.helper';
 import { SubAgentManager, SubAgentResult } from "./sub-agent.manager";
 
 /**
@@ -14,7 +15,7 @@ import { SubAgentManager, SubAgentResult } from "./sub-agent.manager";
  */
 describe("SubAgentManager workflow 子代理生命周期", () => {
   let tmpRoot: string;
-  let store: SessionMetaStore;
+  let store: TestSessionStore;
   let manager: SubAgentManager;
   let emitted: { event: string; evt: any }[];
 
@@ -52,7 +53,7 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sub-agent-manager-spec-"));
     fs.mkdirSync(path.join(tmpRoot, "sessions"), { recursive: true });
     process.env.SESSION_DATA_DIR = tmpRoot;
-    store = new SessionMetaStore();
+    store = createTestSessionStore();
     await store.initialize();
     await store.create({ id: PARENT, title: "parent", sessionType: "web" });
 
@@ -63,7 +64,7 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
       },
     };
     manager = new SubAgentManager(
-      store,
+      store as any,
       { hasActiveStream: () => false } as any, // chatRunnerService：runSubAgentStream 被打桩，不触达
       eventBus as any,
       {} as any, // agentStore：generic 子代理不查询
@@ -87,7 +88,7 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
       workflow: { runId: "run-1", label: "member-a" },
     });
 
-    const sub = store.get(result.subSessionId)!;
+    const sub = await store.get(result.subSessionId)!;
     expect(sub.closedAt).toBeTruthy();
     expect(sub.closeReason).toBe("completed");
 
@@ -97,7 +98,7 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     expect(closed!.evt.payload.subSessionId).toBe(result.subSessionId);
 
     // 配额已释放：冻结会话被 countByParentId 排除
-    expect(store.countByParentId(PARENT)).toBe(0);
+    expect(await store.countByParentId(PARENT)).toBe(0);
   });
 
   it("连续运行超过 10 个 workflow 子代理也不泄漏名额", async () => {
@@ -112,7 +113,7 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
       });
     }
 
-    expect(store.countByParentId(PARENT)).toBe(0);
+    expect(await store.countByParentId(PARENT)).toBe(0);
   });
 
   it("父会话中止时仍完成冻结（aborted 结算）", async () => {
@@ -137,10 +138,10 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
       controller.signal,
     );
 
-    const sub = store.get(result.subSessionId)!;
+    const sub = await store.get(result.subSessionId)!;
     expect(sub.closedAt).toBeTruthy();
     expect(sub.closeReason).toBe("aborted");
-    expect(store.countByParentId(PARENT)).toBe(0);
+    expect(await store.countByParentId(PARENT)).toBe(0);
   });
 
   it("冻结后的子会话经 sendMessage 自动解冻继续交互", async () => {
@@ -163,14 +164,14 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     expect(second.content).toBe("follow-up reply");
     // 自动冻结是 fire-and-forget：轮询等待落库
     const deadline = Date.now() + 2_000;
-    let after = store.get(result.subSessionId)!;
+    let after = await store.get(result.subSessionId)!;
     while (!after.closedAt && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 25));
-      after = store.get(result.subSessionId)!;
+      after = await store.get(result.subSessionId)!;
     }
     expect(after.closedAt).toBeTruthy();
 
     // 名额随解冻→再冻结恢复正常
-    expect(store.countByParentId(PARENT)).toBe(0);
+    expect(await store.countByParentId(PARENT)).toBe(0);
   });
 });

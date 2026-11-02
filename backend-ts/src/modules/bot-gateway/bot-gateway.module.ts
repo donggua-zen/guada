@@ -1,4 +1,4 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { Inject, Module, OnModuleInit } from '@nestjs/common';
 import { BotInstanceManager } from './services/bot-instance-manager.service';
 import { BotAdapterFactory } from './services/bot-adapter.factory';
 import { BotOrchestrator } from './services/bot-orchestrator.service';
@@ -14,7 +14,8 @@ import { ToolsModule } from '../tools/tools.module';
 import { PluginManager } from '../plugins';
 import { SessionManagementPlugin } from './plugins/session-management.plugin';
 import { BotFileSenderPlugin } from './plugins/bot-file-sender.plugin';
-import { SessionMetaStore } from '../chat/session-meta.store';
+import { SESSION_STORE_TOKEN } from '../chat/session-store.facade';
+import type { SessionStoreFacade } from '../chat/session-store.facade';
 import { BotFileStore } from './bot-file.store';
 
 @Module({
@@ -31,7 +32,7 @@ export class BotGatewayModule implements OnModuleInit {
   constructor(
     private readonly pluginManager: PluginManager,
     private readonly botInstanceManager: BotInstanceManager,
-    private readonly sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private readonly sessionStore: SessionStoreFacade,
     private readonly botStore: BotFileStore,
   ) {}
 

@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit, Inject, Optional } from "@nestjs/common";
-import { SessionMetaStore } from "../chat/session-meta.store";
+import { SESSION_STORE_TOKEN } from '../chat/session-store.facade';
+import type { SessionStoreFacade } from '../chat/session-store.facade';
 import { AgentFileStore } from "../agents/agent-file.store";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
@@ -176,7 +177,7 @@ export class SubAgentManager implements OnModuleInit {
   private readonly jobIds = new Map<string, JobId>();
 
   constructor(
-    private sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
     private chatRunnerService: ChatRunnerService,
     private eventBus: EventBusService,
     private agentStore: AgentFileStore,
@@ -369,7 +370,7 @@ export class SubAgentManager implements OnModuleInit {
     abortSignal?: AbortSignal,
   ): Promise<SubAgentResult> {
     // 1. 验证子会话存在且属于该父会话
-    const subSession = this.sessionStore.get(params.sessionId);
+    const subSession = await this.sessionStore.get(params.sessionId);
     if (!subSession) {
       throw new Error("Sub-agent session does not exist.");
     }
@@ -738,7 +739,7 @@ export class SubAgentManager implements OnModuleInit {
     extra?: { stopReason?: string; content?: string },
   ): Promise<void> {
     await this.sessionStore.update(subSessionId, {
-      closedAt: new Date(),
+      closedAt: new Date().toISOString(),
       closeReason: extra?.stopReason ?? null,
     });
 
@@ -771,7 +772,7 @@ export class SubAgentManager implements OnModuleInit {
    * 从数据库获取子 Agent 名称
    */
   private async getSubAgentName(subSessionId: string): Promise<string> {
-    const session = this.sessionStore.get(subSessionId);
+    const session = await this.sessionStore.get(subSessionId);
     return session?.title || "Unknown Sub-Agent";
   }
 
@@ -952,7 +953,7 @@ export class SubAgentManager implements OnModuleInit {
     parentSessionId: string,
   ): Promise<{ subSessionId: string; name: string; status: string }[]> {
     // 从数据库查询所有子 Agent 会话
-    const dbSessions = this.sessionStore.childrenOf(parentSessionId);
+    const dbSessions = await this.sessionStore.childrenOf(parentSessionId);
 
     // 从内存状态获取已完成的子 Agent
     const state = this.states.get(parentSessionId);

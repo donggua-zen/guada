@@ -1,6 +1,7 @@
-import { Logger, Module, OnModuleInit } from "@nestjs/common";
+import { Inject, Logger, Module, OnModuleInit } from "@nestjs/common";
 
-import { SessionMetaStore } from "./session-meta.store";
+import { SESSION_STORE_TOKEN } from './session-store.facade';
+import type { SessionStoreFacade } from './session-store.facade';
 import { ProjectGroupBootstrapService } from "./project-group-bootstrap.service";
 import { AgentEngine } from "./agent-engine.service";
 import { SessionContextFactory } from "./session-context.factory";
@@ -52,10 +53,6 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
   imports: [AuthModule, ToolsModule, AgentsModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule, JobsModule],
   controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, ProjectGroupController, WorkspaceEventsController, SessionEventsController, SessionQueueController],
   providers: [
-    // 会话元数据存储：`sessions/_meta.db`（SQLite），会话域公开仓储，跨域消费者
-    // （files/bot-gateway/sub-agent）经 import ChatModule 获取。
-    SessionMetaStore,
-
     AgentEngine,
     SessionContextFactory,
     SessionService,
@@ -89,13 +86,15 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     // 标签解析器管道
     TagParserPipeline,
   ],
-  exports: [SessionMetaStore, AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory, UserInputQueueService],
+  // 会话存储门面由全局 StoreModule 提供（@Global），这里不再重复 provider；
+  // 跨域消费者直接 @Inject(SESSION_STORE_TOKEN)，无需 import ChatModule。
+  exports: [AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory, UserInputQueueService],
 })
 export class ChatModule implements OnModuleInit {
   private readonly logger = new Logger(ChatModule.name);
 
   constructor(
-    private sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
     private projectGroupBootstrap: ProjectGroupBootstrapService,
   ) {}
 

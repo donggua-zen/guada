@@ -4,11 +4,9 @@ import * as path from "path";
 import { getSessionDir } from "../../common/utils/session-path.util";
 import { qualifiesForProjectGroup } from "../../common/utils/workspace-key.util";
 import type { BaseEvent } from "../../common/persistence/types";
-import {
-  GENERAL_PROJECT_GROUP_ID,
-  SessionMetaStore,
-  toRow,
-} from "./session-meta.store";
+import { GENERAL_PROJECT_GROUP_ID, toRow } from "./session-meta.store";
+import { SESSION_STORE_TOKEN } from "./session-store.facade";
+import type { SessionStoreFacade } from "./session-store.facade";
 import {
   extractTodoStateFromEvents,
   writeTodoStore,
@@ -59,7 +57,7 @@ export class SessionService {
   private readonly logger = new Logger(SessionService.name);
 
   constructor(
-    private sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
     private agentStore: AgentFileStore,
     private modelStore: ProviderFileStore,
     private settingsStorage: SettingsStorage,
@@ -90,7 +88,7 @@ export class SessionService {
     skip?: number;
     limit?: number;
     groupId?: string | null;
-    /** 工作目录比较键：null = 通用桶（空路径 + 未注册目录），undefined = 不过滤 */
+    /** 工作目录范围：null = 通用桶（空路径 + 未注册目录），string = 精确，undefined = 不过滤 */
     workspaceKey?: string | null;
     keyword?: string;
     includeArchived?: boolean;
@@ -106,13 +104,13 @@ export class SessionService {
     includeArchived = false,
     pinned,
   } = opts;
-    const { rows, total } = this.sessionStore.queryPaged(
+    const { rows, total } = await this.sessionStore.queryPaged(
       {
         sessionType: "web",
         archived: includeArchived ? undefined : false,
         pinned,
         groupId,
-        workspaceKey,
+        workspace: toWorkspaceScope(workspaceKey),
         keyword,
       },
       "lastActiveDesc",
@@ -134,7 +132,7 @@ export class SessionService {
     groupId?: string | null;
   }): Promise<{ items: any[]; total: number }> {
     const { skip = 0, limit = 50, keyword, groupId } = opts;
-    const { rows, total } = this.sessionStore.queryPaged(
+    const { rows, total } = await this.sessionStore.queryPaged(
       {
         sessionType: "web",
         archived: true,
@@ -152,9 +150,9 @@ export class SessionService {
 
   /** 单会话视图：meta + children + agent（原 SessionRepository.findById） */
   private async hydrateSession(id: string): Promise<any | null> {
-    const meta = this.sessionStore.get(id);
+    const meta = await this.sessionStore.get(id);
     if (!meta) return null;
-    const children = this.sessionStore.childrenOf(id);
+    const children = await this.sessionStore.childrenOf(id);
     return this.hydrateOne({ ...meta, children });
   }
 
@@ -393,16 +391,18 @@ export class SessionService {
    * 供删除/归档确认弹窗展示影响范围。
    */
   async getProjectGroupStats(pathKey: string) {
-    const count = (extra: { archived?: boolean; pinned?: boolean }) =>
-      this.sessionStore.queryPaged(
-        { workspaceKey: pathKey, sessionType: "web", ...extra },
-        "lastActiveDesc",
-        { skip: 0, limit: 0 },
+    const count = async (extra: { archived?: boolean; pinned?: boolean }) =>
+      (
+        await this.sessionStore.queryPaged(
+          { workspace: toWorkspaceScope(pathKey), sessionType: "web", ...extra },
+          "lastActiveDesc",
+          { skip: 0, limit: 0 },
+        )
       ).total;
 
-    const total = count({});
-    const active = count({ archived: false });
-    const pinned = count({ archived: false, pinned: true });
+    const total = await count({});
+    const active = await count({ archived: false });
+    const pinned = await count({ archived: false, pinned: true });
     return { total, active, archived: total - active, pinned };
   }
 
@@ -413,12 +413,12 @@ export class SessionService {
   async archiveProjectGroupSessions(
     pathKey: string,
   ): Promise<{ archived: number; skipped: number; sessionIds: string[] }> {
-    const ids = this.sessionStore
-      .query(
-        { workspaceKey: pathKey, sessionType: "web", archived: false },
+    const ids = (
+      await this.sessionStore.query(
+        { workspace: toWorkspaceScope(pathKey), sessionType: "web", archived: false },
         "createdAsc",
       )
-      .map((meta) => meta.id);
+    ).map((meta) => meta.id);
     if (ids.length === 0) {
       return { archived: 0, skipped: 0, sessionIds: [] };
     }
@@ -442,16 +442,16 @@ export class SessionService {
   async deleteProjectGroupSessions(
     pathKey: string,
   ): Promise<{ deleted: number; sessionIds: string[] }> {
-    const metas = this.sessionStore.query(
-      { workspaceKey: pathKey, sessionType: "web" },
+    const metas = await this.sessionStore.query(
+      { workspace: toWorkspaceScope(pathKey), sessionType: "web" },
       "createdAsc",
     );
 
     // 预检：主会话或任一子会话有活跃流 → 整体中止（不做部分删除）
     for (const meta of metas) {
-      const activeChild = this.sessionStore
-        .childrenOf(meta.id)
-        .find((child) => this.streamManager.hasActiveStream(child.id));
+      const activeChild = (
+        await this.sessionStore.childrenOf(meta.id)
+      ).find((child) => this.streamManager.hasActiveStream(child.id));
       if (this.streamManager.hasActiveStream(meta.id) || activeChild) {
         throw new HttpException(
           {
@@ -481,7 +481,7 @@ export class SessionService {
    * 不分页——置顶数量天然有限；与分组区互斥（分组区查询传 pinned: false）。
    */
   async getPinnedSessions() {
-    const rows = this.sessionStore.query(
+    const rows = await this.sessionStore.query(
       { sessionType: "web", archived: false, pinned: true },
       "lastActiveDesc",
     );
@@ -819,8 +819,10 @@ export class SessionService {
         title: created.title,
       });
 
-      // 会话目录内附件：物理文件拷入新会话目录
-      await this.copySessionAssetDirs(sourceSessionId, newSessionId);
+      // 会话目录内附件：物理文件拷入新会话目录。
+      // 走资产端口（只拷资产子目录白名单），不直接 fs.cp 整目录——
+      // 那会把事件日志一起复制，而下方 importEvents 已负责重放事件。
+      await this.sessionStore.copyAssets(sourceSessionId, newSessionId);
 
       await this.contextManager.importEvents(newSessionId, migrated);
     } catch (err: any) {
@@ -864,19 +866,6 @@ export class SessionService {
     };
   }
 
-  /** 拷贝会话目录内的附件子目录（images/previews）；源目录不存在时静默跳过 */
-  private async copySessionAssetDirs(
-    sourceSessionId: string,
-    targetSessionId: string,
-  ) {
-    for (const dirName of ["images", "previews"]) {
-      const from = path.join(getSessionDir(sourceSessionId), dirName);
-      if (!fs.existsSync(from)) continue;
-      await fs.promises.cp(from, path.join(getSessionDir(targetSessionId), dirName), {
-        recursive: true,
-      });
-    }
-  }
 
   /**
    * 改写事件前缀中的会话内附件引用（refType='session'，url 内嵌 sessionId）：
@@ -1046,7 +1035,7 @@ export class SessionService {
     // 运行中禁止删除（对齐 archiveSession 的护栏）：主会话或任一子会话有活跃流即拒绝。
     // 子会话随主会话级联删除，若此时引擎仍在写 JSONL，会写向已删目录产生竞态
     // （孤儿 SSE 事件 + 落盘报错），故子会话的活跃流同样纳入检测。
-    const children = this.sessionStore.childrenOf(sessionId);
+    const children = await this.sessionStore.childrenOf(sessionId);
     const activeChild = children.find((c) =>
       this.streamManager.hasActiveStream(c.id),
     );
@@ -1593,7 +1582,7 @@ ${diffText}
    * 更新会话最后活跃时间
    */
   async updateLastActiveAt(sessionId: string) {
-    return this.sessionStore.updateLastActiveAt(sessionId);
+    return await this.sessionStore.updateLastActiveAt(sessionId);
   }
 
   // ── 会话搜索 ──
@@ -1646,7 +1635,7 @@ ${diffText}
     }
 
     // 全量会话 id 清单（扫描顺序 = lastActiveAt DESC；bot/子代理会话被 sessionType 排除）
-    const scanIds = this.sessionStore.listWebSessionIds(includeArchived);
+    const scanIds = await this.sessionStore.listWebSessionIds(includeArchived);
     const total = scanIds.length;
 
     if (phase === "title") {
@@ -1672,7 +1661,7 @@ ${diffText}
 
     let items: any[] = [];
     if (contentIds.length > 0) {
-      const rows = this.sessionStore.getManyByIds(contentIds);
+      const rows = await this.sessionStore.getManyByIds(contentIds);
       const charMap = await this.agentStore.findManyByIds(
         rows
           .map((r: any) => r.agentId)
@@ -1715,4 +1704,18 @@ function encodeScanCursor(offset: number): string {
     JSON.stringify({ phase: "content", offset }),
     "utf-8",
   ).toString("base64");
+}
+
+/**
+ * 旧的三态 `workspaceKey`（string / null / undefined）→ 端口的显式 `WorkspaceScope`。
+ *
+ * 端口把「通用桶」从 SQL 子查询提升成语义值，由驱动自行解析——这样 HTTP 后端
+ * 才能在服务端按已注册分组求差集，而不是把 `NOT IN (SELECT ...)` 泄漏到接口上。
+ */
+function toWorkspaceScope(
+  workspaceKey: string | null | undefined,
+): import('../../common/store/ports/types').WorkspaceScope | undefined {
+  if (workspaceKey === undefined) return undefined;
+  if (workspaceKey === null) return { scope: 'general' };
+  return { scope: 'exact', workspaceKey };
 }

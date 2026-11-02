@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ProviderFileStore } from '../../llm-core/provider-file.store';
-import { SessionMetaStore } from '../../chat/session-meta.store';
+import { SESSION_STORE_TOKEN } from '../../chat/session-store.facade';
+import type { SessionStoreFacade } from '../../chat/session-store.facade';
 import { AgentFileStore } from '../../agents/agent-file.store';
 import { WorkspaceService } from '../../../common/services/workspace.service';
 import { BotFileStore } from '../bot-file.store';
@@ -36,7 +37,7 @@ export class SessionMapperService {
 
   constructor(
     private providerStore: ProviderFileStore,
-    private sessionStore: SessionMetaStore,
+    @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
     private agentStore: AgentFileStore,
     private workspaceService: WorkspaceService,
     private botStore: BotFileStore,
@@ -67,7 +68,7 @@ export class SessionMapperService {
     const normalizedBotUser = this.normalizeBotUser(botUser);
 
     // 尝试查找已存在的会话（Bot 会话的 agentId 为 null）
-    let session = this.sessionStore.findByBotAndExternalId(
+    let session = await this.sessionStore.findByBotAndExternalId(
       botId,
       externalId,
     );
