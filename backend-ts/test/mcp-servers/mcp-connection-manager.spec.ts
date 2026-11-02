@@ -482,7 +482,7 @@ describe("McpConnectionManager.checkHealth", () => {
   it("ping 通过时直接判为健康，不再多发一次 tools/list", async () => {
     const manager = buildManager();
 
-    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toBe(true);
+    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toEqual({ ok: true });
 
     expect(mockRegistry.clients[0].ping).toHaveBeenCalledTimes(1);
     // 轻量路径：合规服务器只花一次 ping 往返（工具列表可能很大，能省则省）
@@ -495,7 +495,7 @@ describe("McpConnectionManager.checkHealth", () => {
     methodNotFound.code = -32601;
     mockPingFailure = methodNotFound;
 
-    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toBe(true);
+    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toEqual({ ok: true });
 
     expect(mockRegistry.clients[0].listTools).toHaveBeenCalledTimes(1);
   });
@@ -513,7 +513,7 @@ describe("McpConnectionManager.checkHealth", () => {
       },
     ];
 
-    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toBe(true);
+    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toEqual({ ok: true });
 
     expect(mockRegistry.clients[0].listTools).toHaveBeenCalledTimes(1);
   });
@@ -523,13 +523,16 @@ describe("McpConnectionManager.checkHealth", () => {
     mockPingFailure = new Error("ping 不通");
     mockListToolsFailure = new Error("listTools 也不通");
 
-    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toBe(false);
+    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toMatchObject({ ok: false });
   });
 
-  it("建连失败判为不可用，且不抛错（配置页只需一个布尔结论）", async () => {
+  it("建连失败判为不可用，且不抛错（error 带真实原因）", async () => {
     const manager = buildManager();
     mockConnectFailure = new Error("ECONNREFUSED");
 
-    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toBe(false);
+    await expect(manager.checkHealth(STDIO_CONFIG, "srv1")).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining("ECONNREFUSED"),
+    });
   });
 });

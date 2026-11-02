@@ -199,7 +199,7 @@ describe("McpServerService 连接释放", () => {
 
   it("测试连接只探测链路，不改动任何状态", async () => {
     const { service, client, connections, store } = build(row);
-    client.healthCheck.mockResolvedValueOnce(true);
+    client.healthCheck.mockResolvedValueOnce({ ok: true });
 
     await expect(service.testConnection("srv1")).resolves.toEqual({ ok: true });
 
@@ -210,13 +210,18 @@ describe("McpServerService 连接释放", () => {
     expect(store.writeTools).not.toHaveBeenCalled();
   });
 
-  it("测试连接失败时如实返回 ok=false 而不是抛错", async () => {
+  it("测试连接失败时如实返回 ok=false 与真实错误，而不是抛错", async () => {
     const { service, client } = build(row);
-    client.healthCheck.mockResolvedValueOnce(false);
+    client.healthCheck.mockResolvedValueOnce({
+      ok: false,
+      error: "MCP connection failed: spawn node ENOENT",
+      reason: "node_missing",
+    });
 
     await expect(service.testConnection("srv1")).resolves.toEqual({
       ok: false,
-      error: "Connection failed",
+      error: "MCP connection failed: spawn node ENOENT",
+      reason: "node_missing",
     });
   });
 });

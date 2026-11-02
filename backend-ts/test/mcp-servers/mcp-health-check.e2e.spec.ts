@@ -47,7 +47,7 @@ describe("MCP 测试连接（端到端）", () => {
 
     await expect(
       service.healthCheck(config, { serverId: "ping-ok" }),
-    ).resolves.toBe(true);
+    ).resolves.toEqual({ ok: true });
   });
 
   it("未实现 ping 的服务器：通过（规范里 ping 是可选的）", async () => {
@@ -55,7 +55,7 @@ describe("MCP 测试连接（端到端）", () => {
 
     await expect(
       service.healthCheck(config, { serverId: "ping-unsupported" }),
-    ).resolves.toBe(true);
+    ).resolves.toEqual({ ok: true });
   });
 
   it("ping 结果多带字段的服务器：仍通过（复现 metaso 的 status 字段）", async () => {
@@ -63,7 +63,7 @@ describe("MCP 测试连接（端到端）", () => {
 
     await expect(
       service.healthCheck(config, { serverId: "ping-sloppy" }),
-    ).resolves.toBe(true);
+    ).resolves.toEqual({ ok: true });
   });
 
   it("结论一致性：能列出工具 ⇒ 测试连接通过（三种 ping 形态全过）", async () => {
@@ -89,18 +89,21 @@ describe("MCP 测试连接（端到端）", () => {
       expect({
         label,
         listable: Object.keys(tools).length > 0,
-        healthy,
+        healthy: healthy.ok,
       }).toEqual({ label, listable: true, healthy: true });
     }
   });
 
-  it("服务器连不上时判为失败，且不抛错", async () => {
+  it("服务器连不上时判为失败，且不抛错（error 带真实原因）", async () => {
     const config = stdioConfig(
       path.join(__dirname, "fixtures", "nonexistent-server.js"),
     );
 
     await expect(
       service.healthCheck(config, { serverId: "missing" }),
-    ).resolves.toBe(false);
+    ).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining("MCP connection failed"),
+    });
   });
 });

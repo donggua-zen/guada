@@ -2932,6 +2932,13 @@ function setupIpcHandlers() {
 // 后端启动 Promise（供 IPC 和 Browser Bridge 等待）
 let backendReadyPromise: Promise<void> | null = null;
 
+// GPU 合成故障排查开关：黑屏（窗口活、路由已到主页但画面全黑）时用
+// GUADA_DISABLE_GPU=1 走软件渲染验证是否显卡/驱动/远程会话的硬件加速问题
+if (process.env.GUADA_DISABLE_GPU === "1") {
+  app.disableHardwareAcceleration();
+  log.info("GUADA_DISABLE_GPU=1：已禁用硬件加速（软件渲染）");
+}
+
 app.whenReady().then(async () => {
   try {
     log.info("Application starting...");

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpConnectionManager } from "./mcp-connection-manager.service";
+import { McpSpawnErrorReason } from "./mcp-spawn-error";
 import {
   McpCallOptions,
   McpServerConfig,
@@ -144,7 +145,7 @@ export class McpClientService {
   async healthCheck(
     config: McpServerConfig,
     options: McpCallOptions = {},
-  ): Promise<boolean> {
+  ): Promise<{ ok: boolean; error?: string; reason?: McpSpawnErrorReason }> {
     return await this.connections.checkHealth(config, options.serverId, options);
   }
 }

@@ -1,6 +1,10 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { McpClientService } from "../../common/mcp/mcp-client.service";
 import { McpConnectionManager } from "../../common/mcp/mcp-connection-manager.service";
+import {
+  classifyMcpSpawnError,
+  describeMcpSpawnError,
+} from "../../common/mcp/mcp-spawn-error";
 import { McpFileStore } from "./mcp-file.store";
 import { PluginManager } from "../plugins/plugin.manager";
 import { findToolNameConflicts } from "./mcp-tool-name";
@@ -121,6 +125,17 @@ export class McpServerService {
 
       return toolsDict;
     } catch (error: any) {
+      // spawn ENOENT（命令不存在）单独成类：错误被吞成空表后 refreshTools 只会抛
+      // 一段与真实原因无关的 4 条文案。这里转抛 BadRequestException——它的 message
+      // 能穿过全局异常过滤器原样到达前端，且 openConnection 已在 message 里追加了
+      // 可读安装提示（见 mcp-spawn-error.ts）。
+      const spawnInfo = classifyMcpSpawnError(error);
+      if (spawnInfo) {
+        throw new BadRequestException(
+          `Failed to fetch tools: ${describeMcpSpawnError(spawnInfo)}`,
+        );
+      }
+
       // 提取更详细的错误信息
       let errorMessage = error.message;
       const originalError = (error as any).originalError;
@@ -528,14 +543,16 @@ export class McpServerService {
    * 且空工具列表也算失败；而「服务器连得上但没暴露工具」是完全合法的状态，
    * 用户需要能和「连不上」区分开。所以这里只做 ping，结果如实返回。
    */
-  async testConnection(id: string): Promise<{ ok: boolean; error?: string }> {
+  async testConnection(
+    id: string,
+  ): Promise<{ ok: boolean; error?: string; reason?: string }> {
     await this.mcpStore.initialize();
     const server = this.mcpStore.getRow(id);
     if (!server) {
       throw new Error("MCP Server not found or unauthorized");
     }
 
-    const ok = await this.mcpClient.healthCheck(
+    const result = await this.mcpClient.healthCheck(
       {
         url: server.url || undefined,
         headers: (server.headers as Record<string, any>) || undefined,
@@ -548,6 +565,12 @@ export class McpServerService {
       { serverId: id },
     );
 
-    return ok ? { ok } : { ok, error: "Connection failed" };
+    if (result.ok) return { ok: true };
+    return {
+      ok: false,
+      // healthCheck 的 error 已含 openConnection 追加的可读安装提示，不再写死 "Connection failed"
+      error: result.error || "Connection failed",
+      ...(result.reason ? { reason: result.reason } : {}),
+    };
   }
 }

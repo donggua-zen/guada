@@ -14,6 +14,8 @@ import {
   killProcessTree,
   killProcessTreeSyncBestEffort,
 } from "../utils/process-tree.util";
+import { applyNodeShim } from "../utils/node-shim.util";
+import { classifyMcpSpawnError, describeMcpSpawnError, McpSpawnErrorReason } from "./mcp-spawn-error";
 
 /**
  * MCP 连接管理器（连接池 / 生命周期 / 进程回收）
@@ -277,14 +279,18 @@ export class McpConnectionManager implements OnApplicationShutdown {
    * 因此两个入口的结论天然一致。
    *
    * 顺带说明工具调用不受此问题影响：`CallToolResultSchema` 继承的是宽松的 `ResultSchema`。
+   *
+   * 返回 { ok, error?, reason? } 而不是裸 boolean：test-connection 要把真实失败原因
+   * 与结构化 reason（如 node_missing，前端弹「安装 Node.js」指引）透给用户，
+   * error 是已含可读提示的包装消息（见 openConnection 的错误富化）。
    */
   async checkHealth(
     config: McpServerConfig,
     serverId?: string,
     options: McpCallOptions = {},
-  ): Promise<boolean> {
+  ): Promise<{ ok: boolean; error?: string; reason?: McpSpawnErrorReason }> {
     try {
-      return await this.withEphemeralConnection(
+      await this.withEphemeralConnection(
         config,
         serverId,
         async (client) => {
@@ -306,11 +312,17 @@ export class McpConnectionManager implements OnApplicationShutdown {
         },
         { signal: options.signal },
       );
+      return { ok: true };
     } catch (error: any) {
       this.logger.warn(
         `MCP 连通性探测失败 ${serverId || describeTransport(config)}: ${describeErrorForLog(error)}`,
       );
-      return false;
+      const spawnInfo = classifyMcpSpawnError(error);
+      return {
+        ok: false,
+        error: error?.message || String(error),
+        ...(spawnInfo ? { reason: spawnInfo.reason } : {}),
+      };
     }
   }
 
@@ -424,8 +436,12 @@ export class McpConnectionManager implements OnApplicationShutdown {
     } catch (error: any) {
       // 超时不代表底层 connect 已停止：必须主动关闭，否则 stdio 子进程会留成孤儿
       await this.closeConnection(slot);
+      // spawn ENOENT（命令不存在）时追加可读安装提示：这里汇聚了全部建连错误，
+      // 运行期 callTool 返回给模型的文本、refreshTools 的日志无需逐处改即可受益。
+      const spawnInfo = classifyMcpSpawnError(error);
+      const hint = spawnInfo ? ` (${describeMcpSpawnError(spawnInfo)})` : "";
       const wrapped = new Error(
-        `MCP connection failed: ${error?.message || error}`,
+        `MCP connection failed: ${error?.message || error}${hint}`,
       );
       (wrapped as any).originalError = error;
       throw wrapped;
@@ -523,10 +539,17 @@ export class McpConnectionManager implements OnApplicationShutdown {
       if (!config.command) {
         throw new Error("Stdio protocol requires 'command' parameter in config");
       }
+      // 内置 Node 回落：用户机器没装 Node（或 GUI 启动导致 PATH 残缺）时，command 为 `node`
+      // 的服务器走 app 内置的 Electron Node。shim 追加在 PATH 末尾——用户装了 node 仍优先用
+      // 用户的；不含 npm/npx，npx 系命令缺失走 classifyMcpSpawnError 的安装指引。
+      const env = applyNodeShim(
+        { ...process.env, ...config.env },
+        process.platform === "win32" ? "win" : "posix",
+      );
       const transport = new StdioClientTransport({
         command: config.command,
         args: config.args || [],
-        env: { ...process.env, ...config.env },
+        env,
         cwd: config.cwd,
         // 默认的 'inherit' 会把服务器 stderr 直接灌进后端 stderr，并混入 Electron 的
         // 崩溃诊断缓冲（electron/main.ts 收集）。改为 pipe 后按行转发到日志，同时留尾部
