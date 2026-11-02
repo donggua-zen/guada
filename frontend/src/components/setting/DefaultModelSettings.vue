@@ -19,13 +19,12 @@
                                     <OpenAI class="w-4 h-4" />
                                 </template>
                                 <template #suffix>
-                                    <el-icon v-if="settingsForm.defaultTitleSummaryModelId" class="model-select-trigger__clear"
-                                        @click.stop="clearModelSelection('title')">
-                                        <DismissCircle16Regular />
-                                    </el-icon>
-                                    <el-icon class="model-select-trigger__caret">
-                                        <ChevronDown20Regular />
-                                    </el-icon>
+                                    
+                                        <DismissCircle16Regular v-if="settingsForm.defaultTitleSummaryModelId" class="model-select-trigger__clear size-4" @click.stop="clearModelSelection('title')"  />
+                                    
+                                    
+                                        <ChevronDown20Regular class="model-select-trigger__caret size-4"  />
+                                    
                                 </template>
                             </GdInput>
                         </div>
@@ -50,13 +49,12 @@
                                     <OpenAI class="w-4 h-4" />
                                 </template>
                                 <template #suffix>
-                                    <el-icon v-if="settingsForm.defaultVisualAssistantModelId" class="model-select-trigger__clear"
-                                        @click.stop="clearModelSelection('visual')">
-                                        <DismissCircle16Regular />
-                                    </el-icon>
-                                    <el-icon class="model-select-trigger__caret">
-                                        <ChevronDown20Regular />
-                                    </el-icon>
+                                    
+                                        <DismissCircle16Regular v-if="settingsForm.defaultVisualAssistantModelId" class="model-select-trigger__clear size-4" @click.stop="clearModelSelection('visual')"  />
+                                    
+                                    
+                                        <ChevronDown20Regular class="model-select-trigger__caret size-4"  />
+                                    
                                 </template>
                             </GdInput>
                         </div>
@@ -81,13 +79,12 @@
                                     <OpenAI class="w-4 h-4" />
                                 </template>
                                 <template #suffix>
-                                    <el-icon v-if="settingsForm.defaultHistoryCompressionModelId" class="model-select-trigger__clear"
-                                        @click.stop="clearModelSelection('compression')">
-                                        <DismissCircle16Regular />
-                                    </el-icon>
-                                    <el-icon class="model-select-trigger__caret">
-                                        <ChevronDown20Regular />
-                                    </el-icon>
+                                    
+                                        <DismissCircle16Regular v-if="settingsForm.defaultHistoryCompressionModelId" class="model-select-trigger__clear size-4" @click.stop="clearModelSelection('compression')"  />
+                                    
+                                    
+                                        <ChevronDown20Regular class="model-select-trigger__caret size-4"  />
+                                    
                                 </template>
                             </GdInput>
                         </div>
@@ -102,9 +99,9 @@
             <div class="mb-4">
                 <GdInput v-model="modelSearchText" :placeholder="t('settings.defaultModel.searchModel')" clearable>
                     <template #prefix>
-                        <el-icon>
-                            <Search20Filled />
-                        </el-icon>
+                        
+                            <Search20Filled class="size-4"  />
+                        
                     </template>
                 </GdInput>
             </div>
@@ -137,53 +134,48 @@
                                                 class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-[#2a2c30] border border-gray-100 dark:border-[#2e3035]">
                                                 <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
                                                     :key="'in-' + cap">
-                                                    <el-icon :size="14">
-                                                        <TextT24Regular v-if="cap === 'text'" />
-                                                        <Image24Regular v-else />
-                                                    </el-icon>
+                                                    <span class="w-3.5 h-3.5"><TextT24Regular v-if="cap === 'text'" />
+                                                        <Image24Regular v-else /></span>
                                                 </template>
-                                                <el-icon :size="10" class="text-gray-300">
-                                                    <ArrowRight16Regular />
-                                                </el-icon>
+                                                
+                                                    <ArrowRight16Regular class="text-gray-300 w-2.5 h-2.5"  />
+                                                
                                                 <template v-for="cap in (model.config?.outputCapabilities || ['text'])"
                                                     :key="'out-' + cap">
-                                                    <el-icon :size="14">
-                                                        <TextT24Regular v-if="cap === 'text'" />
-                                                        <Image24Regular v-else />
-                                                    </el-icon>
+                                                    <span class="w-3.5 h-3.5"><TextT24Regular v-if="cap === 'text'" />
+                                                        <Image24Regular v-else /></span>
                                                 </template>
                                             </div>
 
                                             <!-- 高级功能图标 -->
                                             <template v-for="feature in (model.config?.features || [])" :key="feature">
                                                 <GdTooltip :content="getFeatureLabel(feature)" placement="top">
-                                                    <el-icon class="hover:text-primary transition-colors" :size="14">
-                                                        <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                                                    </el-icon>
+                                                    
+                                                        <WrenchScrewdriver24Regular class="hover:text-primary transition-colors w-3.5 h-3.5"  v-if="feature === 'tools'" />
+                                                    
                                                 </GdTooltip>
                                             </template>
                                             <!-- 思考能力判据是档位菜单（空 = 不能思考） -->
                                             <GdTooltip v-if="(model.thinkingEfforts?.length ?? 0) > 0"
                                                 :content="getFeatureLabel('thinking')" placement="top">
-                                                <el-icon class="hover:text-primary transition-colors" :size="14">
-                                                    <LightbulbFilament24Regular />
-                                                </el-icon>
+                                                
+                                                    <LightbulbFilament24Regular class="hover:text-primary transition-colors w-3.5 h-3.5"  />
+                                                
                                             </GdTooltip>
                                         </div>
                                     </div>
-                                    <el-icon v-if="tempModelId === model.id" class="text-primary shrink-0 mt-1"
-                                        size="18">
-                                        <CheckmarkCircle16Filled />
-                                    </el-icon>
+                                    
+                                        <CheckmarkCircle16Filled v-if="tempModelId === model.id" class="text-primary shrink-0 mt-1 w-4.5 h-4.5"  />
+                                    
                                 </div>
                             </div>
                         </div>
                     </div>
                 </template>
                 <div v-if="filteredModels.length === 0" class="text-center py-8 text-gray-400">
-                    <el-icon size="48" class="mb-2">
-                        <Search20Filled />
-                    </el-icon>
+                    
+                        <Search20Filled class="mb-2 w-12 h-12" mx-auto  />
+                    
                     <p>{{ t('settings.defaultModel.noMatchFound') }}</p>
                 </div>
             </div>
@@ -209,10 +201,7 @@ import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 
 // Element Plus 组件导入
-import {
-    ElTag,
-    ElIcon
-} from 'element-plus'
+
 import GdDialog from '@/components/ui/GdDialog.vue'
 import GdButton from '@/components/ui/GdButton.vue'
 import GdInput from '@/components/ui/GdInput.vue';
@@ -543,26 +532,17 @@ onMounted(async () => {
     cursor: pointer;
 }
 
-.model-select-trigger :deep(.el-input__wrapper),
-.model-select-trigger :deep(.el-input__inner) {
-    cursor: pointer;
-}
-
-.model-select-trigger :deep(.el-input__inner) {
-    user-select: none;
-}
-
 .model-select-trigger__caret {
-    color: var(--el-text-color-placeholder);
+    color: var(--gd-color-text-disabled);
 }
 
 .model-select-trigger__clear {
     cursor: pointer;
-    color: var(--el-text-color-placeholder);
+    color: var(--gd-color-text-disabled);
 }
 
 .model-select-trigger__clear:hover {
-    color: var(--el-text-color-secondary);
+    color: var(--gd-color-text-gray);
 }
 
 /* 模型选择器按钮样式 */
@@ -571,7 +551,7 @@ onMounted(async () => {
 }
 
 :deep(.model-item:hover) {
-    border-color: var(--el-color-primary-light-5);
+    border-color: var(--gd-color-primary-500);
 }
 
 :deep(.provider-group) {
@@ -579,7 +559,7 @@ onMounted(async () => {
 }
 
 :deep(.provider-name) {
-    color: var(--el-text-color-secondary);
+    color: var(--gd-color-text-gray);
     font-size: 0.875rem;
     margin-bottom: 0.5rem;
 }

@@ -9,17 +9,17 @@
         class="rm-item flex items-center justify-between px-1.5 py-1.5 cursor-pointer transition-all text-sm rounded-(--gd-size-dialog-rounded-radius)"
         @click="handleTogglePlan">
         <div class="flex items-center space-x-2">
-          <el-icon size="16" class="text-gray-500 dark:text-gray-400">
-            <Lightbulb24Regular />
-          </el-icon>
+          
+            <Lightbulb24Regular class="text-gray-500 dark:text-gray-400 size-4" />
+          
           <div class="flex flex-col">
             <span>{{ t('chat.input.planModeLabel') }}</span>
             <span class="text-xs text-gray-400 dark:text-gray-500">{{ t('chat.input.planModeDesc') }}</span>
           </div>
         </div>
-        <el-icon v-if="planEnabled" size="16" class="text-gray-500 dark:text-gray-400">
-          <Checkmark16Regular />
-        </el-icon>
+        
+          <Checkmark16Regular v-if="planEnabled" class="text-gray-500 dark:text-gray-400 size-4" />
+        
       </div>
 
       <!-- 分隔线：上面是正交的协作开关，下面是三选一的安全档位，不是同一个组 -->
@@ -30,18 +30,17 @@
         :class="{ 'rm-item--danger': opt.danger }"
         @click="handleSelect(opt.value)">
         <div class="flex items-center space-x-2">
-          <el-icon size="16" :class="opt.danger ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'">
-            <component :is="opt.icon" />
-          </el-icon>
+          
+            <component class="size-4" :class="opt.danger ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'" :is="opt.icon" />
+          
           <div class="flex flex-col">
             <span :class="opt.danger ? 'text-red-500 font-medium' : ''">{{ opt.label }}</span>
             <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.desc }}</span>
           </div>
         </div>
-        <el-icon v-if="currentValue === opt.value" size="16"
-          :class="opt.danger ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'">
-          <Checkmark16Regular />
-        </el-icon>
+        
+          <Checkmark16Regular v-if="currentValue === opt.value" class="size-4 shrink-0" :class="opt.danger ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'" />
+        
       </div>
     </div>
   </GdPopover>
@@ -49,7 +48,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, type Component } from 'vue'
-import { ElIcon } from 'element-plus'
+
 import { useI18n } from 'vue-i18n'
 import { ShieldLock20Regular, ClipboardTask20Regular, ShieldError16Regular, Checkmark16Regular, Lightbulb24Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'

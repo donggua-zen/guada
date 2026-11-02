@@ -9,7 +9,7 @@
  *
  * 产物协议：插件 frontend/dist/<Name>.js 是 IIFE，执行时调用
  *   window.__GuaDaModuleLoader__.register('pluginId:Name', { default: Component })
- * 共享依赖（vue/element-plus/plugin-api）从 window.__GuaDaShared__ 读取，不 import。
+ * 共享依赖（vue/plugin-api）从 window.__GuaDaShared__ 读取，不 import。
  */
 
 const registry = new Map();      // id → exports

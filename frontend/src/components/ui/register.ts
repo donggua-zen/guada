@@ -20,6 +20,24 @@ import GdSwitch from "./GdSwitch.vue";
 import GdSelect from "./GdSelect.vue";
 import GdInputNumber from "./GdInputNumber.vue";
 import GdSlider from "./GdSlider.vue";
+import GdTag from "./GdTag.vue";
+import GdAlert from "./GdAlert.vue";
+import GdProgress from "./GdProgress.vue";
+import GdDivider from "./GdDivider.vue";
+import GdEmpty from "./GdEmpty.vue";
+import GdCheckbox from "./GdCheckbox.vue";
+import GdCheckboxGroup from "./GdCheckboxGroup.vue";
+import GdSegmented from "./GdSegmented.vue";
+import GdRadio from "./GdRadio.vue";
+import GdRadioGroup from "./GdRadioGroup.vue";
+import GdFormField from "./GdFormField.vue";
+import GdTabs from "./GdTabs.vue";
+import GdPagination from "./GdPagination.vue";
+import GdCollapse from "./GdCollapse.vue";
+import GdImageViewer from "./GdImageViewer.vue";
+import GdDrawer from "./GdDrawer.vue";
+import GdDatePicker from "./GdDatePicker.vue";
+import GdTimePicker from "./GdTimePicker.vue";
 
 export function registerUiPrimitives(app: App): void {
   app.component("GdButton", GdButton);
@@ -33,4 +51,22 @@ export function registerUiPrimitives(app: App): void {
   app.component("GdSelect", GdSelect);
   app.component("GdInputNumber", GdInputNumber);
   app.component("GdSlider", GdSlider);
+  app.component("GdTag", GdTag);
+  app.component("GdAlert", GdAlert);
+  app.component("GdProgress", GdProgress);
+  app.component("GdDivider", GdDivider);
+  app.component("GdEmpty", GdEmpty);
+  app.component("GdCheckbox", GdCheckbox);
+  app.component("GdCheckboxGroup", GdCheckboxGroup);
+  app.component("GdSegmented", GdSegmented);
+  app.component("GdRadio", GdRadio);
+  app.component("GdRadioGroup", GdRadioGroup);
+  app.component("GdFormField", GdFormField);
+  app.component("GdTabs", GdTabs);
+  app.component("GdPagination", GdPagination);
+  app.component("GdCollapse", GdCollapse);
+  app.component("GdImageViewer", GdImageViewer);
+  app.component("GdDrawer", GdDrawer);
+  app.component("GdDatePicker", GdDatePicker);
+  app.component("GdTimePicker", GdTimePicker);
 }

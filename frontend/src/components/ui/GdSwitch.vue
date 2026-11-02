@@ -11,7 +11,7 @@
                 <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
             </svg>
         </span>
-        <span v-else class="gd-switch__thumb block rounded-full bg-[var(--gd-switch-thumb)] shadow-sm transition-transform duration-[var(--gd-motion-duration-base)] ease-[var(--gd-motion-ease-spring)]"
+        <span v-else class="gd-switch__thumb block rounded-full bg-[var(--gd-switch-thumb)] shadow-sm transition-[translate] duration-[var(--gd-motion-duration-base)] ease-[var(--gd-motion-ease-spring)]"
             :class="[sizeSpec.thumb, thumbClass]"></span>
     </button>
 </template>
@@ -34,6 +34,8 @@ const props = withDefaults(defineProps<{
     inactiveText?: string;
     /** 非 inline 模式：文案显示在开关外侧（el 的 active-text 在右、inactive-text 在左） */
     showText?: boolean;
+    /** 错误态描边 */
+    error?: boolean;
 }>(), {
     modelValue: false,
     size: "medium",

@@ -15,13 +15,13 @@
 
       <!-- 已选知识库标签显示区域 -->
       <div class="kb-list flex flex-wrap gap-2 mb-1.5 mx-1.5" v-if="selectedKnowledgeBases.length > 0">
-        <el-tag v-for="kb in selectedKnowledgeBases" :key="kb.id" closable type="info"
+        <GdTag v-for="kb in selectedKnowledgeBases" :key="kb.id" closable type="info"
           @close="removeKnowledgeBase(kb.id)" class="text-xs">
           <span class="flex items-center gap-1">
-            <el-icon size="14"><BookSearch24Regular /></el-icon>
+            <BookSearch24Regular class="w-3.5 h-3.5"  />
             {{ kb.name }}
           </span>
-        </el-tag>
+        </GdTag>
       </div>
 
       <!-- Tiptap 编辑器（替换 textarea） -->
@@ -36,7 +36,7 @@
               @click="selectSkill(skill)" @mouseenter="selectedIndex = index">
               <div class="skill-picker-content flex items-center gap-2 w-full">
                 <span class="skill-picker-icon flex items-center justify-center w-5 h-5 text-gray-500 dark:text-gray-400 shrink-0">
-                  <el-icon size="16"><Apps20Regular /></el-icon>
+                  <Apps20Regular class="w-4 h-4"  />
                 </span>
                 <div class="skill-picker-info flex items-center gap-2 flex-1 min-w-0">
                   <div class="skill-picker-name text-sm text-gray-800 dark:text-gray-200" :class="{ 'text-blue-500 dark:text-[#75beff]': index === selectedIndex }">{{ skill.name }}</div>
@@ -60,25 +60,25 @@
           <!-- 图片按钮 -->
           <GdTooltip content="添加图片" placement="top">
             <GdButton class="tool-btn" @click="triggerImageInput" text>
-              <el-icon size="22"><Image24Regular /></el-icon>
+              <Image24Regular class="w-[22px] h-[22px]"  />
             </GdButton>
           </GdTooltip>
           <!-- 附件按钮 -->
           <GdTooltip content="上传文件" placement="top">
             <GdButton class="tool-btn" @click="triggerFileInput" text>
-              <el-icon size="22"><Attach24Regular /></el-icon>
+              <Attach24Regular class="w-[22px] h-[22px]"  />
             </GdButton>
           </GdTooltip>
           <!-- 知识库按钮 -->
           <GdTooltip content="知识库" placement="top">
             <GdButton class="tool-btn" @click="openKnowledgeBasePanel" text>
-              <el-icon size="22"><BookSearch24Regular /></el-icon>
+              <BookSearch24Regular class="w-[22px] h-[22px]"  />
             </GdButton>
           </GdTooltip>
           <!-- 技能按钮（新增） -->
           <GdTooltip content="选择技能 /" placement="top">
             <GdButton class="tool-btn" @click="insertSkill('code-reviewer')" text>
-              <el-icon size="22"><Wrench20Regular /></el-icon>
+              <Wrench20Regular class="w-[22px] h-[22px]"  />
             </GdButton>
           </GdTooltip>
         </div>
@@ -95,20 +95,20 @@
           <div class="tools right-tools">
             <GdTooltip content="会话设置" placement="top">
               <GdButton class="tool-btn" text>
-                <el-icon size="22"><Settings24Regular /></el-icon>
+                <Settings24Regular class="w-[22px] h-[22px]"  />
               </GdButton>
             </GdTooltip>
           </div>
           <div>
             <GdTooltip v-if="streaming && !rawText.trim()" content="停止生成" placement="top">
               <GdButton class="send-btn stop-btn" @click="abortResponse" circle type="danger">
-                <template #icon><el-icon size="22"><Stop24Filled /></el-icon></template>
+                <template #icon><Stop24Filled class="w-[22px] h-[22px]"  /></template>
               </GdButton>
             </GdTooltip>
             <GdTooltip v-else content="发送" placement="top">
               <GdButton class="send-btn" type="primary" @click="sendMessage" circle
                 :disabled="!rawText.trim()">
-                <template #icon><el-icon size="22"><Send24Filled /></el-icon></template>
+                <template #icon><Send24Filled class="w-[22px] h-[22px]"  /></template>
               </GdButton>
             </GdTooltip>
           </div>
@@ -119,14 +119,14 @@
     <!-- 工作目录按钮 -->
     <div class="mt-1 w-full flex justify-start px-1">
       <GdButton class="tool-btn mr-0.5" text>
-        <el-icon size="22"><FolderOpen24Regular /></el-icon>
+        <FolderOpen24Regular class="w-[22px] h-[22px]"  />
         <span class="text-xs font-medium">打开工作目录</span>
       </GdButton>
     </div>
 
     <!-- 测试输出区域 -->
     <div class="test-output w-full mt-4 px-4">
-      <el-divider />
+      <GdDivider />
       <h4 class="text-sm font-medium text-gray-600 mb-2">原始文本（发送给后端的内容）</h4>
       <pre class="raw-text-output">{{ rawText || '(空)' }}</pre>
     </div>
@@ -145,6 +145,8 @@ import {
 } from '@vicons/fluent';
 import GdTooltip from '../ui/GdTooltip.vue';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTag from '@/components/ui/GdTag.vue';
+import GdDivider from '@/components/ui/GdDivider.vue';
 
 
 // ==================== 自定义 Skill 节点 ====================
@@ -552,7 +554,7 @@ const abortResponse = () => {
 /* 技能徽标样式 - 纯文本效果，与普通文本完全一致 */
 :deep(.skill-badge) {
   display: inline;
-  color: var(--el-color-primary);
+  color: var(--gd-color-primary);
   font-size: inherit;
   line-height: inherit;
   cursor: pointer;
@@ -560,13 +562,13 @@ const abortResponse = () => {
 }
 
 :deep(.skill-badge-slash) {
-  color: var(--el-color-primary);
+  color: var(--gd-color-primary);
   font-size: inherit;
   line-height: inherit;
 }
 
 :deep(.skill-badge-text) {
-  color: var(--el-color-primary);
+  color: var(--gd-color-primary);
   font-size: inherit;
   line-height: inherit;
 }
@@ -666,16 +668,16 @@ const abortResponse = () => {
   padding: 6px 6px;
   border-color: transparent;
   background-color: transparent;
-  color: var(--el-text-color-regular);
+  color: var(--gd-color-text);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .model-selector-btn:hover {
-  background-color: var(--el-fill-color-light, #f5f7fa);
+  background-color: var(--gd-color-field-bg);
   border-color: transparent;
-  color: var(--el-text-color-primary);
+  color: var(--gd-color-text);
 }
 
 /* 测试输出 */

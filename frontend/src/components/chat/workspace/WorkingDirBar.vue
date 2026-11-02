@@ -3,7 +3,7 @@
   <div class="working-dir-bar">
     <GdTooltip class="wdb-main-tip" :content="mainWorkspacePath || t('chat.workspace.workingDir')" placement="bottom">
       <button class="wdb-main" @click="openWorkspaceTree">
-        <el-icon :size="16" class="wdb-icon"><Folder16Regular /></el-icon>
+        <Folder16Regular class="wdb-icon w-4 h-4"  />
         <span class="wdb-name">{{ mainWorkspaceBasename || t('chat.workspace.workingDir') }}</span>
       </button>
     </GdTooltip>
@@ -13,7 +13,7 @@
     <template v-for="conn in attachedConnections" :key="conn.id">
       <span v-if="connectionsLoading" class="wdb-attach wdb-attach-skeleton" aria-hidden="true"></span>
       <span v-else class="wdb-attach" @click="openConnCard(conn, $event)">
-        <el-icon :size="16" class="wdb-icon"><component :is="conn.kind === 'docker' ? Cube16Regular : conn.kind === 'wsl' ? Desktop16Regular : Cloud16Regular" /></el-icon>
+        <component class="wdb-icon w-4 h-4"  :is="conn.kind === 'docker' ? Cube16Regular : conn.kind === 'wsl' ? Desktop16Regular : Cloud16Regular" />
         <span class="wdb-name">{{ conn.missing ? t('chat.workspace.unknownConnection') : conn.name }}</span>
       </span>
     </template>
@@ -22,7 +22,7 @@
     <DropdownMenu>
       <GdTooltip :content="t('chat.workspace.addAttachedDir')" placement="bottom">
         <button class="wdb-add">
-          <el-icon :size="12"><Add16Regular /></el-icon>
+          <Add16Regular class="w-3 h-3"  />
         </button>
       </GdTooltip>
       <template #dropdown>

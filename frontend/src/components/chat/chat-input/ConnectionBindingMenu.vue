@@ -6,9 +6,9 @@
       <div v-for="opt in options" :key="opt.id"
         class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
         @click="emit('toggle', opt.id)">
-        <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-          <component :is="opt.kind === 'docker' ? Cube16Regular : opt.kind === 'wsl' ? Desktop16Regular : Cloud16Regular" />
-        </el-icon>
+        
+          <component class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  :is="opt.kind === 'docker' ? Cube16Regular : opt.kind === 'wsl' ? Desktop16Regular : Cloud16Regular" />
+        
         <div class="flex-1 flex flex-col gap-0.5 min-w-0">
           <div class="flex items-baseline gap-1.5 min-w-0">
             <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ opt.name }}</span>
@@ -16,20 +16,20 @@
           </div>
           <span v-if="opt.path" class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis"
             :title="opt.path">
-            <el-icon size="12" class="align-[-1px] mr-0.5"><Folder16Regular /></el-icon>{{ opt.path }}
+            <Folder16Regular class="align-[-1px] mr-0.5 w-3 h-3"  />{{ opt.path }}
           </span>
         </div>
-        <el-icon v-if="attachedIds.includes(opt.id)" size="14" class="shrink-0 text-(--el-color-primary)">
-          <Checkmark16Filled />
-        </el-icon>
+        
+          <Checkmark16Filled v-if="attachedIds.includes(opt.id)" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+        
       </div>
     </template>
     <div v-else
       class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
       @click="goToConnectionSettings">
-      <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-        <Cloud16Regular />
-      </el-icon>
+      
+        <Cloud16Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+      
       <div class="flex-1 text-sm text-(--gd-color-text-gray) dark:text-[#6b7280]">{{ t('chat.workspace.noConnections') }}</div>
     </div>
   </div>
@@ -39,7 +39,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ElIcon } from 'element-plus'
+
 import { Checkmark16Filled, Cloud16Regular, Cube16Regular, Desktop16Regular, Folder16Regular } from '@vicons/fluent'
 import { useRemoteWorkspaceStore } from '@/stores/remoteWorkspace'
 

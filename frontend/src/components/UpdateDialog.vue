@@ -58,7 +58,7 @@
           <span>{{ t('ui.update.downloading', { percent: progressPercent }) }}</span>
           <span>{{ formatSpeed(progress?.bytesPerSecond || 0) }}</span>
         </div>
-        <el-progress
+        <GdProgress
           :percentage="progressPercent"
           :stroke-width="8"
           :show-text="false"
@@ -90,14 +90,14 @@
 
     <template #footer>
       <div class="flex items-center justify-between w-full">
-        <el-checkbox
+        <GdCheckbox
           v-if="store.status === 'available'"
           v-model="dontRemind"
           size="small"
           class="text-xs"
         >
           {{ t('ui.update.dontRemind') }}
-        </el-checkbox>
+        </GdCheckbox>
         <span v-else></span>
         <div class="flex items-center gap-3">
           <template v-if="store.isDownloading">
@@ -133,8 +133,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElCheckbox, ElProgress } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
+import GdProgress from '@/components/ui/GdProgress.vue';
 
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { useUpdateStore } from '@/stores/update'

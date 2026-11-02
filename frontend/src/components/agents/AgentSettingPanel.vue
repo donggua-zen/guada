@@ -13,9 +13,9 @@
               :class="tabsValue === item.path
                 ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
                 : 'text-(--gd-color-text) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)'">
-              <el-icon :size="16">
-                <component :is="item.icon" />
-              </el-icon>
+              
+                <component class="w-4 h-4"  :is="item.icon" />
+              
               <span class="text-sm font-medium">{{ item.label }}</span>
             </div>
           </div>
@@ -26,67 +26,59 @@
         <!-- 基础设置 -->
         <div v-show="tabsValue === 'basic'" class="flex-1 overflow-hidden">
           <div class="h-full overflow-y-auto px-4 py-4">
-            <el-form ref="basicFormRef" :model="agentForm" :rules="basicRules" label-position="top">
+            <div class="flex flex-col gap-3">
               <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
                 <!-- 头像设置 -->
-                <el-form-item prop="avatarUrl" class="mb-0!">
-                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
-                    <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.avatarTitle') }} <span class="text-xs text-gray-400">{{ t('agents.setting.avatarOptional') }}</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.avatarHint') }}</span>
-                    </div>
-                    <AvatarPreview :src="agentForm.avatarUrl" type="assistant" class="w-10"
-                      :name="agentForm.name" @avatar-changed="handleAvatarChanged" />
+                <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
+                  <div class="flex flex-col gap-1 w-1/2">
+                    <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.avatarTitle') }} <span class="text-xs text-gray-400">{{ t('agents.setting.avatarOptional') }}</span></span>
+                    <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.avatarHint') }}</span>
                   </div>
-                </el-form-item>
+                  <AvatarPreview :src="agentForm.avatarUrl" type="assistant" class="w-10"
+                    :name="agentForm.name" @avatar-changed="handleAvatarChanged" />
+                </div>
                 <!-- 智能体名称 -->
-                <el-form-item prop="name" class="mb-0!">
-                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
-                    <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.titleLabel') }}</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.titleHint') }}</span>
-                    </div>
-                    <div class="w-1/2 flex justify-end">
-                      <GdInput v-model="agentForm.name" :placeholder="t('agents.setting.titlePlaceholder')" class="w-full" />
-                    </div>
+                <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
+                  <div class="flex flex-col gap-1 w-1/2">
+                    <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.titleLabel') }}</span>
+                    <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.titleHint') }}</span>
                   </div>
-                </el-form-item>
+                  <div class="w-1/2 flex justify-end">
+                    <GdInput v-model="agentForm.name" :placeholder="t('agents.setting.titlePlaceholder')" class="w-full"  :error="!!errors.name" @blur="validateField('name')" />
+                  </div>
+                </div>
                 <!-- 智能体描述 -->
-                <el-form-item prop="description" class="mb-0!">
-                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
-                    <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.descLabel') }} <span class="text-xs text-gray-400">{{ t('agents.setting.descOptional') }}</span></span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.descHint') }}</span>
-                    </div>
-                    <div class="w-1/2">
-                      <GdInput v-model="agentForm.description" type="textarea" :placeholder="t('agents.setting.descPlaceholder')"
-                        :autosize="{ minRows: 3, maxRows: 5 }" class="w-full" />
-                    </div>
+                <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
+                  <div class="flex flex-col gap-1 w-1/2">
+                    <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.descLabel') }} <span class="text-xs text-gray-400">{{ t('agents.setting.descOptional') }}</span></span>
+                    <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.descHint') }}</span>
                   </div>
-                </el-form-item>
+                  <div class="w-1/2">
+                    <GdInput v-model="agentForm.description" type="textarea" :placeholder="t('agents.setting.descPlaceholder')"
+                      :autosize="{ minRows: 3, maxRows: 5 }" class="w-full" />
+                  </div>
+                </div>
                 <!-- 标识符（目录名即 id）：新建时可自定义，编辑时只读 -->
-                <el-form-item prop="id" class="mb-0!">
-                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
-                    <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">
-                        {{ t('agents.setting.idLabel') }}
-                        <span v-if="props.isNew" class="text-xs text-gray-400">{{ t('agents.setting.idOptional') }}</span>
-                      </span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
-                        {{ props.isNew ? t('agents.setting.idCreateHint') : t('agents.setting.idHint') }}
-                      </span>
-                    </div>
-                    <div class="w-1/2">
-                      <GdInput v-model="agentForm.id" :readonly="!props.isNew"
-                        :placeholder="t('agents.setting.idPlaceholder')" class="w-full font-mono" />
-                    </div>
+                <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
+                  <div class="flex flex-col gap-1 w-1/2">
+                    <span class="text-base text-gray-900 dark:text-[#e8e9ed]">
+                      {{ t('agents.setting.idLabel') }}
+                      <span v-if="props.isNew" class="text-xs text-gray-400">{{ t('agents.setting.idOptional') }}</span>
+                    </span>
+                    <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
+                      {{ props.isNew ? t('agents.setting.idCreateHint') : t('agents.setting.idHint') }}
+                    </span>
                   </div>
-                </el-form-item>
+                  <div class="w-1/2">
+                    <GdInput v-model="agentForm.id" :readonly="!props.isNew"
+                      :placeholder="t('agents.setting.idPlaceholder')" class="w-full font-mono"  :error="!!errors.id" @blur="validateField('id')" />
+                  </div>
+                </div>
               </div>
 
               <!-- 模型选择 -->
               <div class="mt-3 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
-                <el-form-item prop="modelId" class="mb-0!">
+                <div class="flex flex-col gap-3">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.modelLabel') }} <span class="text-xs text-gray-400">{{ t('agents.setting.modelOptional') }}</span></span>
@@ -97,13 +89,12 @@
                         class="w-full" />
                     </div>
                   </div>
-                </el-form-item>
               </div>
 
               <!-- 记忆与压缩 -->
               <div class="mt-3 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
                 <!-- 压缩策略档位（档位同时决定触发时机/保留比例/摘要方式） -->
-                <el-form-item prop="compressionTier" class="mb-0!">
+                <div class="flex flex-col gap-3">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
                       <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.compressionTier') }}</span>
@@ -119,15 +110,16 @@
                       </GdSelect>
                     </div>
                   </div>
-                </el-form-item>
+                </div>
               </div>
 
-              <el-alert :title="t('agents.setting.tipTitle')" type="info" :closable="false" show-icon style="margin-top: 16px;">
+              <GdAlert :title="t('agents.setting.tipTitle')" type="info" :closable="false" show-icon style="margin-top: 16px;">
                 <p class="text-sm">{{ t('agents.setting.tip1') }}</p>
                 <p class="text-sm">{{ t('agents.setting.tip2') }}</p>
                 <p class="text-sm">{{ t('agents.setting.tip3') }}</p>
-              </el-alert>
-            </el-form>
+              </GdAlert>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -136,21 +128,17 @@
         <div v-show="tabsValue === 'prompt'" class="flex-1 overflow-y-auto">
           <div class="px-4 pt-2 pb-6 min-h-full flex flex-col">
             <div class="px-0 flex-1 flex flex-col min-h-0">
-              <el-form ref="promptFormRef" :model="agentForm" :rules="promptRules" label-position="top"
-                label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
-                <el-form-item :show-label="false" :show-feedback="false" style="flex-shrink: 0;" class="no-border-item">
-                  <div class="flex items-center w-full justify-between">
-                    <span>{{ t('agents.setting.systemPromptLabel') }}</span>
-                  </div>
-                </el-form-item>
+              <div class="flex-1 flex flex-col min-h-0">
+                <div class="flex items-center w-full justify-between" style="flex-shrink: 0;">
+                  <span>{{ t('agents.setting.systemPromptLabel') }}</span>
+                </div>
 
                 <!-- 详细设定 -->
-                <el-form-item prop="systemPrompt" :show-label="false"
-                  class="flex-1 min-h-40 prompt-form-item no-border-item">
+                <div class="flex-1 min-h-40">
                   <GdInput v-model="agentForm.systemPrompt" type="textarea" :placeholder="t('agents.setting.systemPromptPlaceholder')" resize="none" />
-                </el-form-item>
+                </div>
 
-              </el-form>
+              </div>
             </div>
           </div>
         </div>
@@ -159,9 +147,9 @@
         <div v-show="tabsValue === 'local_tools'" class="flex-1 overflow-hidden">
           <div class="px-4 py-6 h-full overflow-y-auto">
             <div class="px-0">
-              <el-form label-position="top">
+              <div class="flex flex-col gap-3">
                 <!-- 全部禁用与白名单模式 同一行左对齐 + 右对齐 -->
-                <el-form-item class="no-border-item">
+                <div class="flex flex-col gap-3">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
@@ -172,12 +160,11 @@
                       <SegmentedToggle v-model="allowlistMode" :options="autoEnableOptions" />
                     </div>
                   </div>
-                </el-form-item>
 
                 <div v-if="visibleLocalTools.length === 0" class="text-center text-gray-500 py-8">
-                  <el-icon size="48" class="mb-2">
-                    <Info24Regular />
-                  </el-icon>
+                  
+                    <Info24Regular class="mb-2 w-12 h-12" mx-auto  />
+                  
                   <div>{{ t('agents.setting.noLocalTools') }}</div>
                   <div class="text-sm mt-2">{{ t('agents.setting.noLocalToolsHint') }}</div>
                 </div>
@@ -201,11 +188,11 @@
                     <div class="flex items-center justify-between mt-1.5 text-xs text-gray-400">
                       <div class="flex items-center gap-3">
                         <span class="flex items-center gap-1">
-                          <el-icon :size="14"><Wrench16Regular /></el-icon>
+                          <Wrench16Regular class="w-3.5 h-3.5"  />
                           {{ card.kit.toolCount ?? 0 }}
                         </span>
                         <span class="flex items-center gap-1">
-                          <el-icon :size="14"><TextDescription20Regular /></el-icon>
+                          <TextDescription20Regular class="w-3.5 h-3.5"  />
                           {{ card.kit.promptCount ?? 0 }}
                         </span>
                       </div>
@@ -213,7 +200,8 @@
                     </div>
                   </div>
                 </div>
-              </el-form>
+              </div>
+              </div>
             </div>
           </div>
         </div>
@@ -222,9 +210,9 @@
         <div v-show="tabsValue === 'mcp_tools'" class="flex-1 overflow-hidden">
           <div class="px-4 py-6 h-full overflow-y-auto">
             <div class="px-0">
-              <el-form label-position="top">
+              <div class="flex flex-col gap-3">
                 <!-- MCP 全部禁用与白名单模式 同一行 -->
-                <el-form-item class="no-border-item">
+                <div class="flex flex-col gap-3">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
@@ -236,12 +224,11 @@
                         @update:model-value="handleMcpAllowlistModeChange" />
                     </div>
                   </div>
-                </el-form-item>
 
                 <div v-if="mcpServers.length === 0" class="text-center text-gray-500 py-8">
-                  <el-icon size="48" class="mb-2">
-                    <Info24Regular />
-                  </el-icon>
+                  
+                    <Info24Regular class="mb-2 w-12 h-12" mx-auto  />
+                  
                   <div>{{ t('agents.setting.noMcpServers') }}</div>
                 </div>
 
@@ -253,12 +240,12 @@
                       <div class="flex-1 mr-4">
                         <div class="font-medium text-base mb-1 text-gray-800 dark:text-gray-200">
                           {{ server.name }}
-                          <el-tag v-if="server.enabled" type="success" size="small" class="ml-2">
+                          <GdTag v-if="server.enabled" type="success" size="small" class="ml-2">
                             {{ t('agents.setting.mcpRunning') }}
-                          </el-tag>
-                          <el-tag v-else type="info" size="small" class="ml-2">
+                          </GdTag>
+                          <GdTag v-else type="info" size="small" class="ml-2">
                             {{ t('agents.setting.mcpNotRunning') }}
-                          </el-tag>
+                          </GdTag>
                         </div>
                         <div v-if="server.description" class="text-sm text-gray-600 line-clamp-2">
                           {{ server.description }}
@@ -276,7 +263,8 @@
                     </div>
                   </div>
                 </div>
-              </el-form>
+              </div>
+              </div>
             </div>
           </div>
         </div>
@@ -285,9 +273,9 @@
         <div v-show="tabsValue === 'skills'" class="flex-1 overflow-hidden">
           <div class="px-4 py-6 h-full overflow-y-auto">
             <div class="px-0">
-              <el-form label-position="top">
+              <div class="flex flex-col gap-3">
                 <!-- Skills 全部禁用与白名单模式 同一行 -->
-                <el-form-item class="no-border-item">
+                <div class="flex flex-col gap-3">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
@@ -299,19 +287,18 @@
                     </div>
                   </div>
                   <div class="text-xs text-gray-400 mt-1 w-full">{{ t('agents.setting.skillsSwitchHint') }}</div>
-                </el-form-item>
 
                 <div v-if="loadingSkills" class="text-center py-8">
-                  <el-icon size="24">
-                    <ArrowSync16Regular class="animate-spin" />
-                  </el-icon>
+                  
+                    <ArrowSync16Regular class="w-6 h-6 animate-spin" />
+                  
                   <div class="text-sm text-gray-500 mt-2">{{ t('agents.setting.loadingSkills') }}</div>
                 </div>
 
                 <div v-else-if="visibleSkills.length === 0" class="text-center text-gray-500 py-8">
-                  <el-icon size="48" class="mb-2">
-                    <Info24Regular />
-                  </el-icon>
+                  
+                    <Info24Regular class="mb-2 w-12 h-12" mx-auto  />
+                  
                   <div>{{ t('agents.setting.noSkills') }}</div>
                   <div class="text-sm mt-2">{{ t('agents.setting.noSkillsHint') }}</div>
                 </div>
@@ -327,16 +314,17 @@
                           :loading="updatingSkills.has(skill.id)"
                           @update:model-value="(val) => handleSkillToggle(skill.id, !!val)" :disabled="allSkillsDisabled"
                           size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
-                        <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">{{ t('agents.setting.sourceBuiltin') }}</el-tag>
-                        <el-tag v-if="skill.manifest?.version" type="info" size="small" effect="plain">v{{
-                          skill.manifest.version }}</el-tag>
+                        <GdTag v-if="skill.source === 'system'" type="success" size="small" effect="light">{{ t('agents.setting.sourceBuiltin') }}</GdTag>
+                        <GdTag v-if="skill.manifest?.version" type="info" size="small" effect="plain">v{{
+                          skill.manifest.version }}</GdTag>
                       </div>
                     </div>
                     <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ getSkillDisplayDescription(skill.manifest) || t('agents.setting.noDescription')
                       }}</p>
                   </div>
                 </div>
-              </el-form>
+              </div>
+              </div>
             </div>
           </div>
         </div>
@@ -345,28 +333,27 @@
         <div v-show="tabsValue === 'agent_presets'" class="flex-1 overflow-hidden">
           <div class="px-4 py-6 h-full overflow-y-auto">
             <div class="px-0">
-              <el-form label-position="top">
+              <div class="flex flex-col gap-3">
                 <!-- 全部禁用与白名单模式 同一行 -->
-                <el-form-item class="no-border-item">
+                <div class="flex flex-col gap-3">
                   <div class="flex items-center justify-between w-full">
                     <div class="flex items-center gap-2">
                       <span class="text-sm text-gray-500">{{ t('agents.setting.toolToggle') }}</span>
                       <GdSwitch :model-value="!allAgentsDisabled" @update:model-value="(v) => handleAllAgentsDisabledToggle(!v)" />
                     </div>
                   </div>
-                </el-form-item>
 
                 <div v-if="loadingAgents" class="text-center py-8">
-                  <el-icon size="24">
-                    <ArrowSync16Regular class="animate-spin" />
-                  </el-icon>
+                  
+                    <ArrowSync16Regular class="w-6 h-6 animate-spin" />
+                  
                   <div class="text-sm text-gray-500 mt-2">{{ t('agents.setting.loadingAgents') }}</div>
                 </div>
 
                 <div v-else-if="presetAgents.length === 0" class="text-center text-gray-500 py-8">
-                  <el-icon size="48" class="mb-2">
-                    <Info24Regular />
-                  </el-icon>
+                  
+                    <Info24Regular class="mb-2 w-12 h-12" mx-auto  />
+                  
                   <div>{{ t('agents.setting.noAgents') }}</div>
                   <div class="text-sm mt-2">{{ t('agents.setting.noAgentsHint') }}</div>
                 </div>
@@ -386,7 +373,8 @@
                     <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ char.description || t('agents.setting.noDescription') }}</p>
                   </div>
                 </div>
-              </el-form>
+              </div>
+              </div>
             </div>
           </div>
         </div>
@@ -395,11 +383,11 @@
   </div>
 </template>
 
+
 <script setup lang="ts">
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocale } from '@/locales'
-import { ElForm, ElFormItem, ElIcon, ElAlert, ElTag } from 'element-plus';
 import {
   Code24Regular, Bot24Regular, Wrench16Regular, TextDescription20Regular,
   Info24Regular, ArrowSync16Regular, Person16Regular, Chat16Regular, PlugConnected20Regular
@@ -409,19 +397,16 @@ import { apiService } from '../../services/ApiService'
 import type { Model, ModelProvider, McpServer } from '@/types/api'
 import type { Skill } from '@/types/skills'
 import type { PluginQueryPlugin } from '../../services/modules/settings.api'
-import type { FormInstance } from 'element-plus'
-import type { CompressionTier } from '@/constants'
-
 import { getSkillDisplayName, getSkillDisplayDescription } from '@/utils/skillDisplay'
-import AvatarPreview from '../ui/AvatarPreview.vue'
-import SegmentedToggle from '../ui/SegmentedToggle.vue'
-import { DEFAULT_COMPRESSION_TIER, COMPRESSION_TIER_OPTIONS } from '@/constants'
-import GdInput from '@/components/ui/GdInput.vue'
+import type { CompressionTier } from '@/constants'
+import GdAlert from '@/components/ui/GdAlert.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 import GdSwitch from '@/components/ui/GdSwitch.vue';
 import { toast, type ToastHandle } from '@/components/ui/toastService';
 import {
+  type ParsedPluginConfig,
+  type UnrenderedRefs,
   buildPluginConfig,
   effectiveKitEnabled,
   parseAllAgentsDisabled,
@@ -429,9 +414,9 @@ import {
   parseMcpGate,
   parsePluginConfig,
   splitUnrendered,
-  type ParsedPluginConfig,
-  type UnrenderedRefs,
 } from '../../utils/agentPluginConfig'
+import { DEFAULT_COMPRESSION_TIER, COMPRESSION_TIER_OPTIONS } from '@/constants'
+import { useFormValidation } from '@/composables/useFormValidation'
 
 const { t } = useI18n()
 
@@ -496,8 +481,6 @@ const models = ref<Model[]>([]);
 const providers = ref<ModelProvider[]>([]);
 
 // 表单引用
-const basicFormRef = ref<FormInstance | null>(null)
-const promptFormRef = ref<FormInstance | null>(null)
 
 const tabsValue = ref(props.tab)
 
@@ -578,27 +561,20 @@ const agentForm = reactive<AgentFormData>({
 })
 
 // 验证规则
-const basicRules = computed(() => ({
-  name: [
-    { required: true, message: t('agents.setting.titleRequired'), trigger: ['input', 'blur'] },
-    { min: 2, max: 20, message: t('agents.setting.titleLength'), trigger: ['input', 'blur'] }
-  ],
-  // 标识符（id）：可留空（后端按 name 派生，非 ASCII 名则随机兜底）；
-  // 一旦填写必须是 ASCII slug —— 禁止中文，否则跨平台会有目录名风险
-  id: [
-    {
-      validator: (_rule: unknown, value: string, callback: (err?: Error) => void) => {
-        if (!value) return callback()
-        return /^[a-z0-9][a-z0-9-]*$/.test(value)
-          ? callback()
-          : callback(new Error(t('agents.setting.idInvalid')))
-      },
-      trigger: ['input', 'blur']
-    }
-  ]
-}))
+// 校验（el-form :rules → useFormValidation）
+const { errors, validate: validateForm, validateField } = useFormValidation({
+  name: [{ validator: (v: unknown) => {
+    const value = String(v ?? '');
+    if (!value) return t('agents.setting.titleRequired');
+    return value.length >= 2 && value.length <= 20 ? null : t('agents.setting.titleLength');
+  } }],
+  id: [{ validator: (v: unknown) => {
+    const value = String(v ?? '');
+    if (!value) return null;
+    return /^[a-z0-9][a-z0-9-]*$/.test(value) ? null : t('agents.setting.idInvalid');
+  } }],
+});
 
-const promptRules = {}
 
 // 选项数据
 // const modelOptions = [
@@ -1217,12 +1193,12 @@ const getFormData = () => {
   return finalData;
 }
 
-// 验证所有表单
+// 验证所有表单（errors 填充由 useFormValidation 完成；此处只做 tab 切换）
 const validate = async () => {
   try {
     var formValidates = [
-      basicFormRef.value?.validate(),
-      promptFormRef.value?.validate(),
+      validateForm(),
+      Promise.resolve(true), // prompt 表单无规则
     ]
     const validationResults = await Promise.allSettled(formValidates)
     const hasError = validationResults.some(result => result.status === 'rejected')
@@ -1305,7 +1281,7 @@ defineExpose({
 
 .tool-config-item {
   padding: 12px;
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--gd-color-border);
   border-radius: 6px;
   transition: all 0.2s;
   overflow: hidden;
@@ -1314,18 +1290,11 @@ defineExpose({
 }
 
 .tool-config-item:hover {
-  border-color: var(--el-color-primary-light-5);
-  background-color: var(--el-fill-color-lighter);
+  border-color: var(--gd-color-primary-500);
+  background-color: var(--gd-color-field-bg);
 }
 
-.tool-config-item :deep(.el-checkbox__label) {
-  width: 100%;
-  overflow: hidden;
-}
 
-.tool-config-item :deep(.el-checkbox) {
-  width: 100%;
-}
 
 /* 强制工具描述文本换行 */
 .tool-config-item :deep(*) {
@@ -1358,38 +1327,17 @@ defineExpose({
   transition: all 0.2s;
 }
 
-.tool-checkbox-item :deep(.el-checkbox__input) {
-  position: absolute;
-  left: -9999px;
-}
 
 .tool-checkbox-item.is-checked .tool-name {
-  background-color: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
-  border: 1px solid var(--el-color-primary);
+  background-color: var(--gd-color-primary-100);
+  color: var(--gd-color-primary);
+  border: 1px solid var(--gd-color-primary);
 }
 
 /* 表单区域优化 */
-:deep(.el-form) {
-  height: 100%;
-}
 
 /* 提示词输入框样式 - 禁止resize并占满flex空间（高度下限由模板的 min-h-40 提供） */
 .prompt-form-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.prompt-form-item :deep(.el-form-item__content) {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.prompt-form-item :deep(.el-textarea) {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -1400,12 +1348,6 @@ defineExpose({
   min-height: 0;
 }
 
-.prompt-form-item :deep(.el-textarea__inner) {
-  resize: none !important;
-  height: 100% !important;
-  min-height: unset !important;
-}
-
 /* 无横线表单项 */
 .no-border-item {
   border-bottom: none !important;
@@ -1413,9 +1355,5 @@ defineExpose({
   margin-bottom: 0 !important;
 }
 
-/* 卡片内的表单项去除默认边距和边框 */
-.el-form-item {
-  margin-bottom: 0 !important;
-}
 
 </style>

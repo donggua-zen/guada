@@ -10,18 +10,16 @@
               <span class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">{{ t('chat.memo.contextUsage')
                 }}</span>
               <GdTooltip :content="t('chat.memo.contextUsageTooltip')" placement="top">
-                <el-icon
-                  class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors"
-                  :size="14">
-                  <QuestionCircle16Filled />
-                </el-icon>
+                
+                  <QuestionCircle16Filled class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors w-3.5 h-3.5"  />
+                
               </GdTooltip>
             </div>
             <span class="text-base font-bold" :class="usageColorClass">
               {{ tokenStats.percentage }}%
             </span>
           </div>
-          <el-progress :percentage="tokenStats.percentage" :color="progressColor" :stroke-width="6"
+          <GdProgress :percentage="tokenStats.percentage" :color="progressColor" :stroke-width="6"
             :show-text="false" />
           <div class="flex items-center gap-2 mt-1.5">
             <span class="text-xs text-gray-400 dark:text-[#8b8d95]">
@@ -59,7 +57,6 @@
           </div>
         </div>
 
-
         <!-- 请求媒体负载（精确值）：媒体预算只约束图片，不含文本/工具定义 -->
         <div v-if="requestStats" class="mb-3">
           <div class="flex items-center justify-between mb-2">
@@ -67,18 +64,16 @@
               <span class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">{{ t('chat.memo.requestMedia')
                 }}</span>
               <GdTooltip :content="t('chat.memo.requestMediaTooltip')" placement="top">
-                <el-icon
-                  class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors"
-                  :size="14">
-                  <QuestionCircle16Filled />
-                </el-icon>
+                
+                  <QuestionCircle16Filled class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors w-3.5 h-3.5"  />
+                
               </GdTooltip>
             </div>
             <span class="text-base font-bold" :class="mediaColorClass">
               {{ mediaUsagePercent }}%
             </span>
           </div>
-          <el-progress :percentage="mediaUsagePercent" :color="mediaColor" :stroke-width="6" :show-text="false" />
+          <GdProgress :percentage="mediaUsagePercent" :color="mediaColor" :stroke-width="6" :show-text="false" />
           <div class="flex items-center justify-between gap-2 mt-1.5">
             <span class="text-xs text-gray-400 dark:text-[#8b8d95]">
               {{ formatBytes(requestStats.mediaBytes) }} / {{ formatBytes(requestStats.mediaBudgetBytes) }} ·
@@ -97,22 +92,22 @@
         <!-- 操作按钮 -->
         <div class="flex gap-2 pt-3">
           <GdButton size="small" @click="loadTokenStats" class="flex-1">
-            <el-icon class="mr-1">
-              <ArrowClockwise16Regular />
-            </el-icon>
+            
+              <ArrowClockwise16Regular class="mr-1 size-4"  />
+            
             {{ t('common.refresh') }}
           </GdButton>
           <GdButton size="small" @click="handleCompress" :loading="isCompressing" class="flex-1">
-            <el-icon class="mr-1">
-              <Wand16Regular />
-            </el-icon>
+            
+              <Wand16Regular class="mr-1 size-4"  />
+            
             {{ isCompressing ? t('chat.memo.compressing') : t('chat.memo.compress') }}
           </GdButton>
         </div>
       </div>
     </template>
     <template v-else>
-      <el-empty :description="t('chat.memo.noStats')" :image-size="60" />
+      <GdEmpty :description="t('chat.memo.noStats')" :image-size="60" />
     </template>
 
     <!-- ============ 最新压缩状态 ============ -->
@@ -152,9 +147,9 @@
               </span>
             </div>
             <div class="flex items-center gap-1.5 text-xs pt-1">
-              <el-tag size="small" :type="getStrategyTagType(summaries[0].cleaningStrategy || 'unknown')">
+              <GdTag size="small" :type="getStrategyTagType(summaries[0].cleaningStrategy || 'unknown')">
                 {{ getStrategyLabel(summaries[0].cleaningStrategy || 'unknown') }}
-              </el-tag>
+              </GdTag>
               <span v-if="summaries[0].shadowedCount > 0" class="text-gray-500 dark:text-[#8b8d95]">
                 {{ summaries[0].shadowedCount }} {{ t('chat.memo.items') }}
               </span>
@@ -165,7 +160,6 @@
             {{ t('chat.memo.noSummaryContent') }}
           </div>
 
-
           <!-- 底部信息：时间戳和操作按钮 -->
           <div class="flex items-center justify-between text-xs pt-3">
             <span class="text-gray-400 dark:text-[#8b8d95] truncate" :title="formatTime(summaries[0].createdAt)">
@@ -174,9 +168,9 @@
             <div class="flex gap-1">
               <GdButton size="small" text @click="handleViewHistory"
                 class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                <el-icon>
-                  <List16Regular />
-                </el-icon>
+                
+                  <List16Regular class="size-4"  />
+                
                 <span class="ml-1">{{ t('chat.memo.history') }}</span>
               </GdButton>
             </div>
@@ -184,7 +178,7 @@
         </div>
       </template>
       <template v-else>
-        <el-empty :description="t('chat.memo.noCompressRecords')" :image-size="60" />
+        <GdEmpty :description="t('chat.memo.noCompressRecords')" :image-size="60" />
       </template>
     </div>
 
@@ -226,9 +220,9 @@
               <div class="flex items-center gap-2">
                 <span class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">{{ t('chat.memo.compressTime', {
                   n: summaryTotal - index }) }}</span>
-                <el-tag size="small" :type="getStrategyTagType(summary.cleaningStrategy || 'unknown')">
+                <GdTag size="small" :type="getStrategyTagType(summary.cleaningStrategy || 'unknown')">
                   {{ getStrategyLabel(summary.cleaningStrategy || 'unknown') }}
-                </el-tag>
+                </GdTag>
               </div>
               <span class="text-xs text-gray-400 dark:text-[#8b8d95]">{{ formatTime(summary.createdAt) }}</span>
             </div>
@@ -282,7 +276,7 @@
         </div>
       </template>
       <template v-else>
-        <el-empty :description="t('chat.memo.noCompressRecords')" :image-size="80" />
+        <GdEmpty :description="t('chat.memo.noCompressRecords')" :image-size="80" />
       </template>
       <template #footer>
         <GdButton @click="historyDialogVisible = false">{{ t('chat.memo.close') }}</GdButton>
@@ -296,6 +290,9 @@ import { ref, watch, computed, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSessionTokenStats, applyContextStatsFromEvents, clearTokenStats } from '@/composables/useSessionTokenStats';
 import GdDialog from '@/components/ui/GdDialog.vue';
+import GdTag from '@/components/ui/GdTag.vue';
+import GdProgress from '@/components/ui/GdProgress.vue';
+import GdEmpty from '@/components/ui/GdEmpty.vue';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
 import type { SessionSummaryItem } from '@/services/modules/session.api';
@@ -308,7 +305,6 @@ import dayjs from 'dayjs';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import GdButton from '@/components/ui/GdButton.vue';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
-
 
 const { confirm } = usePopup();
 const { t } = useI18n();
@@ -618,27 +614,5 @@ function handleViewHistory() {
 </script>
 
 <style scoped>
-/* 暗色模式下的 el-tag 样式优化 */
-:deep(.el-tag) {
-  --el-tag-bg-color: var(--el-color-warning-light-9);
-  --el-tag-border-color: var(--el-color-warning-light-8);
-  --el-tag-text-color: var(--el-color-warning-dark-2);
-}
 
-.dark :deep(.el-tag--success) {
-  --el-tag-bg-color: rgba(103, 194, 58, 0.1);
-  --el-tag-border-color: rgba(103, 194, 58, 0.2);
-  --el-tag-text-color: #85ce61;
-}
-
-.dark :deep(.el-tag--warning) {
-  --el-tag-bg-color: rgba(230, 162, 60, 0.1);
-  --el-tag-border-color: rgba(230, 162, 60, 0.2);
-  --el-tag-text-color: #ebb563;
-}
-
-/* 暗色模式下的进度条颜色优化 */
-.dark :deep(.el-progress-bar__inner) {
-  transition: all 0.3s ease;
-}
 </style>

@@ -4,7 +4,7 @@
       <span class="guide-title">{{ t('ui.setupGuide.title') }}</span>
       <div class="header-actions no-drag">
         <span class="skip-link" @click="skipGuide">{{ t('ui.setupGuide.skipGuide') }}</span>
-        <el-icon class="close-btn cursor-pointer" @click="closeGuide"><Dismiss16Regular /></el-icon>
+        <Dismiss16Regular class="close-btn cursor-pointer size-4" @click="closeGuide"  />
       </div>
     </div>
 
@@ -12,7 +12,7 @@
     <div class="guide-steps no-drag">
       <template v-for="stepNo in TOTAL_STEPS" :key="stepNo">
         <div class="step-dot" :class="dotClass(stepNo)" @click="goBackToStep(stepNo)">
-          <el-icon v-if="isStepDone(stepNo)" :size="10"><Checkmark12Regular /></el-icon>
+          <Checkmark12Regular class="w-2.5 h-2.5" v-if="isStepDone(stepNo)"  />
           <span v-else>{{ stepNo }}</span>
         </div>
         <div v-if="stepNo < TOTAL_STEPS" class="step-connector"
@@ -28,9 +28,9 @@
       <div v-if="currentStep === 1" class="step-panel">
         <h3>{{ t('ui.setupGuide.step1Title') }}</h3>
         <p class="desc">{{ t('ui.setupGuide.step1Desc') }}</p>
-        <el-alert type="info" :closable="false" show-icon>
+        <GdAlert type="info" :closable="false" show-icon>
           {{ t('ui.setupGuide.tip') }}
-        </el-alert>
+        </GdAlert>
       </div>
 
       <!-- Step 2: 修改密码引导（密码状态前端不可检测，保持手动推进） -->
@@ -63,7 +63,7 @@
 
   <!-- 全局悬浮引导入口（X 关闭或完成后消失） -->
   <div v-if="!visible && !hasCompleted" class="guide-fab" @click="openGuide" :title="t('ui.setupGuide.viewGuide')">
-    <el-icon><QuestionCircle16Filled /></el-icon>
+    <QuestionCircle16Filled class="size-4"  />
   </div>
 </template>
 
@@ -73,6 +73,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { NEW_SESSION_ID } from '@/constants'
 
 import GdButton from '@/components/ui/GdButton.vue';
+import GdAlert from '@/components/ui/GdAlert.vue';
 import { toast } from '@/components/ui/toastService';
 
 import { useI18n } from 'vue-i18n'

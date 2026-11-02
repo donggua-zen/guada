@@ -11,9 +11,9 @@
                 <!-- 刷新按钮 -->
                 <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
                     <GdButton class="workspace-tool-btn" text @click="refreshTree" :loading="treeStore.isLoading">
-                        <el-icon size="16">
-                            <ArrowClockwise16Regular />
-                        </el-icon>
+                        
+                            <ArrowClockwise16Regular class="w-4 h-4"  />
+                        
                     </GdButton>
                 </GdTooltip>
             </div>

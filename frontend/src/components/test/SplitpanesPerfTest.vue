@@ -103,16 +103,24 @@
     <!-- 对比总结 -->
     <div v-if="hasResult" class="summary">
       <h3>测试结果对比</h3>
-      <el-table :data="compareData" style="width: 100%">
-        <el-table-column prop="metric" label="指标" width="120" />
-        <el-table-column prop="native" label="原生 splitpanes" />
-        <el-table-column prop="lite" label="GdSplitpanes" />
-        <el-table-column prop="diff" label="差异">
-          <template #default="{ row }">
-            <span :class="row.better ? 'better' : 'worse'">{{ row.diff }}</span>
-          </template>
-        </el-table-column>
-      </el-table>
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th class="w-[120px]">指标</th>
+            <th>原生 splitpanes</th>
+            <th>GdSplitpanes</th>
+            <th>差异</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in compareData" :key="row.metric">
+            <td>{{ row.metric }}</td>
+            <td>{{ row.native }}</td>
+            <td>{{ row.lite }}</td>
+            <td><span :class="row.better ? 'better' : 'worse'">{{ row.diff }}</span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </template>
@@ -123,7 +131,6 @@ import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
 import { GdSplitpanes } from '../ui';
 import { usePerfMonitor } from '@/composables/usePerfMonitor';
-import { ElTable, ElTableColumn } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
 
 
@@ -437,6 +444,33 @@ h2 {
 
 .summary h3 {
   margin-bottom: 12px;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  text-align: left;
+}
+
+.compare-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.dark .compare-table th,
+.dark .compare-table td {
+  border-color: #2e3035;
+}
+
+.dark .compare-table th {
+  background: #232428;
 }
 
 .better {

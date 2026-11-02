@@ -22,17 +22,16 @@
           <Avatar :src="currentAgent.avatarUrl" type="assistant" :name="currentAgent.name"
             class="w-4 h-4 shrink-0 rounded overflow-hidden" />
           <span class="text-sm font-medium text-(--gd-color-text)">{{ currentAgent.name }}</span>
-          <el-icon size="12"
-            class="shrink-0 text-(--gd-color-text-gray) group-hover:text-(--gd-color-text) transition-colors">
-            <ChevronRight24Regular />
-          </el-icon>
+          
+            <ChevronRight24Regular class="shrink-0 text-(--gd-color-text-gray) group-hover:text-(--gd-color-text) transition-colors w-3 h-3"  />
+          
         </span>
         <button v-else
           class="agent-chip group cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 rounded-(--gd-size-dialog-rounded-radius) bg-(--gd-color-surface) border border-(--gd-color-surface-border) hover:bg-(--gd-color-surface-hover) transition-colors"
           @click="goToAgents">
-          <el-icon size="14" class="text-(--gd-color-text-gray) group-hover:text-(--gd-color-text) transition-colors">
-            <PersonAdd24Regular />
-          </el-icon>
+          
+            <PersonAdd24Regular class="text-(--gd-color-text-gray) group-hover:text-(--gd-color-text) transition-colors w-3.5 h-3.5"  />
+          
           <span class="text-sm font-medium text-(--gd-color-text-gray) group-hover:text-(--gd-color-text)">{{
             t('chat.welcome.selectAgent') }}</span>
         </button>

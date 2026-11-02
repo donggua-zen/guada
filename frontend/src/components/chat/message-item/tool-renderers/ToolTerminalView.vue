@@ -126,7 +126,7 @@ const pillClass = computed(() => {
 }
 
 .term-output--error {
-  color: var(--el-color-danger);
+  color: var(--gd-color-danger);
 }
 
 .term-output--empty {
@@ -151,18 +151,18 @@ const pillClass = computed(() => {
 }
 
 .term-pill--ok {
-  background: rgba(var(--el-color-success-rgb, 103, 194, 58), 0.14);
-  color: var(--el-color-success);
+  background: rgba(var(--gd-color-success-rgb, 103, 194, 58), 0.14);
+  color: var(--gd-color-success);
 }
 
 .term-pill--error {
-  background: rgba(var(--el-color-danger-rgb, 245, 108, 108), 0.14);
-  color: var(--el-color-danger);
+  background: rgba(var(--gd-color-danger-rgb, 245, 108, 108), 0.14);
+  color: var(--gd-color-danger);
 }
 
 .term-pill--bg {
-  background: rgba(var(--el-color-primary-rgb, 64, 158, 255), 0.12);
-  color: var(--el-color-primary);
+  background: rgba(var(--gd-color-primary-rgb, 110, 118, 250), 0.12);
+  color: var(--gd-color-primary);
 }
 
 .term-uptime {
@@ -172,7 +172,7 @@ const pillClass = computed(() => {
 
 .term-truncated {
   font-size: 11px;
-  color: var(--el-color-warning);
+  color: var(--gd-color-warning);
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
   word-break: break-all;
 }

@@ -18,13 +18,12 @@
               </div>
               <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                 <span class="truncate">{{ currentModelProviderName }}</span>
-                <el-icon v-if="currentModel?.config?.features?.includes('tools')" :size="12">
-                  <WrenchScrewdriver24Regular />
-                </el-icon>
+                
+                  <WrenchScrewdriver24Regular class="w-3 h-3" v-if="currentModel?.config?.features?.includes('tools')"  />
+                
                 <!-- 思考能力判据是档位菜单（空 = 不能思考），不再是 features 标记 -->
-                <el-icon v-if="(currentModel?.thinkingEfforts?.length ?? 0) > 0" :size="12">
-                  <LightbulbFilament24Regular />
-                </el-icon>
+                <span class="size-4" v-if="(currentModel?.thinkingEfforts?.length ?? 0) > 0">
+                  <LightbulbFilament24Regular /></span>
               </div>
               <div v-if="sourceHint" class="text-[11px] text-gray-400 truncate">{{ sourceHint }}</div>
             </div>
@@ -32,9 +31,9 @@
           <template v-else>
             <span class="text-sm flex-1 py-3 text-gray-400">{{ t('chat.input.selectModelHint') }}</span>
           </template>
-          <el-icon size="14" class="text-gray-400 shrink-0">
-            <ChevronRight24Regular />
-          </el-icon>
+          
+            <ChevronRight24Regular class="text-gray-400 shrink-0 w-3.5 h-3.5"  />
+          
         </div>
       </div>
 
@@ -55,9 +54,9 @@
           <span class="text-sm flex-1">{{ t('chat.input.reasoningEffort') }}</span>
           <span class="text-xs text-gray-400">
             {{ thinkingEffortLabel }}</span>
-          <el-icon size="14" class="text-gray-400">
-            <ChevronRight24Regular />
-          </el-icon>
+          
+            <ChevronRight24Regular class="text-gray-400 w-3.5 h-3.5"  />
+          
         </div>
       </template>
 
@@ -81,12 +80,11 @@
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                 <span class="truncate">{{ getModelProviderName(model) }}</span>
-                <el-icon v-if="model.config?.features?.includes('tools')" :size="12">
-                  <WrenchScrewdriver24Regular />
-                </el-icon>
-                <el-icon v-if="(model.thinkingEfforts?.length ?? 0) > 0" :size="12">
-                  <LightbulbFilament24Regular />
-                </el-icon>
+                
+                  <WrenchScrewdriver24Regular class="w-3 h-3" v-if="model.config?.features?.includes('tools')"  />
+                
+                <span class="size-4" v-if="(model.thinkingEfforts?.length ?? 0) > 0">
+                  <LightbulbFilament24Regular /></span>
               </div>
             </div>
           </div>
@@ -97,9 +95,9 @@
       <div class="section-divider"></div>
       <div class="cascade-trigger" @click="goProviderSettings">
         <span class="text-sm flex-1">{{ t('chat.input.manageModels') }}</span>
-        <el-icon size="14" class="text-gray-400">
-          <ChevronRight24Regular />
-        </el-icon>
+        
+          <ChevronRight24Regular class="text-gray-400 w-3.5 h-3.5"  />
+        
       </div>
     </div>
   </GdPopover>
@@ -129,19 +127,15 @@
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                 <!-- <span class="truncate">{{ provider.name }}</span> -->
-                <el-icon v-if="model.config?.features?.includes('tools')" :size="12">
-                  <WrenchScrewdriver24Regular />
-                </el-icon>
-                <el-icon v-if="(model.thinkingEfforts?.length ?? 0) > 0" :size="12">
-                  <LightbulbFilament24Regular />
-                </el-icon>
+                
+                  <WrenchScrewdriver24Regular class="w-3 h-3" v-if="model.config?.features?.includes('tools')"  />
+                
+                <span class="size-4" v-if="(model.thinkingEfforts?.length ?? 0) > 0">
+                  <LightbulbFilament24Regular /></span>
               </div>
             </div>
-            <el-icon class="favorite-icon cursor-pointer transition-all shrink-0" :size="16"
-              @click.stop="handleToggleFavorite(model.id)">
-              <Star24Filled v-if="favoriteIds.has(model.id)" class="text-yellow-500" />
-              <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" />
-            </el-icon>
+            <span class="favorite-icon cursor-pointer transition-all shrink-0 w-4 h-4" @click.stop="handleToggleFavorite(model.id)"><Star24Filled v-if="favoriteIds.has(model.id)" class="text-yellow-500" />
+              <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" /></span>
           </div>
         </div>
       </div>
@@ -167,7 +161,7 @@
 import { computed, ref, watch, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { ElIcon } from 'element-plus'
+
 import { WrenchScrewdriver24Regular, LightbulbFilament24Regular, ChevronRight24Regular, Star24Regular, Star24Filled, ArrowReset20Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import Avatar from '../../ui/Avatar.vue'

@@ -33,7 +33,6 @@ export interface GuaDaSharedI18n {
 export interface GuaDaShared {
   /** 主应用的 Vue 实例（插件产物从这里取，不自行 import） */
   vue: typeof import('vue')
-  'element-plus': typeof import('element-plus')
   runtime: GuaDaSharedRuntime
   i18n: GuaDaSharedI18n
   /** 主应用 apiService 实例（含 _request 与各领域 API 方法） */

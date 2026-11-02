@@ -6,9 +6,9 @@
        hover 提示完整名单；弹窗 = 各远程连接的勾选清单（点击切换绑定，✓ 为已绑定） -->
   <GdTooltip :content="tooltipContent" placement="top">
     <GdButton ref="buttonRef" class="workspace-btn mr-0.5" text @click.stop="togglePopover">
-      <el-icon size="18">
-        <Cloud24Regular />
-      </el-icon>
+      
+        <Cloud24Regular class="w-4.5 h-4.5"  />
+      
       <span v-if="attachedCount === 0" class="text-xs font-medium">{{ t('chat.toolbar.remoteDir') }}</span>
       <template v-else>
         <span class="text-xs font-medium">{{ t('chat.toolbar.remoteDirPrefix') }}</span>
@@ -16,9 +16,9 @@
         <span v-else class="text-xs font-medium max-w-32 truncate">{{ firstAttachedName }}</span>
       </template>
       <span v-if="attachedCount > 1" class="remote-count">{{ attachedCount }}</span>
-      <el-icon size="16" class="ml-0.5">
-        <ChevronUpDown16Regular />
-      </el-icon>
+      
+        <ChevronUpDown16Regular class="ml-0.5 w-4 h-4"  />
+      
     </GdButton>
   </GdTooltip>
 
@@ -31,18 +31,18 @@
         <div v-for="id in missingBindingIds" :key="id"
           class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
           @click="toggle(id)">
-          <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-            <Cloud16Regular />
-          </el-icon>
+          
+            <Cloud16Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+          
           <div class="flex-1 flex flex-col gap-0.5 min-w-0">
             <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap overflow-hidden text-ellipsis">
               {{ t('chat.workspace.unknownConnection') }}
             </span>
             <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ id }}</span>
           </div>
-          <el-icon size="14" class="shrink-0 text-(--el-color-primary)">
-            <Checkmark16Filled />
-          </el-icon>
+          
+            <Checkmark16Filled class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+          
         </div>
         <div class="h-px bg-[#eee] dark:bg-white/8 mx-2 my-1.5"></div>
       </template>
@@ -56,7 +56,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
 
 import { Checkmark16Filled, ChevronUpDown16Regular, Cloud16Regular, Cloud24Regular } from '@vicons/fluent'

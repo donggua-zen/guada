@@ -12,12 +12,12 @@
             <div class="w-full bg-(--gd-color-surface-elevated) rounded-lg p-6 border border-(--gd-color-border)">
                 <div class="flex flex-col items-center space-y-4">
                     <div v-if="updateStore.status === 'checking'" class="flex items-center space-x-2 text-blue-500">
-                        <el-icon><ArrowSync16Regular class="animate-spin" /></el-icon>
+                        <ArrowSync16Regular class="size-4 animate-spin" />
                         <span>{{ t('plugins.about.checking') }}</span>
                     </div>
 
                     <div v-else-if="updateStore.status === 'not-available'" class="text-green-500 flex items-center space-x-2">
-                        <el-icon><CheckmarkCircle16Regular /></el-icon>
+                        <CheckmarkCircle16Regular class="size-4"  />
                         <span>{{ t('plugins.about.upToDate') }}</span>
                     </div>
 
@@ -31,7 +31,7 @@
                                 <span>{{ t('ui.update.downloading', { percent: progressPercent }) }}</span>
                                 <span>{{ speedText }}</span>
                             </div>
-                            <el-progress :percentage="progressPercent" :stroke-width="8" :show-text="false" :indeterminate="!updateStore.progress?.total" />
+                            <GdProgress :percentage="progressPercent" :stroke-width="8" :show-text="false" :indeterminate="!updateStore.progress?.total" />
                         </div>
 
                         <!-- 已下载 / 安装中 -->
@@ -95,7 +95,7 @@
                                 <div class="text-xs text-(--gd-color-text-secondary)">{{ repo.url }}</div>
                             </div>
                         </div>
-                        <el-icon class="text-(--gd-color-text-secondary)"><Link16Regular /></el-icon>
+                        <Link16Regular class="text-(--gd-color-text-secondary) size-4"  />
                     </div>
                 </div>
             </div>
@@ -109,8 +109,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon, ElProgress } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
+import GdProgress from '@/components/ui/GdProgress.vue';
 
 import { ArrowSync16Regular, CheckmarkCircle16Regular, Link16Regular } from '@vicons/fluent'
 import { fixFrontendAssetUrl } from '@/utils/url'

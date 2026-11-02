@@ -13,12 +13,12 @@
   <div ref="panelRef" class="fcp-panel" :class="{ 'fcp-dragging': isDragging }" :style="panelStyle">
     <div class="fcp-header" @mousedown="startDrag" @dblclick="handleHeaderDblClick">
       <div class="flex items-center gap-1.5 min-w-0 flex-1">
-        <el-icon :size="14" class="shrink-0 fcp-header-icon"><Chat16Regular /></el-icon>
+        <Chat16Regular class="shrink-0 fcp-header-icon w-3.5 h-3.5"  />
         <span class="truncate">{{ sessionTitle }}</span>
       </div>
       <div class="flex items-center gap-0.5 shrink-0">
         <button class="fcp-btn" :title="t('chat.floating.hide')" @click.stop="hide">
-          <el-icon :size="14"><Dismiss16Regular /></el-icon>
+          <Dismiss16Regular class="w-3.5 h-3.5"  />
         </button>
       </div>
     </div>

@@ -25,9 +25,9 @@
                 <!-- 加载更多历史消息指示器 -->
                 <Transition name="fade-slide">
                   <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
-                    <el-icon class="mr-2" size="16">
-                      <ArrowSync16Regular class="animate-spin" />
-                    </el-icon>
+                    
+                      <ArrowSync16Regular class="mr-2 w-4 h-4 animate-spin" />
+                    
                     <span class="text-xs">{{ t('chat.panel.loadingHistory') }}</span>
                   </div>
                 </Transition>

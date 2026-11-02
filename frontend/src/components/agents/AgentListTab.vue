@@ -5,7 +5,7 @@
       <div class="flex items-center gap-2">
         <GdButton type="primary" @click="$emit('createAgent')" class="flex items-center">
           <template #icon>
-            <Add16Regular />
+            <Add16Regular class="size-4" />
           </template>
           {{ t('agents.list.create') }}
         </GdButton>
@@ -19,9 +19,9 @@
       </div>
       <GdButton link type="primary" class="text-sm" @click="$emit('openDocs')">
         <template #icon>
-          <el-icon :size="16">
-            <QuestionCircle16Regular />
-          </el-icon>
+          
+            <QuestionCircle16Regular class="w-4 h-4"  />
+          
         </template>
         {{ t('agents.list.docs') }}
       </GdButton>
@@ -54,9 +54,9 @@
                   <GdButton v-if="canDelete(agent)" link size="small" type="danger"
                     class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
                     @click.stop="$emit('deleteAgent', agent)">
-                    <el-icon :size="18">
-                      <Delete20Regular />
-                    </el-icon>
+                    
+                      <Delete20Regular class="w-4.5 h-4.5"  />
+                    
                   </GdButton>
                 </div>
                 <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5 font-mono truncate" :title="agent.id">
@@ -84,9 +84,9 @@
         <!-- 空状态 -->
         <div v-if="!loading && agents.length === 0"
           class="col-span-full text-center py-12 text-gray-500 dark:text-[#8b8d95]">
-          <el-icon size="48" class="text-gray-300 dark:text-[#5a5c63] mb-3">
-            <People32Regular />
-          </el-icon>
+          
+            <People32Regular class="text-gray-300 dark:text-[#5a5c63] mb-3 w-12 h-12" mx-auto  />
+          
           <p class="text-lg">{{ t('agents.list.empty') }}</p>
           <p class="text-sm mt-1">{{ t('agents.list.emptyHint') }}</p>
         </div>
@@ -99,7 +99,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
 import { toast } from '@/components/ui/toastService';
 

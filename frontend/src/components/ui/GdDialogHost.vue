@@ -13,13 +13,11 @@
     @closed="finishModal(entry)"
   >
     <div class="gd-modal-content">
-      <el-icon
-        v-if="entry.options.icon && entry.options.icon !== 'none'"
-        class="gd-modal-icon"
-        :class="`gd-modal-icon--${entry.options.icon}`"
-      >
-        <component :is="getIcon(entry.options.icon)" />
-      </el-icon>
+      <!-- 弹窗图标：22px 盒内居中 16px 字形（gd-modal-icon 保盒，原 el-icon 语义） -->
+      <span v-if="entry.options.icon && entry.options.icon !== 'none'" class="gd-modal-icon"
+        :class="`gd-modal-icon--${entry.options.icon}`">
+        <component :is="getIcon(entry.options.icon)" class="size-4" />
+      </span>
 
       <div class="gd-modal-main">
         <GdInput
@@ -129,6 +127,9 @@ const RenderVNode = defineComponent({
 
 .gd-modal-icon {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 22px;
   margin-top: 1px;

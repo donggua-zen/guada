@@ -5,6 +5,7 @@
 // 首期不启用 type-aware 规则（TypeScript 6 兼容性 + 全量耗时），后续视情况再开。
 import pluginVue from 'eslint-plugin-vue'
 import ts from 'typescript-eslint'
+import globals from 'globals'
 
 /** 类型质量核心规则（.ts 与 .vue 的 <script lang="ts"> 同一口径） */
 const typeQualityRules = {
@@ -66,6 +67,27 @@ export default ts.config(
   // 现存单词组件名（Login.vue、Queue.vue 等）为既定命名，不强制多词
   { rules: { 'vue/multi-word-component-names': 'off' } },
 
+  // 未定义变量兜底（2026-11 增加）：vue-tsc 不检查 <script setup>（无 lang="ts"）的
+  // 文件与 src 下 3 个 .js 文件（main.js / plugin-loader.js / usePluginI18n.js），
+  // "import 被迁移脚本吃掉"这类损伤曾在那里静默存活（MCPServers 的 usePopup）。
+  // no-undef 对 lang="ts" 文件同样生效，但 TS 类型引用不进入 ESLint 的作用域分析，
+  // 不会误报；浏览器全局走 globals 表，Electron ambient 接口单独登记。
+  // auto-imports.d.ts 只声明 ElMessage/ElNotification（均已禁用），
+  // 若有 bare 调用残留，正好由 no-undef 揪出，不登记。
+  {
+    files: ['**/*.vue', 'src/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        // src/vite-env.d.ts 的 ambient 接口（模板事件 as 断言用）
+        ElectronWebviewElement: 'readonly',
+        ElectronWebviewNavigateEvent: 'readonly',
+        ElectronWebviewTitleUpdatedEvent: 'readonly',
+      },
+    },
+    rules: { 'no-undef': 'error' },
+  },
+
   // 路由哨兵字面量防劣化：'new-session' 只允许定义在 src/constants（NEW_SESSION_ID）。
   // 散落字面量容易再出现"把它当会话 id 去打后端接口"的旧问题（workspace-path 500 +
   // 存储层懒创建出幽灵会话目录，见 session-path.util.ts 的 RESERVED_IDS）
@@ -111,6 +133,66 @@ export default ts.config(
         { element: 'ElInputNumber', message: '数字输入统一使用 GdInputNumber；不要在模板里直接写 <ElInputNumber>。' },
         { element: 'el-slider', message: '滑块统一使用 GdSlider（@/components/ui/GdSlider.vue）；不要在模板里直接写 <el-slider>。' },
         { element: 'ElSlider', message: '滑块统一使用 GdSlider；不要在模板里直接写 <ElSlider>。' },
+        { element: 'el-tag', message: '标签统一使用 GdTag（@/components/ui/GdTag.vue）；不要在模板里直接写 <el-tag>。' },
+        { element: 'ElTag', message: '标签统一使用 GdTag；不要在模板里直接写 <ElTag>。' },
+        { element: 'el-alert', message: '提示条统一使用 GdAlert（@/components/ui/GdAlert.vue）；不要在模板里直接写 <el-alert>。' },
+        { element: 'ElAlert', message: '提示条统一使用 GdAlert；不要在模板里直接写 <ElAlert>。' },
+        { element: 'el-divider', message: '分隔线统一使用 GdDivider（@/components/ui/GdDivider.vue）；不要在模板里直接写 <el-divider>。' },
+        { element: 'ElDivider', message: '分隔线统一使用 GdDivider；不要在模板里直接写 <ElDivider>。' },
+        { element: 'el-progress', message: '进度条统一使用 GdProgress（@/components/ui/GdProgress.vue）；不要在模板里直接写 <el-progress>。' },
+        { element: 'ElProgress', message: '进度条统一使用 GdProgress；不要在模板里直接写 <ElProgress>。' },
+        { element: 'el-empty', message: '空态统一使用 GdEmpty（@/components/ui/GdEmpty.vue）；不要在模板里直接写 <el-empty>。' },
+        { element: 'ElEmpty', message: '空态统一使用 GdEmpty；不要在模板里直接写 <ElEmpty>。' },
+        { element: 'el-badge', message: '徽标已去组件化：直接用 span 数字气泡（参考 KBFileUploader）；不要在模板里直接写 <el-badge>。' },
+        { element: 'ElBadge', message: '徽标已去组件化：直接用 span 数字气泡；不要在模板里直接写 <ElBadge>。' },
+        { element: 'el-link', message: '链接语义用 GdButton link；不要在模板里直接写 <el-link>。' },
+        { element: 'ElLink', message: '链接语义用 GdButton link；不要在模板里直接写 <ElLink>。' },
+        { element: 'el-icon', message: '图标直接用 @vicons/fluent 裸组件 + Tailwind 尺寸类（size-4 / w-4 h-4），不包 el-icon；旋转用 animate-spin。' },
+        { element: 'ElIcon', message: '图标直接用 @vicons/fluent 裸组件 + Tailwind 尺寸类，不包 ElIcon。' },
+        { element: 'el-form', message: '表单布局统一用 GdFormField（@/components/ui/GdFormField.vue），校验用 useFormValidation composable；不要在模板里直接写 <el-form>。' },
+        { element: 'ElForm', message: '表单布局统一用 GdFormField + useFormValidation；不要在模板里直接写 <ElForm>。' },
+        { element: 'el-form-item', message: '表单字段统一用 GdFormField（label + 控件 + 行内红字）；不要在模板里直接写 <el-form-item>。' },
+        { element: 'ElFormItem', message: '表单字段统一用 GdFormField；不要在模板里直接写 <ElFormItem>。' },
+        { element: 'el-checkbox', message: '勾选框统一使用 GdCheckbox / GdCheckboxGroup（@/components/ui/）；不要在模板里直接写 <el-checkbox>。' },
+        { element: 'ElCheckbox', message: '勾选框统一使用 GdCheckbox / GdCheckboxGroup；不要在模板里直接写 <ElCheckbox>。' },
+        { element: 'el-checkbox-group', message: '勾选组统一使用 GdCheckboxGroup；不要在模板里直接写 <el-checkbox-group>。' },
+        { element: 'ElCheckboxGroup', message: '勾选组统一使用 GdCheckboxGroup；不要在模板里直接写 <ElCheckboxGroup>。' },
+        { element: 'el-checkbox-button', message: '勾选按钮组统一使用 GdCheckboxGroup + GdCheckbox；不要在模板里直接写 <el-checkbox-button>。' },
+        { element: 'ElCheckboxButton', message: '勾选按钮组统一使用 GdCheckboxGroup + GdCheckbox；不要在模板里直接写 <ElCheckboxButton>。' },
+        { element: 'el-radio', message: '单选统一使用 GdRadio / GdRadioGroup 或 GdSegmented（@/components/ui/）；不要在模板里直接写 <el-radio>。' },
+        { element: 'ElRadio', message: '单选统一使用 GdRadio / GdRadioGroup 或 GdSegmented；不要在模板里直接写 <ElRadio>。' },
+        { element: 'el-radio-group', message: '单选组统一使用 GdRadioGroup 或 GdSegmented；不要在模板里直接写 <el-radio-group>。' },
+        { element: 'ElRadioGroup', message: '单选组统一使用 GdRadioGroup 或 GdSegmented；不要在模板里直接写 <ElRadioGroup>。' },
+        { element: 'el-radio-button', message: '分段单选统一使用 GdSegmented；不要在模板里直接写 <el-radio-button>。' },
+        { element: 'ElRadioButton', message: '分段单选统一使用 GdSegmented；不要在模板里直接写 <ElRadioButton>。' },
+        { element: 'el-tabs', message: '页签统一使用 GdTabs（@/components/ui/GdTabs.vue）；不要在模板里直接写 <el-tabs>。' },
+        { element: 'ElTabs', message: '页签统一使用 GdTabs；不要在模板里直接写 <ElTabs>。' },
+        { element: 'el-tab-pane', message: '页签统一使用 GdTabs（tabs 数组 + 外部 v-if 渲染内容）；不要在模板里直接写 <el-tab-pane>。' },
+        { element: 'ElTabPane', message: '页签统一使用 GdTabs；不要在模板里直接写 <ElTabPane>。' },
+        { element: 'el-pagination', message: '分页统一使用 GdPagination（@/components/ui/GdPagination.vue）；不要在模板里直接写 <el-pagination>。' },
+        { element: 'ElPagination', message: '分页统一使用 GdPagination；不要在模板里直接写 <ElPagination>。' },
+        { element: 'el-collapse', message: '折叠面板统一使用 GdCollapse（@/components/ui/GdCollapse.vue）；不要在模板里直接写 <el-collapse>。' },
+        { element: 'ElCollapse', message: '折叠面板统一使用 GdCollapse；不要在模板里直接写 <ElCollapse>。' },
+        { element: 'el-collapse-item', message: '折叠面板统一使用 GdCollapse；不要在模板里直接写 <el-collapse-item>。' },
+        { element: 'ElCollapseItem', message: '折叠面板统一使用 GdCollapse；不要在模板里直接写 <ElCollapseItem>。' },
+        { element: 'el-upload', message: '上传已去组件化：自绘拖放/点击区 + 隐藏 input[type=file]（参考 Skills.vue）；不要在模板里直接写 <el-upload>。' },
+        { element: 'ElUpload', message: '上传已去组件化：自绘拖放/点击区 + 隐藏 input[type=file]；不要在模板里直接写 <ElUpload>。' },
+        { element: 'el-image-viewer', message: '图片预览统一使用 GdImageViewer（@/components/ui/GdImageViewer.vue）；不要在模板里直接写 <el-image-viewer>。' },
+        { element: 'ElImageViewer', message: '图片预览统一使用 GdImageViewer；不要在模板里直接写 <ElImageViewer>。' },
+        { element: 'el-drawer', message: '抽屉统一使用 GdDrawer（@/components/ui/GdDrawer.vue）；不要在模板里直接写 <el-drawer>。' },
+        { element: 'ElDrawer', message: '抽屉统一使用 GdDrawer；不要在模板里直接写 <ElDrawer>。' },
+        { element: 'el-table', message: '表格已去组件化：静态对比数据用原生 <table> + Tailwind/局部样式（参考 SplitpanesPerfTest.vue）；不要在模板里直接写 <el-table>。' },
+        { element: 'ElTable', message: '表格已去组件化：静态数据用原生 <table>；不要在模板里直接写 <ElTable>。' },
+        { element: 'el-table-column', message: '表格已去组件化：静态数据用原生 <table>；不要在模板里直接写 <el-table-column>。' },
+        { element: 'ElTableColumn', message: '表格已去组件化：静态数据用原生 <table>；不要在模板里直接写 <ElTableColumn>。' },
+        { element: 'el-date-picker', message: '日期时间选择统一使用 GdDatePicker（@/components/ui/GdDatePicker.vue）；不要在模板里直接写 <el-date-picker>。' },
+        { element: 'ElDatePicker', message: '日期时间选择统一使用 GdDatePicker；不要在模板里直接写 <ElDatePicker>。' },
+        { element: 'el-time-picker', message: '时间选择统一使用 GdTimePicker（@/components/ui/GdTimePicker.vue）；不要在模板里直接写 <el-time-picker>。' },
+        { element: 'ElTimePicker', message: '时间选择统一使用 GdTimePicker；不要在模板里直接写 <ElTimePicker>。' },
+        { element: 'el-tree', message: '只读展示树统一使用 GdTree（@/components/ui/GdTree.vue）；不要在模板里直接写 <el-tree>。' },
+        { element: 'ElTree', message: '只读展示树统一使用 GdTree；不要在模板里直接写 <ElTree>。' },
+        { element: 'el-config-provider', message: 'element-plus 已整体卸载，不要引入任何 Element Plus 组件。' },
+        { element: 'ElConfigProvider', message: 'element-plus 已整体卸载，不要引入任何 Element Plus 组件。' },
       ],
     },
   },
@@ -162,6 +244,40 @@ export default ts.config(
               name: 'element-plus',
               importNames: ['ElSlider'],
               message: '滑块统一使用 GdSlider（@/components/ui/GdSlider.vue），不要使用 Element Plus 的 ElSlider。',
+            },
+            {
+              name: 'element-plus',
+              importNames: ['ElTag', 'ElAlert', 'ElDivider', 'ElProgress', 'ElEmpty', 'ElBadge', 'ElLink'],
+              message: '标签/提示条/分隔线/进度条/空态统一使用 GdTag/GdAlert/GdDivider/GdProgress/GdEmpty（@/components/ui/），徽标用 span、链接用 GdButton link；不要使用 Element Plus 的这批组件。',
+            },
+            {
+              name: 'element-plus',
+              importNames: ['ElIcon'],
+              message: '图标直接用 @vicons/fluent 裸组件（Tailwind 尺寸类控制大小），不要使用 Element Plus 的 ElIcon 容器。',
+            },
+            {
+              name: 'element-plus',
+              importNames: ['ElForm', 'ElFormItem', 'ElCheckbox', 'ElCheckboxGroup', 'ElCheckboxButton', 'ElRadio', 'ElRadioGroup', 'ElRadioButton'],
+              message: '表单布局用 GdFormField + useFormValidation；勾选用 GdCheckbox(Group)；单选用 GdSegmented / GdRadio(Group)。不要使用 Element Plus 的这批组件。',
+            },
+            {
+              name: 'element-plus',
+              importNames: ['ElTabs', 'ElTabPane', 'ElPagination', 'ElCollapse', 'ElCollapseItem', 'ElUpload'],
+              message: '页签用 GdTabs、分页用 GdPagination、折叠用 GdCollapse、上传去组件化（自绘容器 + 隐藏 input）。不要使用 Element Plus 的这批组件。',
+            },
+            {
+              name: 'element-plus',
+              importNames: ['ElImageViewer', 'ElDrawer', 'ElTable', 'ElTableColumn'],
+              message: '图片预览用 GdImageViewer、抽屉用 GdDrawer（@/components/ui/）、静态表格用原生 <table>。不要使用 Element Plus 的这批组件。',
+            },
+            {
+              name: 'element-plus',
+              importNames: ['ElDatePicker', 'ElTimePicker'],
+              message: '日期时间选择用 GdDatePicker、时间选择用 GdTimePicker（@/components/ui/）。不要使用 Element Plus 的这批组件。',
+            },
+            {
+              name: 'element-plus',
+              message: 'element-plus 已于 2026-11 整体卸载（去 Element 化收官），不要以任何形式再引入：UI 一律使用 Gd* 组件（@/components/ui/）。',
             },
             {
               name: 'element-plus',

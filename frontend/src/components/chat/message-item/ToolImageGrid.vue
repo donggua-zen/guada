@@ -3,14 +3,14 @@
     <img v-for="(img, index) in images" :key="img.url || img.previewUrl || index"
       :src="toResourceUrl(img.previewUrl || img.url)" :alt="img.name || 'image'"
       class="tool-image-thumb" loading="lazy" @click="open(index)" />
-    <el-image-viewer v-if="showViewer" v-model:visible="showViewer" :url-list="viewerList"
-      :initial-index="viewerIndex" :teleported="true" @close="showViewer = false" />
+    <GdImageViewer :visible="showViewer" :urls="viewerList"
+      :initial-index="viewerIndex" @update:visible="showViewer = $event" @close="showViewer = false" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { ElImageViewer } from 'element-plus';
+import GdImageViewer from '@/components/ui/GdImageViewer.vue';
 import { toResourceUrl } from '@/utils/url';
 import type { FileRef } from '@/types/stream/content-block.types';
 
@@ -60,7 +60,7 @@ const open = (index: number): void => {
   display: block;
   max-width: 160px;
   max-height: 120px;
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--gd-color-border, rgba(0, 0, 0, 0.12));
   border-radius: 6px;
   object-fit: cover;
   cursor: zoom-in;

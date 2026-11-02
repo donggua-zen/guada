@@ -15,9 +15,9 @@
       <span class="wf-card-meta">{{ metaText }}</span>
       <GdTooltip v-if="openWorkflowTab" :content="t('chat.workspace.workflowTab')" placement="bottom">
         <button class="wf-card-detail" @click.stop="openWorkflowTab?.(props.sessionId)">
-          <el-icon :size="14">
-            <Flowchart20Regular />
-          </el-icon>
+          
+            <Flowchart20Regular class="w-3.5 h-3.5"  />
+          
         </button>
       </GdTooltip>
     </div>
@@ -27,9 +27,9 @@
         @open="(subSessionId: string) => openSubAgent?.(subSessionId)" />
       <!-- 日志（编排脚本 log() 播报）：默认收起，运行中是想看"在做什么"时的第二视图 -->
       <button v-if="logs.length" class="wf-card-fold" @click="logsExpanded = !logsExpanded">
-        <el-icon :size="10" class="wf-card-fold-chevron" :class="{ 'is-open': logsExpanded }">
-          <ChevronDown12Regular />
-        </el-icon>
+        
+          <ChevronDown12Regular class="wf-card-fold-chevron w-2.5 h-2.5" :class="{ 'is-open': logsExpanded }"  />
+        
         <span>{{ t('chat.workspace.workflowLogs', { count: logs.length }) }}</span>
       </button>
       <div v-if="logsExpanded" class="wf-card-logs">
@@ -44,9 +44,9 @@
            （绑不到 run 的历史归档只有后者）。默认收起——返回值可能很长 -->
       <template v-else-if="resultText">
         <button class="wf-card-fold" @click="resultExpanded = !resultExpanded">
-          <el-icon :size="10" class="wf-card-fold-chevron" :class="{ 'is-open': resultExpanded }">
-            <ChevronDown12Regular />
-          </el-icon>
+          
+            <ChevronDown12Regular class="wf-card-fold-chevron w-2.5 h-2.5" :class="{ 'is-open': resultExpanded }"  />
+          
           <span>{{ t('chat.workspace.workflowResult') }}</span>
         </button>
         <pre v-if="resultExpanded" class="wf-card-pre">{{ resultText }}</pre>
@@ -58,7 +58,7 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElIcon } from "element-plus";
+
 import { ChevronDown12Regular, Flowchart20Regular } from "@vicons/fluent";
 import { parse as partialParse } from "partial-json";
 import GdTooltip from "@/components/ui/GdTooltip.vue";

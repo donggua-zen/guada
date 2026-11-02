@@ -10,35 +10,33 @@
         <p class="text-sm text-(--gd-color-text-gray) m-0">{{ t('ui.login.welcome') }}</p>
       </div>
 
-      <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="flex flex-col gap-5" @keyup.enter="handleLogin">
-        <el-form-item prop="username">
-          <GdInput v-model="form.username" :placeholder="t('ui.login.username')" size="large" clearable>
+      <div class="flex flex-col gap-5" @keyup.enter="handleLogin">
+        <GdFormField :error="errors.username || undefined">
+          <GdInput v-model="form.username" :placeholder="t('ui.login.username')" size="large" clearable
+            :error="!!errors.username" @blur="validateField('username')">
             <template #prefix>
-              <el-icon class="text-gray-400">
-                <UserIcon />
-              </el-icon>
+                <UserIcon class="text-gray-400 size-4" />
             </template>
           </GdInput>
-        </el-form-item>
+        </GdFormField>
 
-        <el-form-item prop="password">
-          <GdInput v-model="form.password" type="password" show-password :placeholder="t('ui.login.password')" size="large">
+        <GdFormField :error="errors.password || undefined">
+          <GdInput v-model="form.password" type="password" show-password :placeholder="t('ui.login.password')" size="large"
+            :error="!!errors.password" @blur="validateField('password')">
             <template #prefix>
-              <el-icon class="text-gray-400">
-                <LockIcon />
-              </el-icon>
+                <LockIcon class="text-gray-400 size-4" />
             </template>
           </GdInput>
-        </el-form-item>
+        </GdFormField>
 
         <div class="flex justify-between items-center">
-          <el-checkbox v-model="rememberMe">{{ t('ui.login.rememberMe') }}</el-checkbox>
+          <GdCheckbox v-model="rememberMe">{{ t('ui.login.rememberMe') }}</GdCheckbox>
         </div>
 
         <GdButton type="primary" size="large" :loading="loading" @click="handleLogin" class="mt-2 h-11 text-base font-medium rounded-xl">
           {{ loading ? t('ui.login.logging') : t('ui.login.submit') }}
         </GdButton>
-      </el-form>
+      </div>
     </div>
   </div>
 </div>
@@ -58,14 +56,12 @@ import { useAuthStore } from '../stores/auth'
 import { NetworkError } from '@/utils/errors'
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { toast } from '@/components/ui/toastService';
-import CustomTitlebar from './CustomTitlebar.vue'
-
-// Element Plus 组件导入
-import { ElForm, ElFormItem, ElIcon, ElCheckbox } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
 import GdInput from '@/components/ui/GdInput.vue';
-
-import type { FormInstance } from 'element-plus'
+import GdFormField from '@/components/ui/GdFormField.vue';
+import { useFormValidation } from '@/composables/useFormValidation';
+import CustomTitlebar from './CustomTitlebar.vue'
 
 const authStore = useAuthStore()
 // 消息提示
@@ -90,38 +86,24 @@ const rememberMe = ref(false)
 // 加载状态 - 类型化
 const loading = ref(false)
 
-// 表单验证规则 - 类型化
-const rules = reactive({
-  username: {
-    required: true,
-    trigger: ['input', 'blur'],
-    validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
-      if (!value) {
-        callback(new Error(t('ui.login.requireUsername')))
-        return
-      }
-      const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/
-      if (!usernameRegex.test(value)) {
-        callback(new Error(t('ui.login.usernameFormat')))
-        return
-      }
-      callback()
-    }
-  },
-  password: {
-    required: true,
-    trigger: ['input', 'blur'],
-    message: t('ui.login.requirePassword')
-  }
-})
-
-// 表单引用 - 类型化
-const formRef = ref<FormInstance | null>(null)
+// 校验（原 el-form :rules → useFormValidation；错误经 GdFormField 行内红字展示）
+const { errors, validate, validateField } = useFormValidation({
+  username: [{
+    validator: (v) => {
+      const value = String(v ?? '')
+      if (!value) return t('ui.login.requireUsername')
+      return /^[a-zA-Z0-9_]{3,20}$/.test(value) ? null : t('ui.login.usernameFormat')
+    },
+  }],
+  password: [{
+    validator: (v) => (String(v ?? '') ? null : t('ui.login.requirePassword')),
+  }],
+}, () => form)
 
 // 登录处理 - 类型化
 const handleLogin = async (): Promise<void> => {
-  formRef.value?.validate(async (valid: boolean) => {
-    if (valid) {
+  const valid = await validate()
+  if (valid) {
       loading.value = true
       try {
         // 构建登录参数
@@ -165,37 +147,8 @@ const handleLogin = async (): Promise<void> => {
     } else {
       toast.error(t('ui.login.checkInput'))
     }
-  })
-}
+  }
 </script>
 
 <style scoped>
-/* Element Plus 深度样式定制 */
-:deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px var(--gd-color-border) inset;
-  border-radius: 10px;
-  background-color: var(--gd-color-surface);
-  transition: all 0.2s ease;
-  padding: 4px 12px;
-}
-
-.dark :deep(.el-input__wrapper) {
-  background-color: #2a2a2a;
-}
-
-:deep(.el-input.is-focus .el-input__wrapper) {
-  box-shadow: 0 0 0 1px var(--gd-color-primary) inset;
-}
-
-:deep(.el-form-item__label) {
-  font-weight: 500;
-  color: var(--gd-color-text);
-  font-size: 14px;
-  padding-bottom: 6px;
-}
-
-:deep(.el-checkbox__label) {
-  font-size: 14px;
-  color: var(--gd-color-text-gray);
-}
 </style>

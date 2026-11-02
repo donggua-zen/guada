@@ -423,7 +423,7 @@ function handleItemClick(messageId: string) {
   max-height: 220px;
   overflow-y: auto;
   padding: 8px 10px;
-  background-color: var(--el-bg-color, #fff);
+  background-color: var(--gd-color-bg);
   border: 1px solid var(--gd-color-border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
@@ -450,14 +450,14 @@ function handleItemClick(messageId: string) {
   font-size: 11px;
   /* 整数行高：11px 继承 1.5 会得到 16.5px 半像素行盒 */
   line-height: 16px;
-  color: var(--el-text-color-placeholder, #a8abb2);
+  color: var(--gd-color-text-disabled);
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
 }
 
 .pop-title {
   font-size: 13px;
   font-weight: 500;
-  color: var(--el-text-color-primary, #303133);
+  color: var(--gd-color-text);
   /* 整数行高：13 × 1.4 = 18.2px */
   line-height: 18px;
   margin-bottom: 4px;
@@ -471,7 +471,7 @@ function handleItemClick(messageId: string) {
 .pop-preview {
   font-size: 12px;
   line-height: 1.5;
-  color: var(--el-text-color-secondary, #606266);
+  color: var(--gd-color-text-gray);
   white-space: pre-wrap;
   word-break: break-word;
   display: -webkit-box;

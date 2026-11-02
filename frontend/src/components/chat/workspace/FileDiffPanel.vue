@@ -26,14 +26,14 @@
         </button>
       </div>
       <button class="fdp__action" @click="openInFileTab">
-        <el-icon :size="14"><Code20Regular /></el-icon>
+        <Code20Regular class="w-3.5 h-3.5"  />
         <span>{{ t('chat.workspace.viewSource') }}</span>
       </button>
     </div>
 
     <!-- 二进制 / 办公文件：无法逐行 diff，仅提示 -->
     <div v-if="!diffable" class="fdp__nodiff">
-      <el-icon :size="16"><Info24Regular /></el-icon>
+      <Info24Regular class="w-4 h-4"  />
       <span>{{ t('chat.fileChanges.noDiff') }}</span>
     </div>
 
@@ -64,7 +64,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElIcon } from "element-plus";
+
 import { Info24Regular, Code20Regular } from "@vicons/fluent";
 import { diffLines as computeDiffLines } from "diff";
 import { useHighlight } from "@/composables/useHighlight";
@@ -188,7 +188,7 @@ function highlightLine(line: string): string {
   align-items: center;
   gap: 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--gd-color-border);
   flex-shrink: 0;
 }
 
@@ -231,7 +231,7 @@ function highlightLine(line: string): string {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border: 1px solid var(--el-border-color);
+  border: 1px solid var(--gd-color-border);
   border-radius: 4px;
   background: transparent;
   cursor: pointer;
@@ -240,21 +240,21 @@ function highlightLine(line: string): string {
 }
 
 .fdp__tab:hover {
-  background: var(--el-fill-color);
+  background: var(--gd-color-field-bg-hover);
 }
 
 .fdp__tab.is-active {
-  background: var(--el-color-primary-light-9);
-  border-color: var(--el-color-primary-light-5);
+  background: var(--gd-color-primary-100);
+  border-color: var(--gd-color-primary-500);
 }
 
 .fdp__tab-index {
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 .fdp__tab-name {
   font-weight: 500;
-  color: var(--el-text-color-primary);
+  color: var(--gd-color-text);
 }
 
 .fdp__tab-lines {
@@ -264,11 +264,11 @@ function highlightLine(line: string): string {
 }
 
 .fdp__add {
-  color: var(--el-color-success);
+  color: var(--gd-color-success);
 }
 
 .fdp__del {
-  color: var(--el-color-danger);
+  color: var(--gd-color-danger);
 }
 
 /* 二进制兜底 */
@@ -277,7 +277,7 @@ function highlightLine(line: string): string {
   align-items: center;
   gap: 8px;
   padding: 16px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   font-size: 13px;
 }
 
@@ -290,7 +290,7 @@ function highlightLine(line: string): string {
 
 .fdp__view {
   border-radius: 4px;
-  background: var(--el-bg-color);
+  background: var(--gd-color-bg);
 }
 
 .fdp__table {
@@ -320,23 +320,23 @@ function highlightLine(line: string): string {
 }
 
 .is-add {
-  background: rgba(var(--el-color-success-rgb, 103, 194, 58), 0.08);
+  background: rgba(var(--gd-color-success-rgb, 103, 194, 58), 0.08);
 }
 .is-add .fdp__sign {
-  color: var(--el-color-success);
+  color: var(--gd-color-success);
 }
 
 .is-del {
-  background: rgba(var(--el-color-danger-rgb, 245, 108, 108), 0.08);
+  background: rgba(var(--gd-color-danger-rgb, 245, 108, 108), 0.08);
 }
 .is-del .fdp__sign {
-  color: var(--el-color-danger);
+  color: var(--gd-color-danger);
 }
 
 .is-ctx {
   background: transparent;
 }
 .is-ctx .fdp__sign {
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 </style>

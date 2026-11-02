@@ -3,15 +3,15 @@
     <GdDialog v-model="showModal" :title="t('knowledge.chunks.title', { name: selectedFile?.displayName })" size="lg"
         :close-on-click-modal="true" @close="handleClose">
         <div v-if="loading" class="loading-container text-center py-8">
-            <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">
-                <ArrowSync16Regular class="animate-spin" />
-            </el-icon>
+            
+                <ArrowSync16Regular class="text-2xl text-gray-400 dark:text-[#6b6d75] size-4 animate-spin" />
+            
             <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.chunks.loading') }}</p>
         </div>
         <div v-else-if="chunks.length === 0" class="no-chunks-container text-center py-8">
-            <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">
-                <Document24Regular />
-            </el-icon>
+            
+                <Document24Regular class="text-2xl text-gray-400 dark:text-[#6b6d75] size-4"  />
+            
             <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.chunks.empty') }}</p>
         </div>
         <div v-else class="chunks-container">
@@ -37,9 +37,8 @@
                 <div class="text-sm text-gray-500 dark:text-[#8b8d95]">
                     {{ t('knowledge.chunks.pagination', { total: totalChunks, start: Math.min(totalChunks, (currentPage - 1) * pageSize + 1), end: Math.min(totalChunks, currentPage * pageSize) }) }}
                 </div>
-                <el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="totalChunks"
-                    layout="prev, pager, next" :hide-on-single-page="totalChunks <= pageSize"
-                    @current-change="handlePageChange" />
+                <GdPagination v-model="currentPage" :page-size="pageSize" :total="totalChunks"
+      hide-on-single-page @change="handlePageChange" />
             </div>
         </template>
     </GdDialog>
@@ -56,6 +55,7 @@ import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { toast } from '@/components/ui/toastService';
 import { apiService } from '@/services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import GdPagination from '@/components/ui/GdPagination.vue';
 
 interface Props {
     modelValue: boolean
@@ -161,18 +161,18 @@ defineExpose({
 <style scoped>
 
 .chunk-item {
-    border: 1px solid var(--el-border-color);
+    border: 1px solid var(--gd-color-border);
     border-radius: 8px;
     transition: all 0.2s ease;
 }
 
 .chunk-item:hover {
-    border-color: var(--el-color-primary);
-    box-shadow: 0 2px 8px var(--el-box-shadow-light);
+    border-color: var(--gd-color-primary);
+    box-shadow: 0 2px 8px var(--gd-dialog-shadow, 0 0 10px rgba(0, 0, 0, 0.1));
 }
 
 .chunk-header {
-    border-bottom: 1px solid var(--el-border-color);
+    border-bottom: 1px solid var(--gd-color-border);
     padding-bottom: 0.5rem;
 }
 
@@ -180,7 +180,7 @@ defineExpose({
     font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
     line-height: 1.6;
     padding: 0.75rem;
-    background-color: var(--el-bg-color-overlay);
+    background-color: var(--gd-color-surface);
     border-radius: 4px;
     white-space: pre-wrap;
     word-break: break-word;
@@ -188,11 +188,11 @@ defineExpose({
 
 .chunk-index {
     font-weight: bold;
-    color: var(--el-text-color-secondary);
+    color: var(--gd-color-text-gray);
 }
 
 .chunk-meta {
-    color: var(--el-text-color-placeholder);
+    color: var(--gd-color-text-disabled);
 }
 
 .loading-container {

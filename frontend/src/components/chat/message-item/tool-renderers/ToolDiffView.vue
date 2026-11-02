@@ -97,7 +97,7 @@ const visibleRows = computed(() => rows.value.slice(0, MAX_ROWS));
 .tool-view-file {
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
   font-weight: 500;
-  color: var(--el-text-color-regular);
+  color: var(--gd-color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -109,11 +109,11 @@ const visibleRows = computed(() => rows.value.slice(0, MAX_ROWS));
 }
 
 .diff-stat--add {
-  color: var(--el-color-success);
+  color: var(--gd-color-success);
 }
 
 .diff-stat--remove {
-  color: var(--el-color-danger);
+  color: var(--gd-color-danger);
 }
 
 .tool-diff-body {
@@ -133,7 +133,7 @@ const visibleRows = computed(() => rows.value.slice(0, MAX_ROWS));
   font-size: 12px;
   /* 整数行高：12 × 1.55 = 18.6px 会让整块每行都落在小数偏移上（长 diff 最明显） */
   line-height: 19px;
-  color: var(--el-text-color-regular);
+  color: var(--gd-color-text);
 }
 
 .diff-table td {
@@ -155,29 +155,29 @@ const visibleRows = computed(() => rows.value.slice(0, MAX_ROWS));
 }
 
 .diff-line--add {
-  background: rgba(var(--el-color-success-rgb, 103, 194, 58), 0.1);
+  background: rgba(var(--gd-color-success-rgb, 103, 194, 58), 0.1);
 }
 
 .diff-line--add .diff-sign {
-  color: var(--el-color-success);
+  color: var(--gd-color-success);
 }
 
 .diff-line--del {
-  background: rgba(var(--el-color-danger-rgb, 245, 108, 108), 0.1);
+  background: rgba(var(--gd-color-danger-rgb, 245, 108, 108), 0.1);
 }
 
 .diff-line--del .diff-sign {
-  color: var(--el-color-danger);
+  color: var(--gd-color-danger);
 }
 
 .diff-line--ctx .diff-sign {
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 .diff-truncated {
   padding: 4px calc(10px + var(--tool-card-pad-x, 12px)) 4px 10px;
   font-size: 11px;
-  color: var(--el-text-color-secondary);
-  border-top: 1px solid var(--el-border-color-lighter);
+  color: var(--gd-color-text-gray);
+  border-top: 1px solid var(--gd-color-border);
 }
 </style>

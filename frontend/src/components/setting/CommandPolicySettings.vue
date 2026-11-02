@@ -24,7 +24,7 @@
     </div>
 
     <!-- 校验告警 -->
-    <el-alert
+    <GdAlert
       v-for="(w, i) in effective?.warnings || []"
       :key="i"
       :title="w"
@@ -53,9 +53,9 @@
         >
           <span class="truncate">{{ row.label }}</span>
           <span class="flex items-center gap-1 shrink-0">
-            <el-tag size="small" :type="row.builtin ? 'info' : 'warning'" effect="plain">
+            <GdTag size="small" :type="row.builtin ? 'info' : 'warning'" effect="plain">
               {{ row.builtin ? t('settings.policy.tagBuiltin') : t('settings.policy.tagMine') }}
-            </el-tag>
+            </GdTag>
             <GdButton link type="danger" size="small" @click="removeReadOnlyRow(row)">
               {{ t('settings.policy.remove') }}
             </GdButton>
@@ -94,9 +94,9 @@
         >
           <span class="truncate">{{ row.label }}</span>
           <span class="flex items-center gap-1 shrink-0">
-            <el-tag size="small" :type="row.builtin ? 'info' : 'warning'" effect="plain">
+            <GdTag size="small" :type="row.builtin ? 'info' : 'warning'" effect="plain">
               {{ row.builtin ? t('settings.policy.tagBuiltin') : t('settings.policy.tagMine') }}
-            </el-tag>
+            </GdTag>
             <GdButton link type="danger" size="small" @click="removeAskRow(row)">
               {{ t('settings.policy.remove') }}
             </GdButton>
@@ -119,9 +119,9 @@
         >
           <span class="truncate">{{ row.label }}</span>
           <span class="flex items-center gap-1 shrink-0">
-            <el-tag size="small" :type="row.allowed ? 'success' : 'info'" effect="plain">
+            <GdTag size="small" :type="row.allowed ? 'success' : 'info'" effect="plain">
               {{ row.allowed ? t('settings.policy.allowed') : t('settings.policy.askOnce') }}
-            </el-tag>
+            </GdTag>
             <GdButton v-if="!row.allowed" link type="primary" size="small" @click="allowSensitiveRow(row)">
               {{ t('settings.policy.allowThis') }}
             </GdButton>
@@ -164,9 +164,9 @@
         >
           <span class="truncate">{{ row.label }}</span>
           <span class="flex items-center gap-1 shrink-0">
-            <el-tag size="small" :type="row.builtin ? 'info' : 'warning'" effect="plain">
+            <GdTag size="small" :type="row.builtin ? 'info' : 'warning'" effect="plain">
               {{ row.builtin ? t('settings.policy.tagBuiltin') : t('settings.policy.tagMine') }}
-            </el-tag>
+            </GdTag>
             <GdButton link type="danger" size="small" @click="removeWriteRootRow(row)">
               {{ row.builtin ? t('settings.policy.askInstead') : t('settings.policy.remove') }}
             </GdButton>
@@ -205,6 +205,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTag from '@/components/ui/GdTag.vue';
+import GdAlert from '@/components/ui/GdAlert.vue';
 import { toast } from '@/components/ui/toastService';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';

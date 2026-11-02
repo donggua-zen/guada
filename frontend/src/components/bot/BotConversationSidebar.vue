@@ -10,7 +10,7 @@
         :placeholder="t('bot.chat.searchPlaceholder')"
       >
         <template #prefix>
-          <el-icon><Search16Regular /></el-icon>
+          <Search16Regular class="size-4"  />
         </template>
       </GdInput>
     </div>
@@ -38,7 +38,7 @@
       <div
         class="w-12 h-12 rounded-full flex items-center justify-center bg-(--gd-color-primary-100) text-(--gd-color-primary)"
       >
-        <el-icon :size="22"><Chat20Regular /></el-icon>
+        <Chat20Regular class="w-[22px] h-[22px]"  />
       </div>
       <p class="text-sm font-medium text-(--gd-color-gray-900) dark:text-(--gd-color-gray-100)">
         {{ t('bot.chat.noBots') }}
@@ -135,10 +135,8 @@
                 </DropdownMenu>
               </div>
 
-              <el-icon :size="12" class="bot-card-chevron">
-                <ChevronDown12Regular v-if="!isCollapsed(group.botId)" />
-                <ChevronRight12Regular v-else />
-              </el-icon>
+              <span class="bot-card-chevron w-3 h-3"><ChevronDown12Regular v-if="!isCollapsed(group.botId)" />
+                <ChevronRight12Regular v-else /></span>
             </div>
 
             <div class="bot-card-meta">
@@ -294,12 +292,12 @@
     <!-- 底部工具条：所有状态下都在，添加机器人不再藏在管理页 -->
     <div class="bot-side-foot">
       <button type="button" class="bot-add" @click="emit('create')">
-        <el-icon :size="14"><Add16Regular /></el-icon>
+        <Add16Regular class="w-3.5 h-3.5"  />
         {{ t('bot.chat.addBot') }}
       </button>
       <GdTooltip :content="t('bot.card.docs')" placement="top">
         <button type="button" class="bot-docs" @click="emit('docs')">
-          <el-icon :size="14"><Document16Regular /></el-icon>
+          <Document16Regular class="w-3.5 h-3.5"  />
         </button>
       </GdTooltip>
     </div>
@@ -309,7 +307,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
 import { toast } from '@/components/ui/toastService';
 import GdInput from '@/components/ui/GdInput.vue';

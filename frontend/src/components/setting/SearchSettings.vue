@@ -81,10 +81,10 @@
               <GdInput v-model="providerKeys.deepseek" type="password" show-password
                 :placeholder="deepseekUseProviderKey ? t('settings.search.deepseekUseProviderKeyPlaceholder') : 'sk-...'"
                 :disabled="deepseekUseProviderKey" style="width: 360px;" clearable />
-              <el-checkbox v-model="deepseekUseProviderKey" size="small"
+              <GdCheckbox v-model="deepseekUseProviderKey" size="small"
                 :title="t('settings.search.deepseekUseProviderKeyDesc')">
                 {{ t('settings.search.deepseekUseProviderKey') }}
-              </el-checkbox>
+              </GdCheckbox>
             </div>
           </div>
 
@@ -136,6 +136,7 @@ import { apiService } from '@/services/ApiService'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 
 import GdInput from '@/components/ui/GdInput.vue';
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
 import { toast, notify } from '@/components/ui/toastService';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';

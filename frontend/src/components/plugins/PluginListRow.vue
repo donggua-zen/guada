@@ -28,9 +28,9 @@
     <div class="flex shrink-0 items-center gap-2">
       <DropdownMenu v-if="menuItems.length > 0" @command="(command: string) => emit('command', command)">
         <div class="row-menu-trigger" :title="t('common.more')" :aria-label="t('common.more')">
-          <el-icon :size="16">
-            <MoreHorizontal20Filled />
-          </el-icon>
+          
+            <MoreHorizontal20Filled class="w-4 h-4"  />
+          
         </div>
         <template #dropdown>
           <DropdownMenuItem
@@ -51,7 +51,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus'
+
 import { MoreHorizontal20Filled } from '@vicons/fluent'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import DropdownMenu from '@/components/ui/DropdownMenu.vue'

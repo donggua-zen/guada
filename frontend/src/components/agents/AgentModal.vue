@@ -140,7 +140,7 @@ const handleSave = async (): Promise<void> => {
 .dialog-title {
     font-size: 16px;
     font-weight: 600;
-    color: var(--el-text-color-primary);
+    color: var(--gd-color-text);
 }
 
 /* GdDialog 的 .l-dialog__body 是普通 block 容器，flex 属性在此不生效；

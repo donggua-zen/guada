@@ -505,24 +505,6 @@ html.dark {
 }
 
 :root {
-  --el-color-primary: var(--gd-color-primary) !important;
-  --el-color-primary-light-9: var(--gd-color-primary-100) !important;
-  --el-color-primary-light-8: var(--gd-color-primary-200) !important;
-  --el-color-primary-light-7: var(--gd-color-primary-300) !important;
-  --el-color-primary-light-5: var(--gd-color-primary-500) !important;
-  --el-color-primary-light-3: var(--gd-color-primary-800) !important;
-  --el-color-primary-dark-2: var(--gd-color-primary-950) !important;
-  --el-color-primary-light-1: var(--gd-color-primary-950) !important;
-
-  /* 弹层（下拉菜单/选择器/气泡卡片）接入主题表面色 */
-  --el-bg-color-overlay: var(--gd-color-surface) !important;
-  --el-border-color-light: var(--gd-color-surface-border) !important;
-  --el-fill-color-light: var(--gd-color-sidebar-bg-hover) !important;
-
-  /* 日志抽屉是唯一保留的 Element 模态例外，至少让底色/内边距跟随主题 */
-  --el-drawer-bg-color: var(--gd-color-surface) !important;
-  --el-drawer-padding-primary: 16px !important;
-
   /* 标题栏样式变量 */
   --gd-titlebar-text-color: #222;
   --gd-titlebar-hover-bg: rgba(0, 0, 0, 0.06);
@@ -538,24 +520,6 @@ html.dark {
 }
 
 html.dark {
-  --el-color-primary: var(--gd-color-primary) !important;
-  --el-color-primary-light-9: var(--gd-color-primary-100) !important;
-  --el-color-primary-light-8: var(--gd-color-primary-200) !important;
-  --el-color-primary-light-7: var(--gd-color-primary-300) !important;
-  --el-color-primary-light-5: var(--gd-color-primary-500) !important;
-  --el-color-primary-light-3: var(--gd-color-primary-800) !important;
-  --el-color-primary-dark-2: var(--gd-color-primary-950) !important;
-  --el-color-primary-light-1: var(--gd-color-primary-950) !important;
-
-  /* 弹层（下拉菜单/选择器/气泡卡片）接入主题表面色 */
-  --el-bg-color-overlay: var(--gd-color-surface) !important;
-  --el-border-color-light: var(--gd-color-surface-border) !important;
-  --el-fill-color-light: var(--gd-color-sidebar-bg-hover) !important;
-
-  /* 日志抽屉是唯一保留的 Element 模态例外，至少让底色/内边距跟随主题 */
-  --el-drawer-bg-color: var(--gd-color-surface) !important;
-  --el-drawer-padding-primary: 16px !important;
-
   /* 标题栏暗色模式样式变量 */
   --gd-titlebar-text-color: var(--gd-color-text);
   /* #a8aab3 - 柔和的灰白色 */
@@ -1110,8 +1074,8 @@ html.mobile.touch .header-icon-btn::after {
   inset: -8px;
 }
 
-/* el-tabs 移动端：tab 可横向滚动不换行挤压 */
-html.mobile .el-tabs__nav-wrap:not(.is-scrollable) .el-tabs__nav-scroll {
+/* tabs 移动端：tab 可横向滚动不换行挤压（GdTabs 容器自带 overflow-x-auto） */
+html.mobile .gd-tabs {
   overflow-x: auto;
 }
 

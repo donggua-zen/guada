@@ -144,30 +144,28 @@
      来自 turn.metadata（streamProjector.turn_end 写入，持久化后同样可用）。 -->
     <template v-if="assistantMetadata?.finishReason">
       <!-- 错误提示（network_error 为新归一化原因；历史遗留的 terminated 裸错误走 errorAlertKind 兜底） -->
-      <el-alert v-if="errorAlertKind === 'network'" :title="t('chat.turn.networkError')" type="warning"
-        :closable="false" class="mt-2">
+      <GdAlert v-if="errorAlertKind === 'network'" :title="t('chat.turn.networkError')" type="warning" class="mt-2">
         <div>{{ t('chat.turn.networkErrorHint') }}</div>
         <div v-if="assistantMetadata.errorDetail" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
           {{ assistantMetadata.errorDetail }}
         </div>
-      </el-alert>
+      </GdAlert>
 
-      <el-alert v-else-if="assistantMetadata.finishReason === 'error'" :title="t('chat.turn.apiError')" type="error"
-        :closable="false" class="mt-2">
+      <GdAlert v-else-if="assistantMetadata.finishReason === 'error'" :title="t('chat.turn.apiError')" type="error" class="mt-2">
         {{ assistantMetadata.errorDetail }}
-      </el-alert>
+      </GdAlert>
 
       <!-- 超时提示 -->
-      <el-alert v-if="assistantMetadata.finishReason === 'timeout'" :title="t('chat.turn.requestTimeout')"
-        type="warning" :closable="false" class="mt-2">
+      <GdAlert v-if="assistantMetadata.finishReason === 'timeout'" :title="t('chat.turn.requestTimeout')"
+        type="warning" class="mt-2">
         {{ assistantMetadata.errorDetail || t('chat.turn.serverNoResponse') }}
-      </el-alert>
+      </GdAlert>
 
       <!-- 限流提示（文字说明，无继续按钮——用户自行继续） -->
-      <el-alert v-if="assistantMetadata.finishReason === 'rate_limited'"
-        :title="t('chat.turn.rateLimitedPaused')" type="warning" :closable="false" class="mt-2">
+      <GdAlert v-if="assistantMetadata.finishReason === 'rate_limited'"
+        :title="t('chat.turn.rateLimitedPaused')" type="warning" class="mt-2">
         {{ assistantMetadata.errorDetail || t('chat.turn.rateLimitedPaused') }}
-      </el-alert>
+      </GdAlert>
 
       <!-- 用户终止提示 -->
       <div v-if="assistantMetadata.finishReason === 'user_cancel'"
@@ -199,14 +197,13 @@
       <ThinkingStatus v-else :duration-text="durationText" />
     </div>
     <!-- 图片预览 -->
-    <el-image-viewer v-if="showImageViewer" v-model:visible="showImageViewer" :url-list="previewList"
-      :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true" />
+    <GdImageViewer :visible="showImageViewer" :urls="previewList"
+      :initial-index="currentPreViewIndex" @update:visible="showImageViewer = $event" @close="showImageViewer = false" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, inject, type Component } from "vue";
-import { ElAlert, ElImageViewer } from "element-plus";
 import { useI18n } from "vue-i18n";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, BookOpen16Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
@@ -637,7 +634,7 @@ const renderSkillBadges = (text: string): string => {
         .filter(([k]) => k !== 'label')
         .map(([k, v]) => ` data-${k}="${v}"`)
         .join('');
-      return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${attrs.label || ''}" data-trigger="${prefix}"${dataAttrs} class="command-badge" style="color: var(--el-color-primary);">${displayText}</span>`;
+      return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${attrs.label || ''}" data-trigger="${prefix}"${dataAttrs} class="command-badge" style="color: var(--gd-color-primary);">${displayText}</span>`;
     }
   );
 };
@@ -906,24 +903,24 @@ const handleImageClick = (file: FileAttachment) => {
 }
 
 .system-message-icon {
-  color: var(--el-color-warning);
+  color: var(--gd-color-warning);
 }
 
 .system-message-label {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   font-weight: 500;
 }
 
 .system-message-divider {
   height: 1px;
-  background-color: var(--el-border-color-lighter);
+  background-color: var(--gd-color-border);
   margin: 8px 0;
 }
 
 .system-message-body {
   font-size: 14px;
-  color: var(--el-text-color-regular);
+  color: var(--gd-color-text);
 }
 
 /* 中间处理过程分组 */
@@ -950,7 +947,7 @@ const handleImageClick = (file: FileAttachment) => {
 }
 
 .process-group__header:hover {
-  color: var(--el-text-color-primary);
+  color: var(--gd-color-text);
 }
 
 /* 流式过程中的文字波纹效果（action + args 一起波纹） */

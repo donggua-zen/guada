@@ -8,14 +8,9 @@
             @click="handleNodeClick"
         >
             <!-- 展开/折叠图标 -->
-            <el-icon 
-                v-if="node.isDirectory" 
-                class="text-gray-400 transition-transform duration-200"
-                :class="{ 'rotate-90': isExpanded }"
-                size="14"
-            >
-                <ChevronRight16Regular />
-            </el-icon>
+            
+                <ChevronRight16Regular v-if="node.isDirectory" class="text-gray-400 transition-transform duration-200 w-3.5 h-3.5" :class="{ 'rotate-90': isExpanded }"  />
+            
             <div v-else class="w-3.5"></div>
             
             <!-- 文件夹/文件图标 -->
@@ -35,7 +30,7 @@
             </span>
             
             <!-- 状态标签 -->
-            <el-tag v-if="!node.isDirectory" size="small" :type="getStatusType(node.processingStatus)" class="shrink-0">
+            <GdTag v-if="!node.isDirectory" size="small" :type="getStatusType(node.processingStatus)" class="shrink-0">
                 <GdTooltip v-if="node.processingStatus === 'processing' && node.currentStep" :content="node.currentStep" placement="top">
                     <span>{{ getStatusText(node.processingStatus) }}</span>
                 </GdTooltip>
@@ -45,7 +40,7 @@
                     <span>{{ getStatusText(node.processingStatus) }}</span>
                 </GdTooltip>
                 <span v-else>{{ getStatusText(node.processingStatus) }}</span>
-            </el-tag>
+            </GdTag>
         </div>
         
         <!-- 子节点(递归渲染) -->
@@ -76,6 +71,7 @@ import { useI18n } from 'vue-i18n'
 import { ChevronRight16Regular } from '@vicons/fluent'
 import type { KBFile } from '@/stores/knowledgeBase'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
+import GdTag from '@/components/ui/GdTag.vue';
 import FolderIcon from '@/components/ui/FolderIcon.vue'
 import { getFileIconByExt } from '@/composables/useFileIcon'
 

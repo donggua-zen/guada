@@ -24,7 +24,7 @@
       <template v-else>
         <span v-if="row.isDir" class="tree-view-chevron" :class="{ expanded: !isCollapsed(row) }"
           @click.stop="onToggle(row)">
-          <el-icon :size="12"><ChevronRight12Regular /></el-icon>
+          <ChevronRight12Regular class="w-3 h-3"  />
         </span>
         <span v-else class="tree-view-chevron-placeholder" />
         <!-- 行内容插槽：图标 / 名称 / 操作按钮由调用方提供 -->

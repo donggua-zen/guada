@@ -40,41 +40,41 @@
                         </template>
                         <!-- Git 审阅图标 -->
                         <span v-else-if="tab.type === 'git'" class="tab-favicon tab-git">
-                            <el-icon :size="14"><Branch20Regular /></el-icon>
+                            <Branch20Regular class="w-3.5 h-3.5"  />
                         </span>
                         <!-- 进程日志图标 -->
                         <span v-else-if="tab.type === 'processlog'" class="tab-favicon tab-git">
-                            <el-icon :size="14"><Pulse20Regular /></el-icon>
+                            <Pulse20Regular class="w-3.5 h-3.5"  />
                         </span>
                         <!-- 子代理会话图标（运行中带状态点） -->
                         <template v-else-if="tab.type === 'subagent'">
                             <span class="tab-favicon tab-git">
-                                <el-icon :size="14"><Bot20Regular /></el-icon>
+                                <Bot20Regular class="w-3.5 h-3.5"  />
                             </span>
                             <span v-if="isSubAgentRunning(tab.key)" class="tab-run-dot" :title="t('chat.workspace.subagentRunning')"></span>
                         </template>
                         <!-- 子代理列表面板图标（与单个子代理标签的 Bot 图标区分） -->
                         <span v-else-if="tab.type === 'subagentlist'" class="tab-favicon tab-git">
-                            <el-icon :size="14"><PeopleTeam20Regular /></el-icon>
+                            <PeopleTeam20Regular class="w-3.5 h-3.5"  />
                         </span>
                         <!-- 工作流审阅图标 -->
                         <span v-else-if="tab.type === 'workflow'" class="tab-favicon tab-git">
-                            <el-icon :size="14"><Flowchart20Regular /></el-icon>
+                            <Flowchart20Regular class="w-3.5 h-3.5"  />
                         </span>
                         <!-- 计划面板图标 -->
                         <span v-else-if="tab.type === 'plan'" class="tab-favicon tab-git">
-                            <el-icon :size="14"><Notepad20Regular /></el-icon>
+                            <Notepad20Regular class="w-3.5 h-3.5"  />
                         </span>
                         <!-- 差异/编辑记录图标 -->
                         <span v-else-if="tab.type === 'diff'" class="tab-favicon tab-git">
-                            <el-icon :size="14"><Code20Regular /></el-icon>
+                            <Code20Regular class="w-3.5 h-3.5"  />
                         </span>
                         <span class="tab-title" :class="{ 'is-preview': tab.isPreview }">{{ truncateTabTitle(tabTitle(tab)) }}</span>
                         <span class="tab-close"
                             @click.stop="closeTab(tab)">
-                            <el-icon size="10">
-                                <Dismiss12Regular />
-                            </el-icon>
+                            
+                                <Dismiss12Regular class="w-2.5 h-2.5"  />
+                            
                         </span>
                     </div>
                 </div>
@@ -82,9 +82,9 @@
                 <!-- 起始页按钮：打开起始页（无任何标签时同样显示该页） -->
                 <GdTooltip :content="t('chat.workspace.newTab')" placement="bottom">
                     <button class="sidebar-tool-btn no-drag" @click="tabStore.openNewTab()">
-                        <el-icon size="14">
-                            <Add16Regular />
-                        </el-icon>
+                        
+                            <Add16Regular class="w-3.5 h-3.5"  />
+                        
                     </button>
                 </GdTooltip>
             </div>
@@ -100,19 +100,17 @@
                 placement="bottom">
                 <button class="sidebar-tool-btn no-drag mr-1.5" :class="{ active: layoutStore.floatingChatVisible }"
                     @click="layoutStore.toggleFloatingChat()">
-                    <el-icon :size="16">
-                        <Chat16Regular />
-                    </el-icon>
+                    
+                        <Chat16Regular class="w-4 h-4"  />
+                    
                 </button>
             </GdTooltip>
 
             <!-- 全屏按钮 -->
             <GdTooltip :content="layoutStore.workspaceFullscreen ? t('chat.workspace.exitFullscreen') : t('chat.workspace.fullscreen')" placement="bottom">
                 <button class="sidebar-tool-btn no-drag mr-1.5" @click="layoutStore.toggleWorkspaceFullscreen()">
-                    <el-icon :size="16">
-                        <FullScreenMaximize16Regular v-if="!layoutStore.workspaceFullscreen" />
-                        <ArrowMinimize16Regular v-else />
-                    </el-icon>
+                    <span class="w-4 h-4"><FullScreenMaximize16Regular v-if="!layoutStore.workspaceFullscreen" />
+                        <ArrowMinimize16Regular v-else /></span>
                 </button>
             </GdTooltip>
         </div>

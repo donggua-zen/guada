@@ -14,9 +14,9 @@
     <div ref="resultsScrollRef" class="max-h-80 overflow-y-auto py-1">
       <!-- 扫描中（尚无结果） -->
       <div v-if="isSearching && searchResults.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-400">
-        <el-icon class="animate-spin text-2xl mb-2">
-          <ArrowSync16Regular />
-        </el-icon>
+        
+          <ArrowSync16Regular class="animate-spin text-2xl mb-2 size-4"  />
+        
         <span class="text-xs">{{ scanningText }}</span>
       </div>
 
@@ -49,7 +49,7 @@
 
         <!-- 扫描进度（已有部分结果，继续扫描中） -->
         <div v-if="isSearching" class="flex items-center justify-center py-3 text-gray-400">
-          <el-icon class="animate-spin text-sm mr-1"><ArrowSync16Regular /></el-icon>
+          <ArrowSync16Regular class="animate-spin text-sm mr-1 size-4"  />
           <span class="text-xs">{{ scanningText }}</span>
         </div>
       </template>

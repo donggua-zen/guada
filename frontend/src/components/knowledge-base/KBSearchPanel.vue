@@ -3,11 +3,11 @@
   <div class="flex w-full h-full flex-1 flex-col p-4 overflow-hidden min-h-0">
     <!-- 搜索输入区域 -->
     <div class="search-input-section mb-4 bg-white dark:bg-gray-800 rounded-lg p-4">
-      <el-form :model="searchForm" label-width="80px">
-        <el-form-item :label="t('knowledge.search.contentLabel')">
+      <div class="flex flex-col gap-3">
+        <GdFormField :label="t('knowledge.search.contentLabel')" label-width="80px">
           <GdInput v-model="searchForm.query" type="textarea" :rows="3" :placeholder="t('knowledge.search.contentPlaceholder')"
             @keyup.enter.ctrl="handleSearch" />
-        </el-form-item>
+        </GdFormField>
 
         <!-- 结果数量和搜索按钮并排 -->
         <div class="flex items-center gap-4 mt-2">
@@ -17,21 +17,21 @@
           </div>
           <GdButton type="primary" @click="handleSearch" :loading="isSearching" :disabled="!canSearch"
             class="shrink-0" size="default">
-            <el-icon class="mr-1">
-              <Search16Regular />
-            </el-icon>
+            
+              <Search16Regular class="mr-1 size-4"  />
+            
             {{ t('knowledge.search.searchBtn') }}
           </GdButton>
         </div>
-      </el-form>
+      </div>
     </div>
 
     <!-- 搜索结果区域 -->
     <div v-if="searchResults.length > 0 || isSearching" class="search-results-section flex-1 overflow-hidden min-h-0">
       <div v-if="isSearching" class="loading-state text-center py-8">
-        <el-icon class="animate-spin text-3xl text-gray-400">
-          <ArrowSync16Regular />
-        </el-icon>
+        
+          <ArrowSync16Regular class="animate-spin text-3xl text-gray-400 size-4"  />
+        
         <p class="text-sm text-gray-500 mt-2">{{ t('knowledge.search.searching') }}</p>
       </div>
 
@@ -54,24 +54,24 @@
               <div class="flex items-center gap-1.5 flex-wrap">
                 <!-- 混合搜索模式：显示三个分数 -->
                 <template v-if="hasHybridScores(result)">
-                  <el-tag size="small" type="primary" effect="plain">
+                  <GdTag size="small" type="primary" effect="plain">
                     <span class="text-xs">{{ t('knowledge.search.semantic') }}</span>
                     <span class="ml-1 font-medium">{{ (result.semanticScore || 0).toFixed(2) }}</span>
-                  </el-tag>
-                  <el-tag size="small" type="success" effect="plain">
+                  </GdTag>
+                  <GdTag size="small" type="success" effect="plain">
                     <span class="text-xs">{{ t('knowledge.search.keyword') }}</span>
                     <span class="ml-1 font-medium">{{ (result.keywordScore || 0).toFixed(2) }}</span>
-                  </el-tag>
-                  <el-tag size="small" type="warning">
+                  </GdTag>
+                  <GdTag size="small" type="warning">
                     <span class="text-xs">{{ t('knowledge.search.comprehensive') }}</span>
                     <span class="ml-1 font-bold">{{ (result.finalScore || 0).toFixed(2) }}</span>
-                  </el-tag>
+                  </GdTag>
                 </template>
                 <!-- 纯语义搜索模式：显示相似度 -->
                 <template v-else>
-                  <el-tag size="small" type="success">
+                  <GdTag size="small" type="success">
                     {{ t('knowledge.search.similarity') }}: {{ ((result.similarity || 0) * 100).toFixed(1) }}%
-                  </el-tag>
+                  </GdTag>
                 </template>
               </div>
               <span class="text-xs text-gray-400">#{{ index + 1 }}</span>
@@ -79,9 +79,9 @@
 
             <!-- 来源文件 -->
             <div v-if="result.fileName || result.metadata?.fileId" class="mb-2">
-              <el-tag size="small" type="info">
+              <GdTag size="small" type="info">
                 {{ result.fileName || t('knowledge.search.unknownFile') }}
-              </el-tag>
+              </GdTag>
             </div>
 
             <!-- 内容预览 -->
@@ -100,18 +100,18 @@
 
     <!-- 空状态 -->
     <div v-else-if="hasSearched" class="empty-state text-center py-12 flex-1 flex flex-col items-center justify-center">
-      <el-icon size="48" class="text-gray-300 mb-3">
-        <Search48Regular />
-      </el-icon>
+      
+        <Search48Regular class="text-gray-300 mb-3 w-12 h-12" mx-auto  />
+      
       <p class="text-sm text-gray-500">{{ t('knowledge.search.notFound') }}</p>
       <p class="text-xs text-gray-400 mt-1">{{ t('knowledge.search.notFoundHint') }}</p>
     </div>
 
     <!-- 初始状态 -->
     <div v-else class="initial-state text-center py-12 flex-1 flex flex-col items-center justify-center">
-      <el-icon size="48" class="text-gray-300 mb-3">
-        <Search48Regular />
-      </el-icon>
+      
+        <Search48Regular class="text-gray-300 mb-3 w-12 h-12" mx-auto  />
+      
       <p class="text-sm text-gray-500">{{ t('knowledge.search.initial') }}</p>
       <p class="text-xs text-gray-400 mt-1">{{ t('knowledge.search.initialHint') }}</p>
     </div>
@@ -120,6 +120,8 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdFormField from '@/components/ui/GdFormField.vue';
+import GdTag from '@/components/ui/GdTag.vue';
 import GdSlider from '@/components/ui/GdSlider.vue';
 import GdInput from '@/components/ui/GdInput.vue';
 import { getErrorMessage } from '@/utils/errorMessage'

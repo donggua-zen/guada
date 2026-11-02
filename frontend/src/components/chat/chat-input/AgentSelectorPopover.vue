@@ -10,9 +10,9 @@
       <Avatar :src="agent.avatarUrl || undefined" :name="agent.name" type="assistant" :round="false"
         class="w-6 h-6 shrink-0" />
       <span class="flex-1 text-sm text-(--gd-color-text) truncate">{{ agent.name }}</span>
-      <el-icon v-if="agent.id === currentAgentId" size="14" class="shrink-0 text-(--el-color-primary)">
-        <Checkmark16Filled />
-      </el-icon>
+      
+        <Checkmark16Filled v-if="agent.id === currentAgentId" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+      
     </div>
     <div v-if="agents.length === 0" class="px-2 py-3 text-xs text-(--gd-color-text-gray)">
       {{ t('scheduler.composer.noAgents') }}
@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus'
+
 import { Checkmark16Filled } from '@vicons/fluent'
 import GdPopover from '@/components/ui/GdPopover.vue'
 import Avatar from '@/components/ui/Avatar.vue'

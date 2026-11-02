@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
 }
 
 .cel-editor--invalid {
-  border-color: var(--el-color-danger);
+  border-color: var(--gd-color-danger);
 }
 
 .cel-editor__host {

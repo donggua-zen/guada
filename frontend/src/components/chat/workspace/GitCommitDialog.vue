@@ -7,7 +7,7 @@
     <div class="git-commit-form">
       <!-- 分支行：图标 + 等宽分支名 + 右对齐 AI 生成按钮（生成中点击可取消） -->
       <div class="git-cd-branch">
-        <el-icon :size="16"><Branch20Regular /></el-icon>
+        <Branch20Regular class="w-4 h-4"  />
         <span class="git-cd-branch-name">{{ git.selectedBranch || '-' }}</span>
         <GdTooltip class="git-cd-generate-tip" placement="top"
           :content="git.generatingMessage ? t('git.generateMessageCancelTitle') : t('git.generateMessageTitle')">
@@ -15,17 +15,15 @@
             :class="{ 'is-loading': git.generatingMessage }"
             :disabled="!git.status?.isGitRepo || git.totalChanges === 0"
             @click="git.generatingMessage ? git.cancelGenerateMessage() : git.generateCommitMessage()">
-            <el-icon :size="14" :class="{ 'is-loading': git.generatingMessage }">
-              <ArrowSync16Regular v-if="git.generatingMessage" />
-              <Wand16Regular v-else />
-            </el-icon>
+            <span class="w-3.5 h-3.5" :class="{ 'animate-spin': git.generatingMessage }"><ArrowSync16Regular v-if="git.generatingMessage" />
+              <Wand16Regular v-else /></span>
           </button>
         </GdTooltip>
         <GdTooltip placement="top" :content="t('git.constraintTitle')">
           <button type="button" class="git-cd-constraint"
             :disabled="!git.status?.isGitRepo"
             @click="git.openConstraintDialog()">
-            <el-icon :size="14"><Settings16Regular /></el-icon>
+            <Settings16Regular class="w-3.5 h-3.5"  />
           </button>
         </GdTooltip>
       </div>
@@ -38,7 +36,7 @@
         <button type="button" class="git-cd-check" :class="{ checked: git.commitIncludeUnstaged }"
           @click="git.commitIncludeUnstaged = !git.commitIncludeUnstaged">
           <span class="git-cd-check-box">
-            <el-icon v-if="git.commitIncludeUnstaged" :size="10"><Checkmark12Regular /></el-icon>
+            <Checkmark12Regular class="w-2.5 h-2.5" v-if="git.commitIncludeUnstaged"  />
           </span>
           <span>{{ t('git.includeUnstaged') }}</span>
         </button>
@@ -51,26 +49,20 @@
       <div class="git-cd-actions">
         <button type="button" class="git-cd-action git-cd-action--primary" :disabled="git.committing"
           @click="git.submitCommit(false)">
-          <el-icon :size="16" :class="{ 'is-loading': git.commitAction === 'commit' }">
-            <BranchFork16Regular v-if="git.commitAction !== 'commit'" />
-            <ArrowSync16Regular v-else />
-          </el-icon>
+          <span class="w-4 h-4" :class="{ 'animate-spin': git.commitAction === 'commit' }"><BranchFork16Regular v-if="git.commitAction !== 'commit'" />
+            <ArrowSync16Regular v-else /></span>
           <span class="git-cd-action-label">{{ t('git.commit') }}</span>
           <span class="git-cd-action-hint">Ctrl + ↵</span>
         </button>
         <button type="button" class="git-cd-action" :disabled="git.committing" @click="git.submitCommit(true)">
-          <el-icon :size="16" :class="{ 'is-loading': git.commitAction === 'commitAndPush' }">
-            <ArrowUpload16Regular v-if="git.commitAction !== 'commitAndPush'" />
-            <ArrowSync16Regular v-else />
-          </el-icon>
+          <span class="w-4 h-4" :class="{ 'animate-spin': git.commitAction === 'commitAndPush' }"><ArrowUpload16Regular v-if="git.commitAction !== 'commitAndPush'" />
+            <ArrowSync16Regular v-else /></span>
           <span class="git-cd-action-label">{{ t('git.commitAndPush') }}</span>
         </button>
         <button type="button" class="git-cd-action" :disabled="git.committing || (git.status?.ahead ?? 0) === 0"
           @click="git.handlePush">
-          <el-icon :size="16" :class="{ 'is-loading': git.commitAction === 'push' }">
-            <ArrowUpload16Regular v-if="git.commitAction !== 'push'" />
-            <ArrowSync16Regular v-else />
-          </el-icon>
+          <span class="w-4 h-4" :class="{ 'animate-spin': git.commitAction === 'push' }"><ArrowUpload16Regular v-if="git.commitAction !== 'push'" />
+            <ArrowSync16Regular v-else /></span>
           <span class="git-cd-action-label">{{ t('git.push') }}</span>
         </button>
       </div>
@@ -93,10 +85,8 @@
         </button>
         <button type="button" class="git-constraint-btn git-constraint-btn--primary"
           :disabled="git.constraintSaving" @click="git.saveConstraint()">
-          <el-icon :size="14" :class="{ 'is-loading': git.constraintSaving }">
-            <ArrowSync16Regular v-if="git.constraintSaving" />
-            <Checkmark16Regular v-else />
-          </el-icon>
+          <span class="w-3.5 h-3.5" :class="{ 'animate-spin': git.constraintSaving }"><ArrowSync16Regular v-if="git.constraintSaving" />
+            <Checkmark16Regular v-else /></span>
           <span>{{ t('git.constraintSave') }}</span>
         </button>
       </div>
@@ -192,7 +182,7 @@ const git = useGitStore();
 .git-cd-generate.is-loading {
   color: var(--gd-color-primary);
 }
-.git-cd-generate.is-loading .el-icon {
+.git-cd-generate.is-loading svg {
   animation: git-cd-spin 1s linear infinite;
 }
 @keyframes git-cd-spin {

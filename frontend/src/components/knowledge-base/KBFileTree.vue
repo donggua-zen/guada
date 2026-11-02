@@ -25,9 +25,9 @@
 
     <!-- 文件/文件夹列表-->
     <div v-if="isLoading" class="text-center py-8">
-      <el-icon class="animate-spin text-blue-500" size="32">
-        <ArrowSync16Regular />
-      </el-icon>
+      
+        <ArrowSync16Regular class="animate-spin text-blue-500 w-8 h-8"  />
+      
       <p class="mt-2 text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.tree.loading') }}</p>
     </div>
 
@@ -67,22 +67,22 @@
             <GdTooltip v-if="(item.processingStatus === 'processing' || item.processingStatus === 'pending') && item.currentStep" 
               :content="item.currentStep" 
               placement="top">
-              <el-tag size="small" :type="getStatusType(item.processingStatus)" class="truncate max-w-full">
+              <GdTag size="small" :type="getStatusType(item.processingStatus)" class="truncate max-w-full">
                 {{ getStatusDisplayText(item) }}
-              </el-tag>
+              </GdTag>
             </GdTooltip>
             <!-- 失败时 hover 显示具体错误原因 -->
             <GdTooltip v-else-if="item.processingStatus === 'failed'"
               :content="item.errorMessage || t('knowledge.status.unknownError')"
               placement="top">
-              <el-tag size="small" :type="getStatusType(item.processingStatus)">
+              <GdTag size="small" :type="getStatusType(item.processingStatus)">
                 {{ getStatusDisplayText(item) }}
-              </el-tag>
+              </GdTag>
             </GdTooltip>
             <!-- 其他状态直接显示 -->
-            <el-tag v-else size="small" :type="getStatusType(item.processingStatus)">
+            <GdTag v-else size="small" :type="getStatusType(item.processingStatus)">
               {{ getStatusDisplayText(item) }}
-            </el-tag>
+            </GdTag>
           </template>
           <span v-else class="text-xs text-gray-400">-</span>
         </div>
@@ -118,9 +118,9 @@
 
     <!-- 加载更多指示器 -->
     <div v-if="isLoadingMore" class="text-center py-4">
-      <el-icon class="animate-spin text-blue-500" size="24">
-        <ArrowSync16Regular />
-      </el-icon>
+      
+        <ArrowSync16Regular class="animate-spin text-blue-500 w-6 h-6"  />
+      
       <p class="mt-2 text-sm text-gray-500">{{ t('knowledge.tree.loadingMore') }}</p>
     </div>
 
@@ -153,24 +153,22 @@
         <!-- 根目录选项 -->
         <div class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
           :class="{ 'bg-blue-50 dark:bg-blue-900/30': selectedTargetFolderId === null }" @click="selectRootDirectory">
-          <el-icon>
-            <Folder16Regular />
-          </el-icon>
+          
+            <Folder16Regular class="size-4"  />
+          
           <span>{{ t('knowledge.tree.rootDir') }}</span>
         </div>
 
         <!-- 文件夹树 -->
-        <el-tree :data="folderTreeData" :props="{ label: 'displayName', children: 'children' }" node-key="id"
-          highlight-current @node-click="selectTargetFolder" class="mt-2">
-          <template #default="{ node }">
+        <GdTree :data="folderTreeData" label-key="displayName" class="mt-2"
+          :selected="selectedTargetFolderId" @node-click="selectTargetFolder">
+          <template #node="{ node }">
             <span class="flex items-center gap-2">
-              <el-icon>
-                <Folder16Regular />
-              </el-icon>
-              {{ node.label }}
+              <Folder16Regular class="size-4 shrink-0" />
+              {{ node.displayName }}
             </span>
           </template>
-        </el-tree>
+        </GdTree>
       </div>
       <template #footer>
         <GdButton @click="showMoveDialog = false">{{ t('common.cancel') }}</GdButton>
@@ -187,6 +185,7 @@ import { useI18n } from 'vue-i18n'
 import { Folder16Regular, ArrowClockwise16Regular, Delete16Regular, ArrowSync16Regular, Edit16Regular, Location16Regular } from '@vicons/fluent'
 
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTag from '@/components/ui/GdTag.vue';
 import { toast } from '@/components/ui/toastService';
 import GdInput from '@/components/ui/GdInput.vue';
 
@@ -196,6 +195,7 @@ import { apiService } from '@/services/ApiService'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import GdTree from '@/components/ui/GdTree.vue'
 import { getFileIconByExt } from '@/composables/useFileIcon'
 import FolderIcon from '@/components/ui/FolderIcon.vue'
 
@@ -300,13 +300,18 @@ const renamingFileId = ref<string | null>(null) // 保存正在重命名的文�
 const showMoveDialog = ref(false)
 const selectedTargetFolderId = ref<string | null>(null)
 /**
- * 移动对话框文件夹树节点（el-tree data 项；type 别名以获得隐式索引签名，兼容 el-tree 的 TreeNodeData）
+ * 移动对话框文件夹树节点（GdTree data 项；索引签名兼容 GdTreeNode 形态）
  */
 type FolderTreeNode = {
   id: string
   displayName: string
   relativePath?: string | null
   children: FolderTreeNode[]
+}
+
+/** GdTree node-click 回调形态（GdTreeNode 是索引签名，按需取 id） */
+type GdTreeNodeLike = {
+  id?: unknown
 }
 const folderTreeData = ref<FolderTreeNode[]>([])
 const moveLoading = ref(false)
@@ -1055,8 +1060,8 @@ function buildFolderTree(folders: KBFile[]): FolderTreeNode[] {
 /**
  * 选择目标文件夹
  */
-function selectTargetFolder(data: FolderTreeNode) {
-  selectedTargetFolderId.value = data.id
+function selectTargetFolder(data: GdTreeNodeLike) {
+  selectedTargetFolderId.value = String(data.id)
 }
 
 /**

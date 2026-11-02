@@ -96,7 +96,7 @@ const formattedDuration = computed(() => {
   margin-top: 4px;
   margin-left: 22px;
   padding: 8px 12px;
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--gd-color-border);
   border-radius: 4px;
   background: color-mix(in srgb, var(--gd-color-surface) 80%, transparent);
   /* 长思考不再撑满整屏：限高后框内自滚动。

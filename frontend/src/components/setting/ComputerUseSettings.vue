@@ -1,7 +1,7 @@
 <template>
   <div class="flex-1 overflow-hidden">
     <div class="space-y-8">
-      <el-alert
+      <GdAlert
         v-if="!isElectron"
         type="info"
         :closable="false"
@@ -27,9 +27,9 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.computerUse.sidecarStatus') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95] break-all">{{ statusText }}</span>
             </div>
-            <el-tag :type="status?.available ? 'success' : 'warning'" size="small">
+            <GdTag :type="status?.available ? 'success' : 'warning'" size="small">
               {{ status?.available ? t('settings.computerUse.statusReadyShort') : t('settings.computerUse.statusUnavailableShort') }}
-            </el-tag>
+            </GdTag>
           </div>
 
           <div class="px-4 py-3.5 flex items-center justify-between gap-4">
@@ -37,9 +37,9 @@
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.computerUse.systemPermission') }}</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.computerUse.systemPermissionDesc') }}</span>
             </div>
-            <el-tag :type="isWindows ? 'success' : 'info'" size="small">
+            <GdTag :type="isWindows ? 'success' : 'info'" size="small">
               {{ isWindows ? t('settings.computerUse.permissionNone') : t('settings.computerUse.permissionUnsupported') }}
-            </el-tag>
+            </GdTag>
           </div>
         </div>
       </div>
@@ -78,9 +78,9 @@
             <GdButton type="primary" :loading="testing" :disabled="!isElectron" @click="runTest">
               {{ t('settings.computerUse.testButton') }}
             </GdButton>
-            <el-tag v-if="testResult" :type="testResult.ok ? 'success' : 'danger'" size="small">
+            <GdTag v-if="testResult" :type="testResult.ok ? 'success' : 'danger'" size="small">
               {{ testResult.ok ? t('settings.computerUse.testOk') : t('settings.computerUse.testFailed') }}
-            </el-tag>
+            </GdTag>
           </div>
           <p v-if="testResult" class="text-xs text-gray-500 dark:text-[#8b8d95] whitespace-pre-wrap break-all">
             {{ testSummary }}
@@ -103,6 +103,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTag from '@/components/ui/GdTag.vue';
+import GdAlert from '@/components/ui/GdAlert.vue';
 import { toast } from '@/components/ui/toastService';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';

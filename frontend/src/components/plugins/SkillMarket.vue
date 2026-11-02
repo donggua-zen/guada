@@ -29,9 +29,9 @@
         <!-- 错误提示 -->
         <div v-else-if="error"
             class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-6 text-center">
-            <el-icon size="32" class="mb-2 opacity-50 text-gray-400">
-                <MailInbox24Regular />
-            </el-icon>
+            
+                <MailInbox24Regular class="mb-2 opacity-50 text-gray-400 w-8 h-8"  />
+            
             <div class="text-sm text-gray-500 dark:text-[#8b8d95]">
                 {{ error }}
             </div>
@@ -54,12 +54,12 @@
                 @click="handleShowMarketInstallDialog(skill)"
             >
                 <template #badges>
-                    <el-tag v-if="skill.localStatus === 'installed'" type="success" size="small" effect="plain">{{ t('plugins.skills.marketInstalled') }}</el-tag>
-                    <el-tag v-else-if="skill.localStatus === 'updatable'" type="warning" size="small" effect="plain">{{ t('plugins.skills.marketUpdatable') }}</el-tag>
-                    <el-tag v-if="skill.lang !== skill.requestedLang" type="info" size="small" effect="plain">{{ t('plugins.skills.marketFallbackHint') }}</el-tag>
-                    <el-tag v-for="(label, index) in (skill.labels || []).slice(0, 2)" :key="`${label.id}-${index}`" size="small" effect="light">
+                    <GdTag v-if="skill.localStatus === 'installed'" type="success" size="small" effect="plain">{{ t('plugins.skills.marketInstalled') }}</GdTag>
+                    <GdTag v-else-if="skill.localStatus === 'updatable'" type="warning" size="small" effect="plain">{{ t('plugins.skills.marketUpdatable') }}</GdTag>
+                    <GdTag v-if="skill.lang !== skill.requestedLang" type="info" size="small" effect="plain">{{ t('plugins.skills.marketFallbackHint') }}</GdTag>
+                    <GdTag v-for="(label, index) in (skill.labels || []).slice(0, 2)" :key="`${label.id}-${index}`" size="small" effect="light">
                         {{ label.name }}
-                    </el-tag>
+                    </GdTag>
                 </template>
                 <template #actions>
                     <GdButton
@@ -77,13 +77,8 @@
 
         <!-- 分页（仅浏览模式且有多页时显示）：与行列表 gap-y 对齐，上间距收到 12px -->
         <div v-if="pagination && pagination.totalPages > 1" class="mt-3 flex justify-center">
-            <el-pagination
-                layout="prev, pager, next"
-                :total="pagination.total"
-                :page-size="pagination.pageSize"
-                :current-page="pagination.page"
-                @current-change="handlePageChange"
-            />
+            <GdPagination :total="pagination.total" :page-size="pagination.pageSize"
+                :model-value="pagination.page" @change="handlePageChange" />
         </div>
 
         <!-- 市场技能安装对话框：对象先行（图标+名称+版本状态），次要动作降为文字链接，
@@ -105,14 +100,14 @@
                             }}</span>
                         </div>
                     </div>
-                    <el-tag v-if="selectedMarketSkill.localStatus === 'updatable'" type="warning" size="small"
-                        effect="plain">{{ t('plugins.skills.marketUpdatable') }}</el-tag>
-                    <el-tag v-else-if="selectedMarketSkill.localStatus === 'installed'" type="success" size="small"
-                        effect="plain">{{ t('plugins.skills.marketInstalled') }}</el-tag>
+                    <GdTag v-if="selectedMarketSkill.localStatus === 'updatable'" type="warning" size="small"
+                        effect="plain">{{ t('plugins.skills.marketUpdatable') }}</GdTag>
+                    <GdTag v-else-if="selectedMarketSkill.localStatus === 'installed'" type="success" size="small"
+                        effect="plain">{{ t('plugins.skills.marketInstalled') }}</GdTag>
                 </div>
 
                 <div v-if="selectedMarketSkill.labels?.length" class="market-install__labels">
-                    <el-tag v-for="(label, index) in selectedMarketSkill.labels" :key="`${label.id}-${index}`" size="small">{{ label.name }}</el-tag>
+                    <GdTag v-for="(label, index) in selectedMarketSkill.labels" :key="`${label.id}-${index}`" size="small">{{ label.name }}</GdTag>
                 </div>
 
                 <MarkdownContent v-if="selectedMarketSkill.description" class="market-install__desc"
@@ -134,14 +129,14 @@
                 </div>
 
                 <!-- 覆盖/升级影响 -->
-                <el-alert v-if="selectedMarketSkill.localStatus === 'updatable'" class="market-install__notice"
+                <GdAlert v-if="selectedMarketSkill.localStatus === 'updatable'" class="market-install__notice"
                     type="warning" :closable="false"
                     :title="t('plugins.skills.marketUpgradeNotice', { from: selectedMarketSkill.localVersion || '?', to: selectedMarketSkill.version || '?' })" />
-                <el-alert v-else-if="selectedMarketSkill.localStatus === 'installed'" class="market-install__notice"
+                <GdAlert v-else-if="selectedMarketSkill.localStatus === 'installed'" class="market-install__notice"
                     type="info" :closable="false" :title="t('plugins.skills.marketReinstallNotice')" />
 
                 <!-- 失败就地反馈（不依赖一闪而过的 toast） -->
-                <el-alert v-if="marketInstallError" class="market-install__notice" type="error" :closable="false"
+                <GdAlert v-if="marketInstallError" class="market-install__notice" type="error" :closable="false"
                     :title="t('plugins.skills.installFailed')" :description="marketInstallError" />
 
                 <!-- 操作区：唯一实心主按钮 + 次级文字链接 -->
@@ -150,16 +145,16 @@
                         <GdButton v-if="getInstallUrl(selectedMarketSkill, 'git')" link type="primary"
                             @click="handleViewSourceCode(selectedMarketSkill)">
                             {{ t('plugins.skills.marketViewSource') }}
-                            <el-icon class="market-install__ext">
-                                <ArrowUpRight16Regular />
-                            </el-icon>
+                            
+                                <ArrowUpRight16Regular class="market-install__ext size-4"  />
+                            
                         </GdButton>
                         <GdButton v-if="selectedMarketSkill.detailUrl" link type="primary"
                             @click="handleOpenDetailUrl(selectedMarketSkill)">
                             {{ t('plugins.skills.marketViewDetail') }}
-                            <el-icon class="market-install__ext">
-                                <ArrowUpRight16Regular />
-                            </el-icon>
+                            
+                                <ArrowUpRight16Regular class="market-install__ext size-4"  />
+                            
                         </GdButton>
                     </div>
                     <div class="market-install__cta">
@@ -183,8 +178,10 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElTag, ElIcon, ElAlert, ElPagination } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdPagination from '@/components/ui/GdPagination.vue';
+import GdTag from '@/components/ui/GdTag.vue';
+import GdAlert from '@/components/ui/GdAlert.vue';
 import { toast } from '@/components/ui/toastService';
 
 import { ArrowDownload16Regular, ArrowUpRight16Regular, MailInbox24Regular } from '@vicons/fluent'
@@ -644,7 +641,8 @@ defineExpose({
 /* 外链指示：提示会跳出应用 */
 .market-install__ext {
     margin-left: 2px;
-    font-size: 12px;
+    width: 12px;
+    height: 12px;
     opacity: 0.7;
 }
 

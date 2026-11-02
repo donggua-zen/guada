@@ -2,15 +2,15 @@
   <div class="-mb-4 pb-5 pt-2 px-2 w-full flex justify-start gap-1 bg-(--gd-color-secondary-surface) rounded-t-(--gd-size-rounded-radius)">
     <!-- 工作目录按钮 -->
     <GdButton ref="workspaceButtonRef" class="workspace-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
-      <el-icon size="18">
-        <FolderOpen24Regular />
-      </el-icon>
+      
+        <FolderOpen24Regular class="w-4.5 h-4.5"  />
+      
       <span class="text-xs font-medium">
         {{ t('chat.toolbar.workspace', { path: displayWorkspacePath }) }}
       </span>
-      <el-icon size="16" class="ml-0.5">
-        <ChevronUpDown16Regular />
-      </el-icon>
+      
+        <ChevronUpDown16Regular class="ml-0.5 w-4 h-4"  />
+      
     </GdButton>
 
     <!-- 远程目录（附加工作目录）：独立按钮，已选后收起文案只留图标 + 数量角标 -->
@@ -24,9 +24,9 @@
       <span class="text-xs font-medium">
         {{ t('chat.toolbar.group', { name: selectedGroupName }) }}
       </span>
-      <el-icon size="16" class="ml-0.5">
-        <ChevronUpDown16Regular />
-      </el-icon>
+      
+        <ChevronUpDown16Regular class="ml-0.5 w-4 h-4"  />
+      
     </GdButton>
 
     <!-- 外部自定义按钮 -->
@@ -51,9 +51,9 @@
         @click="selectGroup(g.value)">
         <GroupIcon :icon="g.icon" class="w-4 h-4 shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)" />
         <span class="flex-1 text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb]">{{ g.label }}</span>
-        <el-icon v-if="selectedGroupId === g.value" size="14" class="shrink-0 text-(--el-color-primary)">
-          <Checkmark16Filled />
-        </el-icon>
+        
+          <Checkmark16Filled v-if="selectedGroupId === g.value" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+        
       </div>
     </div>
   </GdPopover>

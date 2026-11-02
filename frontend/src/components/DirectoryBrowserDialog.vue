@@ -9,7 +9,7 @@
           ? 'cursor-pointer hover:bg-(--gd-color-sidebar-bg-hover) text-(--gd-color-text)'
           : 'opacity-30 cursor-default text-gray-400'"
         @click="goUp">
-        <el-icon size="16"><ArrowUp16Regular /></el-icon>
+        <ArrowUp16Regular class="w-4 h-4"  />
       </button>
       <input ref="inputRef" v-model="inputPath" type="text" spellcheck="false"
         :placeholder="t('ui.directoryBrowser.pathPlaceholder')"
@@ -24,7 +24,7 @@
     <div class="h-80 overflow-y-auto py-1">
       <!-- 加载中 -->
       <div v-if="loading" class="flex flex-col items-center justify-center h-full text-gray-400">
-        <el-icon class="animate-spin text-2xl mb-2"><ArrowSync16Regular /></el-icon>
+        <ArrowSync16Regular class="animate-spin text-2xl mb-2 size-4"  />
         <span class="text-xs">{{ t('ui.directoryBrowser.loading') }}</span>
       </div>
 
@@ -56,10 +56,8 @@
           :title="entry.name"
           @click="entry.isDirectory && enterDir(entry.name)"
           @dblclick.prevent="entry.isDirectory && enterDir(entry.name)">
-          <el-icon size="16" class="shrink-0" :class="entry.isDirectory ? 'text-(--gd-color-warning, #e6a23c)' : 'text-gray-400'">
-            <Folder16Regular v-if="entry.isDirectory" />
-            <Document16Regular v-else />
-          </el-icon>
+          <span class="shrink-0 w-4 h-4" :class="entry.isDirectory ? 'text-(--gd-color-warning, #e6a23c)' : 'text-gray-400'"><Folder16Regular v-if="entry.isDirectory" />
+            <Document16Regular v-else /></span>
           <span class="flex-1 truncate text-sm text-(--gd-color-text)">{{ entry.name }}</span>
         </div>
       </template>
@@ -80,7 +78,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus'
+
 import { ArrowUp16Regular, DismissCircle16Regular, Document16Regular, Folder16Regular, FolderProhibited16Regular, ArrowSync16Regular } from '@vicons/fluent'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import GdButton from '@/components/ui/GdButton.vue'

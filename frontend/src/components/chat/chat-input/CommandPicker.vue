@@ -15,9 +15,9 @@
       >
         <div class="command-picker-content">
           <span class="command-picker-icon">
-            <el-icon size="16">
-              <Apps20Regular />
-            </el-icon>
+            
+              <Apps20Regular class="w-4 h-4"  />
+            
           </span>
           <div class="command-picker-info flex items-center gap-2">
             <div class="command-picker-name whitespace-nowrap" :class="{ 'text-primary': index === selectedIndex }">
@@ -174,8 +174,8 @@ defineExpose({
   z-index: 1000;
   padding: 8px;
   border-radius: 12px;
-  background: var(--el-bg-color, #fff);
-  border: 1px solid var(--el-border-color, #dcdfe6);
+  background: var(--gd-color-bg);
+  border: 1px solid var(--gd-color-border);
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
@@ -203,7 +203,7 @@ defineExpose({
 
 .command-picker-item:hover,
 .command-picker-item.active {
-  background: var(--el-fill-color-light, #f5f7fa);
+  background: var(--gd-color-field-bg);
 }
 
 .dark .command-picker-item:hover,
@@ -247,14 +247,14 @@ defineExpose({
 }
 
 .command-picker-name.text-primary {
-  color: var(--el-color-primary);
+  color: var(--gd-color-primary);
 }
 
 .command-picker-desc {
   font-size: 12px;
   /* 整数行高：12 × 1.4 = 16.8px */
   line-height: 17px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -266,7 +266,7 @@ defineExpose({
   padding: 16px;
   text-align: center;
   font-size: 13px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 
 .command-picker-footer {
@@ -275,22 +275,22 @@ defineExpose({
   align-items: center;
   gap: 12px;
   padding: 5px 10px;
-  border-top: 1px solid var(--el-border-color-light, #e4e7ed);
+  border-top: 1px solid var(--gd-color-surface-border);
   font-size: 11px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 
 .dark .command-picker-footer {
-  border-top-color: var(--el-border-color-light, #3c3c3c);
+  border-top-color: var(--gd-color-surface-border);
 }
 
 .command-picker-footer kbd {
   display: inline-block;
   padding: 1px 4px;
-  border: 1px solid var(--el-border-color, #dcdfe6);
+  border: 1px solid var(--gd-color-border);
   border-radius: 3px;
-  background: var(--el-bg-color, #fff);
-  color: var(--el-text-color-regular);
+  background: var(--gd-color-bg);
+  color: var(--gd-color-text);
   font-family: inherit;
   font-size: 10px;
   line-height: 1.4;

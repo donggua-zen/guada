@@ -60,7 +60,7 @@ const visibleLines = computed(() => lines.value.slice(0, MAX_LINES));
 .tool-view-file {
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
   font-weight: 500;
-  color: var(--el-text-color-regular);
+  color: var(--gd-color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -68,7 +68,7 @@ const visibleLines = computed(() => lines.value.slice(0, MAX_LINES));
 
 .tool-view-meta {
   flex-shrink: 0;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 
 .tool-content-body {
@@ -87,7 +87,7 @@ const visibleLines = computed(() => lines.value.slice(0, MAX_LINES));
   font-size: 12px;
   /* 整数行高：12 × 1.55 = 18.6px 会让整块每行都落在小数偏移上 */
   line-height: 19px;
-  color: var(--el-text-color-regular);
+  color: var(--gd-color-text);
 }
 
 /* 右侧额外补一个卡片内边距，抵消 .tool-content-body 的负边距，保持代码换行宽度不变 */
@@ -101,7 +101,7 @@ const visibleLines = computed(() => lines.value.slice(0, MAX_LINES));
 .content-truncated {
   padding: 4px calc(10px + var(--tool-card-pad-x, 12px)) 4px 10px;
   font-size: 11px;
-  color: var(--el-text-color-secondary);
-  border-top: 1px solid var(--el-border-color-lighter);
+  color: var(--gd-color-text-gray);
+  border-top: 1px solid var(--gd-color-border);
 }
 </style>

@@ -106,10 +106,7 @@
               </div>
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.mobileAccess.authMethod') }}</span>
-                <el-radio-group v-model="sshForm.authMethod">
-                  <el-radio-button value="privateKey">{{ t('settings.mobileAccess.authPrivateKey') }}</el-radio-button>
-                  <el-radio-button value="password">{{ t('settings.mobileAccess.authPassword') }}</el-radio-button>
-                </el-radio-group>
+                <GdSegmented v-model="sshForm.authMethod" :options="authMethodOptions" />
               </div>
 
               <div v-if="sshForm.authMethod === 'password'" class="flex flex-col gap-1.5 md:col-span-2">
@@ -201,6 +198,7 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdSegmented from '@/components/ui/GdSegmented.vue';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
@@ -244,6 +242,11 @@ const config = reactive<MobileAccessConfigView>({
     hostFingerprint: '',
   },
 })
+
+const authMethodOptions = [
+  { label: t('settings.mobileAccess.authPrivateKey'), value: 'privateKey' },
+  { label: t('settings.mobileAccess.authPassword'), value: 'password' },
+];
 
 const sshForm = reactive({
   host: '',

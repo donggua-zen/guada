@@ -14,7 +14,7 @@
                 <template v-if="view === 'installed'">
                     <GdButton circle :loading="loading" :title="t('common.refresh')" @click="loadServers">
                         <template #icon>
-                            <ArrowClockwise16Regular />
+                            <ArrowClockwise16Regular class="size-4" />
                         </template>
                     </GdButton>
                     <GdButton @click="handleImport">
@@ -25,7 +25,7 @@
                     </GdButton>
                     <GdButton type="primary" @click="handleAddServer">
                         <template #icon>
-                            <Add16Regular />
+                            <Add16Regular class="size-4" />
                         </template>
                         {{ t('plugins.mcp.addServer') }}
                     </GdButton>
@@ -39,12 +39,12 @@
                         class="plugins-search"
                     >
                         <template #prefix>
-                            <el-icon><Search16Regular /></el-icon>
+                            <Search16Regular class="size-4"  />
                         </template>
                     </GdInput>
                     <GdButton circle size="small" :loading="marketLoading" :title="t('plugins.mcpMarket.refresh')" @click="handleMarketRefresh">
                         <template #icon>
-                            <ArrowClockwise16Regular />
+                            <ArrowClockwise16Regular class="size-4" />
                         </template>
                     </GdButton>
                 </template>
@@ -64,10 +64,10 @@
                     @command="(command) => handleServerCommand(command, server)"
                 >
                     <template #badges>
-                        <el-tag v-if="server.type" size="small" type="info" effect="plain">{{ server.type }}</el-tag>
-                        <el-tag v-if="toolCount(server) > 0" size="small" type="info" effect="plain">
+                        <GdTag v-if="server.type" size="small" type="info" effect="plain">{{ server.type }}</GdTag>
+                        <GdTag v-if="toolCount(server) > 0" size="small" type="info" effect="plain">
                             {{ t('plugins.mcp.toolsTag', { count: toolCount(server) }) }}
-                        </el-tag>
+                        </GdTag>
                     </template>
                     <template #actions>
                         <GdSwitch v-model="server.enabled" :active-value="true" :inactive-value="false"
@@ -77,9 +77,9 @@
             </div>
             <div v-else
                 class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-12 text-center">
-                <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
-                    <MailInbox24Regular />
-                </el-icon>
+                
+                    <MailInbox24Regular class="mb-3 opacity-50 text-gray-400 w-12 h-12" mx-auto  />
+                
                 <div class="text-gray-500 dark:text-[#8b8d95]">{{ t('plugins.mcp.empty') }}</div>
                 <div class="text-sm text-gray-400 dark:text-[#6b6d75] mt-2">{{ t('plugins.mcp.emptyHint') }}</div>
                 <GdButton class="mt-4" @click="view = 'market'">{{ t('plugins.page.goMarket') }}</GdButton>
@@ -102,90 +102,92 @@
             destroy-on-close append-to-body>
 
             <!-- Tab 切换 -->
-            <el-tabs v-model="activeTab" class="mb-4">
-                <el-tab-pane :label="t('plugins.mcp.tabConfig')" name="config">
-                    <el-form ref="formRef" :model="serverForm" :rules="formRules" label-position="left"
-                        label-width="120px" size="large">
-                        <el-form-item :label="t('plugins.mcp.nameLabel')" prop="name">
-                            <GdInput v-model="serverForm.name" :placeholder="t('plugins.mcp.namePlaceholder')" />
-                        </el-form-item>
+            <GdTabs v-model="activeTab" :tabs="mcpTabs" class="mb-4" />
+                <div v-if="activeTab === 'config'">
+                    <div class="flex flex-col gap-3">
+                        <GdFormField :label="t('plugins.mcp.nameLabel')" label-width="120px" :error="errors.name || undefined">
+                            <GdInput v-model="serverForm.name" :placeholder="t('plugins.mcp.namePlaceholder')"
+                              :error="!!errors.name" @blur="validateField('name')" />
+                        </GdFormField>
 
                         <!-- HTTP 协议配置 (sse/streamableHttp) -->
                         <template v-if="serverForm.type !== 'stdio'">
-                            <el-form-item :label="t('plugins.mcp.urlLabel')" prop="url">
-                                <GdInput v-model="serverForm.url" placeholder="https://example.com/mcp" />
-                            </el-form-item>
+                            <GdFormField :label="t('plugins.mcp.urlLabel')" label-width="120px" :error="errors.url || undefined">
+                                <GdInput v-model="serverForm.url" placeholder="https://example.com/mcp"
+                                  :error="!!errors.url" @blur="validateField('url')" />
+                            </GdFormField>
 
-                            <el-form-item :label="t('plugins.mcp.headersLabel')" prop="headers">
+                            <GdFormField :label="t('plugins.mcp.headersLabel')" label-width="120px">
                                 <GdInput v-model="serverForm.headers" type="textarea" :rows="5"
                                     :placeholder="t('plugins.mcp.headersPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
                                     {{ t('plugins.mcp.headersHint') }}
                                 </div>
-                            </el-form-item>
+                            </GdFormField>
                         </template>
 
                         <!-- Stdio 协议配置 -->
                         <template v-if="serverForm.type === 'stdio'">
-                            <el-form-item :label="t('plugins.mcp.commandLabel')" prop="command">
-                                <GdInput v-model="serverForm.command" :placeholder="t('plugins.mcp.commandPlaceholder')" />
+                            <GdFormField :label="t('plugins.mcp.commandLabel')" label-width="120px" :error="errors.command || undefined">
+                                <GdInput v-model="serverForm.command" :placeholder="t('plugins.mcp.commandPlaceholder')"
+                                  :error="!!errors.command" @blur="validateField('command')" />
                                 <div class="text-xs text-gray-400 mt-1">
                                     {{ t('plugins.mcp.commandHint') }}
                                 </div>
-                            </el-form-item>
+                            </GdFormField>
 
-                            <el-form-item :label="t('plugins.mcp.argsLabel')" prop="args">
+                            <GdFormField :label="t('plugins.mcp.argsLabel')" label-width="120px">
                                 <GdInput v-model="serverForm.args" type="textarea" :rows="3"
                                     :placeholder="t('plugins.mcp.argsPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
                                     {{ t('plugins.mcp.argsHint') }}
                                 </div>
-                            </el-form-item>
+                            </GdFormField>
 
-                            <el-form-item :label="t('plugins.mcp.envLabel')" prop="env">
+                            <GdFormField :label="t('plugins.mcp.envLabel')" label-width="120px">
                                 <GdInput v-model="serverForm.env" type="textarea" :rows="5"
                                     :placeholder="t('plugins.mcp.envPlaceholder')" />
                                 <div class="text-xs text-gray-400 mt-1">
                                     {{ t('plugins.mcp.envHint') }}
                                 </div>
-                            </el-form-item>
+                            </GdFormField>
 
-                            <el-form-item :label="t('plugins.mcp.cwdLabel')" prop="cwd">
+                            <GdFormField :label="t('plugins.mcp.cwdLabel')" label-width="120px">
                                 <GdInput v-model="serverForm.cwd" :placeholder="t('plugins.mcp.cwdPlaceholder')" />
-                            </el-form-item>
+                            </GdFormField>
                         </template>
 
-                        <el-form-item label="协议类型" prop="type">
+                        <GdFormField label="协议类型" label-width="120px">
                             <GdSelect v-model="serverForm.type" placeholder="选择协议类型" clearable style="width: 100%">
                                 <GdOption label="标准输入 / 输出 (stdio)" value="stdio" />
                                 <GdOption label="服务器发送事件 (sse)" value="sse" />
                                 <GdOption label="可流式传输的 HTTP (streamableHttp)" value="streamableHttp" />
                             </GdSelect>
-                        </el-form-item>
+                        </GdFormField>
 
-                        <el-form-item :label="t('plugins.mcp.descLabel')" prop="description">
+                        <GdFormField :label="t('plugins.mcp.descLabel')" label-width="120px">
                             <GdInput v-model="serverForm.description" type="textarea" :rows="3"
                                 :placeholder="t('plugins.mcp.descPlaceholder')" />
-                        </el-form-item>
+                        </GdFormField>
 
-                        <el-form-item :label="t('plugins.mcp.timeoutLabel')">
+                        <GdFormField :label="t('plugins.mcp.timeoutLabel')" label-width="120px">
                             <GdInput v-model="serverForm.timeoutMs" type="number"
                                 :placeholder="t('plugins.mcp.timeoutPlaceholder')" />
                             <div class="text-xs text-gray-400 mt-1">{{ t('plugins.mcp.timeoutHint') }}</div>
-                        </el-form-item>
+                        </GdFormField>
 
-                        <el-form-item :label="t('plugins.mcp.enabledLabel')">
+                        <GdFormField :label="t('plugins.mcp.enabledLabel')" label-width="120px">
                             <GdSwitch v-model="serverForm.enabled" inline-prompt :active-text="t('plugins.mcp.enabledOn')" :inactive-text="t('plugins.mcp.enabledOff')"
                                 size="large" />
-                        </el-form-item>
-                    </el-form>
-                </el-tab-pane>
+                        </GdFormField>
+                    </div>
+                </div>
 
-                <el-tab-pane :label="t('plugins.mcp.tabTools')" name="tools">
+                <div v-if="activeTab === 'tools'">
                     <div v-if="!isEditMode" class="py-12 text-center">
-                        <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
-                            <Info24Regular />
-                        </el-icon>
+                        
+                            <Info24Regular class="mb-3 opacity-50 text-gray-400 w-12 h-12" mx-auto  />
+                        
                         <div class="text-gray-500">{{ t('plugins.mcp.toolsNewHint') }}</div>
                         <div class="text-sm text-gray-400 mt-2">{{ t('plugins.mcp.toolsNewHintSub') }}</div>
                     </div>
@@ -196,15 +198,15 @@
                                 {{ t('plugins.mcp.toolsCount', { count: toolsList.length }) }}
                             </div>
                             <GdButton size="small" @click="handleTestConnection" :loading="testingConnection">
-                                <el-icon class="mr-1" :class="{ 'is-loading': testingConnection }">
-                                    <PlugConnected24Regular />
-                                </el-icon>
+                                
+                                    <PlugConnected24Regular class="mr-1 size-4" :class="{ 'animate-spin': testingConnection }" />
+                                
                                 {{ t('plugins.mcp.testConnection') }}
                             </GdButton>
                             <GdButton size="small" @click="handleRefreshTools" :loading="refreshingTools">
-                                <el-icon class="mr-1">
-                                    <ArrowClockwise16Regular :class="{ 'animate-spin': refreshingTools }" />
-                                </el-icon>
+                                
+                                    <ArrowClockwise16Regular class="mr-1 size-4"  :class="{ 'animate-spin': refreshingTools }" />
+                                
                                 {{ t('plugins.mcp.refreshTools') }}
                             </GdButton>
                         </div>
@@ -233,11 +235,11 @@
                                                 <span class="text-gray-600 dark:text-[#e8e9ed] flex-1">
                                                     {{ paramInfo.description || paramInfo.type || '' }}
                                                 </span>
-                                                <el-tag
+                                                <GdTag
                                                     v-if="tool.inputSchema.required && tool.inputSchema.required.includes(paramName)"
-                                                    type="danger" size="small">{{ t('plugins.mcp.paramRequired') }}</el-tag>
-                                                <el-tag v-else-if="paramInfo.default !== undefined" type="info"
-                                                    size="small">{{ t('plugins.mcp.paramDefault', { value: paramInfo.default }) }}</el-tag>
+                                                    type="danger" size="small">{{ t('plugins.mcp.paramRequired') }}</GdTag>
+                                                <GdTag v-else-if="paramInfo.default !== undefined" type="info"
+                                                    size="small">{{ t('plugins.mcp.paramDefault', { value: paramInfo.default }) }}</GdTag>
                                             </div>
                                         </div>
                                     </div>
@@ -246,15 +248,14 @@
                         </div>
 
                         <div v-else class="py-8 text-center text-gray-400">
-                            <el-icon size="36" class="mb-2 opacity-50">
-                                <MailInbox24Regular />
-                            </el-icon>
+                            
+                                <MailInbox24Regular class="mb-2 opacity-50 w-9 h-9"  />
+                            
                             <div class="text-sm">{{ t('plugins.mcp.toolsEmpty') }}</div>
                             <div class="text-xs mt-1">{{ t('plugins.mcp.toolsEmptyHint') }}</div>
                         </div>
                     </div>
-                </el-tab-pane>
-            </el-tabs>
+                </div>
 
             <template #footer>
                 <div class="flex justify-end gap-2">
@@ -289,14 +290,28 @@
                 </div>
             </template>
         </GdDialog>
+
+        <!-- 缺少 Node.js 安装指引（测试连接返回 node_missing / npx_missing 时弹出） -->
+        <GdDialog v-model="showNodeGuideModal" :title="t('plugins.mcp.nodeGuideTitle')" align-center size="sm">
+            <div class="text-sm text-gray-600 dark:text-[#8b8d95] whitespace-pre-line">{{ nodeGuideBody }}</div>
+            <template #footer>
+                <div class="flex justify-end gap-2">
+                    <GdButton @click="showNodeGuideModal = false">{{ t('common.close') }}</GdButton>
+                    <GdButton type="primary" @click="handleOpenNodeDownload">{{ t('plugins.mcp.nodeGuideDownload') }}</GdButton>
+                </div>
+            </template>
+        </GdDialog>
     </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElForm, ElFormItem, ElTag, ElTabs, ElTabPane } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTabs from '@/components/ui/GdTabs.vue';
+import GdFormField from '@/components/ui/GdFormField.vue';
+import { useFormValidation } from '@/composables/useFormValidation';
+import GdTag from '@/components/ui/GdTag.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 import GdInput from '@/components/ui/GdInput.vue';
@@ -304,6 +319,8 @@ import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 import { ArrowClockwise16Regular, Add16Regular, ArrowUpload16Regular, MailInbox24Regular, Info24Regular, PlugConnected24Regular, Search16Regular } from '@vicons/fluent'
 import { toast } from '@/components/ui/toastService';
+import { usePopup } from '@/composables/usePopup';
+import { openInExternalBrowser } from '@/utils/browserUtils'
 import { usePluginViewQuery } from '../../composables/usePluginViewQuery'
 import { apiService } from '../../services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -343,6 +360,10 @@ const saving = ref(false)
 const importing = ref(false)
 const importJsonText = ref('')
 const activeTab = ref('config')
+const mcpTabs = [
+    { name: 'config', label: t('plugins.mcp.tabConfig') },
+    { name: 'tools', label: t('plugins.mcp.tabTools') },
+]
 const refreshingTools = ref(false)
 const testingConnection = ref(false)
 const toolsList = ref([])
@@ -356,7 +377,6 @@ const handleServerCommand = (command, server) => {
     if (command === 'delete') handleDeleteServer(server)
 }
 
-const formRef = ref(null)
 
 const serverForm = ref({
     id: null,
@@ -375,43 +395,26 @@ const serverForm = ref({
     enabled: true
 })
 
-const formRules = computed(() => ({
+// 表单校验（el-form :rules → useFormValidation；command 条件规则依赖当前协议类型）
+const { errors, validate, validateField, clearValidate } = useFormValidation({
     name: [
-        { required: true, message: t('plugins.mcp.nameRequired'), trigger: 'blur' },
-        { min: 2, max: 50, message: t('plugins.mcp.nameLength'), trigger: 'blur' }
+        { validator: (v) => {
+            const value = String(v ?? '');
+            if (!value) return t('plugins.mcp.nameRequired');
+            return value.length >= 2 && value.length <= 50 ? null : t('plugins.mcp.nameLength');
+        } },
     ],
     url: [
-        { required: true, message: t('plugins.mcp.urlRequired'), trigger: 'blur' },
-        {
-            validator: (rule, value, callback) => {
-                if (!value) {
-                    callback()
-                    return
-                }
-                const urlPattern = /^https?:\/\/.+/
-                if (urlPattern.test(value)) {
-                    callback()
-                } else {
-                    callback(new Error(t('plugins.mcp.urlInvalid')))
-                }
-            },
-            trigger: 'blur'
-        }
+        { validator: (v) => {
+            const value = String(v ?? '');
+            if (!value) return null; // 仅 HTTP 协议必填（url 字段只在非 stdio 显示）
+            return new RegExp('^https?:\\/\\/.+').test(value) ? null : t('plugins.mcp.urlInvalid');
+        } },
     ],
     command: [
-        {
-            validator: (rule, value, callback) => {
-                if (serverForm.value.type === 'stdio' && !value) {
-                    callback(new Error(t('plugins.mcp.commandRequired')))
-                } else {
-                    callback()
-                }
-            },
-            trigger: 'blur'
-        }
-    ]
-}))
-
+        { validator: (v) => (serverForm.value.type === 'stdio' && !v) ? t('plugins.mcp.commandRequired') : null },
+    ],
+}, () => serverForm.value)
 // 加载 MCP 服务器列表
 const loading = ref(false)
 const loadServers = async () => {
@@ -459,7 +462,7 @@ const handleAddServer = () => {
 
     // 重置表单验证
     setTimeout(() => {
-        formRef.value?.clearValidate()
+        clearValidate()
     }, 100)
 }
 
@@ -500,9 +503,7 @@ const handleEditServer = (server) => {
     showModal.value = true
 
     // 重置表单验证
-    setTimeout(() => {
-        formRef.value?.clearValidate()
-    }, 100)
+    clearValidate()
 }
 
 // 删除服务器
@@ -531,8 +532,9 @@ const handleDeleteServer = async (server) => {
 
 // 保存服务器
 const handleSaveServer = async () => {
+    const valid = await validate()
+    if (!valid) return
     try {
-        await formRef.value.validate()
         saving.value = true
 
         // 解析 HTTP 请求头文本为对象
@@ -840,6 +842,10 @@ const handleTestConnection = async () => {
 
         if (result?.ok) {
             toast.success(t('plugins.mcp.testConnectionSuccess'))
+        } else if (result?.reason === 'node_missing' || result?.reason === 'npx_missing') {
+            // 缺 Node.js：弹安装指引而不是 toast（引导用户去 nodejs.org，本项目不随包分发 npm）
+            nodeGuideReason.value = result.reason
+            showNodeGuideModal.value = true
         } else {
             toast.error(result?.error || t('plugins.mcp.testConnectionFailed'))
         }
@@ -849,6 +855,19 @@ const handleTestConnection = async () => {
     } finally {
         testingConnection.value = false
     }
+}
+
+// Node.js 安装指引对话框（node_missing / npx_missing 两种文案）
+const showNodeGuideModal = ref(false)
+const nodeGuideReason = ref('node_missing')
+const nodeGuideBody = computed(() =>
+    nodeGuideReason.value === 'npx_missing'
+        ? t('plugins.mcp.nodeGuideBodyNpx')
+        : t('plugins.mcp.nodeGuideBodyNode')
+)
+const handleOpenNodeDownload = () => {
+    openInExternalBrowser('https://nodejs.org/zh-cn/download')
+    showNodeGuideModal.value = false
 }
 
 // 切换服务器启用/禁用状态

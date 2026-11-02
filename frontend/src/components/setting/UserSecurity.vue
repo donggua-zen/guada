@@ -20,15 +20,14 @@
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.userSecurity.changePassword') }}</h3>
         <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
           <div class="px-4 py-4">
-            <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-position="left"
-              label-width="80px" size="large" class="max-w-128">
-              <el-form-item :label="t('settings.userSecurity.oldPassword')" prop="oldPassword">
+            <div class="max-w-128">
+              <GdFormField :label="t('settings.userSecurity.oldPassword')" label-width="80px" :error="errors.oldPassword || undefined">
                 <GdInput v-model="passwordForm.oldPassword" type="password" show-password
-                  :placeholder="t('settings.userSecurity.oldPasswordPlaceholder')" />
-              </el-form-item>
-              <el-form-item :label="t('settings.userSecurity.newPassword')" prop="newPassword">
+                  :placeholder="t('settings.userSecurity.oldPasswordPlaceholder')" :error="!!errors.oldPassword" @blur="validateField('oldPassword')" />
+              </GdFormField>
+              <GdFormField :label="t('settings.userSecurity.newPassword')" label-width="80px" :error="errors.newPassword || undefined">
                 <GdInput v-model="passwordForm.newPassword" type="password" show-password
-                  :placeholder="t('settings.userSecurity.newPasswordPlaceholder')" />
+                  :placeholder="t('settings.userSecurity.newPasswordPlaceholder')" :error="!!errors.newPassword" @blur="validateField('newPassword')" />
                 <!-- 实时强度指示条：3 段对应 弱/中/强 -->
                 <div v-if="passwordForm.newPassword" class="flex items-center gap-2 mt-2 w-full">
                   <div class="flex gap-1 flex-1 max-w-40">
@@ -40,15 +39,15 @@
                 <div class="text-xs text-gray-500 dark:text-[#8b8d95] leading-5 mt-1">
                   {{ requireStrongPassword ? t('settings.userSecurity.passwordPolicyHintPublic') : t('settings.userSecurity.passwordPolicyHint') }}
                 </div>
-              </el-form-item>
-              <el-form-item :label="t('settings.userSecurity.confirmPassword')" prop="confirmPassword">
+              </GdFormField>
+              <GdFormField :label="t('settings.userSecurity.confirmPassword')" label-width="80px" :error="errors.confirmPassword || undefined">
                 <GdInput v-model="passwordForm.confirmPassword" type="password" show-password
-                  :placeholder="t('settings.userSecurity.confirmPasswordPlaceholder')" />
-              </el-form-item>
-              <el-form-item>
+                  :placeholder="t('settings.userSecurity.confirmPasswordPlaceholder')" :error="!!errors.confirmPassword" @blur="validateField('confirmPassword')" />
+              </GdFormField>
+              <GdFormField label-width="80px">
                 <GdButton type="primary" @click="handleChangePassword">{{ t('settings.userSecurity.confirmChange') }}</GdButton>
-              </el-form-item>
-            </el-form>
+              </GdFormField>
+            </div>
           </div>
         </div>
       </div>
@@ -65,9 +64,9 @@ import { apiService } from '@/services/ApiService'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils/errorMessage'
 import { getPasswordErrorCode, evaluatePasswordStrength } from '@/utils/passwordStrength'
-// Element Plus 组件导入
-import { ElForm, ElFormItem } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdFormField from '@/components/ui/GdFormField.vue';
+import { useFormValidation } from '@/composables/useFormValidation';
 import GdInput from '@/components/ui/GdInput.vue';
 import GdSwitch from '@/components/ui/GdSwitch.vue';
 
@@ -76,7 +75,21 @@ const { t } = useI18n()
 const { prompt, confirm } = usePopup()
 const authStore = useAuthStore()
 
-const passwordFormRef = ref(null)
+// 原密码表单（el-form → useFormValidation）；错误行内展示 + 控件红描边
+const { errors, validate, validateField, clearValidate } = useFormValidation({
+  oldPassword: [{ validator: (v) => (String(v ?? '') ? null : t('settings.userSecurity.oldPasswordRequired')) }],
+  newPassword: [{ validator: (v) => {
+    const value = String(v ?? '');
+    if (!value) return t('settings.userSecurity.newPasswordRequired');
+    const result = validatePasswordInput(value);
+    return result === true ? null : result;
+  } }],
+  confirmPassword: [{ validator: (v) => {
+    const value = String(v ?? '');
+    if (!value) return t('settings.userSecurity.confirmPasswordRequired');
+    return value === passwordForm.value.newPassword ? null : t('settings.userSecurity.passwordMismatch');
+  } }],
+}, () => passwordForm.value)
 
 // 公网访问开启时要求高强度密码（后端同样会校验，这里用于即时反馈与提示文案）
 const requireStrongPassword = ref(false)
@@ -122,70 +135,6 @@ const passwordStrength = computed(() =>
 const strengthSegments = computed(() =>
   ({ weak: 1, medium: 2, strong: 3 })[passwordStrength.value.level]
 )
-const strengthLabel = computed(() =>
-  t({
-    weak: 'settings.userSecurity.strengthWeak',
-    medium: 'settings.userSecurity.strengthMedium',
-    strong: 'settings.userSecurity.strengthStrong',
-  }[passwordStrength.value.level])
-)
-const strengthActiveClass = computed(() =>
-  ({
-    weak: 'bg-red-500',
-    medium: 'bg-amber-500',
-    strong: 'bg-emerald-500',
-  })[passwordStrength.value.level]
-)
-const strengthTextClass = computed(() =>
-  ({
-    weak: 'text-red-600 dark:text-red-400',
-    medium: 'text-amber-600 dark:text-amber-500',
-    strong: 'text-emerald-600 dark:text-emerald-400',
-  })[passwordStrength.value.level]
-)
-
-// 添加密码表单验证规则
-const passwordRules = computed(() => ({
-  oldPassword: [
-    {
-      required: true,
-      message: t('settings.userSecurity.oldPasswordRequired'),
-      trigger: 'blur'
-    }
-  ],
-  newPassword: [
-    {
-      required: true,
-      message: t('settings.userSecurity.newPasswordRequired'),
-      trigger: 'blur'
-    },
-    {
-      validator: (rule, value, callback) => {
-        const result = validatePasswordInput(value ?? '')
-        if (result === true) callback()
-        else callback(new Error(result))
-      },
-      trigger: 'blur'
-    }
-  ],
-  confirmPassword: [
-    {
-      required: true,
-      message: t('settings.userSecurity.confirmPasswordRequired'),
-      trigger: 'blur'
-    },
-    {
-      validator: (rule, value, callback) => {
-        if (value !== passwordForm.value.newPassword) {
-          callback(new Error(t('settings.userSecurity.passwordMismatch')))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'blur'
-    }
-  ]
-}))
 
 /**
  * 访问密码开关：
@@ -233,28 +182,27 @@ const handlePasswordToggle = async (enabled) => {
 }
 
 // 添加修改密码处理函数
-const handleChangePassword = (e) => {
-  e.preventDefault()
-  passwordFormRef.value?.validate(async (valid) => {
-    if (valid) {
-      try {
-        await apiService.changePassword(passwordForm.value.oldPassword, passwordForm.value.newPassword)
-        // 与访问密码开关保持一致：改密成功后确实已设密码
-        authStore.passwordSet = true
-        // 重置表单
-        passwordForm.value = {
-          oldPassword: '',
-          newPassword: '',
-          confirmPassword: ''
-        }
-        toast.success(t('settings.userSecurity.passwordChanged'))
-      } catch (error) {
-        toast.error(error.message || t('settings.userSecurity.passwordChangeFailed'))
+const handleChangePassword = async () => {
+  const valid = await validate()
+  if (valid) {
+    try {
+      await apiService.changePassword(passwordForm.value.oldPassword, passwordForm.value.newPassword)
+      // 与访问密码开关保持一致：改密成功后确实已设密码
+      authStore.passwordSet = true
+      // 重置表单并清校验态
+      passwordForm.value = {
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
       }
-    } else {
-      console.log('验证失败')
+      clearValidate()
+      toast.success(t('settings.userSecurity.passwordChanged'))
+    } catch (error) {
+      toast.error(error.message || t('settings.userSecurity.passwordChangeFailed'))
     }
-  })
+  } else {
+    console.log('验证失败')
+  }
 }
 
 onMounted(() => {
@@ -263,7 +211,5 @@ onMounted(() => {
   void loadMobileAccessRequirement()
 })
 
-defineExpose({
-  passwordFormRef
-})
+
 </script>

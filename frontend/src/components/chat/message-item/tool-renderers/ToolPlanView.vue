@@ -8,9 +8,9 @@
     -->
     <div class="tool-plan-view">
         <div class="plan-header">
-            <el-icon :size="16" class="plan-header-icon">
-                <Notepad20Regular />
-            </el-icon>
+            
+                <Notepad20Regular class="plan-header-icon w-4 h-4"  />
+            
             <span class="plan-title">{{ t('chat.plan.title') }}</span>
             <span class="flex-1"></span>
             <!-- 终态徽标（批准/拒绝/中断/失败）与流式提示互斥：status 存在即已非执行中。
@@ -21,9 +21,9 @@
             </span>
             <GdTooltip :content="t('chat.messageActions.copy')" placement="top">
                 <button class="plan-icon-btn" @click="copyPlan">
-                    <el-icon :size="14">
-                        <Copy16Regular />
-                    </el-icon>
+                    
+                        <Copy16Regular class="w-3.5 h-3.5"  />
+                    
                 </button>
             </GdTooltip>
         </div>
@@ -41,9 +41,9 @@
             <GdButton v-if="content" type="primary" round size="large" class="plan-open-btn"
                 @click="openPanel">
                 {{ t('chat.plan.viewFullDoc') }}
-                <el-icon :size="16" class="plan-open-icon">
-                    <ArrowRight16Regular />
-                </el-icon>
+                
+                    <ArrowRight16Regular class="plan-open-icon w-4 h-4"  />
+                
             </GdButton>
         </div>
     </div>
@@ -52,7 +52,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
 
 import { ArrowRight16Regular, Copy16Regular, Notepad20Regular } from '@vicons/fluent'

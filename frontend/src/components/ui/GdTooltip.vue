@@ -70,5 +70,6 @@ onUnmounted(() => {
 <style scoped>
 .l-tooltip__trigger {
   display: inline-flex;
+  flex-shrink: 0;
 }
 </style>

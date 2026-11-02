@@ -2,28 +2,28 @@
   <GdDialog v-model="visible" :title="t('bot.card.qrTitle')" size="xs" align-center>
     <div class="flex flex-col items-center py-4">
       <div v-if="loading" class="py-8">
-        <el-icon :size="32">
-          <ArrowSync16Regular class="animate-spin" />
-        </el-icon>
+        
+          <ArrowSync16Regular class="w-8 h-8 animate-spin" />
+        
       </div>
 
       <!-- 已登录 -->
       <div v-else-if="status === 'logged_in'" class="flex flex-col items-center py-4">
-        <el-icon :size="48" class="text-green-500 mb-3">
-          <CheckmarkCircle48Regular />
-        </el-icon>
+        
+          <CheckmarkCircle48Regular class="text-green-500 mb-3 w-12 h-12" mx-auto  />
+        
         <p class="text-sm text-gray-600">{{ message }}</p>
         <GdButton type="danger" size="small" class="mt-4" @click="handleLogout">
-          <el-icon><Power20Regular /></el-icon>
+          <Power20Regular class="size-4"  />
           <span class="ml-1">{{ t('bot.card.logout') }}</span>
         </GdButton>
       </div>
 
       <!-- 二维码生成中 -->
       <div v-else-if="status === 'pending'" class="flex flex-col items-center py-4">
-        <el-icon :size="32" class="text-orange-400 mb-3">
-          <Timer32Regular />
-        </el-icon>
+        
+          <Timer32Regular class="text-orange-400 mb-3 w-8 h-8"  />
+        
         <p class="text-sm text-gray-600">{{ message }}</p>
       </div>
 
@@ -34,7 +34,7 @@
           {{ t('bot.card.qrReadyHint') }}
         </p>
         <GdButton size="small" class="mt-3" @click="refresh">
-          <el-icon><ArrowClockwise16Regular /></el-icon>
+          <ArrowClockwise16Regular class="size-4"  />
           <span class="ml-1">{{ t('bot.card.refreshQr') }}</span>
         </GdButton>
       </div>
@@ -76,7 +76,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { CheckmarkCircle48Regular, Timer32Regular, Power20Regular, ArrowSync16Regular, ArrowClockwise16Regular } from '@vicons/fluent'
-import { ElIcon } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
 import GdInput from '@/components/ui/GdInput.vue';
 

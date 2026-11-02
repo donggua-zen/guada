@@ -105,9 +105,9 @@
                 class="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2"
               >
                 <GdButton type="danger" size="small" @click="handleRemoveWallpaper">
-                  <el-icon class="mr-1">
-                    <Delete16Regular />
-                  </el-icon>
+                  
+                    <Delete16Regular class="mr-1 size-4"  />
+                  
                   删除
                 </GdButton>
               </div>
@@ -115,25 +115,24 @@
 
             <!-- 上传按钮 -->
             <div v-else class="w-full">
-              <el-upload
-                ref="uploadRef"
-                class="wallpaper-uploader"
-                :auto-upload="false"
-                :show-file-list="false"
-                :on-change="handleFileChange"
-                accept="image/jpeg,image/png,image/webp"
+              <div
+                class="wallpaper-uploader w-full h-40 rounded-lg border-2 border-dashed border-gray-300 dark:border-[#2e3035] flex flex-col items-center justify-center cursor-pointer hover:border-(--gd-color-primary) transition-colors"
+                @click="triggerWallpaperSelect"
+                @dragover.prevent
+                @drop.prevent="handleWallpaperDrop"
               >
+                <input ref="wallpaperInputRef" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="handleWallpaperNativeChange" />
                 <div
                   class="w-full h-40 rounded-lg border-2 border-dashed border-gray-300 dark:border-[#2e3035] flex flex-col items-center justify-center cursor-pointer hover:border-(--gd-color-primary) transition-colors"
                 >
-                  <el-icon class="text-3xl text-gray-400 mb-2">
-                    <Add24Regular />
-                  </el-icon>
+                  
+                    <Add24Regular class="text-3xl text-gray-400 mb-2 size-4"  />
+                  
                   <span class="text-sm text-gray-500 dark:text-[#8b8d95]">
                     点击或拖拽上传壁纸
                   </span>
                 </div>
-              </el-upload>
+              </div>
             </div>
           </div>
         </div>
@@ -248,7 +247,6 @@
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, reactive, onMounted, watch, markRaw, computed } from 'vue'
-import { ElUpload, ElIcon } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
 import { toast } from '@/components/ui/toastService';
 import GdSlider from '@/components/ui/GdSlider.vue';
@@ -256,7 +254,6 @@ import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 import GdSwitch from '@/components/ui/GdSwitch.vue';
 
-import type { UploadFile } from 'element-plus'
 import { Add24Regular, Delete16Regular, WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
@@ -427,9 +424,19 @@ const handleSave = async () => {
   }
 }
 
+const wallpaperInputRef = ref<HTMLInputElement | null>(null)
+const triggerWallpaperSelect = (): void => wallpaperInputRef.value?.click()
+const handleWallpaperNativeChange = (e: Event): void => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) void handleWallpaperFile(file)
+}
+const handleWallpaperDrop = (e: DragEvent): void => {
+  const file = e.dataTransfer?.files?.[0]
+  if (file) void handleWallpaperFile(file)
+}
 // 处理文件选择
-const handleFileChange = async (uploadFile: UploadFile) => {
-  const file = uploadFile.raw
+const handleWallpaperFile = async (file: File) => {
   if (!file) return
 
   // 验证文件类型
@@ -527,7 +534,5 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.wallpaper-uploader :deep(.el-upload) {
-  width: 100%;
-}
+
 </style>

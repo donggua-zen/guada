@@ -18,7 +18,7 @@
         </div>
 
         <!-- 部分来源不可用（不阻塞其余条目展示） -->
-        <el-alert
+        <GdAlert
             v-if="partialErrors.length > 0"
             class="mb-3"
             type="warning"
@@ -46,9 +46,9 @@
             v-else-if="error"
             class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-6 text-center"
         >
-            <el-icon size="32" class="mb-2 opacity-50 text-gray-400">
-                <MailInbox24Regular />
-            </el-icon>
+            
+                <MailInbox24Regular class="mb-2 opacity-50 text-gray-400 w-8 h-8"  />
+            
             <div class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ error }}</div>
         </div>
 
@@ -73,20 +73,20 @@
                 @click="handleShowAddDialog(item)"
             >
                 <template #badges>
-                    <el-tag v-if="isInstalled(item)" type="success" size="small" effect="plain">
+                    <GdTag v-if="isInstalled(item)" type="success" size="small" effect="plain">
                         {{ t('plugins.mcpMarket.installed') }}
-                    </el-tag>
-                    <el-tag v-if="item.stats" type="info" size="small" effect="plain">
+                    </GdTag>
+                    <GdTag v-if="item.stats" type="info" size="small" effect="plain">
                         {{ item.stats }}
-                    </el-tag>
-                    <el-tag
+                    </GdTag>
+                    <GdTag
                         v-for="(tag, index) in (item.tags || []).slice(0, 2)"
                         :key="`${tag}-${index}`"
                         size="small"
                         effect="light"
                     >
                         {{ tag }}
-                    </el-tag>
+                    </GdTag>
                 </template>
                 <template #actions>
                     <GdButton
@@ -141,7 +141,7 @@
                 </div>
 
                 <!-- 解析失败就地反馈 -->
-                <el-alert
+                <GdAlert
                     v-if="resolveError"
                     class="mt-3"
                     type="error"
@@ -152,7 +152,7 @@
 
                 <!-- 解析结果：逐服务器展示真实传输明细 -->
                 <template v-else-if="resolvedServers.length > 0">
-                    <el-alert
+                    <GdAlert
                         class="mt-3"
                         type="warning"
                         :closable="false"
@@ -167,15 +167,15 @@
                         >
                             <div class="mcp-market__server-head">
                                 <span class="mcp-market__server-name">{{ server.name }}</span>
-                                <el-tag size="small" effect="plain">{{ server.type }}</el-tag>
-                                <el-tag
+                                <GdTag size="small" effect="plain">{{ server.type }}</GdTag>
+                                <GdTag
                                     v-if="server.needsConfiguration"
                                     size="small"
                                     type="warning"
                                     effect="plain"
                                 >
                                     {{ t('plugins.mcpMarket.needsConfig') }}
-                                </el-tag>
+                                </GdTag>
                             </div>
 
                             <div class="mcp-market__transport">
@@ -216,7 +216,7 @@
                     </div>
 
                     <!-- 导入失败就地反馈 -->
-                    <el-alert
+                    <GdAlert
                         v-if="importError"
                         class="mt-3"
                         type="error"
@@ -257,9 +257,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElAlert, ElIcon, ElTag } from 'element-plus';
+
 import { MailInbox24Regular } from '@vicons/fluent'
 import GdButton from '@/components/ui/GdButton.vue'
+import GdTag from '@/components/ui/GdTag.vue';
+import GdAlert from '@/components/ui/GdAlert.vue';
 import { toast } from '@/components/ui/toastService';
 import GdDialog from '@/components/ui/GdDialog.vue'
 import CardAvatar from '@/components/ui/CardAvatar.vue'

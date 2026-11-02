@@ -39,14 +39,14 @@
                         class="plugins-search"
                     >
                         <template #prefix>
-                            <el-icon><Search16Regular /></el-icon>
+                            <Search16Regular class="size-4"  />
                         </template>
                     </GdInput>
                     <GdButton link size="small" :loading="marketLoading" @click="handleMarketRefresh">
                         <template #icon>
-                            <el-icon :class="{ 'is-loading': marketLoading }">
-                                <ArrowClockwise16Regular />
-                            </el-icon>
+                            
+                                <ArrowClockwise16Regular class="size-4" :class="{ 'animate-spin': marketLoading }" />
+                            
                         </template>
                         {{ marketLoading ? t('common.loading') : t('plugins.skills.marketRefresh') }}
                     </GdButton>
@@ -89,10 +89,10 @@
                     @command="(command) => handleSkillCommand(command, skill)"
                 >
                     <template #badges>
-                        <el-tag v-if="skill.provider" size="small" type="warning" effect="light">{{ t('plugins.skills.fromPlugin') }}</el-tag>
-                        <el-tag v-else-if="skill.source === 'system'" size="small" type="success" effect="light">{{ t('plugins.skills.sourceBuiltin') }}</el-tag>
-                        <el-tag v-else-if="skill.source === 'agents'" size="small" type="warning" effect="light">{{ t('plugins.skills.sourceShared') }}</el-tag>
-                        <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</el-tag>
+                        <GdTag v-if="skill.provider" size="small" type="warning" effect="light">{{ t('plugins.skills.fromPlugin') }}</GdTag>
+                        <GdTag v-else-if="skill.source === 'system'" size="small" type="success" effect="light">{{ t('plugins.skills.sourceBuiltin') }}</GdTag>
+                        <GdTag v-else-if="skill.source === 'agents'" size="small" type="warning" effect="light">{{ t('plugins.skills.sourceShared') }}</GdTag>
+                        <GdTag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</GdTag>
                     </template>
                     <template #actions>
                         <GdTooltip v-if="skill.provider" :content="t('plugins.skills.pluginManaged')" placement="top">
@@ -114,9 +114,9 @@
             <div v-else-if="!loading"
                 class="rounded-[var(--gd-size-surface-radius)] overflow-hidden bg-(--gd-color-surface-subtle)">
                 <div class="p-12 text-center">
-                    <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
-                        <MailInbox24Regular />
-                    </el-icon>
+                    
+                        <MailInbox24Regular class="mb-4 opacity-50 text-gray-400 w-16 h-16"  />
+                    
                     <div class="text-xl font-medium text-gray-600 dark:text-[#e8e9ed] mb-2">
                         {{ t('plugins.skills.empty') }}
                     </div>
@@ -152,9 +152,9 @@
             align-center destroy-on-close append-to-body>
 
             <div v-if="loadingDoc" class="flex justify-center items-center py-12">
-                <el-icon size="32">
-                    <ArrowSync16Regular class="animate-spin" />
-                </el-icon>
+                
+                    <ArrowSync16Regular class="w-8 h-8 animate-spin" />
+                
             </div>
             <div v-else-if="docError" class="py-12 text-center text-red-500">
                 {{ docError }}
@@ -186,31 +186,30 @@
                     {{ t('plugins.skills.installDesc') }}
                 </div>
 
-                <el-upload ref="uploadRef" class="upload-demo" drag :auto-upload="false" :show-file-list="false" :on-change="handleFileChange"
-                    :limit="1" accept=".zip">
-                    <el-icon size="48" class="mb-4 text-gray-400 dark:text-[#6b6d75]"><ArrowUpload24Regular /></el-icon>
-                    <div class="el-upload__text">
-                        {{ t('plugins.skills.uploadText') }} <em>{{ t('plugins.skills.uploadClick') }}</em>
+                <div class="rounded-lg border-2 border-dashed border-gray-300 dark:border-[#4a4b52] p-8 text-center cursor-pointer transition-colors duration-150 hover:border-(--gd-color-primary)"
+                    @click="triggerFileSelect" @dragover.prevent @drop.prevent="handleDrop">
+                    <input ref="fileInputRef" type="file" accept=".zip" class="sr-only" @change="handleNativeFileChange" />
+                    <ArrowUpload24Regular class="mb-4 text-gray-400 dark:text-[#6b6d75] w-12 h-12 mx-auto" />
+                    <div class="text-sm">
+                        {{ t('plugins.skills.uploadText') }} <em class="not-italic text-(--gd-color-primary)">{{ t('plugins.skills.uploadClick') }}</em>
                     </div>
-                    <template #tip>
-                        <div class="el-upload__tip text-xs text-gray-500 mt-2">
-                            {{ t('plugins.skills.uploadTip') }}
-                        </div>
-                    </template>
-                </el-upload>
+                    <div class="text-xs text-gray-500 mt-2">
+                        {{ t('plugins.skills.uploadTip') }}
+                    </div>
+                </div>
 
                 <div v-if="selectedFile" class="mt-4 p-3 bg-gray-50 dark:bg-[#2a2c30] rounded-lg">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                            <el-icon>
-                                <Document16Regular />
-                            </el-icon>
+                            
+                                <Document16Regular class="size-4"  />
+                            
                             <span class="text-sm">{{ selectedFile.name }}</span>
                         </div>
                         <GdButton link type="danger" @click="clearSelectedFile">
-                            <el-icon>
-                                <Dismiss16Regular />
-                            </el-icon>
+                            
+                                <Dismiss16Regular class="size-4"  />
+                            
                         </GdButton>
                     </div>
                     <div class="text-xs text-gray-500 mt-1">
@@ -219,9 +218,9 @@
                 </div>
 
                 <div class="mt-4">
-                    <el-checkbox v-model="forceOverwrite">
+                    <GdCheckbox v-model="forceOverwrite">
                         <span class="text-sm">{{ t('plugins.skills.forceOverwrite') }}</span>
-                    </el-checkbox>
+                    </GdCheckbox>
                     <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1 ml-6">
                         {{ t('plugins.skills.forceOverwriteHint') }}
                     </div>
@@ -242,13 +241,13 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElTag, ElIcon, ElUpload } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
+import GdTag from '@/components/ui/GdTag.vue';
 import { toast } from '@/components/ui/toastService';
 import GdInput from '@/components/ui/GdInput.vue';
 import GdSwitch from '@/components/ui/GdSwitch.vue';
 
-import type { UploadFile } from 'element-plus'
 import { ArrowSync16Regular, ArrowUpload16Regular, ArrowUpload24Regular, ArrowUpRight16Regular, Document16Regular, Dismiss16Regular, ArrowClockwise16Regular, Info24Regular, MailInbox24Regular, Search16Regular } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
@@ -433,7 +432,7 @@ const bodyContent = computed(() => {
 const showInstallDialog = ref(false)
 const installing = ref(false)
 const selectedFile = ref<File | null>(null)
-const uploadRef = ref()
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const forceOverwrite = ref(false)
 
 // 卸载相关状态
@@ -597,8 +596,18 @@ function handleShowInstallDialog() {
 /**
  * 处理文件选择
  */
-function handleFileChange(file: UploadFile) {
-    selectedFile.value = file.raw ?? null
+function handleNativeFileChange(e: Event) {
+    const input = e.target as HTMLInputElement
+    selectedFile.value = input.files?.[0] ?? null
+}
+
+function triggerFileSelect(): void {
+    fileInputRef.value?.click()
+}
+
+function handleDrop(e: DragEvent): void {
+    const file = e.dataTransfer?.files?.[0]
+    if (file) selectedFile.value = file
 }
 
 /**
@@ -607,8 +616,9 @@ function handleFileChange(file: UploadFile) {
 function clearSelectedFile() {
     selectedFile.value = null
     forceOverwrite.value = false
-    if (uploadRef.value) {
-        uploadRef.value.clearFiles()
+    // 重置原生 input（等价原 clearFiles，且天然没有 limit 二次选择拒绝问题）
+    if (fileInputRef.value) {
+        fileInputRef.value.value = ''
     }
 }
 

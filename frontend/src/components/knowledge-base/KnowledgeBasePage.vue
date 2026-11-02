@@ -12,7 +12,7 @@
             <div class="flex items-center gap-2 shrink-0">
               <GdInput v-model="searchKeyword" :placeholder="t('knowledge.page.searchPlaceholder')" clearable size="small" style="width: 160px;">
                 <template #prefix>
-                  <el-icon><Search16Regular /></el-icon>
+                  <Search16Regular class="size-4"  />
                 </template>
               </GdInput>
               <GdButton @click="handleOpenDocs">
@@ -20,7 +20,7 @@
                 {{ t('knowledge.page.docs') }}
               </GdButton>
               <GdButton type="primary" @click="handleOpenCreate">
-                <template #icon><Add16Regular /></template>
+                <template #icon><Add16Regular class="size-4" /></template>
                 {{ t('knowledge.page.createKb') }}
               </GdButton>
             </div>
@@ -58,9 +58,9 @@
 
           <!-- 空状态 -->
           <div v-else-if="!store.loading" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
-            <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
-              <BookOpen48Regular />
-            </el-icon>
+            
+              <BookOpen48Regular class="text-gray-300 dark:text-[#3e4046] mb-3 w-12 h-12" mx-auto  />
+            
             <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? t('knowledge.page.notFound') : t('knowledge.page.empty') }}</p>
             <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? t('knowledge.page.notFoundHint') : t('knowledge.page.emptyHint') }}</p>
           </div>
@@ -75,39 +75,17 @@
         <div class="px-2 py-3 flex items-center gap-3 w-full">
           <GdButton link @click="backToList"
             class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--gd-color-primary) font-medium">
-            <el-icon :size="22">
-              <ArrowLeft24Filled />
-            </el-icon>
+            
+              <ArrowLeft24Filled class="w-[22px] h-[22px]"  />
+            
             <span class="text-base">{{ t('knowledge.page.backToList') }}</span>
           </GdButton>
-          <el-divider direction="vertical" />
+          <GdDivider direction="vertical" />
           <span class="font-semibold text-gray-800 dark:text-[#e8e9ed] text-base">{{ currentKB?.name }}</span>
         </div>
         <!-- Tab 切换区域 -->
         <div class="px-4 pt-1 pb-2">
-          <el-tabs v-model="activeTab" class="kb-tabs">
-            <el-tab-pane label="文件列表" name="files">
-              <template #label>
-                <div class="flex items-center gap-2">
-                  <el-icon :size="16">
-                    <BookOpen24Regular />
-                  </el-icon>
-                  <span class="text-[15px]">{{ t('knowledge.page.tabFiles') }}</span>
-                </div>
-              </template>
-            </el-tab-pane>
-            <el-tab-pane label="搜索" name="search">
-              <template #label>
-                <div class="flex items-center gap-2">
-                  <el-icon :size="16">
-                    <Search24Regular />
-                  </el-icon>
-                  <span class="text-[15px]">{{ t('knowledge.page.tabSearch') }}</span>
-                </div>
-              </template>
-            </el-tab-pane>
-          </el-tabs>
-
+          <GdTabs v-model="activeTab" :tabs="kbTabs" />
         </div>
       </div>
       <div class="flex-1 overflow-auto min-h-0" @scroll="handleScroll">
@@ -143,70 +121,55 @@
 
   <!-- 创建/编辑知识库对话框 -->
   <GdDialog v-model="showKbDialog" :title="dialogMode === 'create' ? t('knowledge.page.createTitle') : t('knowledge.page.editTitle')" size="md" :close-on-click-modal="false" append-to-body>
-    <el-form :model="dialogForm" label-width="140px" size="large">
-      <el-form-item :label="t('knowledge.page.kbName')" required>
+    <div class="flex flex-col gap-3">
+      <GdFormField :label="t('knowledge.page.kbName')" label-width="140px" required>
         <GdInput v-model="dialogForm.name" :placeholder="t('knowledge.page.kbNamePlaceholder')" maxlength="255" show-word-limit />
-      </el-form-item>
+      </GdFormField>
 
-      <el-form-item :label="t('common.description')">
+      <GdFormField :label="t('common.description')" label-width="140px">
         <GdInput v-model="dialogForm.description" type="textarea" :rows="3" :placeholder="t('knowledge.page.descriptionPlaceholder')"
           maxlength="2000" show-word-limit />
-      </el-form-item>
+      </GdFormField>
 
-      <el-form-item :label="t('knowledge.page.embeddingModel')" required>
+      <GdFormField :label="t('knowledge.page.embeddingModel')" label-width="140px" required>
         <GdSelect v-model="dialogForm.embeddingModelId" :placeholder="t('knowledge.page.embeddingModelPlaceholder')" class="w-full">
           <template v-for="provider in embeddingProviders" :key="provider.id">
             <GdOption :label="provider.name" :value="''" disabled />
             <GdOption v-for="model in provider.models" :key="model.id" :label="model.modelName" :value="model.id" />
           </template>
         </GdSelect>
-      </el-form-item>
+      </GdFormField>
 
-      <el-divider />
+      <GdDivider />
 
       <!-- 分块大小配置 -->
-      <el-form-item>
-        <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.chunkMaxSize') }}</span>
-        </template>
+      <GdFormField :label="t('knowledge.page.chunkMaxSize')" label-width="140px">
         <GdInputNumber v-model="dialogForm.chunkMaxSize" :min="100" :max="5000" :step="100" class="w-full" />
-      </el-form-item>
+      </GdFormField>
 
-      <el-form-item>
-        <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.chunkOverlapSize') }}</span>
-        </template>
+      <GdFormField :label="t('knowledge.page.chunkOverlapSize')" label-width="140px">
         <GdInputNumber v-model="dialogForm.chunkOverlapSize" :min="0" :max="500" :step="10" class="w-full" />
-      </el-form-item>
+      </GdFormField>
 
-      <el-form-item>
-        <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.chunkMinSize') }}</span>
-        </template>
+      <GdFormField :label="t('knowledge.page.chunkMinSize')" label-width="140px">
         <GdInputNumber v-model="dialogForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
-      </el-form-item>
+      </GdFormField>
 
-      <el-divider />
+      <GdDivider />
 
       <!-- 混合检索权重：语义召回与关键词召回的占比 -->
-      <el-form-item>
-        <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.semanticWeight') }}</span>
-        </template>
+      <GdFormField :label="t('knowledge.page.semanticWeight')" label-width="140px">
         <GdSlider v-model="dialogForm.semanticWeight" :min="0" :max="1" :step="0.05" show-input />
-      </el-form-item>
+      </GdFormField>
 
-      <el-form-item>
-        <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('knowledge.page.keywordWeight') }}</span>
-        </template>
+      <GdFormField :label="t('knowledge.page.keywordWeight')" label-width="140px">
         <GdSlider v-model="dialogForm.keywordWeight" :min="0" :max="1" :step="0.05" show-input />
-      </el-form-item>
+      </GdFormField>
 
       <div class="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-2 pl-[140px]">
         {{ t('knowledge.page.fusionWeightHint') }}
       </div>
-    </el-form>
+    </div>
 
     <template #footer>
       <div class="flex justify-end gap-3">
@@ -228,6 +191,8 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTabs from '@/components/ui/GdTabs.vue';
+import GdDivider from '@/components/ui/GdDivider.vue';
 import GdSlider from '@/components/ui/GdSlider.vue';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
@@ -269,6 +234,10 @@ const showFileChunksModal = ref(false)  // 文件分块查看弹窗
 const showUploadTaskModal = ref(false)  // 上传任务弹窗
 const selectedFile = ref<KBFile | null>(null)  // 选中的文件
 const activeTab = ref('files')  // 当前激活的 Tab: 'files' 或 'search'
+const kbTabs = [
+  { name: 'files', label: t('knowledge.page.tabFiles'), icon: BookOpen24Regular },
+  { name: 'search', label: t('knowledge.page.tabSearch'), icon: Search24Regular },
+]
 const viewMode = ref<'list' | 'detail'>('list')  // 视图模式：列表或详情
 const searchKeyword = ref('')  // 知识库搜索关键词
 /** 嵌入模型供应商分组（loadEmbeddingModels 过滤出 embedding 模型后的产物） */
@@ -505,7 +474,6 @@ function handleEdit(kb: KnowledgeBase) {
   showKbDialog.value = true
 }
 
-
 /**
  * 删除知识库
  */
@@ -571,8 +539,6 @@ function handleAfterDelete(deletedKbId: string, currentIndex: number) {
   }
 }
 
-
-
 /**
  * 处理上传完成事件
  */
@@ -604,7 +570,6 @@ async function handleFolderCreated() {
     await fileTreeRef.value.forceReload()
   }
 }
-
 
 /**
  * 处理滚动事件（带防抖）
@@ -792,8 +757,6 @@ function getCurrentFiles(): KBFile[] {
   }
   return []
 }
-
-
 
 // ========== Lifecycle ==========
 onMounted(async () => {
@@ -1047,19 +1010,5 @@ watch(
 </script>
 
 <style scoped>
-/* Tab 样式优化 */
-.kb-tabs :deep(.el-tabs__header) {
-  margin-bottom: 0;
-}
 
-.kb-tabs :deep(.el-tabs__nav-wrap::after) {
-  height: 1px;
-}
-
-.kb-tabs :deep(.el-tabs__item) {
-  padding: 0 18px;
-  height: 44px;
-  line-height: 44px;
-  font-size: 14px;
-}
 </style>

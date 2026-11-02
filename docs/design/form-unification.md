@@ -168,18 +168,124 @@
 | `<el-input-number>` | `<GdInputNumber>` | `controls-position="right"` 属性直接删（单形态）；`:controls="false"` 同名保留；`precision/formatter` 未迁（0 用量） |
 | `<el-slider>` | `<GdSlider>` | `:show-input-controls="false"` 直接删（showInput 收敛无步进钮）；`range/marks/vertical` 未迁（0 用量） |
 
+## GdTag / GdAlert / GdProgress / GdDivider / GdEmpty（第五批小散件）
+
+### GdTag（替代 el-tag，62 处/21 文件）
+
+| Prop | 说明 |
+|---|---|
+| `type` | `info/success/warning/danger/primary/error`（error→danger 归一，插件契约别名） |
+| `effect` | `light` 软色底（默认，`bg-[色]/12%`）/ `plain` 描边（`border-[色]/45%`）/ `dark` 实色反白 |
+| `size` | `small` 24px（默认，对齐 GdButton tiny）/ `medium` 28px |
+| `closable` | 尾部内联 X 钮，emit `close`（唯一直实消费：ChatInput 知识库/附件标签） |
+
+五色走 `--gd-color-info/success/warning/danger/primary` token；`gd-tag` + `data-type`/`data-effect`/`data-size` 主题钩子（5 条主题 `.el-tag` 圆角规则已移植为 `.gd-tag`）。el-tag 的 round/hit/color/disable-transitions/@click 全项目 0 用量未实现。
+
+### GdAlert（替代 el-alert，15 处/7 文件）
+
+`type`（warning/info/error/success，保持 el 的 error 命名）、`showIcon`（默认 false 同 el）、`title`/`description` prop 与默认插槽等价渲染。软色调 `border-[色]/35% bg-[色]/10%`；closable 不做（15/15 全禁用）。图标复用 `ui/semanticIcons.ts`（与 GdToastHost 共享）。
+
+### GdProgress（替代 el-progress，6 处/5 文件）
+
+line 型；`strokeWidth`（3/6/8 三档实测）、`showText`、`indeterminate` 流光（CSS keyframes，UpdateDialog/AboutPanel 硬需求）、`color`（hex 或 `(p) => string` 函数，MemoPanel 三段渐变）、`status` 语义色。`gd-progress` + `data-status` 钩子。
+
+### GdDivider（替代 el-divider，8 处/5 文件）
+
+`direction` horizontal/vertical；`contentPosition` left/center/right 文字插槽（left = 短线+文字+长线）。`gd-divider` + `data-direction` 钩子。
+
+### GdEmpty（替代 el-empty，3 处/1 文件）
+
+极简线稿空态（不搬 EP 插画）：`description` + `imageSize`（图标边长）。
+
+### el-badge / el-link 去组件化
+
+- el-badge（1 处）→ 就地 span 数字气泡（`h-4 rounded-full bg-warning text-white text-[11px]`）
+- el-link（1 处）→ `GdButton link type="primary"`（带图标）
+
+## GdFormField + useFormValidation（el-form 系 91 处已迁出）
+
+**表单布局**：`GdFormField.vue`——label + 控件 + 行内红字三明治（zcode FieldError 范式）。
+- 无 `labelWidth`：纵排（label 在上）；传 `labelWidth="120px"`：label 左置固定宽右对齐（对齐 el label-position="left"）
+- `required` 星号纯视觉；`error` prop 有值时显示行内红字 `role="alert"`；`hideRequiredAsterisk` 同 el
+- 钩子：`gd-form-field` + `data-error`。**控件的红描边手动接线**：`<GdInput :error="!!errors.x" @blur="validateField('x')" />`（GdInput/GdSelect/GdInputNumber 均支持 error prop）
+
+**校验**：`composables/useFormValidation.ts`——`useFormValidation(schema)`（schema 支持 `MaybeRef`，动态规则用 computed）：
+- 规则五类直接函数表达（required/正则/长度/一致性/async 查重名），返回 `string | null`
+- `validate(): Promise<boolean>`（聚合，等价 el validate）、`clearValidate(fields?)`（弹窗开关清态）、`validateField(field)`（增量触发）、`errors` reactive（行内红字）
+- 不依赖 async-validator；`validateField`/`resetFields` 因 0 用量未迁（resetFields 语义=重置值+清态，迁移处手动重置表单对象）
+
+**范式样板**：`SchedulerTaskEditView.vue`（迁移前就有的手写校验）与 `LoginPage.vue`（本批迁移后）。
+
+## GdCheckbox / GdSegmented / GdRadio（el-checkbox 22 处 + el-radio 17 处已迁出）
+
+- **GdCheckbox**：自绘方块（size-4，checked 主色底白勾）+ sr-only 原生 input；`v-model` 与受控 `:model-value + @change` 双兼容；`label` prop 或默认插槽（富文本两行内容）。**GdCheckboxGroup**：数组 v-model，组内 `:model-value="arr.includes(x)"` 写法
+- **GdSegmented**（横排分段单选，替代 el-radio-button）：中性描边胶囊 + 主色圆点指示器（ModelsProviderDetail 手工调好的视觉收敛为组件）；`options: { label, value, icon?, disabled? }[]`；键盘左右箭头 + `role="radiogroup"`
+- **GdRadio + GdRadioGroup**（竖排选项卡）：圆点 mark + 富文本插槽（KBFileUploader 标题+描述形态）；provide/inject 组契约
+- 钩子：`gd-checkbox`/`gd-segmented`/`gd-radio` + `data-checked`/`data-value`
+
+## GdTabs / GdPagination / GdCollapse（el-tabs/pagination/collapse 已迁出）
+
+- **GdTabs**：仅 tab 头部条（内容由消费方 v-if/v-show 自渲染）。`tabs: { name, label, icon? }[]` + `v-model` + `@change`；下划线式一级形态（h-11、15px、active 主色下划线）；左右箭头循环 + `role="tablist"`；钩子 `gd-tabs` + `data-active`。卡片/lazy/可关闭 0 用量未做
+- **GdPagination**：`total/pageSize` + `v-model`（或 `:model-value` + `@change` 单向）；`hideOnSinglePage`；页码窗口算法（首尾常驻 ±1 窗口省略号）；`size: small|medium`；钩子 `gd-pagination` + `data-size`
+- **GdCollapse**：单项形态（BotModal「高级设置」场景）。`name` + 数组 `v-model` + `#title` 插槽；`grid-template-rows: 0fr/1fr` 纯 CSS 展开动画 + chevron 旋转；钩子 `gd-collapse` + `data-open`
+- **el-upload 去组件化**（2 处）：自绘拖放/点击区 + 隐藏 `<input type="file" class="sr-only">`；`clearFiles()` → `input.value = ''`（天然无 limit 二次拒绝）；上传逻辑本就自研（取 `e.target.files[0]`）
+
+## 图标范式（el-icon 322 处已迁出）
+
+**图标不建 wrapper**：直接渲染 `@vicons/fluent` 组件 + Tailwind 尺寸类，与 zcode 的裸 lucide 范式一致。
+
+```vue
+<Checkmark16Regular class="w-4 h-4" />                 <!-- 16px -->
+<ArrowSync16Regular class="w-3.5 h-3.5 animate-spin" /> <!-- 14px + 旋转 -->
+<ChevronDown12Regular class="w-3 h-3" :class="{ 'is-open': open }" /> <!-- 动态类数组共存 -->
+```
+
+- 尺寸刻度：12→w-3、14→w-3.5、16→w-4、18→w-4.5、20→w-5、24→w-6、32→w-8、48→w-12（奇数零散值 11/13/22/26 用任意值）
+- 旋转：`animate-spin`（原 el-icon 的 is-loading）
+- 尺寸机制差异：vicons 组件是无 width/height 的裸 svg，**必须显式给尺寸类**（在 GdButton/GdInput 插槽内可省，内部 `[&_svg:not([class*='size-'])]:size-*` 自动兜底）
+- `text-center` 容器里的大图标补 `mx-auto`（preflight 把 svg 设为 display:block）
+- 唯一保留的「盒」：GdDialogHost 的 `.gd-modal-icon`（22px 盒内 16px 字形居中，span 包裹）
+- font-size 型语义类（`.gd-option__icon` 等）已改显式 width/height（el-icon 的 1em 机制消失）
+- ESLint 禁 `<el-icon>` 模板与 `ElIcon` 导入
+
 ## 防回归（frontend/eslint.config.mjs）
 
-- `vue/no-restricted-html-elements` 禁止模板写 `el-input` / `el-switch` / `el-select` / `el-option` / `el-dropdown` 系列 / `el-input-number` / `el-slider`（含 PascalCase）。
-- `no-restricted-imports` 禁止从 `element-plus` 导入 `ElInput` / `ElSwitch` / `ElSelect` / `ElOption` / `ElDropdown*` / `ElInputNumber` / `ElSlider`。
+- `vue/no-restricted-html-elements` 禁止模板写 `el-input` / `el-switch` / `el-select` / `el-option` / `el-dropdown` 系列 / `el-input-number` / `el-slider` / `el-tag` / `el-alert` / `el-divider` / `el-progress` / `el-empty` / `el-badge` / `el-link`（含 PascalCase）。
+- `no-restricted-imports` 禁止从 `element-plus` 导入上述对应的 PascalCase 名称。
 - 注意该类规则必须用 `vue/no-restricted-html-elements`，`no-restricted-syntax` 的 VElement selector 不遍历模板节点（按钮批次已验证）。
 
-## 遗留（下一批去 Element 化）
+## no-undef 兜底（2026-11，浮层批新增）
 
-- `el-slider`（9 处）已随 GdInputNumber 批次完成迁移；GdSliderOptional 重写为零 el 依赖。
-- `ElMessage`（约 187 处真实调用）/ `ElNotification`（业务 0 处，全在 usePopup.notify 内部）/ `v-loading`（1 处）命令式提示体系 → 自研 GdToast（零主题 CSS 债务，zcode toast.tsx 可参考）。
-- `el-radio` 系（17 处，radio-button 本质是分段选择器）、`el-checkbox` 系（22 处，checkbox-button 集中在 ModelsProviderDetail 且自带 ~150 行待删仿制 CSS）。
-- `el-tag`（62 处/21 文件，存量最大、形态单一）、`el-progress`（6）、`el-tabs`（3）、`el-empty`（3）、`el-collapse`（2）、`el-badge`（1）、`el-tree`（1，最重，单独批次）、`el-table`（5，仅测试页）。
-- `el-date-picker`（2）+ `el-time-picker`（1）：全在 scheduler，datetime + HH:mm 窄需求，GdPopover + 月历网格可覆盖。
-- `el-upload`（2）：纯「拖拽区+文件选择壳」，上传逻辑 100% 自研，原生 input[type=file] 即可替代。
-- `el-form` / `el-form-item`（16/75 处）布局与校验体系；GdInput 预留 `error` prop 接手动校验。
+vue-tsc 不检查 `<script setup>`（无 `lang="ts"`）的文件与 src 下 3 个 .js 文件（main.js / plugin-loader.js / usePluginI18n.js）——「import 被迁移脚本吃掉」曾在这里静默存活（MCPServers 的 `usePopup is not defined`，HEAD 1941dd15 就已引入）。ESLint 配置新增一块：全部 vue + src/**/*.js 开 `no-undef: error`，globals 走 `globals.browser` + 3 个 Electron ambient 接口登记（vite-env.d.ts）。lang="ts" 文件 TS 类型引用不进 ESLint 作用域分析，不误报。上线即揪出第 5 处真 bug：UserProfile.vue 用 `router.replace` 但没 `useRouter()`。
+
+## GdImageViewer / GdDrawer（第九批浮层组件，el-image-viewer 2 / el-drawer 1 / el-table 1 已迁出）
+
+- **GdImageViewer**：全屏图片查看器。`urls: string[]` + `visible`（v-model:visible）+ `initialIndex`；循环切换（取模收敛）、ArrowLeft/Right、Esc、点遮罩关闭；加载 spinner + 失败态（`data-failed` 隐藏 img）；z 走 `--gd-z-viewer: 3000`（高于 modal 2000 低于 toast 4000）；滚动锁与 GdDialog 同引用计数模式；钩子 `gd-image-viewer`
+- **GdDrawer**：右侧抽屉。`v-model` + `title` + `size`（宽度，默认 480px）+ `destroyOnClose`（首开前不渲染 slot）+ `closeOnClickModal/closeOnPressEscape`；遮罩 fade + 面板 translateX 滑入（`--gd-motion-duration-dialog`）；模块级单调 z-index 与 GdDialog 同基线；钩子 `gd-drawer`；style.css 两处 `--el-drawer-*` 主题覆盖随迁移删除
+- **el-table 去组件化**（SplitpanesPerfTest 测试页）：4 行静态对比数据用原生 `<table>` + 局部样式，无需 GdTable
+- locale 新增：`common.imagePreview / imageLoadFailed / prevImage / nextImage`（zh/en）
+
+## GdDatePicker / GdTimePicker（第十批，el-date-picker 2 / el-time-picker 1 已迁出）
+
+- **gdDateTime.ts**：纯日期逻辑（42 格日历 buildMonthCells 周日起始、splitDateTime/combineDateTime 往返、非法/越界回退当前时间、clamp），node 单测 14 用例；转换器语义镜像自 scheduler/schedule.ts（ui 层不反向依赖 feature 目录）
+- **GdDatePicker**（datetime 形态）：模型 = `"YYYY-MM-DD HH:mm:ss"` 字符串。触发器复制 GdSelect 触发器壳（`gd-date-picker` 基类 + data-open + filled token 族，size small=26px/default=32px，CalendarLtr16Regular）；面板内嵌 GdPopover（width 300, align start）：‹›翻月 + Intl.DateTimeFormat 月标题 + 星期行（zh 取末字/en 取前两字母）+ 7 列日格（非本月淡化/今天主色描边/选中实底反白）+ 底部时:分:秒三个 tiny GdInput + 「此刻」「清除」
+- **GdTimePicker**（HH:mm）：同一触发器壳（Clock16Regular）；面板两列滚动列表（00-23 / 00-59，28px 行 tabular-nums，选中主色反白），打开时 scrollIntoView 定位选中行
+- **即时 emit 模型**：点日格/改时间/点行立即 emit，面板不自动关（点外/Esc 关，沿用 GdPopover）——对齐 GdSelect 的即选思路但保留面板便于微调时间
+- **迁移**：ScheduleSentence（once 频率 + 每日/每周时间；`.sched-*` 胶囊圆角保留、删 `:deep(.el-input__wrapper)` hack 块，本文件 `--el-*` 清零）；SchedulerTaskEditView（expiresAt clearable，19 处 `--el-*` 批量替换为 `--gd-*` 映射：fill-color-light→field-bg、text-secondary→text-gray、danger-light-9→danger-0f 回退等）
+- locale 新增：`common.now / prevMonth / nextMonth / hour / minute / second`（zh/en）
+- ESLint 禁 `el-date-picker / el-time-picker` 模板与 `ElDatePicker / ElTimePicker` 导入
+
+## 收官批（2026-11）：GdTree + element-plus 整体卸载 —— 去 Element 化完成
+
+- **GdTree**（el-tree 1 处已迁出）：只读展示树三件套——GdTree.vue（provide 上下文）+ GdTreeBranch.ts（defineComponent 递归渲染，子级缩进 +16px）+ gdTreeContext.ts（InjectionKey）。窄契约：`data + idKey/labelKey/childrenKey + v-model:selected + @node-click + #node 插槽`；无折叠/拖拽/异步/多选（0 用量不做）。KBFileTree 移动弹窗 labelKey="displayName" 接入
+- **element-plus 整体卸载**（2.14.4 → 0）：
+  - 前置债清偿：全库 ~200 处 `--el-*` CSS 变量按桥接映射表替换为 `--gd-*`（text-secondary→text-gray、fill-light→field-bg、color-light-N→primary-N、danger-light-9→danger-0f 回退等），Tailwind 括号形态 `text-(--el-color-primary)` 7 处一并处理；替换后 grep 全库归零
+  - 拆除链：App.vue `el-config-provider` locale 包装（直接移除，RouterView 顶出）→ main.js 两行 EP CSS import / `app.use(ElementPlus)` / `__GuaDaShared__["element-plus"]` 注入（插件零消费已验证）→ vite.config 两个 `ElementPlusResolver` → `pnpm remove element-plus` → dts 重生（auto-imports.d.ts 清空 ElMessage/ElNotification 声明）→ plugin-runtime.d.ts 契约删 `'element-plus'` 键 → style.css 两个主题桥接块（22 处 --el-* 定义）删除
+  - main.js 遗留仅一行注释说明卸载事实
+- **AgentSettingPanel 模板损伤修复**（早先 el-form 批次遗留，编译器级才能发现）：el-form/el-form-item 换 div 时 6 处闭合缺失（basic 尾 1 + 四个工具 tab 各 1 + 根层 1）。**教训**：vue-tsc 与 ESLint 均不做模板开合配平检查，只有 vite build（编译器）会报——大迁移后必须跑一次 build + 全库 `vue/compiler-sfc parse` 普查（本次 210 个模板全部 OK）
+- **防回归终态**：ESLint `vue/no-restricted-html-elements` 已覆盖全部 el 组件（含 el-tree/el-config-provider），`no-restricted-imports` 对 `element-plus` 包整包禁入（不限 importNames）
+- **验证**：typecheck 干净、841 测试全绿、build 通过、210 模板 parse OK、`--el-`/`element-plus`/`<el-` grep 全归零、lint 仅剩 8 个 HEAD 既有 no-explicit-any
+
+## 后记
+
+全部完成：自第十批与收官批后，主应用模板与运行时零 Element Plus 依赖（组件、CSS、locale、共享实例、类型契约），element-plus 已从 package.json 卸载。

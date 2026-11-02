@@ -41,29 +41,30 @@
     <GdDialog v-model="showProviderModal" :title="getProviderModalTitle" size="sm" align-center append-to-body
       class="provider-modal dialog-with-scroll">
       <div class="dialog-content">
-        <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
-          label-position="left" hide-required-asterisk>
-          <el-form-item :label="t('settings.models.name')" prop="name">
-            <GdInput v-model="currentProviderEdit.name" :placeholder="t('settings.models.namePlaceholder')" :disabled="!isNameEditable" />
-          </el-form-item>
-          <el-form-item :label="t('settings.models.protocol')" prop="protocol">
+        <div class="flex flex-col gap-3">
+          <GdFormField :label="t('settings.models.name')" label-width="80px" hide-required-asterisk :error="errors.name || undefined">
+            <GdInput v-model="currentProviderEdit.name" :placeholder="t('settings.models.namePlaceholder')" :disabled="!isNameEditable"
+              :error="!!errors.name" @blur="validateField('name')" />
+          </GdFormField>
+          <GdFormField :label="t('settings.models.protocol')" label-width="80px" hide-required-asterisk :error="errors.protocol || undefined">
             <GdSelect v-model="currentProviderEdit.protocol" :placeholder="t('settings.models.selectProtocol')" style="width: 100%"
-              :disabled="!isProtocolEditable">
+              :disabled="!isProtocolEditable" :error="!!errors.protocol" @change="validateField('protocol')">
               <GdOption v-for="p in protocolSelectOptions" :key="p.protocol" :label="p.displayName" :value="p.protocol" />
             </GdSelect>
             <div v-if="currentProtocolUnavailable" class="text-xs text-orange-500 mt-1">
               {{ t('settings.models.protocolUnavailable') }}
             </div>
             <div v-if="currentProtocolCapabilities.length" class="flex flex-wrap gap-1 mt-1">
-              <el-tag v-for="cap in currentProtocolCapabilities" :key="cap" size="small" type="info" effect="plain">
+              <GdTag v-for="cap in currentProtocolCapabilities" :key="cap" size="small" type="info" effect="plain">
                 {{ cap }}
-              </el-tag>
+              </GdTag>
             </div>
-          </el-form-item>
-          <el-form-item :label="t('settings.models.apiUrl')" prop="apiUrl">
-            <GdInput v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
-          </el-form-item>
-          <el-form-item :label="t('settings.models.apiKey')" prop="apiKey">
+          </GdFormField>
+          <GdFormField :label="t('settings.models.apiUrl')" label-width="80px" hide-required-asterisk :error="errors.apiUrl || undefined">
+            <GdInput v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider"
+              :error="!!errors.apiUrl" @blur="validateField('apiUrl')" />
+          </GdFormField>
+          <GdFormField :label="t('settings.models.apiKey')" label-width="80px" hide-required-asterisk :error="errors.apiKey || undefined">
             <div class="api-key-input-wrapper">
               <GdInput v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
               <GdButton type="primary" @click="handleTestConnection" :loading="testingConnection"
@@ -73,16 +74,14 @@
             </div>
             <!-- API Key 获取链接（仅非自定义供应商显示） -->
             <div v-if="currentProviderEdit.provider !== 'custom'" class="mt-2">
-              <el-link type="primary" :underline="false" @click="handleOpenApiKeyUrl" class="text-xs">
-                <el-icon class="mr-1">
-                  <Link16Regular />
-                </el-icon>
+              <GdButton link type="primary" class="text-xs" @click="handleOpenApiKeyUrl">
+                <Link16Regular class="mr-1 size-3.5" />
                 {{ t('settings.models.getApiKey') }}
-              </el-link>
+              </GdButton>
             </div>
-          </el-form-item>
+          </GdFormField>
           <!-- 自定义请求头（仅自定义供应商可编辑） -->
-          <el-form-item :label="t('settings.models.customHeaders')" prop="headers">
+          <GdFormField :label="t('settings.models.customHeaders')" label-width="80px" hide-required-asterisk :error="errors.headers || undefined">
             <GdInput
               v-model="currentProviderEdit.headers"
               type="textarea"
@@ -91,8 +90,8 @@
               :placeholder="t('settings.models.customHeadersPlaceholder')"
             />
             <div class="text-xs text-gray-400 mt-1">{{ t('settings.models.customHeadersDesc') }}</div>
-          </el-form-item>
-        </el-form>
+          </GdFormField>
+        </div>
       </div>
       <template #footer>
         <div class="flex justify-end gap-2">
@@ -108,6 +107,9 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ModelsProviderList from './ModelsProviderList.vue'
+
+const { t } = useI18n()
+const { confirm } = usePopup()
 import ModelsProviderDetail from '../models/ModelsProviderDetail.vue'
 import { Add16Regular, Link16Regular } from '@vicons/fluent'
 import { apiService } from '../../services/ApiService'
@@ -117,40 +119,47 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 import type { Model, ModelPreset, ModelProvider, ProviderProtocol, ProviderTemplate } from '@/types/api'
 import type { CreateProviderPayload, UpdateProviderPayload } from '../../services/modules/model.api'
 
-// Element Plus 组件导入
-import { ElFormItem, ElForm, ElTag } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTag from '@/components/ui/GdTag.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 import GdInput from '@/components/ui/GdInput.vue';
+import GdFormField from '@/components/ui/GdFormField.vue';
+import { useFormValidation } from '@/composables/useFormValidation';
 
-import type { FormInstance, FormItemRule } from 'element-plus'
-import GdDialog from '@/components/ui/GdDialog.vue'
+// 供应商表单校验（el-form :rules → useFormValidation）
+const { errors, validate, validateField, clearValidate } = useFormValidation({
+  name: [{ validator: (v) => (String(v ?? '') ? null : t('settings.models.nameRequired')) }],
+  protocol: [{ validator: (v) => (String(v ?? '') ? null : t('settings.models.protocolRequired')) }],
+  apiUrl: [{ validator: (v) => (String(v ?? '') ? null : t('settings.models.apiUrlRequired')) }],
+  apiKey: [{ validator: (v) => (String(v ?? '') ? null : t('settings.models.apiKeyRequired')) }],
+  headers: [{ validator: (v) => {
+    const errs = validateHeadersText(String(v ?? ''));
+    return errs.length > 0 ? errs.join('；') : null;
+  } }],
+});
 
-// wire 数据含 enabled（列表开关读写，setProviderEnabled 返回 { id, enabled }），共享接口未收录该字段
-type ProviderRow = ModelProvider & { enabled?: boolean }
-// bundled-providers/*.yaml 模板携带 apiKeyUrl（"获取 API Key"跳转用），ProviderTemplate 接口未收录
-type ProviderTemplateRow = ProviderTemplate & { apiKeyUrl?: string }
+const providers = ref<ProviderRow[]>([])
+const models = ref<Model[]>([])
+const providerTemplates = ref<ProviderTemplateRow[]>([])
+const providerProtocols = ref<ProviderProtocol[]>([])
+const modelPresets = ref<ModelPreset[]>([])
+const isProviderEditMode = ref(false)
+const showProviderModal = ref(false)
 
-const { t } = useI18n()
-const { confirm } = usePopup()
 const currentProviderId = ref<string | null>(null)
 
 // 使用响应式数据替代伪数据
-const providers = ref<ProviderRow[]>([])
-const models = ref<Model[]>([])
 const showDetail = ref(false)
 
-// 供应商模板相关
-const providerTemplates = ref<ProviderTemplateRow[]>([])
-// 可用 wire 协议（内置 + 插件贡献；接口失败时回退内置四项）
-const providerProtocols = ref<ProviderProtocol[]>([])
 const FALLBACK_PROTOCOLS: ProviderProtocol[] = [
   { protocol: 'openai', displayName: 'OpenAI', capabilities: {}, source: 'builtin' },
   { protocol: 'openai-response', displayName: 'OpenAI-Response', capabilities: {}, source: 'builtin' },
   { protocol: 'gemini', displayName: 'Gemini', capabilities: {}, source: 'builtin' },
   { protocol: 'anthropic', displayName: 'Anthropic', capabilities: {}, source: 'builtin' },
 ]
+
+// 供应商模板相关
 const activeProtocols = computed(() =>
   providerProtocols.value.length > 0 ? providerProtocols.value : FALLBACK_PROTOCOLS
 )
@@ -163,11 +172,6 @@ const protocolSelectOptions = computed(() => {
   }
   return list
 })
-const currentProtocolUnavailable = computed(() => {
-  const current = currentProviderEdit.value.protocol
-  return !!current && !activeProtocols.value.some((p) => p.protocol === current)
-})
-// 协议能力标记（用于提示该协议支持的工具/视觉/思考等；streaming 是基线，不展示）
 const PROTOCOL_CAPABILITY_LABELS: Record<string, string> = {
   tools: 'Tools',
   vision: 'Vision',
@@ -184,10 +188,11 @@ const currentProtocolCapabilities = computed(() => {
     .filter(([key, value]) => key !== 'streaming' && value === true)
     .map(([key]) => PROTOCOL_CAPABILITY_LABELS[key] || key)
 })
-// 模型预设库
-const modelPresets = ref<ModelPreset[]>([])
-
-// 模板全量展示（同类型可添加多实例；内置类型即预置配置文件，不再限制一个）
+const currentProtocolUnavailable = computed(() => {
+  const current = currentProviderEdit.value.protocol
+  return !!current && !activeProtocols.value.some((p) => p.protocol === current)
+})
+// 协议能力标记（用于提示该协议支持的工具/视觉/思考等；streaming 是基线，不展示）
 const availableTemplates = computed(() => providerTemplates.value)
 
 // 添加用于编辑的临时数据
@@ -228,45 +233,11 @@ const getProviderModalTitle = computed(() => {
   return isFromTemplate ? t('settings.models.addProvider', { name: currentProviderEdit.value.name || t('settings.models.provider') }) : t('settings.models.newGroup')
 })
 
-const isProviderEditMode = ref(false)
-
-const showProviderModal = ref(false)
 const testingConnection = ref(false)
 
-// 供应商表单验证规则
-const providerRules = computed(() => ({
-  name: {
-    required: true,
-    message: t('settings.models.nameRequired'),
-    trigger: ['blur', 'input']
-  },
-  protocol: {
-    required: true,
-    message: t('settings.models.protocolRequired'),
-    trigger: ['change', 'blur']
-  },
-  apiUrl: {
-    required: true,
-    message: t('settings.models.apiUrlRequired'),
-    trigger: ['blur', 'input']
-  },
-  apiKey: {
-    required: true,
-    message: t('settings.models.apiKeyRequired'),
-    trigger: ['blur']
-  },
-  headers: {
-    validator: (_rule: FormItemRule, value: string, callback: (error?: string | Error) => void) => {
-      const errors = validateHeadersText(value)
-      if (errors.length > 0) {
-        callback(new Error(errors.join('；')))
-      } else {
-        callback()
-      }
-    },
-    trigger: ['blur', 'input']
-  }
-}))
+type ProviderRow = ModelProvider & { enabled?: boolean }
+// bundled-providers/*.yaml 模板携带 apiKeyUrl（"获取 API Key"跳转用），ProviderTemplate 接口未收录
+type ProviderTemplateRow = ProviderTemplate & { apiKeyUrl?: string }
 
 // 初始化数据函数
 const initData = async () => {
@@ -315,8 +286,6 @@ const currentModels = computed(() => {
   return models.value.filter(m => m.providerId === currentProviderId.value)
 })
 
-const formRef = ref<FormInstance | null>(null)
-
 const handleCreateGroup = async () => {
   currentProviderId.value = null
   currentProviderEdit.value = {
@@ -330,14 +299,15 @@ const handleCreateGroup = async () => {
       headers: {}
     }
   }
-  formRef.value?.clearValidate?.()
+  clearValidate()
   isProviderEditMode.value = false
   showProviderModal.value = true
 }
 
 const handleSaveProvider = async () => {
   try {
-    await formRef.value?.validate()
+    const valid = await validate()
+    if (!valid) return
 
     const headers = parseHeaders(currentProviderEdit.value.headers)
 
@@ -501,7 +471,6 @@ const validateHeadersText = (text: string): string[] => {
   return errors
 }
 
-
 const handleItemClick = (provider: ProviderRow) => {
   showDetail.value = true
   currentProviderId.value = provider.id
@@ -527,7 +496,7 @@ const handleEditProvider = (provider: ProviderRow) => {
     }
   }
 
-  formRef.value?.clearValidate()
+  clearValidate()
   showProviderModal.value = true
 }
 
@@ -548,7 +517,7 @@ const handleTemplateClick = (template: ProviderTemplateRow) => {
     }
   }
 
-  formRef.value?.clearValidate()
+  clearValidate()
   showProviderModal.value = true
 }
 
@@ -631,8 +600,4 @@ onMounted(() => {
   width: 100%;
 }
 
-.api-key-input-wrapper :deep(.el-input) {
-  flex: 1;
-  min-width: 0;
-}
 </style>

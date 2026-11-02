@@ -11,16 +11,16 @@
             ? 'bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
             : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
           @click="handleSelect(path)">
-          <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-            <Folder20Regular />
-          </el-icon>
+          
+            <Folder20Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+          
           <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
             <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ getFolderName(path) }}</span>
             <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ path }}</span>
           </div>
-          <el-icon v-if="path === currentWorkspacePath" size="14" class="shrink-0 text-(--el-color-primary)">
-            <Checkmark16Filled />
-          </el-icon>
+          
+            <Checkmark16Filled v-if="path === currentWorkspacePath" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+          
         </div>
         <div class="h-px bg-[#eee] dark:bg-white/8 mx-2 my-1.5"></div>
       </template>
@@ -32,16 +32,16 @@
           ? 'bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
           : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="handleSelect(publicPath)">
-        <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-          <PeopleCommunity16Regular />
-        </el-icon>
+        
+          <PeopleCommunity16Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+        
         <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
           <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0">{{ t('chat.input.usePublicDir') }}</span>
           <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ publicPath }}</span>
         </div>
-        <el-icon v-if="publicPath === currentWorkspacePath" size="14" class="shrink-0 text-(--el-color-primary)">
-          <Checkmark16Filled />
-        </el-icon>
+        
+          <Checkmark16Filled v-if="publicPath === currentWorkspacePath" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+        
       </div>
 
       <!-- 自动创建 -->
@@ -50,24 +50,24 @@
           ? 'bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
           : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="handleSelect(null)">
-        <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-          <FolderAdd24Regular />
-        </el-icon>
+        
+          <FolderAdd24Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+        
         <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
           <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ t('chat.input.autoCreate') }}</span>
           <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ t('chat.input.autoCreateDesc') }}</span>
         </div>
-        <el-icon v-if="!currentWorkspacePath" size="14" class="shrink-0 text-(--el-color-primary)">
-          <Checkmark16Filled />
-        </el-icon>
+        
+          <Checkmark16Filled v-if="!currentWorkspacePath" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+        
       </div>
 
       <!-- 选择本地文件夹：Electron 走原生对话框，Web 打开服务端目录浏览器 -->
       <div class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
         @click="handleOpenFolder">
-        <el-icon size="18" class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)">
-          <Desktop16Regular />
-        </el-icon>
+        
+          <Desktop16Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+        
         <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
           <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb]">{{ t('chat.input.selectLocalFolder') }}</span>
         </div>
@@ -85,7 +85,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus';
+
 import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled, PeopleCommunity16Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import DirectoryBrowserDialog from '../../DirectoryBrowserDialog.vue'

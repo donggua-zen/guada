@@ -11,8 +11,6 @@ import { useAuthStore } from "./stores/auth";
 import { NEW_SESSION_ID } from "@/constants";
 import NProgress from "nprogress";
 
-import "element-plus/dist/index.css";
-import "element-plus/theme-chalk/dark/css-vars.css";
 import "./tailwind.css";
 import "./style.css";
 // markdown 排版全局样式：对话流、插件文档、知识库详情等所有 v-html markdown 消费方共用。
@@ -24,7 +22,6 @@ import "nprogress/nprogress.css";
 
 import { apiService } from "@/services/ApiService";
 import * as Vue from "vue";
-import ElementPlus from "element-plus";
 import { reactive, watch } from "vue";
 import "@/services/plugin-loader";
 import { registerUiPrimitives } from "@/components/ui/register";
@@ -312,9 +309,10 @@ if (vuePerfEnabled) app.config.performance = true;
 // runtime：响应式共享数据（用户/会话/语言/主题），插件 UI 可响应式读取
 // i18n：插件语言包注册表（{ zh, en } 字典）
 window.__GuaDaShared__ = {
-  // 共享依赖：主应用同一个 Vue / ElementPlus 实例（插件产物从这里取，不 import）
+  // 共享依赖：主应用同一个 Vue 实例（插件产物从这里取，不 import）。
+  // element-plus 已于 2026-11 整体卸载（主应用与插件均零消费），
+  // 旧插件产物若仍读取该键会得到 undefined——需同步更新插件产物。
   vue: Vue,
-  "element-plus": ElementPlus,
   runtime: reactive({
     user: undefined,
     session: { id: undefined, workspaceId: undefined, workspaceName: undefined },
@@ -344,10 +342,6 @@ const pinia = createPinia();
 app.use(pinia);
 app.use(router);
 app.use(i18n);
-// 全局注册 ElementPlus：主应用自身靠 unplugin 按需导入，但插件产物是运行时加载的 IIFE，
-// resolveComponent('el-xxx') 需要全局注册才能解析（插件模板可直接写 el-button/el-input）。
-// zIndex 抬到 4000：弹窗基座 GdDialog 使用 2000 层级，Element 的浮层必须稳定高于它。
-app.use(ElementPlus, { zIndex: 4000 });
 // 插件 UI 原语全局注册：让插件产物运行时能 resolveComponent('GdXxx')
 registerUiPrimitives(app);
 

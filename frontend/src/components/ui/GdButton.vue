@@ -186,7 +186,7 @@ const resolveSize = (): SizeClasses => {
  * 默认插槽是否「纯文字」（只有文本节点，没有元素/组件）。
  *
  * 纯文字才用 text-box-trim 做光学居中：它裁剪的是文字行盒，作用在 glyph 上。
- * 含图标/自定义内容时（<el-icon>、<svg>、组件），插槽内容高度由图标决定，
+ * 含图标/自定义内容时（<svg>、组件），插槽内容高度由图标决定，
  * 走裁剪反而会让图标与文字基线错位；这类内容继续由按钮自身的 flex 居中处理。
  */
 const isTextOnlyLabel = (): boolean => {

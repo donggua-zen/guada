@@ -9,17 +9,13 @@
                     class="flex items-center gap-0.5 bg-gray-100/80 dark:bg-[#242529] rounded-md p-0.5 shrink-0">
                     <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'rendered' }" :title="t('chat.workspace.preview')"
                         @click="renderMode = 'rendered'">
-                        <el-icon :size="16">
-                            <Eye20Regular v-if="renderMode !== 'rendered'" />
-                            <Eye20Filled v-else />
-                        </el-icon>
+                        <span class="w-4 h-4"><Eye20Regular v-if="renderMode !== 'rendered'" />
+                            <Eye20Filled v-else /></span>
                     </button>
                     <button class="preview-mode-btn" :class="{ 'is-active': renderMode === 'source' }" :title="t('chat.workspace.source')"
                         @click="renderMode = 'source'">
-                        <el-icon :size="16">
-                            <Code20Regular v-if="renderMode !== 'source'" />
-                            <Code20Filled v-else />
-                        </el-icon>
+                        <span class="w-4 h-4"><Code20Regular v-if="renderMode !== 'source'" />
+                            <Code20Filled v-else /></span>
                     </button>
                 </div>
 
@@ -37,9 +33,9 @@
             <div class="flex items-center gap-1 shrink-0">
                 <!-- 手动刷新预览按钮 -->
                 <button class="preview-tool-btn" :title="t('chat.workspace.refreshPreview')" @click="handleManualRefresh">
-                    <el-icon :size="16">
-                        <ArrowClockwise20Regular />
-                    </el-icon>
+                    
+                        <ArrowClockwise20Regular class="w-4 h-4"  />
+                    
                 </button>
                 <!-- 目录树显隐开关（每个文件标签独立记忆，样式与 Git 审阅面板一致） -->
                 <GdTooltip :content="treeVisible ? t('chat.workspace.collapseTree') : t('chat.workspace.expandTree')"
@@ -48,9 +44,9 @@
                     <button class="preview-tool-btn" :class="{ 'preview-tool-btn--active': treeVisible }"
                         :title="treeVisible ? t('chat.workspace.collapseTree') : t('chat.workspace.expandTree')"
                         @click="props.tab.treeVisible = !treeVisible">
-                        <el-icon :size="20">
-                            <TextboxAlignTopRotate9020Regular />
-                        </el-icon>
+                        
+                            <TextboxAlignTopRotate9020Regular class="w-5 h-5"  />
+                        
                     </button>
                     <!-- eslint-enable vue/no-mutating-props -->
                 </GdTooltip>
@@ -68,9 +64,9 @@
             </div>
 
             <div v-else-if="previewLoading" class="flex items-center justify-center h-full w-full">
-                <el-icon size="20">
-                    <ArrowSync16Regular class="animate-spin" />
-                </el-icon>
+                
+                    <ArrowSync16Regular class="w-5 h-5 animate-spin" />
+                
             </div>
 
             <!-- 图片预览 -->

@@ -5,7 +5,7 @@
       <div class="edit-header-inner">
         <div class="header-left">
           <button type="button" class="back-btn" @click="emit('back')">
-            <el-icon :size="18"><ArrowLeft24Filled /></el-icon>
+            <ArrowLeft24Filled class="w-4.5 h-4.5"  />
             <span>{{ t('common.back') }}</span>
           </button>
           <span class="header-divider">·</span>
@@ -25,7 +25,7 @@
           </GdButton>
           <DropdownMenu v-if="isEdit" @command="handleCommand">
             <button type="button" class="icon-btn" :aria-label="t('scheduler.edit.moreActions')">
-              <el-icon :size="18"><MoreHorizontal20Filled /></el-icon>
+              <MoreHorizontal20Filled class="w-4.5 h-4.5"  />
             </button>
             <template #dropdown>
               <DropdownMenuItem command="delete">{{ t('scheduler.edit.delete') }}</DropdownMenuItem>
@@ -76,9 +76,9 @@
         <!-- 更多设置 -->
         <section class="field">
           <button type="button" class="more-toggle" @click="advancedOpen = !advancedOpen">
-            <el-icon :size="14" class="more-icon" :class="{ rotated: advancedOpen }">
-              <ChevronDown16Regular />
-            </el-icon>
+            
+              <ChevronDown16Regular class="more-icon w-3.5 h-3.5" :class="{ rotated: advancedOpen }"  />
+            
             <span>{{ t('scheduler.edit.moreSettings') }}</span>
           </button>
 
@@ -88,10 +88,9 @@
                 <span class="setting-label">{{ t('scheduler.edit.expiresAt') }}</span>
                 <span class="setting-desc">{{ t('scheduler.edit.expiresAtHint') }}</span>
               </div>
-              <el-date-picker :model-value="form.expiresAt" type="datetime" class="setting-control wide"
-                format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" clearable
+              <GdDatePicker :model-value="form.expiresAt" clearable class="setting-control wide"
                 :placeholder="t('scheduler.edit.noExpiry')"
-                @update:model-value="form.expiresAt = $event || ''; errors.expiresAt = ''" />
+                @update:model-value="form.expiresAt = $event; errors.expiresAt = ''" />
             </div>
             <div class="setting-row">
               <div class="setting-text">
@@ -123,8 +122,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElDatePicker, ElIcon } from 'element-plus';
 import { ArrowLeft24Filled, ChevronDown16Regular, MoreHorizontal20Filled } from '@vicons/fluent'
+import GdDatePicker from '@/components/ui/GdDatePicker.vue'
 import GdButton from '@/components/ui/GdButton.vue'
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 import GdInput from '@/components/ui/GdInput.vue'
@@ -575,11 +574,11 @@ defineExpose({
 }
 
 .back-btn:hover {
-  color: var(--el-color-primary);
+  color: var(--gd-color-primary);
 }
 
 .header-divider {
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 .header-title {
@@ -605,7 +604,7 @@ defineExpose({
 }
 
 .icon-btn:hover {
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
 }
 
 .edit-content {
@@ -640,8 +639,8 @@ defineExpose({
   margin: 0;
   padding: 8px 12px;
   border-radius: 8px;
-  background: var(--el-color-danger-light-9);
-  color: var(--el-color-danger);
+  background: var(--gd-color-danger-0f, rgba(245, 108, 108, 0.1));
+  color: var(--gd-color-danger);
   font-size: 13px;
 }
 
@@ -657,33 +656,33 @@ defineExpose({
   gap: 6px;
   height: 26px;
   padding: 0 10px;
-  border: 1px solid var(--el-border-color);
+  border: 1px solid var(--gd-color-border);
   border-radius: 999px;
   background: transparent;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   font-size: 12px;
   cursor: pointer;
 }
 
 .status-pill.enabled {
-  border-color: var(--el-color-success-light-5);
-  color: var(--el-color-success);
+  border-color: var(--gd-color-success);
+  color: var(--gd-color-success);
 }
 
 .status-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--el-text-color-placeholder);
+  background: var(--gd-color-text-disabled);
 }
 
 .status-pill.enabled .status-dot {
-  background: var(--el-color-success);
+  background: var(--gd-color-success);
 }
 
 .status-hint {
   font-size: 12px;
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 .field {
@@ -695,31 +694,13 @@ defineExpose({
 .field-label {
   font-size: 13px;
   font-weight: 500;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 
 .field-error {
   margin: 0;
   font-size: 12px;
-  color: var(--el-color-danger);
-}
-
-.title-input :deep(.el-input__wrapper) {
-  box-shadow: none !important;
-  padding: 4px 0;
-  background: transparent;
-}
-
-.title-input :deep(.el-input__inner) {
-  height: 36px;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--gd-color-text);
-}
-
-.title-input :deep(.el-input__inner)::placeholder {
-  color: var(--el-text-color-placeholder);
-  font-weight: 500;
+  color: var(--gd-color-danger);
 }
 
 .more-toggle {
@@ -729,7 +710,7 @@ defineExpose({
   align-self: flex-start;
   border: none;
   background: transparent;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -749,7 +730,7 @@ defineExpose({
 }
 
 .advanced-panel {
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--gd-color-border);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -760,7 +741,7 @@ defineExpose({
   justify-content: space-between;
   gap: 16px;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-bottom: 1px solid var(--gd-color-border);
 }
 
 .setting-row:last-child {
@@ -782,7 +763,7 @@ defineExpose({
 .setting-desc {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 
 .setting-control {
@@ -803,7 +784,7 @@ defineExpose({
 
 .setting-unit {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 
 @media (max-width: 640px) {

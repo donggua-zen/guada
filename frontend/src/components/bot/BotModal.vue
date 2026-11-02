@@ -1,11 +1,10 @@
 <template>
   <GdDialog v-model="dialogVisible" :title="isEdit ? t('bot.modal.editTitle') : t('bot.modal.createTitle')" size="md" :close-on-click-modal="false"
     @close="handleClose" append-to-body>
-    <el-form ref="formRef" :model="formData" :rules="formRules" label-width="120px" class="bot-form"
-      :validate-on-rule-change="false">
+    <div class="bot-form flex flex-col gap-3">
 
       <!-- 平台选择（仅创建时显示） -->
-      <el-form-item v-if="!isEdit" :label="t('bot.modal.platformLabel')" prop="platform">
+      <GdFormField v-if="!isEdit" :label="t('bot.modal.platformLabel')" label-width="120px" :error="errors.platform || undefined">
         <GdSelect v-model="formData.platform" :placeholder="t('bot.modal.platformPlaceholder')" style="width: 100%" @change="handlePlatformChange">
           <GdOption v-for="platform in botStore.platforms" :key="platform.platform" :label="platform.displayName"
             :value="platform.platform">
@@ -18,15 +17,15 @@
             {{ configDocButtonText }}
           </GdButton>
         </div>
-      </el-form-item>
+      </GdFormField>
 
       <!-- 机器人名称 -->
-      <el-form-item :label="t('bot.modal.nameLabel')" prop="name">
+      <GdFormField :label="t('bot.modal.nameLabel')" label-width="120px" :error="errors.name || undefined">
         <GdInput v-model="formData.name" :placeholder="t('bot.modal.namePlaceholder')" maxlength="50" show-word-limit />
-      </el-form-item>
+      </GdFormField>
 
       <!-- 默认智能体选择（必填） -->
-      <el-form-item :label="t('bot.modal.agentLabel')" prop="defaultAgentId">
+      <GdFormField :label="t('bot.modal.agentLabel')" label-width="120px" :error="errors.defaultAgentId || undefined">
         <GdSelect v-model="formData.defaultAgentId" :placeholder="t('bot.modal.agentPlaceholder')" style="width: 100%" filterable>
           <GdOption v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id">
             <div class="flex items-center gap-2">
@@ -38,10 +37,10 @@
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
           {{ t('bot.modal.agentHint') }}
         </div>
-      </el-form-item>
+      </GdFormField>
 
       <!-- 模型选择（可选，不选则继承自智能体/全局设置） -->
-      <el-form-item :label="t('bot.modal.modelLabel')">
+      <GdFormField :label="t('bot.modal.modelLabel')" label-width="120px">
         <GdSelect v-model="formData.defaultModelId" :placeholder="t('bot.modal.modelPlaceholder')" style="width: 100%" filterable clearable>
           <GdOption v-for="model in availableModels" :key="model.id" :label="model.modelName" :value="model.id">
             <div class="flex items-center gap-2">
@@ -53,10 +52,10 @@
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
           {{ t('bot.modal.modelHint') }}
         </div>
-      </el-form-item>
+      </GdFormField>
 
       <!-- 思考强度选择（仅当选中模型支持思考时显示） -->
-      <el-form-item v-if="thinkingEffortOptions.length > 0" :label="t('bot.modal.thinkingLabel')">
+      <GdFormField v-if="thinkingEffortOptions.length > 0" label-width="120px" :label="t('bot.modal.thinkingLabel')">
         <GdSelect v-model="formData.defaultThinkingEffort" :placeholder="t('bot.modal.thinkingPlaceholder')" style="width: 100%">
           <GdOption v-for="effort in thinkingEffortOptions" :key="effort" :label="getThinkingEffortLabelWithKey(effort)"
             :value="effort" />
@@ -64,10 +63,10 @@
         <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
           {{ t('bot.modal.thinkingHint') }}
         </div>
-      </el-form-item>
+      </GdFormField>
 
       <!-- 引用知识库选择（多选） -->
-      <el-form-item :label="t('bot.modal.kbLabel')">
+      <GdFormField :label="t('bot.modal.kbLabel')" label-width="120px">
         <GdSelect v-model="formData.knowledgeBaseIds" :placeholder="t('bot.modal.kbPlaceholder')" style="width: 100%" multiple
           filterable>
           <GdOption v-for="kb in knowledgeBases" :key="kb.id" :label="kb.name" :value="kb.id">
@@ -80,13 +79,13 @@
         <div class="text-xs text-gray-500 mt-1">
           {{ t('bot.modal.kbHint') }}
         </div>
-      </el-form-item>
+      </GdFormField>
 
       <!-- 安全与权限 -->
-      <el-divider content-position="left">{{ t('bot.modal.securitySection') }}</el-divider>
+      <GdDivider content-position="left">{{ t('bot.modal.securitySection') }}</GdDivider>
 
       <!-- 管理员用户 ID（多选标签输入） -->
-      <el-form-item :label="t('bot.modal.adminUserIdsLabel')">
+      <GdFormField :label="t('bot.modal.adminUserIdsLabel')" label-width="120px">
         <GdSelect v-model="formData.adminUserIds" :placeholder="t('bot.modal.adminUserIdsPlaceholder')" style="width: 100%"
           multiple filterable allow-create default-first-option no-data-text="">
           <GdOption v-for="id in formData.adminUserIds" :key="id" :label="id" :value="id" />
@@ -94,14 +93,13 @@
         <div class="text-xs text-gray-500 mt-1">
           {{ t('bot.modal.adminUserIdsHint') }}
         </div>
-      </el-form-item>
+      </GdFormField>
 
       <!-- 动态平台配置字段 -->
       <template v-if="selectedPlatform">
-        <el-divider content-position="left">{{ t('bot.modal.platformConfig') }}</el-divider>
+        <GdDivider content-position="left">{{ t('bot.modal.platformConfig') }}</GdDivider>
 
-        <el-form-item v-for="field in selectedPlatform.fields" :key="field.key" :label="field.label"
-          :prop="`platformConfig.${field.key}`">
+        <GdFormField v-for="field in selectedPlatform.fields" :key="field.key" :label="field.label" label-width="120px" :error="errors['platformConfig_' + field.key] || undefined">
 
           <!-- 文本输入 -->
           <GdInput v-if="field.type === 'text'" v-model="formData.platformConfig[field.key]"
@@ -129,45 +127,43 @@
           <div v-if="field.description" class="text-xs text-gray-500 mt-1">
             {{ field.description }}
           </div>
-        </el-form-item>
+        </GdFormField>
       </template>
 
       <!-- 高级配置（可折叠） -->
-      <el-collapse v-model="activeCollapse">
-        <el-collapse-item name="advanced">
+      <GdCollapse v-model="activeCollapse" name="advanced">
           <template #title>
             <div class="flex items-center gap-2">
               <span>{{ t('bot.modal.advanced') }}</span>
-              <el-tag size="small" type="info">{{ t('bot.modal.advancedOptional') }}</el-tag>
+              <GdTag size="small" type="info">{{ t('bot.modal.advancedOptional') }}</GdTag>
             </div>
           </template>
 
           <!-- 重连配置 -->
-          <el-form-item :label="t('bot.modal.reconnectLabel')">
+          <GdFormField :label="t('bot.modal.reconnectLabel')" label-width="120px">
             <GdSwitch v-model="formData.reconnectConfig.enabled" />
-          </el-form-item>
+          </GdFormField>
 
           <template v-if="formData.reconnectConfig.enabled">
-            <el-form-item :label="t('bot.modal.maxRetries')">
+            <GdFormField :label="t('bot.modal.maxRetries')" label-width="120px">
               <GdInputNumber v-model="formData.reconnectConfig.maxRetries" :min="1" :max="20" style="width: 100%" />
-            </el-form-item>
+            </GdFormField>
 
-            <el-form-item :label="t('bot.modal.retryInterval')">
+            <GdFormField :label="t('bot.modal.retryInterval')" label-width="120px">
               <GdInputNumber v-model="formData.reconnectConfig.retryInterval" :min="1000" :max="60000" :step="1000"
                 style="width: 100%" />
-            </el-form-item>
+            </GdFormField>
           </template>
-        </el-collapse-item>
-      </el-collapse>
+      </GdCollapse>
 
       <!-- 自动启动（仅创建时） -->
-      <el-form-item v-if="!isEdit" :label="t('bot.modal.autoStartLabel')">
+      <GdFormField v-if="!isEdit" :label="t('bot.modal.autoStartLabel')" label-width="120px">
         <GdSwitch v-model="formData.autoStart" />
         <div class="text-xs text-gray-500 mt-1">
           {{ t('bot.modal.autoStartHint') }}
         </div>
-      </el-form-item>
-    </el-form>
+      </GdFormField>
+    </div>
 
     <template #footer>
       <GdButton @click="handleClose">{{ t('common.cancel') }}</GdButton>
@@ -183,14 +179,17 @@ import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import GdButton from '@/components/ui/GdButton.vue';
+import GdCollapse from '@/components/ui/GdCollapse.vue';
+import GdTag from '@/components/ui/GdTag.vue';
+import GdDivider from '@/components/ui/GdDivider.vue';
 import { toast } from '@/components/ui/toastService';
+import { useFormValidation } from '@/composables/useFormValidation';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 import GdInput from '@/components/ui/GdInput.vue';
 import GdSwitch from '@/components/ui/GdSwitch.vue';
 
-import type { FormInstance, FormRules } from 'element-plus'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import { useBotStore } from '@/stores/bot'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
@@ -215,7 +214,6 @@ const emit = defineEmits<{
 const botStore = useBotStore()
 const { t } = useI18n()
 const knowledgeBaseStore = useKnowledgeBaseStore()
-const formRef = ref<FormInstance>()
 const submitting = ref(false)
 
 // 折叠面板激活项（空数组表示默认全部折叠）
@@ -309,37 +307,37 @@ const formData = ref({
 })
 
 // 表单验证规则
-const formRules = computed<FormRules>(() => {
-  const rules: FormRules = {
+// 校验（el-form :rules → useFormValidation；动态平台字段规则用 computed schema）
+const validationSchema = computed(() => {
+  const schema: Record<string, { validator: (value: unknown) => string | null | true | Promise<string | null | true> }[]> = {
     name: [
-      { required: true, message: t('bot.modal.nameRequired'), trigger: 'blur' },
-      { min: 2, max: 50, message: t('bot.modal.nameLength'), trigger: 'blur' }
+      { validator: (value) => {
+          const v = String(value ?? '');
+          if (!v) return t('bot.modal.nameRequired');
+          return v.length >= 2 && v.length <= 50 ? null : t('bot.modal.nameLength');
+      } },
     ],
-    defaultAgentId: [
-      { required: true, message: t('bot.modal.agentRequired'), trigger: 'change' }
-    ]
-  }
-
-  // 添加平台字段的验证规则
+    defaultAgentId: [{ validator: () => (formData.value.defaultAgentId ? null : t('bot.modal.agentRequired')) }],
+  };
+  // 平台动态字段必填规则
   if (selectedPlatform.value) {
     selectedPlatform.value.fields.forEach(field => {
       if (field.required) {
-        rules[`platformConfig.${field.key}`] = [
-          { required: true, message: t('bot.modal.fieldRequired', { label: field.label }), trigger: 'blur' }
-        ]
+        const key = 'platformConfig_' + field.key;
+        schema[key] = [{ validator: (_value: unknown) => {
+          const cfg = formData.value.platformConfig[field.key];
+          const empty = cfg === undefined || cfg === null || cfg === '' || (Array.isArray(cfg) && !cfg.length);
+          return empty ? t('bot.modal.fieldRequired', { label: field.label }) : null;
+        } }];
       }
-    })
+    });
   }
-
   if (!isEdit.value) {
-    rules.platform = [
-      { required: true, message: t('bot.modal.platformRequired'), trigger: 'change' }
-    ]
+    schema.platform = [{ validator: () => (formData.value.platform ? null : t('bot.modal.platformRequired')) }];
   }
-
-  return rules
-})
-
+  return schema;
+});
+const { errors, validate, clearValidate } = useFormValidation(validationSchema);
 // 模型切换时同步思考强度
 watch(() => formData.value.defaultModelId, (newModelId) => {
   if (!newModelId) {
@@ -404,7 +402,7 @@ watch(dialogVisible, (visible) => {
 
     // 编辑模式填充数据后，等待 DOM 更新再清除验证
     nextTick(() => {
-      formRef.value?.clearValidate()
+      clearValidate()
     })
   }
 })
@@ -427,7 +425,7 @@ const handlePlatformChange = (platform: string | number | (string | number)[]) =
 // 重置表单
 const resetForm = () => {
   // 先清除验证状态，再重置数据，避免触发验证
-  formRef.value?.clearValidate()
+  clearValidate()
 
   formData.value = {
     platform: '',
@@ -502,10 +500,8 @@ onMounted(() => {
 
 // 提交表单
 const handleSubmit = async () => {
-  if (!formRef.value) return
-
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
+  const valid = await validate()
+  if (!valid) return
 
     // 全局默认模型已移除：Bot 未选模型时必须能继承到智能体模型
     if (!formData.value.defaultModelId && !selectedAgent.value?.modelId) {
@@ -556,6 +552,5 @@ const handleSubmit = async () => {
     } finally {
       submitting.value = false
     }
-  })
 }
 </script>

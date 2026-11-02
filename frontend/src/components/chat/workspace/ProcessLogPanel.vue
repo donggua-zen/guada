@@ -11,12 +11,12 @@
       <div class="flex-1"></div>
       <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
         <button class="pl-btn" @click="fetchLog('initial')" :disabled="loading">
-          <el-icon size="14"><ArrowClockwise16Regular :class="{ 'animate-spin': loading }" /></el-icon>
+          <ArrowClockwise16Regular class="w-3.5 h-3.5"  :class="{ 'animate-spin': loading }" />
         </button>
       </GdTooltip>
       <GdTooltip v-if="isRunning" :content="t('chat.workspace.killProcess')" placement="bottom">
         <button class="pl-btn pl-btn-danger" @click="killProcess">
-          <el-icon size="14"><Dismiss16Filled /></el-icon>
+          <Dismiss16Filled class="w-3.5 h-3.5"  />
         </button>
       </GdTooltip>
     </div>

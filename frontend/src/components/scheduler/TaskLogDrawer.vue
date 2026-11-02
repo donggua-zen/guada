@@ -1,5 +1,5 @@
 <template>
-  <el-drawer v-model="drawerVisible" :title="drawerTitle" size="480px" destroy-on-close>
+  <GdDrawer v-model="drawerVisible" :title="drawerTitle" size="480px" destroy-on-close>
     <div class="flex flex-col h-full">
       <!-- 头部操作 -->
       <div class="flex justify-between items-center mb-4">
@@ -20,9 +20,9 @@
           <div v-for="log in logs" :key="log.id"
             class="rounded-lg border border-gray-200 dark:border-[#2e3035] p-3 bg-white dark:bg-[#232428]">
             <div class="flex items-center justify-between mb-2">
-              <el-tag :type="getStatusType(log.status)" size="small" effect="light">
+              <GdTag :type="getStatusType(log.status)" size="small" effect="light">
                 {{ getStatusLabel(log.status) }}
-              </el-tag>
+              </GdTag>
               <span class="text-xs text-gray-400">
                 {{ formatDateTime(log.startedAt) }}
               </span>
@@ -49,22 +49,23 @@
 
         <!-- 空状态 -->
         <div v-else class="py-12 text-center text-gray-400">
-          <el-icon size="48" class="mb-3 opacity-50">
-            <MailInbox24Regular />
-          </el-icon>
+          
+            <MailInbox24Regular class="mb-3 opacity-50 w-12 h-12" mx-auto  />
+          
           <div>{{ t('scheduler.log.empty') }}</div>
           <div class="text-sm mt-2">{{ t('scheduler.log.emptyHint') }}</div>
         </div>
       </div>
     </div>
-  </el-drawer>
+  </GdDrawer>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElDrawer, ElTag, ElIcon } from 'element-plus';
+import GdDrawer from '@/components/ui/GdDrawer.vue';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTag from '@/components/ui/GdTag.vue';
 
 import { ArrowClockwise16Regular, MailInbox24Regular } from '@vicons/fluent'
 import type { ScheduledTask, ScheduledTaskLog } from '../../types/scheduler'

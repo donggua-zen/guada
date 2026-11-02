@@ -1,41 +1,42 @@
 <template>
   <div class="max-w-lg">
-    <el-form ref="basicFormRef" :model="userForm" :rules="basicRules" label-position="left" label-width="80px"
-      size="large">
+    <div class="flex flex-col gap-3">
       <!-- 头像设置 -->
-      <el-form-item :label="t('settings.userProfile.avatarSettings')" :show-label="false">
+      <GdFormField :label="t('settings.userProfile.avatarSettings')" label-width="80px">
         <AvatarPreview :src="userForm.avatarUrl" :type="'user'" @avatar-changed="handleAvaterChanged" />
-      </el-form-item>
-      <el-form-item :label="t('settings.userProfile.nickname')" prop="nickname">
-        <GdInput v-model="userForm.nickname" :placeholder="t('settings.userProfile.nickname')" />
-      </el-form-item>
-      <el-form-item :label="t('settings.userProfile.username')" prop="username">
-        <GdInput v-model="userForm.username" :placeholder="t('settings.userProfile.username')" />
-      </el-form-item>
-      <el-form-item>
+      </GdFormField>
+      <GdFormField :label="t('settings.userProfile.nickname')" label-width="80px" :error="errors.nickname || undefined">
+        <GdInput v-model="userForm.nickname" :placeholder="t('settings.userProfile.nickname')"
+          :error="!!errors.nickname" @blur="validateField('nickname')" />
+      </GdFormField>
+      <GdFormField :label="t('settings.userProfile.username')" label-width="80px" :error="errors.username || undefined">
+        <GdInput v-model="userForm.username" :placeholder="t('settings.userProfile.username')"
+          :error="!!errors.username" @blur="validateField('username')" />
+      </GdFormField>
+      <GdFormField label-width="80px">
         <GdButton type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">{{ t('settings.userProfile.saveInfo') }}</GdButton>
-      </el-form-item>
-    </el-form>
+      </GdFormField>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { AvatarPreview } from '../ui'
 import { useAuthStore } from '../../stores/auth'
 import { toast } from '@/components/ui/toastService';
 import { apiService } from '../../services/ApiService'
-
-// Element Plus 组件导入
-import { ElForm, ElFormItem } from 'element-plus';
 import GdButton from '@/components/ui/GdButton.vue';
 import GdInput from '@/components/ui/GdInput.vue';
+import GdFormField from '@/components/ui/GdFormField.vue';
+import { useFormValidation } from '@/composables/useFormValidation';
 
 const { t } = useI18n()
+const router = useRouter()
 const authStore = useAuthStore()
 
-const basicFormRef = ref(null)
 let avater_file = shallowRef(null)
 const originalUserForm = ref({})
 
@@ -45,37 +46,20 @@ const userForm = ref({
   avatarUrl: '',
 })
 
-const basicRules = computed(() => ({
-  nickname: [
-    {
-      required: true,
-      message: t('settings.userProfile.nicknameRequired'),
-      trigger: 'blur',
-    },
-  ],
+// 校验（原 el-form :rules → useFormValidation；含 async 查重名）
+const { errors, validate, validateField, clearValidate } = useFormValidation({
+  nickname: [{ validator: (v) => (String(v ?? '') ? null : t('settings.userProfile.nicknameRequired')) }],
   username: [
-    {
-      required: true,
-      message: t('settings.userProfile.usernameRequired'),
-      trigger: 'blur',
-    },
-    {
-      validator: (rule, value) => {
-        return /^[a-zA-Z0-9_]{3,20}$/.test(value) || t('settings.userProfile.usernameFormat')
-      },
-      trigger: 'blur',
-    },
-    {
-      asyncValidator: async (rule, value) => {
-        if (!value || value === originalUserForm.value.username) return true
-        const { available } = await apiService.checkUsername(value)
-        if (!available) throw new Error(t('settings.userProfile.usernameTaken'))
-        return true
-      },
-      trigger: 'blur',
-    },
+    { validator: (v) => (String(v ?? '') ? null : t('settings.userProfile.usernameRequired')) },
+    { validator: (v) => (/^[a-zA-Z0-9_]{3,20}$/.test(String(v ?? '')) ? null : t('settings.userProfile.usernameFormat')) },
+    { validator: async (v) => {
+      const value = String(v ?? '')
+      if (!value || value === originalUserForm.value.username) return null
+      const { available } = await apiService.checkUsername(value)
+      return available ? null : t('settings.userProfile.usernameTaken')
+    } },
   ],
-}))
+}, () => userForm.value)
 
 const isFormChanged = computed(() => {
   return (
@@ -92,7 +76,8 @@ const handleAvaterChanged = (file) => {
 
 const handleSaveUserInfo = async () => {
   try {
-    await basicFormRef.value?.validate()
+    const valid = await validate()
+    if (!valid) return
 
     const updateData = {}
     if (userForm.value.nickname !== originalUserForm.value.nickname) {
@@ -124,10 +109,6 @@ const handleSaveUserInfo = async () => {
     toast.error(error.message || t('settings.userProfile.saveFailed'))
   }
 }
-
-defineExpose({
-  basicFormRef
-})
 
 onMounted(() => {
   // 只复制需要的字段到表单

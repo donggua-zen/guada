@@ -116,11 +116,7 @@
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.keepAwakeDesc') }}</span>
             </div>
             <div class="shrink-0">
-              <el-radio-group v-model="settingsForm.keepAwakeMode" size="default" @change="handleKeepAwakeChange">
-                <el-radio-button value="off">{{ t('settings.general.keepAwakeOff') }}</el-radio-button>
-                <el-radio-button value="busy">{{ t('settings.general.keepAwakeBusy') }}</el-radio-button>
-                <el-radio-button value="always">{{ t('settings.general.keepAwakeAlways') }}</el-radio-button>
-              </el-radio-group>
+              <GdSegmented v-model="settingsForm.keepAwakeMode" :options="keepAwakeOptions" @change="handleKeepAwakeChange" />
             </div>
           </div>
         </div>
@@ -140,6 +136,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import GdButton from '@/components/ui/GdButton.vue';
+import GdSegmented from '@/components/ui/GdSegmented.vue';
 import { toast, notify } from '@/components/ui/toastService';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
@@ -195,7 +192,17 @@ watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir
  * 防休眠模式：除了防抖落盘，还要立刻推给 Electron 主进程。
  * 主进程不订阅后端设置变更，慢一拍会让「刚开就休眠」的窗口继续存在。
  */
-function handleKeepAwakeChange(val: string | number | boolean | undefined) {
+const keepAwakeOptions = [
+  { label: t('settings.general.keepAwakeOff'), value: 'off' },
+  { label: t('settings.general.keepAwakeBusy'), value: 'busy' },
+  { label: t('settings.general.keepAwakeAlways'), value: 'always' },
+];
+
+function handleKeepAwakeChange(val: string | number | (string | number)[]) {
+  handleKeepAwakeChangeValue(Array.isArray(val) ? val[0] : val);
+}
+
+function handleKeepAwakeChangeValue(val: string | number | boolean | undefined) {
   if (val === 'off' || val === 'busy' || val === 'always') {
     window.electronAPI?.updateKeepAwakeMode(val)
   }

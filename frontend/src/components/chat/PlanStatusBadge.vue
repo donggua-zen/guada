@@ -44,27 +44,27 @@ const label = computed(() => t(`chat.plan.status.${props.status}`))
 }
 
 .plan-badge-approved {
-    background: color-mix(in srgb, var(--el-color-success) 16%, transparent);
-    color: var(--el-color-success);
+    background: color-mix(in srgb, var(--gd-color-success) 16%, transparent);
+    color: var(--gd-color-success);
 }
 
 .plan-badge-rejected {
-    background: color-mix(in srgb, var(--el-color-danger) 16%, transparent);
-    color: var(--el-color-danger);
+    background: color-mix(in srgb, var(--gd-color-danger) 16%, transparent);
+    color: var(--gd-color-danger);
 }
 
 .plan-badge-error {
-    background: color-mix(in srgb, var(--el-color-danger) 16%, transparent);
-    color: var(--el-color-danger);
+    background: color-mix(in srgb, var(--gd-color-danger) 16%, transparent);
+    color: var(--gd-color-danger);
 }
 
 .plan-badge-pending {
-    background: color-mix(in srgb, var(--el-color-warning) 18%, transparent);
-    color: var(--el-color-warning);
+    background: color-mix(in srgb, var(--gd-color-warning) 18%, transparent);
+    color: var(--gd-color-warning);
 }
 
 .plan-badge-aborted {
-    background: color-mix(in srgb, var(--el-text-color-secondary) 16%, transparent);
-    color: var(--el-text-color-secondary);
+    background: color-mix(in srgb, var(--gd-color-text-gray) 16%, transparent);
+    color: var(--gd-color-text-gray);
 }
 </style>

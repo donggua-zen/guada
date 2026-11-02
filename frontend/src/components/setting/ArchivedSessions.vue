@@ -15,16 +15,16 @@
                 <GdOption :label="t('settings.archived.ungrouped')" :value="UNGROUPED_ID" />
             </GdSelect>
             <GdButton size="small" :loading="isLoading" @click="loadArchivedSessions" circle>
-                <el-icon class="w-4 h-4">
-                    <ArrowClockwise20Regular />
-                </el-icon>
+                
+                    <ArrowClockwise20Regular class="w-4 h-4"  />
+                
             </GdButton>
         </div>
 
         <!-- 批量操作栏 -->
         <div v-if="archivedSessions.length > 0" class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-3">
-                <el-checkbox v-model="selectAll" @change="handleSelectAll">{{ t('common.selectAll') }}</el-checkbox>
+                <GdCheckbox v-model="selectAll" @change="handleSelectAll">{{ t('common.selectAll') }}</GdCheckbox>
                 <span class="text-xs text-gray-400" v-if="selectedIds.size > 0">{{ t('settings.archived.selectedCount', { n: selectedIds.size }) }}</span>
             </div>
             <GdButton type="primary" size="small" :disabled="selectedIds.size === 0" :loading="batchLoading"
@@ -35,9 +35,9 @@
 
         <!-- 加载中 -->
         <div v-if="isLoading" class="flex items-center justify-center py-10 text-gray-400">
-            <el-icon class="animate-spin text-2xl mr-2">
-                <ArrowSync16Regular />
-            </el-icon>
+            
+                <ArrowSync16Regular class="animate-spin text-2xl mr-2 size-4"  />
+            
             <span class="text-sm">{{ t('common.loading') }}</span>
         </div>
 
@@ -47,23 +47,23 @@
                 <div v-for="(session, idx) in archivedSessions" :key="session.id"
                     class="flex items-center gap-2 px-3 py-2 transition-colors duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
                     :class="idx < archivedSessions.length - 1 ? 'border-b border-gray-50 dark:border-gray-700/30' : ''">
-                    <el-checkbox :model-value="selectedIds.has(session.id)"
+                    <GdCheckbox :model-value="selectedIds.has(session.id)"
                         @change="(val: string | number | boolean) => toggleSelect(session.id, val)" />
                     <span class="flex-1 truncate text-sm text-(--gd-color-text)">{{ session.title }}</span>
                     <span class="text-xs text-gray-400 shrink-0">{{ formatLastActive(session.lastActiveAt || session.updatedAt) }}</span>
                     <div class="action-btn p-1 rounded cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20"
                         :title="t('settings.archived.unarchive')" @click="handleUnarchive(session)">
-                        <el-icon class="w-3.5 h-3.5 text-blue-500">
-                            <ArrowUndo20Regular />
-                        </el-icon>
+                        
+                            <ArrowUndo20Regular class="w-3.5 h-3.5 text-blue-500"  />
+                        
                     </div>
                 </div>
             </div>
 
             <!-- 分页 -->
             <div v-if="total > pageSize" class="flex justify-center pt-2">
-                <el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="total"
-                    layout="prev, pager, next" size="small" @current-change="handlePageChange" />
+                <GdPagination v-model="currentPage" :page-size="pageSize" :total="total"
+        size="small" @change="handlePageChange" />
             </div>
         </template>
 
@@ -77,6 +77,8 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdPagination from '@/components/ui/GdPagination.vue';
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 import GdInput from '@/components/ui/GdInput.vue';

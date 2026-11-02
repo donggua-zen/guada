@@ -6,11 +6,9 @@
     <!-- 主内容区域 -->
     <div class="flex flex-col h-full">
         <SetupGuide ref="guideRef" />
-        <el-config-provider :locale="elLocale">
-            <RouterView></RouterView>
-            <GdDialogHost />
-            <GdToastHost />
-        </el-config-provider>
+        <RouterView></RouterView>
+        <GdDialogHost />
+        <GdToastHost />
     </div>
 
     <!-- 全局右键菜单 (Electron 剪贴板操作) -->
@@ -24,9 +22,6 @@
 <script setup>
 import { ref, provide, onMounted, watch, computed } from 'vue'
 import { useRouter, RouterView } from 'vue-router'
-import { ElConfigProvider } from 'element-plus'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import en from 'element-plus/es/locale/lang/en'
 import { useTitle } from './composables/useTitle'
 import { useTheme } from './composables/useTheme'
 import { useTrayStats } from './composables/useTrayStats'
@@ -43,9 +38,6 @@ const theme = useTheme() //不要删除，这里会执行dark模式设置
 useTrayStats() // 托盘悬浮窗统计推送（仅 Electron 生效）
 const isDev = import.meta.env.DEV
 const guideRef = ref(null)
-
-// Element Plus 组件内置文案随语言切换
-const elLocale = computed(() => (getLocale() === 'en-US' ? en : zhCn))
 
 // 主题切换过渡状态
 const showThemeTransition = ref(false)

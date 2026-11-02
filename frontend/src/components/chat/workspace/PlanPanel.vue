@@ -4,9 +4,9 @@
         <div class="flex items-center gap-2 px-3 py-1.5 shrink-0 border-b border-(--gd-color-surface-border)">
             <GdTooltip :content="t('chat.plan.directory')" placement="bottom">
                 <button class="plan-icon-btn" :class="{ 'is-active': directoryOpen }" @click="toggleDirectory">
-                    <el-icon :size="16">
-                        <History16Regular />
-                    </el-icon>
+                    
+                        <History16Regular class="w-4 h-4"  />
+                    
                 </button>
             </GdTooltip>
             <template v-if="selected">
@@ -40,9 +40,9 @@
                         <span class="text-xs font-medium text-(--gd-color-text-gray)">{{ t('chat.plan.title') }}</span>
                         <GdTooltip :content="t('chat.plan.refresh')" placement="bottom">
                             <button class="plan-icon-btn" @click="refresh">
-                                <el-icon :size="14">
-                                    <ArrowClockwise16Regular />
-                                </el-icon>
+                                
+                                    <ArrowClockwise16Regular class="w-3.5 h-3.5"  />
+                                
                             </button>
                         </GdTooltip>
                     </div>
@@ -68,7 +68,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus'
+
 import { ArrowClockwise16Regular, History16Regular } from '@vicons/fluent'
 import GdTooltip from '@/components/ui/GdTooltip.vue'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'

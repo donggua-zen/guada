@@ -4,15 +4,15 @@
     <div class="queue-header">
       <span class="queue-title">{{ t('chat.queue.title', { n: queue.length }) }}</span>
       <button v-if="!pausedReason" class="queue-header-btn" :title="t('chat.queue.pause')" @click="emit('pause')">
-        <el-icon size="13"><Pause24Filled /></el-icon>
+        <Pause24Filled class="w-[13px] h-[13px]"  />
       </button>
     </div>
 
     <!-- 暂停横幅：停止/出错/手动暂停后队列保留但不再自动补发，需要用户显式继续 -->
     <div v-if="pausedReason" class="queue-paused">
-      <el-icon size="13" class="queue-paused-icon">
-        <Warning24Filled />
-      </el-icon>
+      
+        <Warning24Filled class="queue-paused-icon w-[13px] h-[13px]"  />
+      
       <span class="queue-paused-text">{{ pauseLabel(pausedReason) }}</span>
       <button class="queue-resume-btn" @click="emit('continue')">
         {{ t('chat.queue.continue') }}
@@ -26,19 +26,19 @@
         'is-promoting': isPromoting(item),
       }" :title="item.status === 'failed' ? item.error : undefined">
         <div class="queue-item-files" v-if="item.files?.length > 0">
-          <el-icon size="12"><Attach24Regular /></el-icon>
+          <Attach24Regular class="w-3 h-3"  />
           <span>{{ item.files.length }}</span>
         </div>
         <div class="queue-content" @click="item.status === 'queued' && emit('edit', item)">
           <span class="queue-text">{{ item.content }}</span>
         </div>
         <div class="queue-status">
-          <el-icon v-if="item.status === 'running' || isPromoting(item)" size="12">
-            <ArrowSync16Regular class="animate-spin" />
-          </el-icon>
-          <el-icon v-else-if="item.status === 'failed'" size="12" class="queue-failed-icon">
-            <Warning24Filled />
-          </el-icon>
+          
+            <ArrowSync16Regular class="w-3 h-3 animate-spin" v-if="item.status === 'running' || isPromoting(item)" />
+          
+          
+            <Warning24Filled v-else-if="item.status === 'failed'" class="queue-failed-icon w-3 h-3"  />
+          
           <span class="queue-label" :class="{ 'is-failed': item.status === 'failed' }">
             {{ queueLabel(item) }}
           </span>
@@ -46,28 +46,28 @@
         <div class="queue-actions" v-if="item.status === 'queued' && !isPromoting(item)">
           <button class="queue-action-btn" :disabled="!canMoveUp(item.id)" :title="t('chat.queue.moveUp')"
             @click="emit('move', item.id, -1)">
-            <el-icon size="14"><ArrowUp24Regular /></el-icon>
+            <ArrowUp24Regular class="w-3.5 h-3.5"  />
           </button>
           <button class="queue-action-btn" :disabled="!canMoveDown(item.id)" :title="t('chat.queue.moveDown')"
             @click="emit('move', item.id, 1)">
-            <el-icon size="14"><ArrowDown24Regular /></el-icon>
+            <ArrowDown24Regular class="w-3.5 h-3.5"  />
           </button>
           <button class="queue-action-btn" :title="t('chat.queue.sendNow')" @click="emit('sendNow', item.id)">
-            <el-icon size="14"><Play24Filled /></el-icon>
+            <Play24Filled class="w-3.5 h-3.5"  />
           </button>
           <button class="queue-action-btn" @click="emit('edit', item)" :title="t('chat.queue.edit')">
-            <el-icon size="14"><Edit24Regular /></el-icon>
+            <Edit24Regular class="w-3.5 h-3.5"  />
           </button>
           <button class="queue-action-btn" @click="emit('remove', item.id)" :title="t('chat.queue.withdraw')">
-            <el-icon size="14"><Dismiss24Regular /></el-icon>
+            <Dismiss24Regular class="w-3.5 h-3.5"  />
           </button>
         </div>
         <div class="queue-actions" v-else-if="item.status === 'failed'">
           <button class="queue-action-btn" @click="emit('retry', item.id)" :title="t('chat.queue.retry')">
-            <el-icon size="14"><ArrowClockwise24Regular /></el-icon>
+            <ArrowClockwise24Regular class="w-3.5 h-3.5"  />
           </button>
           <button class="queue-action-btn" @click="emit('remove', item.id)" :title="t('chat.queue.withdraw')">
-            <el-icon size="14"><Dismiss24Regular /></el-icon>
+            <Dismiss24Regular class="w-3.5 h-3.5"  />
           </button>
         </div>
       </div>
@@ -187,8 +187,8 @@ function pauseLabel(reason: QueuePauseReason): string {
   padding: 5px 12px;
   border-radius: var(--gd-size-dialog-rounded-radius);
   font-size: 12px;
-  color: var(--el-color-warning-dark-2, #b88230);
-  background: var(--el-color-warning-light-9, rgba(230, 162, 60, 0.12));
+  color: var(--gd-color-warning-hover, var(--gd-color-warning));
+  background: var(--gd-color-warning-0f, rgba(230, 162, 60, 0.12));
 }
 
 .queue-paused-text {
@@ -206,13 +206,13 @@ function pauseLabel(reason: QueuePauseReason): string {
   padding: 2px 8px;
   font-size: 12px;
   cursor: pointer;
-  color: var(--el-color-warning-dark-2, #b88230);
+  color: var(--gd-color-warning-hover, var(--gd-color-warning));
   background: transparent;
   transition: background 0.15s;
 }
 
 .queue-resume-btn:hover {
-  background: var(--el-color-warning-light-8, rgba(230, 162, 60, 0.22));
+  background: var(--gd-color-warning-0f, rgba(230, 162, 60, 0.22));
 }
 
 .queue-item {
@@ -226,7 +226,7 @@ function pauseLabel(reason: QueuePauseReason): string {
 }
 
 .queue-item:hover {
-  background: var(--el-fill-color, rgba(200, 200, 200, 0.2));
+  background: var(--gd-color-field-bg-hover, rgba(200, 200, 200, 0.2));
 }
 
 .queue-item.is-sending {
@@ -235,7 +235,7 @@ function pauseLabel(reason: QueuePauseReason): string {
 }
 
 .queue-item.is-failed {
-  background: var(--el-color-danger-light-9, rgba(245, 108, 108, 0.08));
+  background: var(--gd-color-danger-0f, rgba(245, 108, 108, 0.08));
 }
 
 .queue-item.is-promoting {
@@ -282,7 +282,7 @@ function pauseLabel(reason: QueuePauseReason): string {
 
 .queue-failed-icon,
 .queue-label.is-failed {
-  color: var(--el-color-danger, #f56c6c);
+  color: var(--gd-color-danger);
 }
 
 .queue-label {

@@ -29,7 +29,7 @@
             <GdButton v-if="uploadTasks.length > 0" @click="emit('show-upload-task')" class="upload-btn">
                 <ArrowUpload16Regular class="btn-icon" />
                 {{ t('knowledge.upload.uploadTask') }}
-                <el-badge :value="uploadTasks.length" type="warning" class="ml-1" />
+                <span v-if="uploadTasks.length" class="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--gd-color-warning)] px-1 text-[11px] leading-none text-white">{{ uploadTasks.length }}</span>
             </GdButton>
         </div>
 
@@ -56,10 +56,8 @@
                 <div class="max-h-80 overflow-y-auto space-y-2">
                     <div v-for="conflict in conflicts" :key="conflict.relativePath"
                         class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
-                        <el-icon size="20" :class="conflict.type === 'directory' ? 'text-yellow-500' : 'text-blue-500'">
-                            <Folder20Regular v-if="conflict.type === 'directory'" />
-                            <Document20Regular v-else />
-                        </el-icon>
+                        <span :class="conflict.type === 'directory' ? 'text-yellow-500' : 'text-blue-500'"><Folder20Regular v-if="conflict.type === 'directory'" />
+                            <Document20Regular v-else /></span>
                         <div class="flex-1 min-w-0">
                             <div class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                                 {{ conflict.originalName }}
@@ -75,20 +73,20 @@
                 </div>
 
                 <div class="mt-4">
-                    <el-radio-group v-model="conflictMode" class="flex flex-col gap-3">
-                        <el-radio value="overwrite" size="large">
+                    <GdRadioGroup v-model="conflictMode">
+                        <GdRadio value="overwrite">
                             <div class="flex flex-col">
                                 <span class="font-medium">{{ t('knowledge.upload.conflictOverwrite') }}</span>
                                 <span class="text-xs text-gray-500">{{ t('knowledge.upload.conflictOverwriteDesc') }}</span>
                             </div>
-                        </el-radio>
-                        <el-radio value="keep-both" size="large">
+                        </GdRadio>
+                        <GdRadio value="keep-both">
                             <div class="flex flex-col">
                                 <span class="font-medium">{{ t('knowledge.upload.conflictKeepBoth') }}</span>
                                 <span class="text-xs text-gray-500">{{ t('knowledge.upload.conflictKeepBothDesc') }}</span>
                             </div>
-                        </el-radio>
-                    </el-radio-group>
+                        </GdRadio>
+                    </GdRadioGroup>
                 </div>
             </div>
 
@@ -109,6 +107,8 @@ import { useI18n } from 'vue-i18n'
 import { DocumentAdd16Regular, FolderAdd16Regular, ArrowUpload16Regular, Folder20Regular, Document20Regular } from '@vicons/fluent'
 
 import GdButton from '@/components/ui/GdButton.vue';
+import GdRadio from '@/components/ui/GdRadio.vue';
+import GdRadioGroup from '@/components/ui/GdRadioGroup.vue';
 import { toast } from '@/components/ui/toastService';
 import GdInput from '@/components/ui/GdInput.vue';
 

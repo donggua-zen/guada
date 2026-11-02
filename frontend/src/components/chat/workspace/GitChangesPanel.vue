@@ -7,9 +7,9 @@
         <button class="git-branch-chip" :disabled="!isGitRepo || refreshing">
           <!-- Branch20Regular 为 20 viewBox：16px 仍非整数缩放，但 0.8 倍较柔和；
                图标优先选原生尺寸更锐利 -->
-          <el-icon :size="16"><Branch20Regular /></el-icon>
+          <Branch20Regular class="w-4 h-4"  />
           <span class="git-branch-chip-name">{{ selectedBranch || t('git.branchSelectPlaceholder') }}</span>
-          <el-icon :size="10" class="git-branch-chip-chevron"><ChevronDown12Regular /></el-icon>
+          <ChevronDown12Regular class="git-branch-chip-chevron w-2.5 h-2.5"  />
         </button>
         <template #dropdown>
           <div class="git-branch-menu">
@@ -35,9 +35,9 @@
       <GdTooltip :content="t('git.refresh')" placement="bottom">
         <button class="git-tool-btn" :disabled="!isGitRepo || refreshing" @click="refresh">
           <!-- RefreshRight 为 16 viewBox：按原生尺寸渲染，避免非整数缩放发虚 -->
-          <el-icon :size="16">
-            <ArrowClockwise16Regular :class="{ 'animate-spin': refreshing }" />
-          </el-icon>
+          
+            <ArrowClockwise16Regular class="w-4 h-4"  :class="{ 'animate-spin': refreshing }" />
+          
         </button>
       </GdTooltip>
       <!-- 视图切换（unified/split）：单按钮，图标随当前状态切换（显示目标视图图标）：
@@ -45,23 +45,21 @@
       <GdTooltip :content="diffView === 'unified' ? t('git.splitView') : t('git.unifiedView')" placement="bottom">
         <button class="git-tool-btn" @click="toggleDiffView">
           <!-- 20 viewBox：原生尺寸 20px，保证像素对齐锐利 -->
-          <el-icon :size="20">
-            <CalendarAgenda20Regular v-if="diffView === 'split'" />
-            <DualScreen20Regular v-else />
-          </el-icon>
+          <span class="w-5 h-5"><CalendarAgenda20Regular v-if="diffView === 'split'" />
+            <DualScreen20Regular v-else /></span>
         </button>
       </GdTooltip>
       <!-- 右侧变更目录树开关 -->
       <GdTooltip :content="t('git.toggleTree')" placement="bottom">
         <button class="git-tool-btn" :class="{ 'git-tool-btn--active': showTree }"
           @click="showTree = !showTree">
-          <el-icon :size="20"><TextboxAlignTopRotate9020Regular /></el-icon>
+          <TextboxAlignTopRotate9020Regular class="w-5 h-5"  />
         </button>
       </GdTooltip>
       <!-- 提交（弹窗：消息 + 是否包含未暂存 + 提交/提交并推送/推送）：胶囊按钮 -->
       <button class="git-commit-btn" :disabled="!isGitRepo || totalChanges === 0"
         @click="git.openCommitDialog()">
-        <el-icon :size="16"><BranchFork16Regular /></el-icon>
+        <BranchFork16Regular class="w-4 h-4"  />
         <span>{{ t('git.commitOrPush') }}</span>
       </button>
     </div>
@@ -120,12 +118,12 @@
             <div class="git-diff-nav-group">
               <GdTooltip :content="t('git.prevFileShortcut')" placement="bottom">
                 <button class="git-diff-nav" @click="cycleSelection(-1)">
-                  <el-icon :size="12"><ArrowUp12Regular /></el-icon>
+                  <ArrowUp12Regular class="w-3 h-3"  />
                 </button>
               </GdTooltip>
               <GdTooltip :content="t('git.nextFileShortcut')" placement="bottom">
                 <button class="git-diff-nav" @click="cycleSelection(1)">
-                  <el-icon :size="12"><ArrowDown12Regular /></el-icon>
+                  <ArrowDown12Regular class="w-3 h-3"  />
                 </button>
               </GdTooltip>
             </div>
@@ -251,9 +249,9 @@
           <div class="git-tree-pane">
             <!-- 搜索框：固定在顶部，不随列表滚动 -->
             <div class="git-tree-search shrink-0">
-              <el-icon :size="14" class="git-tree-search-icon">
-                <Search20Regular />
-              </el-icon>
+              
+                <Search20Regular class="git-tree-search-icon w-3.5 h-3.5"  />
+              
               <input
                 v-model="searchText"
                 class="git-tree-search-input"
@@ -262,7 +260,7 @@
                 :placeholder="t('git.searchFiles')"
               />
               <button v-if="searchText" class="git-tree-search-clear" @click="searchText = ''">
-                <el-icon :size="12"><Dismiss12Regular /></el-icon>
+                <Dismiss12Regular class="w-3 h-3"  />
               </button>
             </div>
             <!-- 折叠的未跟踪目录提示：目录行本身可 stage，但用户需要知道它没有逐文件展开 -->
@@ -285,11 +283,11 @@
                   <span class="git-row-actions" @click.stop>
                     <button v-if="(row.stagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.unstageAll')"
                       @click="unstageDir(row.group, row as GitTreeRow)">
-                      <el-icon :size="12"><Subtract16Regular /></el-icon>
+                      <Subtract16Regular class="w-3 h-3"  />
                     </button>
                     <button v-if="(row.unstagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.stageAll')"
                       @click="stageDir(row.group, row as GitTreeRow)">
-                      <el-icon :size="12"><Add16Regular /></el-icon>
+                      <Add16Regular class="w-3 h-3"  />
                     </button>
                   </span>
                 </template>
@@ -301,10 +299,10 @@
                   <span class="git-row-actions" @click.stop>
                     <button v-if="row.row.group === 'staged'" class="git-row-btn" :title="t('git.unstage')"
                       @click="unstageFile(row.row)">
-                      <el-icon :size="12"><Subtract16Regular /></el-icon>
+                      <Subtract16Regular class="w-3 h-3"  />
                     </button>
                     <button v-else class="git-row-btn" :title="t('git.stage')" @click="stageFile(row.row)">
-                      <el-icon :size="12"><Add16Regular /></el-icon>
+                      <Add16Regular class="w-3 h-3"  />
                     </button>
                   </span>
                 </template>

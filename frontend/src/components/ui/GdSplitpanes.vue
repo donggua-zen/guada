@@ -427,7 +427,7 @@ onUnmounted(() => {
 }
 
 .lite-splitpanes__splitter:hover::after {
-  background-color: var(--el-color-primary-light-8, #d9ecff);
+  background-color: var(--gd-color-primary-200);
 }
 
 /* 拖拽中持续高亮分割线，即使鼠标移出分割条区域 */
@@ -436,7 +436,7 @@ onUnmounted(() => {
 }
 
 .lite-splitpanes--resizing .lite-splitpanes__splitter::after {
-  background-color: var(--el-color-primary-light-8, #d9ecff);
+  background-color: var(--gd-color-primary-200);
 }
 
 /* 拖拽期间禁用所有过渡动画 */
@@ -466,7 +466,7 @@ onUnmounted(() => {
 }
 
 .dark .lite-splitpanes__splitter:hover::after {
-  background-color: var(--el-color-primary-light-8, #4a4d55);
+  background-color: var(--gd-color-primary-200);
 }
 
 /* 拖拽时全屏遮罩，阻止下层元素收到 hover/mousemove 事件 */

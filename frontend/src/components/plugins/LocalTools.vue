@@ -4,7 +4,7 @@
       <template #actions>
         <GdButton circle :loading="loading" :title="t('common.refresh')" @click="loadGlobalTools">
           <template #icon>
-            <ArrowClockwise16Regular />
+            <ArrowClockwise16Regular class="size-4" />
           </template>
         </GdButton>
         <GdButton type="primary" @click="startInstallDialog">{{ t('plugins.localTools.installPlugin') }}</GdButton>
@@ -56,9 +56,9 @@
           @command="(command) => handlePluginCommand(command, tool)"
         >
           <template #badges>
-            <el-tag v-if="tool.provides" size="small" type="primary" effect="plain">{{ t('plugins.localTools.sourceProvider') }}</el-tag>
-            <el-tag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
-            <el-tag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
+            <GdTag v-if="tool.provides" size="small" type="primary" effect="plain">{{ t('plugins.localTools.sourceProvider') }}</GdTag>
+            <GdTag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</GdTag>
+            <GdTag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</GdTag>
           </template>
           <template #actions>
             <!-- 系统插件恒启用、后端拒绝禁用，不提供启停控件 -->
@@ -90,9 +90,9 @@
           <CardAvatar :src="currentTool?.icon ? resolvePluginIconUrl(currentTool?.pluginId, currentTool?.iconRev) : null" :name="currentTool?.displayName" size="md" tray />
           <div class="flex items-center gap-2">
             <span class="text-base font-semibold text-gray-900 dark:text-[#e8e9ed]">{{ currentTool?.displayName }}</span>
-            <el-tag v-if="currentTool?.provides" size="small" type="primary" effect="plain">{{ t('plugins.localTools.sourceProvider') }}</el-tag>
-            <el-tag v-if="currentTool?.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</el-tag>
-            <el-tag v-else-if="currentTool?.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</el-tag>
+            <GdTag v-if="currentTool?.provides" size="small" type="primary" effect="plain">{{ t('plugins.localTools.sourceProvider') }}</GdTag>
+            <GdTag v-if="currentTool?.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</GdTag>
+            <GdTag v-else-if="currentTool?.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</GdTag>
           </div>
         </div>
       </template>
@@ -130,6 +130,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTag from '@/components/ui/GdTag.vue';
 import { toast } from '@/components/ui/toastService';
 import GdInput from '@/components/ui/GdInput.vue';
 import GdSwitch from '@/components/ui/GdSwitch.vue';

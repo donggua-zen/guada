@@ -17,9 +17,9 @@
         :class="{ 'border-t border-gray-100 dark:border-[#2e3035]': item.divider }"
         @click="handleItemClick(item)"
       >
-        <el-icon v-if="item.icon" size="16">
-          <component :is="item.icon" />
-        </el-icon>
+        
+          <component class="w-4 h-4" v-if="item.icon"  :is="item.icon" />
+        
         <span>{{ item.label }}</span>
       </div>
     </div>

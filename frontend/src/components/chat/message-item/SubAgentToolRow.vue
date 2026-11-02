@@ -5,9 +5,9 @@
          颜色不同、本就是两段，hover 只提亮被指向的那一段；中间分隔符 · 不可点也不变色。
          整行不给背景色、不加整行提示——行内交互只留这两段文字（列表入口在输入框状态栏与侧栏）。 -->
     <div class="flex items-center text-sm min-w-0">
-      <el-icon class="shrink-0 text-gray-500" :class="{ 'is-failed': failed }" size="16">
-        <Bot20Regular />
-      </el-icon>
+      
+        <Bot20Regular class="shrink-0 text-gray-500 w-4 h-4" :class="{ 'is-failed': failed }"  />
+      
       <span class="shrink-0 ml-1.5 text-gray-600 dark:text-gray-400">{{ t('chat.toolCalls.subAgentLabel') }}</span>
       <span v-if="displayName" class="sa-link shrink-0 ml-1.5 font-medium text-gray-600 dark:text-gray-400"
         :class="{ 'is-clickable': clickable }" @click.stop="onClick">{{ displayName }}</span>
@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { ElIcon } from 'element-plus';
+
 import { useI18n } from 'vue-i18n';
 import { Bot20Regular } from '@vicons/fluent';
 import { parse as partialParse } from 'partial-json';
@@ -105,7 +105,7 @@ const onClick = (): void => {
 }
 
 .sa-link.is-clickable:hover {
-  color: var(--el-text-color-regular);
+  color: var(--gd-color-text);
 }
 
 /* 失败原因块：红色微底等宽正文，视觉对齐工作流卡的 .wf-card-error；

@@ -393,7 +393,7 @@ h2 {
   gap: 4px;
   padding: 0 2px;
   margin: 0 2px;
-  color: var(--el-text-color-regular);
+  color: var(--gd-color-text);
   font-size: var(--gd-size-text-base, 14px);
   line-height: 1.8;
   cursor: pointer;
@@ -403,7 +403,7 @@ h2 {
 
 :deep(.skill-badge-icon) {
   font-size: 10px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   line-height: 1;
 }
 
@@ -413,7 +413,7 @@ h2 {
 }
 
 :deep(.skill-badge:hover) {
-  color: var(--el-text-color-primary);
+  color: var(--gd-color-text);
 }
 
 /* 工具栏 */

@@ -22,7 +22,6 @@
       </div>
     </div>
 
-
     <!-- 分组模式切换：普通分组 / 按工作目录；右侧快捷操作默认隐藏，hover 本行时显示 -->
     <div class="px-2 pb-1 flex items-center gap-1 group/mode-row">
       <SegmentedToggle :model-value="sessionGroupStore.groupingMode" :options="groupingModeOptions"
@@ -32,19 +31,17 @@
         <!-- 全部展开 / 全部收起 -->
         <GdTooltip :content="toggleAllGroupsTooltip" placement="bottom">
           <div class="session-action-trigger hover:bg-(--gd-color-sidebar-bg-hover)" @click="toggleAllGroups">
-            <el-icon class="w-4 h-4">
-              <ArrowMinimize16Regular v-if="allGroupsExpanded" />
-              <ArrowMaximize16Regular v-else />
-            </el-icon>
+            <span class="w-4 h-4"><ArrowMinimize16Regular v-if="allGroupsExpanded" />
+              <ArrowMaximize16Regular v-else /></span>
           </div>
         </GdTooltip>
         <!-- 新建分组 / 项目 -->
         <GdTooltip :content="createGroupTooltip" placement="bottom">
           <div class="session-action-trigger hover:bg-(--gd-color-sidebar-bg-hover)"
             @click="handleCreateGroupShortcut">
-            <el-icon class="w-4 h-4">
-              <FolderAdd16Regular />
-            </el-icon>
+            
+              <FolderAdd16Regular class="w-4 h-4"  />
+            
           </div>
         </GdTooltip>
       </div>
@@ -88,9 +85,9 @@
               <DropdownMenu v-if="hasGroupActions(group)"
                 @command="(cmd: string) => handleGroupMenuSelect(cmd, group)">
                 <div class="session-action-trigger">
-                  <el-icon class="w-4 h-4">
-                    <MoreHorizontal20Filled />
-                  </el-icon>
+                  
+                    <MoreHorizontal20Filled class="w-4 h-4"  />
+                  
                 </div>
                 <template #dropdown>
                   <!-- 目录模式：项目的编辑 / 归档 / 删除 -->
@@ -130,9 +127,9 @@
               <GdTooltip v-if="group.id !== PINNED_GROUP_ID"
                 :content="t('ui.sidebar.newSessionInGroup', { name: getGroupDisplayName(group) })" placement="bottom">
                 <div class="session-action-trigger" @click.stop="openNewSession(group)">
-                  <el-icon class="w-4 h-4">
-                    <CommentAdd16Regular />
-                  </el-icon>
+                  
+                    <CommentAdd16Regular class="w-4 h-4"  />
+                  
                 </div>
               </GdTooltip>
             </div>
@@ -198,9 +195,9 @@
                     : 'opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto pointer-events-none'">
                   <DropdownMenu @command="(cmd: string) => handleDropdownSelect(cmd, session)">
                     <div class="session-action-trigger">
-                      <el-icon class="w-4 h-4">
-                        <MoreHorizontal20Filled />
-                      </el-icon>
+                      
+                        <MoreHorizontal20Filled class="w-4 h-4"  />
+                      
                     </div>
                       <template #dropdown>
                         <DropdownMenuItem command="pin">
@@ -234,9 +231,9 @@
                 class="py-1 px-5 text-left">
                 <div v-if="sessionGroupStore.loadingMoreGroupId === group.id"
                   class="flex items-center justify-center gap-2 text-xs text-gray-500">
-                  <el-icon class="animate-spin" size="14">
-                    <ArrowSync16Regular />
-                  </el-icon>
+                  
+                    <ArrowSync16Regular class="animate-spin w-3.5 h-3.5"  />
+                  
                   <span>{{ t('ui.sidebar.loadingMore') }}</span>
                 </div>
                 <div v-else class="text-xs text-gray-400 cursor-pointer hover:text-blue-500 transition-colors"
@@ -327,14 +324,14 @@
           {{ t('ui.sidebar.deleteWarning') }}
         </p>
       </div>
-      <el-checkbox v-model="deleteWorkspaceChecked" class="w-full">
+      <GdCheckbox v-model="deleteWorkspaceChecked" class="w-full">
         <div class="flex flex-col gap-1" style="white-space: normal; word-wrap: break-word; overflow-wrap: break-word;">
           <span class="font-medium">{{ t('ui.sidebar.deleteWorkspace') }}</span>
           <span class="text-xs text-gray-500 dark:text-gray-400" style="line-height: 1.5;">
             {{ t('ui.sidebar.deleteWorkspaceDesc') }}
           </span>
         </div>
-      </el-checkbox>
+      </GdCheckbox>
     </div>
     <template #footer>
       <div class="flex justify-end gap-2">
@@ -398,6 +395,7 @@ import GdTooltip from './ui/GdTooltip.vue'
 import GroupEditDialog from './session/GroupEditDialog.vue'
 import GroupIcon from './session/GroupIcon.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
 import GdButton from '@/components/ui/GdButton.vue'
 import MobileAccessDialog from '@/components/MobileAccessDialog.vue'
 import DirectoryBrowserDialog from '@/components/DirectoryBrowserDialog.vue'
@@ -734,7 +732,6 @@ onMounted(() => {
   })
   void refreshMobileAccessActive()
 })
-
 
 /**
  * 判断指定分组是否正在加载
@@ -1527,7 +1524,6 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
   color: var(--gd-color-sidebar-text-active);
 }
 
-
 .session-actions {
   margin-left: auto;
 }
@@ -1555,16 +1551,6 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* 滚动条样式 */
-:deep(.el-scrollbar__bar) {
-  opacity: 0.6;
-  transition: opacity 0.2s;
-}
-
-:deep(.el-scrollbar__bar:hover) {
-  opacity: 1;
 }
 
 /* 状态指示器样式 */

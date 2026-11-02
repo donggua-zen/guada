@@ -21,7 +21,7 @@
               </GdButton>
               <DropdownMenu class="split-menu" @command="handleCreateCommand">
                 <button type="button" class="split-arrow" :aria-label="t('scheduler.page.moreCreate')">
-                  <el-icon :size="14"><ChevronDown16Regular /></el-icon>
+                  <ChevronDown16Regular class="w-3.5 h-3.5"  />
                 </button>
                 <template #dropdown>
                   <DropdownMenuItem command="chat">
@@ -65,7 +65,7 @@
                   <div class="card-menu" @click.stop>
                     <DropdownMenu @command="handleCardCommand($event, task)">
                       <button type="button" class="card-menu-btn" :aria-label="t('scheduler.page.moreActions')">
-                        <el-icon :size="16"><MoreHorizontal20Filled /></el-icon>
+                        <MoreHorizontal20Filled class="w-4 h-4"  />
                       </button>
                       <template #dropdown>
                         <DropdownMenuItem command="run">
@@ -110,7 +110,7 @@
 
             <div v-else class="empty-block">
               <div class="empty-icon">
-                <el-icon :size="28"><CalendarAgenda24Regular /></el-icon>
+                <CalendarAgenda24Regular class="w-7 h-7"  />
               </div>
               <p class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('scheduler.page.empty') }}</p>
               <p class="text-xs text-gray-400 dark:text-[#6b6d75] mt-1">{{ t('scheduler.page.emptyHint') }}</p>
@@ -176,7 +176,7 @@
             </div>
             <div v-else-if="!historyLoading" class="empty-block">
               <div class="empty-icon">
-                <el-icon :size="28"><History20Regular /></el-icon>
+                <History20Regular class="w-7 h-7"  />
               </div>
               <p class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('scheduler.page.historyEmpty') }}</p>
             </div>
@@ -240,7 +240,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { NEW_SESSION_ID } from '@/constants'
-import { ElIcon } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue'
 import GdSwitch from '@/components/ui/GdSwitch.vue';
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -548,14 +548,14 @@ onMounted(() => {
   border: none;
   border-left: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 0 8px 8px 0;
-  background: var(--el-color-primary);
+  background: var(--gd-color-primary);
   color: #fff;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
 .split-arrow:hover {
-  background: var(--el-color-primary-light-2);
+  background: var(--gd-color-primary-800);
 }
 
 .page-tabs {
@@ -574,7 +574,7 @@ onMounted(() => {
   border: none;
   border-radius: 999px;
   background: transparent;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -582,25 +582,25 @@ onMounted(() => {
 }
 
 .page-tab:hover {
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
   color: var(--gd-color-text);
 }
 
 .page-tab.active {
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
   color: var(--gd-color-text);
 }
 
 .tab-count {
   font-size: 11px;
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 /* 任务模板 */
 .template-hint {
   margin: 4px 0 12px;
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 
 .template-grid {
@@ -649,8 +649,8 @@ onMounted(() => {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: var(--el-fill-color-light);
-  color: var(--el-color-primary);
+  background: var(--gd-color-field-bg);
+  color: var(--gd-color-primary);
   font-size: 13px;
   font-weight: 600;
   flex-shrink: 0;
@@ -669,7 +669,7 @@ onMounted(() => {
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -679,7 +679,7 @@ onMounted(() => {
 .template-foot {
   margin-top: auto;
   font-size: 11px;
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 .task-grid {
@@ -724,12 +724,12 @@ onMounted(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--el-color-success);
+  background: var(--gd-color-success);
   flex-shrink: 0;
 }
 
 .card-dot.paused {
-  background: var(--el-text-color-placeholder);
+  background: var(--gd-color-text-disabled);
 }
 
 .card-title {
@@ -746,12 +746,12 @@ onMounted(() => {
 
 .card-status {
   font-size: 11px;
-  color: var(--el-color-success);
+  color: var(--gd-color-success);
   flex-shrink: 0;
 }
 
 .card-status.paused {
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 .card-menu {
@@ -773,12 +773,12 @@ onMounted(() => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   cursor: pointer;
 }
 
 .card-menu-btn:hover {
-  background: var(--el-fill-color);
+  background: var(--gd-color-field-bg-hover);
 }
 
 .card-prompt {
@@ -786,7 +786,7 @@ onMounted(() => {
   min-height: 40px;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -807,7 +807,7 @@ onMounted(() => {
   gap: 8px;
   min-width: 0;
   font-size: 11px;
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 .card-schedule {
@@ -842,8 +842,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-placeholder);
+  background: var(--gd-color-field-bg);
+  color: var(--gd-color-text-disabled);
 }
 
 .history-rail {
@@ -853,7 +853,7 @@ onMounted(() => {
   bottom: 12px;
   width: 2px;
   border-radius: 999px;
-  background: var(--el-border-color-lighter);
+  background: var(--gd-color-border);
   z-index: 0;
 }
 
@@ -873,7 +873,7 @@ onMounted(() => {
 }
 
 .history-row:hover {
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
 }
 
 .history-dot {
@@ -892,22 +892,22 @@ onMounted(() => {
 }
 
 .history-status.running {
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
+  background: var(--gd-color-primary-100);
+  color: var(--gd-color-primary);
 }
 
 .history-status.failed {
-  background: var(--el-color-danger-light-9);
-  color: var(--el-color-danger);
+  background: var(--gd-color-danger-0f, rgba(245, 108, 108, 0.1));
+  color: var(--gd-color-danger);
 }
 
 .history-status.missed {
-  background: var(--el-color-warning-light-9);
-  color: var(--el-color-warning);
+  background: var(--gd-color-warning-0f, rgba(230, 162, 60, 0.1));
+  color: var(--gd-color-warning);
 }
 
 .history-status.pending {
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-secondary);
+  background: var(--gd-color-field-bg);
+  color: var(--gd-color-text-gray);
 }
 </style>

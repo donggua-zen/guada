@@ -20,9 +20,9 @@
                     <h4 class="text-sm font-medium text-gray-900 dark:text-[#e8e9ed] truncate pr-2">
                         {{ file.displayName }}
                     </h4>
-                    <el-tag size="small" :type="statusType">
+                    <GdTag size="small" :type="statusType">
                         {{ statusText }}
-                    </el-tag>
+                    </GdTag>
                 </div>
                 <p class="text-xs text-gray-500 dark:text-[#8b8d95]">
                     {{ formatSize(file.fileSize) }} · {{ file.fileExtension ? file.fileExtension.toUpperCase() : t('knowledge.file.unknown') }}
@@ -38,7 +38,7 @@
 
         <!-- 进度条 -->
         <div v-if="file.processingStatus === 'processing' || file.processingStatus === 'uploading'" class="mt-2">
-            <el-progress
+            <GdProgress
                 :percentage="file.progressPercentage"
                 :stroke-width="3"
                 :status="file.processingStatus === 'uploading' ? undefined : 'warning'"
@@ -94,6 +94,8 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTag from '@/components/ui/GdTag.vue';
+import GdProgress from '@/components/ui/GdProgress.vue';
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowClockwise12Regular, Delete16Regular } from '@vicons/fluent'

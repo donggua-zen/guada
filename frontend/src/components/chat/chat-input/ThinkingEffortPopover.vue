@@ -2,9 +2,9 @@
   <GdPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="180" :anchor-el="anchorEl">
     <template #header>
       <div class="flex items-center gap-2">
-        <el-icon size="16" class="text-gray-600 dark:text-gray-400">
-          <LightbulbFilament24Regular />
-        </el-icon>
+        
+          <LightbulbFilament24Regular class="text-gray-600 dark:text-gray-400 w-4 h-4"  />
+        
         <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">{{ t('chat.input.thinkingEffortTitle') }}</span>
       </div>
     </template>
@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { ElIcon } from 'element-plus'
+
 import { useI18n } from 'vue-i18n'
 import { LightbulbFilament24Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'

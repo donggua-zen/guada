@@ -10,7 +10,7 @@
   >
     <div class="git-diff-gap-inner">
       <!-- 收起态（gap）：→ 可展开；展开态（gap-close）：→ 旋转 90° = ↓ 可收起（对齐文件树惯例） -->
-      <el-icon :size="12" class="git-diff-gap-icon"><ChevronRight12Regular /></el-icon>
+      <ChevronRight12Regular class="git-diff-gap-icon w-3 h-3"  />
       <span>{{ gapText }}</span>
     </div>
   </div>

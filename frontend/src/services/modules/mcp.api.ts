@@ -40,6 +40,8 @@ export interface McpApi {
 export interface McpConnectionTestResult {
   ok: boolean;
   error?: string;
+  /** spawn ENOENT 归类（镜像后端 mcp-spawn-error.ts）：node/npx 缺失时前端弹安装指引 */
+  reason?: "node_missing" | "npx_missing" | "command_missing";
 }
 
 export const mcpApi: McpApi = {

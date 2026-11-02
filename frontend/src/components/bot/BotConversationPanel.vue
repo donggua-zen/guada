@@ -46,7 +46,7 @@
       <div
         class="w-14 h-14 rounded-full flex items-center justify-center bg-(--gd-color-primary-100) text-(--gd-color-primary)"
       >
-        <el-icon :size="26"><Chat24Regular /></el-icon>
+        <Chat24Regular class="w-[26px] h-[26px]"  />
       </div>
       <p class="text-sm font-medium text-(--gd-color-gray-900) dark:text-(--gd-color-gray-100)">
         {{ t('bot.chat.selectConversation') }}
@@ -59,7 +59,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
 
 import { Chat24Regular } from '@vicons/fluent'

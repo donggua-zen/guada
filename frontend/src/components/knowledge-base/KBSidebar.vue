@@ -6,7 +6,7 @@
             <div class="flex justify-between items-center">
                 <span class="font-semibold text-base text-(--gd-color-text)">{{ t('knowledge.sidebar.title') }}</span>
                 <GdButton type="primary" @click="handleCreate">
-                    <template #icon><Add16Regular /></template>
+                    <template #icon><Add16Regular class="size-4" /></template>
                     {{ t('knowledge.sidebar.create') }}
                 </GdButton>
             </div>
@@ -28,9 +28,9 @@
                 <template v-if="filteredKnowledgeBases.length === 0">
                     <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
                         <div class="empty-state-icon mb-3 text-gray-300">
-                            <el-icon size="32">
-                                <Add24Regular />
-                            </el-icon>
+                            
+                                <Add24Regular class="w-8 h-8"  />
+                            
                         </div>
                         <div class="empty-state-title text-sm font-medium mb-1">
                             {{ searchKeyword ? t('knowledge.sidebar.notFound') : t('knowledge.sidebar.empty') }}
@@ -69,9 +69,9 @@
                                     </DropdownMenuItem>
                                 </template>
                                 <div @click.stop class="kb-action-trigger">
-                                    <el-icon class="w-4 h-4">
-                                        <MoreHorizontal16Filled />
-                                    </el-icon>
+                                    
+                                        <MoreHorizontal16Filled class="w-4 h-4"  />
+                                    
                                 </div>
                             </DropdownMenu>
                         </div>
@@ -156,25 +156,6 @@ function handleDropdownCommand(command: string, kb: KnowledgeBase) {
 
 <style scoped>
 /* 搜索框样式 */
-.search-box :deep(.el-input__wrapper) {
-    background-color: var(--gd-color-surface);
-    border-radius: 8px;
-    box-shadow: 0 0 0 1px var(--gd-color-border) inset;
-    padding: 6px 12px;
-    transition: all 0.2s ease;
-}
-
-.search-box :deep(.el-input__wrapper:hover) {
-    box-shadow: 0 0 0 1px var(--gd-color-primary-300) inset;
-}
-
-.search-box :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--gd-color-primary) inset;
-}
-
-.search-box :deep(.el-input__inner) {
-    font-size: 13px;
-}
 
 /* 知识库列表项样式 - 参考 ChatSidebar.vue */
 .kb-item {
@@ -257,12 +238,5 @@ function handleDropdownCommand(command: string, kb: KnowledgeBase) {
 }
 
 /* 滚动条美化 - 参考 ChatSidebar.vue */
-.kb-sidebar :deep(.el-scrollbar__bar) {
-    opacity: 0.6;
-    transition: opacity 0.2s;
-}
 
-.kb-sidebar :deep(.el-scrollbar__bar:hover) {
-    opacity: 1;
-}
 </style>

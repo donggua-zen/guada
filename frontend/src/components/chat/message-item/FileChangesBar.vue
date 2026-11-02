@@ -115,8 +115,8 @@ function dirPath(filePath: string): string {
   width: 20px;
   height: 20px;
   border-radius: 5px;
-  background: var(--el-fill-color);
-  color: var(--el-text-color-secondary);
+  background: var(--gd-color-field-bg-hover);
+  color: var(--gd-color-text-gray);
   flex-shrink: 0;
 }
 
@@ -132,7 +132,7 @@ function dirPath(filePath: string): string {
      行盒高度又会把整行/后续内容顶到小数 y 上 */
   line-height: 20px;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  color: var(--gd-color-text);
   flex: 1;
 }
 
@@ -144,7 +144,7 @@ function dirPath(filePath: string): string {
 }
 
 .fcb__chevron {
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   transition: transform 0.2s ease;
   flex-shrink: 0;
 }
@@ -154,11 +154,11 @@ function dirPath(filePath: string): string {
 }
 
 .fcb__added {
-  color: var(--el-color-success);
+  color: var(--gd-color-success);
 }
 
 .fcb__removed {
-  color: var(--el-color-danger);
+  color: var(--gd-color-danger);
 }
 
 .fcb__list {
@@ -176,14 +176,14 @@ function dirPath(filePath: string): string {
 }
 
 .fcb__file-row:hover {
-  background: var(--el-fill-color);
+  background: var(--gd-color-field-bg-hover);
 }
 
 .fcb__file-path {
   font-size: 13px;
   /* 整数行高：同上，13px 字号的继承行高是 19.5px */
   line-height: 20px;
-  color: var(--el-text-color-primary);
+  color: var(--gd-color-text);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -195,13 +195,13 @@ function dirPath(filePath: string): string {
 }
 
 .fcb__file-path.is-link:hover {
-  color: var(--el-color-primary);
+  color: var(--gd-color-primary);
   text-decoration: underline;
 }
 
 .fcb__file-dir {
   font-size: 12px;
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

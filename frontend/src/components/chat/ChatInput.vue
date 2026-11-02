@@ -21,21 +21,21 @@
       <!-- 已选知识库 + 附加连接标签显示区域（同一排） -->
       <div class="kb-list flex flex-wrap gap-2 mb-1.5 mx-1.5"
         v-if="selectedKnowledgeBases.length > 0 || selectedAttachmentTags.length > 0">
-        <el-tag v-for="kb in selectedKnowledgeBases" :key="`kb-${kb.id}`"
+        <GdTag v-for="kb in selectedKnowledgeBases" :key="`kb-${kb.id}`"
           :closable="!props.readonly && !props.configLocked" type="info"
           @close="removeKnowledgeBase(kb.id)" class="text-xs">
           <span class="flex items-center gap-1">
             <BookSearch24Regular class="w-3.5 h-3.5" />
             {{ kb.name }}
           </span>
-        </el-tag>
-        <el-tag v-for="tag in selectedAttachmentTags" :key="`att-${tag.typeId}-${tag.id}`" closable type="info"
+        </GdTag>
+        <GdTag v-for="tag in selectedAttachmentTags" :key="`att-${tag.typeId}-${tag.id}`" closable type="info"
           @close="removeAttachmentTag(tag.typeId, tag.id)" class="text-xs">
           <span class="flex items-center gap-1">
             <Cloud24Regular class="w-3.5 h-3.5" />
             {{ tag.name }}
           </span>
-        </el-tag>
+        </GdTag>
       </div>
 
       <!-- Tiptap 编辑器（替换 textarea） -->
@@ -88,7 +88,7 @@
                 <span class="plan-mode-label text-xs font-medium">{{ t('chat.input.planMode') }}</span>
               </button>
             </GdTooltip>
-            <!-- <el-divider direction="vertical"></el-divider> -->
+            <!-- <GdDivider direction="vertical"></GdDivider> -->
           </template>
 
 
@@ -160,7 +160,7 @@
 import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElTag } from 'element-plus';
+
 import type { Model, ModelProvider } from '@/types/api'
 import type { UploadResponse } from '@/types/service'
 import type { ChatFileView } from '@/types/session'
@@ -192,6 +192,7 @@ import {
 import { apiService } from '@/services/ApiService';
 import { useCapabilitiesStore } from '@/stores/capabilities';
 import GdButton from '@/components/ui/GdButton.vue';
+import GdTag from '@/components/ui/GdTag.vue';
 import { toast } from '@/components/ui/toastService';
 
 
@@ -1735,7 +1736,7 @@ defineExpose({ insertText, insertBadge });
 :deep(.message-editor .ProseMirror p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder);
   float: left;
-  color: var(--el-text-color-placeholder, #a8abb2);
+  color: var(--gd-color-text-disabled);
   pointer-events: none;
   height: 0;
 }

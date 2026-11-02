@@ -9,7 +9,7 @@
           <Avatar v-if="currentAgent" :src="currentAgent.avatarUrl || undefined" :name="currentAgent.name"
             type="assistant" :round="false" class="w-4 h-4 shrink-0" />
           <span class="identity-text">{{ currentAgent ? currentAgent.name : t('scheduler.composer.agentPlaceholder') }}</span>
-          <el-icon :size="12"><ChevronDown16Regular /></el-icon>
+          <ChevronDown16Regular class="w-3 h-3"  />
         </button>
         <AgentSelectorPopover :show="agentPopoverVisible" :anchor-el="agentButtonRef" :agents="agents"
           :current-agent-id="modelValue.agentId || null" @update:show="agentPopoverVisible = $event"
@@ -19,7 +19,7 @@
       <span class="identity-label">{{ isNewSession ? '' : t('scheduler.composer.sendTo') }}</span>
       <button ref="outputButtonRef" type="button" class="identity-pill" @click.stop="toggleOutputPopover">
         <span class="identity-text">{{ outputLabel }}</span>
-        <el-icon :size="12"><ChevronDown16Regular /></el-icon>
+        <ChevronDown16Regular class="w-3 h-3"  />
       </button>
       <GdPopover :show="outputPopoverVisible" @update:show="outputPopoverVisible = $event" :width="340"
         :anchor-el="outputButtonRef">
@@ -29,7 +29,7 @@
             <span class="option-title">{{ t('scheduler.composer.outputIndependent') }}</span>
             <span class="option-desc">{{ t('scheduler.composer.outputIndependentHint') }}</span>
           </div>
-          <el-icon v-if="outputTarget === 'independent'" :size="14"><Checkmark16Filled /></el-icon>
+          <Checkmark16Filled class="w-3.5 h-3.5" v-if="outputTarget === 'independent'"  />
         </button>
         <button type="button" class="option-row" :class="{ active: outputTarget === 'merged' }"
           @click="setOutputTarget('merged')">
@@ -37,7 +37,7 @@
             <span class="option-title">{{ t('scheduler.composer.outputMerged') }}</span>
             <span class="option-desc">{{ t('scheduler.composer.outputMergedHint') }}</span>
           </div>
-          <el-icon v-if="outputTarget === 'merged'" :size="14"><Checkmark16Filled /></el-icon>
+          <Checkmark16Filled class="w-3.5 h-3.5" v-if="outputTarget === 'merged'"  />
         </button>
         <button type="button" class="option-row" :class="{ active: outputTarget === 'existing' }"
           @click="setOutputTarget('existing')">
@@ -45,21 +45,21 @@
             <span class="option-title">{{ t('scheduler.composer.outputExisting') }}</span>
             <span class="option-desc">{{ t('scheduler.composer.outputExistingHint') }}</span>
           </div>
-          <el-icon v-if="outputTarget === 'existing'" :size="14"><Checkmark16Filled /></el-icon>
+          <Checkmark16Filled class="w-3.5 h-3.5" v-if="outputTarget === 'existing'"  />
         </button>
 
         <div v-if="outputTarget === 'existing'" class="session-picker">
           <GdInput :model-value="sessionKeyword" size="small" :placeholder="t('scheduler.composer.searchSession')"
             clearable @update:model-value="handleSessionSearch">
             <template #prefix>
-              <el-icon :size="14"><Search16Regular /></el-icon>
+              <Search16Regular class="w-3.5 h-3.5"  />
             </template>
           </GdInput>
           <div class="session-list">
             <button v-for="session in sessionOptions" :key="session.id" type="button" class="session-row"
               :class="{ active: session.id === modelValue.targetSessionId }" @click="selectSession(session)">
               <span class="session-title">{{ session.title || session.id }}</span>
-              <el-icon v-if="session.id === modelValue.targetSessionId" :size="14"><Checkmark16Filled /></el-icon>
+              <Checkmark16Filled class="w-3.5 h-3.5" v-if="session.id === modelValue.targetSessionId"  />
             </button>
             <div v-if="sessionOptions.length === 0" class="session-empty">
               {{ sessionsLoading ? t('common.loading') : t('scheduler.composer.noSessions') }}
@@ -74,9 +74,9 @@
       <div v-if="isNewSession" class="composer-context">
         <button ref="workspaceButtonRef" type="button" class="context-pill"
           @click.stop="workspacePopoverVisible = !workspacePopoverVisible">
-          <el-icon :size="14"><FolderOpen24Regular /></el-icon>
+          <FolderOpen24Regular class="w-3.5 h-3.5"  />
           <span class="pill-label">{{ t('scheduler.composer.workspacePrefix') }}{{ displayWorkspacePath }}</span>
-          <el-icon :size="12"><ChevronUpDown16Regular /></el-icon>
+          <ChevronUpDown16Regular class="w-3 h-3"  />
         </button>
         <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef"
           :current-workspace-path="modelValue.workspacePath || null" :public-path="publicPath"
@@ -97,12 +97,10 @@
           <template v-if="isNewSession">
             <button ref="permissionButtonRef" type="button" class="composer-pill"
               :class="{ 'pill-warn': modelValue.unattended }" @click.stop="permissionPopoverVisible = !permissionPopoverVisible">
-              <el-icon :size="14">
-                <ShieldError16Regular v-if="modelValue.unattended" />
-                <ShieldLock24Regular v-else />
-              </el-icon>
+              <span class="w-3.5 h-3.5"><ShieldError16Regular v-if="modelValue.unattended" />
+                <ShieldLock24Regular v-else /></span>
               <span class="pill-label">{{ modelValue.unattended ? t('scheduler.composer.unattended') : t('scheduler.composer.confirmEach') }}</span>
-              <el-icon :size="12"><ChevronUpDown16Regular /></el-icon>
+              <ChevronUpDown16Regular class="w-3 h-3"  />
             </button>
             <GdPopover :show="permissionPopoverVisible" @update:show="permissionPopoverVisible = $event" :width="280"
               :anchor-el="permissionButtonRef">
@@ -111,14 +109,14 @@
                   <span class="option-title">{{ t('scheduler.composer.unattended') }}</span>
                   <span class="option-desc">{{ t('scheduler.composer.unattendedHint') }}</span>
                 </div>
-                <el-icon v-if="modelValue.unattended" :size="14"><Checkmark16Filled /></el-icon>
+                <Checkmark16Filled class="w-3.5 h-3.5" v-if="modelValue.unattended"  />
               </button>
               <button type="button" class="option-row" :class="{ active: !modelValue.unattended }" @click="setUnattended(false)">
                 <div class="option-text">
                   <span class="option-title">{{ t('scheduler.composer.confirmEach') }}</span>
                   <span class="option-desc">{{ t('scheduler.composer.confirmEachHint') }}</span>
                 </div>
-                <el-icon v-if="!modelValue.unattended" :size="14"><Checkmark16Filled /></el-icon>
+                <Checkmark16Filled class="w-3.5 h-3.5" v-if="!modelValue.unattended"  />
               </button>
             </GdPopover>
           </template>
@@ -132,7 +130,7 @@
               class="w-4 h-4 shrink-0" />
             <span class="pill-label">{{ modelButtonLabel }}</span>
             <span v-if="displayThinkingEffort" class="thinking-label">{{ getThinkingEffortLabelWithKey(displayThinkingEffort) }}</span>
-            <el-icon :size="12"><ChevronDown16Regular /></el-icon>
+            <ChevronDown16Regular class="w-3 h-3"  />
           </button>
           <ModelSelectorPanel v-model:visible="modelPopoverVisible" :anchor-el="modelButtonRef" :models="models"
             :providers="providers" :current-model-id="modelValue.modelId || null"
@@ -155,7 +153,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus';
+
 import {
   Checkmark16Filled,
   ChevronDown16Regular,
@@ -407,7 +405,7 @@ onMounted(() => {
 
 .identity-label {
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   white-space: nowrap;
 }
 
@@ -428,7 +426,7 @@ onMounted(() => {
 }
 
 .identity-pill:hover {
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
 }
 
 .identity-text {
@@ -439,7 +437,7 @@ onMounted(() => {
 
 .identity-arrow {
   font-size: 12px;
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 /* 工作目录 + 远程目录：对齐聊天输入框顶部 */
@@ -461,7 +459,7 @@ onMounted(() => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -469,13 +467,13 @@ onMounted(() => {
 }
 
 .context-pill:hover {
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
   color: var(--gd-color-text);
 }
 
 /* 远程目录按钮自带 primary 文字色，这里统一成和工作目录一致的次要色 */
 .composer-context :deep(.workspace-btn) {
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   font-size: 12px;
   font-weight: 500;
 }
@@ -487,33 +485,19 @@ onMounted(() => {
 .composer-shell {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--gd-color-input-border, var(--el-border-color));
+  border: 1px solid var(--gd-color-input-border, var(--gd-color-border));
   border-radius: var(--gd-size-rounded-radius, 12px);
-  background: var(--gd-color-input-bg, var(--el-fill-color-blank));
+  background: var(--gd-color-input-bg, var(--gd-color-surface));
   transition: border-color 0.15s ease;
 }
 
 .composer-shell:focus-within {
-  border-color: var(--el-color-primary);
+  border-color: var(--gd-color-primary);
 }
 
 .composer-shell.has-error {
-  border-color: var(--el-color-danger);
-  box-shadow: 0 0 0 2px var(--el-color-danger-light-8);
-}
-
-.composer-textarea :deep(.el-textarea__inner) {
-  box-shadow: none !important;
-  background: transparent;
-  border: none;
-  padding: 12px 14px 6px;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--gd-color-text);
-}
-
-.composer-textarea :deep(.el-textarea__inner)::placeholder {
-  color: var(--el-text-color-placeholder);
+  border-color: var(--gd-color-danger);
+  box-shadow: 0 0 0 2px var(--gd-color-danger-0f, rgba(245, 108, 108, 0.1));
 }
 
 .composer-toolbar {
@@ -542,7 +526,7 @@ onMounted(() => {
   padding: 0 9px;
   border: none;
   border-radius: 999px;
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
   color: var(--gd-color-text);
   font-size: 12px;
   cursor: pointer;
@@ -550,11 +534,11 @@ onMounted(() => {
 }
 
 .composer-pill:hover {
-  background: var(--el-fill-color);
+  background: var(--gd-color-field-bg-hover);
 }
 
 .pill-warn {
-  color: var(--el-color-warning);
+  color: var(--gd-color-warning);
 }
 
 .pill-label {
@@ -564,7 +548,7 @@ onMounted(() => {
 }
 
 .thinking-label {
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
   font-size: 11px;
 }
 
@@ -588,11 +572,11 @@ onMounted(() => {
 }
 
 .option-row:hover {
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
 }
 
 .option-row.active {
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
 }
 
 .option-text {
@@ -610,7 +594,7 @@ onMounted(() => {
 .option-desc {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 
 .session-picker {
@@ -619,7 +603,7 @@ onMounted(() => {
   gap: 6px;
   margin-top: 6px;
   padding-top: 8px;
-  border-top: 1px solid var(--el-border-color-lighter);
+  border-top: 1px solid var(--gd-color-border);
 }
 
 .session-list {
@@ -647,7 +631,7 @@ onMounted(() => {
 
 .session-row:hover,
 .session-row.active {
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
 }
 
 .session-title {
@@ -660,7 +644,7 @@ onMounted(() => {
   padding: 10px 8px;
   text-align: center;
   font-size: 12px;
-  color: var(--el-text-color-placeholder);
+  color: var(--gd-color-text-disabled);
 }
 
 .composer-hint,
@@ -669,15 +653,15 @@ onMounted(() => {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 
 .composer-prompt-error {
   padding: 0 14px 6px;
-  color: var(--el-color-danger);
+  color: var(--gd-color-danger);
 }
 
 .composer-error {
-  color: var(--el-color-danger);
+  color: var(--gd-color-danger);
 }
 </style>

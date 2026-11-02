@@ -206,12 +206,12 @@ onUnmounted(() => {
 
 .sidebar-resize-handle:hover::after,
 .sidebar-resize-handle--active::after {
-  background-color: var(--el-color-primary-light-8, #d9ecff);
+  background-color: var(--gd-color-primary-200);
 }
 
 .dark .sidebar-resize-handle:hover::after,
 .dark .sidebar-resize-handle--active::after {
-  background-color: var(--el-color-primary-light-8, #4a4d55);
+  background-color: var(--gd-color-primary-200);
 }
 
 /* 拖拽时全屏遮罩，阻止下层元素收到 hover/mousemove */

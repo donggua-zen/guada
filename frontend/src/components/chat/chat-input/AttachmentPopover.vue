@@ -4,17 +4,17 @@
     <div class="att-popover">
       <!-- 上传图片 -->
       <div class="att-item" @click="$emit('select-image')">
-        <el-icon size="16" class="att-item-icon shrink-0">
-          <Image24Regular />
-        </el-icon>
+        
+          <Image24Regular class="att-item-icon shrink-0 w-4 h-4"  />
+        
         <span class="att-item-name">{{ t('chat.input.uploadImage') }}</span>
       </div>
 
       <!-- 上传文件 -->
       <div class="att-item" @click="$emit('select-file')">
-        <el-icon size="16" class="att-item-icon shrink-0">
-          <Attach24Regular />
-        </el-icon>
+        
+          <Attach24Regular class="att-item-icon shrink-0 w-4 h-4"  />
+        
         <span class="att-item-name">{{ t('chat.input.uploadFile') }}</span>
       </div>
 
@@ -28,7 +28,7 @@
           </div>
           <div v-for="kb in knowledgeBases" :key="kb.id"
             class="att-kb-item" @click="$emit('toggle-kb', kb.id)">
-            <el-checkbox :model-value="selectedKbIds.includes(kb.id)" @click.stop size="small" />
+            <GdCheckbox :model-value="selectedKbIds.includes(kb.id)" @click.stop size="small" />
             <div class="flex-1 min-w-0">
               <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ kb.name }}</div>
               <div v-if="kb.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ kb.description }}</div>
@@ -47,7 +47,7 @@
           </div>
           <div v-for="item in (attType._items || [])" :key="item.id"
             class="att-kb-item" @click="toggleAttachment(attType.id, item.id)">
-            <el-checkbox :model-value="isAttachmentSelected(attType.id, item.id)" @click.stop size="small" />
+            <GdCheckbox :model-value="isAttachmentSelected(attType.id, item.id)" @click.stop size="small" />
             <div class="flex-1 min-w-0">
               <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ item.name }}</div>
               <div v-if="item.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ item.description }}</div>
@@ -61,12 +61,13 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ElIcon, ElCheckbox } from 'element-plus';
+
 import { useI18n } from 'vue-i18n'
 import { Image24Regular, Attach24Regular } from '@vicons/fluent';
 import GdPopover from '../../ui/GdPopover.vue';
 import { apiService } from '@/services/ApiService';
 import type { AttachmentTypeInfo, AttachmentItem } from '@/services/modules/plugin.api';
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
 
 const { t } = useI18n()
 

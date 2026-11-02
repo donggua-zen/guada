@@ -15,22 +15,10 @@
                             <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
                         </svg>
                     </span>
-                    <span v-else class="gd-toast__icon flex shrink-0 items-center" :class="iconClass(item.type)">
-                        <svg v-if="item.type === 'success'" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10" stroke-width="2" />
-                            <path d="m8.5 12.5 2.5 2.5 5-5.5" />
-                        </svg>
-                        <svg v-else-if="item.type === 'error'" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10" stroke-width="2" />
-                            <path d="M15 9l-6 6M9 9l6 6" />
-                        </svg>
-                        <svg v-else-if="item.type === 'warning'" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke-width="2" />
-                            <path d="M12 9v4M12 17h.01" />
-                        </svg>
-                        <svg v-else class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10" stroke-width="2" />
-                            <path d="M12 16v-4M12 8h.01" />
+                    <span v-else class="gd-toast__icon flex shrink-0 items-center" :class="semanticIconClass[item.type]">
+                        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path v-for="(d, i) in semanticIconPaths[item.type]" :key="i" :d="d" />
                         </svg>
                     </span>
                     <div class="min-w-0">
@@ -50,16 +38,8 @@
     </Teleport>
 </template>
 <script setup lang="ts">
-import { toastStack, dismissToast, type ToastType } from './toastService';
-
-/** 语义色图标：与 GdDialogHost 的弹窗图标配色同一套 token；loading 用 spinner 不走此映射 */
-const iconClass = (type: ToastType): string => ({
-    success: 'text-[var(--gd-color-success)]',
-    error: 'text-[var(--gd-color-danger)]',
-    warning: 'text-[var(--gd-color-warning)]',
-    info: 'text-[var(--gd-color-info)]',
-    loading: '',
-}[type] ?? '');
+import { toastStack, dismissToast } from './toastService';
+import { semanticIconClass, semanticIconPaths } from './semanticIcons';
 </script>
 <style scoped>
 /* 进出场：从上方 8px 落下 / 收回，堆栈上移用 move 过渡 */

@@ -14,7 +14,7 @@
                         <div class="text-xs text-(--gd-color-text-secondary)">{{ feedbackLink.url }}</div>
                     </div>
                 </div>
-                <el-icon class="text-(--gd-color-text-secondary)"><Link16Regular /></el-icon>
+                <Link16Regular class="text-(--gd-color-text-secondary) size-4"  />
             </div>
             <div class="flex flex-wrap justify-center gap-8">
                 <!-- QQ 群 -->
@@ -58,7 +58,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElIcon } from 'element-plus';
+
 import GdButton from '@/components/ui/GdButton.vue';
 
 import { Link16Regular } from '@vicons/fluent'

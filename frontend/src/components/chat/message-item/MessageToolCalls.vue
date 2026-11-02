@@ -25,8 +25,8 @@
           </span>
           <!-- diff 类工具的增删行数徽章 -->
           <span v-if="rendererStat(toolIndex)" class="ml-2 shrink-0 font-mono text-xs flex items-center gap-1.5">
-            <span v-if="rendererStat(toolIndex)!.added" style="color: var(--el-color-success)">+{{ rendererStat(toolIndex)!.added }}</span>
-            <span v-if="rendererStat(toolIndex)!.removed" style="color: var(--el-color-danger)">−{{ rendererStat(toolIndex)!.removed }}</span>
+            <span v-if="rendererStat(toolIndex)!.added" style="color: var(--gd-color-success)">+{{ rendererStat(toolIndex)!.added }}</span>
+            <span v-if="rendererStat(toolIndex)!.removed" style="color: var(--gd-color-danger)">−{{ rendererStat(toolIndex)!.removed }}</span>
           </span>
         </div>
         <!-- 子代理工具：打开对应子代理会话的面板（点击不触发行展开；
@@ -398,13 +398,13 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   align-items: center;
   justify-content: center;
   margin-left: 8px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   cursor: pointer;
   transition: color 0.15s ease;
 }
 
 .open-subagent-btn:hover {
-  color: var(--el-color-primary);
+  color: var(--gd-color-primary);
 }
 
 /* 内联结果区：统一卡片容器（边框 + 圆角 + 微透明表面底色）区分展开内容与正文；
@@ -416,7 +416,7 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   margin-top: 4px;
   margin-left: 22px;
   padding: 4px var(--tool-card-pad-x);
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--gd-color-border);
   border-radius: 4px;
   /* 微微透明：透出下方正文一点底色，视觉更轻 */
   background: color-mix(in srgb, var(--gd-color-surface) 80%, transparent);
@@ -442,7 +442,7 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   margin-bottom: 4px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   word-break: break-all;
 }
 
@@ -466,12 +466,12 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   flex-shrink: 0;
   width: 3em;
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
   user-select: none;
 }
 
 .io-divider {
-  border-top: 1px solid var(--el-border-color-lighter);
+  border-top: 1px solid var(--gd-color-border);
   /* 与 .io-content 的右侧留白对齐，分割线不顶到卡片边框 */
   margin-right: var(--tool-card-pad-x);
 }
@@ -483,7 +483,7 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   /* 滚动区已满铺，右侧留白收在正文上（保证换行位置与改动前一致） */
   padding-right: var(--tool-card-pad-x);
   font-size: 12px;
-  color: var(--el-text-color-regular);
+  color: var(--gd-color-text);
 }
 
 .tool-result-inline pre {
@@ -518,6 +518,6 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   gap: 2px;
   margin-left: 8px;
   font-size: 12px;
-  color: var(--el-text-color-secondary);
+  color: var(--gd-color-text-gray);
 }
 </style>

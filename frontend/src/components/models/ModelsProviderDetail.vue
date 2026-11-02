@@ -5,13 +5,13 @@
       <div class="flex items-center gap-3 min-w-0">
         <GdButton link @click="$emit('back')"
           class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--gd-color-primary) font-medium shrink-0">
-          <el-icon :size="20"><ChevronLeft20Regular /></el-icon>
+          <ChevronLeft20Regular class="w-5 h-5"  />
           <span>{{ t('settings.providerDetail.back') }}</span>
         </GdButton>
         <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed] truncate">{{ provider?.name }}</h1>
       </div>
       <GdButton @click="handleAddModel">
-        <template #icon><Add16Regular /></template>
+        <template #icon><Add16Regular class="size-4" /></template>
         {{ t('settings.providerDetail.addModel') }}
       </GdButton>
     </div>
@@ -21,14 +21,14 @@
       <div class="px-4 pb-4 w-full md:max-w-220 md:mx-auto">
         <!-- 空状态 -->
         <div v-if="models.length === 0" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
-          <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
-            <Box16Regular />
-          </el-icon>
+          
+            <Box16Regular class="text-gray-300 dark:text-[#3e4046] mb-3 w-12 h-12" mx-auto  />
+          
           <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ t('settings.providerDetail.noModels') }}</p>
           <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ t('settings.providerDetail.noModelsDesc') }}</p>
           <div class="flex justify-center gap-3 mt-6">
             <GdButton type="primary" @click="handleAddModel">
-              <template #icon><Add16Regular /></template>
+              <template #icon><Add16Regular class="size-4" /></template>
               {{ t('settings.providerDetail.addModel') }}
             </GdButton>
           </div>
@@ -54,23 +54,19 @@
                       <div class="flex items-center gap-0.5">
                         <template v-for="cap in (model.config?.inputCapabilities || [])" :key="'in-' + cap">
                           <GdTooltip :content="t('settings.providerDetail.input') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
-                            <el-icon class="hover:text-primary transition-colors" :size="16">
-                              <TextT24Regular v-if="cap === 'text'" />
-                              <Image24Regular v-else-if="cap === 'image'" />
-                            </el-icon>
+                            <span class="hover:text-primary transition-colors w-4 h-4"><TextT24Regular v-if="cap === 'text'" />
+                              <Image24Regular v-else-if="cap === 'image'" /></span>
                           </GdTooltip>
                         </template>
                       </div>
-                      <el-icon class="text-gray-300 dark:text-[#3e4046] mx-0.5" :size="12">
-                        <ArrowRight24Regular />
-                      </el-icon>
+                      
+                        <ArrowRight24Regular class="text-gray-300 dark:text-[#3e4046] mx-0.5 w-3 h-3"  />
+                      
                       <div class="flex items-center gap-0.5">
                         <template v-for="cap in (model.config?.outputCapabilities || [])" :key="'out-' + cap">
                           <GdTooltip :content="t('settings.providerDetail.output') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
-                            <el-icon class="hover:text-primary transition-colors" :size="16">
-                              <TextT24Regular v-if="cap === 'text'" />
-                              <Image24Regular v-else-if="cap === 'image'" />
-                            </el-icon>
+                            <span class="hover:text-primary transition-colors w-4 h-4"><TextT24Regular v-if="cap === 'text'" />
+                              <Image24Regular v-else-if="cap === 'image'" /></span>
                           </GdTooltip>
                         </template>
                       </div>
@@ -78,18 +74,16 @@
                         <span class="w-px h-3 bg-gray-200 dark:bg-[#2e3035] mx-1"></span>
                         <template v-for="feature in (model.config?.features || [])" :key="feature">
                           <GdTooltip :content="getLableName(feature)" placement="top">
-                            <el-icon class="hover:text-primary transition-colors" :size="16">
-                              <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                              <Beaker16Regular v-else />
-                            </el-icon>
+                            <span class="hover:text-primary transition-colors w-4 h-4"><WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                              <Beaker16Regular v-else /></span>
                           </GdTooltip>
                         </template>
                         <!-- 思考能力判据是档位菜单（空 = 不能思考） -->
                         <GdTooltip v-if="(model.thinkingEfforts?.length ?? 0) > 0" :content="getLableName('thinking')"
                           placement="top">
-                          <el-icon class="hover:text-primary transition-colors" :size="16">
-                            <LightbulbFilament24Regular />
-                          </el-icon>
+                          
+                            <LightbulbFilament24Regular class="hover:text-primary transition-colors w-4 h-4"  />
+                          
                         </GdTooltip>
                       </template>
                     </div>
@@ -99,12 +93,12 @@
               <div class="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity shrink-0">
                 <GdSwitch v-model="model.isActive" :active-text="t('common.enabled')" :inactive-text="t('common.disabled')"
                   @change="handleToggleModelActive(model)" inline-prompt size="small" />
-                <GdButton link style="font-size: 18px; color: var(--el-text-color-secondary)"
+                <GdButton link style="font-size: 18px; color: var(--gd-color-text-gray)"
                   @click="handleEditClick(model)">
-                  <el-icon><Settings16Regular /></el-icon>
+                  <Settings16Regular class="size-4"  />
                 </GdButton>
                 <GdButton type="danger" link style="font-size: 18px" @click="handleDeleteClick(model)">
-                  <el-icon><SubtractCircle16Regular /></el-icon>
+                  <SubtractCircle16Regular class="size-4"  />
                 </GdButton>
               </div>
             </li>
@@ -117,11 +111,10 @@
     <GdDialog v-model="showEditModal" :title="isEditMode ? t('settings.providerDetail.editModelInfo') : t('settings.providerDetail.newModel')" size="md" align-center
       class="model-edit-dialog dialog-with-scroll" append-to-body>
       <div class="dialog-content">
-        <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
-          label-width="120px" size="default">
+        <div class="flex flex-col gap-3">
 
           <div class="form-section">
-            <el-form-item :label="t('settings.providerDetail.modelName')" prop="modelName">
+            <GdFormField :label="t('settings.providerDetail.modelName')" label-width="120px" :error="errors.modelName">
               <div class="api-key-input-wrapper">
                 <GdInput v-model="editModelForm.modelName" :placeholder="t('settings.providerDetail.modelNamePlaceholder')" clearable
                   :disabled="isEditMode" />
@@ -135,113 +128,74 @@
               </div>
               <!-- 预设检测提示 -->
               <div v-if="!isEditMode && matchedPreset" class="preset-hint" @click="applyPreset(matchedPreset)">
-                <el-icon class="mr-1"><Wand16Regular /></el-icon>
+                <Wand16Regular class="mr-1 size-4"  />
                 {{ t('settings.providerDetail.presetDetected', { label: matchedPreset.label }) }}
               </div>
-            </el-form-item>
+            </GdFormField>
 
-            <el-form-item :label="t('settings.providerDetail.modelType')" prop="modelType">
-              <el-radio-group v-model="editModelForm.modelType">
-                <el-radio-button value="text">
-                  <span class="gd-option">
-                    <span class="gd-option__mark gd-option__mark--radio"></span>
-                    <el-icon class="gd-option__icon"><TextT24Regular /></el-icon>
-                    <span class="gd-option__label">{{ t('settings.providerDetail.chatModel') }}</span>
-                  </span>
-                </el-radio-button>
-                <el-radio-button value="embedding">
-                  <span class="gd-option">
-                    <span class="gd-option__mark gd-option__mark--radio"></span>
-                    <el-icon class="gd-option__icon"><Group24Regular /></el-icon>
-                    <span class="gd-option__label">{{ t('settings.providerDetail.embeddingModel') }}</span>
-                  </span>
-                </el-radio-button>
-              </el-radio-group>
-            </el-form-item>
+            <GdFormField :label="t('settings.providerDetail.modelType')" label-width="120px" :error="errors.modelType">
+              <GdSegmented v-model="editModelForm.modelType" :options="modelTypeOptions" />
+            </GdFormField>
           </div>
 
           <!-- 对话模型配置 -->
           <div v-if="editModelForm.modelType === 'text'" class="transition-all">
-            <el-form-item :label="t('settings.providerDetail.inputCapabilities')" prop="config.inputCapabilities" class="mb-3">
-              <el-checkbox-group v-model="editModelForm.config.inputCapabilities">
-                <el-checkbox-button value="text" disabled>
-                  <span class="gd-option">
-                    <span class="gd-option__mark"></span>
-                    <el-icon class="gd-option__icon"><TextT24Regular /></el-icon>
-                    <span class="gd-option__label">{{ t('settings.providerDetail.text') }}</span>
+            <GdFormField :label="t('settings.providerDetail.inputCapabilities')" label-width="120px" class="mb-3" :error="errors.config_inputCapabilities">
+              <GdCheckboxGroup v-model="editModelForm.config.inputCapabilities">
+                <GdCheckbox :model-value="editModelForm.config.inputCapabilities?.includes('text')" disabled>
+                  <span class="flex items-center gap-2">
+                    <TextT24Regular class="size-4"  />
+                    <span class="text-[13px] leading-none">{{ t('settings.providerDetail.text') }}</span>
                     <GdTooltip :content="t('settings.providerDetail.capabilityLocked')" placement="top">
-                      <el-icon class="gd-option__lock"><LockClosed16Regular /></el-icon>
+                      <LockClosed16Regular class="size-4 text-[var(--gd-color-text-disabled)]"  />
                     </GdTooltip>
                   </span>
-                </el-checkbox-button>
-                <el-checkbox-button value="image">
-                  <span class="gd-option">
-                    <span class="gd-option__mark"></span>
-                    <el-icon class="gd-option__icon"><Image24Regular /></el-icon>
-                    <span class="gd-option__label">{{ t('settings.providerDetail.image') }}</span>
+                </GdCheckbox>
+                <GdCheckbox :model-value="editModelForm.config.inputCapabilities?.includes('image')">
+                  <span class="flex items-center gap-2">
+                    <Image24Regular class="size-4"  />
+                    <span class="text-[13px] leading-none">{{ t('settings.providerDetail.image') }}</span>
                   </span>
-                </el-checkbox-button>
-              </el-checkbox-group>
-            </el-form-item>
+                </GdCheckbox>
+              </GdCheckboxGroup>
+            </GdFormField>
 
-            <el-form-item :label="t('settings.providerDetail.outputCapabilities')" prop="config.outputCapabilities" class="mb-3">
-              <el-checkbox-group v-model="editModelForm.config.outputCapabilities">
-                <el-checkbox-button value="text" disabled>
-                  <span class="gd-option">
-                    <span class="gd-option__mark"></span>
-                    <el-icon class="gd-option__icon"><TextT24Regular /></el-icon>
-                    <span class="gd-option__label">{{ t('settings.providerDetail.text') }}</span>
+            <GdFormField :label="t('settings.providerDetail.outputCapabilities')" label-width="120px" class="mb-3" :error="errors.config_outputCapabilities">
+              <GdCheckboxGroup v-model="editModelForm.config.outputCapabilities">
+                <GdCheckbox :model-value="editModelForm.config.outputCapabilities?.includes('text')" disabled>
+                  <span class="flex items-center gap-2">
+                    <TextT24Regular class="size-4"  />
+                    <span class="text-[13px] leading-none">{{ t('settings.providerDetail.text') }}</span>
                     <GdTooltip :content="t('settings.providerDetail.capabilityLocked')" placement="top">
-                      <el-icon class="gd-option__lock"><LockClosed16Regular /></el-icon>
+                      <LockClosed16Regular class="size-4 text-[var(--gd-color-text-disabled)]"  />
                     </GdTooltip>
                   </span>
-                </el-checkbox-button>
-                <el-checkbox-button value="image">
-                  <span class="gd-option">
-                    <span class="gd-option__mark"></span>
-                    <el-icon class="gd-option__icon"><Image24Regular /></el-icon>
-                    <span class="gd-option__label">{{ t('settings.providerDetail.image') }}</span>
+                </GdCheckbox>
+                <GdCheckbox :model-value="editModelForm.config.outputCapabilities?.includes('image')">
+                  <span class="flex items-center gap-2">
+                    <Image24Regular class="size-4"  />
+                    <span class="text-[13px] leading-none">{{ t('settings.providerDetail.image') }}</span>
                   </span>
-                </el-checkbox-button>
-              </el-checkbox-group>
-            </el-form-item>
+                </GdCheckbox>
+              </GdCheckboxGroup>
+            </GdFormField>
 
-            <el-form-item :label="t('settings.providerDetail.advancedFeatures')" prop="config.features" class="mb-4">
-              <el-checkbox-group v-model="editModelForm.config.features">
-                <el-checkbox-button value="tools">
-                  <span class="gd-option">
-                    <span class="gd-option__mark"></span>
-                    <el-icon class="gd-option__icon"><WrenchScrewdriver24Regular /></el-icon>
-                    <span class="gd-option__label">{{ t('settings.providerDetail.toolCalling') }}</span>
+            <GdFormField :label="t('settings.providerDetail.advancedFeatures')" label-width="120px" class="mb-4" :error="errors.config_features">
+              <GdCheckboxGroup v-model="editModelForm.config.features">
+                <GdCheckbox :model-value="editModelForm.config.features?.includes('tools')">
+                  <span class="flex items-center gap-2">
+                    <WrenchScrewdriver24Regular class="size-4"  />
+                    <span class="text-[13px] leading-none">{{ t('settings.providerDetail.toolCalling') }}</span>
                   </span>
-                </el-checkbox-button>
-              </el-checkbox-group>
-            </el-form-item>
+                </GdCheckbox>
+              </GdCheckboxGroup>
+            </GdFormField>
 
             <!-- 思考调节：自动判断（跟随继承链）/ 不支持 / 支持。
                  只声明能力，不勾档位——档位由类型卡 / preset / 通用兜底决定 -->
-            <el-form-item :label="t('settings.providerDetail.thinkingTuning')" class="mb-4">
+            <GdFormField :label="t('settings.providerDetail.thinkingTuning')" label-width="120px" class="mb-4">
               <div class="w-full">
-                <el-radio-group v-model="editModelForm.thinkingMode">
-                  <el-radio-button value="auto">
-                    <span class="gd-option">
-                      <span class="gd-option__mark gd-option__mark--radio"></span>
-                      <span class="gd-option__label">{{ t('settings.providerDetail.thinkingAuto') }}</span>
-                    </span>
-                  </el-radio-button>
-                  <el-radio-button value="false">
-                    <span class="gd-option">
-                      <span class="gd-option__mark gd-option__mark--radio"></span>
-                      <span class="gd-option__label">{{ t('settings.providerDetail.thinkingUnsupported') }}</span>
-                    </span>
-                  </el-radio-button>
-                  <el-radio-button value="true">
-                    <span class="gd-option">
-                      <span class="gd-option__mark gd-option__mark--radio"></span>
-                      <span class="gd-option__label">{{ t('settings.providerDetail.thinkingSupported') }}</span>
-                    </span>
-                  </el-radio-button>
-                </el-radio-group>
+                <GdSegmented v-model="editModelForm.thinkingMode" :options="thinkingModeOptions" />
 
                 <div class="mt-2 text-xs text-gray-400">
                   <template v-if="editModelForm.thinkingMode === 'auto'">
@@ -259,14 +213,14 @@
                     <div class="text-xs font-medium text-gray-500 dark:text-[#8b8d95] mb-2">
                       {{ t('settings.providerDetail.thinkingEffortMenu') }}
                     </div>
-                    <el-checkbox-group v-model="editModelForm.thinkingEffortsMenu">
-                      <el-checkbox-button v-for="effort in THINKING_EFFORT_OPTIONS" :key="effort" :value="effort">
-                        <span class="gd-option">
-                          <span class="gd-option__mark"></span>
-                          <span class="gd-option__label">{{ getThinkingEffortLabelWithKey(effort) }}</span>
+                    <GdCheckboxGroup v-model="editModelForm.thinkingEffortsMenu">
+                      <GdCheckbox v-for="effort in THINKING_EFFORT_OPTIONS" :key="effort"
+                        :model-value="editModelForm.thinkingEffortsMenu?.includes(effort)">
+                        <span class="ml-0.5 flex items-center gap-2">
+                          <span class="text-[13px] leading-none">{{ getThinkingEffortLabelWithKey(effort) }}</span>
                         </span>
-                      </el-checkbox-button>
-                    </el-checkbox-group>
+                      </GdCheckbox>
+                    </GdCheckboxGroup>
                     <div class="mt-1.5 text-xs text-gray-400">{{ t('settings.providerDetail.thinkingEffortMenuHint') }}</div>
                     <div v-if="menuNeedsNonOff" class="mt-1 text-xs text-red-500">
                       {{ t('settings.providerDetail.thinkingMenuNeedsNonOff') }}
@@ -284,7 +238,7 @@
                         :value="PATCH_TEMPLATE_CUSTOM" />
                     </GdSelect>
                     <div v-if="formatSuggestion" class="preset-hint">
-                      <el-icon class="mr-1"><Wand16Regular /></el-icon>
+                      <Wand16Regular class="mr-1 size-4"  />
                       {{ t('settings.providerDetail.thinkingTemplateSuggested', formatSuggestion) }}
                       <GdButton v-if="suggestedTemplateExpr" link type="primary" class="!text-xs !px-1"
                         @click="fillTemplate(suggestedTemplateExpr)">
@@ -323,7 +277,7 @@
 
                     <!-- 表达式为空：显示当前生效拼法及其等价表达式，一键填入（不自动改数据） -->
                     <div v-if="!editModelForm.thinkingPatchExpr.trim()" class="preset-hint">
-                      <el-icon class="mr-1"><Wand16Regular /></el-icon>
+                      <Wand16Regular class="mr-1 size-4"  />
                       {{ t('settings.providerDetail.thinkingExprEmptyHint', { format: formEffectiveFormat }) }}
                       <GdButton v-if="inheritedTemplateExpr" link type="primary" class="!text-xs !px-1"
                         @click="fillTemplate(inheritedTemplateExpr)">
@@ -364,64 +318,64 @@
                   {{ t('settings.providerDetail.thinkingOverrideResetNote') }}
                 </div>
               </div>
-            </el-form-item>
+            </GdFormField>
 
-            <el-form-item :label="t('settings.providerDetail.contextWindow')" prop="config.contextWindow">
+            <GdFormField :label="t('settings.providerDetail.contextWindow')" label-width="120px" :error="errors.config_contextWindow">
               <GdInputNumber v-model="editModelForm.config.contextWindow" placeholder="128000" style="width: 240px;">
                 <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
               </GdInputNumber>
-            </el-form-item>
+            </GdFormField>
 
-            <el-form-item :label="t('settings.providerDetail.maxOutputTokens')" prop="config.maxOutputTokens">
+            <GdFormField :label="t('settings.providerDetail.maxOutputTokens')" label-width="120px" :error="errors.config_maxOutputTokens">
               <GdInputNumber v-model="editModelForm.config.maxOutputTokens" placeholder="4096" style="width: 240px;">
                 <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
               </GdInputNumber>
-            </el-form-item>
+            </GdFormField>
 
-            <el-divider content-position="left" class="!my-4 text-xs text-gray-400">
+            <GdDivider content-position="left" class="!my-4 text-xs text-gray-400">
               <button type="button"
                 class="inline-flex items-center gap-1 cursor-pointer whitespace-nowrap hover:text-gray-600 dark:hover:text-[#b8bac1]"
                 @click="defaultParamsExpanded = !defaultParamsExpanded">
-                <el-icon class="transition-transform" :class="defaultParamsExpanded ? 'rotate-90' : ''" :size="12">
-                  <ChevronRight16Regular />
-                </el-icon>
+                
+                  <ChevronRight16Regular class="transition-transform w-3 h-3" :class="defaultParamsExpanded ? 'rotate-90' : ''"  />
+                
                 {{ t('settings.providerDetail.defaultParamsDesc') }}
               </button>
-            </el-divider>
+            </GdDivider>
 
             <!-- 默认折叠：这些参数绝大多数情况不需要设置；条目已有值时自动展开，不隐藏存量配置 -->
             <div v-show="defaultParamsExpanded">
-              <el-form-item :label="t('settings.providerDetail.temperature')" prop="config.temperature">
+              <GdFormField :label="t('settings.providerDetail.temperature')" label-width="120px" :error="errors.config_temperature">
                 <GdInputNumber v-model="editModelForm.config.temperature" :min="0" :max="2" :step="0.1"
                   :placeholder="t('settings.providerDetail.modelDefault')" style="width: 240px;" />
-              </el-form-item>
+              </GdFormField>
 
-              <el-form-item label="Top P" prop="config.topP">
+              <GdFormField label="Top P" label-width="120px" :error="errors.config_topP">
                 <GdInputNumber v-model="editModelForm.config.topP" :min="0" :max="1" :step="0.05"
                   :placeholder="t('settings.providerDetail.modelDefault')" style="width: 240px;" />
-              </el-form-item>
+              </GdFormField>
 
-              <el-form-item :label="t('settings.providerDetail.frequencyPenalty')" prop="config.frequencyPenalty">
+              <GdFormField :label="t('settings.providerDetail.frequencyPenalty')" label-width="120px" :error="errors.config_frequencyPenalty">
                 <GdInputNumber v-model="editModelForm.config.frequencyPenalty" :min="-2" :max="2" :step="0.1"
                   :placeholder="t('settings.providerDetail.modelDefault')" style="width: 240px;" />
-              </el-form-item>
+              </GdFormField>
 
-              <el-form-item :label="t('settings.providerDetail.customParameters')" prop="config.customParameters">
+              <GdFormField :label="t('settings.providerDetail.customParameters')" label-width="120px" :error="errors.config_customParameters">
                 <GdInput v-model="customParamsStr" type="textarea" :rows="3"
                   placeholder='{ "temperature": 0.7, "top_p": 1 }' class="font-mono text-xs" />
-              </el-form-item>
+              </GdFormField>
             </div>
           </div>
 
           <!-- 嵌入模型配置 -->
           <div v-else-if="editModelForm.modelType === 'embedding'" class="transition-all">
-            <el-form-item :label="t('settings.providerDetail.vectorDimensions')" prop="config.vectorDimensions">
+            <GdFormField :label="t('settings.providerDetail.vectorDimensions')" label-width="120px" :error="errors.config_vectorDimensions">
               <GdInputNumber v-model="editModelForm.config.vectorDimensions" :placeholder="t('settings.providerDetail.vectorDimensionsPlaceholder')"
                 style="width: 240px;" />
               <div class="text-xs text-gray-400 mt-1">{{ t('settings.providerDetail.vectorDimensionsDesc') }}</div>
-            </el-form-item>
+            </GdFormField>
           </div>
-        </el-form>
+        </div>
       </div>
       <template #footer>
         <div class="dialog-footer flex justify-end gap-3">
@@ -438,17 +392,17 @@
         <div class="mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">
           <GdInput v-model="searchModelName" :placeholder="t('settings.providerDetail.searchModelName')" clearable @input="handleSearchModel">
             <template #prefix>
-              <el-icon>
-                <Search16Regular />
-              </el-icon>
+              
+                <Search16Regular class="size-4"  />
+              
             </template>
           </GdInput>
         </div>
 
         <div v-if="fetchingModels" class="flex justify-center items-center py-12">
-          <el-icon class="text-primary" style="font-size: 32px;">
-            <ArrowSync16Regular class="animate-spin" />
-          </el-icon>
+          
+            <ArrowSync16Regular class="text-primary w-8 h-8 animate-spin" />
+          
         </div>
         <div v-else class="pb-4">
           <div v-if="filteredFetchedModels.length > 0">
@@ -464,17 +418,15 @@
                   </span>
                   <template v-for="feature in (model.config?.features || [])" :key="feature">
                     <GdTooltip :content="getLableName(feature)" placement="top">
-                      <el-icon class="hover:text-primary transition-colors" :size="14">
-                        <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                        <Beaker16Regular v-else />
-                      </el-icon>
+                      <span class="hover:text-primary transition-colors w-3.5 h-3.5"><WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                        <Beaker16Regular v-else /></span>
                     </GdTooltip>
                   </template>
                   <GdTooltip v-if="(model.thinkingEfforts?.length ?? 0) > 0" :content="getLableName('thinking')"
                     placement="top">
-                    <el-icon class="hover:text-primary transition-colors" :size="14">
-                      <LightbulbFilament24Regular />
-                    </el-icon>
+                    
+                      <LightbulbFilament24Regular class="hover:text-primary transition-colors w-3.5 h-3.5"  />
+                    
                   </GdTooltip>
                 </div>
                 <GdButton link type="primary" size="small" @click="handleSelectFromFetch(model)">
@@ -495,13 +447,34 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
+import GdDivider from '@/components/ui/GdDivider.vue';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 import GdInput from '@/components/ui/GdInput.vue';
+import GdFormField from '@/components/ui/GdFormField.vue';
 import GdSwitch from '@/components/ui/GdSwitch.vue';
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+const { confirm } = usePopup()
+
+const props = defineProps<{
+  provider: ModelProvider
+  models: Model[]
+  modelPresets: ModelPreset[]
+}>()
+
+const currentEditModelId = ref<string | null>(null)
+
+const showEditModal = ref(false)
+
+const emit = defineEmits<{
+  back: []
+  changed: []
+}>()
 import { useDebounceFn } from '@vueuse/core'
 import Avatar from '../ui/Avatar.vue'
 import GdTooltip from '../ui/GdTooltip.vue'
@@ -511,6 +484,7 @@ import {
 } from '@vicons/fluent'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
+import { useFormValidation } from '@/composables/useFormValidation'
 import { notify } from '@/components/ui/toastService';
 import {
   getModelDisplayName,
@@ -529,152 +503,7 @@ import {
 import GdDialog from '@/components/ui/GdDialog.vue'
 import CelExpressionEditor from './CelExpressionEditor.vue'
 import type { Model, ModelProvider, ModelPreset } from '@/types/api'
-import type { FormInstance } from 'element-plus'
 import type { ThinkingPatchPayload } from '../../services/modules/model.api'
-
-const props = defineProps<{
-  provider: ModelProvider
-  models: Model[]
-  modelPresets: ModelPreset[]
-}>()
-
-const emit = defineEmits<{
-  back: []
-  changed: []
-}>()
-
-const { t } = useI18n()
-const { confirm } = usePopup()
-
-// ========== 编辑/新增模型信息 ==========
-const showEditModal = ref(false)
-const saving = ref(false)
-const editFormRef = ref<FormInstance | null>(null)
-const currentEditModelId = ref<string | null>(null)
-const isEditMode = ref(false)
-
-// 编辑弹窗每次打开时尝试加载拼法推荐（进程内只请求一次）
-watch(showEditModal, (open) => {
-  if (open) {
-    loadFormatSuggestion()
-    loadPatchTemplates()
-  }
-})
-
-// ========== 思考调节（能力三态 + 档位菜单 + wire 映射 + 拼法）==========
-/** 条目级覆盖 → 表单三态；无覆盖 = 跟随继承链 */
-const thinkingModeFromModel = (model: Model): 'auto' | 'true' | 'false' => {
-  const override = model?.supportsThinkingOverride
-  if (override === true) return 'true'
-  if (override === false) return 'false'
-  return 'auto'
-}
-
-/** 覆盖态 → 表单档位菜单（仅取条目显式覆盖；继承链的菜单不回填，避免保存时误写覆盖） */
-const effortsMenuFromModel = (model: Model): string[] => {
-  const override = model?.thinkingEffortsOverride
-  return Array.isArray(override) ? [...override] : []
-}
-
-/** 组思考 payload：
- * - true：能力覆盖 + 可选显式档位/表达式（勾选菜单 → thinkingEfforts 数组；
- *   表达式非空 → thinkingPatchExpr 并清掉条目级 thinkingFormat 覆盖——wire 值
- *   输入已移出界面，改名/钳制由表达式承担，thinkingEffortsMap 不再由表单产出）
- * - false：仅能力覆盖 false
- * - auto：条目存在任一覆盖时发 null 清除，全部回退继承链
- */
-const buildThinkingPayload = (): ThinkingPatchPayload => {
-  const mode = editModelForm.value.thinkingMode
-  const model = props.models?.find((x) => x.id === currentEditModelId.value)
-  if (mode === 'false') return { supportsThinking: false }
-  if (mode === 'auto') {
-    const payload: ThinkingPatchPayload = {}
-    if (model?.supportsThinkingOverride !== undefined) payload.supportsThinking = null
-    if (model?.thinkingEffortsOverride !== undefined) payload.thinkingEfforts = null
-    if (model?.thinkingEffortsMapOverride !== undefined) payload.thinkingEffortsMap = null
-    if (model?.thinkingPatchExprOverride !== undefined) payload.thinkingPatchExpr = null
-    if (model?.compatOverride !== undefined) payload.compat = null
-    return payload
-  }
-
-  const payload: ThinkingPatchPayload = { supportsThinking: true }
-  const checked = new Set(editModelForm.value.thinkingEffortsMenu as string[])
-  const menu = THINKING_EFFORT_OPTIONS.filter((e) => checked.has(e))
-  if (menu.length > 0) {
-    payload.thinkingEfforts = menu
-  } else if (model?.thinkingEffortsOverride !== undefined) {
-    payload.thinkingEfforts = null
-  }
-
-  // 旧版 wire 值映射：仅显式清除时下发 null（保存不隐式清除，存量数据运行时继续生效）
-  if (clearLegacyMapRequested.value) {
-    payload.thinkingEffortsMap = null
-  }
-
-  // 拼法表达式：非空 → 提交并清掉条目级 thinkingFormat 覆盖（表达式接管拼法，
-  // 避免清空表达式后回落到陈旧拼法）。空 → 自定义态拼法显式化：默认 openai 钉在
-  // 条目 compat 上（不再跟随类型卡，想跟随用「自动判断」）；条目已有显式
-  // thinkingFormat（legacy 数据）则保留不动；同时清掉残留的表达式覆盖
-  const expr = (editModelForm.value.thinkingPatchExpr || '').trim()
-  if (expr) {
-    payload.thinkingPatchExpr = expr
-    const restCompat = { ...(model?.compatOverride || {}) }
-    delete restCompat.thinkingFormat
-    if (Object.keys(restCompat).length > 0) {
-      payload.compat = restCompat
-    } else if (model?.compatOverride !== undefined) {
-      payload.compat = null
-    }
-  } else {
-    if (model?.thinkingPatchExprOverride !== undefined) {
-      payload.thinkingPatchExpr = null
-    }
-    if (model?.compatOverride?.thinkingFormat === undefined) {
-      payload.compat = { ...(model?.compatOverride || {}), thinkingFormat: 'openai' }
-    }
-  }
-
-  // 旧版「档位 → JSON Patch」：界面已由表达式取代；仅显式清除时下发 null
-  //（保存不再隐式清除，存量 patch 数据运行时继续生效）
-  if (clearLegacyPatchRequested.value) {
-    payload.thinkingEffortsPatch = null
-  }
-  return payload
-}
-// 显式"支持"态的派生提示
-const menuNeedsNonOff = computed(() => {
-  const menu = editModelForm.value.thinkingEffortsMenu as string[]
-  return menu.length > 0 && !menu.some((e) => e !== 'none')
-})
-
-const hasExplicitOverrides = computed(() => {
-  const model = currentModel.value
-  if (!model) return false
-  return (
-    model.supportsThinkingOverride !== undefined ||
-    model.thinkingEffortsOverride !== undefined ||
-    model.thinkingEffortsMapOverride !== undefined ||
-    model.thinkingEffortsPatchOverride !== undefined ||
-    model.thinkingPatchExprOverride !== undefined ||
-    model.compatOverride !== undefined
-  )
-})
-
-const currentModel = computed(() =>
-  props.models?.find((x) => x.id === currentEditModelId.value) || null
-)
-
-/** 生效拼法不上强度值（开关型 format）——表达式为空时的非阻断提示 */
-const effectiveFormatSupportsEffort = computed(
-  () => currentModel.value?.supportsReasoningEffort ?? true
-)
-
-/** 自定义态空表达式的生效拼法（所见即所存）：条目显式 thinkingFormat（legacy 保留）> 默认 openai */
-const formEffectiveFormat = computed(() => {
-  return currentModel.value?.compatOverride?.thinkingFormat ?? 'openai'
-})
-
-// 按 API 地址推荐拼法（每次会话只请求一次；仅供提示，保存需用户显式选择）
 const formatSuggestion = ref<{ format: string; vendor: string } | null>(null)
 const suggestionLoaded = ref(false)
 const loadFormatSuggestion = async () => {
@@ -825,6 +654,17 @@ interface EditModelFormData {
   config: NonNullable<Model['config']>
 }
 
+// GdSegmented 选项（模型类型 / 思考模式）：图标走组件 icon prop
+const modelTypeOptions = [
+  { label: t('settings.providerDetail.chatModel'), value: 'text', icon: TextT24Regular },
+  { label: t('settings.providerDetail.embeddingModel'), value: 'embedding', icon: Group24Regular },
+];
+const thinkingModeOptions = [
+  { label: t('settings.providerDetail.thinkingAuto'), value: 'auto' },
+  { label: t('settings.providerDetail.thinkingUnsupported'), value: 'false' },
+  { label: t('settings.providerDetail.thinkingSupported'), value: 'true' },
+];
+
 const editModelForm = ref<EditModelFormData>({  modelName: '',
   modelType: 'text',
   thinkingMode: 'auto',
@@ -897,24 +737,15 @@ const applyPreset = (preset: ModelPreset) => {
   }
 }
 
-const editModelRules = computed(() => ({
-  modelName: { required: true, message: t('settings.providerDetail.modelNameRequired'), trigger: 'blur' },
-  modelType: { required: true, message: t('settings.providerDetail.modelTypeRequired'), trigger: 'change' },
-  'config.contextWindow': {
-    required: false,
-    type: 'number' as const,
-    validator: (_rule: unknown, value: number | undefined) => !value || value > 0,
-    message: t('settings.providerDetail.contextWindowInvalid'),
-    trigger: 'blur' as const
-  },
-  'config.maxOutputTokens': {
-    required: false,
-    type: 'number' as const,
-    validator: (_rule: unknown, value: number | undefined) => !value || value > 0,
-    message: t('settings.providerDetail.maxOutputTokensInvalid'),
-    trigger: 'blur' as const
-  }
-}))
+// 校验（el-form :rules → useFormValidation；dot-path 键转为下划线，与模板 errors.xxx 对齐）
+const { errors: editFormErrors, validate: validateEditForm } = useFormValidation({
+  modelName: [{ validator: (v: unknown) => (String(v ?? '') ? null : t('settings.providerDetail.modelNameRequired')) }],
+  modelType: [{ validator: (v: unknown) => (String(v ?? '') ? null : t('settings.providerDetail.modelTypeRequired')) }],
+  config_contextWindow: [{ validator: (v: unknown) => (!v || Number(v) > 0) ? null : t('settings.providerDetail.contextWindowInvalid') }],
+  config_maxOutputTokens: [{ validator: (v: unknown) => (!v || Number(v) > 0) ? null : t('settings.providerDetail.maxOutputTokensInvalid') }],
+});
+// 模板里 errors.xxx 直接读（GdFormField :error）
+const errors = editFormErrors;
 
 const getLableName = (type: string) => {
   switch (type) {
@@ -1035,7 +866,8 @@ const handleEditClick = (model: Model) => {
 // 保存模型
 const handleSaveModel = async () => {
   try {
-    await editFormRef.value?.validate()
+    const valid = await validateEditForm()
+    if (!valid) return
 
     // 显式"支持"态下的菜单约束：仅勾 none 等价于"不能思考"，与后端规则一致
     if (editModelForm.value.thinkingMode === 'true' && menuNeedsNonOff.value) {
@@ -1168,198 +1000,147 @@ const handleFetchModels = async () => {
     fetchingModels.value = false
   }
 }
+
+const saving = ref(false)
+
+const isEditMode = ref(false)
+
+// 编辑弹窗每次打开时尝试加载拼法推荐（进程内只请求一次）
+watch(showEditModal, (open) => {
+  if (open) {
+    loadFormatSuggestion()
+    loadPatchTemplates()
+  }
+})
+
+// ========== 思考调节（能力三态 + 档位菜单 + wire 映射 + 拼法）==========
+/** 条目级覆盖 → 表单三态；无覆盖 = 跟随继承链 */
+
+const thinkingModeFromModel = (model: Model): 'auto' | 'true' | 'false' => {
+  const override = model?.supportsThinkingOverride
+  if (override === true) return 'true'
+  if (override === false) return 'false'
+  return 'auto'
+}
+
+/** 覆盖态 → 表单档位菜单（仅取条目显式覆盖；继承链的菜单不回填，避免保存时误写覆盖） */
+
+const effortsMenuFromModel = (model: Model): string[] => {
+  const override = model?.thinkingEffortsOverride
+  return Array.isArray(override) ? [...override] : []
+}
+
+/** 组思考 payload：
+ * - true：能力覆盖 + 可选显式档位/表达式（勾选菜单 → thinkingEfforts 数组；
+ *   表达式非空 → thinkingPatchExpr 并清掉条目级 thinkingFormat 覆盖——wire 值
+ *   输入已移出界面，改名/钳制由表达式承担，thinkingEffortsMap 不再由表单产出）
+ * - false：仅能力覆盖 false
+ * - auto：条目存在任一覆盖时发 null 清除，全部回退继承链
+ */
+
+const buildThinkingPayload = (): ThinkingPatchPayload => {
+  const mode = editModelForm.value.thinkingMode
+  const model = props.models?.find((x) => x.id === currentEditModelId.value)
+  if (mode === 'false') return { supportsThinking: false }
+  if (mode === 'auto') {
+    const payload: ThinkingPatchPayload = {}
+    if (model?.supportsThinkingOverride !== undefined) payload.supportsThinking = null
+    if (model?.thinkingEffortsOverride !== undefined) payload.thinkingEfforts = null
+    if (model?.thinkingEffortsMapOverride !== undefined) payload.thinkingEffortsMap = null
+    if (model?.thinkingPatchExprOverride !== undefined) payload.thinkingPatchExpr = null
+    if (model?.compatOverride !== undefined) payload.compat = null
+    return payload
+  }
+
+  const payload: ThinkingPatchPayload = { supportsThinking: true }
+  const checked = new Set(editModelForm.value.thinkingEffortsMenu as string[])
+  const menu = THINKING_EFFORT_OPTIONS.filter((e) => checked.has(e))
+  if (menu.length > 0) {
+    payload.thinkingEfforts = menu
+  } else if (model?.thinkingEffortsOverride !== undefined) {
+    payload.thinkingEfforts = null
+  }
+
+  // 旧版 wire 值映射：仅显式清除时下发 null（保存不隐式清除，存量数据运行时继续生效）
+  if (clearLegacyMapRequested.value) {
+    payload.thinkingEffortsMap = null
+  }
+
+  // 拼法表达式：非空 → 提交并清掉条目级 thinkingFormat 覆盖（表达式接管拼法，
+  // 避免清空表达式后回落到陈旧拼法）。空 → 自定义态拼法显式化：默认 openai 钉在
+  // 条目 compat 上（不再跟随类型卡，想跟随用「自动判断」）；条目已有显式
+  // thinkingFormat（legacy 数据）则保留不动；同时清掉残留的表达式覆盖
+  const expr = (editModelForm.value.thinkingPatchExpr || '').trim()
+  if (expr) {
+    payload.thinkingPatchExpr = expr
+    const restCompat = { ...(model?.compatOverride || {}) }
+    delete restCompat.thinkingFormat
+    if (Object.keys(restCompat).length > 0) {
+      payload.compat = restCompat
+    } else if (model?.compatOverride !== undefined) {
+      payload.compat = null
+    }
+  } else {
+    if (model?.thinkingPatchExprOverride !== undefined) {
+      payload.thinkingPatchExpr = null
+    }
+    if (model?.compatOverride?.thinkingFormat === undefined) {
+      payload.compat = { ...(model?.compatOverride || {}), thinkingFormat: 'openai' }
+    }
+  }
+
+  // 旧版「档位 → JSON Patch」：界面已由表达式取代；仅显式清除时下发 null
+  //（保存不再隐式清除，存量 patch 数据运行时继续生效）
+  if (clearLegacyPatchRequested.value) {
+    payload.thinkingEffortsPatch = null
+  }
+  return payload
+}
+// 显式"支持"态的派生提示
+
+const menuNeedsNonOff = computed(() => {
+  const menu = editModelForm.value.thinkingEffortsMenu as string[]
+  return menu.length > 0 && !menu.some((e) => e !== 'none')
+})
+
+const hasExplicitOverrides = computed(() => {
+  const model = currentModel.value
+  if (!model) return false
+  return (
+    model.supportsThinkingOverride !== undefined ||
+    model.thinkingEffortsOverride !== undefined ||
+    model.thinkingEffortsMapOverride !== undefined ||
+    model.thinkingEffortsPatchOverride !== undefined ||
+    model.thinkingPatchExprOverride !== undefined ||
+    model.compatOverride !== undefined
+  )
+})
+
+const currentModel = computed(() =>
+  props.models?.find((x) => x.id === currentEditModelId.value) || null
+)
+
+/** 生效拼法不上强度值（开关型 format）——表达式为空时的非阻断提示 */
+
+const effectiveFormatSupportsEffort = computed(
+  () => currentModel.value?.supportsReasoningEffort ?? true
+)
+
+/** 自定义态空表达式的生效拼法（所见即所存）：条目显式 thinkingFormat（legacy 保留）> 默认 openai */
+
+const formEffectiveFormat = computed(() => {
+  return currentModel.value?.compatOverride?.thinkingFormat ?? 'openai'
+})
+
+// 按 API 地址推荐拼法（每次会话只请求一次；仅供提示，保存需用户显式选择）
 </script>
 
 <style scoped>
-/* el-divider 的文本自带一层实色背景（用来遮住分隔横线），底色是 Element 的
-   --el-bg-color，暗色下与 GdDialog 表面色不一致，会显出一条异色带——
-   对齐对话框底色（变量与 GdDialog.vue 的面板背景同源） */
-:deep(.el-divider__text) {
-  background-color: var(--gd-color-dialog-bg, var(--gd-color-bg));
-}
-
-/* ── 选项胶囊（模型类型 / 能力 / 思考调节）──────────────────────
-   不用 Element 默认的"主色实心块"选中态：改为中性描边胶囊 + 前置指示器。
-   克制原则：**主色只出现在指示器上**，胶囊本体（描边/底色）始终保持中性，
-   选中仅表现为指示器填充 + 文字加深。这样一排选项不会出现大面积色块，
-   也与"高亮色不要用黑色"的反馈一致（主色既做了强调，又不喧宾夺主）。
-   固定项（必选的"文本"）外观与其它选中项一致，约束另由锁图标表达。 */
-
-/* 组内胶囊用 flex + gap 排布：水平间距与换行行距统一 8px（原方案是相邻胶囊
-   补 margin-left，胶囊换行后两行之间没有间距，且行首胶囊会被 margin 顶出缩进） */
-:deep(.el-checkbox-group),
-:deep(.el-radio-group) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-:deep(.el-checkbox-button + .el-checkbox-button),
-:deep(.el-radio-button + .el-radio-button) {
-  margin-left: 0;
-}
-
-/* 中和 Element 的选中态变量：它的 is-checked / is-active 规则会据此上色，
-   改写变量比用 !important 对抗基础规则更稳（后续加状态不会漏）。
-   这里全部落成中性色——主色只在下面指示器规则里出现。 */
-:deep(.el-checkbox-button) {
-  --el-checkbox-button-checked-bg-color: var(--gd-color-input-bg);
-  --el-checkbox-button-checked-text-color: var(--gd-color-text);
-  --el-checkbox-button-checked-border-color: var(--gd-color-input-border);
-  --el-checkbox-button-disabled-checked-fill: var(--gd-color-input-bg);
-}
-
-:deep(.el-radio-button) {
-  --el-radio-button-checked-bg-color: var(--gd-color-input-bg);
-  --el-radio-button-checked-text-color: var(--gd-color-text);
-  --el-radio-button-checked-border-color: var(--gd-color-input-border);
-}
-
-:deep(.el-checkbox-button__inner),
-:deep(.el-radio-button__inner) {
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  padding: 0 12px;
-  /* 覆盖组内首尾元素的方角拼接 */
-  border-radius: 8px !important;
-  /* 不加 !important：Element 的选中态规则特异性更高，要让上面那组
-     --el-*-button-checked-* 变量能覆盖到这里（现全为中性色） */
-  background: var(--gd-color-input-bg);
-  border: 1px solid var(--gd-color-input-border);
-  outline: none;
-  /* 未选中为次级灰，选中由 is-checked 规则加深 */
-  color: var(--gd-color-text-gray);
-  font-size: 13px;
-  line-height: 1;
-  font-weight: 400;
-  /* Element 选中态会加 -1px 左投影（拼接按钮组的残留），这里统一抹掉 */
-  box-shadow: none !important;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
-}
-
-/* 悬停：仅未选中项转深描边；选中项排除在外（选中态本就中性，
-   压回灰也无妨，但保持一致便于后续调整） */
-:deep(.el-checkbox-button:not(.is-checked) .el-checkbox-button__inner:hover),
-:deep(.el-radio-button:not(.is-active) .el-radio-button__inner:hover) {
-  color: var(--gd-color-text) !important;
-  border-color: var(--gd-color-text-disabled);
-}
-
-:deep(.el-checkbox-button.is-checked .gd-option__label),
-:deep(.el-radio-button.is-active .gd-option__label) {
-  font-weight: 500;
-}
-
-/* 固定项（必选的"文本"）：它不是"禁用"而是"必选不可改"，所以外观与
-   普通选中项一致（中性胶囊 + 主色指示器），仅去掉可点击手势；
-   约束交给右侧锁图标表达。
-   只覆盖 is-disabled.is-checked——将来若出现真正需要置灰的禁用项，
-   它没有 is-checked，会保留 Element 的置灰样式。 */
-:deep(.el-checkbox-button.is-disabled.is-checked .el-checkbox-button__inner) {
-  color: var(--gd-color-text) !important;
-  background: var(--gd-color-input-bg) !important;
-  border-color: var(--gd-color-input-border) !important;
-  cursor: default;
-}
-
-/* 禁用且未选中：压掉 Element 的 hover 变主色，明确"不可点" */
-:deep(.el-checkbox-button.is-disabled:not(.is-checked) .el-checkbox-button__inner),
-:deep(.el-checkbox-button.is-disabled:not(.is-checked) .el-checkbox-button__inner:hover) {
-  cursor: default;
-  color: var(--gd-color-text-disabled) !important;
-  border-color: var(--gd-color-input-border) !important;
-}
-
-:deep(.el-checkbox-button.is-focus .el-checkbox-button__inner),
-:deep(.el-radio-button__original-radio:focus-visible + .el-radio-button__inner) {
-  border-color: var(--gd-color-primary) !important;
-  box-shadow: 0 0 0 2px var(--gd-color-primary-100) !important;
-}
-
-.gd-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.gd-option__icon {
-  font-size: 15px;
-  color: var(--gd-color-text-gray);
-  transition: color 0.15s ease;
-}
-
-/* 指示器：未选中 = 空心描边（勾/点透明）；选中 = 主色填充 + 白色对勾/圆点。
-   勾色用 --el-color-white 而非 --gd-color-primary-text：后者暗色下是
-   #d3d3d3，压在粉色上几乎看不清；前者亮暗色都是 #fff，与 Element
-   原生 checkbox 的选中样式（primary 底 + color-white 勾）一致。
-   未选中必须显式 transparent——不能靠"勾色=底色"取巧，那样暗色下会露出来。 */
-.gd-option__mark {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: var(--gd-color-input-bg);
-  box-shadow: inset 0 0 0 1px var(--gd-color-input-border);
-  color: transparent;
-  transition: background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
-}
-
-.gd-option__mark::after {
-  content: '';
-  width: 4px;
-  height: 8px;
-  /* subpixel-ok: 45° 旋转的对角勾边（4×8px 旋转 45°），边缘本就抗锯齿、不适用奇偶栅格；1.5px 是刻意的笔画粗细 */
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg) translate(-1px, -1px);
-}
-
-.gd-option__mark--radio {
-  border-radius: 50%;
-}
-
-.gd-option__mark--radio::after {
-  width: 6px;
-  height: 6px;
-  border: none;
-  border-radius: 50%;
-  background: currentColor;
-  transform: none;
-}
-
-/* 选中态由 Element 的状态类驱动（整段包进 deep，匹配 slot 内的子元素） */
-:deep(.el-checkbox-button.is-checked .gd-option__mark),
-:deep(.el-radio-button.is-active .gd-option__mark) {
-  background: var(--gd-color-primary);
-  box-shadow: none;
-  color: var(--el-color-white);
-}
-
-/* 选中项图标随文字一起加深为中性色——主色只留给指示器，
-   避免一个选项里出现两处强调色 */
-:deep(.el-checkbox-button.is-checked .gd-option__icon),
-:deep(.el-radio-button.is-active .gd-option__icon) {
-  color: var(--gd-color-text);
-}
-
-.gd-option__lock {
-  font-size: 14px;
-  color: var(--gd-color-text-disabled);
-}
-
 /* API Key 输入框和按钮布局 */
 .api-key-input-wrapper {
   display: flex;
   gap: 8px;
   width: 100%;
-}
-
-.api-key-input-wrapper :deep(.el-input) {
-  flex: 1;
-  min-width: 0;
 }
 
 /* 预设检测提示 */

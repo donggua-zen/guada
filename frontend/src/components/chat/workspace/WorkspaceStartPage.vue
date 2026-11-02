@@ -6,7 +6,7 @@
       <div class="start-list">
         <button class="start-item" @click="emit('open-file')">
           <span class="start-item-icon">
-            <el-icon :size="18"><Folder16Regular /></el-icon>
+            <Folder16Regular class="w-4.5 h-4.5"  />
           </span>
           <span class="start-item-text">
             <span class="start-item-title">{{ t('chat.workspace.newFile') }}</span>
@@ -15,7 +15,7 @@
         </button>
         <button class="start-item" @click="emit('open-terminal')">
           <span class="start-item-icon">
-            <el-icon :size="18"><WindowConsole20Regular /></el-icon>
+            <WindowConsole20Regular class="w-4.5 h-4.5"  />
           </span>
           <span class="start-item-text">
             <span class="start-item-title">{{ t('chat.workspace.terminal') }}</span>
@@ -24,7 +24,7 @@
         </button>
         <button class="start-item" @click="emit('open-browser')">
           <span class="start-item-icon">
-            <el-icon :size="18"><Globe16Regular /></el-icon>
+            <Globe16Regular class="w-4.5 h-4.5"  />
           </span>
           <span class="start-item-text">
             <span class="start-item-title">{{ t('chat.workspace.newBrowser') }}</span>
@@ -33,7 +33,7 @@
         </button>
         <button class="start-item" @click="emit('open-git')">
           <span class="start-item-icon">
-            <el-icon :size="18"><Branch20Regular /></el-icon>
+            <Branch20Regular class="w-4.5 h-4.5"  />
           </span>
           <span class="start-item-text">
             <span class="start-item-title">{{ t('chat.workspace.gitTab') }}</span>
@@ -43,7 +43,7 @@
         <!-- 子代理：面板常驻入口（无论有无子代理都可进入，面板内列出活跃 + 已结束回放） -->
         <button class="start-item" @click="emit('open-subagents')">
           <span class="start-item-icon">
-            <el-icon :size="18"><Bot20Regular /></el-icon>
+            <Bot20Regular class="w-4.5 h-4.5"  />
           </span>
           <span class="start-item-text">
             <span class="start-item-title">{{ t('chat.workspace.subagents') }}</span>
@@ -53,7 +53,7 @@
         <!-- 工作流：面板常驻入口（无论有无运行都可进入，面板内列出历史 run） -->
         <button class="start-item" @click="emit('open-workflow')">
           <span class="start-item-icon">
-            <el-icon :size="18"><Flowchart20Regular /></el-icon>
+            <Flowchart20Regular class="w-4.5 h-4.5"  />
           </span>
           <span class="start-item-text">
             <span class="start-item-title">{{ t('chat.workspace.workflowTab') }}</span>
@@ -63,7 +63,7 @@
         <!-- 计划：面板常驻入口（无论有无计划都可进入，面板内列出历史计划） -->
         <button class="start-item" @click="emit('open-plan')">
           <span class="start-item-icon">
-            <el-icon :size="18"><Notepad20Regular /></el-icon>
+            <Notepad20Regular class="w-4.5 h-4.5"  />
           </span>
           <span class="start-item-text">
             <span class="start-item-title">{{ t('chat.workspace.planTab') }}</span>

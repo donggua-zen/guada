@@ -25,9 +25,9 @@
                 :class="{ 'bg-(--gd-color-surface)': editingId === element.id }">
                 <!-- 拖拽手柄 -->
                 <div class="drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600">
-                  <el-icon class="w-4 h-4">
-                    <ReOrderDotsHorizontal20Regular />
-                  </el-icon>
+                  
+                    <ReOrderDotsHorizontal20Regular class="w-4 h-4"  />
+                  
                 </div>
 
                 <!-- 分组名称（编辑模式） -->
@@ -45,15 +45,15 @@
                   <div class="flex items-center gap-1">
                     <div class="action-btn p-1 rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
                       @click="startEdit(element)">
-                      <el-icon class="w-3.5 h-3.5 text-gray-500">
-                        <Edit16Regular />
-                      </el-icon>
+                      
+                        <Edit16Regular class="w-3.5 h-3.5 text-gray-500"  />
+                      
                     </div>
                     <div class="action-btn p-1 rounded cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20"
                       @click="handleDeleteGroup(element)">
-                      <el-icon class="w-3.5 h-3.5 text-red-400">
-                        <Delete20Regular />
-                      </el-icon>
+                      
+                        <Delete20Regular class="w-3.5 h-3.5 text-red-400"  />
+                      
                     </div>
                   </div>
                 </template>

@@ -11,12 +11,12 @@
     <div v-if="!expanded" class="todo-pill flex items-center gap-2 px-3 py-2 cursor-pointer select-none"
       @click="expanded = true">
       <span class="flex h-4 w-4 shrink-0 items-center justify-center">
-        <el-icon v-if="currentItem?.status === 'in_progress'" size="14" class="todo-icon--active">
-          <ArrowRight16Regular />
-        </el-icon>
-        <el-icon v-else-if="currentItem?.status === 'completed'" size="14" class="todo-icon--done">
-          <Checkmark16Regular />
-        </el-icon>
+        
+          <ArrowRight16Regular v-if="currentItem?.status === 'in_progress'" class="todo-icon--active w-3.5 h-3.5"  />
+        
+        
+          <Checkmark16Regular v-else-if="currentItem?.status === 'completed'" class="todo-icon--done w-3.5 h-3.5"  />
+        
         <span v-else class="todo-ring"></span>
       </span>
       <span class="min-w-0 flex-1 truncate text-xs todo-text" :title="currentItem?.content">
@@ -25,9 +25,9 @@
       <span v-if="doneCount" class="shrink-0 font-mono text-xs todo-text-faint">
         {{ doneCount }}/{{ items.length }}
       </span>
-      <el-icon :size="12" class="todo-chevron shrink-0">
-        <ChevronDown12Regular />
-      </el-icon>
+      
+        <ChevronDown12Regular class="todo-chevron shrink-0 w-3 h-3"  />
+      
     </div>
 
     <!-- ── 展开态：完整卡片 ── -->
@@ -40,21 +40,21 @@
         <span v-if="doneCount" class="ml-auto shrink-0 font-mono text-xs font-semibold todo-count">
           {{ doneCount }}/{{ items.length }}
         </span>
-        <el-icon :size="12" class="todo-chevron shrink-0 is-open" :class="{ 'ml-auto': !doneCount }">
-          <ChevronDown12Regular />
-        </el-icon>
+        
+          <ChevronDown12Regular class="todo-chevron shrink-0 is-open w-3 h-3" :class="{ 'ml-auto': !doneCount }"  />
+        
       </div>
 
       <!-- 全部条目：✓ 完成 / → 进行中 / ○ 待处理 -->
       <div class="mt-2 flex flex-col gap-0.5">
         <div v-for="(item, i) in items" :key="i" class="flex items-start gap-2 rounded px-1 py-0.5">
           <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
-            <el-icon v-if="item.status === 'completed'" size="14" class="todo-icon--done">
-              <Checkmark16Regular />
-            </el-icon>
-            <el-icon v-else-if="item.status === 'in_progress'" size="14" class="todo-icon--active">
-              <ArrowRight16Regular />
-            </el-icon>
+            
+              <Checkmark16Regular v-if="item.status === 'completed'" class="todo-icon--done w-3.5 h-3.5"  />
+            
+            
+              <ArrowRight16Regular v-else-if="item.status === 'in_progress'" class="todo-icon--active w-3.5 h-3.5"  />
+            
             <span v-else class="todo-ring"></span>
           </span>
           <span class="min-w-0 flex-1 text-xs leading-relaxed break-words" :title="item.content"

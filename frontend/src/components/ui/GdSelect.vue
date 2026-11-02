@@ -151,6 +151,8 @@ const props = withDefaults(defineProps<{
     variant?: "filled" | "outline";
     size?: "tiny" | "small" | "medium" | "default" | "large";
     noDataText?: string;
+    /** 错误态红描边（表单校验行内错误时由 GdFormField 调用方接线） */
+    error?: boolean;
 }>(), {
     modelValue: "",
     options: () => [],
@@ -382,6 +384,12 @@ const triggerClasses = computed((): string => {
         classes.push(props.variant === "outline"
             ? "bg-[var(--gd-color-field-outline-bg)] border-[var(--gd-color-field-outline-border)] opacity-60"
             : "bg-[var(--gd-color-field-bg-disabled)] border-transparent");
+    } else if (props.error) {
+        classes.push(
+            "bg-[var(--gd-color-field-bg)]",
+            "border-[var(--gd-color-danger)]",
+            "md:hover:bg-[var(--gd-color-field-bg-hover)]",
+        );
     } else if (props.variant === "outline") {
         classes.push(
             "cursor-pointer bg-[var(--gd-color-field-outline-bg)] border-[var(--gd-color-field-outline-border)]",

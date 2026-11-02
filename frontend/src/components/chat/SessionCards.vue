@@ -33,15 +33,15 @@
           <!-- 分页器（对齐 ZCode：翻页只走箭头，选完不自动翻；单页为禁用态） -->
           <span class="shrink-0 flex items-center gap-1 text-xs text-gray-400">
             <button class="ask-page-btn" :disabled="pageIdx === 0" @click="prevPage">
-              <el-icon :size="12">
-                <ChevronLeft20Regular />
-              </el-icon>
+              
+                <ChevronLeft20Regular class="w-3 h-3"  />
+              
             </button>
             <span class="tabular-nums">{{ pageIdx + 1 }}/{{ total }}</span>
             <button class="ask-page-btn" :disabled="isLast" @click="nextPage">
-              <el-icon :size="12">
-                <ChevronRight20Regular />
-              </el-icon>
+              
+                <ChevronRight20Regular class="w-3 h-3"  />
+              
             </button>
           </span>
         </div>
@@ -111,7 +111,7 @@
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
 import { computed, nextTick, ref, watch } from "vue";
-import { ElIcon } from 'element-plus';
+
 import { ChevronLeft20Regular, ChevronRight20Regular } from "@vicons/fluent";
 import { useI18n } from "vue-i18n";
 import { apiService } from "@/services/ApiService";

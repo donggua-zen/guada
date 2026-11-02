@@ -30,7 +30,7 @@
         <button ref="weekdayButtonRef" type="button" class="sched-pill trigger-pill"
           @click.stop="weekdayPopoverVisible = !weekdayPopoverVisible">
           <span class="truncate max-w-40">{{ weeklySummary }}</span>
-          <el-icon :size="12"><ChevronDown16Regular /></el-icon>
+          <ChevronDown16Regular class="w-3 h-3"  />
         </button>
         <GdPopover :show="weekdayPopoverVisible" @update:show="weekdayPopoverVisible = $event" :width="288"
           :anchor-el="weekdayButtonRef">
@@ -55,7 +55,7 @@
         <button ref="monthDayButtonRef" type="button" class="sched-pill trigger-pill"
           @click.stop="monthDayPopoverVisible = !monthDayPopoverVisible">
           <span class="truncate max-w-40">{{ monthlySummary }}</span>
-          <el-icon :size="12"><ChevronDown16Regular /></el-icon>
+          <ChevronDown16Regular class="w-3 h-3"  />
         </button>
         <GdPopover :show="monthDayPopoverVisible" @update:show="monthDayPopoverVisible = $event" :width="320"
           :anchor-el="monthDayButtonRef">
@@ -70,16 +70,15 @@
 
       <template v-if="draft.frequency === 'once'">
         <span class="sentence-text">{{ t('scheduler.schedule.at') }}</span>
-        <el-date-picker :model-value="draft.onceAt" type="datetime" class="sched-date"
-          format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" :clearable="false"
+        <GdDatePicker :model-value="draft.onceAt" size="small" class="sched-date"
           :placeholder="t('scheduler.schedule.oncePlaceholder')"
-          @update:model-value="emitDraft({ onceAt: String($event || '') })" />
+          @update:model-value="emitDraft({ onceAt: $event })" />
       </template>
 
       <template v-else-if="needsTime">
         <span class="sentence-text">{{ t('scheduler.schedule.at') }}</span>
-        <el-time-picker :model-value="timeValue" format="HH:mm" value-format="HH:mm" :clearable="false"
-          class="sched-time" @update:model-value="handleTimeChange" />
+        <GdTimePicker :model-value="timeValue" size="small" class="sched-time"
+          @update:model-value="handleTimeChange" />
       </template>
 
       <template v-if="draft.frequency === 'custom'">
@@ -101,9 +100,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElTimePicker, ElDatePicker, ElIcon } from 'element-plus';
 import { ChevronDown16Regular } from '@vicons/fluent'
 import GdPopover from '@/components/ui/GdPopover.vue'
+import GdDatePicker from '@/components/ui/GdDatePicker.vue'
+import GdTimePicker from '@/components/ui/GdTimePicker.vue'
 import GdInput from '@/components/ui/GdInput.vue'
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
@@ -266,51 +266,34 @@ function pad2(value: number): string {
 
 .sentence-shell.has-error {
   border-radius: 8px;
-  box-shadow: 0 0 0 1px var(--el-color-danger);
+  box-shadow: 0 0 0 1px var(--gd-color-danger);
 }
 
 .sentence-text {
   font-size: 13px;
-  color: var(--gd-color-text-gray, var(--el-text-color-secondary));
+  color: var(--gd-color-text-gray);
   white-space: nowrap;
 }
 
 .sentence-tz {
   font-size: 12px;
-  color: var(--gd-color-text-disabled, var(--el-text-color-placeholder));
+  color: var(--gd-color-text-disabled);
 }
 
 .sentence-preview {
   margin-left: auto;
   font-size: 12px;
-  color: var(--gd-color-text-gray, var(--el-text-color-secondary));
+  color: var(--gd-color-text-gray);
   white-space: nowrap;
 }
 
 .sentence-error {
   margin: 0;
   font-size: 12px;
-  color: var(--el-color-danger);
+  color: var(--gd-color-danger);
 }
 
 .sched-pill {
-  flex: 0 0 auto;
-}
-
-.sched-pill :deep(.el-select__wrapper) {
-  min-height: 26px;
-  padding: 0 9px;
-  border-radius: 999px;
-  background: var(--el-fill-color-light);
-  box-shadow: none !important;
-  font-size: 13px;
-}
-
-.sched-pill :deep(.el-select__placeholder) {
-  color: var(--gd-color-text);
-}
-
-.sentence-shell :deep(.el-select) {
   flex: 0 0 auto;
 }
 
@@ -321,11 +304,13 @@ function pad2(value: number): string {
 .sentence-shell :deep(.sched-time) {
   width: 96px;
   flex: 0 0 auto;
+  border-radius: 999px;
 }
 
 .sentence-shell :deep(.sched-date) {
   width: 198px;
   flex: 0 0 auto;
+  border-radius: 999px;
 }
 
 .sentence-shell :deep(.sched-cron) {
@@ -350,7 +335,7 @@ function pad2(value: number): string {
   padding: 0 10px;
   border: none;
   border-radius: 999px;
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
   color: var(--gd-color-text);
   font-size: 13px;
   cursor: pointer;
@@ -358,49 +343,11 @@ function pad2(value: number): string {
 }
 
 .trigger-pill:hover {
-  background: var(--el-fill-color);
+  background: var(--gd-color-field-bg-hover);
 }
 
-.sentence-shell :deep(.sched-time),
-.sentence-shell :deep(.sched-date),
-.sentence-shell :deep(.sched-cron) {
-  height: 26px;
-  min-height: 26px;
-  line-height: 26px;
-}
-
-.sentence-shell :deep(.sched-time .el-input__inner),
-.sentence-shell :deep(.sched-date .el-input__inner),
-.sentence-shell :deep(.sched-cron .el-input__inner) {
-  height: 26px;
-  line-height: 26px;
-}
-
-.sentence-shell :deep(.sched-time .el-input__wrapper) {
-  height: 26px;
-  min-height: 26px;
-  box-shadow: none !important;
-  background: var(--el-fill-color-light);
-  border-radius: 999px;
-  padding: 0 9px;
-}
-
-.sentence-shell :deep(.sched-date .el-input__wrapper) {
-  height: 26px;
-  min-height: 26px;
-  box-shadow: none !important;
-  background: var(--el-fill-color-light);
-  border-radius: 999px;
-  padding: 0 9px;
-}
-
-.sentence-shell :deep(.sched-cron .el-input__wrapper) {
-  height: 26px;
-  min-height: 26px;
-  box-shadow: none !important;
-  background: var(--el-fill-color-light);
-  border-radius: 999px;
-  padding: 0 10px;
+/* GdTimePicker/GdDatePicker/GdInput 的 small 档自带 26px 高，这里只收敛字重与等宽 */
+.sentence-shell :deep(.sched-cron input) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
 }
@@ -421,7 +368,7 @@ function pad2(value: number): string {
   height: 30px;
   border: none;
   border-radius: 8px;
-  background: var(--el-fill-color-light);
+  background: var(--gd-color-field-bg);
   color: var(--gd-color-text);
   font-size: 12px;
   cursor: pointer;
@@ -433,11 +380,11 @@ function pad2(value: number): string {
 }
 
 .day-chip:hover {
-  background: var(--el-fill-color);
+  background: var(--gd-color-field-bg-hover);
 }
 
 .day-chip.active {
-  background: var(--el-color-primary);
+  background: var(--gd-color-primary);
   color: #fff;
 }
 
@@ -451,7 +398,7 @@ function pad2(value: number): string {
 .day-action {
   border: none;
   background: transparent;
-  color: var(--el-color-primary);
+  color: var(--gd-color-primary);
   font-size: 12px;
   cursor: pointer;
 }

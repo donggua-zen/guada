@@ -3,9 +3,9 @@
     <!-- 命令执行事件 -->
     <div v-if="eventType === 'command'" class="event-card__command">
       <div class="flex items-center gap-1.5">
-        <el-icon size="14" class="text-gray-400 dark:text-gray-500">
-          <KeyCommand16Regular />
-        </el-icon>
+        
+          <KeyCommand16Regular class="text-gray-400 dark:text-gray-500 w-3.5 h-3.5"  />
+        
         <span class="font-mono text-xs text-gray-500 dark:text-gray-400">
           /{{ commandName }}
         </span>
@@ -28,9 +28,9 @@
       <div v-if="compressing" class="event-card__divider">
         <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
         <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
-          <el-icon size="14">
-            <ArrowSync16Regular class="animate-spin" />
-          </el-icon>
+          
+            <ArrowSync16Regular class="w-3.5 h-3.5 animate-spin" />
+          
           <span class="event-card__compaction-text">{{ t('chat.turn.contextCompacting') }}</span>
         </span>
         <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
@@ -39,9 +39,9 @@
       <div v-else-if="compressResult" class="event-card__divider">
         <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
         <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
-          <el-icon size="14">
-            <Archive20Regular />
-          </el-icon>
+          
+            <Archive20Regular class="w-3.5 h-3.5"  />
+          
           <span class="event-card__compaction-text">{{ compressResultLabel }}</span>
         </span>
         <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
@@ -51,10 +51,8 @@
           <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
           <button type="button" class="event-card__compaction-btn" @click="expanded = !expanded">
             <!-- 14px（偶数）：与上方压缩中胶囊同规格；13px 在 24px 行内的居中余量是 5.5px 半像素 -->
-            <el-icon size="14">
-              <Archive20Regular v-if="!expanded" />
-              <ArrowUp16Regular v-else />
-            </el-icon>
+            <span class="w-3.5 h-3.5"><Archive20Regular v-if="!expanded" />
+              <ArrowUp16Regular v-else /></span>
             <span class="event-card__compaction-text">{{ compactLabel }}</span>
           </button>
           <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
@@ -75,20 +73,18 @@
       <div class="event-card__divider">
         <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
         <button type="button" class="event-card__compaction-btn" @click="expanded = !expanded">
-          <el-icon size="14">
-            <PanelRightExpand20Filled v-if="isSubagentNotice" />
+          <span class="w-3.5 h-3.5"><PanelRightExpand20Filled v-if="isSubagentNotice" />
             <ArrowUp16Regular v-else-if="expanded" />
-            <ChevronDown12Regular v-else class="rotate-90" />
-          </el-icon>
+            <ChevronDown12Regular v-else class="rotate-90" /></span>
           <span class="event-card__compaction-text">{{ noticeLabel }}</span>
         </button>
         <!-- 子代理结果通知：点进派生子代理的会话（source.subSessionId 结构化携带） -->
         <GdTooltip v-if="isSubagentNotice && subSessionId && openSubAgentSession"
           :content="t('chat.toolCalls.openSubAgentPanel')" placement="top">
           <span class="event-card__subagent-btn" @click="openSubAgentSession(subSessionId)">
-            <el-icon size="14">
-              <PanelRightExpand20Filled />
-            </el-icon>
+            
+              <PanelRightExpand20Filled class="w-3.5 h-3.5"  />
+            
           </span>
         </GdTooltip>
         <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
@@ -101,9 +97,9 @@
       <div class="event-card__divider">
         <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
         <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
-          <el-icon size="14">
-            <Warning16Regular />
-          </el-icon>
+          
+            <Warning16Regular class="w-3.5 h-3.5"  />
+          
           <span class="event-card__compaction-text">{{ t('chat.turn.contextWindowNoticeTitle') }}</span>
         </span>
         <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
@@ -118,9 +114,9 @@
       <div class="event-card__divider">
         <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
         <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
-          <el-icon size="14">
-            <Cut20Regular />
-          </el-icon>
+          
+            <Cut20Regular class="w-3.5 h-3.5"  />
+          
           <span class="event-card__compaction-text">{{ toolImagePruneLabel }}</span>
         </span>
         <span class="event-card__line event-card__line--right" aria-hidden="true"></span>

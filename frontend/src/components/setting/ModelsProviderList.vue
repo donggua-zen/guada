@@ -64,7 +64,7 @@
             :title="template.name">
             {{ template.name }}
           </h3>
-          <el-tag v-if="template.source === 'plugin'" size="small" type="info" effect="plain" class="shrink-0">插件</el-tag>
+          <GdTag v-if="template.source === 'plugin'" size="small" type="info" effect="plain" class="shrink-0">插件</GdTag>
         </div>
         <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
           {{ template.description || '点击添加到您的供应商列表' }}
@@ -83,11 +83,12 @@
 </template>
 
 <script setup>
-import { ElTag } from 'element-plus';
+
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { apiService } from '@/services/ApiService'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdSwitch from '@/components/ui/GdSwitch.vue';
+import GdTag from '@/components/ui/GdTag.vue';
 
 const props = defineProps({
   items: {

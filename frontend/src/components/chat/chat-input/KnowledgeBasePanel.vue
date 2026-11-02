@@ -5,9 +5,9 @@
       <div class="mb-3">
         <GdInput v-model="searchText" :placeholder="t('chat.input.searchKnowledgeBase')" clearable size="small">
           <template #prefix>
-            <el-icon>
-              <Search12Regular />
-            </el-icon>
+            
+              <Search12Regular class="size-4"  />
+            
           </template>
         </GdInput>
       </div>
@@ -16,9 +16,9 @@
       <div class="kb-list-container min-h-0 overflow-hidden">
         <div class="space-y-1 pb-4 w-full">
           <div v-if="filteredKnowledgeBases.length === 0" class="text-center py-6 text-gray-400">
-            <el-icon size="32" class="mb-1">
-              <Search12Regular />
-            </el-icon>
+            
+              <Search12Regular class="mb-1 w-8 h-8"  />
+            
             <p class="text-xs">{{ t('chat.input.noMatchKnowledgeBase') }}</p>
           </div>
           <div v-else class="space-y-1">
@@ -26,7 +26,7 @@
               class="kb-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2" :class="{
                 'kb-item-active': selectedIds.includes(kb.id)
               }" @click="handleToggle(kb.id)">
-              <el-checkbox :model-value="selectedIds.includes(kb.id)" @click.stop @change="handleToggle(kb.id)"
+              <GdCheckbox :model-value="selectedIds.includes(kb.id)" @click.stop @change="handleToggle(kb.id)"
                 size="small" />
               <div class="flex-1 min-w-0 flex items-center gap-2">
                 <div class="font-medium text-sm truncate shrink">{{ kb.name }}</div>
@@ -45,10 +45,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElCheckbox, ElIcon } from 'element-plus';
+
 import { Search12Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import GdInput from '@/components/ui/GdInput.vue';
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
 
 const { t } = useI18n()
 

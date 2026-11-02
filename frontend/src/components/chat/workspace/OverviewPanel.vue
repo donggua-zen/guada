@@ -44,10 +44,10 @@
         <div class="overview-dropdown">
           <DropdownMenu @command="git.checkout">
             <button class="overview-row" :disabled="!git.isGitRepo">
-              <el-icon :size="16" class="overview-row-icon"><BranchFork16Regular /></el-icon>
+              <BranchFork16Regular class="overview-row-icon w-4 h-4"  />
               <span class="overview-row-label">{{ t('git.branch') }}</span>
               <span class="overview-row-value overview-row-value--branch">{{ git.selectedBranch || '-' }}</span>
-              <el-icon :size="12" class="overview-row-chevron"><ChevronDown12Regular /></el-icon>
+              <ChevronDown12Regular class="overview-row-chevron w-3 h-3"  />
             </button>
             <template #dropdown>
               <div class="overview-branch-menu">
@@ -64,7 +64,7 @@
 
         <!-- 提交或推送：打开全局提交弹窗（GitCommitDialog） -->
         <button class="overview-row" :disabled="!git.isGitRepo" @click="git.openCommitDialog()">
-          <el-icon :size="16" class="overview-row-icon"><ArrowUpload16Regular /></el-icon>
+          <ArrowUpload16Regular class="overview-row-icon w-4 h-4"  />
           <span class="overview-row-label">{{ t('git.commitOrPush') }}</span>
         </button>
       </section>
@@ -79,7 +79,7 @@
             <span class="overview-browser-title">{{ w.title || t('chat.workspace.unnamedWindow') }}</span>
           </button>
           <button class="overview-browser-new" @click="createBrowser">
-            <el-icon :size="14"><Add16Regular /></el-icon>
+            <Add16Regular class="w-3.5 h-3.5"  />
             <span>{{ t('chat.workspace.newTab') }}</span>
           </button>
         </div>
@@ -89,12 +89,12 @@
            用户无法分辨「打开了但渲染异常」与「确实没有可概览项」）。
            数据在途时先出加载态，避免空态闪现后被内容替换 ── -->
       <div v-if="showEmptyState" class="overview-empty">
-        <el-icon :size="22" class="overview-empty-icon"><AppsListDetail20Regular /></el-icon>
+        <AppsListDetail20Regular class="overview-empty-icon w-[22px] h-[22px]"  />
         <p class="overview-empty-title">{{ emptyText.title }}</p>
         <p class="overview-empty-hint">{{ emptyText.hint }}</p>
       </div>
       <div v-else-if="showLoadingState" class="overview-empty">
-        <el-icon :size="16" class="overview-empty-icon"><ArrowSync16Regular class="animate-spin" /></el-icon>
+        <ArrowSync16Regular class="overview-empty-icon w-4 h-4 animate-spin" />
         <p class="overview-empty-hint">{{ t('common.loading') }}</p>
       </div>
     </div>

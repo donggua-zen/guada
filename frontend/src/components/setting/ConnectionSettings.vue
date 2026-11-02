@@ -278,7 +278,7 @@
               {{ t('settings.connection.dirNotExist') }}
             </div>
             <!-- 目录列表 -->
-            <div class="flex-1 min-h-0 border rounded-lg overflow-hidden" style="border-color: var(--el-border-color, #dcdfe6);">
+            <div class="flex-1 min-h-0 border rounded-lg overflow-hidden" style="border-color: var(--gd-color-border);">
               <!-- 标题栏（风格与 item 一致，但不可点击） -->
               <div
                 class="flex items-center gap-2 px-3 py-2 text-xs text-gray-400 select-none"

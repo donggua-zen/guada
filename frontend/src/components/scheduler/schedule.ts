@@ -73,7 +73,7 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0')
 }
 
-/** Date → el-date-picker 使用的本地时间字符串 */
+/** Date → 本地时间字符串 "YYYY-MM-DD HH:mm:ss"（调度模型格式，GdDatePicker 同用） */
 export function toLocalDateTimeString(date: Date): string {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(
     date.getHours(),
