@@ -1,7 +1,8 @@
 import {
   ALLOWED_MARKET_HOSTS,
+  SKILLHUB_DOWNLOAD_HOST_POLICY,
   isAllowedMarketUrl,
-} from "../../src/modules/mcp-market/market-http.client";
+} from "../../src/common/http/market-http.client";
 
 /**
  * 市场 HTTP 白名单测试。
@@ -83,5 +84,43 @@ describe('market-http.client 白名单', () => {
       'www.mcpworld.com',
       'skillhub-1388575217.cos.accelerate.myqcloud.com',
     ]);
+  });
+
+  it('SkillHub 下载策略只放开 api 与 skillhub-* COS 桶', () => {
+    expect(
+      isAllowedMarketUrl(
+        'https://api.skillhub.cn/api/v1/download?slug=demo',
+        SKILLHUB_DOWNLOAD_HOST_POLICY,
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedMarketUrl(
+        'https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com/skills/demo.zip',
+        SKILLHUB_DOWNLOAD_HOST_POLICY,
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedMarketUrl(
+        'https://skillhub-1388575217.cos.accelerate.myqcloud.com/skills/demo.zip',
+        SKILLHUB_DOWNLOAD_HOST_POLICY,
+      ),
+    ).toBe(true);
+
+    // 其它桶、无 skillhub 前缀的桶、站点域名都不放行
+    expect(
+      isAllowedMarketUrl(
+        'https://other-bucket.cos.ap-guangzhou.myqcloud.com/skills/demo.zip',
+        SKILLHUB_DOWNLOAD_HOST_POLICY,
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedMarketUrl('https://skillhub.cn/skills/demo', SKILLHUB_DOWNLOAD_HOST_POLICY),
+    ).toBe(false);
+    expect(
+      isAllowedMarketUrl(
+        'https://skillhub-1388575217.cos.ap-guangzhou.myqcloud.com.evil.com/x.zip',
+        SKILLHUB_DOWNLOAD_HOST_POLICY,
+      ),
+    ).toBe(false);
   });
 });

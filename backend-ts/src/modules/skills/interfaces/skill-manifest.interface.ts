@@ -33,6 +33,22 @@ export interface SkillManifest {
 export type SkillSourceType = 'system' | 'agents' | 'global' | 'workspace';
 
 /**
+ * 市场来源（安装时写入技能目录内的 .skill-origin.json，加载时读回）
+ *
+ * 只用于「已安装状态匹配 / 升级判断 / UI 溯源」，不参与 AI 上下文。
+ */
+export interface SkillOrigin {
+  /** 市场标识：skillhub / official / 其它字符串 */
+  source: string;
+  /** 市场内稳定条目 id（SkillHub 为 slug） */
+  itemId: string;
+  /** 安装时的市场版本（用于展示与升级比较） */
+  version?: string;
+  /** 安装时间（ISO 字符串） */
+  installedAt?: string;
+}
+
+/**
  * 完整 Skill 定义（内存表示）
  */
 /**
@@ -58,6 +74,8 @@ export interface SkillDefinition {
   provider?: string;
   /** 资源基：模型按此 + 相对路径访问脚本/资源（未声明时默认技能目录） */
   resourceBase?: SkillResourceBase;
+  /** 市场来源（详见 SkillOrigin；手动上传/Git 安装时缺省） */
+  origin?: SkillOrigin;
 }
 
 /**

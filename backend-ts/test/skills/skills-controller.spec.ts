@@ -385,5 +385,73 @@ describe('SkillsController', () => {
       expect(result.success).toBe(false);
       expect(result.message).toContain('Invalid URL');
     });
+
+    it('下载安装时写入市场来源 sidecar', async () => {
+      const zipBuffer = createSingleSkillZip('url-skill');
+      const originalFetch = global.fetch;
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        arrayBuffer: async () => zipBuffer,
+      }) as unknown as typeof fetch;
+
+      try {
+        const result = await controller.installFromUrl({
+          url: 'https://example.com/url-skill.zip',
+          force: false,
+          origin: { source: 'official', itemId: 'url-skill', version: '1.0.0' },
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.skillIds).toEqual(['url-skill']);
+
+        const origin = JSON.parse(
+          await fs.readFile(
+            path.join(testSkillsDir, 'url-skill', '.skill-origin.json'),
+            'utf-8',
+          ),
+        );
+        expect(origin).toMatchObject({
+          source: 'official',
+          itemId: 'url-skill',
+          version: '1.0.0',
+        });
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+
+    it('根级 SKILL.md 时不应把下载的 ZIP 复制进技能目录', async () => {
+      const zip = new AdmZip();
+      zip.addFile(
+        'SKILL.md',
+        Buffer.from('---\nname: root-skill\ndescription: Root skill\n---\n\n# Root\n', 'utf-8'),
+      );
+      zip.addFile('README.md', Buffer.from('readme', 'utf-8'));
+
+      const originalFetch = global.fetch;
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        arrayBuffer: async () => zip.toBuffer(),
+      }) as unknown as typeof fetch;
+
+      try {
+        const result = await controller.installFromUrl({
+          url: 'https://example.com/root-skill.zip',
+          force: false,
+        });
+
+        expect(result.success).toBe(true);
+        const files = await fs.readdir(path.join(testSkillsDir, 'root-skill'));
+        expect(files).toContain('SKILL.md');
+        expect(files).toContain('README.md');
+        expect(files).not.toContain('skill.zip');
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
   });
 });

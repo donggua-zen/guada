@@ -12,7 +12,11 @@ import {
   BadRequestException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import { fetchMarketJson, fetchMarketText, MarketFetchError } from "./market-http.client";
+import {
+  fetchMarketJson,
+  fetchMarketText,
+  MarketFetchError,
+} from "../../common/http/market-http.client";
 import {
   ExtractedMcpConfig,
   extractMcpConfig,

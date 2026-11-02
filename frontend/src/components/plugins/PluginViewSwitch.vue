@@ -241,6 +241,25 @@ function move(step: number) {
     width: 240px;
 }
 
+/* ── 视图切换淡入 ──
+   v-show 从 none 恢复时动画会重新播放，因此不需要 Transition/重建组件。
+   加载态统一复用 .plugins-skeleton，不再额外维护进度条。 */
+.plugins-view-fade {
+    animation: plugins-view-fade-in 180ms ease-out;
+}
+
+@keyframes plugins-view-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* ── 首次进入市场的占位行：几何对齐 PluginListRow（py-2.5 px-2 / gap-3 / 40px 头像 / 20px+16px 两行）
    pulse 只动 opacity，与 MessageSkeleton 同一手法 */
 .plugins-skeleton {

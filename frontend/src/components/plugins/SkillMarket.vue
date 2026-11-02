@@ -15,9 +15,9 @@
             </button>
         </div>
 
-        <!-- 首次切入市场：先按行 geometry 占位，避免视图条切过去是一片空白 -->
-        <div v-if="loading && items.length === 0" class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
-            <div v-for="i in 4" :key="i" class="plugins-skeleton" aria-hidden="true">
+        <!-- 加载中：统一用骨架动画（首次进入与刷新共用），骨架数量贴近当前列表高度 -->
+        <div v-if="loading" class="-mx-2 grid grid-cols-1 gap-x-6 gap-y-3 lg:grid-cols-2">
+            <div v-for="i in skeletonCount" :key="i" class="plugins-skeleton" aria-hidden="true">
                 <span class="plugins-skeleton__avatar"></span>
                 <span class="plugins-skeleton__lines">
                     <span class="plugins-skeleton__line plugins-skeleton__line--name"></span>
@@ -38,7 +38,7 @@
         </div>
 
         <!-- 空结果（浏览模式） -->
-        <div v-else-if="!loading && items.length === 0"
+        <div v-else-if="items.length === 0"
             class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-8 text-center text-sm text-gray-500 dark:text-[#8b8d95]">
             {{ t('plugins.skills.marketEmptyResult') }}
         </div>
@@ -196,7 +196,7 @@ import {
 import { getLocale } from '@/locales'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import { openInExternalBrowser } from '@/utils/browserUtils'
-import { isVersionNewer } from '@/utils/version'
+import { applyMarketStatus, dedupeById } from '@/utils/marketStatus'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
@@ -236,6 +236,9 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 // 浏览模式：有关键词或选了标签；否则为推荐模式
 const isBrowseMode = computed(() => keyword.value !== '' || selectedLabelId.value !== '')
+
+/** 刷新时骨架行数与当前列表接近，避免高度跳动 */
+const skeletonCount = computed(() => Math.max(4, Math.min(items.value.length, 12)))
 
 const labelChips = computed(() => [
     { id: '', name: t('plugins.skills.marketFilterAll'), index: 0 },
@@ -279,7 +282,13 @@ async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
     marketInstallError.value = null
 
     try {
-        const response = await apiService.installSkillFromUrl(zipUrl)
+        // 已安装时走覆盖安装：升级/重装必须带 force，否则后端会以目录已存在拒绝
+        const force = marketSkill.localStatus !== 'not_installed'
+        const response = await apiService.installSkillFromUrl(zipUrl, force, {
+            source: 'official',
+            itemId: marketSkill.id,
+            ...(marketSkill.version ? { version: marketSkill.version } : {}),
+        })
         if (response.success) {
             toast.success(response.message || t('common.createSuccess'))
             showMarketInstallDialog.value = false
@@ -320,27 +329,10 @@ function handleOpenDetailUrl(marketSkill: MarketSkillWithStatus) {
 }
 
 /**
- * 更新所有市场技能的状态（与本地已安装技能做名字匹配）
+ * 更新所有市场技能的状态（优先按安装来源匹配，回退到名称匹配）
  */
 function refreshStatus() {
-    const localSkills = props.localSkills
-    items.value = items.value.map(marketSkill => {
-        const match = localSkills.find(
-            local => local.manifest.name?.toLowerCase() === marketSkill.id?.toLowerCase()
-        )
-        if (!match) {
-            return { ...marketSkill, localStatus: 'not_installed' as const }
-        }
-
-        // 名字匹配成功，比较版本：只有市场版本更高才可更新；
-        // 本地版本更高或相同都视为已安装（避免把降级误判为升级）。
-        const localVer = match.manifest.version
-        const marketVer = marketSkill.version
-        if (marketVer && localVer && isVersionNewer(marketVer, localVer)) {
-            return { ...marketSkill, localStatus: 'updatable' as const, localVersion: localVer }
-        }
-        return { ...marketSkill, localStatus: 'installed' as const, localVersion: localVer }
-    })
+    items.value = applyMarketStatus(dedupeById(items.value), props.localSkills, 'official')
 }
 
 watch(() => props.localSkills, refreshStatus, { deep: true })
@@ -433,14 +425,21 @@ async function loadMarket(forceRefresh: boolean = false) {
 
         items.value = nextItems
         pagination.value = nextPagination
-        // 与本地技能做名字匹配，更新状态
+        lastLoadedAt.value = Date.now()
+        // 与本地技能匹配，更新状态（内部会按 id 去重）
         refreshStatus()
     } catch (err) {
         if (seq !== loadSeq) return
         console.error('加载市场技能失败:', err)
-        error.value = getErrorMessage(err) || t('plugins.skills.marketError')
-        items.value = []
-        pagination.value = null
+        const message = getErrorMessage(err) || t('plugins.skills.marketError')
+        if (items.value.length > 0) {
+            // 刷新失败时保留已有列表，避免整页闪成错误态
+            toast.error(message)
+        } else {
+            error.value = message
+            items.value = []
+            pagination.value = null
+        }
     } finally {
         if (seq === loadSeq) loading.value = false
     }
@@ -448,12 +447,21 @@ async function loadMarket(forceRefresh: boolean = false) {
 
 /** 首次进入市场视图才拉数据；未激活时所有加载出口都直接返回 */
 const activated = ref(false)
+/** 上次成功加载时间：切回视图时只有超过 60s 才自动刷新 */
+const lastLoadedAt = ref(0)
 
 function activate() {
-    if (activated.value) return
-    activated.value = true
-    void loadLabels()
-    void loadMarket()
+    if (!activated.value) {
+        activated.value = true
+        void loadLabels()
+        void loadMarket()
+        return
+    }
+    // 切回视图：数据已新鲜就直接展示（配合视图淡入动画）；
+    // 超过 60s 才在后台刷新，用顶部进度条给出反馈，避免每次切换都换一批。
+    if (!loading.value && Date.now() - lastLoadedAt.value > 60_000) {
+        void loadMarket()
+    }
 }
 
 /**

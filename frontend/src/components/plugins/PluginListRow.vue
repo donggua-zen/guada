@@ -3,7 +3,7 @@
     class="plugin-list-row group flex min-w-0 cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-(--gd-color-surface-subtle-hover)"
     @click="emit('click')"
   >
-    <div class="shrink-0" :class="{ 'opacity-60': muted }">
+    <div class="shrink-0" :class="{ 'opacity-60': muted, 'plugin-row-avatar--top': hasMeta }">
       <CardAvatar :src="iconSrc" :name="name" size="md" tray />
     </div>
 
@@ -19,10 +19,11 @@
         v-if="description"
         class="plugin-row-desc mt-1 truncate leading-4 text-(--gd-color-text-gray)"
         style="font-size: var(--gd-size-text-xs);"
-        :title="description"
       >
         {{ description }}
       </p>
+      <!-- 可选的第三行（如下载/收藏等次级信息）；有它时头像仍对齐前两行 -->
+      <slot name="meta" />
     </div>
 
     <div class="flex shrink-0 items-center gap-2">
@@ -50,6 +51,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed, useSlots } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { MoreHorizontal20Filled } from '@vicons/fluent'
@@ -78,9 +80,18 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const slots = useSlots()
+/** 传了 meta 插槽：头像改为对齐前两行，而不是被第三行整体拉居中 */
+const hasMeta = computed(() => Boolean(slots.meta))
 </script>
 
 <style scoped>
+/* 带第三行时头像顶端对齐：头像高度 ≈ 前两行（标题 20 + 间距 4 + 描述 16），
+   第三行落在头像下方，视觉上仍是「两行居中」。 */
+.plugin-row-avatar--top {
+  align-self: flex-start;
+}
+
 .row-menu-trigger {
   display: flex;
   align-items: center;

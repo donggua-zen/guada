@@ -30,7 +30,7 @@
                         {{ t('plugins.skills.docs') }}
                     </GdButton>
                 </template>
-                <template v-else>
+                <template v-else-if="view === 'market'">
                     <GdInput
                         v-model="marketKeyword"
                         :placeholder="t('plugins.skills.marketSearchPlaceholder')"
@@ -56,11 +56,35 @@
                         </template>
                     </GdButton>
                 </template>
+                <template v-else>
+                    <GdInput
+                        v-model="skillhubKeyword"
+                        :placeholder="t('plugins.skills.skillhubSearchPlaceholder')"
+                        clearable
+                        size="default"
+                        class="plugins-search"
+                    >
+                        <template #prefix>
+                            <Search16Regular class="size-4"  />
+                        </template>
+                    </GdInput>
+                    <GdButton link size="small" :loading="skillHubLoading" @click="handleSkillHubRefresh">
+                        <template #icon>
+                            <ArrowClockwise16Regular class="size-4" :class="{ 'animate-spin': skillHubLoading }" />
+                        </template>
+                        {{ skillHubLoading ? t('common.loading') : t('plugins.skills.skillhubRefresh') }}
+                    </GdButton>
+                    <GdButton circle size="small" :title="t('plugins.page.marketOpenWeb')" @click="handleOpenSkillHubSite">
+                        <template #icon>
+                            <ArrowUpRight16Regular />
+                        </template>
+                    </GdButton>
+                </template>
             </div>
         </div>
 
         <!-- 已安装视图：来源筛选 chips 取代原竖排可折叠分区 -->
-        <div v-show="view === 'installed'">
+        <div v-show="view === 'installed'" class="plugins-view-fade">
             <div v-if="skillGroups.length > 0" class="plugins-filter-row">
                 <button
                     v-for="chip in sourceChips"
@@ -92,6 +116,7 @@
                         <GdTag v-if="skill.provider" size="small" type="warning" effect="light">{{ t('plugins.skills.fromPlugin') }}</GdTag>
                         <GdTag v-else-if="skill.source === 'system'" size="small" type="success" effect="light">{{ t('plugins.skills.sourceBuiltin') }}</GdTag>
                         <GdTag v-else-if="skill.source === 'agents'" size="small" type="warning" effect="light">{{ t('plugins.skills.sourceShared') }}</GdTag>
+                        <GdTag v-if="skill.origin?.source === 'skillhub'" size="small" type="info" effect="light">{{ t('plugins.skills.originSkillHub') }}</GdTag>
                         <GdTag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</GdTag>
                     </template>
                     <template #actions>
@@ -137,12 +162,23 @@
         </div>
 
         <!-- 市场视图：v-show 保留实例，切回来不重新请求、搜索与筛选状态都在；数据首次进入才拉 -->
-        <div v-show="view === 'market'">
+        <div v-show="view === 'market'" class="plugins-view-fade">
             <SkillMarket
                 ref="marketRef"
                 v-model:keyword="marketKeyword"
                 :local-skills="skills"
                 :active="view === 'market'"
+                @installed="() => loadSkills()"
+            />
+        </div>
+
+        <!-- SkillHub 视图：独立第三视图，数据由本机后端代理 -->
+        <div v-show="view === 'skillhub'" class="plugins-view-fade">
+            <SkillHubMarket
+                ref="skillHubRef"
+                v-model:keyword="skillhubKeyword"
+                :local-skills="skills"
+                :active="view === 'skillhub'"
                 @installed="() => loadSkills()"
             />
         </div>
@@ -261,6 +297,7 @@ import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
 import PluginViewSwitch from './PluginViewSwitch.vue'
 import SkillMarket from './SkillMarket.vue'
+import SkillHubMarket from './SkillHubMarket.vue'
 import type { PluginRowMenuItem, PluginViewSwitchItem } from './pluginList.types'
 import type { Skill } from '@/types/skills'
 
@@ -277,13 +314,17 @@ const { confirm } = usePopup()
 const view = usePluginViewQuery()
 /** 市场搜索词由页面工具栏持有，市场组件常驻不销毁，切回来仍保留 */
 const marketKeyword = ref('')
+/** SkillHub 搜索词独立于官网市场，避免两边搜索状态互相污染 */
+const skillhubKeyword = ref('')
 /** 已安装的来源筛选（'' = 全部）；与市场标签筛选各自独立 */
 const sourceFilter = ref('')
 const marketRef = ref<InstanceType<typeof SkillMarket> | null>(null)
+const skillHubRef = ref<InstanceType<typeof SkillHubMarket> | null>(null)
 
 const viewItems = computed<PluginViewSwitchItem[]>(() => [
     { value: 'installed', label: t('plugins.page.viewInstalled') },
     { value: 'market', label: t('plugins.page.viewMarket') },
+    { value: 'skillhub', label: t('plugins.page.viewSkillHub') },
 ])
 
 /** 来源 chips：全部 + 有人的分区（空分区不出现，所以不用再带数字） */
@@ -302,13 +343,22 @@ const visibleSkills = computed<Skill[]>(() => {
 
 /** 换一批按钮的加载态取自市场组件（v-show 常驻，父级只读不调） */
 const marketLoading = computed(() => marketRef.value?.loading === true)
+const skillHubLoading = computed(() => skillHubRef.value?.loading === true)
 
 function handleMarketRefresh() {
     marketRef.value?.refresh()
 }
 
+function handleSkillHubRefresh() {
+    skillHubRef.value?.refresh()
+}
+
 function handleOpenMarketSite() {
     openInExternalBrowser('https://ai.dingd.cn/skills')
+}
+
+function handleOpenSkillHubSite() {
+    openInExternalBrowser('https://skillhub.cn/skills')
 }
 
 // 文档查看相关状态

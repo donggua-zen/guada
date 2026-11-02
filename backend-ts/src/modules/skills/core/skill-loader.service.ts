@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createHash } from 'crypto';
 import * as yaml from 'js-yaml';
-import { SkillManifest, SkillDefinition, SkillSourceType } from '../interfaces/skill-manifest.interface';
+import { SkillManifest, SkillDefinition, SkillSourceType, SkillOrigin } from '../interfaces/skill-manifest.interface';
 
 /**
  * YAML frontmatter 解析结果
@@ -40,6 +40,7 @@ export class SkillLoaderService {
 
     const bd = baseDir || skillDir;
     const relPath = path.relative(bd, skillDir);
+    const origin = await this.readOrigin(skillDir);
 
     return {
       id: manifest.name.toLowerCase(),
@@ -49,6 +50,7 @@ export class SkillLoaderService {
       contentHash,
       source,
       enabled: true,
+      ...(origin ? { origin } : {}),
     };
   }
 
@@ -105,10 +107,44 @@ export class SkillLoaderService {
     // 更新 skill 定义
     skill.manifest = manifest;
     skill.contentHash = newContentHash;
+    // 市场来源可能随重装/重载变化；sidecar 不存在时清空，避免残留旧来源
+    skill.origin = await this.readOrigin(path.dirname(skillMdPath));
 
     this.logger.log(`Reloaded manifest for skill: ${skill.id}, hash changed: ${skill.contentHash !== newContentHash}`);
 
     return skill;
+  }
+
+  /**
+   * 读取市场来源 sidecar（best-effort）。
+   *
+   * 文件不存在、超大、JSON 非法或字段缺失时一律返回 undefined —— 来源是可选元数据，
+   * 不能让一个坏文件阻止技能加载。
+   */
+  private async readOrigin(skillDir: string): Promise<SkillOrigin | undefined> {
+    try {
+      const file = path.join(skillDir, '.skill-origin.json');
+      const stat = await fs.stat(file);
+      if (!stat.isFile() || stat.size > 4096) return undefined;
+
+      const parsed = JSON.parse(await fs.readFile(file, 'utf-8')) as Record<string, unknown>;
+      const source = typeof parsed?.source === 'string' ? parsed.source.trim() : '';
+      const itemId = typeof parsed?.itemId === 'string' ? parsed.itemId.trim() : '';
+      if (!source || !itemId) return undefined;
+
+      return {
+        source: source.slice(0, 32),
+        itemId: itemId.slice(0, 200),
+        ...(typeof parsed.version === 'string' && parsed.version
+          ? { version: parsed.version.slice(0, 64) }
+          : {}),
+        ...(typeof parsed.installedAt === 'string' && parsed.installedAt
+          ? { installedAt: parsed.installedAt.slice(0, 40) }
+          : {}),
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   /**

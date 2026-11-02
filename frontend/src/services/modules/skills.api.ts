@@ -1,6 +1,6 @@
 import type { ApiContext } from "./api-context";
 import type { PaginatedResponse } from "@/types/common";
-import type { Skill, SkillCommand } from "@/types/skills";
+import type { Skill, SkillCommand, SkillOrigin } from "@/types/skills";
 
 export interface SkillsApi {
   fetchSkills(): Promise<PaginatedResponse<Skill>>;
@@ -11,8 +11,12 @@ export interface SkillsApi {
   reloadSkill(skillId: string): Promise<Skill>;
   getAutoScanStatus(): Promise<{ enabled: boolean }>;
   toggleAutoScan(enabled: boolean): Promise<{ enabled: boolean }>;
-  installSkill(file: File, force?: boolean): Promise<{ success: boolean; skillId?: string; message: string }>;
-  installSkillFromUrl(url: string, force?: boolean): Promise<{ success: boolean; skillId?: string; message: string }>;
+  installSkill(file: File, force?: boolean): Promise<{ success: boolean; skillIds?: string[]; message: string }>;
+  installSkillFromUrl(
+    url: string,
+    force?: boolean,
+    origin?: SkillOrigin,
+  ): Promise<{ success: boolean; skillIds?: string[]; message: string }>;
   uninstallSkill(skillId: string): Promise<{ success: boolean; message: string }>;
   enableSkill(skillId: string): Promise<{ success: boolean; message: string }>;
   disableSkill(skillId: string): Promise<{ success: boolean; message: string }>;
@@ -69,7 +73,7 @@ export const skillsApi: SkillsApi = {
     }
 
     try {
-      return await this._request<{ success: boolean; skillId?: string; message: string }>("/skills/install", {
+      return await this._request<{ success: boolean; skillIds?: string[]; message: string }>("/skills/install", {
         method: "POST",
         data: formData,
         headers: {
@@ -82,11 +86,19 @@ export const skillsApi: SkillsApi = {
     }
   },
 
-  async installSkillFromUrl(this: ApiContext, url: string, force: boolean = false) {
-    return await this._request<{ success: boolean; skillId?: string; message: string }>("/skills/install-from-url", {
-      method: "POST",
-      data: { url, force },
-    });
+  async installSkillFromUrl(
+    this: ApiContext,
+    url: string,
+    force: boolean = false,
+    origin?: SkillOrigin,
+  ) {
+    return await this._request<{ success: boolean; skillIds?: string[]; message: string }>(
+      "/skills/install-from-url",
+      {
+        method: "POST",
+        data: { url, force, ...(origin ? { origin } : {}) },
+      },
+    );
   },
 
   async uninstallSkill(this: ApiContext, skillId: string) {

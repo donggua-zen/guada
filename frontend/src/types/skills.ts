@@ -29,6 +29,18 @@ export interface SkillManifest {
 /** 技能来源：global=用户安装, system=系统内置, agents=共享目录, workspace=工作目录 */
 export type SkillSourceType = 'system' | 'agents' | 'global' | 'workspace'
 
+/** 市场来源（安装时写入技能目录内的 .skill-origin.json） */
+export interface SkillOrigin {
+    /** 市场标识：skillhub / official / 其它字符串 */
+    source: string
+    /** 市场内稳定条目 id（SkillHub 为 slug） */
+    itemId: string
+    /** 安装时的市场版本 */
+    version?: string
+    /** 安装时间（ISO 字符串） */
+    installedAt?: string
+}
+
 /** 完整技能定义（列表/详情接口的条目形状） */
 export interface Skill {
     id: string
@@ -40,6 +52,8 @@ export interface Skill {
     basePath?: string
     baseDir?: string
     contentHash?: string
+    /** 市场来源（手动上传/Git 安装时缺省） */
+    origin?: SkillOrigin
 }
 
 /** 命令条目（/ 命令面板数据源；label 等自定义字段由各命令提供者附加） */

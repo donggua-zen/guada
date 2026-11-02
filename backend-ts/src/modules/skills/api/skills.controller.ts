@@ -2,7 +2,12 @@ import { Controller, Get, Post, Param, Body, Logger, Query, UseInterceptors, Upl
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SkillOrchestrator } from '../core/skill-orchestrator.service';
 import { SkillWatcherService } from '../core/skill-watcher.service';
-import { SkillDefinition } from '../interfaces/skill-manifest.interface';
+import { SkillDefinition, SkillOrigin } from '../interfaces/skill-manifest.interface';
+import {
+  copyDirectory,
+  extractZipSafely,
+  installSkillsFromDirectory,
+} from '../core/skill-package.installer';
 import { SkillDiscoveryResult } from '../interfaces/index';
 import { createPaginatedResponse, PaginatedResponse } from '../../../common/types/pagination';
 import { SkillMetadataValidator } from '../common/skill-metadata.validator';
@@ -10,7 +15,6 @@ import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
-import AdmZip from 'adm-zip';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -307,7 +311,7 @@ export class SkillsController {
       
       // 移动目录（自动转换到正确层级）
       // 注意：使用 copy + rm 替代 rename，以支持跨磁盘分区移动
-      await this.copyDirectory(skillDir, targetDir);
+      await copyDirectory(skillDir, targetDir);
       await fs.rm(skillDir, { recursive: true, force: true });
 
       // 清理临时文件
@@ -337,9 +341,11 @@ export class SkillsController {
   async installFromUrl(@Body() body: {
     url: string;
     force?: boolean;
+    /** 市场来源；官网市场安装时由前端带上，手动粘贴 URL 时缺省 */
+    origin?: SkillOrigin;
   }): Promise<{ success: boolean; skillIds?: string[]; message: string }> {
     try {
-      const { url, force } = body;
+      const { url, force, origin } = body;
 
       if (!url) {
         return { success: false, message: 'URL is required' };
@@ -357,52 +363,55 @@ export class SkillsController {
       const tempDir = path.join(os.tmpdir(), tempDirName);
       await fs.mkdir(tempDir, { recursive: true });
 
-      // 下载 ZIP 文件
-      const zipPath = path.join(tempDir, 'skill.zip');
-      const response = await fetch(url);
-      if (!response.ok) {
-        await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: `Failed to download ZIP: HTTP ${response.status} ${response.statusText}` };
-      }
-      const buffer = Buffer.from(await response.arrayBuffer());
-      await fs.writeFile(zipPath, buffer);
-
-      // 验证 & 解压 ZIP
-      let zip: AdmZip;
       try {
-        zip = new AdmZip(zipPath);
-      } catch {
+        // 下载 ZIP 文件
+        const zipPath = path.join(tempDir, 'skill.zip');
+        const response = await fetch(url);
+        if (!response.ok) {
+          return { success: false, message: `Failed to download ZIP: HTTP ${response.status} ${response.statusText}` };
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+        await fs.writeFile(zipPath, buffer);
+
+        // 解压到独立子目录：避免 ZIP 内是根级 SKILL.md 时把 skill.zip 一起复制进技能目录
+        const extractedDir = path.join(tempDir, 'extracted');
+        await fs.mkdir(extractedDir, { recursive: true });
+        try {
+          extractZipSafely(zipPath, extractedDir);
+        } catch {
+          return { success: false, message: 'Downloaded file is not a valid ZIP archive' };
+        }
+
+        // 安装包内所有技能
+        const result = await installSkillsFromDirectory(extractedDir, this.skillsDir, {
+          force,
+          origin,
+        });
+
+        // 有成功安装的技能时触发扫描
+        if (result.installed.length > 0) {
+          await this.orchestrator.triggerScan();
+        }
+
+        // 构造返回消息
+        const parts: string[] = [];
+        if (result.installed.length > 0) {
+          parts.push(`Installed: ${result.installed.map(s => `'${s.skillId}'`).join(', ')}`);
+        }
+        if (result.errors.length > 0) {
+          parts.push(`Errors: ${result.errors.map(e => e.error).join('; ')}`);
+        }
+
+        const success = result.installed.length > 0;
+        return {
+          success,
+          skillIds: result.installed.map(s => s.skillId),
+          message: parts.length > 0 ? parts.join('. ') : 'No skills found in the ZIP archive',
+        };
+      } finally {
+        // 清理临时文件
         await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: 'Downloaded file is not a valid ZIP archive' };
       }
-      zip.extractAllTo(tempDir, true);
-
-      // 安装包内所有技能
-      const result = await this.installSkillsFromDir(tempDir, force);
-
-      // 清理临时文件
-      await fs.rm(tempDir, { recursive: true, force: true });
-
-      // 有成功安装的技能时触发扫描
-      if (result.installed.length > 0) {
-        await this.orchestrator.triggerScan();
-      }
-
-      // 构造返回消息
-      const parts: string[] = [];
-      if (result.installed.length > 0) {
-        parts.push(`Installed: ${result.installed.map(s => `'${s.skillId}'`).join(', ')}`);
-      }
-      if (result.errors.length > 0) {
-        parts.push(`Errors: ${result.errors.map(e => e.error).join('; ')}`);
-      }
-
-      const success = result.installed.length > 0;
-      return {
-        success,
-        skillIds: result.installed.map(s => s.skillId),
-        message: parts.length > 0 ? parts.join('. ') : 'No skills found in the ZIP archive',
-      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to install skill from URL: ${errorMessage}`);
@@ -476,40 +485,43 @@ export class SkillsController {
       const tempDir = path.join(os.tmpdir(), `skill-install-${Date.now()}`);
       await fs.mkdir(tempDir, { recursive: true });
 
-      // 保存 ZIP 文件
-      const zipPath = path.join(tempDir, file.originalname);
-      await fs.writeFile(zipPath, file.buffer);
+      try {
+        // 保存 ZIP 文件（固定文件名，不信任上传文件名里的路径片段）
+        const zipPath = path.join(tempDir, 'skill.zip');
+        await fs.writeFile(zipPath, file.buffer);
 
-      // 解压 ZIP
-      const zip = new AdmZip(zipPath);
-      zip.extractAllTo(tempDir, true);
+        // 解压到独立子目录：避免根级 SKILL.md 时把 ZIP 自身复制进技能目录
+        const extractedDir = path.join(tempDir, 'extracted');
+        await fs.mkdir(extractedDir, { recursive: true });
+        extractZipSafely(zipPath, extractedDir);
 
-      // 安装包内所有技能
-      const result = await this.installSkillsFromDir(tempDir, force);
+        // 安装包内所有技能
+        const result = await installSkillsFromDirectory(extractedDir, this.skillsDir, { force });
 
-      // 清理临时文件
-      await fs.rm(tempDir, { recursive: true, force: true });
+        // 有成功安装的技能时触发扫描
+        if (result.installed.length > 0) {
+          await this.orchestrator.triggerScan();
+        }
 
-      // 有成功安装的技能时触发扫描
-      if (result.installed.length > 0) {
-        await this.orchestrator.triggerScan();
+        // 构造返回消息
+        const parts: string[] = [];
+        if (result.installed.length > 0) {
+          parts.push(`Installed: ${result.installed.map(s => `'${s.skillId}'`).join(', ')}`);
+        }
+        if (result.errors.length > 0) {
+          parts.push(`Errors: ${result.errors.map(e => e.error).join('; ')}`);
+        }
+
+        const success = result.installed.length > 0;
+        return {
+          success,
+          skillIds: result.installed.map(s => s.skillId),
+          message: parts.length > 0 ? parts.join('. ') : 'No skills found in the ZIP archive',
+        };
+      } finally {
+        // 清理临时文件
+        await fs.rm(tempDir, { recursive: true, force: true });
       }
-
-      // 构造返回消息
-      const parts: string[] = [];
-      if (result.installed.length > 0) {
-        parts.push(`Installed: ${result.installed.map(s => `'${s.skillId}'`).join(', ')}`);
-      }
-      if (result.errors.length > 0) {
-        parts.push(`Errors: ${result.errors.map(e => e.error).join('; ')}`);
-      }
-
-      const success = result.installed.length > 0;
-      return {
-        success,
-        skillIds: result.installed.map(s => s.skillId),
-        message: parts.length > 0 ? parts.join('. ') : 'No skills found in the ZIP archive',
-      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to install skill: ${errorMessage}`);
@@ -604,165 +616,5 @@ export class SkillsController {
     return null;
   }
 
-  /**
-   * 从 SKILL.md 文件中解析技能名称和描述
-   */
-  private async parseSkillMetadata(skillMdPath: string): Promise<{
-    name: string;
-    description: string;
-  } | null> {
-    try {
-      const skillMdContent = await fs.readFile(skillMdPath, 'utf-8');
-      const frontmatterMatch = skillMdContent.match(/^---\s*\n([\s\S]*?)\n---/);
-      let manifestName = '';
-      let description = '';
-      if (frontmatterMatch) {
-        const yamlContent = frontmatterMatch[1];
-        const nameMatch = yamlContent.match(/^name:\s*(.+)/im);
-        if (nameMatch) {
-          manifestName = nameMatch[1].trim().replace(/^['"]|['"]$/g, '');
-        }
-        const descMatch = yamlContent.match(/description:\s*(.+)/i);
-        if (descMatch) {
-          description = descMatch[1].trim().replace(/^['"]|['"]$/g, '');
-        }
-      }
-      if (!manifestName) {
-        return null;
-      }
-      return { name: manifestName, description };
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * 从解压目录安装所有技能（支持多技能包）
-   */
-  private async installSkillsFromDir(
-    tempDir: string,
-    force: boolean,
-  ): Promise<{
-    installed: Array<{ skillId: string }>;
-    errors: Array<{ skillId: string; error: string }>;
-  }> {
-    const result: { installed: Array<{ skillId: string }>; errors: Array<{ skillId: string; error: string }> } = {
-      installed: [],
-      errors: [],
-    };
-
-    // 递归查找所有 SKILL.md
-    const skillMdFiles = await this.findSkillMdFiles(tempDir);
-    if (skillMdFiles.length === 0) {
-      return result;
-    }
-
-    for (const skillMdPath of skillMdFiles) {
-      const skillDir = path.dirname(skillMdPath);
-
-      // 解析元数据
-      const metadata = await this.parseSkillMetadata(skillMdPath);
-      if (!metadata) {
-        result.errors.push({ skillId: path.basename(skillDir), error: 'Skill name not found in SKILL.md frontmatter' });
-        continue;
-      }
-
-      const { name: manifestName, description } = metadata;
-
-      // 验证元数据
-      const validationResult = SkillMetadataValidator.validateMetadata(
-        manifestName,
-        description,
-        manifestName,
-      );
-      if (!validationResult.isValid) {
-        result.errors.push({ skillId: manifestName, error: validationResult.errors.join('; ') });
-        continue;
-      }
-
-      // 复制到 skills 目录
-      const targetDir = path.join(this.skillsDir, manifestName);
-
-      try {
-        // 检查是否已存在
-        try {
-          await fs.access(targetDir);
-          if (!force) {
-            result.errors.push({ skillId: manifestName, error: `Skill already exists. Use force=true to overwrite` });
-            continue;
-          }
-          this.logger.log(`Force overwriting existing skill: ${manifestName}`);
-          await fs.rm(targetDir, { recursive: true, force: true });
-        } catch {
-          // 目录不存在，继续
-        }
-
-        // 确保目标父目录存在
-        await fs.mkdir(path.dirname(targetDir), { recursive: true });
-
-        // 复制目录
-        await this.copyDirectory(skillDir, targetDir);
-
-        result.installed.push({ skillId: manifestName });
-        this.logger.log(`Installed skill: ${manifestName}`);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        result.errors.push({ skillId: manifestName, error: errorMessage });
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * 递归复制目录
-   * @param src 源目录
-   * @param dest 目标目录
-   */
-  private async copyDirectory(src: string, dest: string): Promise<void> {
-    // 创建目标目录
-    await fs.mkdir(dest, { recursive: true });
-    
-    // 读取源目录内容
-    const entries = await fs.readdir(src, { withFileTypes: true });
-    
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name);
-      const destPath = path.join(dest, entry.name);
-      
-      if (entry.isDirectory()) {
-        // 递归复制子目录
-        await this.copyDirectory(srcPath, destPath);
-      } else {
-        // 复制文件
-        await fs.copyFile(srcPath, destPath);
-      }
-    }
-  }
-
-  /**
-   * 递归查找 SKILL.md 文件（保留用于其他用途）
-   */
-  private async findSkillMdFiles(dir: string): Promise<string[]> {
-    const results: string[] = [];
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      
-      if (entry.isDirectory()) {
-        // 跳过隐藏目录和 node_modules
-        if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
-          const subResults = await this.findSkillMdFiles(fullPath);
-          results.push(...subResults);
-        }
-      } else if (entry.name === 'SKILL.md') {
-        results.push(fullPath);
-      }
-    }
-
-    return results;
-  }
-
-  // TODO: 实现批量安装、从 URL 安装等功能
+  // 安装/解压/SKILL.md 解析统一在 core/skill-package.installer.ts
 }
