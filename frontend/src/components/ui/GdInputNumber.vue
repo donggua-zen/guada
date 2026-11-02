@@ -4,15 +4,17 @@
     <div class="gd-input-number contents" :data-size="(size === 'default' || size === 'large' ? 'medium' : size)">
         <GdInput ref="inputRef" :model-value="inputText" type="text" :variant="variant" :size="size"
             :placeholder="placeholder" :disabled="disabled" :error="error" inputmode="decimal"
-            :class="attrs.class" :style="attrs.style" @update:model-value="handleInput" @focus="emit('focus', $event)"
+            :class="attrs.class" :style="[attrs.style, stepperReserveStyle]" @update:model-value="handleInput" @focus="emit('focus', $event)"
             @blur="handleBlur" @keyup.enter="handleEnter">
         <!-- suffix 合成槽：单位插槽 + 右排步进按钮 -->
         <template v-if="$slots.suffix || (controls && !disabled)" #suffix>
             <slot name="suffix"></slot>
+            <!-- 步进钮贴右缘：绝对定位脱离内容流（wrapper 是 relative），
+                 左侧 1px 分隔线 + 满高两等分，右侧圆角贴合壳的内圆角 -->
             <span v-if="controls && !disabled"
-                class="mr-0.5 flex flex-col overflow-hidden rounded-[4px] border border-[var(--gd-color-border)]">
+                class="absolute inset-y-0 right-0 flex w-4 flex-col overflow-hidden rounded-r-[5px] border-l border-[var(--gd-color-border)]">
                 <button type="button" :tabindex="-1" aria-label="增加" :disabled="atMax"
-                    class="flex h-[14px] w-[16px] cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-[var(--gd-color-field-text-placeholder)] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 md:hover:bg-[var(--gd-color-field-option-bg-hover)] md:hover:text-[var(--gd-color-field-text)]"
+                    class="flex min-h-0 w-full flex-1 cursor-pointer items-center justify-center border-0 bg-transparent p-0 text-[var(--gd-color-field-text-placeholder)] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 md:hover:bg-[var(--gd-color-field-option-bg-hover)] md:hover:text-[var(--gd-color-field-text)]"
                     @click.stop="stepBy(1)" @mousedown.prevent>
                     <svg class="size-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -20,7 +22,7 @@
                     </svg>
                 </button>
                 <button type="button" :tabindex="-1" aria-label="减少" :disabled="atMin"
-                    class="flex h-[14px] w-[16px] cursor-pointer items-center justify-center border-t border-[var(--gd-color-border)] bg-transparent p-0 text-[var(--gd-color-field-text-placeholder)] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 md:hover:bg-[var(--gd-color-field-option-bg-hover)] md:hover:text-[var(--gd-color-field-text)]"
+                    class="flex min-h-0 w-full flex-1 cursor-pointer items-center justify-center border-0 border-t border-[var(--gd-color-border)] bg-transparent p-0 text-[var(--gd-color-field-text-placeholder)] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 md:hover:bg-[var(--gd-color-field-option-bg-hover)] md:hover:text-[var(--gd-color-field-text)]"
                     @click.stop="stepBy(-1)" @mousedown.prevent>
                     <svg class="size-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -69,6 +71,13 @@ const emit = defineEmits<{
 
 const attrs = useAttrs();
 const inputRef = ref<InstanceType<typeof GdInput> | null>(null);
+
+/** 步进钮绝对定位贴右缘后，给 wrapper 补右内距（覆盖 GdInput 自带 px），
+ *  避免输入文本/单位插槽被压在步进钮下面 */
+const stepperReserveStyle = computed((): Record<string, string> | null => {
+    if (!props.controls || props.disabled) return null;
+    return { paddingRight: "24px" };
+});
 
 // 输入框里的文本：外部值变化时同步（null → 空串显示 placeholder）
 const inputText = computed((): string => (props.modelValue === null || props.modelValue === undefined ? "" : String(props.modelValue)));

@@ -139,9 +139,10 @@
        filled 灰底无边框为默认形态，全部由 text/surface 派生（亮暗主题自动跟随）；
        outline 白底描边形态引用 --gd-color-input-*，主题覆盖 input token 即换肤
        ==================== */
-  --gd-color-field-bg: color-mix(in srgb, var(--gd-color-text) 5.5%, var(--gd-color-surface));
-  --gd-color-field-bg-hover: color-mix(in srgb, var(--gd-color-text) 8%, var(--gd-color-surface));
-  --gd-color-field-bg-focus: var(--gd-color-surface);
+  --gd-color-field-bg: color-mix(in srgb, var(--gd-color-text) 4%, var(--gd-color-surface));
+  --gd-color-field-bg-hover: color-mix(in srgb, var(--gd-color-text) 7%, var(--gd-color-surface));
+  /* 聚焦不跳白底：与常态同底，只靠主色描边表达聚焦（hover 离开后不再闪回白色） */
+  --gd-color-field-bg-focus: var(--gd-color-field-bg);
   --gd-color-field-bg-disabled: color-mix(in srgb, var(--gd-color-text) 2.5%, var(--gd-color-surface));
   --gd-color-field-text: var(--gd-color-text);
   --gd-color-field-text-placeholder: color-mix(in srgb, var(--gd-color-text) 40%, transparent);

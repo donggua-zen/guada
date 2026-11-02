@@ -1,6 +1,8 @@
 <template>
-    <!-- 触发器：与 GdInput 同一视觉壳（filled 默认灰底无边框），filterable 时内嵌原生输入 -->
-    <div ref="triggerRef" :class="triggerClasses" :data-variant="variant" :data-size="resolvedSize"
+    <!-- 触发器：与 GdInput 同一视觉壳（filled 默认灰底无边框），filterable 时内嵌原生输入。
+         v-bind="$attrs"：fragment 根（触发器 + Teleport 面板）不会自动继承外部 class/style，
+         必须显式落到触发器上 -->
+    <div ref="triggerRef" v-bind="$attrs" :class="triggerClasses" :data-variant="variant" :data-size="resolvedSize"
         role="combobox" :aria-expanded="show" aria-haspopup="listbox" :aria-activedescendant="show ? activeDescendant : undefined"
         :tabindex="disabled ? -1 : 0" :aria-disabled="disabled || undefined"
         @click="togglePanel" @keydown="handleTriggerKeydown" @mouseenter="hovered = true" @mouseleave="hovered = false">
@@ -42,6 +44,9 @@
                 <path d="m6 9 6 6 6-6" />
             </svg>
         </span>
+        <!-- GdOption 子组件的挂载出口：GdOption render null，仅 setup 阶段向本组件注册。
+             没有这个 <slot> 出口，Vue 不会实例化插槽内容，所有子组件式下拉都会是"无数据" -->
+        <slot></slot>
     </div>
 
     <!-- 下拉面板：GdPopover 承担定位/翻转/点击外部关闭/Esc -->
@@ -89,7 +94,7 @@ import { computed, nextTick, provide, ref, watch } from "vue";
 import GdPopover from "./GdPopover.vue";
 import { gdSelectKey } from "./gdSelectContext";
 
-defineOptions({ name: "GdSelect" });
+defineOptions({ name: "GdSelect", inheritAttrs: false });
 
 export interface GdSelectOption {
     label: string;
