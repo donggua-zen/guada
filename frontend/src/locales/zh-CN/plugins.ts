@@ -124,7 +124,7 @@ export default {
     noDescription: '暂无描述',
     installed: '已添加',
     addBtn: '添加',
-    updateBtn: '更新配置',
+    updateBtn: '更新',
     loadFailed: '加载 MCP 市场失败',
     partialUnavailable: '部分来源暂时不可用',
     addTitle: '添加 MCP 服务器',

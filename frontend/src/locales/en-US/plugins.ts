@@ -124,7 +124,7 @@
     noDescription: 'No description',
     installed: 'Added',
     addBtn: 'Add',
-    updateBtn: 'Update config',
+    updateBtn: 'Update',
     loadFailed: 'Failed to load MCP market',
     partialUnavailable: 'Some sources are temporarily unavailable',
     addTitle: 'Add MCP Server',
