@@ -113,26 +113,19 @@
               </div>
             </div>
 
-            <!-- 上传按钮 -->
-            <div v-else class="w-full">
-              <div
-                class="wallpaper-uploader w-full h-40 rounded-lg border-2 border-dashed border-gray-300 dark:border-[#2e3035] flex flex-col items-center justify-center cursor-pointer hover:border-(--gd-color-primary) transition-colors"
-                @click="triggerWallpaperSelect"
-                @dragover.prevent
-                @drop.prevent="handleWallpaperDrop"
-              >
-                <input ref="wallpaperInputRef" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="handleWallpaperNativeChange" />
-                <div
-                  class="w-full h-40 rounded-lg border-2 border-dashed border-gray-300 dark:border-[#2e3035] flex flex-col items-center justify-center cursor-pointer hover:border-(--gd-color-primary) transition-colors"
-                >
-                  
-                    <Add24Regular class="text-3xl text-gray-400 mb-2 size-4"  />
-                  
-                  <span class="text-sm text-gray-500 dark:text-[#8b8d95]">
-                    点击或拖拽上传壁纸
-                  </span>
-                </div>
-              </div>
+            <!-- 上传区域：单层虚线框（此前内外两层同款 div 套在一起，会画出两圈虚线） -->
+            <div
+              v-else
+              class="wallpaper-uploader w-full h-40 rounded-lg border-2 border-dashed border-gray-300 dark:border-[#2e3035] flex flex-col items-center justify-center cursor-pointer hover:border-(--gd-color-primary) transition-colors"
+              @click="triggerWallpaperSelect"
+              @dragover.prevent
+              @drop.prevent="handleWallpaperDrop"
+            >
+              <input ref="wallpaperInputRef" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="handleWallpaperNativeChange" />
+              <Add24Regular class="mb-2 size-6 text-gray-400" />
+              <span class="text-sm text-gray-500 dark:text-[#8b8d95]">
+                点击或拖拽上传壁纸
+              </span>
             </div>
           </div>
         </div>

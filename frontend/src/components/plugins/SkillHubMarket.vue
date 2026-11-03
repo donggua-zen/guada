@@ -27,7 +27,7 @@
     <!-- 错误 -->
     <div v-else-if="error"
         class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-6 text-center">
-        <MailInbox24Regular class="mb-2 opacity-50 text-gray-400 w-8 h-8" />
+        <MailInbox24Regular class="mb-2 opacity-50 text-gray-400 w-8 h-8 mx-auto" />
         <div class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ error }}</div>
         <GdButton class="mt-3" size="small" @click="handleRefresh">{{ t('common.retry') }}</GdButton>
     </div>

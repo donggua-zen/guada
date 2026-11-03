@@ -28,7 +28,8 @@
           </div>
           <div v-for="kb in knowledgeBases" :key="kb.id"
             class="att-kb-item" @click="$emit('toggle-kb', kb.id)">
-            <GdCheckbox :model-value="selectedKbIds.includes(kb.id)" @click.stop size="small" />
+            <GdCheckbox :model-value="selectedKbIds.includes(kb.id)" @click.stop
+              @change="$emit('toggle-kb', kb.id)" size="small" />
             <div class="flex-1 min-w-0">
               <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ kb.name }}</div>
               <div v-if="kb.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ kb.description }}</div>
@@ -47,7 +48,8 @@
           </div>
           <div v-for="item in (attType._items || [])" :key="item.id"
             class="att-kb-item" @click="toggleAttachment(attType.id, item.id)">
-            <GdCheckbox :model-value="isAttachmentSelected(attType.id, item.id)" @click.stop size="small" />
+            <GdCheckbox :model-value="isAttachmentSelected(attType.id, item.id)" @click.stop
+              @change="toggleAttachment(attType.id, item.id)" size="small" />
             <div class="flex-1 min-w-0">
               <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ item.name }}</div>
               <div v-if="item.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ item.description }}</div>

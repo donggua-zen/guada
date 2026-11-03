@@ -10,7 +10,7 @@
       <!-- 已登录 -->
       <div v-else-if="status === 'logged_in'" class="flex flex-col items-center py-4">
         
-          <CheckmarkCircle48Regular class="text-green-500 mb-3 w-12 h-12" mx-auto  />
+          <CheckmarkCircle48Regular class="text-green-500 mb-3 w-12 h-12 mx-auto"  />
         
         <p class="text-sm text-gray-600">{{ message }}</p>
         <GdButton type="danger" size="small" class="mt-4" @click="handleLogout">

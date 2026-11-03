@@ -60,6 +60,7 @@ import { fsApi, type FsApi } from "./modules/fs.api";
 import { gitApi, type GitApi } from "./modules/git.api";
 import { usageApi, type UsageApi } from "./modules/usage.api";
 import { mobileAccessApi, type MobileAccessApi } from "./modules/mobile-access.api";
+import { claudeImportApi, type ClaudeImportApi } from "./modules/claude-import.api";
 
 export type { FileChangeEvent };
 export type { SessionEvent, SessionEventType };
@@ -92,7 +93,8 @@ interface ApiService
     FsApi,
     GitApi,
     UsageApi,
-    MobileAccessApi {}
+    MobileAccessApi,
+    ClaudeImportApi {}
 
 /**
  * 把数据里的 http://localhost:<port>/ 前缀资源 URL 改写为相对路径。
@@ -430,6 +432,7 @@ Object.assign(
   gitApi,
   usageApi,
   mobileAccessApi,
+  claudeImportApi,
 );
 
 /**

@@ -4,13 +4,13 @@
         :close-on-click-modal="true" @close="handleClose">
         <div v-if="loading" class="loading-container text-center py-8">
             
-                <ArrowSync16Regular class="text-2xl text-gray-400 dark:text-[#6b6d75] size-4 animate-spin" />
+                <ArrowSync16Regular class="text-2xl text-gray-400 dark:text-[#6b6d75] size-4 animate-spin mx-auto" />
             
             <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.chunks.loading') }}</p>
         </div>
         <div v-else-if="chunks.length === 0" class="no-chunks-container text-center py-8">
             
-                <Document24Regular class="text-2xl text-gray-400 dark:text-[#6b6d75] size-4"  />
+                <Document24Regular class="text-2xl text-gray-400 dark:text-[#6b6d75] size-4 mx-auto"  />
             
             <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.chunks.empty') }}</p>
         </div>

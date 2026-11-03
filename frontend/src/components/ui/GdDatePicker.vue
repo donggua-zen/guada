@@ -59,13 +59,15 @@
                     {{ cell.date.getDate() }}
                 </button>
             </div>
-            <!-- 底部时间行：时/分/秒 + 此刻 + 清除 -->
+            <!-- 底部时间行：时/分/秒 + 此刻 + 清除。
+                 定宽用内联 style：GdInput 壳自带 w-full，同元素上再加 w-11
+                 谁生效取决于 Tailwind 产物顺序，内联样式无歧义 -->
             <div class="flex items-center gap-1.5 border-t border-[var(--gd-color-border)] px-1 pb-0.5 pt-2">
-                <GdInput v-model="hourText" type="number" size="tiny" class="w-11" :min="0" :max="23" @change="emitFromInputs" />
+                <GdInput v-model="hourText" type="number" size="tiny" style="width: 44px" :min="0" :max="23" @change="emitFromInputs" />
                 <span class="text-[12px] text-[var(--gd-color-text-gray)]">:</span>
-                <GdInput v-model="minuteText" type="number" size="tiny" class="w-11" :min="0" :max="59" @change="emitFromInputs" />
+                <GdInput v-model="minuteText" type="number" size="tiny" style="width: 44px" :min="0" :max="59" @change="emitFromInputs" />
                 <span class="text-[12px] text-[var(--gd-color-text-gray)]">:</span>
-                <GdInput v-model="secondText" type="number" size="tiny" class="w-11" :min="0" :max="59" @change="emitFromInputs" />
+                <GdInput v-model="secondText" type="number" size="tiny" style="width: 44px" :min="0" :max="59" @change="emitFromInputs" />
                 <span class="flex-1" />
                 <button type="button" class="gd-date-picker__action" @click="pickNow">{{ t('common.now') }}</button>
                 <button v-if="clearable" type="button" class="gd-date-picker__action" @click="handleClear">{{ t('common.clear') }}</button>

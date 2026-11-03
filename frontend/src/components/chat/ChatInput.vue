@@ -161,7 +161,6 @@ import { getErrorMessage } from '@/utils/errorMessage'
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { Model, ModelProvider } from '@/types/api'
 import type { UploadResponse } from '@/types/service'
 import type { ChatFileView } from '@/types/session'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
@@ -190,6 +189,7 @@ import {
   Lightbulb24Regular, Dismiss16Regular
 } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService';
+import { useModelCatalog } from '@/composables/useModelCatalog';
 import { useCapabilitiesStore } from '@/stores/capabilities';
 import GdButton from '@/components/ui/GdButton.vue';
 import GdTag from '@/components/ui/GdTag.vue';
@@ -260,9 +260,8 @@ const imageInputRef = ref<HTMLInputElement | null>(null);
 let fileIdCounter = 0;
 const focused = ref(false);
 const isDragOver = ref(false);
-// 模型选择器相关
-const models = ref<Model[]>([]);
-const providers = ref<ModelProvider[]>([]);
+// 模型选择器相关：复用 useModelCatalog 进程内缓存（与定时任务编辑器共享同一份「可用模型 -> 供应商」视图）
+const { models, providers, ensureLoaded: ensureModelsLoaded } = useModelCatalog();
 // 弹窗触发按钮引用
 const modelButtonRef = ref<HTMLElement | null>(null);
 // Token 上限 popover
@@ -958,25 +957,6 @@ const removeKnowledgeBase = (kbId: string) => {
   emit('config-change', { knowledgeBaseIds: newKbIds });  // 通知父组件保存配置
 };
 
-// 加载模型列表
-const loadModels = async () => {
-  try {
-    const response = await apiService.fetchModels();
-    response.items.forEach(provider => {
-      // 过滤只保留 mode_type 为 'text' 的模型
-      const textModels = provider.models?.filter(model => model.modelType === "text") ?? [];
-      models.value.push(...textModels);
-      delete provider.models;
-      // 只有当该供应商有符合条件的模型时才加入列表
-      if (textModels.length > 0) {
-        providers.value.push(provider);
-      }
-    });
-  } catch (error) {
-    console.error('获取模型列表失败:', error);
-  }
-};
-
 // 加载知识库列表
 const loadKnowledgeBases = async () => {
   try {
@@ -1502,7 +1482,7 @@ watch(() => props.buttons, (value) => {
 
 onMounted(() => {
   void capabilities.ensureLoaded();
-  loadModels();
+  void ensureModelsLoaded().catch((error) => console.error('获取模型列表失败:', error));
   initThinkingEffort(); // 初始化思考强度
 
   // 初始化 Tiptap 编辑器

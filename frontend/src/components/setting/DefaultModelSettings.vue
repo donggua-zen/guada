@@ -11,22 +11,9 @@
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.titleSummaryModel') }}</span>
                             <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.titleSummaryModelDesc') }}</span>
                         </div>
-                        <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('title')"
-                            @keydown="(e) => onTriggerKeydown(e, 'title')">
-                            <GdInput :model-value="titleSummaryModelName" :placeholder="t('settings.defaultModel.selectModel')"
-                                readonly class="w-full">
-                                <template #prefix>
-                                    <OpenAI class="w-4 h-4" />
-                                </template>
-                                <template #suffix>
-                                    
-                                        <DismissCircle16Regular v-if="settingsForm.defaultTitleSummaryModelId" class="model-select-trigger__clear size-4" @click.stop="clearModelSelection('title')"  />
-                                    
-                                    
-                                        <ChevronDown20Regular class="model-select-trigger__caret size-4"  />
-                                    
-                                </template>
-                            </GdInput>
+                        <div class="w-full max-w-md shrink-0">
+                            <GdSelect v-model="titleModelValue" :options="textModelOptions" filterable clearable
+                                :placeholder="t('settings.defaultModel.selectModel')" />
                         </div>
                     </div>
                 </div>
@@ -41,22 +28,9 @@
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.visualAssistantModel') }}</span>
                             <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.visualAssistantModelDesc') }}</span>
                         </div>
-                        <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('visual')"
-                            @keydown="(e) => onTriggerKeydown(e, 'visual')">
-                            <GdInput :model-value="visualAssistantModelName" :placeholder="t('settings.defaultModel.selectVisualModel')"
-                                readonly class="w-full">
-                                <template #prefix>
-                                    <OpenAI class="w-4 h-4" />
-                                </template>
-                                <template #suffix>
-                                    
-                                        <DismissCircle16Regular v-if="settingsForm.defaultVisualAssistantModelId" class="model-select-trigger__clear size-4" @click.stop="clearModelSelection('visual')"  />
-                                    
-                                    
-                                        <ChevronDown20Regular class="model-select-trigger__caret size-4"  />
-                                    
-                                </template>
-                            </GdInput>
+                        <div class="w-full max-w-md shrink-0">
+                            <GdSelect v-model="visualModelValue" :options="visualModelOptions" filterable clearable
+                                :placeholder="t('settings.defaultModel.selectVisualModel')" />
                         </div>
                     </div>
                 </div>
@@ -71,115 +45,15 @@
                             <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.defaultModel.historyCompressionModel') }}</span>
                             <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.defaultModel.historyCompressionModelDesc') }}</span>
                         </div>
-                        <div class="model-select-trigger w-full max-w-md shrink-0" @click="openModelDialog('compression')"
-                            @keydown="(e) => onTriggerKeydown(e, 'compression')">
-                            <GdInput :model-value="historyCompressionModelName" :placeholder="t('settings.defaultModel.selectModel')"
-                                readonly class="w-full">
-                                <template #prefix>
-                                    <OpenAI class="w-4 h-4" />
-                                </template>
-                                <template #suffix>
-                                    
-                                        <DismissCircle16Regular v-if="settingsForm.defaultHistoryCompressionModelId" class="model-select-trigger__clear size-4" @click.stop="clearModelSelection('compression')"  />
-                                    
-                                    
-                                        <ChevronDown20Regular class="model-select-trigger__caret size-4"  />
-                                    
-                                </template>
-                            </GdInput>
+                        <div class="w-full max-w-md shrink-0">
+                            <GdSelect v-model="compressionModelValue" :options="textModelOptions" filterable clearable
+                                :placeholder="t('settings.defaultModel.selectModel')" />
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 模型选择对话框 -->
-        <GdDialog v-model="modelDialogVisible" :title="t('settings.defaultModel.selectModelTitle')" :size="isMobile ? 'full' : 'md'" :append-to-body="true"
-            destroy-on-close>
-            <div class="mb-4">
-                <GdInput v-model="modelSearchText" :placeholder="t('settings.defaultModel.searchModel')" clearable>
-                    <template #prefix>
-                        
-                            <Search20Filled class="size-4"  />
-                        
-                    </template>
-                </GdInput>
-            </div>
-            <div class="model-list max-h-[60vh] overflow-y-auto">
-                <template v-for="provider in filteredProviders" :key="provider.id">
-                    <div class="provider-group mb-4">
-                        <div class="provider-name text-sm font-medium text-gray-700 mb-2">
-                            {{ provider.name }}
-                        </div>
-                        <div class="provider-models space-y-1">
-                            <div v-for="model in getProviderModels(provider.id)" :key="model.id"
-                                class="model-item p-3 rounded-lg cursor-pointer border transition-all mb-2 last:mb-0"
-                                :class="{
-                                    'bg-pink-50 dark:bg-pink-900/20 border-pink-300 dark:border-pink-700': tempModelId === model.id,
-                                    'border-gray-100 dark:border-[#2e3035] hover:bg-pink-50/50 dark:hover:bg-pink-900/10': tempModelId !== model.id
-                                }" @click="selectAndClose(model.id)">
-                                <div class="flex items-start justify-between gap-2">
-                                    <div class="flex-1 min-w-0">
-                                        <div class="font-medium text-sm text-gray-800 dark:text-[#e8e9ed] truncate mb-1">
-                                            {{ model.modelName }}</div>
-                                        <!-- 特性图标组 -->
-                                        <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95]">
-                                            <span
-                                                class="model-item-tag px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#2a2c30] font-medium text-[10px]">
-                                                {{ model.modelType === 'text' ? t('settings.defaultModel.chatType') : t('settings.defaultModel.embeddingType') }}
-                                            </span>
-
-                                            <!-- 输入/输出能力箭头组 -->
-                                            <div v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
-                                                class="model-item-tag flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-[#2a2c30] border border-gray-100 dark:border-[#2e3035]">
-                                                <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
-                                                    :key="'in-' + cap">
-                                                    <span class="w-3.5 h-3.5"><TextT24Regular v-if="cap === 'text'" />
-                                                        <Image24Regular v-else /></span>
-                                                </template>
-                                                
-                                                    <ArrowRight16Regular class="text-gray-300 w-2.5 h-2.5"  />
-                                                
-                                                <template v-for="cap in (model.config?.outputCapabilities || ['text'])"
-                                                    :key="'out-' + cap">
-                                                    <span class="w-3.5 h-3.5"><TextT24Regular v-if="cap === 'text'" />
-                                                        <Image24Regular v-else /></span>
-                                                </template>
-                                            </div>
-
-                                            <!-- 高级功能图标 -->
-                                            <template v-for="feature in (model.config?.features || [])" :key="feature">
-                                                <GdTooltip :content="getFeatureLabel(feature)" placement="top">
-                                                    
-                                                        <WrenchScrewdriver24Regular class="hover:text-primary transition-colors w-3.5 h-3.5"  v-if="feature === 'tools'" />
-                                                    
-                                                </GdTooltip>
-                                            </template>
-                                            <!-- 思考能力判据是档位菜单（空 = 不能思考） -->
-                                            <GdTooltip v-if="(model.thinkingEfforts?.length ?? 0) > 0"
-                                                :content="getFeatureLabel('thinking')" placement="top">
-                                                
-                                                    <LightbulbFilament24Regular class="hover:text-primary transition-colors w-3.5 h-3.5"  />
-                                                
-                                            </GdTooltip>
-                                        </div>
-                                    </div>
-                                    
-                                        <CheckmarkCircle16Filled v-if="tempModelId === model.id" class="text-primary shrink-0 mt-1 w-4.5 h-4.5"  />
-                                    
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </template>
-                <div v-if="filteredModels.length === 0" class="text-center py-8 text-gray-400">
-                    
-                        <Search20Filled class="mb-2 w-12 h-12" mx-auto  />
-                    
-                    <p>{{ t('settings.defaultModel.noMatchFound') }}</p>
-                </div>
-            </div>
-        </GdDialog>
     </div>
 </template>
 
@@ -187,27 +61,10 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
-import { OpenAI } from "@/components/icons";
-import {
-    TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular,
-    ChevronDown20Regular, DismissCircle16Regular,
-    Search20Filled, CheckmarkCircle16Filled, ArrowRight16Regular
-} from '@vicons/fluent'
 
 import { apiService } from '@/services/ApiService'
-
 import { notify } from '@/components/ui/toastService';
-import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
-
-// Element Plus 组件导入
-
-import GdDialog from '@/components/ui/GdDialog.vue'
-import GdButton from '@/components/ui/GdButton.vue'
-import GdInput from '@/components/ui/GdInput.vue';
-
-const breakpoints = useBreakpoints(breakpointsTailwind)
-const isMobile = breakpoints.smaller('md') // md = 768px
+import GdSelect from '@/components/ui/GdSelect.vue'
 
 const { t } = useI18n()
 
@@ -221,13 +78,6 @@ const historyCompressionFormRef = ref(null)
 const models = ref([])
 const providers = ref([])
 
-// 当前打开的对话框类型 ('title' | 'translation' | 'compression' | 'visual')
-const currentDialogType = ref('')
-
-// 模型选择对话框相关
-const modelDialogVisible = ref(false)
-const modelSearchText = ref('')
-const tempModelId = ref(null) // 临时选中的模型 ID
 
 // 表单数据
 const settingsForm = reactive({
@@ -252,151 +102,52 @@ const translationRules = computed(() => ({
     ]
 }))
 
-// 计算各个模型的显示名称
-const getModelNameById = (modelId) => {
-    if (!modelId) return ''
-    const model = models.value.find(m => m.id === modelId)
-    return model ? model.modelName.split('/').pop() : ''
-}
-
-// 计算各个模型输入框的显示值
-const titleSummaryModelName = computed(() =>
-    getModelNameById(settingsForm.defaultTitleSummaryModelId)
-)
-
-const translationModelName = computed(() =>
-    getModelNameById(settingsForm.defaultTranslationModelId)
-)
-
-const historyCompressionModelName = computed(() =>
-    getModelNameById(settingsForm.defaultHistoryCompressionModelId)
-)
-
-const visualAssistantModelName = computed(() => {
-    const model = models.value.find(m => m.id === settingsForm.defaultVisualAssistantModelId)
-    return model ? model.modelName.split('/').pop() : ''
+// 三个模型选择器：未设置时空串（GdSelect 用空串表示无值），清空回写 null
+const titleModelValue = computed({
+    get: () => settingsForm.defaultTitleSummaryModelId ?? '',
+    set: (value) => { settingsForm.defaultTitleSummaryModelId = value === '' ? null : value },
+})
+const visualModelValue = computed({
+    get: () => settingsForm.defaultVisualAssistantModelId ?? '',
+    set: (value) => { settingsForm.defaultVisualAssistantModelId = value === '' ? null : value },
+})
+const compressionModelValue = computed({
+    get: () => settingsForm.defaultHistoryCompressionModelId ?? '',
+    set: (value) => { settingsForm.defaultHistoryCompressionModelId = value === '' ? null : value },
 })
 
-// 打开模型对话框
-const openModelDialog = (type) => {
-    currentDialogType.value = type
-    modelSearchText.value = ''
+const shortModelName = (model) => (model?.modelName || '').split('/').pop() || model?.id || ''
 
-    // 根据类型设置当前选中的模型
-    switch (type) {
-        case 'title':
-            tempModelId.value = settingsForm.defaultTitleSummaryModelId
-            break
-        case 'translation':
-            tempModelId.value = settingsForm.defaultTranslationModelId
-            break
-        case 'compression':
-            tempModelId.value = settingsForm.defaultHistoryCompressionModelId
-            break
-        case 'visual':
-            tempModelId.value = settingsForm.defaultVisualAssistantModelId
-            break
-    }
-
-    modelDialogVisible.value = true
-}
-
-/**
- * 只读触发器的键盘可达性：Enter / 空格 等效于点击。
- * 替换掉 el-select 之前，它是可以键盘打开下拉的，这里保持同样的可达性。
- */
-const onTriggerKeydown = (event, type) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault()
-        openModelDialog(type)
-    }
-}
-
-// 选择并自动关闭对话框
-const selectAndClose = (modelId) => {
-    if (!modelId) return
-
-    // 根据类型更新对应的模型 ID
-    switch (currentDialogType.value) {
-        case 'title':
-            settingsForm.defaultTitleSummaryModelId = modelId
-            break
-        case 'translation':
-            settingsForm.defaultTranslationModelId = modelId
-            break
-        case 'compression':
-            settingsForm.defaultHistoryCompressionModelId = modelId
-            break
-        case 'visual':
-            settingsForm.defaultVisualAssistantModelId = modelId
-            break
-    }
-
-    modelDialogVisible.value = false
-}
-
-// 清除模型选择
-const clearModelSelection = (type) => {
-    switch (type) {
-        case 'title':
-            settingsForm.defaultTitleSummaryModelId = null
-            break
-        case 'translation':
-            settingsForm.defaultTranslationModelId = null
-            break
-        case 'compression':
-            settingsForm.defaultHistoryCompressionModelId = null
-            break
-        case 'visual':
-            settingsForm.defaultVisualAssistantModelId = null
-            break
-    }
-}
-
-// 获取特性标签名称
-const getFeatureLabel = (type) => {
-    switch (type) {
-        case 'tools': return t('settings.defaultModel.toolCalling');
-        case 'thinking': return t('settings.defaultModel.mixedThinking');
-        default: return type;
-    }
-}
-
-// 过滤后的模型列表（支持搜索）
-const filteredModels = computed(() => {
-    if (!modelSearchText.value) return models.value
-    const searchText = modelSearchText.value.toLowerCase()
-    return models.value.filter(model =>
-        model.modelName?.toLowerCase().includes(searchText) ||
-        model.description?.toLowerCase().includes(searchText)
-    )
-})
-
-// 按供应商分组的过滤后模型列表
-const filteredProviders = computed(() => {
-    if (!models.value.length || !providers.value.length) return []
-
-    let filtered = filteredModels.value
-    
-    // 如果是视觉辅助模型选择，仅显示支持图像输入的模型
-    if (currentDialogType.value === 'visual') {
-        filtered = filtered.filter(model => {
-            const inputCapabilities = model.config?.inputCapabilities
-            return Array.isArray(inputCapabilities) && inputCapabilities.includes('image')
+// 下拉选项：供应商名作为 disabled 分组头（与智能体设置的模型下拉同一形态）。
+// GdSelect 的过滤按 label 匹配，分组头只在自身命中时显示
+const buildModelOptions = (filterFn) => {
+    const options = []
+    providers.value.forEach((provider) => {
+        const providerModels = models.value.filter((model) =>
+            model.providerId === provider.id && (!filterFn || filterFn(model))
+        )
+        if (!providerModels.length) return
+        options.push({ label: provider.name, value: provider.id, disabled: true })
+        providerModels.forEach((model) => {
+            options.push({ label: shortModelName(model), value: model.id })
         })
-    }
-    
-    return providers.value.map(provider => ({
-        ...provider,
-        models: filtered.filter(model => model.providerId === provider.id)
-    })).filter(provider => provider.models.length > 0)
-})
-
-// 获取指定供应商的模型列表
-const getProviderModels = (providerId) => {
-    const provider = filteredProviders.value.find(p => p.id === providerId)
-    return provider ? provider.models : []
+    })
+    return options
 }
+
+const textModelOptions = computed(() => buildModelOptions())
+const visualModelOptions = computed(() => {
+    const options = buildModelOptions((model) =>
+        Array.isArray(model.config?.inputCapabilities) && model.config.inputCapabilities.includes('image')
+    )
+    // 历史配置可能指向已不满足图像输入的模型：保留一个禁选项，让触发器仍能显示名称
+    const currentId = settingsForm.defaultVisualAssistantModelId
+    if (currentId && !options.some((option) => option.value === currentId)) {
+        const current = models.value.find((model) => model.id === currentId)
+        if (current) options.unshift({ label: shortModelName(current), value: current.id, disabled: true })
+    }
+    return options
+})
 
 // 加载模型列表
 const loadModels = async () => {
@@ -521,53 +272,4 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.footer {
-    border-top: 1px solid var(--gd-color-border);
-}
 
-/* 只读模型触发器：外观对齐 el-select（指针 + 不可选中文本），
-   但不会像 el-select 那样弹出自己的下拉层 */
-.model-select-trigger {
-    cursor: pointer;
-}
-
-.model-select-trigger__caret {
-    color: var(--gd-color-text-disabled);
-}
-
-.model-select-trigger__clear {
-    cursor: pointer;
-    color: var(--gd-color-text-disabled);
-}
-
-.model-select-trigger__clear:hover {
-    color: var(--gd-color-text-gray);
-}
-
-/* 模型选择器按钮样式 */
-:deep(.model-item) {
-    transition: all 0.2s;
-}
-
-:deep(.model-item:hover) {
-    border-color: var(--gd-color-primary-500);
-}
-
-:deep(.provider-group) {
-    margin-bottom: 1rem;
-}
-
-:deep(.provider-name) {
-    color: var(--gd-color-text-gray);
-    font-size: 0.875rem;
-    margin-bottom: 0.5rem;
-}
-
-/* 移动端特性标签隐藏（原挂 .el-tag，Element Plus 卸载后改挂本地 .model-item-tag 钩子） */
-@media (max-width: 768px) {
-    :deep(.model-item .model-item-tag) {
-        display: none;
-    }
-}
-</style>

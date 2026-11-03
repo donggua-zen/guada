@@ -50,7 +50,7 @@
         <!-- 空状态 -->
         <div v-else class="py-12 text-center text-gray-400">
           
-            <MailInbox24Regular class="mb-3 opacity-50 w-12 h-12" mx-auto  />
+            <MailInbox24Regular class="mb-3 opacity-50 w-12 h-12 mx-auto"  />
           
           <div>{{ t('scheduler.log.empty') }}</div>
           <div class="text-sm mt-2">{{ t('scheduler.log.emptyHint') }}</div>

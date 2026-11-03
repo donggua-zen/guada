@@ -89,6 +89,7 @@
                         class="w-full" />
                     </div>
                   </div>
+                </div>
               </div>
 
               <!-- 记忆与压缩 -->
@@ -118,7 +119,6 @@
                 <p class="text-sm">{{ t('agents.setting.tip2') }}</p>
                 <p class="text-sm">{{ t('agents.setting.tip3') }}</p>
               </GdAlert>
-              </div>
             </div>
           </div>
         </div>
@@ -167,7 +167,7 @@
 
                 <div v-if="visibleLocalTools.length === 0" class="text-center text-gray-500 py-8">
                   
-                    <Info24Regular class="mb-2 w-12 h-12" mx-auto  />
+                    <Info24Regular class="mb-2 w-12 h-12 mx-auto"  />
                   
                   <div>{{ t('agents.setting.noLocalTools') }}</div>
                   <div class="text-sm mt-2">{{ t('agents.setting.noLocalToolsHint') }}</div>
@@ -231,7 +231,7 @@
 
                 <div v-if="mcpServers.length === 0" class="text-center text-gray-500 py-8">
                   
-                    <Info24Regular class="mb-2 w-12 h-12" mx-auto  />
+                    <Info24Regular class="mb-2 w-12 h-12 mx-auto"  />
                   
                   <div>{{ t('agents.setting.noMcpServers') }}</div>
                 </div>
@@ -294,14 +294,14 @@
 
                 <div v-if="loadingSkills" class="text-center py-8">
                   
-                    <ArrowSync16Regular class="w-6 h-6 animate-spin" />
+                    <ArrowSync16Regular class="w-6 h-6 animate-spin mx-auto" />
                   
                   <div class="text-sm text-gray-500 mt-2">{{ t('agents.setting.loadingSkills') }}</div>
                 </div>
 
                 <div v-else-if="visibleSkills.length === 0" class="text-center text-gray-500 py-8">
                   
-                    <Info24Regular class="mb-2 w-12 h-12" mx-auto  />
+                    <Info24Regular class="mb-2 w-12 h-12 mx-auto"  />
                   
                   <div>{{ t('agents.setting.noSkills') }}</div>
                   <div class="text-sm mt-2">{{ t('agents.setting.noSkillsHint') }}</div>
@@ -349,14 +349,14 @@
 
                 <div v-if="loadingAgents" class="text-center py-8">
                   
-                    <ArrowSync16Regular class="w-6 h-6 animate-spin" />
+                    <ArrowSync16Regular class="w-6 h-6 animate-spin mx-auto" />
                   
                   <div class="text-sm text-gray-500 mt-2">{{ t('agents.setting.loadingAgents') }}</div>
                 </div>
 
                 <div v-else-if="presetAgents.length === 0" class="text-center text-gray-500 py-8">
                   
-                    <Info24Regular class="mb-2 w-12 h-12" mx-auto  />
+                    <Info24Regular class="mb-2 w-12 h-12 mx-auto"  />
                   
                   <div>{{ t('agents.setting.noAgents') }}</div>
                   <div class="text-sm mt-2">{{ t('agents.setting.noAgentsHint') }}</div>

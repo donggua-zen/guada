@@ -26,7 +26,7 @@
     <!-- 文件/文件夹列表-->
     <div v-if="isLoading" class="text-center py-8">
       
-        <ArrowSync16Regular class="animate-spin text-blue-500 w-8 h-8"  />
+        <ArrowSync16Regular class="animate-spin text-blue-500 w-8 h-8 mx-auto"  />
       
       <p class="mt-2 text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.tree.loading') }}</p>
     </div>
@@ -119,7 +119,7 @@
     <!-- 加载更多指示器 -->
     <div v-if="isLoadingMore" class="text-center py-4">
       
-        <ArrowSync16Regular class="animate-spin text-blue-500 w-6 h-6"  />
+        <ArrowSync16Regular class="animate-spin text-blue-500 w-6 h-6 mx-auto"  />
       
       <p class="mt-2 text-sm text-gray-500">{{ t('knowledge.tree.loadingMore') }}</p>
     </div>
@@ -1138,9 +1138,12 @@ if (typeof window !== 'undefined') {
   window.addEventListener('click', closeContextMenu)
 }
 
-// 组件卸载时清理轮询定时器
+// 组件卸载时清理监听与轮询定时器
 onUnmounted(() => {
   console.log('[DEBUG] KBFileTree 组件销毁,清理轮询定时器')
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('click', closeContextMenu)
+  }
   stopFileProcessingPolling()
 })
 </script>

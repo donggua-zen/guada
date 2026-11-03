@@ -59,7 +59,7 @@
           <!-- 空状态 -->
           <div v-else-if="!store.loading" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
             
-              <BookOpen48Regular class="text-gray-300 dark:text-[#3e4046] mb-3 w-12 h-12" mx-auto  />
+              <BookOpen48Regular class="text-gray-300 dark:text-[#3e4046] mb-3 w-12 h-12 mx-auto"  />
             
             <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? t('knowledge.page.notFound') : t('knowledge.page.empty') }}</p>
             <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? t('knowledge.page.notFoundHint') : t('knowledge.page.emptyHint') }}</p>

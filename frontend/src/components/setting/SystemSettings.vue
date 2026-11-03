@@ -95,6 +95,9 @@
                             <template v-else-if="currentTabValue === 'usage'">
                                 <UsageStats />
                             </template>
+                            <template v-else-if="currentTabValue === 'claude-import'">
+                                <ClaudeImport />
+                            </template>
                             <template v-else-if="currentTabValue === 'profile'">
                                 <UserProfile />
                             </template>
@@ -138,6 +141,8 @@ import AboutPanel from '../plugins/AboutPanel.vue'
 import SessionGroupManage from './SessionGroupManage.vue'
 import ArchivedSessions from './ArchivedSessions.vue'
 import UsageStats from './UsageStats.vue'
+// 会话导入：低频功能，懒加载
+const ClaudeImport = defineAsyncComponent(() => import('./ClaudeImport.vue'))
 import UserProfile from './UserProfile.vue'
 import UserSecurity from './UserSecurity.vue'
 import ConnectionSettings from './ConnectionSettings.vue'
@@ -166,6 +171,7 @@ import {
     ChevronLeft16Regular,
     Person16Regular,
     ShieldCheckmark20Regular,
+    ArrowUpload20Regular,
 } from '@vicons/fluent'
 
 import PageHeader from '@/components/PageHeader.vue'
@@ -199,6 +205,7 @@ const groupMap = computed<Record<string, string>>(() => ({
     'session-groups': t('settings.system.groups.dataManagement'),
     'session-archived': t('settings.system.groups.dataManagement'),
     usage: t('settings.system.groups.dataManagement'),
+    'claude-import': t('settings.system.groups.dataManagement'),
     plugin: t('settings.system.groups.system'),
     profile: t('settings.system.groups.account'),
     security: t('settings.system.groups.account'),
@@ -301,6 +308,11 @@ const sidebarItems = computed(() => [
         label: t('settings.system.tabs.usage'),
         path: 'usage',
         icon: ChartMultiple24Regular,
+    },
+    {
+        label: t('settings.system.tabs.claudeImport'),
+        path: 'claude-import',
+        icon: ArrowUpload20Regular,
     },
     {
         label: t('settings.system.tabs.profile'),

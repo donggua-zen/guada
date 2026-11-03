@@ -140,7 +140,7 @@
                 class="rounded-[var(--gd-size-surface-radius)] overflow-hidden bg-(--gd-color-surface-subtle)">
                 <div class="p-12 text-center">
                     
-                        <MailInbox24Regular class="mb-4 opacity-50 text-gray-400 w-16 h-16"  />
+                        <MailInbox24Regular class="mb-4 opacity-50 text-gray-400 w-16 h-16 mx-auto"  />
                     
                     <div class="text-xl font-medium text-gray-600 dark:text-[#e8e9ed] mb-2">
                         {{ t('plugins.skills.empty') }}

@@ -85,7 +85,7 @@
         <div v-if="!loading && agents.length === 0"
           class="col-span-full text-center py-12 text-gray-500 dark:text-[#8b8d95]">
           
-            <People32Regular class="text-gray-300 dark:text-[#5a5c63] mb-3 w-12 h-12" mx-auto  />
+            <People32Regular class="text-gray-300 dark:text-[#5a5c63] mb-3 w-12 h-12 mx-auto"  />
           
           <p class="text-lg">{{ t('agents.list.empty') }}</p>
           <p class="text-sm mt-1">{{ t('agents.list.emptyHint') }}</p>

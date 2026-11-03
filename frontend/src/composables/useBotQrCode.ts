@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { apiService } from '@/services/ApiService'
@@ -117,6 +117,14 @@ export function useBotQrCode() {
     if (shown) {
       pollTimer = setInterval(fetchStatus, QR_POLL_MS)
     } else if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  })
+
+  // 宿主组件在弹窗打开期间被卸载（如路由切走）时兜底清轮询，避免定时器永久存活
+  onScopeDispose(() => {
+    if (pollTimer) {
       clearInterval(pollTimer)
       pollTimer = null
     }

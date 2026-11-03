@@ -210,7 +210,9 @@ const wrapperClasses = computed((): string => {
     const s = resolveSize();
     const classes: string[] = [
         // gd-input 基类是主题插件（plugins/guada-themes）的稳定定位钩子，
-        // 配合 data-variant / data-size 做拟物化换肤，不要改名
+        // 配合 data-variant / data-size 做拟物化换肤，不要改名。
+        // 宽度固定 w-full：需要定宽时由消费方包一层带 w-* 的容器（不要指望 w-11 直接覆盖，
+        // 同元素上两个宽度工具类特异性相同，谁生效取决于 Tailwind 产物顺序）
         "gd-input",
         "group",
         "relative flex w-full min-w-0 items-center box-border",

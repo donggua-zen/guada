@@ -24,6 +24,13 @@ export const GdOption = defineComponent({
                 slot: slots.default ? () => slots.default!() : null,
             });
             onScopeDispose(dispose);
+            // 只写插槽不传 label：面板里能看到文字，触发器却是空——常见误用，开发期提示
+            if (import.meta.env.DEV && !props.label && slots.default) {
+                console.warn(
+                    `<GdOption value="${String(props.value)}"> 未传 label：触发器上的显示文本取自 label，` +
+                    `插槽内容只用于面板内的自定义渲染。请补 :label 或改用文本子节点写法`,
+                );
+            }
         } else if (import.meta.env.DEV) {
             console.warn('<GdOption> 必须作为 <GdSelect> 的子组件使用');
         }

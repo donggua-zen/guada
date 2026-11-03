@@ -27,8 +27,8 @@
         <!-- filterable 输入框：多选时始终在 chips 末尾，单选时仅面板打开期间渲染 -->
         <input v-if="filterable && (multiple || show)" ref="filterInputRef" v-model="query" type="text"
             class="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] leading-none outline-none placeholder:text-[var(--gd-color-field-text-placeholder)]"
-            :class="disabled ? 'cursor-not-allowed' : ''" :placeholder="multiple && !selectedValues.length ? (placeholder || '') : ''"
-            :disabled="disabled" :aria-controls="`${uid}-listbox`" @keydown="handleFilterKeydown" @compositionstart="compositionStart = true" @compositionend="compositionStart = false">
+            :class="disabled ? 'cursor-not-allowed' : ''" :placeholder="hasValue ? '' : (placeholder || '')"
+            :disabled="disabled" :aria-controls="`${uid}-listbox`" @click.stop @input="handleFilterInput" @keydown="handleFilterKeydown" @compositionstart="compositionStart = true" @compositionend="compositionStart = false">
         <!-- suffix：clearable 清空钮（hover 且有值时替代箭头）+ 转义箭头 -->
         <span v-if="!disabled && clearable && hasValue && hovered" class="ml-1.5 flex shrink-0 items-center">
             <button type="button" :tabindex="-1" aria-label="清空"
@@ -183,6 +183,9 @@ const filterInputRef = ref<HTMLInputElement | null>(null);
 const hovered = ref(false);
 const show = ref(false);
 const query = ref("");
+// 是否处于「用户主动搜索」态：单选 filterable 打开时 query 会被回填成选中项 label，
+// 那是展示值不是过滤词；只有用户实际键入后才按 query 过滤，否则打开面板会只剩选中项。
+const searchActive = ref(false);
 const compositionStart = ref(false);
 const highlightIndex = ref(0); // 在扁平可选列表（含 create 虚拟项）中的下标
 const popoverWidth = ref<number | undefined>(undefined);
@@ -205,13 +208,13 @@ const displayLabel = computed(() => (multiple.value ? "" : hasValue.value ? labe
 
 // ==================== 过滤与扁平列表 ====================
 const filteredEntries = computed<FlatEntry[]>(() => {
-    const q = query.value.trim().toLowerCase();
+    const q = searchActive.value ? query.value.trim().toLowerCase() : "";
     const list = resolvedOptions.value.filter((opt) => !q || String(opt.label).toLowerCase().includes(q));
     return list.map((opt) => ({ label: opt.label, value: opt.value, disabled: opt.disabled }));
 });
 const createItem = computed<FlatEntry | null>(() => {
     if (!props.allowCreate || props.loading) return null;
-    const q = query.value.trim();
+    const q = searchActive.value ? query.value.trim() : "";
     if (!q) return null;
     const exists = resolvedOptions.value.some((opt) => String(opt.label).toLowerCase() === q.toLowerCase());
     return exists ? null : { label: q, value: q, create: true };
@@ -235,28 +238,44 @@ const firstSelectableIndex = (): number => flatEntries.value.findIndex((e) => !e
 // ==================== 打开/关闭 ====================
 const openPanel = async (): Promise<void> => {
     if (props.disabled || show.value) return;
-    query.value = "";
+    // 单选可搜索：把当前选中项的 label 先回填到输入框（面板打开期间 label span 让位给输入框，
+    // 留空会让触发器看起来「原来的内容被清空了」）。先于 show 赋值，render 时输入框就已带值，
+    // 下一拍 focus 后才能 select() 全选——键入即替换成搜索词。
+    query.value = filterable.value && !multiple.value ? displayLabel.value : "";
+    searchActive.value = false;
     highlightIndex.value = Math.max(0, firstSelectableIndex());
     popoverWidth.value = triggerRef.value?.offsetWidth || undefined;
     show.value = true;
     await nextTick();
     // 焦点必须落在组件内键盘事件才有人接：filterable 有内嵌输入框，
     // 其余场景焦点拉回触发器（keydown 由 handleTriggerKeydown 转发）
-    if (filterable.value) filterInputRef.value?.focus();
-    else triggerRef.value?.focus();
+    if (filterable.value) {
+        filterInputRef.value?.focus();
+        if (!multiple.value) filterInputRef.value?.select();
+    } else {
+        triggerRef.value?.focus();
+    }
     scrollHighlightIntoView();
 };
 const closePanel = (): void => {
     show.value = false;
     query.value = "";
+    searchActive.value = false;
 };
 const togglePanel = (): void => {
     if (props.disabled) return;
     if (show.value) closePanel(); else openPanel();
 };
+// 用户键入才进入搜索态（面板打开时 query 里的选中项 label 只作展示）
+const handleFilterInput = (): void => {
+    searchActive.value = true;
+};
 watch(show, (visible) => {
     emits("visible-change", visible);
     if (visible) return;
+    // 点外/Esc 关闭（不经过 closePanel）也要复位，避免下次打开沿用上次的搜索词
+    query.value = "";
+    searchActive.value = false;
     // 关闭后焦点回到触发器（filterable 的内嵌输入框已随面板销毁），保证后续键盘操作
     triggerRef.value?.focus();
 });
@@ -325,6 +344,7 @@ const selectEntry = (entry: FlatEntry): void => {
         emits("update:modelValue", next);
         emits("change", next);
         query.value = ""; // el 行为：多选选择后清空查询，面板保持打开
+        searchActive.value = false;
         // 清空查询会触发 [query] watcher 把高亮重置到首个可选——多选要连续勾选，
         // 这里在下一拍把高亮放回刚点的选项，避免"点一个就跳回第一项"
         nextTick(() => {
@@ -359,6 +379,14 @@ watch([query, resolvedOptions], () => {
     highlightIndex.value = Math.max(0, firstSelectableIndex());
 });
 
+// 面板打开期间选中值被外部改变（清空按钮、异步回填）时，同步输入框的展示值；
+// 用户已进入搜索态则不动（输入框里的内容就是搜索词）
+watch(displayLabel, (label) => {
+    if (show.value && filterable.value && !multiple.value && !searchActive.value) {
+        query.value = label;
+    }
+});
+
 // ==================== 样式（触发器壳与 GdInput 同一 token 套路） ====================
 interface SizeSpec {
     height: string;
@@ -383,7 +411,9 @@ const filterable = computed(() => props.filterable);
 const triggerClasses = computed((): string => {
     const s = resolveSize();
     const classes: string[] = [
-        // gd-select 基类是主题插件的稳定定位钩子，配合 data-variant / data-size 换肤，不要改名
+        // gd-select 基类是主题插件的稳定定位钩子，配合 data-variant / data-size 换肤，不要改名。
+        // 宽度固定 w-full：需要定宽时由消费方包一层带 w-* 的容器（不要指望 w-44 直接覆盖，
+        // 同元素上两个宽度工具类特异性相同，谁生效取决于 Tailwind 产物顺序）
         "gd-select",
         "group relative flex w-full min-w-0 box-border border",
         // 圆角形态：默认矩形圆角（与 GdInput 表单控件一致），pill = 全圆角胶囊

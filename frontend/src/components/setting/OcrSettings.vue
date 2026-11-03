@@ -45,7 +45,10 @@
                 <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.ocr.servicePort') }}</span>
                 <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.servicePortDesc') }}</span>
               </div>
-              <GdInputNumber v-model="settingsForm.umiPort" :min="1" :max="65535" placeholder="1224" class="shrink-0" />
+              <!-- 宽度必须显式给：GdInputNumber 内部的 GdInput 壳自带 w-full，
+                   不给宽度 + shrink-0 会占满整行，把左侧标签挤成单字竖排 -->
+              <GdInputNumber v-model="settingsForm.umiPort" :min="1" :max="65535" placeholder="1224"
+                style="width: 200px;" class="shrink-0" />
             </div>
           </template>
 

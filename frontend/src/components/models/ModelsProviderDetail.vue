@@ -22,7 +22,7 @@
         <!-- 空状态 -->
         <div v-if="models.length === 0" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
           
-            <Box16Regular class="text-gray-300 dark:text-[#3e4046] mb-3 w-12 h-12" mx-auto  />
+            <Box16Regular class="text-gray-300 dark:text-[#3e4046] mb-3 w-12 h-12 mx-auto"  />
           
           <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ t('settings.providerDetail.noModels') }}</p>
           <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ t('settings.providerDetail.noModelsDesc') }}</p>

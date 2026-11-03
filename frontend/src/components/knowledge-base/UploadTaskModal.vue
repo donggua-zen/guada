@@ -52,7 +52,7 @@
     <!-- 空状态 -->
     <div v-else class="text-center py-12">
       
-        <ArrowUpload24Regular class="text-gray-300 dark:text-[#3e4046] mb-3 w-12 h-12" mx-auto  />
+        <ArrowUpload24Regular class="text-gray-300 dark:text-[#3e4046] mb-3 w-12 h-12 mx-auto"  />
       
       <p class="text-sm text-gray-500 dark:text-[#8b8d95]">{{ t('knowledge.uploadTask.empty') }}</p>
     </div>

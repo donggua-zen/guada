@@ -36,7 +36,7 @@
         <div v-if="searchResults.length > 0 || isSearching" class="search-results-section">
             <div v-if="isSearching" class="loading-state text-center py-8">
                 
-                    <ArrowSync16Regular class="animate-spin text-3xl text-gray-400 size-4"  />
+                    <ArrowSync16Regular class="animate-spin text-3xl text-gray-400 size-4 mx-auto"  />
                 
                 <p class="text-sm text-gray-500 mt-2">{{ t('knowledge.search.searching') }}</p>
             </div>
@@ -108,7 +108,7 @@
         <!-- 空状态 -->
         <div v-else-if="hasSearched" class="empty-state text-center py-12">
             
-                <Search48Regular class="text-gray-300 mb-3 w-12 h-12" mx-auto  />
+                <Search48Regular class="text-gray-300 mb-3 w-12 h-12 mx-auto"  />
             
             <p class="text-sm text-gray-500">{{ t('knowledge.search.notFound') }}</p>
             <p class="text-xs text-gray-400 mt-1">{{ t('knowledge.search.notFoundHint') }}</p>
@@ -117,7 +117,7 @@
         <!-- 初始状态 -->
         <div v-else class="initial-state text-center py-12">
             
-                <Search48Regular class="text-gray-300 mb-3 w-12 h-12" mx-auto  />
+                <Search48Regular class="text-gray-300 mb-3 w-12 h-12 mx-auto"  />
             
             <p class="text-sm text-gray-500">{{ t('knowledge.search.initial') }}</p>
             <p class="text-xs text-gray-400 mt-1">{{ t('knowledge.search.initialHint') }}</p>

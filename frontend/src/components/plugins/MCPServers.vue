@@ -78,7 +78,7 @@
             <div v-else
                 class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-12 text-center">
                 
-                    <MailInbox24Regular class="mb-3 opacity-50 text-gray-400 w-12 h-12" mx-auto  />
+                    <MailInbox24Regular class="mb-3 opacity-50 text-gray-400 w-12 h-12 mx-auto"  />
                 
                 <div class="text-gray-500 dark:text-[#8b8d95]">{{ t('plugins.mcp.empty') }}</div>
                 <div class="text-sm text-gray-400 dark:text-[#6b6d75] mt-2">{{ t('plugins.mcp.emptyHint') }}</div>
@@ -186,7 +186,7 @@
                 <div v-if="activeTab === 'tools'">
                     <div v-if="!isEditMode" class="py-12 text-center">
                         
-                            <Info24Regular class="mb-3 opacity-50 text-gray-400 w-12 h-12" mx-auto  />
+                            <Info24Regular class="mb-3 opacity-50 text-gray-400 w-12 h-12 mx-auto"  />
                         
                         <div class="text-gray-500">{{ t('plugins.mcp.toolsNewHint') }}</div>
                         <div class="text-sm text-gray-400 mt-2">{{ t('plugins.mcp.toolsNewHintSub') }}</div>
@@ -249,7 +249,7 @@
 
                         <div v-else class="py-8 text-center text-gray-400">
                             
-                                <MailInbox24Regular class="mb-2 opacity-50 w-9 h-9"  />
+                                <MailInbox24Regular class="mb-2 opacity-50 w-9 h-9 mx-auto"  />
                             
                             <div class="text-sm">{{ t('plugins.mcp.toolsEmpty') }}</div>
                             <div class="text-xs mt-1">{{ t('plugins.mcp.toolsEmptyHint') }}</div>

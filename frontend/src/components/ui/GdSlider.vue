@@ -1,13 +1,22 @@
 <template>
     <div :class="rootClasses" :data-size="resolvedSize">
         <div class="relative flex min-w-0 flex-1 items-center" @mouseenter="hovered = true" @mouseleave="hovered = false">
-            <!-- 视觉层：轨道 + 主色填充 -->
-            <div class="pointer-events-none absolute inset-x-0 top-1/2 h-[6px] -translate-y-1/2 overflow-hidden rounded-full bg-[var(--gd-color-field-bg-hover)]">
-                <div class="h-full rounded-full bg-[var(--gd-color-primary)] transition-[width] duration-75"
+            <!-- 视觉层：轨道 + 主色填充。
+                 轨道按圆点行程内缩左右各 12px（原生 thumb 半径）：原生 range 的可用区间是
+                 [12, 宽-12]，圆点中心 = 12 + percent×(宽-24)。若轨道铺满整宽再按 percent 填充，
+                 填充终点 percent×宽 只在 50% 处与圆点中心重合，>50% 就会越过圆点（p 时多出
+                 12×(2p-1) px）。内缩后填充百分比与圆点行程同基准，终点恒为圆点中心。 -->
+            <div class="pointer-events-none absolute top-1/2 h-[6px] -translate-y-1/2 overflow-hidden rounded-full bg-[var(--gd-color-field-bg-hover)]"
+                :style="{ left: `${thumbLeftPx}px`, right: `${thumbLeftPx}px` }">
+                <div class="h-full rounded-full bg-[var(--gd-color-primary)]"
+                    :class="dragging ? '' : 'transition-[width] duration-75'"
                     :style="{ width: `${percent * 100}%` }"></div>
             </div>
-            <!-- thumb 视觉层：跟随百分比（与 input 命中区按同一公式对齐，首尾不越界） -->
-            <div class="pointer-events-none absolute top-1/2 size-[14px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--gd-color-surface)] shadow-[0_1px_3px_rgba(0,0,0,0.25)] ring-1 ring-[var(--gd-color-border)] transition-[left] duration-75"
+            <!-- thumb 视觉层：跟随百分比（与 input 命中区按同一公式对齐，首尾不越界）。
+                 拖动中不加 transition：每个 input 事件都会重启 75ms 过渡，圆点永远追在指针后面，
+                 连续拖动时表现为「不跟手/发粘」；仅在点击轨道/键盘步进时保留过渡。 -->
+            <div class="pointer-events-none absolute top-1/2 size-[14px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--gd-color-surface)] shadow-[0_1px_3px_rgba(0,0,0,0.25)] ring-1 ring-[var(--gd-color-border)]"
+                :class="dragging ? '' : 'transition-[left] duration-75'"
                 :style="{ left: `calc(${thumbLeftPx}px + ${percent * thumbTravelPx}px)` }"></div>
             <!-- tooltip：拖动/悬停时显示 -->
             <div v-if="showTooltip && tooltipShown"
@@ -21,7 +30,7 @@
                 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-[24px] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-transparent"
                 :min="min" :max="max" :step="step" :value="modelValue" :disabled="disabled"
                 :aria-valuenow="modelValue" aria-orientation="horizontal"
-                @input="handleRangeInput" @change="emit('change', modelValue!)"
+                @input="handleRangeInput" @change="handleRangeChange"
                 @pointerdown="dragging = true" @pointerup="endDrag" @pointercancel="endDrag"
                 @focus="tooltipVisible = true" @blur="tooltipVisible = false">
         </div>
@@ -101,6 +110,12 @@ const handleNumberInput = (value: number | null): void => {
 };
 const endDrag = (): void => {
     dragging.value = false;
+};
+// 原生 change 在松手时必定触发（即使指针移出控件），用它兜底结束拖动态，
+// 避免 pointerup 丢失后 dragging 卡在 true（会导致视觉层永久失去过渡）
+const handleRangeChange = (): void => {
+    endDrag();
+    emit("change", props.modelValue);
 };
 
 // tooltip 显示时机：拖动中、或悬停

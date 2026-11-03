@@ -17,7 +17,7 @@
         <div class="space-y-1 pb-4 w-full">
           <div v-if="filteredKnowledgeBases.length === 0" class="text-center py-6 text-gray-400">
             
-              <Search12Regular class="mb-1 w-8 h-8"  />
+              <Search12Regular class="mb-1 w-8 h-8 mx-auto"  />
             
             <p class="text-xs">{{ t('chat.input.noMatchKnowledgeBase') }}</p>
           </div>
