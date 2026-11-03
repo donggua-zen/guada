@@ -326,6 +326,29 @@ export interface CompactionEndData {
   sourceCommandId?: string;
 }
 
+/**
+ * 导入路径合成的压缩点（外部来源 → 本项目 compaction 三事件）。
+ *
+ * 语义：在第 `beforeTurnIndex` 个回合之前插入一次压缩。
+ * `shadowedCount` 按**折叠视图头部前缀**计算（replayer 的 splice 语义），调用方需顺序模拟：
+ * 第一次压缩 = 该点之前的消息条数；之后每次 = 1 + 距上次压缩点新增的消息条数
+ * （上一次的摘要节点占折叠视图头部一条）。
+ */
+export interface ImportCompactionPoint {
+  /** 0 = 第一个回合之前；= turns.length = 全部回合之后 */
+  beforeTurnIndex: number;
+  /** 摘要正文 */
+  summary: string;
+  /** 折叠视图头部要遮蔽的消息条数 */
+  shadowedCount: number;
+  /** 遮蔽末位消息 id（前端"已压缩"标记的依据；可缺省） */
+  shadowedEndId?: string;
+  /** 摘要消息 id（缺省由导入方生成） */
+  summaryMessageId?: string;
+  /** 压缩事件时间戳（缺省 now；导入时用源时间） */
+  time?: number;
+}
+
 // ─── 命令执行(事件类消息,对齐 DSH command/run + command/done)───
 // 由 command/run 开启、command/done 收尾。S0 起不再折叠进 ReplayState.messages
 // （command 事件对 LLM 视图无意义），仅落盘供事件页读盘独立折叠展示。

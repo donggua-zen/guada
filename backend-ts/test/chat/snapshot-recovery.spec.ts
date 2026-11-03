@@ -255,4 +255,114 @@ describe("importTurns 上下文占用锚点（重建路径）", () => {
     expect((finish?.data as any)?.usedTokens).toBe(2);
     expect((finish?.data as any)?.promptTokens).toBe(0);
   });
+
+  it("原始时间戳保留：turn.createdAt / message.createdAt / metadata.finishedAt 覆盖事件 time", async () => {
+    const store = new JsonlMessageService(backend);
+    const T = 1730000000000;
+    await store.importTurns(sid, [
+      {
+        id: "t-imp1",
+        kind: "turn",
+        metadata: { finishedAt: T + 60000 },
+        messages: [
+          {
+            id: "u-imp1",
+            role: "user",
+            kind: "user",
+            source: { kind: "user" },
+            metadata: {},
+            content: [{ type: "text", text: "q" }],
+            createdAt: T,
+          },
+          {
+            id: "a-imp1",
+            role: "assistant",
+            kind: "model",
+            source: { kind: "model", provider: "p", model: "m" },
+            metadata: {},
+            content: [{ type: "text", text: "a" }],
+            createdAt: T + 30000,
+          },
+        ],
+        visible: true,
+        createdAt: T,
+      },
+    ]);
+    const events = await backend.getAllEvents(sid);
+    const byType = (t: string) => events.filter((e) => e.type === t);
+    expect(byType("turn/start")[0]?.time).toBe(T);
+    expect(byType("user/message")[0]?.time).toBe(T);
+    expect(byType("assistant/message")[0]?.time).toBe(T + 30000);
+    expect(byType("turn/finish")[0]?.time).toBe(T + 60000);
+  });
+
+  it("缺省 createdAt → 事件 time 回退 Date.now()（运行时路径行为不变）", async () => {
+    const store = new JsonlMessageService(backend);
+    const before = Date.now() - 1000;
+    await store.importTurns(sid, [turnWithUsage({ promptTokens: 1, completionTokens: 1 })]);
+    const events = await backend.getAllEvents(sid);
+    for (const e of events) {
+      expect(e.time).toBeGreaterThanOrEqual(before);
+    }
+  });
+
+  it("compactions 选项：在对应回合前写压缩三事件，折叠后为摘要 + 压缩后尾巴", async () => {
+    const store = new JsonlMessageService(backend);
+    const makeTurn = (id: string, q: string, a: string): Turn => ({
+      id,
+      kind: "turn",
+      metadata: {},
+      messages: [
+        {
+          id: `${id}-u`,
+          role: "user",
+          kind: "user",
+          source: { kind: "user" },
+          metadata: {},
+          content: [{ type: "text", text: q }],
+        },
+        {
+          id: `${id}-a`,
+          role: "assistant",
+          kind: "model",
+          source: { kind: "model", provider: "p", model: "m" },
+          metadata: {},
+          content: [{ type: "text", text: a }],
+        },
+      ],
+      visible: true,
+    });
+
+    await store.importTurns(sid, [makeTurn("t1", "q1", "a1"), makeTurn("t2", "q2", "a2")], {
+      // 第一次压缩：该点之前 2 条消息（q1 + a1）
+      compactions: [
+        { beforeTurnIndex: 1, summary: "摘要X", shadowedCount: 2, shadowedEndId: "t1-a" },
+      ],
+    });
+
+    const events = await backend.getAllEvents(sid);
+    const types = events.map((e) => e.type);
+    const summaryIdx = types.indexOf("compaction/summary");
+    const t2StartIdx = events.findIndex(
+      (e) => e.type === "turn/start" && (e.data as any).turnId === "t2",
+    );
+    // 三事件成括号，且先于第二回合
+    expect(summaryIdx).toBeGreaterThan(-1);
+    expect(types[summaryIdx - 1]).toBe("compaction/start");
+    expect(types[summaryIdx + 1]).toBe("compaction/end");
+    expect(summaryIdx).toBeLessThan(t2StartIdx);
+    expect((events[summaryIdx].data as any)).toMatchObject({
+      shadowedCount: 2,
+      shadowedEndId: "t1-a",
+      summary: "摘要X",
+    });
+
+    // 折叠（LLM 视图）：前缀两条被摘要替换 → [摘要, q2, a2]
+    const state = foldEvents(events, createInitialState());
+    expect(state.messages).toHaveLength(3);
+    expect(state.messages[0].source).toMatchObject({ kind: "plugin", plugin: "compact" });
+    expect((state.messages[0].content[0] as any).text).toBe("摘要X");
+    expect((state.messages[1].content[0] as any).text).toBe("q2");
+    expect((state.messages[2].content[0] as any).text).toBe("a2");
+  });
 });

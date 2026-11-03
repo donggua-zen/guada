@@ -16,7 +16,7 @@ import type {
   FileRef,
   TokenUsage,
 } from '../types/conversation.types';
-import type { BaseEvent, ContextStatsData, OccupancyAnchor, SessionMeta, ToolImagePruneData } from './types';
+import type { BaseEvent, ContextStatsData, ImportCompactionPoint, OccupancyAnchor, SessionMeta, ToolImagePruneData } from './types';
 
 // ============================================================================
 // 参数类型定义
@@ -160,11 +160,13 @@ export interface IMessageStore {
   clearSessionTurns(sessionId: string): Promise<void>;
   /** 批量导入轮次（重建/导入路径）。
    *  @param opts.effectiveContextWindow 会话模型的有效上下文窗口——传入时 turn/finish 携带
-   *    上下文占用锚点（usedTokens 取回合 usage 的 provider 报告值），供前端逆向扫描免 REST */
+   *    上下文占用锚点（usedTokens 取回合 usage 的 provider 报告值），供前端逆向扫描免 REST
+   *  @param opts.compactions 外部来源的压缩点——在各回合前插入 compaction 三事件，
+   *    界面全量可见、模型侧折叠为「摘要 + 压缩后尾巴」（见 ImportCompactionPoint） */
   importTurns(
     sessionId: string,
     turns: Turn[],
-    opts?: { effectiveContextWindow?: number },
+    opts?: { effectiveContextWindow?: number; compactions?: ImportCompactionPoint[] },
   ): Promise<{ imported: number }>;
 
   // ─── 分支/克隆（原始事件迁移）───

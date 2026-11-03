@@ -25,6 +25,7 @@ import {
   SessionModeChangedData,
   ContextStatsData,
   CompactionDegradationData,
+  ImportCompactionPoint,
   ToolImagePruneData,
 } from './types';
 import { MESSAGE_EVENT_LOG, PendingEvent } from './event-log.port';
@@ -954,7 +955,7 @@ export class JsonlMessageService implements IMessageStore {
   async importTurns(
     sessionId: string,
     turns: Turn[],
-    opts?: { effectiveContextWindow?: number },
+    opts?: { effectiveContextWindow?: number; compactions?: ImportCompactionPoint[] },
   ): Promise<{ imported: number }> {
     return this.runExclusive(sessionId, () =>
       this.importTurnsInternal(sessionId, turns, opts),
@@ -964,7 +965,7 @@ export class JsonlMessageService implements IMessageStore {
   private async importTurnsInternal(
     sessionId: string,
     turns: Turn[],
-    opts?: { effectiveContextWindow?: number },
+    opts?: { effectiveContextWindow?: number; compactions?: ImportCompactionPoint[] },
   ): Promise<{ imported: number }> {
     let count = 0;
     // 累计 surface 启发式（字符/4，与 TokenMeter 文本估算同口径）——无 provider usage 时的回退锚点
@@ -976,8 +977,50 @@ export class JsonlMessageService implements IMessageStore {
       if (e.type === 'turn/start') existingTurnIds.add((e.data as { turnId: string }).turnId);
     }
 
-    for (const turn of turns) {
+    // 外部来源的压缩点：按 beforeTurnIndex 排序后，在对应回合写入前插入
+    // compaction/start → summary → end 三事件（appendBatch 保序）。
+    // shadowedCount 由调用方按折叠视图语义算好（见 ImportCompactionPoint）。
+    const compactions = [...(opts?.compactions ?? [])]
+      .filter((c) => c.shadowedCount > 0 && !!c.summary)
+      .sort((a, b) => a.beforeTurnIndex - b.beforeTurnIndex);
+    let compactionCursor = 0;
+    const takeCompactionsUpTo = (turnIndex: number): PendingEvent[] => {
+      const batch: PendingEvent[] = [];
+      while (
+        compactionCursor < compactions.length &&
+        compactions[compactionCursor].beforeTurnIndex <= turnIndex
+      ) {
+        const c = compactions[compactionCursor];
+        compactionCursor += 1;
+        const summaryMessageId = c.summaryMessageId ?? generateOrderedMessageId('c');
+        const time = c.time ?? Date.now();
+        batch.push({ type: 'compaction/start', time, data: {} });
+        batch.push({
+          type: 'compaction/summary',
+          time,
+          data: {
+            ...(c.shadowedEndId ? { shadowedEndId: c.shadowedEndId } : {}),
+            shadowedCount: c.shadowedCount,
+            summary: c.summary,
+            summaryMessageId,
+          },
+        });
+        batch.push({ type: 'compaction/end', time, data: {} });
+      }
+      return batch;
+    };
+
+    for (let turnIndex = 0; turnIndex < turns.length; turnIndex++) {
+      const turn = turns[turnIndex];
+      // 先落压缩括号（顺序：压缩点 → 其后的回合）
+      const compactionBatch = takeCompactionsUpTo(turnIndex);
+      if (compactionBatch.length > 0) {
+        await this.appendBatch(sessionId, compactionBatch);
+      }
       const turnId = turn.id || generateOrderedMessageId('m');
+      // 原始时间保留（导入/重建路径传 turn.createdAt / message.createdAt）：
+      // 缺省回退 Date.now()，运行时路径行为不变
+      const turnTime = turn.createdAt ?? Date.now();
       // 本回合要写的全部事件先攒齐，最后一次性追加（后端按批连续分配 seq，
       // 避免逐条往返——HTTP 驱动下逐条 append 会是每事件一次网络请求）
       const turnEvents: PendingEvent[] = [];
@@ -985,7 +1028,7 @@ export class JsonlMessageService implements IMessageStore {
       if (!existingTurnIds.has(turnId)) {
         turnEvents.push({
           type: 'turn/start',
-          time: Date.now(),
+          time: turnTime,
           data: {
             turnId,
             kind: 'turn',
@@ -995,6 +1038,7 @@ export class JsonlMessageService implements IMessageStore {
       }
       // 写消息（一次调用/注入，按 role/kind 分派三事件；消息挂到本回合）
       for (const message of turn.messages) {
+        const messageTime = message.createdAt ?? turnTime;
         surfaceTokens += estimateMessageTokens(message);
         const isTool = message.source.kind === 'tool';
         const tr = message.content.find(
@@ -1003,7 +1047,7 @@ export class JsonlMessageService implements IMessageStore {
         if (isTool) {
           turnEvents.push({
             type: 'tool/result',
-            time: Date.now(),
+            time: messageTime,
             data: {
               messageId: message.id || generateOrderedMessageId('m'),
               toolCallId: (message.source as Extract<MessageSource, { kind: 'tool' }>).toolCallId,
@@ -1017,7 +1061,7 @@ export class JsonlMessageService implements IMessageStore {
         } else if (message.role === 'assistant') {
           turnEvents.push({
             type: 'assistant/message',
-            time: Date.now(),
+            time: messageTime,
             data: {
               messageId: message.id || generateOrderedMessageId('m'),
               content: message.content,
@@ -1027,7 +1071,7 @@ export class JsonlMessageService implements IMessageStore {
         } else {
           turnEvents.push({
             type: 'user/message',
-            time: Date.now(),
+            time: messageTime,
             data: {
               messageId: message.id || generateOrderedMessageId('m'),
               kind: message.kind,
@@ -1060,7 +1104,7 @@ export class JsonlMessageService implements IMessageStore {
         : surfaceTokens;
       turnEvents.push({
         type: 'turn/finish',
-        time: Date.now(),
+        time: (turn.metadata?.finishedAt as number | undefined) ?? Date.now(),
         data: {
           turnId,
           promptTokens: usage?.promptTokens ?? 0,
@@ -1076,6 +1120,11 @@ export class JsonlMessageService implements IMessageStore {
         },
       });
       await this.appendBatch(sessionId, turnEvents);
+    }
+    // 末尾压缩点（beforeTurnIndex >= turns.length，如"压缩后没有再说话"）：全部回合之后落括号
+    const trailingCompactions = takeCompactionsUpTo(Number.MAX_SAFE_INTEGER);
+    if (trailingCompactions.length > 0) {
+      await this.appendBatch(sessionId, trailingCompactions);
     }
     return { imported: count };
   }

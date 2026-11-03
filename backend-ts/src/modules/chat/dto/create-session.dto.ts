@@ -1,4 +1,4 @@
-import { IsOptional, IsString, ValidateNested } from "class-validator";
+import { IsOptional, IsString, IsObject, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { SessionSettingsDto } from "./session-settings.dto";
 
@@ -37,4 +37,9 @@ export class CreateSessionDto {
   @ValidateNested()
   @Type(() => SessionSettingsDto)
   settings?: SessionSettingsDto;
+
+  /** 通用扩展字段（不索引）：导入来源等（SessionRow.data），整对象透传不校验内部键 */
+  @IsOptional()
+  @IsObject()
+  data?: Record<string, any>;
 }

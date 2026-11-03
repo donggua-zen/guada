@@ -45,13 +45,15 @@ import { ToolImagePruneService } from "./compaction/tool-image-prune.service";
 import { SessionReplayService } from "./session-replay.service";
 import { PlanHistoryService } from "./plan-history.service";
 import { SessionModelBackfillService } from "./session-model-backfill.service";
+import { ClaudeImportController } from "./claude-import/claude-import.controller";
+import { ClaudeImportService } from "./claude-import/claude-import.service";
 
 // 标签解析器
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Module({
   imports: [AuthModule, ToolsModule, AgentsModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule, JobsModule],
-  controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, ProjectGroupController, WorkspaceEventsController, SessionEventsController, SessionQueueController],
+  controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, ProjectGroupController, WorkspaceEventsController, SessionEventsController, SessionQueueController, ClaudeImportController],
   providers: [
     AgentEngine,
     SessionContextFactory,
@@ -80,6 +82,8 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     SessionReplayService,
     // 老会话模型回填（全局默认对话模型移除后的一次性数据收敛）
     SessionModelBackfillService,
+    // Claude Code 历史会话导入（扫描 ~/.claude/projects → 解析 → createSession + importTurns）
+    ClaudeImportService,
     // 计划历史（转录扫描：计划身份 = ExitPlanMode toolCallId，列表含状态）
     PlanHistoryService,
 

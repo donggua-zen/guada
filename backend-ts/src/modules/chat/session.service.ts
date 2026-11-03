@@ -696,6 +696,8 @@ export class SessionService {
       settings: filteredSettings,
       workspacePath: finalWorkspacePath,
       groupId: data.groupId || null,
+      // 通用扩展字段（导入来源等）：不索引，原样落 SessionRow.data
+      data: data.data && typeof data.data === "object" ? data.data : null,
       sessionType: "web",
     };
 
