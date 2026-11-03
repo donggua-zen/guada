@@ -574,7 +574,7 @@
     customHeadersPlaceholder: 'One header per line, format: Key: Value',
     customHeadersDesc: 'Used for API Gateway authentication, etc. Example: Authorization: Bearer token',
     requestCompression: 'Request body compression',
-    requestCompressionDesc: 'Compress request bodies over 64KB with gzip to save bandwidth; requires upstream support for Content-Encoding: gzip (the self-hosted relay supports it).',
+    requestCompressionDesc: 'Compress request bodies over 64KB with gzip before sending. Only a few providers support this; usually left off.',
     editProvider: 'Edit Provider',
     addProvider: 'Add {name}',
   addProviderEntry: 'Add Provider',

@@ -569,7 +569,7 @@ export default {
     customHeadersPlaceholder: '每行一个请求头，格式为: Key: Value',
     customHeadersDesc: '用于 API Gateway 认证等场景，格式示例: Authorization: Bearer token',
     requestCompression: '请求体压缩',
-    requestCompressionDesc: '大于 64KB 的请求体 gzip 压缩后发送，节省带宽；需上游支持 Content-Encoding: gzip（自家中转站已支持）。',
+    requestCompressionDesc: '大于 64KB 的请求体 gzip 压缩后发送，仅少数供应商支持，一般不勾选',
     editProvider: '编辑供应商',
     addProvider: '添加 {name}',
   addProviderEntry: '添加供应商',
