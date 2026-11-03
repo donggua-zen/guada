@@ -310,8 +310,12 @@ const skillGroups = computed(() => groupSkills(skills.value))
 const { t } = useI18n()
 const { confirm } = usePopup()
 
-// ── 二级视图：已安装 / 市场（状态落 route query，刷新与前进后退不丢）──
-const view = usePluginViewQuery()
+// ── 二级视图：已安装 / 市场 / SkillHub（状态落 route query，刷新与前进后退不丢）──
+const view = usePluginViewQuery(
+    'installed',
+    ['installed', 'market', 'skillhub'],
+    'skills',
+)
 /** 市场搜索词由页面工具栏持有，市场组件常驻不销毁，切回来仍保留 */
 const marketKeyword = ref('')
 /** SkillHub 搜索词独立于官网市场，避免两边搜索状态互相污染 */

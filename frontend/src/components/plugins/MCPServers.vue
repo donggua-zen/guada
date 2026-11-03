@@ -334,7 +334,7 @@ const { t } = useI18n()
 // 响应式数据
 const servers = ref([])
 // ── 二级视图：已添加 / 市场（状态落 route query，刷新与前进后退不丢）──
-const view = usePluginViewQuery()
+const view = usePluginViewQuery('installed', ['installed', 'market'], 'mcp')
 /** 搜索框在视图条上，市场组件常驻，切回来关键词还在 */
 const marketKeyword = ref('')
 const marketRef = ref(null)
