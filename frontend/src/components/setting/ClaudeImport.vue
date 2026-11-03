@@ -12,11 +12,13 @@
                         {{ item.label }}
                     </button>
                 </div>
-                <GdTooltip :content="infoText" placement="top">
-                    <button type="button" class="ci-info" :aria-label="t('settings.claudeImport.infoAria')">
-                        <Info24Regular />
-                    </button>
-                </GdTooltip>
+                <button type="button" class="ci-info" :aria-label="t('settings.claudeImport.guideOpen')"
+                    @click="showGuide = true">
+                    <Info24Regular />
+                </button>
+                <button type="button" class="ci-guide-link" @click="showGuide = true">
+                    {{ t('settings.claudeImport.guideOpen') }}
+                </button>
             </div>
             <div class="ci-bar__right">
                 <GdInput v-model="keyword" clearable size="small" class="ci-search"
@@ -224,6 +226,32 @@
                 </div>
             </template>
         </div>
+
+        <!-- 导入说明：会导入什么 / 不会导入什么 / 免责声明 -->
+        <GdDialog v-model="showGuide" :title="t('settings.claudeImport.guideTitle')" align-center size="md">
+            <div class="ci-guide">
+                <div class="ci-guide__section">
+                    <div class="ci-guide__heading">{{ t('settings.claudeImport.guideImportTitle') }}</div>
+                    <ul class="ci-guide__list">
+                        <li v-for="(item, index) in guideImportItems" :key="`in-${index}`">{{ item }}</li>
+                    </ul>
+                </div>
+                <div class="ci-guide__section">
+                    <div class="ci-guide__heading">{{ t('settings.claudeImport.guideSkipTitle') }}</div>
+                    <ul class="ci-guide__list">
+                        <li v-for="(item, index) in guideSkipItems" :key="`out-${index}`">{{ item }}</li>
+                    </ul>
+                </div>
+                <div class="ci-guide__notice">{{ t('settings.claudeImport.guideDisclaimer') }}</div>
+            </div>
+            <template #footer>
+                <div class="flex justify-end">
+                    <GdButton type="primary" @click="showGuide = false">
+                        {{ t('settings.claudeImport.guideClose') }}
+                    </GdButton>
+                </div>
+            </template>
+        </GdDialog>
     </div>
 </template>
 
@@ -234,12 +262,12 @@ import { useRouter } from 'vue-router'
 import { NEW_SESSION_ID } from '@/constants'
 import GdButton from '@/components/ui/GdButton.vue'
 import GdCheckbox from '@/components/ui/GdCheckbox.vue'
+import GdDialog from '@/components/ui/GdDialog.vue'
 import GdEmpty from '@/components/ui/GdEmpty.vue'
 import GdInput from '@/components/ui/GdInput.vue'
 import GdSelect from '@/components/ui/GdSelect.vue'
 import GdOption from '@/components/ui/GdSelectOption'
 import GdTag from '@/components/ui/GdTag.vue'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
 import { toast } from '@/components/ui/toastService'
 import usePopup from '@/composables/usePopup'
 import { apiService } from '@/services/ApiService'
@@ -307,6 +335,8 @@ const groupId = ref('')
 const summary = ref<ClaudeImportResult | null>(null)
 const importing = ref(false)
 const cancelled = ref(false)
+/** 导入说明对话框（会导入什么/不会导入什么 + 免责声明） */
+const showGuide = ref(false)
 const inFlight = ref<string[]>([])
 const progress = reactive({ done: 0, total: 0 })
 const sourceTabRefs = reactive<Record<string, HTMLElement | null>>({})
@@ -440,7 +470,34 @@ const emptyDesc = computed(() =>
         : t('settings.claudeImport.noCandidateDesc', { path: scannedPath() }),
 )
 
-const infoText = computed(() => t('settings.claudeImport.info', { path: scannedPath() }))
+/** 导入说明：会导入的内容（压缩检查点按来源支持情况追加） */
+const guideImportItems = computed(() => {
+    const items = [
+        t('settings.claudeImport.guideImportDialog'),
+        t('settings.claudeImport.guideImportReasoning'),
+        t('settings.claudeImport.guideImportTools'),
+        t('settings.claudeImport.guideImportMeta'),
+    ]
+    if (source.value !== 'claudeCode') {
+        items.push(t('settings.claudeImport.guideImportCompaction'))
+    }
+    return items
+})
+
+/** 导入说明：不会导入的内容（Claude 源额外说明压缩摘要的现状） */
+const guideSkipItems = computed(() => {
+    const items = [
+        t('settings.claudeImport.guideSkipMedia'),
+        t('settings.claudeImport.guideSkipInjected'),
+        t('settings.claudeImport.guideSkipSub'),
+        t('settings.claudeImport.guideSkipModel'),
+        t('settings.claudeImport.guideSkipState'),
+    ]
+    if (source.value === 'claudeCode') {
+        items.push(t('settings.claudeImport.guideSkipClaudeCompaction'))
+    }
+    return items
+})
 
 /** 扫不到根时退回约定路径，至少让用户知道该把文件放哪儿 */
 function scannedPath(): string {
@@ -828,6 +885,53 @@ function gotoSessionList() {
 .ci-info :deep(svg) {
     width: 16px;
     height: 16px;
+}
+
+/* 「导入说明」文字入口：与信息图标同一点击目标，但更容易被发现 */
+.ci-guide-link {
+    border: 0;
+    padding: 0 2px;
+    background: transparent;
+    font-size: var(--gd-size-text-xs);
+    color: var(--gd-color-text-gray);
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.ci-guide-link:hover {
+    color: var(--gd-color-text);
+    text-decoration: underline;
+}
+
+/* 导入说明对话框：会导入 / 不会导入 / 免责声明 */
+.ci-guide {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    font-size: var(--gd-size-text-sm);
+    line-height: 1.65;
+    color: var(--gd-color-text);
+}
+
+.ci-guide__heading {
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.ci-guide__list {
+    margin: 0;
+    padding-left: 18px;
+    list-style: disc;
+    color: var(--gd-color-text-gray);
+}
+
+.ci-guide__notice {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--gd-color-surface-subtle);
+    color: var(--gd-color-text-gray);
+    font-size: var(--gd-size-text-xs);
+    line-height: 1.6;
 }
 
 .ci-search {

@@ -69,21 +69,27 @@
                         {{ snapshot.heatmap.startDate }} ~ {{ snapshot.heatmap.endDate }}
                     </span>
                 </div>
+                <!-- 周列等分容器宽度（flex-1）而不是固定 12px：一年 54 列 × 15px ≈ 810px
+                     会超出卡片内宽，逼出一条横向滚动条。等分后格子随容器自适应，
+                     窄屏（低于最小列宽）才回落到滚动 -->
                 <div class="mt-3 overflow-x-auto pb-1">
-                    <div class="min-w-max">
+                    <div class="relative">
                         <div class="flex gap-[3px]">
                             <div v-for="week in snapshot.heatmap.weeks" :key="week.weekIndex"
-                                class="flex flex-col gap-[3px]">
-                                <div v-for="(day, index) in week.days" :key="index" class="w-3 h-3 rounded-sm"
+                                class="flex min-w-[6px] flex-1 flex-col gap-[3px]">
+                                <div v-for="(day, index) in week.days" :key="index" class="aspect-square w-full rounded-sm"
                                     :class="day ? heatmapClass(day.level) : 'bg-transparent'"
                                     :title="day && !day.future ? `${day.date} · ${formatCompactTokens(day.totalTokens)} tokens · ${day.requestCount}` : ''" />
                             </div>
                         </div>
-                        <!-- 月份标签：与周列左对齐 -->
-                        <div class="relative mt-1 h-4" :style="{ width: heatmapGridWidth + 'px' }">
+                        <!-- 月份标签：left 用百分比（与等分列同步，不依赖 DOM 测量）。
+                             起始月是残月，紧随其后的月份只隔一两列，重叠的按最小间距剔除；
+                             末尾标签改为右对齐锚定，避免文本越界 -->
+                        <div class="relative mt-1 h-4">
                             <span v-for="label in monthLabels" :key="label.weekIndex"
                                 class="absolute top-0 text-[10px] leading-4 text-gray-400 dark:text-[#777982] whitespace-nowrap"
-                                :style="{ left: label.left + 'px' }">
+                                :class="label.anchorRight ? '-translate-x-full' : ''"
+                                :style="{ left: label.leftPercent + '%' }">
                                 {{ label.text }}
                             </span>
                         </div>
@@ -259,34 +265,33 @@ const PALETTE = [
     '#ef4444', '#06b6d4', '#ec4899', '#84cc16',
 ]
 
-const HEATMAP_CELL_PX = 12
-const HEATMAP_GAP_PX = 3
-
-/** 热力图宽度：周列数 × (格子 + 间距)，用于月份标签定位 */
-const heatmapGridWidth = computed(
-    () =>
-        (snapshot.value?.heatmap.weeks.length ?? 0) *
-        (HEATMAP_CELL_PX + HEATMAP_GAP_PX),
-)
-
 /**
  * 月份标签：在每个月第一周的位置放一个标签。
- * 一年 12 个标签，周间距足够，不需要做重叠裁剪。
+ * - leftPercent：列是 flex-1 等分的，标签按百分比定位即可与列对齐，不需要测量 DOM
+ * - 起始月是残月（如 10-26 开始），下一月只隔 1~2 列，两个标签会叠在一起，
+ *   按最小间距做一次碰撞剔除（保留先出现的那个）
+ * - anchorRight：末尾月份贴近右缘时改为右对齐锚定，避免文本越界
  */
 const monthLabels = computed(() => {
     const weeks = snapshot.value?.heatmap.weeks ?? []
-    const labels: Array<{ weekIndex: number; left: number; text: string }> = []
+    const total = weeks.length
+    const labels: Array<{ weekIndex: number; leftPercent: number; text: string; anchorRight: boolean }> = []
     let lastMonth = ''
+    let lastIndex = -Infinity
     for (const [index, week] of weeks.entries()) {
         const firstDay = week.days.find((day) => day != null)
         if (!firstDay) continue
         const month = firstDay.date.slice(0, 7)
         if (month === lastMonth) continue
         lastMonth = month
+        // 最小间距 3 列（10 周 ≈ 12 个标签时不会误删，残月后紧邻的月份会跳过）
+        if (index - lastIndex < 3) continue
+        lastIndex = index
         labels.push({
             weekIndex: index,
-            left: index * (HEATMAP_CELL_PX + HEATMAP_GAP_PX),
+            leftPercent: (index / total) * 100,
             text: formatMonthLabel(firstDay.date, locale.value),
+            anchorRight: index / total > 0.9,
         })
     }
     return labels
