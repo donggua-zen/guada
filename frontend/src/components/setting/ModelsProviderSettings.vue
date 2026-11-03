@@ -146,7 +146,9 @@ const { errors, validate, validateField, clearValidate } = useFormValidation({
     const errs = validateHeadersText(String(v ?? ''));
     return errs.length > 0 ? errs.join('；') : null;
   } }],
-});
+}, () => currentProviderEdit.value);
+// 第二个参数是取值 getter：漏传时校验器永远拿到 undefined，
+// 于是「编辑供应商」会对着已填好的内容报「请输入…」
 
 const providers = ref<ProviderRow[]>([])
 const models = ref<Model[]>([])

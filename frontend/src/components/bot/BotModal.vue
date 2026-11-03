@@ -337,7 +337,7 @@ const validationSchema = computed(() => {
   }
   return schema;
 });
-const { errors, validate, clearValidate } = useFormValidation(validationSchema);
+const { errors, validate, clearValidate } = useFormValidation(validationSchema, () => formData.value);
 // 模型切换时同步思考强度
 watch(() => formData.value.defaultModelId, (newModelId) => {
   if (!newModelId) {

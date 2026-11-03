@@ -746,6 +746,15 @@ const { errors: editFormErrors, validate: validateEditForm } = useFormValidation
   modelType: [{ validator: (v: unknown) => (String(v ?? '') ? null : t('settings.providerDetail.modelTypeRequired')) }],
   config_contextWindow: [{ validator: (v: unknown) => (!v || Number(v) > 0) ? null : t('settings.providerDetail.contextWindowInvalid') }],
   config_maxOutputTokens: [{ validator: (v: unknown) => (!v || Number(v) > 0) ? null : t('settings.providerDetail.maxOutputTokensInvalid') }],
+}, () => {
+  // 键名用下划线是为对齐模板 errors.config_xxx；这里把嵌套路径摊平成同名键
+  const form = editModelForm.value;
+  return {
+    modelName: form.modelName,
+    modelType: form.modelType,
+    config_contextWindow: form.config.contextWindow,
+    config_maxOutputTokens: form.config.maxOutputTokens,
+  };
 });
 // 模板里 errors.xxx 直接读（GdFormField :error）
 const errors = editFormErrors;

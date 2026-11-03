@@ -577,7 +577,7 @@ const { errors, validate: validateForm, validateField } = useFormValidation({
     if (!value) return null;
     return /^[a-z0-9][a-z0-9-]*$/.test(value) ? null : t('agents.setting.idInvalid');
   } }],
-});
+}, () => agentForm);
 
 
 // 选项数据
