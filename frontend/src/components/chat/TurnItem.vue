@@ -109,8 +109,12 @@
               </div>
               <!-- 分组内容 -->
               <div class="process-group__collapsible"
-                :class="{ 'is-expanded': isGroupContentVisible(groupIndex, group) }">
-                <div class="process-group__body">
+                :class="{
+                  'is-expanded': isGroupContentVisible(groupIndex, group),
+                  'no-transition': isGroupInstant(group),
+                }">
+                <div class="process-group__body"
+                  :class="{ 'is-skipped': isGroupBodySkipped(groupIndex, group) }">
                   <div class="process-group__body-scroll space-y-2"
                     :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible }"
                     :ref="isLastActive(groupIndex) ? setActiveBodyRef : undefined"
@@ -203,7 +207,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, inject, type Component } from "vue";
+import { computed, ref, watch, nextTick, inject, onBeforeUnmount, type Component } from "vue";
 import { useI18n } from "vue-i18n";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, BookOpen16Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
@@ -227,7 +231,7 @@ import { useLayoutStore } from '@/stores/layout';
 import { isHiddenBlock, getThinkingPreview } from '@/utils/messageUtils';
 import { isJobNoticeSource } from '@/utils/jobNotice';
 import { previewFile } from '@/utils/workspacePreview';
-import { resolveGroupExpanded, nextGroupExpandOverride, hasUnfinishedSteps, isToolCallExecuting, resolveGroupTitlePhase } from './groupExpansion';
+import { resolveGroupExpanded, nextGroupExpandOverride, hasUnfinishedSteps, isToolCallExecuting, resolveGroupTitlePhase, estimateGroupLines } from './groupExpansion';
 import { perfCount, perfStart } from '@/utils/perf';
 
 const { t } = useI18n();
@@ -316,13 +320,67 @@ const isGroupExpanded = (groupIndex: number, group: DisplayGroup): boolean => {
   return resolveGroupExpanded(groupExpandOverrides.value, group.id, isLastActive(groupIndex));
 };
 
+// ── 折叠态退出布局 ────────────────────────────────────────────────
+/* 折叠只是 0fr 裁剪，内容一直留在布局树里：旧回合的分组可能有几千 px（思考正文 + N 个工具行，
+   `.process-group__body-scroll` 没限高、还挂着两层 mask），于是列表每一次重排都要把它们算一遍。
+   折叠态给 body 加 content-visibility:hidden（隐含 contain:size layout paint style），子树彻底
+   退出布局与绘制；只有展开/收起动画期间临时恢复可见，动画结束再摘掉。
+   代价：content-visibility:hidden 的元素 scrollHeight 恒为 0，所以"大分组"判定只能按数据估算，
+   不能在 toggle 时读 DOM。 */
+
+/** 过渡时长（与 CSS 的 grid-template-rows 保持一致） */
+const GROUP_EXPAND_ANIMATION_MS = 150;
+/** 动画期额外余量：后台标签页的 transitionend/合成器提交可能晚于过渡时长 */
+const ANIMATION_SETTLE_MS = 60;
+/** 估算行数超过该值就瞬时展开：大分组正是动画收益最低、单帧最贵的那类 */
+const INSTANT_EXPAND_ESTIMATE_LINES = 60;
+
+/** 大分组不播动画（展开和收起都瞬时，行为一致且可预期） */
+const isGroupInstant = (group: DisplayGroup): boolean =>
+  group.isCollapsible && estimateGroupLines(group.items) > INSTANT_EXPAND_ESTIMATE_LINES;
+
+/** 正在播放展开/收起动画的分组：动画期间内容必须可见，否则会当场消失 */
+const animatingGroupIds = ref<Set<string>>(new Set());
+const animatingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function markGroupAnimating(groupId: string): void {
+  const next = new Set(animatingGroupIds.value);
+  next.add(groupId);
+  animatingGroupIds.value = next;
+  const prev = animatingTimers.get(groupId);
+  if (prev !== undefined) clearTimeout(prev);
+  animatingTimers.set(groupId, setTimeout(() => {
+    animatingTimers.delete(groupId);
+    if (!animatingGroupIds.value.has(groupId)) return;
+    const rest = new Set(animatingGroupIds.value);
+    rest.delete(groupId);
+    animatingGroupIds.value = rest;
+  }, GROUP_EXPAND_ANIMATION_MS + ANIMATION_SETTLE_MS));
+}
+
+onBeforeUnmount(() => {
+  for (const timer of animatingTimers.values()) clearTimeout(timer);
+  animatingTimers.clear();
+});
+
+/** 折叠且不在动画中 → 让 body 退出布局。不可折叠组始终渲染，不参与。 */
+const isGroupBodySkipped = (groupIndex: number, group: DisplayGroup): boolean =>
+  group.isCollapsible
+  && !isGroupExpanded(groupIndex, group)
+  && !animatingGroupIds.value.has(group.id);
+
 const toggleGroup = (groupIndex: number, group: DisplayGroup) => {
   const expanded = isGroupExpanded(groupIndex, group);
   const active = isLastActive(groupIndex);
   groupExpandOverrides.value.set(group.id, nextGroupExpandOverride(groupExpandOverrides.value, group.id, active));
+  // 动画期间内容必须保持可见（否则收起动画会当场把内容摘掉）。
+  // 两个写入在同一帧提交，渲染结果就是"可见 + is-expanded"，0fr→1fr 的过渡不会丢帧。
+  if (!isGroupInstant(group)) markGroupAnimating(group.id);
   if (!expanded && !active) {
     lockScrollAnchor()
   }
+  // 归因：点击次数 vs ChatPanel 的 chat.contentResize（每次尺寸变化 = 一帧重排）
+  perfCount('turn.expand');
 };
 
 /** 分组内容当前是否可见（与模板 collapsible 的 is-expanded 判定保持同一表达式） */
@@ -975,19 +1033,34 @@ const handleImageClick = (file: FileAttachment) => {
   }
 }
 
+/* grid-template-rows 是布局属性，过渡期间每帧都要重排到滚动容器：300ms/60Hz ≈ 18 帧。
+   收到 150ms（≈9 帧）；更大的分组交给 .no-transition 直接瞬时，别为动画付逐帧重排。 */
 .process-group__collapsible {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: grid-template-rows 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .process-group__collapsible.is-expanded {
   grid-template-rows: 1fr;
 }
 
+/* 大分组瞬时展开/收起：单帧重排代价与内容体积成正比，逐帧动画收益趋零 */
+.process-group__collapsible.no-transition {
+  transition: none;
+}
+
 .process-group__body {
   min-height: 0;
   overflow: hidden;
+}
+
+/* 折叠态：整棵子树退出布局与绘制（content-visibility:hidden 隐含 contain:size layout paint style）。
+   旧回合的分组可能有几千 px（思考正文 + N 个工具行、没限高、还挂两层 mask），留在布局树里
+   会拖慢列表的每一次重排。动画期间由 isGroupBodySkipped 保持可见，否则收起动画会当场把内容摘掉。
+   这里不加 contain：body 已经 overflow:hidden，再加 contain 只会给子卡片弹层新增包含块。 */
+.process-group__body.is-skipped {
+  content-visibility: hidden;
 }
 
 .process-group__body-scroll {

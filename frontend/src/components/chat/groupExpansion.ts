@@ -69,6 +69,24 @@ export function hasUnfinishedSteps(
 }
 
 /**
+ * 分组内容行数估算（不读 DOM）——用于判断"这个分组值不值得播展开动画"。
+ *
+ * 不能读 DOM：折叠态用 `content-visibility: hidden` 让子树退出布局，scrollHeight 恒为 0。
+ * 折算口径：思考正文 60 字符/行；每个工具调用按 2 行（行头 + 参数摘要）。
+ */
+export function estimateGroupLines(items: ReadonlyArray<DisplayItem>): number {
+  let lines = 0;
+  for (const item of items) {
+    if (item.type === 'think') {
+      lines += Math.ceil((item.reasoningContent?.length ?? 0) / 60);
+    } else if (item.type === 'tool') {
+      lines += 2 + (item.toolCalls?.length ?? 0) * 2;
+    }
+  }
+  return lines;
+}
+
+/**
  * 分组标题的语义阶段（收起/展开共用）：
  * - thinking：组内没有工具（纯思考），或工具已全部完成、当前又在流式思考；
  * - executing-tools：有工具调用正在执行；

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  estimateGroupLines,
   hasUnfinishedSteps,
   nextGroupExpandOverride,
   resolveGroupExpanded,
@@ -216,5 +217,41 @@ describe("resolveGroupTitlePhase", () => {
   it("工具执行中且思考也在流式 → 工具优先 executing-tools", () => {
     const items = [toolItem([{ id: "c1", name: "read" }]), thinkItem({ thinking: true })];
     expect(resolveGroupTitlePhase(items, true)).toBe("executing-tools");
+  });
+});
+
+/**
+ * 分组长度的估算（决定"是否值得播展开动画"）：
+ * 折叠态用 content-visibility 退出布局，读不到 scrollHeight，只能按内容折算。
+ */
+describe("estimateGroupLines", () => {
+  const thinkItem = (reasoningContent?: string): DisplayItem =>
+    ({ id: "t1", type: "think", reasoningContent, source: {} }) as DisplayItem;
+
+  const toolItem = (callCount: number): DisplayItem =>
+    ({
+      id: "tl1",
+      type: "tool",
+      toolCalls: Array.from({ length: callCount }, (_, i) => ({ id: `c${i}`, name: "read" })),
+      source: {},
+    }) as DisplayItem;
+
+  it("空分组记 0 行", () => {
+    expect(estimateGroupLines([])).toBe(0);
+  });
+
+  it("思考正文按 60 字符/行向上取整", () => {
+    expect(estimateGroupLines([thinkItem("a".repeat(60))])).toBe(1);
+    expect(estimateGroupLines([thinkItem("a".repeat(61))])).toBe(2);
+    expect(estimateGroupLines([thinkItem()])).toBe(0);
+  });
+
+  it("工具项按 2 行/项 + 2 行/调用计", () => {
+    expect(estimateGroupLines([toolItem(0)])).toBe(2);
+    expect(estimateGroupLines([toolItem(3)])).toBe(8);
+  });
+
+  it("多项累加", () => {
+    expect(estimateGroupLines([thinkItem("a".repeat(120)), toolItem(1)])).toBe(6);
   });
 });

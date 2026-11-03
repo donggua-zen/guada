@@ -245,7 +245,7 @@ import { useSessionSettingsSync } from '@/composables/useSessionSettingsSync'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 import { getErrorMessage, getApiErrorStatus } from '@/utils/errorMessage'
-import { perfStart, traceSessionOpen, endSessionOpenTrace } from '@/utils/perf'
+import { perfStart, perfCount, traceSessionOpen, endSessionOpenTrace } from '@/utils/perf'
 import {
   parseLocalSlashCommand,
   type LocalSlashCommand,
@@ -751,6 +751,8 @@ function handleContentResizeForScrollRestore() {
   // 折叠/展开、图片加载、懒挂载等都会改变内容高度：
   // 1) 触发几何兜底，补挂新进入视口附近的占位；
   // 2) 非贴底时把视口锚点钉回原位，避免内容被顶走。
+  // chat.contentResize 每次 = 一帧重排：与 turn.expand 计数相比即可量出"一次展开放大成几帧"。
+  perfCount('chat.contentResize')
   scheduleMountVisiblePlaceholders()
   scheduleAnchorRestore()
   if (!pendingScrollRestore || isFollowingScroll.value) return;
