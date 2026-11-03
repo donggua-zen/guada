@@ -59,6 +59,8 @@ export interface CreateProviderPayload {
     avatarUrl?: string
     attributes?: { headers?: Record<string, string> }
     compat?: ThinkingCompatConfig
+    /** 请求体压缩（true=大 JSON 请求体 gzip 上传；缺省=继承类型卡默认） */
+    requestCompression?: boolean
 }
 
 /** updateProvider 请求体（镜像后端 updateProvider 白名单） */
@@ -71,6 +73,8 @@ export interface UpdateProviderPayload {
     attributes?: { headers?: Record<string, string> }
     /** null = 清除实例级 compat 覆盖、回退类型卡声明 */
     compat?: ThinkingCompatConfig | null
+    /** true/false = 写入实例级覆盖；null = 清除覆盖、回退类型卡默认 */
+    requestCompression?: boolean | null
 }
 
 /** testProviderConnection 请求体（后端直接解构 apiUrl/apiKey/attributes/protocol） */

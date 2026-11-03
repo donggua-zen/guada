@@ -82,6 +82,10 @@ export class ModelService {
         protocolAvailable: !!protocolInfo?.active,
         // 实例级 compat 覆盖（原始声明；编辑弹窗回填/清除用）
         compat: provider.compat,
+        // 请求体压缩：生效值（实例 > 类型卡 > 关闭）与实例级原始声明（回填/清除用）
+        requestCompression:
+          provider.requestCompression ?? card?.requestCompression ?? false,
+        requestCompressionOverride: provider.requestCompression,
         models,
       };
     });
@@ -163,6 +167,8 @@ export class ModelService {
         description: card.description,
         apiKeyUrl: card.apiKeyUrl,
         avatarUrl: this.resolveCardAvatarUrl(card),
+        // 类型卡默认的请求体压缩（创建实例时预选开关用）
+        requestCompression: card.requestCompression === true,
         // 来源元信息：前端据此显示「供应商包」徽标/来源提示
         source: card.source || "builtin",
         pluginId: card.pluginId,
@@ -281,6 +287,7 @@ export class ModelService {
     _avatarUrl?: string,
     attributes?: any,
     compat?: any,
+    requestCompression?: boolean,
   ) {
     const isKnownType = provider && this.bundledCatalog.hasType(provider) && provider !== "custom";
     const type = isKnownType ? provider! : "custom";
@@ -313,6 +320,8 @@ export class ModelService {
         ? { headers: attributes.headers }
         : {}),
       ...(compatConfig ? { compat: compatConfig } : {}),
+      // 请求体压缩显式声明（缺省 = 继承类型卡默认）
+      ...(typeof requestCompression === "boolean" ? { requestCompression } : {}),
     };
 
     await this.store.saveProvider(config);
@@ -341,6 +350,12 @@ export class ModelService {
       patch.headers = typeof data.attributes.headers === "object" && data.attributes.headers !== null
         ? data.attributes.headers
         : undefined;
+    }
+    if (data.requestCompression === null) {
+      // 清除实例级覆盖 → 回退类型卡默认（与 compat 同一语义）
+      patch.requestCompression = undefined;
+    } else if (typeof data.requestCompression === "boolean") {
+      patch.requestCompression = data.requestCompression;
     }
     if (typeof data.enabled === "boolean") patch.enabled = data.enabled;
 

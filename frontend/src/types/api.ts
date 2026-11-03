@@ -116,6 +116,10 @@ export interface ModelProvider {
     attributes?: { headers?: Record<string, string> }
     /** 实例级 wire 兼容开关覆盖（缺省 = 继承类型卡） */
     compat?: ThinkingCompatConfig
+    /** 请求体压缩生效值（实例 > 类型卡 > 关闭） */
+    requestCompression?: boolean
+    /** 实例级 requestCompression 原始声明（null/undefined = 继承类型卡） */
+    requestCompressionOverride?: boolean
     /** 类型来源是否仍可用（插件包禁用/卸载后为 false；custom 恒为 true） */
     typeAvailable?: boolean
     typeSource?: 'builtin' | 'plugin'
@@ -140,6 +144,8 @@ export interface ProviderTemplate {
     description?: string
     /** 类型卡附加属性（当前仅 headers） */
     attributes?: { headers?: Record<string, string> }
+    /** 类型卡默认的请求体压缩（创建实例时预选开关） */
+    requestCompression?: boolean
     /** 类型卡来源：builtin=随应用分发；plugin=供应商包贡献 */
     source?: 'builtin' | 'plugin'
     /** 贡献该模板的插件 id */

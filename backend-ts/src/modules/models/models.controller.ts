@@ -111,6 +111,7 @@ export class ModelsController {
       body.avatarUrl || body.avatar_url,
       body.attributes,
       body.compat,
+      typeof body.requestCompression === "boolean" ? body.requestCompression : undefined,
     );
   }
 

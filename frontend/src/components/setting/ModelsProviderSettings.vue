@@ -80,6 +80,13 @@
               </GdButton>
             </div>
           </GdFormField>
+          <!-- 请求体压缩（通用传输能力：≥64KB 的 JSON 请求体 gzip 上传） -->
+          <GdFormField :label="t('settings.models.requestCompression')" label-width="80px" hide-required-asterisk>
+            <div class="flex items-center">
+              <GdSwitch v-model="currentProviderEdit.requestCompression" />
+            </div>
+            <div class="text-xs text-gray-400 mt-1">{{ t('settings.models.requestCompressionDesc') }}</div>
+          </GdFormField>
           <!-- 自定义请求头（仅自定义供应商可编辑） -->
           <GdFormField :label="t('settings.models.customHeaders')" label-width="80px" hide-required-asterisk :error="errors.headers || undefined">
             <GdInput
@@ -125,7 +132,9 @@ import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 import GdInput from '@/components/ui/GdInput.vue';
 import GdFormField from '@/components/ui/GdFormField.vue';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 import { useFormValidation } from '@/composables/useFormValidation';
+import { useModelCatalog } from '@/composables/useModelCatalog';
 
 // 供应商表单校验（el-form :rules → useFormValidation）
 const { errors, validate, validateField, clearValidate } = useFormValidation({
@@ -141,6 +150,10 @@ const { errors, validate, validateField, clearValidate } = useFormValidation({
 
 const providers = ref<ProviderRow[]>([])
 const models = ref<Model[]>([])
+
+// 模型写路径收口：任何增删改/启停后强刷共享模型目录（useModelCatalog），
+// 聊天输入框、定时任务编辑器等已挂载消费方立即看到最新目录
+const { ensureLoaded: ensureCatalogLoaded } = useModelCatalog()
 const providerTemplates = ref<ProviderTemplateRow[]>([])
 const providerProtocols = ref<ProviderProtocol[]>([])
 const modelPresets = ref<ModelPreset[]>([])
@@ -203,6 +216,7 @@ const currentProviderEdit = ref<{
   provider: string
   protocol: string
   headers: string
+  requestCompression: boolean
   attributes: {
     headers: Record<string, string>
   }
@@ -213,6 +227,7 @@ const currentProviderEdit = ref<{
   provider: "custom",
   protocol: "openai",
   headers: "",
+  requestCompression: false,
   attributes: {
     headers: {} as Record<string, string>
   }
@@ -275,6 +290,10 @@ const reloadProvidersAndModels = async () => {
 
   models.value = nextModels
   providers.value = nextProviders
+
+  // 设置页拉的是 fetchAllModels（含停用项，用于管理视图），
+  // 共享目录是 fetchModels（text+isActive，用于选择视图），两者口径不同，各自刷新
+  void ensureCatalogLoaded(true)
 }
 
 const currentProvider = computed<ModelProvider>(() => {
@@ -300,6 +319,7 @@ const handleCreateGroup = async () => {
     provider: "custom",
     protocol: "openai",
     headers: '',
+    requestCompression: false,
     attributes: {
       headers: {}
     }
@@ -320,6 +340,8 @@ const handleSaveProvider = async () => {
       const updateData: UpdateProviderPayload = {
         apiKey: currentProviderEdit.value.apiKey,
         apiUrl: currentProviderEdit.value.apiUrl,
+        // 显式写入实例级覆盖（开关状态即生效值，用户确认后不再依赖类型卡默认）
+        requestCompression: currentProviderEdit.value.requestCompression,
         attributes: {
           headers
         }
@@ -335,6 +357,8 @@ const handleSaveProvider = async () => {
       }
       await apiService.updateProvider(currentProviderId.value, updateData)
       notify.success(t('common.updateSuccess'), t('settings.models.providerUpdated'), { duration: 2000 })
+      // 供应商名称/地址变更影响目录展示，强刷共享目录与本地列表保持同源
+      void ensureCatalogLoaded(true)
 
       const provider = providers.value.find(p => p.id === currentProviderId.value)
       if (provider) {
@@ -355,6 +379,7 @@ const handleSaveProvider = async () => {
         apiKey: currentProviderEdit.value.apiKey,
         provider: currentProviderEdit.value.provider || 'custom',
         protocol: currentProviderEdit.value.protocol || 'openai',
+        requestCompression: currentProviderEdit.value.requestCompression,
         attributes: {
           headers
         }
@@ -493,6 +518,7 @@ const handleEditProvider = (provider: ProviderRow) => {
     apiKey: provider.apiKey || "",
     provider: provider.provider || "custom",
     protocol: provider.protocol || "openai",
+    requestCompression: provider.requestCompression === true,
     headers: Object.entries(existingHeaders)
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n'),
@@ -516,6 +542,7 @@ const handleTemplateClick = (template: ProviderTemplateRow) => {
     apiKey: "",
     provider: template.id,
     protocol: template.protocol || 'openai',
+    requestCompression: template.requestCompression === true,
     headers: '',
     attributes: {
       headers: {}
@@ -531,6 +558,8 @@ const handleToggleProvider = async (provider: ProviderRow, enabled: boolean) => 
   try {
     await apiService.setProviderEnabled(provider.id, enabled)
     provider.enabled = enabled
+    // 禁用供应商会改变可用模型集合，强刷共享目录
+    void ensureCatalogLoaded(true)
     notify.success(
       enabled ? t('settings.models.providerEnabled') : t('settings.models.providerDisabled'),
       enabled ? t('settings.models.providerEnabledMsg', { name: provider.name }) : t('settings.models.providerDisabledMsg', { name: provider.name }),
