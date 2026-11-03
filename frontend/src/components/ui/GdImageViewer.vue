@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { t } from '@/locales'
+import { useFullscreen } from '@/composables/useFullscreen'
 
 defineOptions({ inheritAttrs: false })
 
@@ -128,6 +129,23 @@ function unlockBodyScroll() {
   scrollLocked = false
 }
 
+// ── 顶部工具条避让 Windows 原生窗口按钮 ──
+// Electron(Windows) 用 titleBarOverlay 把最小化/最大化/关闭画在右上角（高 36px），
+// 查看器是全屏 fixed 层，关闭按钮若贴右上角就会被原生 X 盖住。
+// 非 Windows / 浏览器环境不需要让位；全屏时原生按钮不显示，同样恢复贴边。
+const { isFullscreen } = useFullscreen()
+const isWindowsElectron = typeof window !== 'undefined'
+  && !!window.electronAPI
+  && window.electronAPI.platform === 'win32'
+/** 原生按钮条高度，与 electron/main.ts 的 TITLEBAR_HEIGHT 对应 */
+const TITLEBAR_HEIGHT_PX = 36
+const barStyle = computed(() => {
+  if (!isWindowsElectron || isFullscreen.value) return {}
+  // 整条下移，让出原生按钮那一行（36px）+ 8px 呼吸位；
+  // 计数与关闭钮都随之落在按钮行下方，不再被原生 X 压住
+  return { paddingTop: `${TITLEBAR_HEIGHT_PX + 8}px` }
+})
+
 // 键盘监听挂在 document 上：查看器内无输入焦点元素，全局监听最简
 if (typeof document !== 'undefined') {
   document.addEventListener('keydown', handleKeydown)
@@ -149,8 +167,8 @@ onBeforeUnmount(() => {
         :aria-label="t('common.imagePreview')"
         @click="handleOverlayClick"
       >
-        <!-- 顶部：计数 + 关闭 -->
-        <div class="l-viewer__bar">
+        <!-- 顶部：计数 + 关闭。Windows 下按 barStyle 让开原生窗口按钮区 -->
+        <div class="l-viewer__bar" :style="barStyle">
           <span class="l-viewer__counter">{{ counterText }}</span>
           <button class="l-viewer__btn" type="button" :aria-label="t('common.close')" @click="close">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
