@@ -166,16 +166,43 @@ export const useSessionStore = defineStore('session', () => {
         !s.archived && !s.pinned && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent'
 
     /**
+     * 目录模式桶解析器（由侧边栏注入，见 GlobalSidebar）。
+     *
+     * 目录模式下 loadedCounts 以目录桶 id（ProjectGroup.id / __general__）为 key，
+     * 而写路径（setSession / moveSession 等）只拿得到 Session，无法自行判断桶归属；
+     * 注入解析器后扩窗才与读取路径（getVisibleSessionsByProjectGroup）落在同一个 key。
+     * 返回 null 表示当前为手工分组模式，回退 groupId 语义。非响应式：只在写路径读取。
+     */
+    let resolveProjectBucket: ((session: Session) => string | null) | null = null
+
+    /** 注册/清除目录桶解析器（传 null 清除；侧边栏挂载时注入、卸载时清理） */
+    const setProjectBucketResolver = (
+        resolver: ((session: Session) => string | null) | null,
+    ): void => {
+        resolveProjectBucket = resolver
+    }
+
+    /** 会话扩窗应落的窗口 key：目录模式用桶 id，手工模式用分组 id */
+    const visibleWindowKey = (session: Session): string => {
+        const bucketId = resolveProjectBucket?.(session)
+        return bucketId ?? session.groupId ?? UNGROUPED_ID
+    }
+
+    /**
      * 会话新进入某分组的可见列表时，同步扩大该组的分页窗口。
      *
      * 窗口数量（loadedCounts）默认等于服务端分页返回的条数，只有「加载更多」和折叠重置
      * 会改它。新建/移入/取消归档/取消置顶的会话若刚好落在窗口之外，会被分页截断误藏，
      * 因此这些入口需要 +1。分组尚未建立窗口（count 为 0/undefined）时不处理——
      * 此时 getVisibleSessionsByGroup 不做截断。
+     *
+     * @param previousVisibleKey - 会话移动前所在的可见窗口 key。与目标 key 相同时说明仍在
+     *   同一窗口内（如目录模式下改手工分组不改变桶归属），不扩窗。
      */
-    const growVisibleCount = (session: Session): void => {
+    const growVisibleCount = (session: Session, previousVisibleKey?: string): void => {
         if (!isVisibleInGroup(session)) return
-        const key = session.groupId ?? UNGROUPED_ID
+        const key = visibleWindowKey(session)
+        if (previousVisibleKey !== undefined && previousVisibleKey === key) return
         const count = loadedCounts.value.get(key)
         if (count !== undefined && count > 0) {
             loadedCounts.value.set(key, count + 1)
@@ -201,8 +228,11 @@ export const useSessionStore = defineStore('session', () => {
         // 新进入可见状态（新插入 / 恢复归档 / 取消置顶）或跨分组移动时扩大目标组窗口
         const becameVisible = (!existing || !isVisibleInGroup(existing)) && isVisibleInGroup(session)
         const movedGroup = !!existing && (existing.groupId || null) !== (session.groupId || null)
-        if (becameVisible || (movedGroup && isVisibleInGroup(session))) {
+        if (becameVisible) {
             growVisibleCount(session)
+        } else if (movedGroup && isVisibleInGroup(session) && existing) {
+            // 移动前已在可见集合中：仅当落到不同窗口才 +1（目录模式改 groupId 不换桶）
+            growVisibleCount(session, visibleWindowKey(existing))
         }
         sessionsMap.value.set(session.id, session)
     }
@@ -375,9 +405,10 @@ export const useSessionStore = defineStore('session', () => {
         if (!session) return
         const target = targetGroupId === UNGROUPED_ID ? null : targetGroupId
         if ((session.groupId || null) === target) return
+        const previousKey = isVisibleInGroup(session) ? visibleWindowKey(session) : undefined
         session.groupId = target
         // 目标组可能已建立分页窗口：移入的会话不应被窗口截断误藏
-        growVisibleCount(session)
+        growVisibleCount(session, previousKey)
     }
 
     /**
@@ -390,8 +421,9 @@ export const useSessionStore = defineStore('session', () => {
         if (!session) return
         const target = groupId === UNGROUPED_ID ? null : groupId
         if ((session.groupId || null) === target) return
+        const previousKey = isVisibleInGroup(session) ? visibleWindowKey(session) : undefined
         session.groupId = target
-        growVisibleCount(session)
+        growVisibleCount(session, previousKey)
     }
 
     /**
@@ -1000,6 +1032,7 @@ export const useSessionStore = defineStore('session', () => {
         resetGroupPagination,
         setHasMore,
         groupHasMore,
+        setProjectBucketResolver,
         getSidebarState,
         setSidebarFlag,
         getSidebarFlag,

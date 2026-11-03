@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 import { useSessionStore, UNGROUPED_ID } from "./session";
+import { resolveProjectBucketId } from "@/utils/projectGroupBucket";
 import type { UserQueueSnapshot } from "@/types/session";
 
 /**
@@ -488,6 +489,122 @@ describe("sessionStore 目录分组视图", () => {
     expect(store.getVisibleSessionsByProjectGroup("pg-a", groups).map((s) => s.id)).toEqual([
       "a1",
     ]);
+  });
+});
+
+/**
+ * 目录模式扩窗（回归：项目下新建会话后窗口不增长，最旧会话被挤出）。
+ *
+ * 写路径只有 Session（目录模式下 groupId 为 null），扩窗 key 必须经注入的桶解析器
+ * 落到 ProjectGroup.id / __general__，与 loadSessions 写入、可见截断读取使用同一个 key。
+ */
+describe("sessionStore 目录模式扩窗", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+  afterEach(() => {
+    // 解析器是 store 级闭包变量：用例间清理，避免串味
+    useSessionStore().setProjectBucketResolver(null);
+  });
+
+  const mk = (id: string, over: Record<string, any> = {}) =>
+    ({
+      id,
+      title: id,
+      sessionType: "web",
+      lastActiveAt: "2026-01-01T00:00:00.000Z",
+      ...over,
+    }) as any;
+
+  const groups = [
+    {
+      id: "pg-a",
+      name: "alpha",
+      path: "D:\\AI\\alpha",
+      pathKey: "d:/ai/alpha",
+      sortOrder: 0,
+      isOverridden: false,
+      kind: "workspace",
+    },
+    {
+      id: "__general__",
+      name: "",
+      path: null,
+      pathKey: null,
+      sortOrder: Number.MAX_SAFE_INTEGER,
+      isOverridden: false,
+      kind: "general",
+    },
+  ] as any;
+
+  it("目录模式下新建会话扩大所在目录桶窗口，最旧会话不再被挤出", () => {
+    const store = useSessionStore();
+    store.setProjectBucketResolver((s) => resolveProjectBucketId(s, groups));
+
+    // 首屏：该目录桶已加载 2 条（窗口 = 2）
+    store.setSession(mk("a-old", { workspaceKey: "d:/ai/alpha", lastActiveAt: "2026-01-01T00:00:00.000Z" }));
+    store.setSession(mk("a-mid", { workspaceKey: "d:/ai/alpha", lastActiveAt: "2026-01-02T00:00:00.000Z" }));
+    store.setLoadedCount("pg-a", 2);
+
+    // 新建会话（创建请求只带 workspacePath，groupId 为 null）→ 桶窗口 +1
+    store.setSession(
+      mk("a-new", {
+        workspaceKey: "d:/ai/alpha",
+        lastActiveAt: "2026-01-03T00:00:00.000Z",
+        updatedAt: "2026-01-03T00:00:00.000Z",
+      }),
+    );
+
+    expect(store.getLoadedCount("pg-a")).toBe(3);
+    expect(store.getVisibleSessionsByProjectGroup("pg-a", groups).map((s) => s.id)).toEqual([
+      "a-new",
+      "a-mid",
+      "a-old",
+    ]);
+    // 手工分组语义的虚拟 key 不被误写
+    expect(store.getLoadedCount(UNGROUPED_ID)).toBe(0);
+  });
+
+  it("解析器返回 null（手工分组模式）时回退 groupId 语义", () => {
+    const store = useSessionStore();
+    store.setProjectBucketResolver(() => null);
+    store.setSession(mk("g-old", { groupId: "g1", lastActiveAt: "2026-01-01T00:00:00.000Z" }));
+    store.setSession(mk("g-mid", { groupId: "g1", lastActiveAt: "2026-01-02T00:00:00.000Z" }));
+    store.setLoadedCount("g1", 2);
+
+    store.setSession(mk("g-new", { groupId: "g1", lastActiveAt: "2026-01-03T00:00:00.000Z" }));
+
+    expect(store.getLoadedCount("g1")).toBe(3);
+    expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(3);
+  });
+
+  it("目录模式下改手工分组不改变桶归属，不误扩桶窗口", () => {
+    const store = useSessionStore();
+    store.setProjectBucketResolver((s) => resolveProjectBucketId(s, groups));
+    store.setSession(mk("a1", { workspaceKey: "d:/ai/alpha", groupId: null }));
+    store.setLoadedCount("pg-a", 1);
+
+    store.moveSession("a1", "g-manual");
+
+    // 仍在同一目录桶内可见 → 窗口不变
+    expect(store.getLoadedCount("pg-a")).toBe(1);
+  });
+
+  it("清除解析器后不再扩目录桶", () => {
+    const store = useSessionStore();
+    store.setSession(mk("a-old", { workspaceKey: "d:/ai/alpha", lastActiveAt: "2026-01-01T00:00:00.000Z" }));
+    store.setSession(mk("a-mid", { workspaceKey: "d:/ai/alpha", lastActiveAt: "2026-01-02T00:00:00.000Z" }));
+    store.setLoadedCount("pg-a", 2);
+
+    store.setProjectBucketResolver((s) => resolveProjectBucketId(s, groups));
+    store.setProjectBucketResolver(null);
+
+    store.setSession(
+      mk("a-new", { workspaceKey: "d:/ai/alpha", lastActiveAt: "2026-01-03T00:00:00.000Z" }),
+    );
+
+    // 无解析器 → 回退到 UNGROUPED_ID（无窗口），目录桶保持 2
+    expect(store.getLoadedCount("pg-a")).toBe(2);
   });
 });
 

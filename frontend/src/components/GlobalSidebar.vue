@@ -373,6 +373,7 @@
 
 <script setup lang="ts">
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
+import { resolveProjectBucketId } from '@/utils/projectGroupBucket'
 import { NEW_SESSION_ID } from '@/constants'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, markRaw, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -448,6 +449,16 @@ const authStore = useAuthStore()
 const layoutStore = useLayoutStore()
 const sessionStore = useSessionStore()
 const sessionGroupStore = useSessionGroupStore()
+// 目录模式下扩窗要把会话解析到目录桶（ProjectGroup.id / __general__），与 loadSessions
+// 写入 loadedCounts 的 key 对齐；手工分组模式返回 null，store 回退到 groupId 语义。
+sessionStore.setProjectBucketResolver((session) =>
+  sessionGroupStore.groupingMode === 'workspace'
+    ? resolveProjectBucketId(session, sessionGroupStore.projectGroups)
+    : null,
+)
+onBeforeUnmount(() => {
+  sessionStore.setProjectBucketResolver(null)
+})
 // 工作流 run 缓存（内联卡片/审阅标签共用）：会话删除时按会话释放
 const workflowRunsStore = useWorkflowRunsStore()
 const { themeMode, setTheme } = useTheme()
