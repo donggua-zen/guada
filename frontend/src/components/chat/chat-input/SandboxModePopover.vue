@@ -10,7 +10,7 @@
         @click="handleTogglePlan">
         <div class="flex items-center space-x-2">
           
-            <Lightbulb24Regular class="text-gray-500 dark:text-gray-400 size-4" />
+            <Lightbulb20Regular class="text-gray-500 dark:text-gray-400 size-5 shrink-0" />
           
           <div class="flex flex-col">
             <span>{{ t('chat.input.planModeLabel') }}</span>
@@ -31,7 +31,7 @@
         @click="handleSelect(opt.value)">
         <div class="flex items-center space-x-2">
           
-            <component class="size-4" :class="opt.danger ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'" :is="opt.icon" />
+            <component class="size-5 shrink-0" :class="opt.danger ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'" :is="opt.icon" />
           
           <div class="flex flex-col">
             <span :class="opt.danger ? 'text-red-500 font-medium' : ''">{{ opt.label }}</span>
@@ -50,7 +50,7 @@
 import { computed, onMounted, type Component } from 'vue'
 
 import { useI18n } from 'vue-i18n'
-import { ShieldLock20Regular, ClipboardTask20Regular, ShieldError16Regular, Checkmark16Regular, Lightbulb24Regular } from '@vicons/fluent'
+import { ShieldLock20Regular, ClipboardTask20Regular, ShieldError20Regular, Checkmark16Regular, Lightbulb20Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 
@@ -105,7 +105,7 @@ const options = computed<RunModeOption[]>(() => {
         : t('chat.input.runModeWorkspaceWriteDesc'),
       icon: ShieldLock20Regular,
     },
-    { value: 'danger-full-access', label: t('chat.input.runModeFullAccess'), desc: t('chat.input.runModeFullAccessDesc'), icon: ShieldError16Regular, danger: true },
+    { value: 'danger-full-access', label: t('chat.input.runModeFullAccess'), desc: t('chat.input.runModeFullAccessDesc'), icon: ShieldError20Regular, danger: true },
   ]
   return all.filter((opt) => capabilities.isSupported(opt.value))
 })
