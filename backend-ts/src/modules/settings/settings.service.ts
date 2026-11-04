@@ -16,6 +16,8 @@ import {
   SK_SYS_KB_STORAGE_ROOT,
   SK_SYS_KEEP_AWAKE_MODE,
   KEEP_AWAKE_MODES,
+  SK_SYS_SHELL_BACKEND,
+  SHELL_BACKENDS,
   LEGACY_SK_MOD_CHAT,
   MODEL_ID_KEYS,
 } from '../../constants/settings.constants';
@@ -97,6 +99,16 @@ export class SettingsService implements OnModuleInit {
       if (!KEEP_AWAKE_MODES.includes(incoming)) {
         throw new BadRequestException(
           `keepAwakeMode 只能是 ${KEEP_AWAKE_MODES.join(' / ')}`,
+        );
+      }
+    }
+    if (group === SG_SYSTEM && SK_SYS_SHELL_BACKEND in data) {
+      // shell 后端非法值会在启动期被静默当作 auto（readShellBackendPreference 的兜底），
+      // 用户以为切了壳实际没切 —— 与 keepAwakeMode 同理，这里直接拒。
+      const incoming = data[SK_SYS_SHELL_BACKEND];
+      if (incoming !== '' && !SHELL_BACKENDS.includes(incoming)) {
+        throw new BadRequestException(
+          `shellBackend 只能是 ${SHELL_BACKENDS.join(' / ')}`,
         );
       }
     }

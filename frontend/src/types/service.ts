@@ -232,6 +232,8 @@ export interface SystemGroupSettings {
     llmIdleTimeoutMs?: number
     /** 防休眠模式：off 不干预 / busy 仅执行任务时 / always 始终（仅桌面端生效） */
     keepAwakeMode?: 'off' | 'busy' | 'always'
+    /** Shell 后端：auto 自动检测 / 手动指定（shell 插件与交互终端共用，重启后生效） */
+    shellBackend?: 'auto' | 'gitbash' | 'powershell' | 'cmd'
 }
 
 /** ocr 分组：OCR 提供方与密钥 */

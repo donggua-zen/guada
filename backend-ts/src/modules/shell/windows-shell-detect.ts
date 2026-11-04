@@ -2,18 +2,22 @@
  * Windows shell 探测（纯 fs，零子进程）。
  *
  * 优先级（形状对齐 zcode 的 bash-shell-provider，兜底改为 PowerShell）：
- *   0. GUADA_SHELL 显式覆盖（用户手动指定，限定可识别的 shell 名）
+ *   0. 设置页手动指定的 shell 后端（preference ≠ auto 时，优先于 env）
+ *   0'. GUADA_SHELL 显式覆盖（用户手动指定，限定可识别的 shell 名）
  *   1. Git Bash 固定安装路径
  *   2. 由 PATH 中的 git.exe 反推（Git\cmd\git.exe / Git\mingw64\bin\git.exe 两种布局）
  *   3. PowerShell：POWERSHELL env → %SystemRoot%\System32\WindowsPowerShell\v1.0 → PATH
  *   4. cmd.exe
  *
+ * 手动指定的 shell 不可用时回退 0' 之后的自动链（调用方负责告警）。
  * 全程只做 fs 存在性检查，不启动任何子进程（避免控制台窗口闪现）。
  * 本模块不依赖 Nest DI：检测逻辑以 (env, exists) 入参形式暴露，便于单测注入。
  */
 
 import * as fsSync from "node:fs";
 import { win32 } from "node:path";
+
+import type { ShellBackendSetting } from "../../constants/settings.constants";
 
 export type ShellKind = "powershell" | "cmd" | "gitbash" | "sh";
 
@@ -165,12 +169,53 @@ export function classifyShellOverride(
   return null;
 }
 
+/**
+ * 按设置偏好解析：只尝试用户手动指定的那一种 shell。
+ * 命中返回 source 为 "settings preference" 的结果；未命中返回 null（调用方回退自动检测并告警）。
+ * cmd 无需路径（执行时走 ComSpec），恒命中。
+ */
+function resolveByPreference(
+  preference: ShellBackendSetting,
+  env: NodeJS.ProcessEnv,
+  exists: ExistsCheck,
+): ShellResolution | null {
+  if (preference === "cmd") {
+    return { kind: "cmd", path: "", source: "settings preference" };
+  }
+  if (preference === "gitbash") {
+    const bash = resolveGitBash(env, exists);
+    return bash
+      ? { kind: "gitbash", path: bash.path, source: "settings preference" }
+      : null;
+  }
+  if (preference === "powershell") {
+    const ps = resolvePowerShell(env, exists);
+    return ps
+      ? { kind: "powershell", path: ps.path, source: "settings preference" }
+      : null;
+  }
+  return null;
+}
+
 /** 解析 Windows 上应使用的 shell（见文件头优先级） */
 export function resolveWindowsShell(options: {
   env: NodeJS.ProcessEnv;
   exists?: ExistsCheck;
+  /** 设置页手动指定的 shell 后端（auto/缺省 = 自动检测） */
+  preference?: ShellBackendSetting;
 }): ShellResolution {
   const exists = options.exists ?? defaultExists;
+
+  // 用户设置优先于 GUADA_SHELL env：设置页是面向普通用户的显式入口，
+  // 不应被启动脚本里可能残留的 env 静默遮蔽。
+  if (options.preference && options.preference !== "auto") {
+    const preferred = resolveByPreference(
+      options.preference,
+      options.env,
+      exists,
+    );
+    if (preferred) return preferred;
+  }
 
   const override = classifyShellOverride(
     envValue(options.env, "GUADA_SHELL"),
@@ -193,4 +238,19 @@ export function resolveWindowsShell(options: {
   }
 
   return { kind: "cmd", path: "", source: "cmd.exe (no PowerShell found)" };
+}
+
+/**
+ * 探测各 shell 是否可用（供 /capabilities 裁剪设置页选项）。
+ * cmd 恒可用（Windows 自带，执行时解析 ComSpec）。
+ */
+export function detectAvailableWindowsShells(
+  env: NodeJS.ProcessEnv,
+  exists: ExistsCheck = defaultExists,
+): { gitbash: boolean; powershell: boolean; cmd: boolean } {
+  return {
+    gitbash: resolveGitBash(env, exists) !== null,
+    powershell: resolvePowerShell(env, exists) !== null,
+    cmd: true,
+  };
 }

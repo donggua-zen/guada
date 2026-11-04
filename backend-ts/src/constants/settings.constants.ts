@@ -25,6 +25,16 @@ export const KEEP_AWAKE_MODES = ['off', 'busy', 'always'] as const;
 export type KeepAwakeMode = (typeof KEEP_AWAKE_MODES)[number];
 /** 防休眠缺省值：桌面端无人值守场景（长任务/定时任务）默认保持唤醒 */
 export const KEEP_AWAKE_MODE_DEFAULT: KeepAwakeMode = 'busy';
+/**
+ * Shell 后端：auto 自动检测（Git Bash → PowerShell → cmd）/ 手动指定（shell 插件与交互终端共用）。
+ * 指定的 shell 未安装时回退自动检测；重启后端后生效。
+ */
+export const SK_SYS_SHELL_BACKEND = 'shellBackend';
+/** Shell 后端的合法取值 */
+export const SHELL_BACKENDS = ['auto', 'gitbash', 'powershell', 'cmd'] as const;
+export type ShellBackendSetting = (typeof SHELL_BACKENDS)[number];
+/** Shell 后端缺省值：自动检测，行为与旧版本一致 */
+export const SHELL_BACKEND_DEFAULT: ShellBackendSetting = 'auto';
 
 /**
  * 模型偏好设置键名 (SK_MOD = Setting Key Model)

@@ -137,14 +137,15 @@ describeUnix("ProcessManagerService 手动终止进程树", () => {
     );
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     fs.rmSync(grandchildPidFile, { force: true });
     service = new ProcessManagerService(
       {} as unknown as ChatRunnerService,
       new EventEmitter2(),
       makeStubRegistry(),
     );
-    service.onModuleInit();
+    // detectShell 为 async（读设置存储）；Nest 启动时同样会 await 生命周期钩子
+    await service.onModuleInit();
   });
 
   afterEach(() => {
@@ -294,14 +295,15 @@ describeWin("ProcessManagerService Windows 管道进程树终止", () => {
   const PIPELINE =
     "for d in a b; do timeout 60 sleep 30 | cat; done | sort -u | head -5";
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guada-win-kill-"));
     service = new ProcessManagerService(
       {} as unknown as ChatRunnerService,
       new EventEmitter2(),
       makeStubRegistry(),
     );
-    service.onModuleInit();
+    // detectShell 为 async（读设置存储）；Nest 启动时同样会 await 生命周期钩子
+    await service.onModuleInit();
   });
 
   afterEach(async () => {

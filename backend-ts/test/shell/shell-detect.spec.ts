@@ -1,6 +1,7 @@
 import {
   WINDOWS_GIT_BASH_PATHS,
   classifyShellOverride,
+  detectAvailableWindowsShells,
   pathExecutableCandidates,
   resolveWindowsShell,
 } from "../../src/modules/shell/windows-shell-detect";
@@ -214,6 +215,93 @@ describe("resolveWindowsShell", () => {
     });
   });
 
+  describe("设置 preference（system.shellBackend 手动指定）", () => {
+    it("preference=gitbash 命中固定路径，source 标记 settings preference", () => {
+      const { exists } = fakeExists([PROGRAM_FILES_BASH, SYSTEM_PS]);
+
+      const resolved = resolveWindowsShell({
+        env: { PATH: "" },
+        exists,
+        preference: "gitbash",
+      });
+
+      expect(resolved.kind).toBe("gitbash");
+      expect(resolved.path).toBe(PROGRAM_FILES_BASH);
+      expect(resolved.source).toBe("settings preference");
+    });
+
+    it("preference=gitbash 优先于 GUADA_SHELL env", () => {
+      const { exists } = fakeExists([
+        PROGRAM_FILES_BASH,
+        "D:\\msys\\bash.exe",
+      ]);
+
+      const resolved = resolveWindowsShell({
+        env: { GUADA_SHELL: "D:\\msys\\bash.exe", PATH: "" },
+        exists,
+        preference: "gitbash",
+      });
+
+      expect(resolved.path).toBe(PROGRAM_FILES_BASH);
+      expect(resolved.source).toBe("settings preference");
+    });
+
+    it("preference=powershell 强制 PowerShell（即使装了 Git Bash）", () => {
+      const { exists } = fakeExists([PROGRAM_FILES_BASH, SYSTEM_PS]);
+
+      const resolved = resolveWindowsShell({
+        env: { SystemRoot: "C:\\Windows", PATH: "" },
+        exists,
+        preference: "powershell",
+      });
+
+      expect(resolved.kind).toBe("powershell");
+      expect(resolved.path).toBe(SYSTEM_PS);
+      expect(resolved.source).toBe("settings preference");
+    });
+
+    it("preference=cmd 直接命中（cmd 无需路径，执行时解析 ComSpec）", () => {
+      const { exists } = fakeExists([PROGRAM_FILES_BASH, SYSTEM_PS]);
+
+      const resolved = resolveWindowsShell({
+        env: { PATH: "" },
+        exists,
+        preference: "cmd",
+      });
+
+      expect(resolved.kind).toBe("cmd");
+      expect(resolved.path).toBe("");
+      expect(resolved.source).toBe("settings preference");
+    });
+
+    it("指定的 shell 未安装时回退自动检测链（source 保留原层级标记）", () => {
+      const { exists } = fakeExists([SYSTEM_PS]); // 没有 Git Bash
+
+      const resolved = resolveWindowsShell({
+        env: { SystemRoot: "C:\\Windows", PATH: "" },
+        exists,
+        preference: "gitbash",
+      });
+
+      expect(resolved.kind).toBe("powershell");
+      expect(resolved.source).not.toBe("settings preference");
+      expect(resolved.source).toContain("system");
+    });
+
+    it("preference=auto 走既有自动链（不受 source 变化影响）", () => {
+      const { exists } = fakeExists([PROGRAM_FILES_BASH]);
+
+      const resolved = resolveWindowsShell({
+        env: { PATH: "" },
+        exists,
+        preference: "auto",
+      });
+
+      expect(resolved.kind).toBe("gitbash");
+      expect(resolved.source).toContain("default install path");
+    });
+  });
+
   it("固定 Git Bash 路径清单与 zcode 保持一致（两种 Program Files 布局）", () => {
     expect([...WINDOWS_GIT_BASH_PATHS]).toEqual([
       "C:\\Program Files\\Git\\bin\\bash.exe",
@@ -266,5 +354,37 @@ describe("classifyShellOverride", () => {
     const { exists } = fakeExists([]);
     expect(classifyShellOverride(undefined, exists)).toBeNull();
     expect(classifyShellOverride("C:\\nope\\bash.exe", exists)).toBeNull();
+  });
+});
+
+describe("detectAvailableWindowsShells", () => {
+  it("装了 Git Bash 和 PowerShell 时两项均可用，cmd 恒可用", () => {
+    const { exists } = fakeExists([PROGRAM_FILES_BASH, SYSTEM_PS]);
+
+    const available = detectAvailableWindowsShells({ PATH: "" }, exists);
+
+    expect(available).toEqual({ gitbash: true, powershell: true, cmd: true });
+  });
+
+  it("都没装时只有 cmd 可用", () => {
+    const { exists } = fakeExists([]);
+
+    const available = detectAvailableWindowsShells(
+      { SystemRoot: "C:\\Windows", PATH: "" },
+      exists,
+    );
+
+    expect(available).toEqual({ gitbash: false, powershell: false, cmd: true });
+  });
+
+  it("PowerShell 可用性探测走 SystemRoot 系统路径", () => {
+    const { exists } = fakeExists([SYSTEM_PS]);
+
+    const available = detectAvailableWindowsShells(
+      { SystemRoot: "C:\\Windows", PATH: "" },
+      exists,
+    );
+
+    expect(available.powershell).toBe(true);
   });
 });

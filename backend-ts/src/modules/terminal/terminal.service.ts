@@ -2,7 +2,9 @@ import {
   Injectable,
   Logger,
   OnModuleDestroy,
+  OnModuleInit,
   OnApplicationShutdown,
+  Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { execFileSync } from "node:child_process";
@@ -10,6 +12,14 @@ import { randomUUID } from "node:crypto";
 import { PtyHandle } from "./types";
 import { ensureSpawnHelperExecutable, PtyHelperError } from "./pty-helper";
 import { envValue, resolveWindowsShell } from "../shell/windows-shell-detect";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";
+import {
+  SG_SYSTEM,
+  SK_SYS_SHELL_BACKEND,
+  SHELL_BACKENDS,
+  SHELL_BACKEND_DEFAULT,
+  type ShellBackendSetting,
+} from "../../constants/settings.constants";
 
 /** transcript 保留上限（字节，超出丢弃头部） */
 const TRANSCRIPT_LIMIT = 1 << 20; // 1MB
@@ -42,7 +52,9 @@ function installPtyExitHook(): void {
  *  - 会话归属/权限校验在 Gateway 层完成
  */
 @Injectable()
-export class TerminalService implements OnModuleDestroy, OnApplicationShutdown {
+export class TerminalService
+  implements OnModuleInit, OnModuleDestroy, OnApplicationShutdown
+{
   private readonly logger = new Logger(TerminalService.name);
   /** PTY 注册表 */
   private readonly sessions = new Map<string, PtyHandle>();
@@ -54,10 +66,34 @@ export class TerminalService implements OnModuleDestroy, OnApplicationShutdown {
   private readonly orphanTimer: ReturnType<typeof setInterval>;
   /** orphan 超时（毫秒）：5 分钟 */
   private readonly ORPHAN_TIMEOUT_MS = 5 * 60 * 1000;
+  /** 设置页手动指定的 shell 后端（auto = 自动检测）；启动时读一次缓存 */
+  private shellBackendPreference: ShellBackendSetting = SHELL_BACKEND_DEFAULT;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    // 设置存储：读 shellBackend。@Optional 兼容无 SharedModule 的测试/嵌入场景。
+    @Optional() private readonly settingsStorage?: SettingsStorage,
+  ) {
     this.orphanTimer = setInterval(() => this.reclaimOrphans(), 30_000);
     this.orphanTimer.unref?.();
+  }
+
+  /** 启动时读一次设置页的手动 shell 指定项；读失败按 auto 继续 */
+  async onModuleInit(): Promise<void> {
+    try {
+      const raw = await this.settingsStorage?.getSettingValue(
+        SG_SYSTEM,
+        SK_SYS_SHELL_BACKEND,
+        SHELL_BACKEND_DEFAULT,
+      );
+      this.shellBackendPreference = SHELL_BACKENDS.includes(raw as never)
+        ? (raw as ShellBackendSetting)
+        : SHELL_BACKEND_DEFAULT;
+    } catch (error) {
+      this.logger.warn(
+        `读取 shellBackend 设置失败，终端按自动检测继续: ${(error as Error)?.message ?? error}`,
+      );
+    }
   }
 
   onModuleDestroy(): void {
@@ -85,15 +121,19 @@ export class TerminalService implements OnModuleDestroy, OnApplicationShutdown {
   /**
    * 解析默认 shell。
    *
-   * 优先级：TERMINAL_SHELL 配置 > Windows：Git Bash → PowerShell → cmd.exe > Unix：$SHELL/sh。
+   * 优先级：TERMINAL_SHELL 配置 > 设置页手动指定（system.shellBackend）> Windows：Git Bash → PowerShell → cmd.exe > Unix：$SHELL/sh。
    * Git Bash 用 -l 启动 login shell（/etc/profile 才会把 /usr/bin 加进 PATH）。
+   * 指定的 shell 不可用时回退自动检测（resolveWindowsShell 内部处理）。
    */
   private defaultShell(): { file: string; args: string[]; env?: Record<string, string> } {
     const cfg = this.configService.get<string>("TERMINAL_SHELL");
     if (cfg) return { file: cfg, args: [] };
 
     if (process.platform === "win32") {
-      const resolved = resolveWindowsShell({ env: process.env });
+      const resolved = resolveWindowsShell({
+        env: process.env,
+        preference: this.shellBackendPreference,
+      });
       if (resolved.kind === "gitbash") {
         // Git Bash 不会把 xterm 的设备属性应答（ESC[?1;2c）原样回显——那是 cmd.exe 的坑，
         // 也是这里从 cmd 换成 PowerShell 的历史原因。

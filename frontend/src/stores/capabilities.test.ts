@@ -109,4 +109,45 @@ describe("useCapabilitiesStore", () => {
       "danger-full-access",
     ]);
   });
+
+  describe("shell 可用性（Shell 后端设置页置灰未装项）", () => {
+    it("Windows 后端上报 shells 时按上报结果判定", async () => {
+      fetchCapabilities.mockResolvedValue({
+        platform: "win32",
+        sandboxModes: ["workspace-write", "danger-full-access"],
+        shells: { gitbash: false, powershell: true, cmd: true },
+      });
+
+      const store = useCapabilitiesStore();
+      await store.ensureLoaded();
+
+      expect(store.isShellAvailable("gitbash")).toBe(false);
+      expect(store.isShellAvailable("powershell")).toBe(true);
+      expect(store.isShellAvailable("cmd")).toBe(true);
+    });
+
+    it("非 Windows 平台 shells 为 null，按可用处理", async () => {
+      fetchCapabilities.mockResolvedValue({
+        platform: "darwin",
+        sandboxModes: [...ALL_SANDBOX_MODES],
+        shells: null,
+      });
+
+      const store = useCapabilitiesStore();
+      await store.ensureLoaded();
+
+      expect(store.isShellAvailable("gitbash")).toBe(true);
+      expect(store.isShellAvailable("powershell")).toBe(true);
+    });
+
+    it("请求失败（shells 未上报）时乐观缺省全部可用", async () => {
+      fetchCapabilities.mockRejectedValue(new Error("offline"));
+
+      const store = useCapabilitiesStore();
+      await store.ensureLoaded();
+
+      expect(store.isShellAvailable("gitbash")).toBe(true);
+      expect(store.isShellAvailable("cmd")).toBe(true);
+    });
+  });
 });

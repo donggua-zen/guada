@@ -37,7 +37,7 @@ describe("ProcessManagerService × JobRegistry", () => {
     delete process.env.GUADA_WIN32_JOB_SPAWN;
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guada-job-registry-"));
     chatRunner = { enqueueMessage: jest.fn().mockResolvedValue(undefined) };
     ({ registry, eventBus } = makeRegistry());
@@ -46,7 +46,8 @@ describe("ProcessManagerService × JobRegistry", () => {
       new EventEmitter2(),
       registry,
     );
-    service.onModuleInit();
+    // detectShell 为 async（读设置存储）；Nest 启动时同样会 await 生命周期钩子
+    await service.onModuleInit();
   });
 
   afterEach(async () => {

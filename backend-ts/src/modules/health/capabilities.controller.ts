@@ -1,10 +1,13 @@
 import { Controller, Get } from "@nestjs/common";
 import { supportedSandboxModes } from "../../common/services/sandbox-policy";
+import { detectAvailableWindowsShells } from "../shell/windows-shell-detect";
 
 /**
  * 运行时能力探测（公开路由，与 /health 同级）。
  *
  * 前端据此裁剪输入区安全档位：Windows 后端不提供 read-only。
+ * shells 字段供设置页裁剪 Shell 后端选项（未安装的置灰）；
+ * 非 Windows 平台 shells 为 null（设置项不展示）。
  * 平台必须由后端给出——Web/移动端访问 Windows 后端时，客户端平台不可靠。
  */
 @Controller("capabilities")
@@ -14,6 +17,10 @@ export class CapabilitiesController {
     return {
       platform: process.platform,
       sandboxModes: supportedSandboxModes(),
+      shells:
+        process.platform === "win32"
+          ? detectAvailableWindowsShells(process.env)
+          : null,
     };
   }
 }

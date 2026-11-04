@@ -49,7 +49,7 @@ describeWin("ProcessManagerService native Win32 Job spawn", () => {
     delete process.env.GUADA_WIN32_JOB_SPAWN;
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guada-native-job-"));
     chatRunner = { enqueueMessage: jest.fn().mockResolvedValue(undefined) };
     service = new ProcessManagerService(
@@ -57,7 +57,8 @@ describeWin("ProcessManagerService native Win32 Job spawn", () => {
       new EventEmitter2(),
       makeStubRegistry(),
     );
-    service.onModuleInit();
+    // detectShell 为 async（读设置存储）；Nest 启动时同样会 await 生命周期钩子
+    await service.onModuleInit();
   });
 
   afterEach(() => {
@@ -222,7 +223,7 @@ describePwsh("ProcessManagerService native PowerShell", () => {
     delete process.env.GUADA_WIN32_JOB_SPAWN;
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guada-native-pwsh-"));
     chatRunner = { enqueueMessage: jest.fn().mockResolvedValue(undefined) };
     service = new ProcessManagerService(
@@ -230,7 +231,8 @@ describePwsh("ProcessManagerService native PowerShell", () => {
       new EventEmitter2(),
       makeStubRegistry(),
     );
-    service.onModuleInit();
+    // detectShell 为 async（读设置存储）；Nest 启动时同样会 await 生命周期钩子
+    await service.onModuleInit();
   });
 
   afterEach(() => {
@@ -282,7 +284,7 @@ describePwsh("ProcessManagerService native PowerShell", () => {
 });
 
 describeWin("ProcessManagerService shell gate", () => {
-  it("keeps cmd.exe on the legacy path", () => {
+  it("keeps cmd.exe on the legacy path", async () => {
     const previous = process.env.GUADA_SHELL;
     process.env.GUADA_SHELL =
       process.env.ComSpec || "C:\\Windows\\System32\\cmd.exe";
@@ -291,7 +293,8 @@ describeWin("ProcessManagerService shell gate", () => {
         { enqueueMessage: jest.fn() } as unknown as ChatRunnerService,
         new EventEmitter2(),
       );
-      service.onModuleInit();
+      // detectShell 现在读设置存储（async），Nest 启动时本就会 await 生命周期钩子
+      await service.onModuleInit();
       try {
         expect(service.getShellKind()).toBe("cmd");
         expect((service as any).canUseNativeSpawn()).toBe(false);

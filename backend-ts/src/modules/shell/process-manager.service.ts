@@ -48,6 +48,14 @@ import {
 import { isShellSandboxSupported } from "../../common/services/sandbox-policy";
 import { JobRegistryService } from "../jobs/job-registry.service";
 import type { JobId, JobOutcome } from "../jobs/job.types";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";
+import {
+  SG_SYSTEM,
+  SK_SYS_SHELL_BACKEND,
+  SHELL_BACKENDS,
+  SHELL_BACKEND_DEFAULT,
+  type ShellBackendSetting,
+} from "../../constants/settings.constants";
 
 // ============================================================================
 // UTF-8 边界修剪工具
@@ -520,12 +528,14 @@ export class ProcessManagerService
     private readonly eventEmitter: EventEmitter2,
     // 允许直接 new 的测试/嵌入场景不挂 Registry；生产由 ShellModule imports JobsModule 注入。
     @Optional() private readonly jobRegistry?: JobRegistryService,
+    // 设置存储：读 shellBackend 手动指定项。@Optional 保持测试直接 new 的用法。
+    @Optional() private readonly settingsStorage?: SettingsStorage,
   ) {}
 
   // ── 生命周期 ──
 
-  onModuleInit() {
-    this.detectShell();
+  async onModuleInit() {
+    await this.detectShell();
     this.ensureLogDir();
     this.cleanupOldLogs();
     this.gcTimer = setInterval(
@@ -580,29 +590,64 @@ export class ProcessManagerService
   // ── Shell 检测 ──
 
   /**
+   * 读取设置页的手动 shell 指定项（system.shellBackend）。
+   * 读失败（存储不可用/旧配置损坏）按 auto 继续，不阻塞启动。
+   */
+  private async readShellBackendPreference(): Promise<ShellBackendSetting> {
+    try {
+      const raw = await this.settingsStorage?.getSettingValue(
+        SG_SYSTEM,
+        SK_SYS_SHELL_BACKEND,
+        SHELL_BACKEND_DEFAULT,
+      );
+      return SHELL_BACKENDS.includes(raw as never)
+        ? (raw as ShellBackendSetting)
+        : SHELL_BACKEND_DEFAULT;
+    } catch {
+      return SHELL_BACKEND_DEFAULT;
+    }
+  }
+
+  /**
    * 启动时检测可用的 shell。
    * Unix：默认 sh。
-   * Windows：优先 Git Bash（装了 Git for Windows 就有），否则 PowerShell，最后 cmd.exe。
+   * Windows：优先设置页手动指定（system.shellBackend），否则 GUADA_SHELL env，
+   * 最后自动检测（Git Bash → PowerShell → cmd.exe）。
    * 检测细节与优先级见 windows-shell-detect.ts（全程纯 fs 探测，零子进程，避免窗口闪现）。
    *
    * 注意：沙盒模式（read-only / workspace-write）下命令由 sandbox.exe 用其内置 shell 执行，
    * 本检测只决定非沙盒路径（danger-full-access）与交互终端使用哪个壳。
    */
-  private detectShell(): void {
+  private async detectShell(): Promise<void> {
     if (process.platform !== "win32") {
       this.shellInfo = { kind: "sh", path: "" };
       this.logger.log("Shell detected: sh (Unix default)");
       return;
     }
 
-    const resolved = resolveWindowsShell({ env: process.env });
+    const preference = await this.readShellBackendPreference();
+    const resolved = resolveWindowsShell({ env: process.env, preference });
     this.shellInfo = { kind: resolved.kind, path: resolved.path };
 
+    if (
+      preference !== "auto" &&
+      resolved.source !== "settings preference"
+    ) {
+      this.logger.warn(
+        `Shell preference "${preference}" from settings is unusable (not installed), falling back to auto-detection`,
+      );
+    }
     const override = envValue(process.env, "GUADA_SHELL");
     if (override && resolved.source !== "GUADA_SHELL override") {
-      this.logger.warn(
-        `GUADA_SHELL is set but unusable (missing file or unrecognized shell), ignored: ${override}`,
-      );
+      if (preference !== "auto" && resolved.source === "settings preference") {
+        this.logger.warn(
+          `GUADA_SHELL is ignored: settings preference "${preference}" takes priority`,
+        );
+      } else {
+        this.logger.warn(
+          `GUADA_SHELL is set but unusable (missing file or unrecognized shell), ignored: ${override}`,
+        );
+      }
     }
     this.logger.log(`Shell detected: ${resolved.kind} (${resolved.source})`);
   }

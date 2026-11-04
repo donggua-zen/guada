@@ -41,6 +41,15 @@ export default {
     keepAwakeOff: '关闭',
     keepAwakeBusy: '仅执行任务时',
     keepAwakeAlways: '始终',
+    shellBackendGroup: 'Shell 后端',
+    shellBackend: '命令执行 Shell',
+    shellBackendDesc: 'shell 插件（run_command）与交互终端共用的命令解释器。默认自动检测：优先 Git Bash，其次 PowerShell，最后 cmd。',
+    shellBackendAuto: '自动（Git Bash 优先）',
+    shellBackendGitbash: 'Git Bash',
+    shellBackendPowershell: 'PowerShell',
+    shellBackendCmd: 'cmd',
+    shellBackendNotInstalled: '未安装',
+    shellBackendRestartHint: '更改将在重启应用后生效。',
   },
 
   mobileAccess: {

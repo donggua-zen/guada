@@ -41,6 +41,15 @@
     keepAwakeOff: 'Off',
     keepAwakeBusy: 'While tasks run',
     keepAwakeAlways: 'Always',
+    shellBackendGroup: 'Shell Backend',
+    shellBackend: 'Command Shell',
+    shellBackendDesc: 'The command interpreter shared by the shell plugin (run_command) and the interactive terminal. Defaults to auto-detection: Git Bash first, then PowerShell, then cmd.',
+    shellBackendAuto: 'Auto (Git Bash first)',
+    shellBackendGitbash: 'Git Bash',
+    shellBackendPowershell: 'PowerShell',
+    shellBackendCmd: 'cmd',
+    shellBackendNotInstalled: 'not installed',
+    shellBackendRestartHint: 'Changes take effect after restarting the app.',
   },
 
   mobileAccess: {

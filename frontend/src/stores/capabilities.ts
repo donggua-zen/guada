@@ -8,6 +8,7 @@ import {
   supportedSandboxModes,
   type SandboxMode,
 } from "@/utils/sandboxMode";
+import type { ShellAvailability } from "@/services/modules/capabilities.api";
 
 export { ALL_SANDBOX_MODES, isSandboxMode };
 export type { SandboxMode };
@@ -25,6 +26,7 @@ export const useCapabilitiesStore = defineStore("capabilities", () => {
     typeof window !== "undefined" && window.electronAPI?.platform === "win32";
   const platform = ref<string | null>(initialWindows ? "win32" : null);
   const sandboxModes = ref<SandboxMode[]>(supportedSandboxModes(platform.value));
+  const shells = ref<ShellAvailability | null>(null);
   const loaded = ref(false);
   let pending: Promise<void> | null = null;
 
@@ -45,6 +47,7 @@ export const useCapabilitiesStore = defineStore("capabilities", () => {
           : [];
         sandboxModes.value =
           modes.length > 0 ? modes : supportedSandboxModes(nextPlatform);
+        shells.value = caps?.shells ?? null;
         // 只在成功时标记已加载：冷启动/后端未就绪的首轮失败，下一次挂载会重试。
         loaded.value = true;
       } catch (error) {
@@ -69,13 +72,24 @@ export const useCapabilitiesStore = defineStore("capabilities", () => {
     return normalizeSandboxMode(mode, platform.value);
   }
 
+  /**
+   * 某 shell 后端在 Windows 上是否已安装（设置页置灰未装项）。
+   * 仅 Windows 且后端已上报时返回真实结果，否则按可用处理（乐观缺省）。
+   */
+  function isShellAvailable(kind: keyof ShellAvailability): boolean {
+    if (!isWindows.value || !shells.value) return true;
+    return shells.value[kind] ?? true;
+  }
+
   return {
     platform,
     sandboxModes,
+    shells,
     loaded,
     isWindows,
     ensureLoaded,
     isSupported,
     normalize,
+    isShellAvailable,
   };
 });

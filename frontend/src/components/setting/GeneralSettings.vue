@@ -106,6 +106,30 @@
         </div>
       </div>
 
+      <!-- Shell 后端分组：run_command 与交互终端共用（Windows only；后端非 win32 时 capabilities 无此设置） -->
+      <div v-if="isWindowsBackend">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.shellBackendGroup') }}</h3>
+        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden">
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+            <div class="flex flex-col gap-1 min-w-0 flex-1">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.shellBackend') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.shellBackendDesc') }}</span>
+            </div>
+            <div class="shrink-0 w-52">
+              <GdSelect v-model="settingsForm.shellBackend" size="default">
+                <GdOption :label="t('settings.general.shellBackendAuto')" value="auto" />
+                <GdOption :label="shellOptionLabel('gitbash', t('settings.general.shellBackendGitbash'))" value="gitbash" :disabled="!capabilities.isShellAvailable('gitbash')" />
+                <GdOption :label="shellOptionLabel('powershell', t('settings.general.shellBackendPowershell'))" value="powershell" :disabled="!capabilities.isShellAvailable('powershell')" />
+                <GdOption :label="shellOptionLabel('cmd', t('settings.general.shellBackendCmd'))" value="cmd" />
+              </GdSelect>
+            </div>
+          </div>
+          <div class="px-4 pb-3.5">
+            <span class="text-xs text-amber-600 dark:text-amber-500">{{ t('settings.general.shellBackendRestartHint') }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- 桌面行为分组：防休眠由 Electron 主进程持 powerSaveBlocker 实现，Web 端只存不生效 -->
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">{{ t('settings.general.desktop') }}</h3>
@@ -147,11 +171,21 @@ import { useDebounceFn } from '@vueuse/core'
 import type { SystemGroupSettings } from '@/types/service'
 import { apiService } from '@/services/ApiService'
 import { useLanguage } from '@/composables/useLanguage'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 import DirectoryBrowserDialog from '@/components/DirectoryBrowserDialog.vue'
 
 const { t } = useI18n()
 const { locale: currentLocale, setLanguage } = useLanguage()
 const selectedLanguage = ref(currentLocale.value)
+
+// Shell 后端选项的可用性来自 /capabilities（未安装的置灰）
+const capabilities = useCapabilitiesStore()
+const isWindowsBackend = computed(() => capabilities.platform === 'win32')
+
+/** 未安装的 shell 在标签后缀提示（已装/探测未知则原样显示） */
+function shellOptionLabel(kind: 'gitbash' | 'powershell' | 'cmd', base: string): string {
+  return capabilities.isShellAvailable(kind) ? base : `${base} (${t('settings.general.shellBackendNotInstalled')})`
+}
 
 function handleLanguageChange(val: string | number | (string | number)[]) {
   setLanguage(String(val) as 'zh-CN' | 'en-US')
@@ -166,6 +200,8 @@ const settingsForm = reactive({
   llmRequestTimeoutMs: 600,   // 秒（后端存储为毫秒）
   llmIdleTimeoutMs: 120,     // 秒
   keepAwakeMode: 'busy' as 'off' | 'busy' | 'always',
+  // Shell 后端：auto = 自动检测（Git Bash → PowerShell → cmd）
+  shellBackend: 'auto' as 'auto' | 'gitbash' | 'powershell' | 'cmd',
 })
 
 // 原始设置备份，用于对比是否有改动
@@ -184,7 +220,7 @@ const debouncedSave = useDebounceFn(async () => {
 }, 300)
 
 // 监听设置变化自动保存
-watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs, keepAwakeMode: settingsForm.keepAwakeMode }), () => {
+watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs, keepAwakeMode: settingsForm.keepAwakeMode, shellBackend: settingsForm.shellBackend }), () => {
   debouncedSave()
 }, { deep: true })
 
@@ -220,6 +256,9 @@ const loadSettings = async () => {
     settingsForm.llmRequestTimeoutMs = Math.round(Number(response.llmRequestTimeoutMs) / 1000) || 600
     settingsForm.llmIdleTimeoutMs = Math.round(Number(response.llmIdleTimeoutMs) / 1000) || 120
     settingsForm.keepAwakeMode = response.keepAwakeMode || 'busy'
+    // Shell 后端：历史值/非法值收敛为 auto（后端校验也会拒非法值）
+    const shellBackend = response.shellBackend
+    settingsForm.shellBackend = shellBackend === 'gitbash' || shellBackend === 'powershell' || shellBackend === 'cmd' ? shellBackend : 'auto'
     // 读到的值顺手推一次主进程：主进程启动时直接读文件，这里是二者的兜底对账点
     handleKeepAwakeChange(settingsForm.keepAwakeMode)
     // 备份原始数据
@@ -299,6 +338,7 @@ const handleSave = async () => {
       llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs * 1000,
       llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs * 1000,
       keepAwakeMode: settingsForm.keepAwakeMode,
+      shellBackend: settingsForm.shellBackend,
     }
 
     // 使用分组设置接口更新 system 分组
@@ -316,6 +356,8 @@ const handleSave = async () => {
 
 // 生命周期
 onMounted(() => {
+  // 平台与 shell 可用性（未装的选项置灰）来自 /capabilities
+  capabilities.ensureLoaded()
   loadSettings()
 })
 </script>

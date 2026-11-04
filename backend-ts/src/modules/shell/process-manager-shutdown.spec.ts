@@ -9,7 +9,7 @@ describe("ProcessManagerService shutdown reaper", () => {
       {} as any,
       new EventEmitter2(),
     );
-    service.onModuleInit();
+    await service.onModuleInit();
 
     const entry: any = {
       id: "shutdown-proc",
