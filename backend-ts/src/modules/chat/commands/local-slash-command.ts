@@ -9,7 +9,7 @@
  */
 
 /** 本地命令名（与前端 picker、i18n 共用同一词表） */
-export const LOCAL_SLASH_COMMANDS = ['compact', 'compress'] as const;
+export const LOCAL_SLASH_COMMANDS = ['compact', 'compress', 'goal'] as const;
 
 export type LocalSlashCommandName = (typeof LOCAL_SLASH_COMMANDS)[number];
 

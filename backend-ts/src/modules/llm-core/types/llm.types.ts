@@ -33,6 +33,7 @@ export type UsageSource =
   | "commit_message"
   | "memory_sync"
   | "image_recognition"
+  | "goal_verification"
   | "other";
 
 /** 一次 LLM 调用的统计上下文（仅用于本地用量账本，不参与 wire 请求） */

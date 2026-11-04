@@ -5,6 +5,7 @@ import { UploadModule } from "./common/upload/upload.module";
 import { SharedModule } from "./common/services/shared.module";
 import { WorkspaceModule } from "./common/workspace/workspace.module";
 import { ChatModule } from "./modules/chat/chat.module";
+import { GoalModule } from "./modules/goal/goal.module";
 import { ModelsModule } from "./modules/models/models.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { AgentsModule } from "./modules/agents/agents.module";
@@ -62,6 +63,7 @@ import { MobileAccessModule } from './modules/mobile-access/mobile-access.module
     McpClientModule, // MCP 客户端模块（全局）
     SkillsModule, // Skills 集成框架模块
     ChatModule,
+    GoalModule,      // 会话目标（事实源 = JSONL 事件日志，零 DB 改动）
     ModelsModule,
     AuthModule,
     AgentsModule,

@@ -388,6 +388,24 @@ export default {
     },
   },
 
+  // ── 会话目标（session goal：运行时胶囊 + hover 详情） ──
+  goal: {
+    title: '会话目标',
+    pause: '暂停目标',
+    resume: '恢复目标',
+    resumeDisarmed: '重新启用（服务重启后需手动恢复）',
+    clear: '清除目标',
+    iteration: '第 {n} 次',
+    status: {
+      active: '进行中',
+      paused: '已暂停',
+      blocked: '受阻',
+      complete: '已完成',
+      budget_limited: '预算耗尽',
+    },
+    failure: '执行异常',
+  },
+
   // ── 工作区 ──
   workspace: {
     back: '后退',
@@ -547,10 +565,18 @@ export default {
     createWindowFailed: '创建窗口失败',
   },
 
-  // ── 本地斜杠命令（/compact 等，不进 LLM） ──
+  // ── 本地斜杠命令（/compact、/goal 等，不进 LLM） ──
   command: {
     compactDescription: '压缩当前会话上下文（可选：附加摘要要求）',
     attachmentsNotSupported: '斜杠命令不支持附件，请移除附件后重试',
+    goalDescription: '设置会话目标（/goal 目标；支持 pause / resume / clear / edit）',
+    goalRequiresObjective: '请提供目标内容，例如 /goal 修复登录失败的问题',
+    goalPlanConflict: '请先关闭计划模式，再设置会话目标',
+    goalSet: '会话目标已设置',
+    goalCleared: '会话目标已清除',
+    goalPaused: '会话目标已暂停',
+    goalResumed: '会话目标已恢复',
+    goalError: '会话目标操作失败',
   },
 
   // ── 备忘录 ──

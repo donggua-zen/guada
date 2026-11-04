@@ -1,14 +1,35 @@
 <template>
-  <!-- 输入区运行时状态胶囊（共享外壳）：单条 28px 药丸内分三段——待办 / 后台进程 / 子代理，
-       任一段没有内容就整段不渲染，三段全空整根不渲染；hover 在上方弹出面板按域分段列细节。
-       数据契约：待办（REST + todo_updated）、进程（jobs_snapshot + jobs REST 基线）、
-       子代理（ChatPage 下传的 subSessions + sessionStore.streamStatus），各域逻辑见
-       composables/useTodoStatus.ts、composables/useRunningProcesses.ts、utils/subagentDisplay.ts。
+  <!-- 输入区运行时状态胶囊（共享外壳）：单条 28px 药丸内分四段——目标 / 待办 / 后台进程 / 子代理，
+       任一段没有内容就整段不渲染，四段全空整根不渲染；hover 在上方弹出面板按域分段列细节。
+       数据契约：目标（REST + goal_updated + onConnected 补拉）、待办（REST + todo_updated）、
+       进程（jobs_snapshot + jobs REST 基线）、子代理（ChatPage 下传的 subSessions + sessionStore.streamStatus），
+       各域逻辑见 composables/useGoalStatus.ts、composables/useTodoStatus.ts、
+       composables/useRunningProcesses.ts、utils/subagentDisplay.ts。
        已结束（冻结）子代理不在本胶囊表达（运行时状态专属），回放入口见子代理列表面板
        （workspace/SubagentListPanel.vue）。 -->
   <div v-if="hasAny" class="composer-status-bar" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
     <!-- 外壳：唯一一条药丸，段间以细竖线分隔（同形约定见 ChatPanel 的 .composer-status-row 注释） -->
     <div class="csb-capsule">
+      <!-- ── 会话目标段：截断的目标 + 迭代数/阶段；active/paused 时给暂停/恢复按钮。
+           active 但 armed=false（后端重启）时显示恢复按钮重新激活自动推进。 ── -->
+      <span v-if="goal" class="csb-seg">
+        <span class="csb-icon">
+          <Target20Regular class="w-3.5 h-3.5 csb-icon--muted" />
+        </span>
+        <span class="csb-text" :title="goal.objective">{{ goal.objective }}</span>
+        <span class="csb-count">{{ goalCapsuleText }}</span>
+        <button v-if="goal.phase === 'active' && goalState?.armed !== false" class="csb-goal-btn" :title="t('chat.goal.pause')"
+          :aria-label="t('chat.goal.pause')" @click.stop="pauseGoal">
+          <Pause16Regular class="w-2.5 h-2.5" />
+        </button>
+        <button v-else-if="goal.phase === 'paused' || (goal.phase === 'active' && goalState?.armed === false)"
+          class="csb-goal-btn" :title="goalState?.armed === false ? t('chat.goal.resumeDisarmed') : t('chat.goal.resume')"
+          :aria-label="goalState?.armed === false ? t('chat.goal.resumeDisarmed') : t('chat.goal.resume')"
+          @click.stop="resumeGoal">
+          <Play16Regular class="w-2.5 h-2.5" />
+        </button>
+      </span>
+
       <!-- ── 待办段 ── -->
       <span v-if="todoItems.length" class="csb-seg">
         <span class="csb-icon">
@@ -23,7 +44,7 @@
       <!-- ── 后台进程段：只出数量（接口只返回运行中进程）；
            图标取终端工具同款（TOOL_ICON_MAP 的 terminal → WindowConsole20Filled，
            与对话流里 run_command 工具行一致）——一眼可辨"这是后台命令"；
-           命令等详情在 hover 面板里看（三段可能同时出现，文案会互相挤占宽度） ── -->
+           命令等详情在 hover 面板里看（多段可能同时出现，文案会互相挤占宽度） ── -->
       <span v-if="processes.length" class="csb-seg">
         <span class="csb-icon">
           <WindowConsole20Filled class="w-3.5 h-3.5 csb-icon--muted" />
@@ -48,6 +69,36 @@
     <Transition name="csb-panel">
       <div v-if="panelVisible" class="csb-panel">
         <div class="csb-panel-scroll">
+          <!-- 会话目标：目标全文、阶段、迭代数、token 用量、清除按钮 -->
+          <section v-if="goal" class="csb-section">
+            <header class="csb-sec-head">
+              <span class="csb-sec-title">{{ t('chat.goal.title') }}</span>
+              <span class="csb-sec-count">{{ goalPhaseText }}</span>
+              <GdTooltip :content="t('chat.goal.clear')" placement="bottom">
+                <button class="csb-sec-btn ml-auto" @click="clearGoal">
+                  <Dismiss16Regular class="w-3.5 h-3.5" />
+                </button>
+              </GdTooltip>
+            </header>
+            <div class="csb-list">
+              <div class="csb-row">
+                <span class="csb-row-text csb-goal-objective">{{ goal.objective }}</span>
+              </div>
+              <div class="csb-row">
+                <span class="csb-row-status">{{ t('chat.goal.iteration', { n: goal.iteration }) }}</span>
+                <span class="csb-elapsed ml-auto">{{ goalTokensText }}</span>
+              </div>
+              <div v-if="goal.blockedReason" class="csb-row">
+                <span class="csb-row-text csb-goal-objective">{{ goal.blockedReason }}</span>
+              </div>
+              <div v-if="goalState?.failure" class="csb-row">
+                <span class="csb-row-text csb-goal-objective">
+                  {{ t('chat.goal.failure') }}: {{ goalState.failure }}
+                </span>
+              </div>
+            </div>
+          </section>
+
           <!-- 待办 -->
           <section v-if="todoItems.length" class="csb-section">
             <header class="csb-sec-head">
@@ -123,11 +174,14 @@
 <script setup lang="ts">
 import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, WindowConsole20Filled } from "@vicons/fluent";
+import { ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, Pause16Regular, Play16Regular, Target20Regular, WindowConsole20Filled } from "@vicons/fluent";
 import GdTooltip from "@/components/ui/GdTooltip.vue";
 import WorkflowStatusDot from "@/components/chat/workflow/WorkflowStatusDot.vue";
+import { useGoalStatus } from "@/composables/useGoalStatus";
 import { useTodoStatus } from "@/composables/useTodoStatus";
 import { useRunningProcesses } from "@/composables/useRunningProcesses";
+import { apiService } from "@/services/ApiService";
+import { toast } from "@/components/ui/toastService";
 import { useSessionStore } from "@/stores/session";
 import { shortCommand } from "@/utils/processDisplay";
 import { buildSubagentItems, countRunningSubagents, splitSubagents, type SubagentItem } from "@/utils/subagentDisplay";
@@ -142,6 +196,11 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
+const { state: goalState, refresh: refreshGoal } = useGoalStatus(
+  () => props.sessionId,
+);
+const goal = computed(() => goalState.value?.goal ?? null);
+
 const { items: todoItems, doneCount: todoDoneCount, currentItem: currentTodo } = useTodoStatus(
   () => props.sessionId,
 );
@@ -151,15 +210,70 @@ const { processes, elapsedText, killProcess, openProcessLog } = useRunningProces
 
 const sessionStore = useSessionStore();
 
+/** 详情页阶段文案（胶囊在非 active/paused 阶段也复用） */
+const goalPhaseText = computed(() =>
+  goal.value ? t(`chat.goal.status.${goal.value.phase}`) : '',
+);
+
+/** 胶囊右侧短文案：进行中/暂停显示迭代数，其余阶段显示阶段名 */
+const goalCapsuleText = computed(() => {
+  const g = goal.value;
+  if (!g) return '';
+  return g.phase === 'active' || g.phase === 'paused'
+    ? t('chat.goal.iteration', { n: g.iteration })
+    : goalPhaseText.value;
+});
+
+/** 目标 token 用量：无预算时只显示已用，有预算显示「已用 / 预算」 */
+const goalTokensText = computed(() => {
+  const g = goal.value;
+  if (!g) return '';
+  return g.tokenBudget === null || g.tokenBudget === undefined
+    ? `${g.tokensUsed} tok`
+    : `${g.tokensUsed} / ${g.tokenBudget} tok`;
+});
+
+/** 目标 REST 变更：成功与否都补拉一次，避免本地投影与后端状态漂移 */
+async function mutateGoal(action: () => Promise<unknown>): Promise<void> {
+  try {
+    await action();
+  } catch (error) {
+    console.error("Failed to update session goal:", error);
+    toast.error(t('chat.command.goalError'));
+  }
+  void refreshGoal();
+}
+
+function pauseGoal(): void {
+  const sid = props.sessionId;
+  const g = goal.value;
+  if (!sid || !g) return;
+  void mutateGoal(() => apiService.pauseSessionGoal(sid, g.revision));
+}
+
+function resumeGoal(): void {
+  const sid = props.sessionId;
+  const g = goal.value;
+  if (!sid || !g) return;
+  void mutateGoal(() => apiService.resumeSessionGoal(sid, g.revision));
+}
+
+function clearGoal(): void {
+  const sid = props.sessionId;
+  const g = goal.value;
+  if (!sid || !g) return;
+  void mutateGoal(() => apiService.clearSessionGoal(sid, g.revision));
+}
+
 const subagentItems = computed(() =>
   buildSubagentItems(props.subSessions, (id) => sessionStore.peekStreamStatus(id), t("chat.workspace.subagentTab")),
 );
 const activeSubagents = computed(() => splitSubagents(subagentItems.value).active);
 const runningSubagentCount = computed(() => countRunningSubagents(subagentItems.value));
 
-/** 任一段有内容才有胶囊（三段全空 → 整根不渲染，回到底部按钮的 :has() 锚点依赖此行为） */
+/** 任一段有内容才有胶囊（四段全空 → 整根不渲染，回到底部按钮的 :has() 锚点依赖此行为） */
 const hasAny = computed(
-  () => todoItems.value.length > 0 || processes.value.length > 0 || activeSubagents.value.length > 0,
+  () => !!goal.value || todoItems.value.length > 0 || processes.value.length > 0 || activeSubagents.value.length > 0,
 );
 
 // ── hover 展开（时序与旧 TODO 胶囊一致：进入 120ms 防误触，离开 80ms 防抖动） ──
@@ -444,6 +558,14 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
   font-size: 12px;
   color: var(--gd-color-text-gray);
 }
+/* 目标全文：面板里折行展示（胶囊里才截断），覆盖 .csb-row-text 的 nowrap */
+.csb-goal-objective {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
 .csb-row-status {
   flex: 0 0 auto;
   font-size: 11px;
@@ -477,6 +599,27 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
 .csb-kill:hover {
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
+}
+
+/* 目标段暂停/恢复按钮：常驻（不像终止进程那样仅 hover 显示，避免找不到入口） */
+.csb-goal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gd-color-text-disabled);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.csb-goal-btn:hover {
+  color: var(--gd-color-text);
+  background: var(--gd-color-surface-hover);
 }
 
 /* 面板出入动画：只动 transform 不动 opacity（本环境 rAF 不可靠，opacity 会卡半透明） */

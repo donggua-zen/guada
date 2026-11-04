@@ -5,7 +5,7 @@
  * 避免把正常提问/路径误判成命令。
  */
 
-export const LOCAL_SLASH_COMMAND_NAMES = ['compact', 'compress'] as const;
+export const LOCAL_SLASH_COMMAND_NAMES = ['compact', 'compress', 'goal'] as const;
 
 export type LocalSlashCommandName = (typeof LOCAL_SLASH_COMMAND_NAMES)[number];
 
@@ -13,6 +13,8 @@ export interface LocalSlashCommand {
   name: LocalSlashCommandName;
   /** 命令后的自由文本（`/compact 只保留最近 10 轮`），作为摘要附加指令 */
   instructions?: string;
+  /** 命令后的自由文本（`/goal <objective>`），目标命令的参数原文；与 instructions 同源 */
+  objective?: string;
 }
 
 const COMMAND_RE = /^\s*\/([A-Za-z][\w-]*)(?:\s+([\s\S]*))?$/;
@@ -33,6 +35,9 @@ export function parseLocalSlashCommand(
   const instructions = rawArgs?.trim();
   return {
     name: name as LocalSlashCommandName,
+    // compact 只用 instructions；goal 额外带 objective（目标/子命令原文）。
+    // 不给 compact 附加 objective，避免改变既有命令的返回形状。
     ...(instructions ? { instructions } : {}),
+    ...(instructions && name === 'goal' ? { objective: instructions } : {}),
   };
 }

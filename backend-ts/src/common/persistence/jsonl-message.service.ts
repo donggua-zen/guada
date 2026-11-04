@@ -15,11 +15,14 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   foldEvents,
   createInitialState,
+  goalChangeError,
 } from './replayer';
 import {
   BaseEvent,
   OccupancyAnchor,
   ReplayState,
+  GoalChangeData,
+  GoalFoldState,
   AskAskedData,
   AskAnsweredData,
   SessionModeChangedData,
@@ -33,7 +36,7 @@ import type { MessageEventLog } from './event-log.port';
 import { generateOrderedMessageId } from '../utils/ordered-id.util';
 import { isVisionImageMediaType } from '../utils/media-type.util';
 import { SYNTHETIC_TOOL_INTERRUPTED_TEXT } from '../utils/tool-pairing.util';
-import { CorruptSessionLogError } from './errors';
+import { CorruptSessionLogError, GoalStateError } from './errors';
 import type {
   Turn,
   Message,
@@ -220,7 +223,9 @@ export class JsonlMessageService implements IMessageStore {
       const events = await this.backend.getAllEvents(sessionId);
       return foldEvents(events, createInitialState());
     }
-    // 形状守卫：旧 version 快照（turns 形状）→ 回退全量重放
+    // 形状守卫：旧 version 快照（turns 形状）→ 回退全量重放。
+    // goal 是后续新增字段：现存快照都产生于 goal 事件存在之前，缺字段天然等价
+    // 「无目标」，无需 bump 快照版本、也无需回退重放。
     const snapshotState = snapshot.state as Partial<ReplayState> | null;
     if (!snapshotState || !Array.isArray(snapshotState.messages)) {
       this.logger.warn(
@@ -229,6 +234,8 @@ export class JsonlMessageService implements IMessageStore {
       const events = await this.backend.getAllEvents(sessionId);
       return foldEvents(events, createInitialState());
     }
+    snapshotState.goal ??= null;
+    snapshotState.goalFailure ??= null;
     // 快照 + 跨卷增量（首条 session/rotate 由 replayer no-op 忽略）
     const tail = await this.backend.readEvents(
       sessionId,
@@ -494,6 +501,83 @@ export class JsonlMessageService implements IMessageStore {
   async getOccupancyAnchor(sessionId: string): Promise<OccupancyAnchor | null> {
     const state = await this.getState(sessionId);
     return state.occupancyAnchor ?? null;
+  }
+
+  /**
+   * 会话目标折叠态：与 loadContext 共用同一回放态缓存（热路径 O(1)）。
+   * 旧快照无 goal 字段 → 无目标；lastSeq 供前端防晚到响应覆盖。
+   */
+  async getGoalState(sessionId: string): Promise<GoalFoldState> {
+    const state = await this.getState(sessionId);
+    return {
+      goal: state.goal ?? null,
+      lastSeq: state.lastProcessedSeq,
+      failure: state.goalFailure ?? null,
+    };
+  }
+
+  /**
+   * 追加 goal/change（**唯一事实源**）。
+   *
+   * CAS 门在 runExclusive 临界区内整体完成「读折叠态 → 校验期望版本 → 预检状态迁移
+   * → 追加 → 增量 fold」。runExclusive 的注释明确「读取不走锁」，所以读必须放在锁内，
+   * 否则两个窗口 / 异步 verifier 会各自读到旧状态再先后写入。
+   *
+   * 预检复用 replayer 的 goalChangeError：非法迁移绝不落盘（落盘会毒化折叠态，
+   * 后续每次重放都记 goalFailure）。写失败不推进状态——日志是唯一事实源。
+   */
+  async appendGoalChange(
+    sessionId: string,
+    data: GoalChangeData,
+    options?: { expectedRevision?: number; expectedGoalId?: string },
+  ): Promise<{ seq: number; revision: number }> {
+    return this.runExclusive(sessionId, async () => {
+      const state = await this.getState(sessionId);
+      if (state.goalFailure) {
+        throw new GoalStateError(
+          `goal state is corrupt for ${sessionId}: ${state.goalFailure}`,
+          'GOAL_STATE_CORRUPT',
+        );
+      }
+      const current = state.goal ?? null;
+      const currentRevision = current?.revision ?? 0;
+      if (
+        options?.expectedRevision !== undefined &&
+        options.expectedRevision !== currentRevision
+      ) {
+        throw new GoalStateError(
+          `stale goal revision for ${sessionId}: expected ${options.expectedRevision}, current ${currentRevision}`,
+          'GOAL_STALE_REVISION',
+        );
+      }
+      if (
+        options?.expectedGoalId !== undefined &&
+        current?.goalId !== options.expectedGoalId
+      ) {
+        throw new GoalStateError(
+          `stale goalId for ${sessionId}: expected ${options.expectedGoalId}, current ${current?.goalId ?? 'none'}`,
+          'GOAL_STALE_REVISION',
+        );
+      }
+      const error = goalChangeError(state, data);
+      if (error) {
+        throw new GoalStateError(
+          `invalid goal change for ${sessionId}: ${error}`,
+          'GOAL_INVALID_TRANSITION',
+        );
+      }
+      const finalized = await this.append(sessionId, {
+        type: 'goal/change',
+        time: Date.now(),
+        data: {
+          operation: data.operation,
+          goal: data.goal,
+          ...(data.clearedGoalId === undefined ? {} : { clearedGoalId: data.clearedGoalId }),
+          ...(data.reason === undefined ? {} : { reason: data.reason }),
+        },
+      });
+      return { seq: finalized.seq, revision: data.goal?.revision ?? 0 };
+    });
   }
 
   /**

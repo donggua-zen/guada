@@ -26,6 +26,8 @@ import {
   ToolImagePruneData,
   ContextStatsData,
   CompactionSummaryData,
+  GoalChangeData,
+  GoalSnapshot,
   MessageFile,
   PRUNE_STRATEGY_USER_EDIT,
   PRUNE_STRATEGY_THINKING_STRIP,
@@ -50,7 +52,105 @@ export function createInitialState(): ReplayState {
     lastProcessedSeq: -1,
     openCompactionSeq: null,
     occupancyAnchor: null,
+    goal: null,
+    goalFailure: null,
   };
+}
+
+/** goal 状态机允许的 phase 迁移（from → to），null 表示「无当前目标」 */
+const GOAL_PHASE_TRANSITIONS: Record<string, Array<GoalSnapshot['phase'] | null>> = {
+  create: [null],
+  edit: ['active', 'paused'],
+  pause: ['active'],
+  resume: ['paused', 'blocked'],
+  complete: ['active'],
+  block: ['active'],
+  budget_limited: ['active'],
+  verification: ['active'],
+  iteration: ['active'],
+  clear: ['active', 'paused', 'blocked', 'complete', 'budget_limited'],
+};
+
+/** 目标快照能否由该操作产生（目标 phase 与操作语义一致） */
+const GOAL_EXPECTED_PHASE: Record<string, GoalSnapshot['phase'] | 'unchanged' | 'none'> = {
+  create: 'active',
+  edit: 'unchanged',
+  pause: 'paused',
+  resume: 'active',
+  complete: 'complete',
+  block: 'blocked',
+  budget_limited: 'budget_limited',
+  verification: 'unchanged',
+  iteration: 'unchanged',
+  clear: 'none',
+};
+
+/**
+ * 纯校验一条 goal/change：返回首个错误原因，合法返回 null（不修改 state）。
+ *
+ * 供两处复用：
+ * - foldGoalChange（重放时，失败只记 goalFailure 不抛）
+ * - JsonlMessageService.appendGoalChange（写入前预检，防止非法事件落盘后毒化折叠态）
+ */
+export function goalChangeError(state: ReplayState, data: GoalChangeData | null): string | null {
+  if (!data || typeof data !== 'object' || typeof data.operation !== 'string') {
+    return 'malformed payload';
+  }
+  const allowedFrom = GOAL_PHASE_TRANSITIONS[data.operation];
+  if (!allowedFrom) return `unknown operation "${data.operation}"`;
+  const current = state.goal ?? null;
+  const from = current?.phase ?? null;
+  if (!allowedFrom.includes(from)) {
+    return `illegal phase transition ${from ?? 'none'} -> ${data.operation}`;
+  }
+  if (data.operation === 'clear') {
+    if (!current) return 'clear with no active goal';
+    if (data.goal !== null) return 'clear must carry a null snapshot';
+    return null;
+  }
+  const next = data.goal;
+  if (!next || typeof next !== 'object') return 'missing goal snapshot';
+  if (data.operation === 'create') {
+    if (next.phase !== 'active' || next.revision !== 1) {
+      return 'create requires phase=active and revision=1';
+    }
+  } else {
+    if (!current) return `${data.operation} with no active goal`;
+    if (next.goalId !== current.goalId) return 'goalId mismatch';
+    if (next.revision !== current.revision + 1) {
+      return `revision gap (expected ${current.revision + 1}, got ${next.revision})`;
+    }
+    const expected = GOAL_EXPECTED_PHASE[data.operation];
+    if (expected === 'unchanged' && next.phase !== current.phase) {
+      return `${data.operation} must keep phase ${current.phase}`;
+    }
+    if (expected !== 'unchanged' && next.phase !== expected) {
+      return `${data.operation} requires phase=${expected}, got ${next.phase}`;
+    }
+  }
+  if (typeof next.objective !== 'string' || !next.objective.trim()) return 'empty objective';
+  if (!Number.isFinite(next.iteration) || next.iteration < 0
+    || !Number.isFinite(next.maxRounds) || next.maxRounds <= 0) {
+    return 'invalid iteration/maxRounds';
+  }
+  return null;
+}
+
+/**
+ * 折叠单条 goal/change（严格校验，last-wins 全量快照）。
+ *
+ * 事实源只有日志：与 session/mode_changed 的「只审计不折叠」相反，这里必须真正
+ * 把快照折叠进 ReplayState，冷加载才能恢复。校验失败只记 goalFailure，**不抛异常**——
+ * 消息是主链路，一个坏 goal 事件不能让整个会话打不开；GoalService 见 failure 拒绝推进。
+ */
+export function foldGoalChange(state: ReplayState, event: BaseEvent): void {
+  const data = event.data as unknown as GoalChangeData | null;
+  const error = goalChangeError(state, data);
+  if (error) {
+    state.goalFailure ??= `goal/change at seq ${event.seq}: ${error}`;
+    return;
+  }
+  state.goal = data!.goal;
 }
 
 /**
@@ -352,6 +452,13 @@ export function foldEvent(
     // 无状态透传：事实源是 session.settings，本事件只作审计与切换历史。
     // 刻意不折叠进 ReplayState——若从这里恢复，会与 settings 形成第二个状态源。
     case 'session/mode_changed':
+      break;
+
+    // ─── 会话目标：唯一事实源在本事件，必须折叠进 ReplayState ───
+    // 与 session/mode_changed 相反（那个的事实源在 session.settings）。
+    // 严格校验失败只记 goalFailure，不阻塞消息折叠。
+    case 'goal/change':
+      foldGoalChange(state, event);
       break;
 
     // ─── command/run + command/done：不再折叠进 state.messages（S0 移除历史遗留）───

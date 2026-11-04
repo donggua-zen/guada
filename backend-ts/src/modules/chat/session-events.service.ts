@@ -10,6 +10,7 @@ import {
   SubAgentCreatedEvent,
   SubAgentClosedEvent,
   TodoUpdatedEvent,
+  GoalUpdatedEvent,
   UserQueueChangedEvent,
   BotStatusChangedEvent,
   BotChangedEvent,
@@ -42,6 +43,7 @@ export type SessionEventType =
   | "sub_agent_create"
   | "sub_agent_closed"
   | "todo_updated"
+  | "goal_updated"
   | "jobs_snapshot"
   | "plugins_changed"
   | "queue_updated"
@@ -353,6 +355,17 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   handleTodoUpdated(event: TodoUpdatedEvent) {
     this.broadcastToAllClients(
       toSessionEvent("todo_updated", event),
+    );
+  }
+
+  /**
+   * 会话目标更新 → SSE。非流事件、不进 catchup buffer；前端重连靠
+   * `onConnected` 的 GET /sessions/:id/goal 补拉（与 todo 同款语义）。
+   */
+  @OnEvent(HOOKS.GOAL_UPDATED)
+  handleGoalUpdated(event: GoalUpdatedEvent) {
+    this.broadcastToAllClients(
+      toSessionEvent("goal_updated", event),
     );
   }
 

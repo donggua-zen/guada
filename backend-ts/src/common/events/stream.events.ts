@@ -140,6 +140,24 @@ export interface TodoUpdatedEvent {
 }
 
 /**
+ * 会话目标更新事件（内部模块间使用）
+ *
+ * 事件名：goal.updated
+ * 非流事件：SSE 不补发，前端重连靠 GET /sessions/:id/goal 补拉。
+ */
+export interface GoalUpdatedEvent {
+  sessionId: string;
+  timestamp: string;
+  source?: string;
+  payload?: {
+    action?: string;
+    goal?: unknown;
+    lastSeq?: number;
+    failure?: string | null;
+  };
+}
+
+/**
  * 机器人运行状态变化事件（内部模块间使用）
  *
  * 事件名：bot.status_changed
@@ -206,6 +224,7 @@ export function toSessionEvent(
     | SubAgentCreatedEvent
     | SubAgentClosedEvent
     | TodoUpdatedEvent
+    | GoalUpdatedEvent
     | UserQueueChangedEvent,
 ): SessionEvent {
   return {

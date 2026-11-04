@@ -1798,10 +1798,32 @@ async function copyMessage(block: MessageActionTarget) {
 }
 
 /**
- * 发送本地斜杠命令（当前仅 /compact、/compress）。
+ * 命令被拒绝时把文本放回输入框（ChatInput.sendMessage 会在 emit 后同步清空编辑器）。
+ * nextTick 确保恢复发生在清空之后，否则会被紧随其后的 clearContent 覆盖。
+ */
+function restoreRejectedInput(originalContent: string): void {
+  void nextTick(() => {
+    if (!inputMessage.value.content) {
+      inputMessage.value.content = originalContent;
+    }
+  });
+}
+
+/** 按命令名（及 /goal 子动作）选择成功文案；执行逻辑仍在后端，这里只管提示。 */
+function localCommandSuccessKey(command: LocalSlashCommand): string {
+  if (command.name !== 'goal') return 'chat.memo.compressStarted';
+  const verb = command.objective?.trim().split(/\s+/)[0]?.toLowerCase();
+  if (verb === 'clear') return 'chat.command.goalCleared';
+  if (verb === 'pause') return 'chat.command.goalPaused';
+  if (verb === 'resume') return 'chat.command.goalResumed';
+  return 'chat.command.goalSet';
+}
+
+/**
+ * 发送本地斜杠命令（/compact、/compress、/goal 及其子命令）。
  *
  * 执行逻辑只留在后端：这里仍走统一的 `/chat/stream` 入口，由后端在落库/建流前识别
- * 本地命令并转手动压缩。前端只负责前置门控（流式中/附件）、输入恢复与结果提示，
+ * 本地命令并转手动压缩或目标变更。前端只负责前置门控（流式中/附件）、输入恢复与结果提示，
  * 保证"命令文本不落库、不进 LLM"的定义只有后端一处（也便于未来命令插件化）。
  */
 async function sendLocalSlashCommand(
@@ -1811,23 +1833,14 @@ async function sendLocalSlashCommand(
 ) {
   const sessionId = currentSessionId.value;
   if (!sessionId) return;
-  // 命令被拒绝时把文本放回输入框（ChatInput.sendMessage 会在 emit 后同步清空编辑器）。
-  // nextTick 确保恢复发生在清空之后，否则会被紧随其后的 clearContent 覆盖。
-  const restoreInput = () => {
-    void nextTick(() => {
-      if (!inputMessage.value.content) {
-        inputMessage.value.content = originalContent;
-      }
-    });
-  };
   if (fileCount > 0) {
     toast.warning(t('chat.command.attachmentsNotSupported'));
-    restoreInput();
+    restoreRejectedInput(originalContent);
     return;
   }
   if (isStreaming.value || sessionStore.sessionIsCompressing(sessionId)) {
     toast.warning(t('chat.memo.streamingWarning'));
-    restoreInput();
+    restoreRejectedInput(originalContent);
     return;
   }
   try {
@@ -1838,7 +1851,7 @@ async function sendLocalSlashCommand(
       userMessage: { content: originalContent },
     });
     if (res?.localCommand) {
-      toast.success(t('chat.memo.compressStarted'));
+      toast.success(t(localCommandSuccessKey(command)));
       return;
     }
     // 理论上不会走到：后端词表未同步（前端识别为命令、后端按普通消息处理）。
@@ -1855,9 +1868,12 @@ async function sendLocalSlashCommand(
     ) {
       toast.warning(t('chat.memo.streamingWarning'));
     } else {
-      toast.error(msg || t('chat.memo.compressFailed'));
+      const fallback = command.name === 'goal'
+        ? t('chat.command.goalError')
+        : t('chat.memo.compressFailed');
+      toast.error(msg || fallback);
     }
-    restoreInput();
+    restoreRejectedInput(originalContent);
   }
 }
 
@@ -1906,10 +1922,25 @@ async function handleSendMessage(payload?: InputMessageState) {
   try {
     const { content, files, knowledgeBaseIds } = data;
 
-    // 本地斜杠命令（/compact）：控制指令，直接执行，不进消息队列、不发模型。
+    // 本地斜杠命令（/compact、/goal）：控制指令，直接执行，不进消息队列、不发模型。
     // 必须在"流式入队"之前拦截——否则命令会被当成普通文本排队，流结束后再发给模型。
     const localCommand = parseLocalSlashCommand(content);
     if (localCommand) {
+      if (localCommand.name === 'goal') {
+        const sid = currentSessionId.value;
+        // 计划模式与目标循环互斥：两者都会改写回合编排，交给后端之前先拦下
+        if (sid && sessionStore.sessionPlanEnabled(sid)) {
+          toast.warning(t('chat.command.goalPlanConflict'));
+          restoreRejectedInput(content);
+          return;
+        }
+        // /goal 无参数 = 空目标：后端不接收，提示用户补齐后重发
+        if (!localCommand.objective) {
+          toast.warning(t('chat.command.goalRequiresObjective'));
+          restoreRejectedInput(content);
+          return;
+        }
+      }
       await sendLocalSlashCommand(localCommand, files.length, content);
       return;
     }

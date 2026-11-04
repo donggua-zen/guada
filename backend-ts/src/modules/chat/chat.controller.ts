@@ -25,6 +25,7 @@ import { ChatRunnerService } from "./chat-runner.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 import { InteractionWaitService } from "../../common/services/interaction-wait.service";
 import { parseLocalSlashCommand } from "./commands/local-slash-command";
+import { LocalSlashCommandRegistry } from "./commands/local-slash-command.registry";
 import { normalizeWorkflowCommandInput } from "../workflow/workflow.command";
 import { normalizeTurnSettingsOverride } from "./types/turn-settings-override";
 import { UserInputQueueService } from "./user-input-queue.service";
@@ -41,6 +42,7 @@ export class ChatController {
     private tagParserPipeline: TagParserPipeline,
     private interactionWait: InteractionWaitService,
     private userInputQueue: UserInputQueueService,
+    private localCommands: LocalSlashCommandRegistry,
   ) {}
 
   /**
@@ -109,23 +111,46 @@ export class ChatController {
         });
       }
       try {
-        const result = await this.sessionService.compressSession(sessionId, {
-          instructions: localCommand.instructions,
-        });
-        if (!res.writableEnded) {
-          res.status(200).json({
-            ok: true,
-            localCommand: {
-              name: localCommand.name,
-              ...(localCommand.instructions === undefined
-                ? {}
-                : { instructions: localCommand.instructions }),
-              started: result?.started === true,
-            },
+        if (localCommand.name === 'compact' || localCommand.name === 'compress') {
+          const result = await this.sessionService.compressSession(sessionId, {
+            instructions: localCommand.instructions,
           });
+          if (!res.writableEnded) {
+            res.status(200).json({
+              ok: true,
+              localCommand: {
+                name: localCommand.name,
+                ...(localCommand.instructions === undefined
+                  ? {}
+                  : { instructions: localCommand.instructions }),
+                started: result?.started === true,
+              },
+            });
+          }
+        } else {
+          // 其余本地命令由功能模块在 onModuleInit 注册的 handler 执行
+          // （如 /goal）。ChatModule 不反向依赖功能模块，避免循环。
+          if (!this.localCommands.has(localCommand.name)) {
+            throw new BadRequestException({
+              error: `本地命令 ${localCommand.name} 未注册处理器`,
+              code: 'LOCAL_COMMAND_NO_HANDLER',
+            });
+          }
+          const result = await this.localCommands.dispatch(localCommand.name, {
+            sessionId,
+            clientId,
+            args: localCommand.instructions,
+            raw: localCommand.raw,
+          });
+          if (!res.writableEnded) {
+            res.status(200).json({
+              ok: true,
+              localCommand: { name: localCommand.name, ...result },
+            });
+          }
         }
       } catch (error: any) {
-        this.respondStartError(res, error, "压缩启动失败");
+        this.respondStartError(res, error, "命令执行失败");
       }
       return;
     }

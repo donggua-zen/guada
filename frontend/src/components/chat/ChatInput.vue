@@ -1428,6 +1428,14 @@ const localSlashCommandItems = (): SkillCommand[] => [
     trigger: 'slash',
     local: true,
   },
+  {
+    name: 'goal',
+    label: 'goal',
+    description: t('chat.command.goalDescription'),
+    providerId: 'local',
+    trigger: 'slash',
+    local: true,
+  },
 ];
 
 const loadCommands = async (trigger: 'slash' | 'mention') => {

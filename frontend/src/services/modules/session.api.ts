@@ -1,5 +1,5 @@
 import type { ApiContext } from "./api-context";
-import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, SidebarProjectSessionsResponse, ProjectGroup, GroupStats, ArchiveSessionGroupResult, ArchiveProjectGroupResult, DeleteProjectGroupResult, CreateSessionRequest, UpdateSessionRequest, SessionPlanItem } from "@/types/session";
+import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, SidebarProjectSessionsResponse, ProjectGroup, GroupStats, ArchiveSessionGroupResult, ArchiveProjectGroupResult, DeleteProjectGroupResult, CreateSessionRequest, UpdateSessionRequest, SessionPlanItem, GoalStateResponse } from "@/types/session";
 
 export interface SessionApi {
   createSession(data: CreateSessionRequest): Promise<Session>;
@@ -318,6 +318,28 @@ export interface SessionApi {
   ): Promise<{ items: SessionSummaryItem[]; total: number }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
   getSessionTodo(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
+  /** 会话目标全量状态（REST 基线；SSE goal_updated 不补发，重连需重拉） */
+  getSessionGoal(sessionId: string): Promise<GoalStateResponse>;
+  /** 新建/覆盖目标：expectedRevision 为乐观锁，缺省由后端按当前 revision 处理 */
+  setSessionGoal(
+    sessionId: string,
+    data: {
+      objective: string;
+      maxRounds?: number;
+      tokenBudget?: number | null;
+      expectedRevision?: number;
+    },
+  ): Promise<GoalStateResponse>;
+  /** 清除目标（DELETE 带请求体） */
+  clearSessionGoal(sessionId: string, expectedRevision?: number): Promise<GoalStateResponse>;
+  /** 暂停目标迭代 */
+  pauseSessionGoal(
+    sessionId: string,
+    expectedRevision: number,
+    reason?: string,
+  ): Promise<GoalStateResponse>;
+  /** 恢复目标迭代 */
+  resumeSessionGoal(sessionId: string, expectedRevision: number): Promise<GoalStateResponse>;
   /** bootId = 后端进程启动标识：变化即 revision 语义重置（后端重启后 revision 归零） */
   getSessionJobs(
     sessionId: string,
@@ -624,6 +646,52 @@ export const sessionApi: SessionApi = {
 
   async getSessionTodo(this: ApiContext, sessionId: string) {
     return await this._request(`/sessions/${sessionId}/todo`);
+  },
+
+  async getSessionGoal(this: ApiContext, sessionId: string) {
+    return await this._request<GoalStateResponse>(`/sessions/${sessionId}/goal`);
+  },
+
+  async setSessionGoal(
+    this: ApiContext,
+    sessionId: string,
+    data: {
+      objective: string;
+      maxRounds?: number;
+      tokenBudget?: number | null;
+      expectedRevision?: number;
+    },
+  ) {
+    return await this._request<GoalStateResponse>(`/sessions/${sessionId}/goal`, {
+      method: "PUT",
+      data,
+    });
+  },
+
+  async clearSessionGoal(this: ApiContext, sessionId: string, expectedRevision?: number) {
+    return await this._request<GoalStateResponse>(`/sessions/${sessionId}/goal`, {
+      method: "DELETE",
+      data: expectedRevision === undefined ? {} : { expectedRevision },
+    });
+  },
+
+  async pauseSessionGoal(
+    this: ApiContext,
+    sessionId: string,
+    expectedRevision: number,
+    reason?: string,
+  ) {
+    return await this._request<GoalStateResponse>(`/sessions/${sessionId}/goal/pause`, {
+      method: "POST",
+      data: reason === undefined ? { expectedRevision } : { expectedRevision, reason },
+    });
+  },
+
+  async resumeSessionGoal(this: ApiContext, sessionId: string, expectedRevision: number) {
+    return await this._request<GoalStateResponse>(`/sessions/${sessionId}/goal/resume`, {
+      method: "POST",
+      data: { expectedRevision },
+    });
   },
 
   async getSessionJobs(this: ApiContext, sessionId: string) {

@@ -87,6 +87,12 @@ export interface IMessageStore {
    */
   getOccupancyAnchor?(sessionId: string): Promise<OccupancyAnchor | null>;
 
+  /**
+   * 会话目标折叠态（唯一事实源是 goal/change 事件，不是 _meta.db）。
+   * 与 loadContext 共用同一回放态缓存；旧快照无该字段 → 无目标。
+   */
+  getGoalState(sessionId: string): Promise<import('./types').GoalFoldState>;
+
   // ─── 写入 ───
   // 版本号契约：revision 由写入方在写入时随返回值原子给出（本批次最后事件的 seq），
   // 消费方绝不事后查询 getLastProcessedSeq——写入与查询之间的并发写会让
@@ -283,6 +289,21 @@ export interface IMessageStore {
     sessionId: string,
     data: import('./types').SessionModeChangedData,
   ): Promise<void>;
+
+  /**
+   * 追加会话目标变更事件（goal/change，**事实源**）。
+   *
+   * CAS 门在 runExclusive 临界区内完成「读折叠态 → 校验 expectedRevision/goalId
+   * → 预检状态迁移 → 追加 → 增量 fold」，防止两个窗口或异步 verifier 基于旧状态写入。
+   * @param options.expectedRevision 期望的当前逻辑版本号（0 = 无目标）
+   * @param options.expectedGoalId 期望的当前目标 id（undefined = 不校验）
+   * @returns 写入后版本号（本事件 seq）与新逻辑版本号
+   */
+  appendGoalChange(
+    sessionId: string,
+    data: import('./types').GoalChangeData,
+    options?: { expectedRevision?: number; expectedGoalId?: string },
+  ): Promise<{ seq: number; revision: number }>;
 
   // ─── 会话生命周期 / 内部维护 ───
   /** 懒创建语义：会话不存在则创建存储（新会话/断点恢复前调用） */

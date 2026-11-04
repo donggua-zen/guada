@@ -24,3 +24,14 @@ export class CorruptSessionLogError extends Error {
     this.name = "CorruptSessionLogError";
   }
 }
+
+/** 会话目标写入被拒绝（CAS 陈旧 / 折叠态损坏 / 非法状态迁移） */
+export class GoalStateError extends Error {
+  constructor(
+    message: string,
+    readonly code: 'GOAL_STALE_REVISION' | 'GOAL_STATE_CORRUPT' | 'GOAL_INVALID_TRANSITION',
+  ) {
+    super(message);
+    this.name = 'GoalStateError';
+  }
+}

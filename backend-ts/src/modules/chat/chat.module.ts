@@ -47,6 +47,7 @@ import { PlanHistoryService } from "./plan-history.service";
 import { SessionModelBackfillService } from "./session-model-backfill.service";
 import { ClaudeImportController } from "./claude-import/claude-import.controller";
 import { ClaudeImportService } from "./claude-import/claude-import.service";
+import { LocalSlashCommandRegistry } from "./commands/local-slash-command.registry";
 
 // 标签解析器
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
@@ -89,10 +90,12 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
     // 标签解析器管道
     TagParserPipeline,
+    // 本地斜杠命令执行注册表（功能模块在 onModuleInit 注册自己的 handler）
+    LocalSlashCommandRegistry,
   ],
   // 会话存储门面由全局 StoreModule 提供（@Global），这里不再重复 provider；
   // 跨域消费者直接 @Inject(SESSION_STORE_TOKEN)，无需 import ChatModule。
-  exports: [AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory, UserInputQueueService],
+  exports: [AgentEngine, SessionService, SessionEventsService, ChatRunnerService, SessionContextFactory, UserInputQueueService, LocalSlashCommandRegistry],
 })
 export class ChatModule implements OnModuleInit {
   private readonly logger = new Logger(ChatModule.name);

@@ -41,6 +41,8 @@ export const HOOKS = {
   MEMORY_COMPACTED: 'memory.compacted',
   /** 待办更新（前端刷新） */
   TODO_UPDATED: 'todo.updated',
+  /** 会话目标更新（前端胶囊 REST 重拉；SSE 不补发该事件） */
+  GOAL_UPDATED: 'goal.updated',
 } as const;
 
 export type HookName = (typeof HOOKS)[keyof typeof HOOKS];

@@ -177,6 +177,45 @@ export interface SessionPlanItem {
     path: string | null
 }
 
+/** 会话目标阶段 */
+export type SessionGoalPhase = 'active' | 'paused' | 'blocked' | 'complete' | 'budget_limited'
+
+/** 最近一次目标校验结果 */
+export interface SessionGoalVerification {
+    passed: boolean
+    reason: string
+    nextAction: string | null
+    /** 校验时间（Unix 毫秒） */
+    at: number
+}
+
+/** 后端 GoalSnapshot：会话目标（自主迭代循环）的持久化状态 */
+export interface SessionGoal {
+    goalId: string
+    revision: number
+    objective: string
+    phase: SessionGoalPhase
+    blockedReason?: string | null
+    maxRounds: number
+    iteration: number
+    tokensUsed: number
+    tokenBudget: number | null
+    lastVerification?: SessionGoalVerification | null
+    /** 创建时间（Unix 毫秒） */
+    createdAt: number
+    /** 更新时间（Unix 毫秒） */
+    updatedAt: number
+}
+
+/** 目标 REST 统一响应（GET/PUT/DELETE/pause/resume 同形；goal_updated.payload 亦同形） */
+export interface GoalStateResponse {
+    goal: SessionGoal | null
+    lastSeq: number
+    failure: string | null
+    /** 进程内激活态：后端重启后为 false（目标仍在但不会自动续跑），须显式 resume */
+    armed: boolean
+}
+
 /** 一次挂起中的交互（会话级统一交互卡队列的元素） */
 export interface PendingAsk {
     /** 临时凭证 id（uuid，应答提交时回传匹配等待者） */
@@ -224,6 +263,11 @@ export interface SessionState {
      * 消费方：计划面板、起始页入口、审批卡「查看完整计划」。
      */
     plans?: SessionPlanItem[]
+    /**
+     * 会话目标（session goal）UI 投影：事实源在后端，胶囊经 useGoalStatus 独立
+     * REST 基线 + SSE 重拉；本字段作为会话状态里的可选快照，供统一订阅器写入。
+     */
+    goal?: SessionGoal | null
     /** 会话内容缓存已加载标记:二次打开时不再向后端拉取,仅靠订阅增量补新 */
     loaded?: boolean
     /** 历史是否还有更早回合(分页游标状态,按会话记忆;组件级单例 ref 切会话会串) */

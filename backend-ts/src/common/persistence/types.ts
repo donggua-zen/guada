@@ -40,7 +40,8 @@ export type EventType =
   | 'ask/asked'
   | 'ask/answered'
   | 'session/mode_changed'
-  | 'context/stats';
+  | 'context/stats'
+  | 'goal/change';
 
 // ─── 基础事件 ───
 
@@ -416,6 +417,77 @@ export interface SessionModeChangedData {
   toolCallId?: string;
 }
 
+// ─── 会话目标（goal：唯一事实源是 JSONL 事件日志）───
+
+/** 目标生命周期状态 */
+export type GoalPhase =
+  | 'active'
+  | 'paused'
+  | 'blocked'
+  | 'complete'
+  | 'budget_limited';
+
+/** 一次独立校验器的判定结果 */
+export interface GoalVerificationResult {
+  passed: boolean;
+  reason: string;
+  nextAction: string | null;
+  at: number;
+}
+
+/**
+ * 目标全量快照（goal/change 事件的 data.goal）。
+ *
+ * 事件只追加、快照整体替换：折叠态 = 最后一条有效 goal/change 的快照，
+ * 不存在增量补丁，避免重放顺序敏感。
+ */
+export interface GoalSnapshot {
+  goalId: string;
+  /** 逻辑版本号：每次持久化变更 +1；CAS 依据，不是日志 seq */
+  revision: number;
+  objective: string;
+  phase: GoalPhase;
+  /** phase=blocked/budget_limited 时的原因 */
+  blockedReason?: string | null;
+  maxRounds: number;
+  iteration: number;
+  tokensUsed: number;
+  tokenBudget: number | null;
+  lastVerification?: GoalVerificationResult | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** goal/change 事件负载：全量快照 or clear 墓碑 */
+export interface GoalChangeData {
+  operation:
+    | 'create'
+    | 'edit'
+    | 'pause'
+    | 'resume'
+    | 'complete'
+    | 'block'
+    | 'budget_limited'
+    | 'verification'
+    | 'iteration'
+    | 'clear';
+  /** 变更后的全量快照；clear 为 null */
+  goal: GoalSnapshot | null;
+  /** clear 时的目标 id（墓碑保留，便于审计） */
+  clearedGoalId?: string;
+  /** 人类可读的变更原因（校验器判定、用户取消等） */
+  reason?: string;
+}
+
+/** 读接口返回的视图：当前目标 + 折叠水位 + 首个重放错误 */
+export interface GoalFoldState {
+  goal: GoalSnapshot | null;
+  /** 折叠水位（lastProcessedSeq），前端防晚到响应覆盖 */
+  lastSeq: number;
+  /** 严格重放遇到的首个错误；非空时 GoalService 拒绝推进 */
+  failure: string | null;
+}
+
 // ─── 回放产物（扁平消息 surface，对齐 DSH）───
 
 /**
@@ -483,6 +555,13 @@ export interface ReplayState {
   openCompactionSeq?: number | null;
   /** 最新视图占用锚点（见 OccupancyAnchor）；缺省 = 无锚点（回退纯启发式） */
   occupancyAnchor?: OccupancyAnchor | null;
+  /**
+   * 会话目标当前快照（唯一事实源是 goal/change 事件，不是 _meta.db）。
+   * 随 ReplayState 一起进 snapshot.json；旧快照无该字段 → null（等价「无目标」）。
+   */
+  goal?: GoalSnapshot | null;
+  /** goal/change 严格重放的首个错误；非空时 GoalService 拒绝推进 */
+  goalFailure?: string | null;
 }
 
 export interface Envelope {

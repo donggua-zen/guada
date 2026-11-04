@@ -36,6 +36,7 @@ const PURPOSE_SOURCE: Record<string, UsageSource> = {
   commit_message: "commit_message",
   memory_sync: "memory_sync",
   image_recognition: "image_recognition",
+  goal_verification: "goal_verification",
 };
 
 /** 图表最多展示的天数：all 范围也只看近一年趋势，汇总仍为全量 */

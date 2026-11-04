@@ -45,7 +45,12 @@ export type QueueSource =
    * 引擎终止本轮并把文字随 run() 返回值交回，这里作为**真实用户消息**入队开启新轮次。
    * 刻意不进 toMessageSource 映射——折叠时走默认 kind='user'，渲染与手打消息无异。
    */
-  | { kind: "plan_feedback"; [key: string]: any };
+  | { kind: "plan_feedback"; [key: string]: any }
+  /**
+   * 会话目标自动续跑：校验器判未完成后入队的下一轮指令。
+   * hidden:true 会随 source 合并进 userMessage.metadata，前端据此隐藏该消息。
+   */
+  | { kind: "goal"; goalId?: string; iteration?: number; hidden?: boolean; [key: string]: any };
 
 /**
  * QueueSource → MessageSource（P4b：队列来源真正进入三层消息的 source）
@@ -73,6 +78,9 @@ export function toMessageSource(
         processId: source.processId,
         ...(source.jobId ? { jobId: source.jobId } : {}),
       };
+    case "goal":
+      // 目标续跑：模型可见但前端隐藏（metadata.hidden 由 startStream 合并 source 时写入）
+      return { kind: "plugin", plugin: "goal" };
     default:
       return undefined;
   }
@@ -740,6 +748,10 @@ export class ChatRunnerService {
           userMessage: {
             blocks: mergedBlocks,
             ...(messageSource ? { source: messageSource } : {}),
+            // goal 续跑消息用户不可见：hidden 随 source 合并进 metadata
+            ...((mergedSource as Record<string, unknown>).hidden === true
+              ? { metadata: { hidden: true } }
+              : {}),
           },
           regenerationMode: "overwrite",
           source: mergedSource,

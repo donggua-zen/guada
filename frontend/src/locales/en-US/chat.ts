@@ -388,6 +388,24 @@
     },
   },
 
+  // ── Session goal (runtime capsule + hover details) ──
+  goal: {
+    title: 'Session Goal',
+    pause: 'Pause goal',
+    resume: 'Resume goal',
+    resumeDisarmed: 'Re-enable (manual resume after server restart)',
+    clear: 'Clear goal',
+    iteration: 'Round {n}',
+    status: {
+      active: 'Active',
+      paused: 'Paused',
+      blocked: 'Blocked',
+      complete: 'Complete',
+      budget_limited: 'Budget limited',
+    },
+    failure: 'Last failure',
+  },
+
   // ── 工作区 ──
   workspace: {
     back: 'Back',
@@ -547,10 +565,18 @@
     createWindowFailed: 'Failed to create window',
   },
 
-  // ── Local slash commands (/compact etc., not sent to the LLM) ──
+  // ── Local slash commands (/compact, /goal etc., not sent to the LLM) ──
   command: {
     compactDescription: 'Compact the current conversation context (optional summary instructions)',
     attachmentsNotSupported: 'Slash commands do not support attachments. Remove them and retry.',
+    goalDescription: 'Set a session goal (/goal <objective>; supports pause / resume / clear / edit)',
+    goalRequiresObjective: 'Please provide an objective, e.g. /goal fix the login failure',
+    goalPlanConflict: 'Turn off plan mode before setting a session goal',
+    goalSet: 'Session goal set',
+    goalCleared: 'Session goal cleared',
+    goalPaused: 'Session goal paused',
+    goalResumed: 'Session goal resumed',
+    goalError: 'Failed to update the session goal',
   },
 
   // ── 备忘录 ──

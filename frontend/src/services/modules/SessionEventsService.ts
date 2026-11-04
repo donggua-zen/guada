@@ -12,6 +12,7 @@ export type SessionEventType =
   | "sub_agent_create"
   | "sub_agent_closed"
   | "todo_updated"
+  | "goal_updated"
   | "jobs_snapshot"
   | "plugins_changed"
   | "queue_updated"
