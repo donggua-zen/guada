@@ -3,15 +3,15 @@ import { defineStore } from 'pinia'
 import { useStorage } from '@vueuse/core'
 import { ref, computed } from 'vue'
 import { apiService } from '@/services/ApiService'
+import {
+  resolveWorkspaceChoiceMode,
+  type WorkspaceChoice,
+  type WorkspaceChoiceMode,
+} from '@/utils/workspaceChoice'
+
+export type { WorkspaceChoice, WorkspaceChoiceMode }
 
 const MAX_RECENT = 10
-
-export type WorkspaceChoiceMode = 'auto' | 'public' | 'custom'
-
-export interface WorkspaceChoice {
-  mode: WorkspaceChoiceMode
-  path: string | null
-}
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   const recentWorkspaces = useStorage<string[]>('recentWorkspaces', [])
@@ -68,12 +68,26 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return normalized.endsWith('/') ? normalized + 'public' : normalized + '/public'
   }
 
+  /**
+   * 记录「上次选择」。
+   * 每次都赋新对象（而不是就地改字段），新建页据此 watch 到变化后重新套用目录 ——
+   * 侧栏「+」重复点同一分组时 URL 不变，只能靠 store 变化驱动。
+   */
   function setLastChoice(mode: WorkspaceChoiceMode, path: string | null) {
     lastChoice.value = { mode, path }
   }
 
   function getLastChoice(): WorkspaceChoice | null {
     return lastChoice.value
+  }
+
+  /**
+   * 按目标路径记录「上次选择」：推断模式 + 记入最近列表。
+   * 新建页工具栏、定时任务编辑器、侧栏分组「+」三个入口共用，避免各自复制推断分支。
+   */
+  function applyChoice(workspacePath: string | null) {
+    setLastChoice(resolveWorkspaceChoiceMode(workspacePath, getPublicPath()), workspacePath)
+    if (workspacePath) addRecent(workspacePath)
   }
 
   return {
@@ -86,5 +100,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     getPublicPath,
     setLastChoice,
     getLastChoice,
+    applyChoice,
   }
 })

@@ -157,6 +157,8 @@ const openGroupSelector = () => {
 
 const selectGroup = (groupId: string) => {
   const groupIdToSet = groupId === UNGROUPED_ID ? null : groupId
+  // 记为「上次选择」：新建页 watch 后套用，侧栏分组「+」也写同一个 store
+  sessionGroupStore.setLastGroupChoice(groupIdToSet)
   emit('config-change', { groupId: groupIdToSet })
   groupSelectorVisible.value = false
 }
@@ -166,20 +168,8 @@ const openWorkspaceDialog = () => {
 }
 
 const handleWorkspaceSelect = (workspacePath: string | null) => {
-  // 判断选择类型并记录
-  let mode: 'auto' | 'public' | 'custom'
-  if (workspacePath === null) {
-    mode = 'auto'
-  } else if (publicPath.value && workspacePath === publicPath.value) {
-    mode = 'public'
-  } else {
-    mode = 'custom'
-  }
-  workspaceStore.setLastChoice(mode, workspacePath)
-
-  if (workspacePath) {
-    workspaceStore.addRecent(workspacePath)
-  }
+  // 记为「上次选择」（推断 auto/public/custom 并记入最近列表）：新建页 watch 后套用
+  workspaceStore.applyChoice(workspacePath)
   emit('config-change', { workspacePath })
 }
 </script>

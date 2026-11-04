@@ -66,6 +66,23 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   /** 目录分组是否已加载 */
   const projectGroupsLoaded = ref(false)
 
+  /**
+   * 「上次选择」的手工分组（localStorage 持久化，与 `workspaceStore.lastChoice` 同构）。
+   *
+   * 侧栏分组的「新建会话」不再经 URL query 传意图（相同 URL 的 replace 是 no-op，
+   * 重复点同一分组不会重新套用），改为写这里，由新建页 watch 后套用。
+   * 存字符串而非 null：`''` = 任务列表（未分组），避免 useStorage 默认序列化对 null 的歧义。
+   */
+  const lastGroupChoiceId = useStorage<string>('lastSessionGroupChoice', '')
+
+  /** 上次选择的分组 id；null = 任务列表（未分组） */
+  const lastGroupChoice = computed((): string | null => lastGroupChoiceId.value || null)
+
+  /** 记录「上次选择」的分组；null = 任务列表（未分组） */
+  function setLastGroupChoice(groupId: string | null): void {
+    lastGroupChoiceId.value = groupId ?? ''
+  }
+
   // ========== 计算属性 ==========
 
   /** 排序后的目录分组（「通用」桶 sortOrder 为最大值，天然在最后） */
@@ -193,6 +210,8 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
       groups.value = groups.value.filter(g => g.id !== groupId)
       expandedState.value.delete(groupId)
       saveExpandedState(expandedState.value)
+      // 被删的正是「上次选择」的分组 → 清空，避免新建页套用一个已不存在的分组
+      if (lastGroupChoiceId.value === groupId) setLastGroupChoice(null)
       return true
     } catch (error) {
       console.error('删除分组失败:', error)
@@ -406,6 +425,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
     groupingMode,
     projectGroups,
     projectGroupsLoaded,
+    lastGroupChoice,
 
     // 计算属性
     sortedGroups,
@@ -417,6 +437,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
     setGroups,
     toggleExpand,
     setExpand,
+    setLastGroupChoice,
     createGroup,
     updateGroup,
     deleteGroup,

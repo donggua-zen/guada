@@ -374,6 +374,7 @@
 <script setup lang="ts">
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { resolveProjectBucketId } from '@/utils/projectGroupBucket'
+import { resolveGroupWorkspacePath } from '@/utils/newSessionEntry'
 import { NEW_SESSION_ID } from '@/constants'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, markRaw, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -383,6 +384,7 @@ import { useLayoutStore } from '../stores/layout'
 import { useSessionStore } from '../stores/session'
 import { useWorkflowRunsStore } from '../stores/workflowRuns'
 import { useSessionGroupStore, GENERAL_PROJECT_GROUP_ID } from '../stores/sessionGroup'
+import { useWorkspaceStore } from '../stores/workspace'
 import { UNGROUPED_ID } from '../stores/session'
 import { useTheme, type ThemeMode } from '../composables/useTheme'
 import { isMobileDevice } from '../composables/useDevice'
@@ -449,6 +451,7 @@ const authStore = useAuthStore()
 const layoutStore = useLayoutStore()
 const sessionStore = useSessionStore()
 const sessionGroupStore = useSessionGroupStore()
+const workspaceStore = useWorkspaceStore()
 // 目录模式下扩窗要把会话解析到目录桶（ProjectGroup.id / __general__），与 loadSessions
 // 写入 loadedCounts 的 key 对齐；手工分组模式返回 null，store 回退到 groupId 语义。
 sessionStore.setProjectBucketResolver((session) =>
@@ -706,18 +709,24 @@ const handleGroupMenuSelect = (command: string, group: SidebarGroupItem): void =
 }
 
 // 打开新建会话面板，指定分组
-const openNewSession = (group: SidebarGroupItem) => {
-  const query: Record<string, string> = {}
+//
+// 入口意图（工作目录 / 分组）走 store，不塞进 URL：相同 URL 的 router.replace 是 no-op，
+// 停在新会话页时再点同一分组的「+」不会触发任何导航钩子。store 每次赋新值 → 新建页
+// watch 到变化后重新套用（详见 CreateSessionChatPanel 的 lastChoice / lastGroupChoice watch）。
+const openNewSession = async (group: SidebarGroupItem) => {
   if (sessionGroupStore.groupingMode === 'workspace') {
-    // 目录模式：在该目录下建会话；「通用」桶不指定目录（走后端自动生成）
-    if (group.kind === 'workspace' && group.path) {
-      query.workspacePath = group.path
+    // 「通用」桶没有自身路径：先取公共目录（baseDir 未就绪时先拉一次）
+    if (group.kind === 'general') await workspaceStore.ensureBaseDir()
+    const workspacePath = resolveGroupWorkspacePath(group, workspaceStore.getPublicPath())
+    if (workspacePath) {
+      // 目录分组 → 该目录；「通用」桶 → 公共目录。两者都记住，之后顶部「新建任务」/Ctrl+N 沿用
+      workspaceStore.applyChoice(workspacePath)
     }
-  } else if (group.id !== UNGROUPED_ID) {
-    query.groupId = group.id
+  } else {
+    // 手工分组：UNGROUPED_ID（任务列表）显式清空分组，其余记住该分组
+    sessionGroupStore.setLastGroupChoice(group.id === UNGROUPED_ID ? null : group.id)
   }
-  // 已在新会话页面时只更新 query 参数，不重新导航
-  router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID }, query })
+  router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
 }
 
 // 导航项配置

@@ -72,9 +72,10 @@ import type { Model } from '@/types/api';
 import type { Session, CreateSessionRequest, InputMessageState, ChatFileView } from '@/types/session';
 import { notify } from '@/components/ui/toastService';
 import { useTitle } from "../../composables/useTitle";
-import { useRouter, useRoute } from 'vue-router';
+import { useRouter } from 'vue-router';
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { useWorkspaceStore } from '@/stores/workspace';
+import { useSessionGroupStore } from '@/stores/sessionGroup';
 import { usePrefillInput } from '@/composables/usePrefillInput';
 import { useSelectedAgent } from '@/composables/useSelectedAgent';
 import { useNewSessionDraftStore, type NewSessionDraftConfig } from '@/stores/newSessionDraft';
@@ -88,7 +89,6 @@ import { ChevronRight24Regular, PersonAdd24Regular } from '@vicons/fluent'
 // 弹出层工具
 ;
 const router = useRouter();
-const route = useRoute();
 const capabilities = useCapabilitiesStore();
 
 // 响应式数据 - 类型化
@@ -598,6 +598,7 @@ const handleConfigChange = (config: ChatInputConfigChange): void => {
 // 前往智能体管理页面
 
 const workspaceStore = useWorkspaceStore()
+const sessionGroupStore = useSessionGroupStore()
 const { consumePrefill } = usePrefillInput()
 const { consumeSelectedAgent } = useSelectedAgent()
 
@@ -626,25 +627,36 @@ onMounted(() => {
   });
   // 启动打字机效果
   startTypewriter();
-  // 从 query 参数恢复分组预选
-  const groupId = route.query.groupId;
-  if (groupId && typeof groupId === 'string') {
-    currentSession.value.groupId = groupId;
-  }
-  // 目录模式：从 query 恢复目标工作目录（在该目录下建会话）
-  const queryWorkspacePath = route.query.workspacePath;
-  if (typeof queryWorkspacePath === 'string' && queryWorkspacePath) {
-    currentSession.value.workspacePath = queryWorkspacePath;
-  } else {
-    // 根据上次选择初始化工作目录
-    initWorkspacePath()
-  }
+  // 入口意图（分组 / 工作目录）来自 store：侧栏分组的「+」写 store 后跳转，不经过 URL
+  initGroupChoice();
+  void initWorkspacePath();
   // 消费跨页面预填文本（如定时任务页"在对话中创建"）——显式带文本进入，覆盖暂存草稿正文
   const prefill = consumePrefill()
   if (prefill) {
     draftContent.value = prefill
   }
 });
+
+/**
+ * 按「上次选择」初始化目标分组。
+ *
+ * 手工分组模式才认分组；目录模式下分组恒为 null —— 归属由工作目录决定
+ * （后端按 workspaceKey 分桶，手工分组不生效）。
+ * 分组列表已加载时校验一次：记忆里的分组可能已被删除（例如另一窗口删的），
+ * 落到不存在的分组会让会话在侧栏「消失」。
+ */
+function initGroupChoice(): void {
+  if (sessionGroupStore.groupingMode !== 'group') {
+    currentSession.value.groupId = null;
+    return;
+  }
+  const remembered = sessionGroupStore.lastGroupChoice;
+  const exists =
+    !sessionGroupStore.hasLoaded || remembered === null
+      ? true
+      : sessionGroupStore.groups.some(g => g.id === remembered);
+  currentSession.value.groupId = exists ? remembered : null;
+}
 
 async function initWorkspacePath() {
   await workspaceStore.ensureBaseDir()
@@ -694,24 +706,17 @@ async function initWorkspacePath() {
   }
 }
 
-// 监听 groupId 查询参数变化（已在新建面板时点击其他分组的情况）
-watch(() => route.query.groupId, (newGroupId) => {
-  if (newGroupId && typeof newGroupId === 'string') {
-    currentSession.value.groupId = newGroupId;
-  } else {
-    currentSession.value.groupId = null;
-  }
+// 「上次选择」变化 → 重新套用（侧栏分组「+」写 store 后跳转；面板已挂载时 URL 不变，
+// 只能靠 store 变化驱动）。面板自己的选择器也会写同一个 store，回套同值即幂等。
+watch(() => workspaceStore.lastChoice, () => {
+  void initWorkspacePath();
 });
 
-// 监听 workspacePath 查询参数变化（目录模式下点击其他目录分组的新建按钮）
-watch(() => route.query.workspacePath, (newPath) => {
-  if (typeof newPath === 'string' && newPath) {
-    currentSession.value.workspacePath = newPath;
-  } else {
-    // 查询参数被清空 → 回到按上次选择推断的默认目录
-    void initWorkspacePath();
-  }
-});
+// 分组「上次选择」或分组模式变化 → 重新套用目标分组
+watch(() => sessionGroupStore.lastGroupChoice, initGroupChoice);
+watch(() => sessionGroupStore.groupingMode, initGroupChoice);
+// 分组列表加载完成 → 再校验一次记忆里的分组是否仍存在
+watch(() => sessionGroupStore.hasLoaded, initGroupChoice);
 
 onUnmounted(() => {
   clearTypewriterTimer();

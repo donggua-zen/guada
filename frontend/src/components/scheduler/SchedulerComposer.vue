@@ -291,12 +291,8 @@ function handleAgentSelect(agent: Agent) {
 }
 
 function handleWorkspaceSelect(workspacePath: string | null) {
-  let mode: 'auto' | 'public' | 'custom'
-  if (workspacePath === null) mode = 'auto'
-  else if (publicPath.value && workspacePath === publicPath.value) mode = 'public'
-  else mode = 'custom'
-  workspaceStore.setLastChoice(mode, workspacePath)
-  if (workspacePath) workspaceStore.addRecent(workspacePath)
+  // 与新建页共用「上次选择」：推断 auto/public/custom 并记入最近列表
+  workspaceStore.applyChoice(workspacePath)
   patch({ workspacePath: workspacePath || '' })
 }
 
