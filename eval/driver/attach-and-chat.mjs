@@ -93,7 +93,7 @@ async function login() {
 
 // ── 2. 建连接（附着既有容器）──────────────────────────────
 async function createConnection() {
-  // 同名连接先清掉：连接名唯一，残留会让创建报 500
+  // 同名连接先清掉：连接名唯一，残留会让创建报 409
   const existing = await api("GET", "/remote-workspace/connections");
   const list = Array.isArray(existing) ? existing : existing?.connections || [];
   for (const c of list) {

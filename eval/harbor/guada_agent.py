@@ -177,7 +177,7 @@ class GuaDaAgent(BaseAgent):
         self.logger.info("附着容器：%s（路径 %s，连接名 %s）",
                          container, self.options.container_path, self._conn_name)
 
-        # 同名残余先清理（连接名唯一，重名会 500）——只可能来自同一 trial 的重跑
+        # 同名残余先清理（连接名唯一，重名会 409）——只可能来自同一 trial 的重跑
         existing = await self._api("GET", "/remote-workspace/connections")
         rows = existing if isinstance(existing, list) else (existing or {}).get("connections", [])
         for c in rows or []:

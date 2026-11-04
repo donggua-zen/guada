@@ -452,7 +452,7 @@ async def is_dir(self, path, user=None) -> bool ...         # :1211
 ```text
 POST   /api/v1/auth/auto-login                  → {access_token}（免密模式可直接用）
 POST   /api/v1/remote-workspace/connections      body {name, config:{kind:"docker", container, path, perm}}
-                                                 ← {id, ...}；**连接名唯一，重名返回 500**
+                                                 ← {id, ...}；**连接名唯一，重名返回 409**
 POST   /api/v1/sessions                          body {agentId, modelId, workspacePath, settings}
                                                  settings.attachments["ssh-connection"]=[connId] 完成绑定
                                                  **agentId 必传**：DTO 标了 @IsOptional，

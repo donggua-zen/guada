@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
@@ -57,6 +57,12 @@ const SETTINGS_KEY_AGENT_DOWNLOAD_URL = "agentDownloadUrl";
 /** agent 最新版本接口(返回 {"version":"x.y.z"});配置后部署时自动检查并下载最新版 */
 const SETTINGS_KEY_AGENT_LATEST_URL = "agentLatestVersionUrl";
 
+const CONNECTION_NAME_CONFLICT_MESSAGE =
+  "连接名称已存在，请换一个名称";
+
+const normalizeConnectionName = (name: string): string =>
+  String(name ?? "").trim();
+
 @Injectable()
 export class RemoteWorkspaceService {
   private readonly logger = new Logger(RemoteWorkspaceService.name);
@@ -86,13 +92,21 @@ export class RemoteWorkspaceService {
     name: string,
     config: RemoteConnection["config"],
   ): Promise<RemoteConnection> {
+    const normalizedName = normalizeConnectionName(name);
     const conns = await this.getConnections();
-    if (conns.some((c) => c.name === name)) {
-      throw new Error(`Connection name '${name}' already exists`);
+    if (
+      conns.some(
+        (c) => normalizeConnectionName(c.name) === normalizedName,
+      )
+    ) {
+      throw new HttpException(
+        CONNECTION_NAME_CONFLICT_MESSAGE,
+        HttpStatus.CONFLICT,
+      );
     }
     const conn: RemoteConnection = {
       id: mintId(ID_PREFIXES.conn),
-      name,
+      name: normalizedName,
       config,
     };
     conns.push(conn);
@@ -107,11 +121,24 @@ export class RemoteWorkspaceService {
     const conns = await this.getConnections();
     const idx = conns.findIndex((c) => c.id === id);
     if (idx === -1) return null;
-    if (updates.name && updates.name !== conns[idx].name) {
-      if (conns.some((c) => c.id !== id && c.name === updates.name)) {
-        throw new Error(`Connection name '${updates.name}' already exists`);
+    if (updates.name !== undefined) {
+      const normalizedName = normalizeConnectionName(updates.name);
+      // 兼容旧行为：空名称不覆盖已有名称，避免 API 直接调用产生无名连接
+      if (normalizedName) {
+        if (
+          conns.some(
+            (c) =>
+              c.id !== id &&
+              normalizeConnectionName(c.name) === normalizedName,
+          )
+        ) {
+          throw new HttpException(
+            CONNECTION_NAME_CONFLICT_MESSAGE,
+            HttpStatus.CONFLICT,
+          );
+        }
+        conns[idx].name = normalizedName;
       }
-      conns[idx].name = updates.name;
     }
     if (updates.config) {
       conns[idx].config = updates.config;

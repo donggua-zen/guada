@@ -84,10 +84,11 @@
 
           <!-- 表单区：独立滚动；pr-2 给滑块与输入框之间留 8px -->
           <div v-if="currentStep === 0" class="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto pr-2 mt-3">
-            <div>
+            <GdFormField :error="errors.name || undefined">
               <label class="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{{ t('settings.connection.connectionName') }} <span class="text-red-500">*</span></label>
-              <GdInput v-model="editName" placeholder="my-server" />
-            </div>
+              <GdInput ref="nameInputRef" v-model="editName" placeholder="my-server"
+                :error="!!errors.name" @blur="validateField('name')" @input="clearValidate(['name'])" />
+            </GdFormField>
 
             <!-- 连接类型：SSH 远程主机 / 本机（或远程 daemon）上的 Docker 容器 / 本机 WSL 发行版（仅 Windows） -->
             <div>
@@ -362,15 +363,18 @@
 </template>
 
 <script setup lang="ts">
-import { getErrorMessage } from '@/utils/errorMessage'
-import { ref, computed, onUnmounted } from 'vue'
+import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
+import { ref, computed, nextTick, onUnmounted } from 'vue'
 
 import GdButton from '@/components/ui/GdButton.vue';
 import { toast } from '@/components/ui/toastService';
+import GdFormField from '@/components/ui/GdFormField.vue';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 import GdInput from '@/components/ui/GdInput.vue';
+import { useFormValidation } from '@/composables/useFormValidation';
+import { normalizeConnectionName, validateConnectionName } from '@/utils/connectionNameValidation';
 
 import { useI18n } from 'vue-i18n'
 import GdDialog from '@/components/ui/GdDialog.vue'
@@ -412,6 +416,28 @@ const connections = computed(() => remoteWorkspaceStore.connections)
 const editing = ref(false)
 const editConnId = ref<string | null>(null)
 const editName = ref('')
+const nameInputRef = ref<InstanceType<typeof GdInput> | null>(null)
+
+/** 名称校验：必填与重名都显示在输入框下方；编辑态按 id 排除自身 */
+const { errors, validate, validateField, clearValidate } = useFormValidation({
+  name: [{
+    validator: (value) => {
+      const result = validateConnectionName(value, connections.value, editConnId.value)
+      if (result === 'required') return t('settings.connection.nameRequired')
+      if (result === 'taken') return t('settings.connection.nameTaken')
+      return null
+    },
+  }],
+}, () => ({ name: editName.value }))
+
+/** 名称类错误回到 Step 0，聚焦输入框但不丢弃已完成的配置/部署结果 */
+async function focusNameField(messageKey?: 'nameRequired' | 'nameTaken') {
+  if (messageKey) errors.name = t(`settings.connection.${messageKey}`)
+  currentStep.value = 0
+  await nextTick()
+  nameInputRef.value?.focus()
+  nameInputRef.value?.select()
+}
 
 /** 新连接的默认配置（SSH 形状；切到 Docker/WSL 时由 switchType 替换字段组） */
 function defaultConfig(kind: 'ssh' | 'docker' | 'wsl' = 'ssh'): RemoteConnectionConfig {
@@ -448,7 +474,7 @@ function switchType(kind: 'ssh' | 'docker' | 'wsl') {
 
 /** 当前宿主是否为 Windows（WSL 连接仅在 Windows 可用；Electron 暴露 platform，Web 端退回 navigator） */
 const isWindowsHost = computed(() => {
-  const platform = (typeof window !== 'undefined' && (window as any).electronAPI?.platform) ||
+  const platform = (typeof window !== 'undefined' && window.electronAPI?.platform) ||
     (typeof navigator !== 'undefined' ? navigator.platform : '')
   return /^win/i.test(String(platform || ''))
 })
@@ -605,6 +631,7 @@ function hue(name: string): number {
 
 function startNew() {
   editing.value = true
+  clearValidate()
   editConnId.value = null
   editName.value = ''
   editConfig.value = defaultConfig()
@@ -624,6 +651,7 @@ function startNew() {
 
 function editConn(conn: RemoteConnection) {
   editing.value = true
+  clearValidate()
   editConnId.value = conn.id
   editName.value = conn.name
   // 从未选择过权限的旧连接:默认 workspace(按钮高亮体现);
@@ -655,6 +683,10 @@ const canProceedFromConfig = computed(() => {
 })
 
 async function goToTest() {
+  if (!(await validate())) {
+    await focusNameField()
+    return
+  }
   currentStep.value = 1
   await testConn()
 }
@@ -750,7 +782,13 @@ function goUp() {
 }
 
 async function saveConn() {
-  if (!editName.value.trim()) { toast.warning(t('settings.connection.nameRequired')); return }
+  // 名称类错误就近呈现；保存前再校验一次，覆盖向导期间另一窗口新增同名连接的情况
+  if (!(await validate())) {
+    await focusNameField()
+    return
+  }
+  const name = normalizeConnectionName(editName.value)
+  editName.value = name
   saving.value = true
   try {
     // 路径栏里的内容可能未点「前往」生效:保存前按当前路径再校验一次存在性,
@@ -764,15 +802,20 @@ async function saveConn() {
     // store 动作成功后已同步本地清单，无需重新加载
     if (editConnId.value) {
       await remoteWorkspaceStore.updateConnection(editConnId.value, {
-        name: editName.value, config: editConfig.value
+        name, config: editConfig.value
       })
     } else {
-      await remoteWorkspaceStore.createConnection(editName.value, editConfig.value)
+      await remoteWorkspaceStore.createConnection(name, editConfig.value)
     }
     editing.value = false
     toast.success(t('common.saveSuccess'))
   } catch (e) {
-    toast.error(t('common.saveFailed') + ': ' + (getErrorMessage(e)))
+    if (getApiErrorStatus(e) === 409) {
+      // 服务端是名称唯一性的最终权威：本地清单过期时回跳 Step 0，不弹全局错误
+      await focusNameField('nameTaken')
+    } else {
+      toast.error(t('common.saveFailed') + ': ' + (getErrorMessage(e)))
+    }
   } finally {
     saving.value = false
   }

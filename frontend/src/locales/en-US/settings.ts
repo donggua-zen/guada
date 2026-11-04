@@ -229,6 +229,7 @@
     testConnection: 'Test Connection',
     connectionSuccess: 'Connection successful',
     nameRequired: 'Please enter a connection name',
+    nameTaken: 'This connection name already exists. Please choose another one.',
     stepConfig: 'Configuration',
     stepTest: 'Test Connection',
     stepBrowse: 'Select Directory',

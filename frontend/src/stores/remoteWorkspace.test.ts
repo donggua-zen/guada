@@ -23,6 +23,8 @@ vi.mock("@/services/ApiService", () => ({
 import { useRemoteWorkspaceStore, toggleConnectionBinding } from "./remoteWorkspace";
 import { apiService } from "@/services/ApiService";
 import { SSH_CONNECTION_ATTACHMENT_TYPE } from "@/constants";
+import { ApiError } from "@/utils/errors";
+import { getApiErrorStatus } from "@/utils/errorMessage";
 
 const mockedGet = vi.mocked(apiService.getConnections);
 const mockedCreate = vi.mocked(apiService.createConnection);
@@ -154,8 +156,10 @@ describe("remoteWorkspace Store", () => {
       mockedGet.mockResolvedValue([original]);
       await store.ensureConnections();
 
-      mockedCreate.mockRejectedValue(new Error("name conflict"));
-      await expect(store.createConnection("alpha", original.config)).rejects.toThrow("name conflict");
+      const conflict = new ApiError("连接名称已存在", 409);
+      mockedCreate.mockRejectedValue(conflict);
+      await expect(store.createConnection("alpha", original.config)).rejects.toBe(conflict);
+      expect(getApiErrorStatus(conflict)).toBe(409);
       expect(store.connections).toEqual([original]);
 
       mockedUpdate.mockRejectedValue(new Error("Connection not found"));

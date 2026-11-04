@@ -229,6 +229,7 @@ export default {
     testConnection: '测试连接',
     connectionSuccess: '连接成功',
     nameRequired: '请填写连接名称',
+    nameTaken: '该连接名称已存在，请换一个名称',
     // 向导步骤
     stepConfig: '填写配置',
     stepTest: '测试连接',
