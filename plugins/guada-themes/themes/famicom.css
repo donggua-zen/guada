@@ -99,11 +99,40 @@
   --gd-color-dialog-bg: #faf6ed;
   --gd-code-block-bg: #f0ebde;
 
-  /* 排版与细节 */
-  --gd-size-text-base: 15px;
-  --gd-size-text-sm: 14px;
+  /* 排版与细节
+     字号不再下调：--gd-size-text-base 到 15px 会让 markdown.css 的派生除法
+     （/3.5 /1.75 /7 /4.67）与气泡 1.5 行高整体掉进半像素，实测整页 98 处小数高度
+     （14px 时 0 处），还会连带把 .hljs-* 行盒推出 0.4px */
+  --gd-color-success: #1a7a1a;
+  --gd-color-warning: #8a5a00;
+  --gd-color-danger: #b00d26;
+  --gd-color-success-text: #ffffff;
+  --gd-color-warning-text: #ffffff;
+  --gd-color-danger-text: #ffffff;
+  /* 原 #b0a89a 在奶白塑料壳上只有 1.98:1（发送键禁用态直接沿用这个 token，
+     于是灰底白图标=看不见）；提到 #6f6656 = 4.75:1 */
+  --gd-color-text-disabled: #6f6656;
+  /* 8-bit 没有圆角：把 radius token 归零，比手写十几条规则稳
+     （.gd-popover / .model-item-compact / AttachmentPopover 等都直接消费这两个 token，
+     设 0 能穿透 Tailwind 的 rounded-(--) 工具类） */
+  --gd-size-surface-radius: 0;
+  --gd-size-rounded-radius: 0;
+  --gd-size-dialog-rounded-radius: 0;
+  --gd-size-overview-panel-radius: 0;
+  --gd-layout-card-radius: 0;
   --gd-shimmer-base: #c8bfa8;
   --gd-shimmer-highlight: #c8102e;
+
+  /* 语法高亮收成 NES 五色系（红/金/青/绿/白），亮暗各一套 */
+  --gd-md-syntax-comment: #7a6f5e;
+  --gd-md-syntax-keyword: #b00d26;
+  --gd-md-syntax-string: #1a7a1a;
+  --gd-md-syntax-number: #8a5a00;
+  --gd-md-syntax-function: #2a2520;
+  --gd-md-syntax-type: #0058f8;
+  --gd-md-syntax-property: #a8327a;
+  --gd-md-syntax-tag: #b00d26;
+  --gd-md-syntax-punctuation: #6a6055;
 
   /* 窗口控制按钮：hover 背景是主题红（--gd-titlebar-hover-bg），
      图标需变白才能看清 */
@@ -199,11 +228,34 @@ html.dark[data-theme="famicom"] {
   --gd-color-dialog-bg: #1e1e24;
   --gd-code-block-bg: #141418;
 
-  /* 排版与细节 */
-  --gd-size-text-base: 15px;
-  --gd-size-text-sm: 14px;
+  /* 排版与细节（字号同亮色不再下调，理由见亮色块注释） */
+  /* 夜间这三个语义色是「提亮」方向（亮色块反过来压深），所以实心按钮/标签的字必须成对翻深：
+     --gd-color-*-text 只在 :root 给了 #fff、html.dark 不覆盖，白压浅红实测只有 2.05:1 */
+  --gd-color-success: #6ee06e;
+  --gd-color-warning: #f0c020;
+  --gd-color-danger: #ff6b6b;
+  --gd-color-success-text: #06210a;
+  --gd-color-warning-text: #221800;
+  --gd-color-danger-text: #2c0309;
+  --gd-color-text-disabled: #8a8275;
+  --gd-size-surface-radius: 0;
+  --gd-size-rounded-radius: 0;
+  --gd-size-dialog-rounded-radius: 0;
+  --gd-size-overview-panel-radius: 0;
+  --gd-layout-card-radius: 0;
   --gd-shimmer-base: #3a3a42;
   --gd-shimmer-highlight: #e6203a;
+
+  /* 语法高亮 NES 五色系（夜间：显像管亮色） */
+  --gd-md-syntax-comment: #6a655a;
+  --gd-md-syntax-keyword: #ff6b6b;
+  --gd-md-syntax-string: #6ee06e;
+  --gd-md-syntax-number: #f0c020;
+  --gd-md-syntax-function: #ffffff;
+  --gd-md-syntax-type: #40d0e0;
+  --gd-md-syntax-property: #f8a0c0;
+  --gd-md-syntax-tag: #ff6b6b;
+  --gd-md-syntax-punctuation: #8a8275;
 
   /* 窗口控制按钮：常态跟随主题文字色（比全局暗色默认更亮），
      hover 进一步变白 */
@@ -240,6 +292,11 @@ html[data-theme="famicom"] {
   --fc-frame-gray: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%23c8bfa8' stroke-width='6'/></svg>");
   /* 红框：代码块 */
   --fc-frame-red: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%23c8102e' stroke-width='6'/></svg>");
+  /* 阶梯齿与指示灯的颜色单独给：压在主题红顶条上的对比要拉得开
+     （第一版直接复用 --gd-color-titlebar-border，实测暗色下 #3a3a42 压在 #1a1a20
+     上只有 1.3:1，用户反馈"UI 上找不到锯齿"） */
+  --fc-edge: rgba(0, 0, 0, 0.75);
+  --fc-led: var(--gd-color-secondary);
 }
 html.dark[data-theme="famicom"] {
   /* 金框：暗色用户气泡 */
@@ -248,6 +305,9 @@ html.dark[data-theme="famicom"] {
   --fc-frame-gray: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%233a3a42' stroke-width='6'/></svg>");
   /* 荧光红框：暗色代码块 */
   --fc-frame-red: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><path d='M15 3 H105 L105 9 L111 9 L111 15 L117 15 V105 L111 105 L111 111 L105 111 L105 117 H15 L15 111 L9 111 L9 105 L3 105 V15 L9 15 L9 9 L15 9 L15 3 Z' fill='none' stroke='%23e6203a' stroke-width='6'/></svg>");
+  /* 暗色顶条本就深，齿改用亮灰抬起才看得见；待机灯换成主题红 */
+  --fc-edge: rgba(255, 255, 255, 0.42);
+  --fc-led: var(--gd-color-primary);
 }
 
 /* 像素网格背景纹理（亮色：4px 网格，极淡） */
@@ -259,13 +319,31 @@ html[data-theme="famicom"] body::before {
   background-color: var(--gd-color-bg);
 }
 
-/* 暗色模式：CRT 扫描线 + 像素网格 */
-html.dark[data-theme="famicom"] body::before {
+/* 暗色模式：CRT 扫描线 + 像素网格。
+   两个坑（都是实测）：
+   1) body::before 是全局壁纸层，基础样式给了 opacity:0，只有 html.wallpaper-loaded
+      才显形 —— 本机没设壁纸时它承载的主题纹理整层是看不见的，所以纹理必须同时
+      铺在 .content-clear-wallpaper（无壁纸时的内容卡）上；
+   2) 原来扫描线是 1px 黑 / 3px 透，在 14px 文本上基本看不出来，
+      升成 2px 黑 / 2px 亮才压出显像管的行结构，暗角用 inset 阴影（不新增伪元素，
+      body::after 已被应用的壁纸遮罩占用） */
+html.dark[data-theme="famicom"] body::before,
+html.dark[data-theme="famicom"] .content-clear-wallpaper {
   background-image:
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.30) 0 2px, rgba(255, 255, 255, 0.022) 2px 4px),
     linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
   background-size: 100% 4px, 4px 4px, 4px 4px;
+}
+html.dark[data-theme="famicom"] .content-clear-wallpaper {
+  box-shadow: inset 0 0 120px 24px rgba(0, 0, 0, 0.45);
+}
+/* 显像管辉光只给标题与代码（正文整片加 text-shadow 会糊掉小字号的汉字边缘） */
+html.dark[data-theme="famicom"] .markdown-text h1,
+html.dark[data-theme="famicom"] .markdown-text h2,
+html.dark[data-theme="famicom"] .markdown-text h3,
+html.dark[data-theme="famicom"] .custom-code-block pre {
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.18);
 }
 
 /* 内容区也铺一层像素网格（body::before 常被不透明背景盖住） */
@@ -275,13 +353,7 @@ html[data-theme="famicom"] .content-clear-wallpaper {
     linear-gradient(90deg, rgba(42, 37, 32, 0.035) 1px, transparent 1px);
   background-size: 4px 4px;
 }
-html.dark[data-theme="famicom"] .content-clear-wallpaper {
-  background-image:
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.10) 0 1px, transparent 1px 4px),
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-  background-size: 100% 4px, 4px 4px, 4px 4px;
-}
+/* 暗色版在上面 CRT 一节已经给过（同一选择器写两遍会互相盖，这里不再重复） */
 
 /* ============================================================
    用户气泡：红底 + 深红像素框 + FC 塑料按钮斜面（内高光/内暗影）
@@ -351,19 +423,64 @@ html[data-theme="famicom"] .workspace-sidebar {
   border-left: 3px solid var(--gd-color-primary);
 }
 
-/* 标题栏：红色顶条下压一道深红粗线（FC 顶部分割条） */
+/* 标题栏：FC 顶部分割条 = 8px 城垛阶梯（两排反相齿，每齿 8×4px）+ 左侧 8×8 POWER 灯。
+   全部用 layered background 画——.custom-titlebar 是 flex + drag-region，
+   用 ::before 会多出一个 flex 项把整组内容推右，background 层则零布局影响。
+   齿色走 --fc-edge（亮=压在红条上的深齿，暗=抬起来的亮齿），
+   第一版复用 --gd-color-titlebar-border 时暗色只有 1.3:1，肉眼等于没有。
+   注意：这条只在桌面端可见（组件里 v-if="isElectron"，实测浏览器里命中 0 个），
+   高度 36px 与 electron/main.ts 的 TITLEBAR_HEIGHT 绑定，只能加装饰不能改高 */
 html[data-theme="famicom"] .custom-titlebar {
-  border-bottom: 3px solid var(--gd-color-titlebar-border);
+  border-bottom: none;
+  background-image:
+    linear-gradient(var(--fc-led), var(--fc-led)),
+    repeating-linear-gradient(90deg, var(--fc-edge) 0 8px, transparent 8px 16px),
+    repeating-linear-gradient(90deg, transparent 0 8px, var(--fc-edge) 8px 16px);
+  background-size: 8px 8px, 100% 4px, 100% 4px;
+  background-position: 8px center, left calc(100% - 4px), left bottom;
+  background-repeat: no-repeat, repeat, repeat;
 }
 
-/* 会话激活项：FC 按钮斜面（内高光 + 内暗影），去圆角 */
-html[data-theme="famicom"] .session-item {
+/* 双线框：日版 FC 说明书的排印框是「外粗内细」两道线。
+   像素九宫格已经占了卡片的 ::before，所以内层用 outline 叠，不新增节点 */
+html[data-theme="famicom"] .user-section .message-item__card {
+  outline: 1px solid rgba(255, 255, 255, 0.5);
+  outline-offset: -5px;
+}
+html[data-theme="famicom"] .assistant-section .message-item__card {
+  outline: 1px solid rgba(42, 37, 32, 0.18);
+  outline-offset: -5px;
+}
+html.dark[data-theme="famicom"] .assistant-section .message-item__card {
+  outline-color: rgba(216, 208, 192, 0.16);
+}
+
+/* 列表项方角 + FC 菜单光标。
+   .session-item / .group-header / .nav-item 都是组件里写死的 rounded-md/lg（不是 token），
+   主题选择器 html[data-theme=…] + 类 = (0,2,1) 压得过 Tailwind 工具类与 scoped 单类规则。
+   光标方块要位置：所有行统一让出 18px 左槽，只给 active 画，避免选中时整行文字跳动 */
+html[data-theme="famicom"] .session-item,
+html[data-theme="famicom"] .group-header,
+html[data-theme="famicom"] .nav-item {
   border-radius: 0;
+}
+html[data-theme="famicom"] .session-item {
+  padding-left: 18px;
 }
 html[data-theme="famicom"] .session-item-active {
   box-shadow:
     inset 2px 2px 0 rgba(255, 255, 255, 0.28),
     inset -2px -2px 0 rgba(0, 0, 0, 0.25);
+}
+html[data-theme="famicom"] .session-item-active::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  margin-top: -4px;
+  width: 8px;
+  height: 8px;
+  background: currentColor;
 }
 
 /* ============================================================
@@ -390,9 +507,12 @@ html[data-theme="famicom"] .input-area:focus-within::before {
   border-image-source: var(--fc-frame-red);
 }
 
-/* 发送按钮：方形像素按钮 + 按下位移（游戏按键手感） */
+/* 发送键 = A/B 键：方角 + 2px 键帽硬边 + 斜面高光 + 按下整体下沉。
+   组件写的是 border:none + :active{transform:scale(.92)}，主题选择器 (0,4,1)
+   压得过 .send-btn[data-v]…:active:not(…) 的 (0,4,0)，实测 radius 已经穿上 0px */
 html[data-theme="famicom"] .send-btn {
   border-radius: 0;
+  border: 2px solid rgba(0, 0, 0, 0.4);
   box-shadow:
     inset 2px 2px 0 rgba(255, 255, 255, 0.28),
     inset -2px -2px 0 rgba(0, 0, 0, 0.22),
@@ -405,8 +525,27 @@ html[data-theme="famicom"] .send-btn:active:not(:disabled) {
     inset -2px -2px 0 rgba(0, 0, 0, 0.28),
     1px 1px 0 rgba(0, 0, 0, 0.2);
 }
+/* 停止态：组件硬编码 #f56c6c + 白图标（2.90:1），换成主题红并成对给字色 */
+html[data-theme="famicom"] .send-btn.stop-btn,
+html.dark[data-theme="famicom"] .send-btn.stop-btn {
+  background-color: var(--gd-color-danger);
+  color: var(--gd-color-danger-text);
+}
+/* 禁用态：组件是 background-color: var(--gd-color-text-disabled) + opacity .45 + 白图标。
+   这个 token 本来是「前景色」，被组件当底色用——上一档把 #b0a89a 提到 #6f6656 之后，
+   白图标没了（深色壳），换成深图标又只有 2.08:1，所以这里连壳带图标一起给：
+   FC 的「关」= 灰壳 + 反色图标，明暗各一组（实测 4.36 / 4.67） */
+html[data-theme="famicom"] .send-btn:disabled {
+  background-color: var(--gd-color-surface-border);
+  color: rgba(42, 37, 32, 0.72);
+  opacity: 1;
+  filter: none;
+}
+html.dark[data-theme="famicom"] .send-btn:disabled {
+  color: rgba(216, 208, 192, 0.72);
+}
 
-/* 输入区工具按钮：去圆角 */
+/* 输入区工具按钮：去圆角 + 硬边（和键帽同一套语言） */
 html[data-theme="famicom"] .tool-btn,
 html[data-theme="famicom"] .model-selector-btn {
   border-radius: 0;
@@ -468,18 +607,25 @@ html[data-theme="famicom"] .markdown-text table td {
   border-bottom: 2px solid var(--gd-color-surface-border);
 }
 
-/* 代码块（真实选择器 .markdown-text pre，旧主题的 .md-code 已失效）：
-   8-bit 游戏对话框——红像素框 + 硬阴影。
-   注意：pre 带 overflow:auto，伪元素必须 inset:0 画在盒内侧，
-   否则溢出部分会撑出滚动条 */
-html[data-theme="famicom"] .markdown-text pre {
+/* 代码块：8-bit 游戏对话框。
+   真实结构是 .custom-code-block > .code-scroll > pre（实测 6 个），
+   而「看得见的那张卡片」是最外层：它原本是 radius 8px + overflow:hidden + #f6f6f6，
+   主题的像素九宫格画在 pre 上，于是四角阶梯被外层圆角切平，
+   --gd-code-block-bg 也被外层自己的底色盖掉。框改由外层画，滚动仍交给 .code-scroll
+   （伪元素若留在带 overflow 的层上，溢出内容会被撑出滚动条） */
+html[data-theme="famicom"] .custom-code-block {
   position: relative;
-  border: 2px solid transparent;
   border-radius: 0;
-  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
-  padding: 12px 14px;
+  overflow: visible;
+  background-color: var(--gd-code-block-bg);
+  box-shadow: 3px 3px 0 rgba(42, 37, 32, 0.18);
 }
-html[data-theme="famicom"] .markdown-text pre::before {
+html[data-theme="famicom"] .custom-code-block .code-scroll {
+  overflow: auto;
+  border-radius: 0;
+  padding-top: 20px; /* 让出 8px 框线 + 10px 标题条（见下方 C 段） */
+}
+html[data-theme="famicom"] .custom-code-block::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -490,18 +636,49 @@ html[data-theme="famicom"] .markdown-text pre::before {
   border-image-repeat: stretch;
   pointer-events: none;
 }
-html.dark[data-theme="famicom"] .markdown-text pre {
-  box-shadow: 3px 3px 0 rgba(230, 32, 58, 0.15);
+html[data-theme="famicom"] .markdown-text pre {
+  position: static;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+}
+html[data-theme="famicom"] .markdown-text pre::before { content: none }
+html.dark[data-theme="famicom"] .custom-code-block {
+  box-shadow: 3px 3px 0 rgba(230, 32, 58, 0.18);
+}
+
+/* 对话框标题条：10px 深红带 + 3 个方块铆钉，全部用 layered background 画在外层，
+   不新增节点、不占伪元素（::before 已经是像素框）。
+   带子起于 y=8px：像素框的描边本身占掉最外 8px，压在描边上会和框线糊成一片 */
+html[data-theme="famicom"] .custom-code-block {
+  background-image:
+    linear-gradient(var(--gd-color-primary), var(--gd-color-primary)),
+    radial-gradient(circle at 14px 13px, var(--gd-color-surface) 0 2px, transparent 2px),
+    radial-gradient(circle at 22px 13px, var(--gd-color-surface) 0 2px, transparent 2px),
+    radial-gradient(circle at 30px 13px, var(--gd-color-surface) 0 2px, transparent 2px);
+  background-size: 100% 10px, auto, auto, auto;
+  background-position: left 8px, 0 0, 0 0, 0 0;
+  background-repeat: no-repeat;
 }
 
 /* ============================================================
    按钮：零圆角 + 硬边框 + 按键手感（GdButton）
+   描边必须显式给色：Tailwind preflight 已经把全局 border-style 设成 solid，
+   所以只写 border-width:2px 会直接画出 2px currentColor —— 实测主色按钮
+   被糊了一圈白边、默认按钮一圈深边，同一排按钮粗细一致但颜色各走各的
    ============================================================ */
 html[data-theme="famicom"] .gd-button {
   border-radius: 0;
-  border-width: 2px;
+  border: 2px solid var(--gd-color-border);
   font-weight: 600;
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.15);
+}
+html[data-theme="famicom"] .gd-button[data-variant="primary"],
+html[data-theme="famicom"] .gd-button[data-variant="secondary"],
+html[data-theme="famicom"] .gd-button[data-variant="danger"],
+html[data-theme="famicom"] .gd-button[data-variant="warning"] {
+  border-color: rgba(0, 0, 0, 0.35);
 }
 html[data-theme="famicom"] .gd-button:active {
   transform: translate(2px, 2px);
@@ -514,31 +691,84 @@ html[data-theme="famicom"] .l-dialog {
 }
 html[data-theme="famicom"] .gd-tag {
   border-radius: 0;
-  border-width: 2px;
+  border: 2px solid currentColor;
 }
 html[data-theme="famicom"] .gd-popover {
   border-radius: 0;
-  border-width: 2px;
-  border-color: var(--gd-color-border);
+  border: 2px solid var(--gd-color-border);
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.15);
+}
+/* 表单控件（下拉/输入/日期）走同一套硬边：它们的圆角本身吃 token，
+   上面亮暗两块已把 --gd-size-*-radius 归零，这里只补描边与硬影 */
+html[data-theme="famicom"] .gd-select,
+html[data-theme="famicom"] .gd-input,
+html[data-theme="famicom"] .gd-date-picker,
+html[data-theme="famicom"] .gd-time-picker {
+  border-radius: 0;
+}
+html[data-theme="famicom"] .gd-select:hover,
+html[data-theme="famicom"] .gd-input:hover {
+  border-color: var(--gd-color-primary);
 }
 
 /* ============================================================
-   像素字体点缀：只覆盖拉丁/数字（unicode-range 限制），
-   中文回退黑体，混排像汉化版 FC 游戏字幕
+   交互面：滚动条 / 选区 / 键盘焦点 / 头像
+   原主题这四样一行规则都没有，实测一滚动、一选中文字、一按 Tab
+   就露出浏览器默认细灰滚轮 + 蓝选区 + 蓝色椭圆环，FC 感当场断
    ============================================================ */
-html[data-theme="famicom"] .session-title,
+html[data-theme="famicom"] ::-webkit-scrollbar { width: 12px; height: 12px }
+html[data-theme="famicom"] ::-webkit-scrollbar-track { background: var(--gd-color-surface-border) }
+html[data-theme="famicom"] ::-webkit-scrollbar-thumb {
+  background: var(--gd-color-primary);
+  border: 2px solid var(--gd-color-surface);
+  border-radius: 0;
+}
+html[data-theme="famicom"] ::-webkit-scrollbar-thumb:hover { background: var(--gd-color-primary-hover) }
+html[data-theme="famicom"] ::-webkit-scrollbar-corner { background: var(--gd-color-surface-border) }
+html.dark[data-theme="famicom"] ::-webkit-scrollbar-thumb { background: var(--gd-color-primary) }
+html[data-theme="famicom"] ::selection {
+  background: var(--gd-color-primary);
+  color: #ffffff;
+}
+html.dark[data-theme="famicom"] ::selection {
+  background: var(--gd-color-secondary);
+  color: #221800;
+}
+html[data-theme="famicom"] :focus-visible {
+  outline: 2px solid var(--gd-color-secondary);
+  outline-offset: 2px;
+}
+/* 头像只动形状与锯齿，不做去彩（内容图片一律不动，避免影响真实工作） */
+html[data-theme="famicom"] .avatar-image {
+  border-radius: 0;
+  border: 2px solid var(--gd-color-surface-border);
+  image-rendering: pixelated;
+}
+
+/* ============================================================
+   像素字体点缀：Press Start 2P 的 unicode-range 只覆盖拉丁/数字，
+   汉字一律回退黑体（混排效果＝汉化版 FC 字幕）。
+   所以只能挂在「本来就主要是拉丁与数字」的地方：品牌名、分组日期、
+   正文标题、模型 ID、目录名、token 计数。
+   反面教训两条（都实测过）：
+   - 挂在 .gd-button / 会话标题这类纯中文元素上等于白挂，整段回退黑体；
+   - 原先还叠了 font-size:.85em 想抵消像素字偏大的字面，
+     实测 .gd-button 12.75px、.group-header 13.6px 全是小数字号，
+     而且 2 倍字宽本来就该靠字号档位收，不该靠小数乘出来 */
+html[data-theme="famicom"] .custom-titlebar,
 html[data-theme="famicom"] .group-header,
 html[data-theme="famicom"] .markdown-text h1,
 html[data-theme="famicom"] .markdown-text h2,
 html[data-theme="famicom"] .markdown-text h3,
-html[data-theme="famicom"] .gd-button,
-html[data-theme="famicom"] .custom-titlebar {
+html[data-theme="famicom"] .model-selector-btn,
+html[data-theme="famicom"] .wdb-name,
+html[data-theme="famicom"] .token-limit-control {
   font-family: 'Press Start 2P', 'PingFang SC', 'Microsoft YaHei', monospace;
 }
-/* 像素字体字形偏大，标题区缩小一号保持版式 */
+/* 死钩子更正：主题原来写的是 .session-title，实测 DOM 命中 0 个，
+   侧栏真实类名是 .session-title-text（42 个）。这里显式退回系统黑体，
+   免得后续有人以为"会话标题已经是像素字体" */
 html[data-theme="famicom"] .session-title,
-html[data-theme="famicom"] .group-header,
-html[data-theme="famicom"] .gd-button {
-  font-size: 0.85em;
+html[data-theme="famicom"] .session-title-text {
+  font-family: var(--gd-font-sans);
 }
