@@ -46,7 +46,7 @@
       <div v-for="g in groupSelectorOptions" :key="g.value"
         class="flex items-center gap-1.25 px-2 py-1 rounded-(--gd-size-dialog-rounded-radius) cursor-pointer transition-all duration-150"
         :class="selectedGroupId === g.value
-          ? 'bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
+          ? 'group-option-active bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
           : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="selectGroup(g.value)">
         <GroupIcon :icon="g.icon" class="w-4 h-4 shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)" />
@@ -189,5 +189,16 @@ const handleWorkspaceSelect = (workspacePath: string | null) => {
 
 .workspace-btn:hover {
   color: var(--gd-color-text);
+}
+
+/* 选中分组行整行反色：active 底色（模板里的 bg- 工具类给出）在深色主题里是实心色
+   （XP 的 #316AC5），而行内图标/名称/勾各自写了颜色类，含 primary 的勾——蓝底上等于隐形。
+   sidebar-text-active 在默认主题 = 正文色，所以原主题下没有视觉变化。 */
+.group-option-active {
+  color: var(--gd-color-sidebar-text-active);
+}
+
+.group-option-active :is(div, span, svg) {
+  color: inherit;
 }
 </style>

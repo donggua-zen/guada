@@ -75,10 +75,10 @@
                 :name="getModelDisplayName(model.modelName)" type="assistant" :round="false" class="w-full h-full" />
             </div>
             <div class="flex-1 min-w-0">
-              <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
+              <div class="font-medium text-sm text-(--gd-color-text) truncate">
                 {{ getModelDisplayName(model.modelName) }}
               </div>
-              <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+              <div class="flex items-center gap-1 text-xs text-(--gd-color-text-gray)">
                 <span class="truncate">{{ getModelProviderName(model) }}</span>
                 
                   <WrenchScrewdriver24Regular class="w-3 h-3" v-if="model.config?.features?.includes('tools')"  />
@@ -122,10 +122,10 @@
                 :name="getModelDisplayName(model.modelName)" type="assistant" :round="false" class="w-full h-full" />
             </div>
             <div class="flex-1 min-w-0">
-              <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
+              <div class="font-medium text-sm text-(--gd-color-text) truncate">
                 {{ getModelDisplayName(model.modelName) }}
               </div>
-              <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+              <div class="flex items-center gap-1 text-xs text-(--gd-color-text-gray)">
                 <!-- <span class="truncate">{{ provider.name }}</span> -->
                 
                   <WrenchScrewdriver24Regular class="w-3 h-3" v-if="model.config?.features?.includes('tools')"  />
@@ -152,7 +152,7 @@
         'te-item-active': thinkingEffortValue === effort
       }" @click.stop="$emit('select-thinking-effort', effort)">
       <span>{{ getThinkingEffortLabel(effort) }}</span>
-      <span class="text-xs text-gray-400">{{ effort }}</span>
+      <span class="text-xs text-(--gd-color-text-disabled)">{{ effort }}</span>
     </div>
   </GdPopover>
 </template>
@@ -400,16 +400,28 @@ watch(() => props.visible, (newVal) => {
   background: var(--gd-color-sidebar-bg-hover);
 }
 
-.model-item-active {
+/* active 底色在深色主题里会是实心色（如 XP 的 #316AC5），文字必须成对翻白，
+   否则深灰字压深蓝底只有 2.4:1 对比；sidebar-text-active 在默认主题 = 正文色，视觉不变。
+   行内元素各自写了颜色类，用后代选择器整行反色（特异性高于工具类）；
+   已收藏的橙星是 !important 语义色，不参与反色。
+   选择器要叠上基类：上面的 .model-item-compact:hover / .te-item:hover 同为 (0,2,0)，
+   单写 .model-item-active 会被后面的 hover 抢走底色——hover 时「白底白字」就是这么来的
+   （默认主题下 hover==active 同色所以看不出来）。 */
+.model-item-compact.model-item-active,
+.te-item.te-item-active,
+.model-item-compact.model-item-active:hover,
+.te-item.te-item-active:hover {
   background: var(--gd-color-sidebar-bg-active);
+  color: var(--gd-color-sidebar-text-active);
+}
+
+.model-item-active :is(div, span, svg),
+.te-item-active :is(div, span, svg) {
+  color: inherit;
 }
 
 .te-item:hover {
   background: var(--gd-color-sidebar-bg-hover);
-}
-
-.te-item-active {
-  background: var(--gd-color-sidebar-bg-active);
 }
 
 /* 收藏图标 */
@@ -431,6 +443,11 @@ watch(() => props.visible, (newVal) => {
 
 .favorite-icon .text-gray-400 {
   color: var(--gd-color-text-gray) !important;
+}
+
+/* 未收藏的星在选中行里同样要跟底反色（上面那条带 !important，这里也得压住它） */
+.model-item-active .favorite-icon .text-gray-400 {
+  color: inherit !important;
 }
 
 .cascade-trigger {

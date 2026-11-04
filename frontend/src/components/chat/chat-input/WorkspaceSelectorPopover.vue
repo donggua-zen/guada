@@ -8,7 +8,7 @@
         <div v-for="path in filteredRecentList" :key="path"
           class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
           :class="path === currentWorkspacePath
-            ? 'bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
+            ? 'ws-item-active bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
             : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
           @click="handleSelect(path)">
           
@@ -29,7 +29,7 @@
       <div v-if="publicPath"
         class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
         :class="publicPath === currentWorkspacePath
-          ? 'bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
+          ? 'ws-item-active bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
           : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="handleSelect(publicPath)">
         
@@ -47,7 +47,7 @@
       <!-- 自动创建 -->
       <div class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
         :class="!currentWorkspacePath
-          ? 'bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
+          ? 'ws-item-active bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
           : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="handleSelect(null)">
         
@@ -155,3 +155,16 @@ function handleBrowserSelect(path: string) {
   emit('select', path)
 }
 </script>
+
+<style scoped>
+/* 选中工作区行整行反色：active 底色在深色主题里是实心色（XP 的 #316AC5），
+   而行内图标/名称/路径/勾各写了颜色类（路径还是 text-[#999] 这种字面量，主题翻不动）。
+   sidebar-text-active 在默认主题 = 正文色，所以原主题下没有视觉变化。 */
+.ws-item-active {
+  color: var(--gd-color-sidebar-text-active);
+}
+
+.ws-item-active :is(div, span, svg) {
+  color: inherit;
+}
+</style>
