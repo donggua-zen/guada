@@ -36,7 +36,16 @@ export function useSessionEvents() {
 
   function updateCurrentSessionId() {
     const sid = route.params.sessionId;
-    currentSessionId.value = Array.isArray(sid) ? sid[0] : sid;
+    const next = Array.isArray(sid) ? sid[0] : sid;
+
+    // 红点语义 = 一次性通知（阅后即焚）：进入会话即视为已读，不跟踪是否真的处理了
+    // （用户可能刻意忽略待答卡，持续亮红点会与真正的未读事件混淆）。
+    // 集中在此处理，覆盖侧边栏点击之外的编程式导航（通知跳转等），避免"已进入会话但 unread 残留"。
+    if (next) {
+      sessionStore.setSidebarFlag(next, "unread", false);
+    }
+
+    currentSessionId.value = next;
   }
 
   /**
@@ -65,12 +74,16 @@ export function useSessionEvents() {
 
   function handleVisibilityChange() {
     windowHidden.value = document.hidden;
+    // 回到前台即视为已读（阅后即焚）；只清当前会话，其他会话的未读保留。
+    // 隐藏时不做任何补亮：已看过的待答卡不重复提醒，避免红点与真正的未读混淆。
     if (!document.hidden && currentSessionId.value) {
       sessionStore.setSidebarFlag(currentSessionId.value, "unread", false);
     }
   }
 
   function init() {
+    // 初始可见性（后台启动/最小化启动时直接进隐藏态，避免误判为"正在看"）
+    windowHidden.value = document.hidden === true;
     // 路由变化时更新当前会话 ID
     updateCurrentSessionId();
     const stopRouteWatch = router.afterEach(() => updateCurrentSessionId());
@@ -117,6 +130,17 @@ export function useSessionEvents() {
           }
         }
         projectChunk(sessionStore, sid, chunk);
+
+        // 审批/询问到达 = 有人在等你操作：非当前会话或窗口隐藏时置未读。
+        // 桌面任务栏红点由 useTrayStats 轮询 unread 派生（与侧边栏蓝点/待答胶囊同源）；
+        // 当前会话且窗口可见时不置——用户直接看到交互卡，不打扰。
+        // 同值幂等：SSE 补发/重放重复触发无副作用。
+        if (
+          chunk.type === "ask_requested" &&
+          (sid !== currentSessionId.value || windowHidden.value)
+        ) {
+          sessionStore.setSidebarFlag(sid, "unread", true);
+        }
       }),
     );
 
@@ -142,6 +166,13 @@ export function useSessionEvents() {
                 toolName: ask.toolName,
                 questions: ask.questions ?? [],
               });
+              // 断线/刷新期间到达的待答卡同样要点亮红点（非当前会话或窗口隐藏）
+              if (
+                ask.sessionId !== currentSessionId.value ||
+                windowHidden.value
+              ) {
+                sessionStore.setSidebarFlag(ask.sessionId, "unread", true);
+              }
             }
           })
           .catch(() => {

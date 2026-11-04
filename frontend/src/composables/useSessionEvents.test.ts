@@ -16,8 +16,13 @@ import { useSessionStore } from "@/stores/session";
  */
 
 // init() 里 document.addEventListener("visibilitychange") —— node 环境无 document,提供最小 mock
+// visibilityHandlers 捕获注册的可见性回调,供测试手动切换前后台
+const visibilityHandlers: Array<() => void> = [];
 vi.stubGlobal("document", {
-  addEventListener: vi.fn(),
+  hidden: false,
+  addEventListener: (type: string, cb: () => void) => {
+    if (type === "visibilitychange") visibilityHandlers.push(cb);
+  },
   removeEventListener: vi.fn(),
 });
 
@@ -25,6 +30,9 @@ vi.stubGlobal("document", {
 const registeredHandlers = new Map<string, (event: any) => void>();
 // 捕获 (重)建连监听,供测试手动触发补拉
 const connectHandlers: Array<() => void> = [];
+// 可变路由参数 + 捕获 router.afterEach 回调,供测试模拟编程式导航
+const routeParams: { sessionId?: string } = { sessionId: "s1" };
+const afterEachHandlers: Array<() => void> = [];
 
 vi.mock("@/services/ApiService", () => ({
   apiService: {
@@ -69,8 +77,14 @@ vi.mock("@/composables/usePopup", () => ({
 }));
 
 vi.mock("vue-router", () => ({
-  useRouter: () => ({ afterEach: () => () => {}, replace: vi.fn() }),
-  useRoute: () => ({ params: { sessionId: "s1" } }),
+  useRouter: () => ({
+    afterEach: (cb: () => void) => {
+      afterEachHandlers.push(cb);
+      return () => {};
+    },
+    replace: vi.fn(),
+  }),
+  useRoute: () => ({ params: routeParams }),
 }));
 
 import { useSessionEvents } from "./useSessionEvents";
@@ -120,6 +134,10 @@ describe("useSessionEvents 统一订阅器", () => {
     setActivePinia(createPinia());
     registeredHandlers.clear();
     connectHandlers.length = 0;
+    visibilityHandlers.length = 0;
+    afterEachHandlers.length = 0;
+    routeParams.sessionId = "s1";
+    (document as any).hidden = false;
     vi.clearAllMocks();
     vi.mocked(apiService.fetchPendingAsks).mockResolvedValue({ pending: [] });
     vi.mocked(apiService.fetchSessionQueue).mockResolvedValue(
@@ -210,6 +228,33 @@ describe("useSessionEvents 统一订阅器", () => {
     expect(store.peekSessionPendingAsk("s1")?.cardKind).toBe("write-approval");
     // 补写语义：本地既有的仍保留（清空会把仍可应答的卡片弄丢）
     expect(store.peekSessionPendingAsk("s-local")?.requestId).toBe("local-1");
+    // s1 是当前会话且窗口可见 → 不置未读（不打扰正在看的用户）
+    expect(store.getSidebarState("s1").unread).toBe(false);
+  });
+
+  it("（重）建连补拉待答卡:非当前会话置未读(断线期间的 ask 也要点亮红点)", async () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    vi.mocked(apiService.fetchPendingAsks).mockResolvedValue({
+      pending: [
+        {
+          sessionId: "s-bg",
+          requestId: "r-bg",
+          kind: "approval",
+          cardKind: "command-approval",
+          title: "命令需要批准",
+          questions: [],
+        },
+      ],
+    });
+
+    for (const cb of connectHandlers) cb();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(store.peekSessionPendingAsk("s-bg")?.requestId).toBe("r-bg");
+    expect(store.getSidebarState("s-bg").unread).toBe(true);
   });
 
   it("running 事件:streamStatus=running + 侧边栏 working=true", () => {
@@ -262,6 +307,93 @@ describe("useSessionEvents 统一订阅器", () => {
     emitStreamStatus({ sessionId: "s1", status: "running" });
 
     expect(store.sessionPendingAsk("s1")?.requestId).toBe("req1");
+  });
+
+  it("ask_requested 到达非当前会话:置未读(桌面红点与侧边栏同源)", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    streamEventHub.route({
+      type: "ask_requested",
+      sessionId: "s-bg",
+      requestId: "r-bg",
+      kind: "approval",
+      cardKind: "command-approval",
+      questions: [],
+      streamSeq: 1,
+      streamBootId: "boot-ask",
+    } as any);
+
+    expect(store.peekSessionPendingAsk("s-bg")?.requestId).toBe("r-bg");
+    expect(store.getSidebarState("s-bg").unread).toBe(true);
+  });
+
+  it("ask_requested 到达当前会话且窗口可见:不置未读(用户直接看到卡片)", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    streamEventHub.route({
+      type: "ask_requested",
+      sessionId: "s1",
+      requestId: "r-cur",
+      kind: "ask",
+      cardKind: "question",
+      questions: [],
+      streamSeq: 1,
+      streamBootId: "boot-ask",
+    } as any);
+
+    expect(store.peekSessionPendingAsk("s1")?.requestId).toBe("r-cur");
+    expect(store.getSidebarState("s1").unread).toBe(false);
+  });
+
+  it("离开会话不补亮未读:红点是一次性通知(阅后即焚),待答卡刻意忽略也不持续提醒", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    store.upsertSessionPendingAsk("s1", { requestId: "r1", kind: "approval", questions: [] });
+
+    // 编程式导航到 s2（路由回调）
+    routeParams.sessionId = "s2";
+    for (const cb of afterEachHandlers) cb();
+
+    // s1 虽有未答卡片，但用户已看过 → 不补亮；进入的 s2 置已读
+    expect(store.peekSessionPendingAsk("s1")?.requestId).toBe("r1");
+    expect(store.getSidebarState("s1").unread).toBe(false);
+    expect(store.getSidebarState("s2").unread).toBe(false);
+  });
+
+  it("进入会话即已读:清当前会话未读,不误清其他会话", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    store.setSidebarFlag("s1", "unread", true);
+    store.setSidebarFlag("s-other", "unread", true);
+
+    for (const cb of afterEachHandlers) cb();
+
+    expect(store.getSidebarState("s1").unread).toBe(false);
+    expect(store.getSidebarState("s-other").unread).toBe(true);
+  });
+
+  it("窗口隐藏不补亮已看过的待答卡；恢复可见时清除当前会话未读", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    store.upsertSessionPendingAsk("s1", { requestId: "r1", kind: "approval", questions: [] });
+
+    // 用户已看过卡片后隐藏窗口：不重复提醒
+    (document as any).hidden = true;
+    for (const cb of visibilityHandlers) cb();
+    expect(store.getSidebarState("s1").unread).toBe(false);
+
+    // 恢复可见 = 阅后即焚：清掉当前会话未读
+    store.setSidebarFlag("s1", "unread", true);
+    store.setSidebarFlag("s-other", "unread", true);
+    (document as any).hidden = false;
+    for (const cb of visibilityHandlers) cb();
+    expect(store.getSidebarState("s1").unread).toBe(false);
+    expect(store.getSidebarState("s-other").unread).toBe(true);
   });
 
   it("子 Agent 事件:写 streamStatus(供 ChatPage watch),但不改侧边栏 working", () => {

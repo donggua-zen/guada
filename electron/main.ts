@@ -35,6 +35,11 @@ import {
   type UpdateEvent,
   type UpdateInfo,
 } from "./updater";
+import {
+  createTaskbarOverlayImage,
+  resolveTaskbarOverlayLayout,
+  type TaskbarOverlayLayout,
+} from "./taskbar-badge";
 let backendProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 let windowManager: BrowserWebviewManager | null = null; // 窗口管理器
@@ -53,6 +58,42 @@ let tray: Tray | null = null; // 系统托盘图标
 let floatWindow: BrowserWindow | null = null; // 托盘悬浮小窗
 /** 当前聚合的托盘统计信息 */
 let trayStats = { running: 0, unread: 0 };
+/**
+ * 任务栏未读角标（原理参考 zcode packages/desktop/src/main/unreadBadge.ts）：
+ * - Windows：app.setBadgeCount 是 no-op，走 BrowserWindow.setOverlayIcon；
+ * - macOS：app.setBadgeCount 控制 Dock 角标。
+ * 未读只有"有/无"两态（本项目 unread 是布尔语义），overlay 图构建一次缓存复用。
+ */
+const taskbarOverlayLayout: TaskbarOverlayLayout = resolveTaskbarOverlayLayout(
+  process.platform,
+  os.release(),
+);
+let taskbarOverlayImage: import("electron").NativeImage | null =
+  process.platform === "win32"
+    ? createTaskbarOverlayImage(taskbarOverlayLayout, nativeImage)
+    : null;
+
+/** 当前角标是否已点亮；渲染层每 2s 轮询推送，只在状态翻转时调用系统 API，避免任务栏反复重绘。 */
+let taskbarUnreadBadgeActive = false;
+
+/** 把未读状态同步到任务栏/Dock 角标（由 tray:update-stats 驱动）。 */
+function syncTaskbarUnreadBadge(unread: number) {
+  const hasUnread = unread > 0;
+  if (hasUnread === taskbarUnreadBadgeActive) return;
+  taskbarUnreadBadgeActive = hasUnread;
+  if (process.platform === "win32") {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setOverlayIcon(
+        hasUnread ? taskbarOverlayImage : null,
+        hasUnread ? "有未读消息" : "",
+      );
+    }
+    return;
+  }
+  if (process.platform === "darwin") {
+    app.setBadgeCount(hasUnread ? 1 : 0);
+  }
+}
 /** 悬浮窗设置（默认隐藏，用户在设置页开启后生效） */
 let traySettings = { enabled: false, opacity: 95 };
 let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
@@ -1791,6 +1832,9 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       webviewTag: true, // 启用 <webview> 标签，用于浏览器自动化内嵌预览
+      // 关闭后台节流：隐藏到托盘/最小化时渲染进程定时器会被默认节流（可降到 1 次/分钟），
+      // 而任务栏未读角标依赖 useTrayStats 的 2s 轮询推送 unread，节流会让红点滞后出现/滞后消失。
+      backgroundThrottling: false,
     },
     show: false,
     backgroundColor: "#000000",
@@ -1800,6 +1844,10 @@ function createWindow() {
 
   // 设置应用菜单
   setupApplicationMenu();
+
+  // 新窗口没有 overlay：重置角标状态，让下一次轮询按当前未读重新应用
+  // （macOS 关窗后由 Dock 承载角标，重新激活时同样需要重新 setBadgeCount）
+  taskbarUnreadBadgeActive = false;
 
   if (isDev) {
     // 开发环境：根据 USE_STATIC_FRONTEND 决定加载方式
@@ -2071,6 +2119,8 @@ function setupIpcHandlers() {
       if (floatWindow && !floatWindow.isDestroyed()) {
         floatWindow.webContents.send("float:update", stats);
       }
+      // 任务栏/Dock 未读角标与悬浮窗、托盘菜单同源（stats.unread）
+      syncTaskbarUnreadBadge(stats.unread);
     },
   );
 
