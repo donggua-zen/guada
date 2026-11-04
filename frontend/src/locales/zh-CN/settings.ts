@@ -5,6 +5,19 @@ export default {
     system: '系统',
   },
 
+  pet: {
+    avatarTitle: '宠物形象',
+    avatarHint: '选择桌面上显示的形象。更多形象正在制作中。',
+    emptyAvatars: '未找到可用形象（缺少 build-resources/pets 素材）。',
+    noPreview: '暂无预览',
+    behaviorTitle: '显示与外观',
+    enable: '显示桌面宠物',
+    enableDesc: '常驻桌面，显示任务运行进度与未读提醒',
+    opacity: '桌宠透明度',
+    opacityDesc: '调节宠物与气泡的不透明度',
+    saveFailed: '保存桌宠设置失败',
+  },
+
   general: {
     language: '语言',
     languageDesc: '选择应用界面语言',
@@ -397,6 +410,7 @@ export default {
       providers: '模型供应商',
       ocr: 'OCR 设置',
       appearance: '外观',
+      pet: '桌面宠物',
       search: '搜索设置',
       browser: '浏览器',
       computerUse: '桌面操作',

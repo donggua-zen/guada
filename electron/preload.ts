@@ -157,13 +157,52 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getComputerUseStatus: () => ipcRenderer.invoke('computer-use:status'),
   testComputerUse: () => ipcRenderer.invoke('computer-use:test'),
 
-  // 托盘悬浮窗：推送聚合统计数据（fire-and-forget）
-  updateTrayStats: (stats: { running: number; unread: number }) =>
-    ipcRenderer.send('tray:update-stats', stats),
+  // 桌宠/托盘：推送聚合统计数据（fire-and-forget）
+  // 托盘提示、任务栏角标与桌宠状态同源，故一次推送携带全部字段
+  updateTrayStats: (stats: {
+    running: number
+    unread: number
+    mode?: 'idle' | 'walk' | 'run' | 'yawn'
+    title?: string
+    toolLabel?: string
+    sessionId?: string | null
+  }) => ipcRenderer.send('tray:update-stats', stats),
 
-  // 托盘悬浮窗：推送配置（显隐 + 透明度）
-  updateTraySettings: (settings: { enabled: boolean; opacity: number }) =>
-    ipcRenderer.send('tray:update-settings', settings),
+  // 桌宠：推送配置（形象 + 显隐 + 透明度）
+  updatePetSettings: (settings: {
+    enabled: boolean
+    opacity: number
+    avatarId?: string
+  }) => ipcRenderer.send('pet:update-settings', settings),
+
+  /** 桌宠：可用形象列表（设置页形象选择器；预览图为 data URL） */
+  listPetAvatars: () =>
+    ipcRenderer.invoke('pet:list-avatars') as Promise<
+      Array<{ id: string; name: string; previewDataUrl: string | null }>
+    >,
+
+  /**
+   * 桌宠发起的操作回传主窗口渲染层（主进程 → 渲染层）
+   *
+   * 为什么要绕一圈：桌宠窗是独立进程上下文，没有后端 token，也不能直接调 API。
+   * 由主进程转发给主窗口渲染层，后者用既有 apiService 落盘/中断流，
+   * 保持「后端是设置的单一真相」。
+   */
+  onPetAction: (
+    callback: (payload: {
+      kind: 'toggle-enabled' | 'open-session' | 'stop-session'
+      enabled?: boolean
+      sessionId?: string | null
+    }) => void
+  ) => {
+    const listener = (_event: unknown, payload: {
+      kind: 'toggle-enabled' | 'open-session' | 'stop-session'
+      enabled?: boolean
+      sessionId?: string | null
+    }) => callback(payload)
+    ipcRenderer.on('pet:action', listener)
+    return () => ipcRenderer.removeListener('pet:action', listener)
+  },
 
   // 防休眠模式：off 不干预 / busy 仅执行任务时 / always 始终（落盘由后端负责）
   updateKeepAwakeMode: (mode: 'off' | 'busy' | 'always') =>

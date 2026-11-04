@@ -20,11 +20,14 @@
 </template>
 
 <script setup>
-import { ref, provide, onMounted, watch, computed } from 'vue'
+import { ref, provide, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter, RouterView } from 'vue-router'
 import { useTitle } from './composables/useTitle'
 import { useTheme } from './composables/useTheme'
 import { useTrayStats } from './composables/useTrayStats'
+import { useLayoutStore } from './stores/layout'
+import { useSessionStore } from './stores/session'
+import { apiService } from './services/ApiService'
 import { i18n, getLocale } from './locales'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
 import SetupGuide from './components/SetupGuide.vue'
@@ -35,9 +38,54 @@ import ContextMenuManager from './utils/ContextMenuManager'
 const router = useRouter()
 const title = useTitle()
 const theme = useTheme() //不要删除，这里会执行dark模式设置
-useTrayStats() // 托盘悬浮窗统计推送（仅 Electron 生效）
+useTrayStats() // 桌宠 + 托盘状态推送（仅 Electron 生效）
 const isDev = import.meta.env.DEV
 const guideRef = ref(null)
+
+const layoutStore = useLayoutStore()
+const sessionStore = useSessionStore()
+
+/**
+ * 桌宠发起的操作（桌宠窗没有后端 token，统一转回主窗口渲染层执行）
+ *
+ * - toggle-enabled：托盘菜单/右键菜单改了开关 → 这里落盘，保持后端为单一真相
+ * - open-session：点气泡 → 进会话（顺带清未读，与侧边栏点击同语义）
+ * - stop-session：点气泡停止 → 走既有 cancelResponse（后端 stop 接口）
+ */
+let unsubscribePetAction = null
+onMounted(() => {
+  if (!window.electronAPI?.onPetAction) return
+  unsubscribePetAction = window.electronAPI.onPetAction((payload) => {
+    if (payload.kind === 'toggle-enabled') {
+      const enabled = payload.enabled === true
+      layoutStore.setPetEnabled(enabled)
+      layoutStore.applyPetSettings()
+      void apiService
+        .updateGroupSettings('pet', { enabled })
+        .catch((error) => console.error('保存桌宠开关失败:', error))
+      return
+    }
+    if (payload.kind === 'open-session') {
+      const sessionId = payload.sessionId
+      if (!sessionId) return
+      sessionStore.setSidebarFlag(sessionId, 'unread', false)
+      router.replace({ name: 'Chat', params: { sessionId } })
+      return
+    }
+    if (payload.kind === 'stop-session') {
+      const sessionId = payload.sessionId
+      if (!sessionId) return
+      void apiService
+        .cancelResponse(sessionId)
+        .catch((error) => console.error('停止会话失败:', error))
+    }
+  })
+})
+
+onUnmounted(() => {
+  unsubscribePetAction?.()
+  unsubscribePetAction = null
+})
 
 // 主题切换过渡状态
 const showThemeTransition = ref(false)

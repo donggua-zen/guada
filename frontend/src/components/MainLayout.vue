@@ -128,6 +128,8 @@ onMounted(() => {
   // 外观分组（壁纸/透明度/主题预设/语言）只在这里读一次：语言也由这次响应派生，
   // 不再由 App.vue 单独拉一份。applyWallpaperSettings 只写 documentElement，不依赖元素存在。
   layoutStore.loadAppearanceSettings()
+  // 桌宠是独立设置项（pet 分组），启动时单独拉一次并把配置推给主进程
+  layoutStore.loadPetSettings()
 
   loadToolDisplays()
 

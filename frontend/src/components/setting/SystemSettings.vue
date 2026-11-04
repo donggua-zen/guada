@@ -68,6 +68,9 @@
                             <template v-else-if="currentTabValue === 'appearance'">
                                 <AppearanceSettings />
                             </template>
+                            <template v-else-if="currentTabValue === 'pet'">
+                                <PetSettings />
+                            </template>
                             <template v-else-if="currentTabValue === 'search'">
                                 <SearchSettings />
                             </template>
@@ -134,6 +137,7 @@ import GeneralSettings from './GeneralSettings.vue'
 const ModelsProviderSettings = defineAsyncComponent(() => import('./ModelsProviderSettings.vue'))
 import OcrSettings from './OcrSettings.vue'
 import AppearanceSettings from './AppearanceSettings.vue'
+import PetSettings from './PetSettings.vue'
 import SearchSettings from './SearchSettings.vue'
 import BrowserSettings from './BrowserSettings.vue'
 import ComputerUseSettings from './ComputerUseSettings.vue'
@@ -172,6 +176,7 @@ import {
     Person16Regular,
     ShieldCheckmark20Regular,
     ArrowUpload20Regular,
+    AnimalCat24Regular,
 } from '@vicons/fluent'
 
 import PageHeader from '@/components/PageHeader.vue'
@@ -199,6 +204,7 @@ const groupMap = computed<Record<string, string>>(() => ({
     connections: t('settings.system.groups.general'),
     'mobile-access': t('settings.system.groups.system'),
     appearance: t('settings.system.groups.personalization'),
+    pet: t('settings.system.groups.personalization'),
     search: t('settings.system.groups.personalization'),
     about: t('settings.system.groups.system'),
     community: t('settings.system.groups.system'),
@@ -253,6 +259,11 @@ const sidebarItems = computed(() => [
         label: t('settings.system.tabs.appearance'),
         path: 'appearance',
         icon: Image24Regular,
+    },
+    {
+        label: t('settings.system.tabs.pet'),
+        path: 'pet',
+        icon: AnimalCat24Regular,
     },
     {
         label: t('settings.system.tabs.search'),

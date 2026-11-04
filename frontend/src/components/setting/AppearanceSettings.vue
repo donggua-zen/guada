@@ -187,48 +187,6 @@
         </div>
       </div>
 
-      <!-- 悬浮任务状态分组 -->
-      <div>
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">悬浮任务状态</h3>
-        <div
-          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) overflow-hidden"
-        >
-          <!-- 显隐开关 -->
-          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
-            <div class="flex flex-col gap-1 min-w-0">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">显示悬浮窗</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
-                最小化到托盘时显示任务运行和未读统计
-              </span>
-            </div>
-            <GdSwitch v-model="settingsForm.floatWidgetEnabled" size="large" @change="handleFloatWidgetChange" />
-          </div>
-
-          <!-- 透明度调节 -->
-          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
-            <div class="flex flex-col gap-1 min-w-0">
-              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">悬浮窗透明度</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
-                调节悬浮窗卡片的不透明度
-              </span>
-            </div>
-            <div class="flex items-center gap-3 shrink-0 w-48">
-              <GdSlider
-                v-model="settingsForm.floatWidgetOpacity"
-                :min="30"
-                :max="100"
-                :step="1"
-                class="flex-1"
-                @change="handleFloatWidgetChange"
-              />
-              <span class="text-sm text-gray-600 dark:text-[#8b8d95] w-10 text-right">
-                {{ settingsForm.floatWidgetOpacity }}%
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- 重置按钮 -->
       <div class="flex justify-end">
         <GdButton @click="handleReset">恢复默认设置</GdButton>
@@ -245,7 +203,6 @@ import { toast } from '@/components/ui/toastService';
 import GdSlider from '@/components/ui/GdSlider.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
-import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 import { Add24Regular, Delete16Regular, WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
 import { useDebounceFn } from '@vueuse/core'
@@ -302,8 +259,6 @@ const themeOptions = computed(() => [
 const settingsForm = reactive({
   sidebarOpacity: 100,
   contentOpacity: 100,
-  floatWidgetEnabled: false,
-  floatWidgetOpacity: 95,
 })
 
 const previewUrl = ref<string | null>(null)
@@ -362,8 +317,6 @@ const loadSettings = async () => {
 
     settingsForm.sidebarOpacity = response.sidebarOpacity ?? 100
     settingsForm.contentOpacity = response.contentOpacity ?? 100
-    settingsForm.floatWidgetEnabled = response.floatWidgetEnabled === true
-    settingsForm.floatWidgetOpacity = response.floatWidgetOpacity ?? 95
     previewUrl.value = resolveWallpaperUrl(response.wallpaperUrl || null)
 
     // 主题预设不从这里同步：运行时真值是 useTheme refs（localStorage 同步），
@@ -372,8 +325,6 @@ const loadSettings = async () => {
 
     // 同步到 layout store
     syncToLayoutStore()
-    // 同步到 Electron 主进程
-    pushFloatWidgetSettings()
   } catch (error) {
     console.error('获取外观设置失败:', error)
     // 使用默认值
@@ -385,8 +336,6 @@ const syncToLayoutStore = () => {
   layoutStore.setSidebarOpacity(settingsForm.sidebarOpacity)
   layoutStore.setContentOpacity(settingsForm.contentOpacity)
   layoutStore.setWallpaperUrl(previewUrl.value)
-  layoutStore.setFloatWidgetEnabled(settingsForm.floatWidgetEnabled)
-  layoutStore.setFloatWidgetOpacity(settingsForm.floatWidgetOpacity)
 }
 
 // 保存设置
@@ -397,8 +346,6 @@ const handleSave = async () => {
       sidebarOpacity: settingsForm.sidebarOpacity,
       contentOpacity: settingsForm.contentOpacity,
       wallpaperUrl: extractRelativePath(previewUrl.value),
-      floatWidgetEnabled: settingsForm.floatWidgetEnabled,
-      floatWidgetOpacity: settingsForm.floatWidgetOpacity,
       lightThemePreset: lightThemePreset.value,
       darkThemePreset: darkThemePreset.value,
     }
@@ -409,8 +356,6 @@ const handleSave = async () => {
 
     // 同步到 layout store
     syncToLayoutStore()
-    // 同步到 Electron 主进程
-    pushFloatWidgetSettings()
   } catch (error) {
     console.error('保存外观设置失败:', error)
     toast.error('保存失败: ' + (getErrorMessage(error) || '未知错误'))
@@ -476,31 +421,10 @@ const handleOpacityChange = () => {
   layoutStore.setContentOpacity(settingsForm.contentOpacity)
 }
 
-/**
- * 推送悬浮窗设置到 Electron 主进程
- */
-const pushFloatWidgetSettings = () => {
-  window.electronAPI?.updateTraySettings({
-    enabled: settingsForm.floatWidgetEnabled,
-    opacity: settingsForm.floatWidgetOpacity,
-  })
-}
-
-/**
- * 悬浮任务窗设置变化（开关 / 透明度）
- */
-const handleFloatWidgetChange = () => {
-  layoutStore.setFloatWidgetEnabled(settingsForm.floatWidgetEnabled)
-  layoutStore.setFloatWidgetOpacity(settingsForm.floatWidgetOpacity)
-  handleSave()
-}
-
 // 恢复默认设置
 const handleReset = async () => {
   settingsForm.sidebarOpacity = 100
   settingsForm.contentOpacity = 100
-  settingsForm.floatWidgetEnabled = false
-  settingsForm.floatWidgetOpacity = 95
 
   // 重置主题预设
   setLightThemePreset('default')

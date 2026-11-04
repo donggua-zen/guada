@@ -142,9 +142,10 @@ export const useLayoutStore = defineStore('layout', () => {
   const sidebarOpacity = useStorage<number>('sidebarOpacity', 100)
   const contentOpacity = useStorage<number>('contentOpacity', 100)
 
-  // 悬浮任务窗设置（持久化到 localStorage）
-  const floatWidgetEnabled = useStorage<boolean>('floatWidgetEnabled', false)
-  const floatWidgetOpacity = useStorage<number>('floatWidgetOpacity', 95)
+  // 桌面宠物设置（独立设置项，后端 `pet` 分组为单一真相；这里做启动期缓存）
+  const petEnabled = useStorage<boolean>('petEnabled', false)
+  const petOpacity = useStorage<number>('petOpacity', 95)
+  const petAvatarId = useStorage<string>('petAvatarId', 'silver-haired')
 
   // 防止重复加载壁纸的标志
   let isLoadingWallpaper = false
@@ -246,17 +247,65 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   /**
-   * 设置悬浮任务窗显隐
+   * 设置桌宠显隐
    */
-  const setFloatWidgetEnabled = (enabled: boolean): void => {
-    floatWidgetEnabled.value = enabled
+  const setPetEnabled = (enabled: boolean): void => {
+    petEnabled.value = enabled
   }
 
   /**
-   * 设置悬浮任务窗透明度
+   * 设置桌宠透明度
    */
-  const setFloatWidgetOpacity = (opacity: number): void => {
-    floatWidgetOpacity.value = opacity
+  const setPetOpacity = (opacity: number): void => {
+    petOpacity.value = opacity
+  }
+
+  /**
+   * 设置桌宠形象
+   */
+  const setPetAvatarId = (avatarId: string): void => {
+    petAvatarId.value = avatarId
+  }
+
+  /** 把当前桌宠设置推给 Electron 主进程（浏览器环境下空转） */
+  const applyPetSettings = (): void => {
+    window.electronAPI?.updatePetSettings?.({
+      enabled: petEnabled.value,
+      opacity: petOpacity.value,
+      avatarId: petAvatarId.value,
+    })
+  }
+
+  /**
+   * 读取桌宠设置（独立分组 `pet`）
+   *
+   * 兼容迁移：老版本把开关/透明度存在 appearance 组（floatWidget*），
+   * 新分组为空时回退读取一次，避免升级后桌宠莫名消失。
+   */
+  const loadPetSettings = async (): Promise<void> => {
+    try {
+      const saved = await apiService.fetchGroupSettings<Record<string, unknown>>('pet')
+      if (typeof saved?.enabled === 'boolean') petEnabled.value = saved.enabled
+      if (typeof saved?.opacity === 'number') petOpacity.value = saved.opacity
+      if (typeof saved?.avatarId === 'string' && saved.avatarId) {
+        petAvatarId.value = saved.avatarId
+      }
+
+      // 迁移：新分组还没写过任何值 → 读老键
+      if (saved?.enabled === undefined && saved?.opacity === undefined) {
+        const legacy = await apiService.fetchGroupSettings<Record<string, unknown>>('appearance')
+        if (typeof legacy?.floatWidgetEnabled === 'boolean') {
+          petEnabled.value = legacy.floatWidgetEnabled
+        }
+        if (typeof legacy?.floatWidgetOpacity === 'number') {
+          petOpacity.value = legacy.floatWidgetOpacity
+        }
+      }
+    } catch (error) {
+      console.error('读取桌宠设置失败:', error)
+    } finally {
+      applyPetSettings()
+    }
   }
 
   /**
@@ -368,12 +417,6 @@ export const useLayoutStore = defineStore('layout', () => {
       if (response.contentOpacity !== undefined) {
         contentOpacity.value = response.contentOpacity
       }
-      if (response.floatWidgetEnabled !== undefined) {
-        floatWidgetEnabled.value = response.floatWidgetEnabled === true
-      }
-      if (response.floatWidgetOpacity !== undefined) {
-        floatWidgetOpacity.value = response.floatWidgetOpacity
-      }
 
       // 语言与外观同组下发：只在这里消费（App.vue 不再单独拉一次 appearance）
       applyLanguageFromAppearance(response.language)
@@ -388,14 +431,6 @@ export const useLayoutStore = defineStore('layout', () => {
       }
 
       applyWallpaperSettings()
-
-      // 同步悬浮窗设置到 Electron 主进程
-      if (window.electronAPI) {
-        window.electronAPI.updateTraySettings({
-          enabled: floatWidgetEnabled.value,
-          opacity: floatWidgetOpacity.value,
-        })
-      }
       return true
     } catch (error) {
       console.error('加载外观设置失败:', error)
@@ -428,8 +463,14 @@ export const useLayoutStore = defineStore('layout', () => {
     wallpaperUrl,
     sidebarOpacity,
     contentOpacity,
-    floatWidgetEnabled,
-    floatWidgetOpacity,
+    petEnabled,
+    petOpacity,
+    petAvatarId,
+    loadPetSettings,
+    applyPetSettings,
+    setPetEnabled,
+    setPetOpacity,
+    setPetAvatarId,
     toggleSidebar,
     setSidebarVisible,
     setSidebarWidth,
@@ -444,8 +485,6 @@ export const useLayoutStore = defineStore('layout', () => {
     setWallpaperUrl,
     setSidebarOpacity,
     setContentOpacity,
-    setFloatWidgetEnabled,
-    setFloatWidgetOpacity,
     applyWallpaperSettings,
     appearanceSettings,
     loadAppearanceSettings,

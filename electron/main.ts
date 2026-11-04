@@ -8,7 +8,6 @@ import {
   MenuItemConstructorOptions,
   dialog,
   clipboard,
-  screen,
   crashReporter,
   nativeImage,
   powerSaveBlocker,
@@ -40,6 +39,12 @@ import {
   resolveTaskbarOverlayLayout,
   type TaskbarOverlayLayout,
 } from "./taskbar-badge";
+import {
+  PetWindowController,
+  listPetAvatars,
+  resolvePetsRootDir,
+  type PetStatePayload,
+} from "./pet-window";
 let backendProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 let windowManager: BrowserWebviewManager | null = null; // 窗口管理器
@@ -55,9 +60,18 @@ const MAX_STDERR_LINES = 200;
 /** 标题栏高度(px)：原生窗口按钮 overlay 用；修改需同步前端 CustomTitlebar.vue 根节点的 h-9 */
 const TITLEBAR_HEIGHT = 36;
 let tray: Tray | null = null; // 系统托盘图标
-let floatWindow: BrowserWindow | null = null; // 托盘悬浮小窗
-/** 当前聚合的托盘统计信息 */
+let petWindow: PetWindowController | null = null; // 桌面宠物窗（替代旧的托盘悬浮状态卡）
+/** 当前聚合的托盘统计信息（桌宠状态同源派生） */
 let trayStats = { running: 0, unread: 0 };
+/** 最近一次收到的桌宠状态（渲染层就绪前也会缓存，避免首帧空白） */
+let petState: PetStatePayload = {
+  mode: "idle",
+  running: 0,
+  unread: 0,
+  title: "",
+  toolLabel: "",
+  sessionId: null,
+};
 /**
  * 任务栏未读角标（原理参考 zcode packages/desktop/src/main/unreadBadge.ts）：
  * - Windows：app.setBadgeCount 是 no-op，走 BrowserWindow.setOverlayIcon；
@@ -95,7 +109,12 @@ function syncTaskbarUnreadBadge(unread: number) {
   }
 }
 /** 悬浮窗设置（默认隐藏，用户在设置页开启后生效） */
-let traySettings = { enabled: false, opacity: 95 };
+/** 桌宠设置（与设置页「桌面宠物」分组同源；后端为单一真相，这里只持 runtime 副本） */
+let petSettings = {
+  enabled: false,
+  opacity: 95,
+  avatarId: "silver-haired",
+};
 let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
 /** 最近一次检查更新的原始响应，供下载/安装流程复用（不接受渲染层传入 URL）。 */
 let lastUpdateInfo: UpdateInfo | null = null;
@@ -1487,6 +1506,21 @@ function updateTrayMenu() {
         }
       },
     },
+    {
+      // 与设置页同一个开关（后端为单一真相）：这里只改 runtime 并通知渲染层落盘
+      label: "显示桌面宠物",
+      type: "checkbox",
+      checked: petSettings.enabled,
+      click: (item) => {
+        petSettings = { ...petSettings, enabled: item.checked };
+        applyPetSettings();
+        mainWindow?.webContents.send("pet:action", {
+          kind: "toggle-enabled",
+          enabled: item.checked,
+        });
+        updateTrayMenu();
+      },
+    },
     { type: "separator" },
     {
       label: "退出",
@@ -1499,167 +1533,17 @@ function updateTrayMenu() {
 }
 
 /**
- * 创建托盘悬浮小窗
- * 主窗口隐藏时，在屏幕右下角显示一个半透明状态卡片
+ * 应用桌宠设置（形象 + 显隐 + 透明度）
+ *
+ * 与旧的「悬浮任务状态卡」不同：桌宠**常驻桌面**，不再跟随主窗口的最小化/隐藏状态。
+ * 开关只由 petSettings.enabled 决定。
  */
-function createFloatWindow() {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } =
-    primaryDisplay.workAreaSize;
-
-  const floatingHTML = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="UTF-8"><style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html { background: transparent; }
-html, body { height: 100%; overflow: hidden; }
-body {
-  background: transparent;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: #e8e9ed;
-  user-select: none;
-  white-space: nowrap;
-  display: flex; flex-direction: column; justify-content: center;
-  padding: 0;
-}
-.card {
-  background: rgba(30, 30, 35, 0.85);
-  backdrop-filter: blur(8px);
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.1);
-  width: 100%; height: 100%;
-  display: flex; flex-direction: column; justify-content: center;
-  padding: 6px 12px;
-}
-.row { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12px; }
-.icon-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.dot-green { background: #4caf50; box-shadow: 0 0 3px #4caf50; }
-.dot-orange { background: #ff9800; box-shadow: 0 0 3px #ff9800; }
-.row .val { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
-</style></head>
-<body>
-<div class="card" id="card" style="opacity:0">
-  <div class="row"><span class="icon-dot dot-green"></span><span>任务运行中</span><span class="val" id="val-running">0</span></div>
-  <div class="row"><span class="icon-dot dot-orange"></span><span>未读消息</span><span class="val" id="val-unread">0</span></div>
-</div>
-<script>
-const { ipcRenderer } = require('electron');
-const card = document.getElementById('card');
-
-// 接收用户设置的透明度（浮窗就绪后主进程 float:ready → applyTraySettings 会立即下发）
-ipcRenderer.on('float:settings', (_, settings) => {
-  if (settings.opacity !== undefined) {
-    card.style.opacity = String(settings.opacity / 100);
-  }
-});
-
-// 悬浮窗统计数据更新（仅更新数字，不设置透明度）
-ipcRenderer.on('float:update', (_, data) => {
-  document.getElementById('val-running').textContent = data.running;
-  document.getElementById('val-unread').textContent = data.unread;
-});
-
-// 双击恢复主窗口
-card.addEventListener('dblclick', () => {
-  ipcRenderer.send('float:dblclick');
-});
-
-// JS 拖拽实现（替代 -webkit-app-region，避免鼠标事件被拦截）
-let isDragging = false;
-let dragStartX = 0, dragStartY = 0;
-
-card.addEventListener('mousedown', (e) => {
-  isDragging = false;
-  dragStartX = e.screenX;
-  dragStartY = e.screenY;
-
-  const onMouseMove = (e) => {
-    if (e.buttons !== 1) { cleanup(); return; }
-    const dx = e.screenX - dragStartX;
-    const dy = e.screenY - dragStartY;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-      isDragging = true;
-      ipcRenderer.send('float:drag-move', { dx, dy });
-      dragStartX = e.screenX;
-      dragStartY = e.screenY;
-    }
-  };
-
-  const onMouseUp = () => {
-    cleanup();
-    isDragging = false;
-  };
-
-  const cleanup = () => {
-    document.removeEventListener('mousemove', onMouseMove);
-    document.removeEventListener('mouseup', onMouseUp);
-  };
-
-  document.addEventListener('mousemove', onMouseMove);
-  document.addEventListener('mouseup', onMouseUp);
-  });
-
-  // 接收悬浮窗设置（透明度）
-  ipcRenderer.on('float:settings', (_, settings) => {
-    if (settings.opacity !== undefined) {
-      userOpacity = settings.opacity / 100;
-      card.style.opacity = String(userOpacity);
-    }
-  });
-
-  // 通知主进程：浮窗已就绪，可下发缓存设置
-  ipcRenderer.send('float:ready');
-  <\/script>
-</body>
-</html>`;
-
-  floatWindow = new BrowserWindow({
-    width: 160,
-    height: 80,
-    x: screenWidth - 180,
-    y: screenHeight - 100,
-    transparent: true,
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    show: false,
-    focusable: false,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
-  });
-
-  floatWindow.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(floatingHTML)}`,
-  );
-
-  floatWindow.on("closed", () => {
-    floatWindow = null;
-  });
-}
-
-/**
- * 应用悬浮窗设置（显隐 + 透明度）
- */
-function applyTraySettings() {
-  if (!floatWindow || floatWindow.isDestroyed()) return;
-
-  // 显隐控制：主窗口最小化或隐藏时且 enabled 才显示浮窗
-  const isMinimized = mainWindow?.isMinimized() ?? false;
-  const isHidden = mainWindow ? !mainWindow.isVisible() : true;
-  const shouldShow =
-    traySettings.enabled && mainWindow && (isMinimized || isHidden);
-  if (shouldShow) {
-    floatWindow.show();
-    floatWindow.webContents.send("float:settings", {
-      opacity: traySettings.opacity,
-    });
-  } else {
-    floatWindow.hide();
-  }
+function applyPetSettings() {
+  if (!petWindow) return;
+  // 先切形象（会重建窗口），再套用显隐/透明度
+  petWindow.setAvatar(petSettings.avatarId);
+  petWindow.setEnabled(petSettings.enabled);
+  petWindow.setOpacity(petSettings.opacity);
 }
 
 // 判断是否为本地地址（允许在主窗口内导航）
@@ -1939,7 +1823,7 @@ function createWindow() {
     }
   });
 
-  // 关闭按钮最小化到托盘（hide 事件中执行 applyTraySettings，避免重复触发闪烁）
+  // 关闭按钮最小化到托盘（hide 事件中执行 applyPetSettings，避免重复触发闪烁）
   mainWindow.on("close", (event) => {
     if (!(app as AppExtended).isQuiting) {
       event.preventDefault();
@@ -1947,36 +1831,10 @@ function createWindow() {
     }
   });
 
-  // 主窗口隐藏/最小化 → 延迟 1s 显示浮窗（避免闪烁），恢复/显示 → 立即隐藏
-  let floatShowTimeout: ReturnType<typeof setTimeout> | null = null;
-  mainWindow.on("hide", () => {
-    if (floatShowTimeout) clearTimeout(floatShowTimeout);
-    floatShowTimeout = setTimeout(() => {
-      applyTraySettings();
-      floatShowTimeout = null;
-    }, 500);
-  });
-  mainWindow.on("minimize", () => {
-    if (floatShowTimeout) clearTimeout(floatShowTimeout);
-    floatShowTimeout = setTimeout(() => {
-      applyTraySettings();
-      floatShowTimeout = null;
-    }, 500);
-  });
-  mainWindow.on("show", () => {
-    if (floatShowTimeout) {
-      clearTimeout(floatShowTimeout);
-      floatShowTimeout = null;
-    }
-    if (floatWindow) floatWindow.hide();
-  });
-  mainWindow.on("restore", () => {
-    if (floatShowTimeout) {
-      clearTimeout(floatShowTimeout);
-      floatShowTimeout = null;
-    }
-    if (floatWindow) floatWindow.hide();
-  });
+  // 桌宠常驻桌面：主窗口隐藏/最小化/显示/恢复都不再联动显隐，
+  // 显隐只由「显示桌面宠物」开关决定（见 applyPetSettings）。
+  // 主窗口全屏时桌宠仍保持置顶（screen-saver 层级），这是刻意的：
+  // 用户要的是「随时能看到它在干活」，而不是全屏游戏时被藏起来。
 
   // 全屏状态推送给渲染进程：macOS 原生全屏会隐藏红绿灯，
   // 前端据此取消标题栏/侧边栏为其预留的左侧留白
@@ -2099,11 +1957,21 @@ function setupIpcHandlers() {
     },
   );
 
-  // 接收渲染进程推送的托盘统计信息，更新悬浮窗 + 托盘菜单
+  // 接收渲染进程推送的托盘统计信息，更新桌宠 + 托盘菜单
   ipcMain.on(
     "tray:update-stats",
-    (_, stats: { running: number; unread: number }) => {
-      trayStats = stats;
+    (
+      _,
+      stats: {
+        running: number;
+        unread: number;
+        mode?: PetStatePayload["mode"];
+        title?: string;
+        toolLabel?: string;
+        sessionId?: string | null;
+      },
+    ) => {
+      trayStats = { running: stats.running, unread: stats.unread };
       // 更新托盘工具提示
       if (tray) {
         const parts: string[] = [];
@@ -2115,45 +1983,163 @@ function setupIpcHandlers() {
       }
       // 更新托盘菜单
       updateTrayMenu();
-      // 更新悬浮窗内容（仅统计数据，不携带设置项）
-      if (floatWindow && !floatWindow.isDestroyed()) {
-        floatWindow.webContents.send("float:update", stats);
-      }
-      // 任务栏/Dock 未读角标与悬浮窗、托盘菜单同源（stats.unread）
+      // 更新桌宠（模式/计数/标题/工具名）
+      petState = {
+        mode: stats.mode ?? "idle",
+        running: stats.running,
+        unread: stats.unread,
+        title: stats.title ?? "",
+        toolLabel: stats.toolLabel ?? "",
+        sessionId: stats.sessionId ?? null,
+      };
+      petWindow?.pushState(petState);
+      // 任务栏/Dock 未读角标与桌宠、托盘菜单同源（stats.unread）
       syncTaskbarUnreadBadge(stats.unread);
     },
   );
 
-  // 悬浮窗双击 → 显示主窗口
-  ipcMain.on("float:dblclick", () => {
+  // 桌宠首帧就绪 → 补发配置/设置/状态缓存
+  ipcMain.on("pet:ready", () => {
+    petWindow?.onRendererReady();
+  });
+
+  // 桌宠上报可交互几何（当前动画紧包围盒 + 气泡矩形）→ 决定是否放开穿透
+  ipcMain.on("pet:hit-geometry", (_, geometry: unknown) => {
+    if (!geometry || typeof geometry !== "object") return;
+    petWindow?.setHitGeometry(
+      geometry as {
+        image: { x: number; y: number; w: number; h: number };
+        bubble: { x: number; y: number; w: number; h: number } | null;
+      },
+    );
+  });
+
+  // 桌宠拖动：按下即进入交互态（暂停命中判定），移动按屏幕增量走
+  ipcMain.on("pet:drag-move", (_, delta: { dx: number; dy: number }) => {
+    if (!delta) return;
+    petWindow?.setInteracting(true);
+    petWindow?.moveBy(Number(delta.dx) || 0, Number(delta.dy) || 0);
+  });
+
+  // 拖动结束：退出交互态 + 落盘位置
+  ipcMain.on("pet:drag-end", () => {
+    petWindow?.setInteracting(false);
+    petWindow?.persistPosition();
+  });
+
+  // 单击桌宠：唤起主窗口（带 sessionId 时由渲染层跳转）
+  ipcMain.on("pet:click", (_, payload: { sessionId?: string | null }) => {
     if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
     } else {
       createWindow();
     }
+    if (payload?.sessionId) {
+      mainWindow?.webContents.send("pet:action", {
+        kind: "open-session",
+        sessionId: payload.sessionId,
+      });
+    }
   });
 
-  // 悬浮窗鼠标拖拽移动
-  ipcMain.on("float:drag-move", (_, { dx, dy }: { dx: number; dy: number }) => {
-    if (!floatWindow || floatWindow.isDestroyed()) return;
-    const [x, y] = floatWindow.getPosition();
-    floatWindow.setPosition(x + dx, y + dy);
+  // 气泡「停止」：交给渲染层调 cancelResponse（后端 stop 接口由前端持有 token）
+  ipcMain.on("pet:stop-session", (_, payload: { sessionId?: string | null }) => {
+    if (!payload?.sessionId) return;
+    mainWindow?.webContents.send("pet:action", {
+      kind: "stop-session",
+      sessionId: payload.sessionId,
+    });
   });
 
-  // 接收前端设置的悬浮窗配置（始终下发浮窗，不依赖主窗口可见状态）
+  // 桌宠右键菜单
   ipcMain.on(
-    "tray:update-settings",
-    (_, settings: { enabled: boolean; opacity: number }) => {
-      traySettings = settings;
-      if (floatWindow && !floatWindow.isDestroyed()) {
-        floatWindow.webContents.send("float:settings", {
-          opacity: traySettings.opacity,
-        });
-      }
-      applyTraySettings();
+    "pet:context-menu",
+    (_, payload: { x?: number; y?: number } | undefined) => {
+      const win = petWindow?.window;
+      if (!win || win.isDestroyed()) return;
+
+      // Menu.popup 的 x/y 是**窗口内坐标**，渲染层给的是屏幕坐标 → 先换算
+      const bounds = win.getBounds();
+      const localX = Math.round((payload?.x ?? bounds.x) - bounds.x);
+      const localY = Math.round((payload?.y ?? bounds.y) - bounds.y);
+
+      const menu = Menu.buildFromTemplate([
+        {
+          label: "打开主窗口",
+          click: () => {
+            if (mainWindow) {
+              mainWindow.show();
+              mainWindow.focus();
+            } else {
+              createWindow();
+            }
+          },
+        },
+        {
+          label: "隐藏桌宠",
+          click: () => {
+            petSettings = { ...petSettings, enabled: false };
+            applyPetSettings();
+            mainWindow?.webContents.send("pet:action", {
+              kind: "toggle-enabled",
+              enabled: false,
+            });
+            updateTrayMenu();
+          },
+        },
+        { type: "separator" },
+        {
+          label: "退出 GuaDa",
+          click: () => app.quit(),
+        },
+      ]);
+
+      // Windows 上 focusable:false 的窗口弹不出原生菜单：临时放开焦点，
+      // 菜单关闭后立刻收回（否则桌宠会开始抢主窗口的焦点）。
+      const wasFocusable = win.isFocusable();
+      if (!wasFocusable) win.setFocusable(true);
+      menu.popup({
+        window: win,
+        x: localX,
+        y: localY,
+        callback: () => {
+          if (!wasFocusable && !win.isDestroyed()) win.setFocusable(false);
+        },
+      });
     },
   );
+
+  // 接收前端推送的桌宠配置（形象 + 显隐 + 透明度）
+  ipcMain.on(
+    "pet:update-settings",
+    (
+      _,
+      settings: { enabled?: boolean; opacity?: number; avatarId?: string },
+    ) => {
+      if (!settings || typeof settings !== "object") return;
+      petSettings = {
+        enabled: settings.enabled === true,
+        opacity:
+          typeof settings.opacity === "number" && Number.isFinite(settings.opacity)
+            ? Math.min(100, Math.max(0, settings.opacity))
+            : petSettings.opacity,
+        avatarId:
+          typeof settings.avatarId === "string" && settings.avatarId
+            ? settings.avatarId
+            : petSettings.avatarId,
+      };
+      applyPetSettings();
+      updateTrayMenu();
+    },
+  );
+
+  // 设置页形象选择器：扫描 build-resources/pets/ 下的可用形象
+  ipcMain.handle("pet:list-avatars", () => {
+    if (!petWindow) return [];
+    return listPetAvatars(resolvePetsRootDir(isDev, __dirname, process.resourcesPath));
+  });
 
   // 防休眠模式：设置页「通用 → 桌面行为」变更时推送（落盘由后端负责，这里只管 blocker）
   ipcMain.on("power:update-keep-awake-mode", (_, mode: unknown) => {
@@ -2161,15 +2147,6 @@ function setupIpcHandlers() {
     if (mode === keepAwakeMode) return;
     keepAwakeMode = mode;
     reconcileKeepAwakeBlocker();
-  });
-
-  // 浮窗就绪后主动发送缓存的设置
-  ipcMain.on("float:ready", () => {
-    applyTraySettings();
-    // 推送当前统计数据
-    if (floatWindow && !floatWindow.isDestroyed()) {
-      floatWindow.webContents.send("float:update", trayStats);
-    }
   });
 
   // 窗口控制
@@ -3002,6 +2979,17 @@ app.whenReady().then(async () => {
     // 之前，环境变量决定后端监听地址；此时写回后 spawn 读到的是关闭状态）
     const mobileAccessAutoDisabled = enforceMobileAccessPasswordGate();
 
+    // 创建桌面宠物窗控制器（懒创建：只有开关打开时才真正建窗；这里先持有控制器，
+    // 让 pet:ready / 状态推送在窗口尚未创建时也能安全落到缓存里）。
+    // 必须在 createWindow 之前：渲染层挂载即推 tray:update-settings，
+    // 控制器晚于主窗口创建会让这次推送被空指针丢掉、桌宠要等下一次设置变更才出现。
+    petWindow = new PetWindowController({
+      petsRootDir: resolvePetsRootDir(isDev, __dirname, process.resourcesPath),
+      avatarId: petSettings.avatarId,
+      preloadPath: path.join(__dirname, "pet-preload.js"),
+      positionFile: path.join(app.getPath("userData"), "pet-window.json"),
+    });
+
     // 立即创建窗口，不用等后端启动
     createWindow();
 
@@ -3014,9 +3002,6 @@ app.whenReady().then(async () => {
         body: "账户未设置访问密码，局域网/公网入口已自动关闭。",
       }).show();
     }
-
-    // 创建托盘悬浮小窗
-    createFloatWindow();
 
     // 启动后端服务（不阻塞窗口）
     log.info("Starting backend service in background...");
@@ -3138,8 +3123,13 @@ app.on("window-all-closed", () => {
 
 // macOS 激活应用
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  // 不能按「所有窗口数为 0」判断：桌宠窗常驻，会让计数永远非 0，
+  // 点 Dock 图标就不会重建主窗口。以 mainWindow 实例为准。
+  if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
   }
 });
 

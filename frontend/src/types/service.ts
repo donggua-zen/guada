@@ -213,8 +213,9 @@ export interface AppearanceGroupSettings {
     wallpaperUrl?: string | null
     sidebarOpacity?: number
     contentOpacity?: number
-    floatWidgetEnabled?: boolean
-    floatWidgetOpacity?: number
+    // 注：桌宠已独立到 `pet` 分组（enabled/opacity/avatarId）。
+    // 历史版本存在本组的 floatWidgetEnabled/floatWidgetOpacity 只作为迁移来源，
+    // 由 stores/layout.ts 的 loadPetSettings 读取，不再出现在类型里。
     lightThemePreset?: string
     darkThemePreset?: string
     /** 界面语言（前端写、后端只存；随本组一起下发，见 composables/useLanguage） */

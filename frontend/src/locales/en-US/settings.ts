@@ -1,8 +1,21 @@
-﻿export default {
+export default {
   appearance: {
     light: 'Light',
     dark: 'Dark',
     system: 'System',
+  },
+
+  pet: {
+    avatarTitle: 'Pet avatar',
+    avatarHint: 'Choose the avatar shown on your desktop. More avatars are on the way.',
+    emptyAvatars: 'No avatar found (missing build-resources/pets assets).',
+    noPreview: 'No preview',
+    behaviorTitle: 'Visibility & appearance',
+    enable: 'Show desktop pet',
+    enableDesc: 'Always on the desktop, showing running tasks and unread reminders',
+    opacity: 'Pet opacity',
+    opacityDesc: 'Adjust the opacity of the pet and its bubble',
+    saveFailed: 'Failed to save desktop pet settings',
   },
 
   general: {
@@ -402,6 +415,7 @@
       providers: 'Model Providers',
       ocr: 'OCR Settings',
       appearance: 'Appearance',
+      pet: 'Desktop Pet',
       search: 'Search Settings',
       browser: 'Browser',
       computerUse: 'Computer Use',

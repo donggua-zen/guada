@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: transparent;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    cursor: default;
+  }
+
+  #root {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-end;
+    opacity: 1;
+    transition: opacity 120ms linear;
+  }
+
+  /* ── 气泡 ─────────────────────────────────────────────── */
+  .bubble {
+    position: relative;
+    width: 250px;
+    margin-bottom: 2px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(38, 34, 31, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.38);
+    color: #f2f1ee;
+    display: none;
+    flex-direction: column;
+    gap: 3px;
+    animation: bubble-in 160ms ease-out;
+    /* 气泡整块可点（打开会话） */
+    cursor: pointer;
+  }
+  .bubble.show { display: flex; }
+  @keyframes bubble-in {
+    from { opacity: 0; transform: translateY(4px) scale(0.97); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .bubble-head { display: flex; align-items: flex-start; gap: 6px; }
+
+  .bubble-title {
+    flex: 1; min-width: 0;
+    font-size: 12px; line-height: 1.35; font-weight: 600;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; word-break: break-all;
+  }
+
+  .bubble-actions { display: flex; gap: 4px; flex-shrink: 0; padding-top: 1px; }
+
+  .act {
+    width: 20px; height: 20px; border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.10);
+    color: #e8e7e3;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: background 120ms ease, transform 120ms ease;
+  }
+  .act:hover { background: rgba(255, 255, 255, 0.20); }
+  .act:active { transform: scale(0.94); }
+  .act svg { width: 11px; height: 11px; display: block; }
+  .act-stop { color: #ff8f86; border-color: rgba(255, 143, 134, 0.35); background: rgba(255, 90, 78, 0.16); }
+  .act-stop:hover { background: rgba(255, 90, 78, 0.28); }
+  .act-stop .square {
+    width: 8px; height: 8px; border-radius: 2px; background: currentColor;
+  }
+
+  .bubble-sub {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10.5px; line-height: 1.3;
+    color: #9d9a94;
+  }
+  .bubble-sub .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: #7fb3ff; flex-shrink: 0;
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+  .bubble-sub .dot.idle { background: #f0a95c; animation: none; }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1.1); }
+  }
+  .bubble-sub .label {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ── 宠物本体 ─────────────────────────────────────────── */
+  .stage {
+    position: relative;
+    height: 216px;
+    width: 100%;
+    padding-bottom: 6px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.30));
+    /* 可交互区域统一指点手（拖动中另见 body.is-dragging） */
+    cursor: pointer;
+  }
+  .stage img {
+    height: 210px; width: 210px;
+    display: block;
+    image-rendering: auto;
+    transform-origin: 50% 100%;
+    will-change: transform;
+    /* 关键：img 默认是 HTML5 可拖拽对象，不关掉的话拖动会走原生 DnD，
+       拖出的是「图片幽灵」而不是移动窗口 */
+    -webkit-user-drag: none;
+    user-drag: none;
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: none;
+  }
+  .stage img[data-mode="run"] { animation: bob-run 0.5s ease-in-out infinite; }
+  .stage img[data-mode="walk"] { animation: bob-walk 0.9s ease-in-out infinite; }
+  @keyframes bob-run {
+    0%, 100% { transform: translateY(0) }
+    50%      { transform: translateY(-3px) }
+  }
+  @keyframes bob-walk {
+    0%, 100% { transform: translateY(0) }
+    50%      { transform: translateY(-2px) }
+  }
+
+  /* 拖动中：握拳手型（覆盖 .stage / .bubble 的默认形态） */
+  body.is-dragging,
+  body.is-dragging .stage,
+  body.is-dragging .bubble {
+    cursor: grabbing;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="bubble" id="bubble">
+    <div class="bubble-head">
+      <div class="bubble-title" id="title"></div>
+      <div class="bubble-actions" id="actions">
+        <div class="act act-open" id="btn-open" title="打开会话">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.6a8.4 8.4 0 0 1-.9-3.9 8.4 8.4 0 0 1 8.4-8.4h.6a8.4 8.4 0 0 1 8.4 8.4z"/>
+          </svg>
+        </div>
+        <div class="act act-stop" id="btn-stop" title="停止执行">
+          <span class="square"></span>
+        </div>
+      </div>
+    </div>
+    <div class="bubble-sub">
+      <span class="dot" id="dot"></span>
+      <span class="label" id="sub"></span>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <img id="pet" alt="" draggable="false">
+  </div>
+</div>
+
+<script>
+(function () {
+  var api = window.petAPI;
+  /** 画布边长（由 sprites.json 的 canvas 决定；烘焙脚本缩图后这里自动跟随） */
+  var CANVAS = 720;
+
+  var root = document.getElementById('root');
+  var bubble = document.getElementById('bubble');
+  var titleEl = document.getElementById('title');
+  var subEl = document.getElementById('sub');
+  var dotEl = document.getElementById('dot');
+  var actionsEl = document.getElementById('actions');
+  var img = document.getElementById('pet');
+
+  // ── 动画配置（由主进程读盘下发；file:// 下 fetch 会被 CORS 拦，故不走 fetch） ──
+  var config = null;
+  var frames = {};        // key -> [Image]
+  var loaded = {};        // key -> bool
+  var mode = 'idle';
+  var frameIndex = 0;
+  var timer = null;
+  /**
+   * 本轮空闲是否已经打过哈欠。
+   * 状态每 2s 会重复推 mode='yawn'，若不记住「已播」就会每 2 秒重打一次；
+   * 只有真的来了任务（walk/run）才复位，下一次长空闲才会再打。
+   */
+  var yawnPlayed = false;
+  var currentSessionId = null;
+  var state = { running: 0, unread: 0, title: '', toolLabel: '' };
+
+  function frameSrc(key, i) {
+    var n = String(i).padStart(2, '0');
+    return 'frames/' + key + '/frame_' + n + '-nobg.webp';
+  }
+
+  function load(key) {
+    if (loaded[key] || !config) return;
+    var a = config.animations[key];
+    if (!a) return;
+    loaded[key] = true;
+    var list = [];
+    for (var i = 1; i <= a.count; i++) {
+      var im = new Image();
+      im.src = frameSrc(key, i);
+      list.push(im);
+    }
+    frames[key] = list;
+  }
+
+  function play(key) {
+    load(key);
+    var a = config.animations[key];
+    if (!a || !frames[key]) return;
+    if (timer) { clearInterval(timer); timer = null; }
+    frameIndex = 0;
+    img.dataset.mode = key;
+    img.src = frames[key][0].src;
+    timer = setInterval(function () {
+      var list = frames[key];
+      if (!list) return;
+      frameIndex++;
+      if (frameIndex >= list.length) {
+        if (a.loop) {
+          frameIndex = 0;
+        } else {
+          clearInterval(timer); timer = null;
+          // 单次动画（打哈欠）播完回待机，并标记本轮已播，
+          // 避免状态仍是 yawn 时每 2s 重播一次
+          if (key === 'yawn') { yawnPlayed = true; }
+          setMode('idle', true);
+          return;
+        }
+      }
+      var im = list[frameIndex];
+      if (im && im.complete) img.src = im.src;
+    }, 1000 / a.fps);
+  }
+
+  function setMode(next, force) {
+    if (!config) return;
+    if (!force && next === mode) return;
+    // 来了任务 → 复位「本轮已打哈欠」，下次长空闲可以再打一次
+    if (next === 'walk' || next === 'run') yawnPlayed = false;
+    // 长空闲只打一次哈欠，播完就待在 idle（状态仍会推 yawn，这里挡掉）
+    if (next === 'yawn' && yawnPlayed) next = 'idle';
+    if (!force && next === mode) return;
+    mode = next;
+    play(next);
+    reportGeometry();
+  }
+
+  // ── 状态 → 气泡 ──
+  /** 状态上是否该显示气泡 */
+  var bubbleWanted = false;
+  /** 拖动中临时隐藏（拖拽时气泡跟着晃很干扰） */
+  var bubbleHidden = false;
+  /** 窗口在屏幕上的可见区间（窗口内坐标）；null = 未知，按全宽处理 */
+  var clip = null;
+
+  function renderBubble() {
+    var running = state.running || 0;
+    var unread = state.unread || 0;
+
+    bubbleWanted = running > 0 || unread > 0;
+    if (running > 0) {
+      titleEl.textContent = state.title || (running + ' 个会话运行中');
+      subEl.textContent = '正在执行 · ' + (state.toolLabel || '工具调用');
+      dotEl.classList.remove('idle');
+      actionsEl.style.display = 'flex';
+    } else if (unread > 0) {
+      titleEl.textContent = unread + ' 个会话有未读消息';
+      subEl.textContent = '点击打开最近会话';
+      dotEl.classList.add('idle');
+      actionsEl.style.display = 'none';
+    } else {
+      actionsEl.style.display = 'none';
+    }
+    updateBubble();
+  }
+
+  /** 应用显隐 + 位置，并重报几何（气泡矩形参与命中判定） */
+  function updateBubble() {
+    var visible = bubbleWanted && !bubbleHidden;
+    bubble.classList.toggle('show', visible);
+    if (visible) positionBubble();
+    reportGeometry();
+  }
+
+  /**
+   * 气泡横向偏移：窗口贴边时有一截在屏幕外，气泡不能跟着出屏。
+   * 做法是按「屏幕可见区间」把气泡夹进来（必要时收窄），而不是把窗口推回屏幕内
+   * ——窗口位置只由宠物决定，气泡自己让路。
+   */
+  function positionBubble() {
+    var winW = document.documentElement.clientWidth || 360;
+    var clipL = clip ? Math.max(0, Math.min(winW, clip.left)) : 0;
+    var clipR = clip ? Math.max(0, Math.min(winW, clip.right)) : winW;
+    if (clipR <= clipL) return;
+
+    // 可见宽度不足时收窄气泡（再窄就没有阅读价值了，留 90px 下限）
+    var avail = Math.max(90, clipR - clipL - 16);
+    var width = Math.min(250, avail);
+    bubble.style.width = width + 'px';
+
+    var centeredLeft = (winW - width) / 2;
+    var targetLeft = Math.max(clipL + 8, Math.min(centeredLeft, clipR - width - 8));
+    bubble.style.left = Math.round(targetLeft - centeredLeft) + 'px';
+  }
+
+  // ── 命中几何上报 ──
+  // 主进程按「当前动画的紧包围盒 + 气泡矩形」判定穿透。
+  // 用紧包围盒而不是整张 384² 画布：立绘只占画布中间一条，
+  // 四周（以及 idle 时相对 run 多出来的那圈）全是透明，用画布矩形会挡住桌面点击。
+  var lastGeomJson = '';
+  function reportGeometry() {
+    if (!api) return;
+    var ir = img.getBoundingClientRect();
+    var br = bubble.classList.contains('show') ? bubble.getBoundingClientRect() : null;
+    var geom = {
+      image: bboxRect(ir),
+      bubble: br
+        ? { x: Math.round(br.left), y: Math.round(br.top), w: Math.round(br.width), h: Math.round(br.height) }
+        : null,
+    };
+    var json = JSON.stringify(geom);
+    if (json === lastGeomJson) return;
+    lastGeomJson = json;
+    api.reportHitGeometry(geom);
+  }
+
+  /** 当前动画包围盒 → 窗口内矩形；配置缺失时退化为图片矩形 */
+  function bboxRect(imgRect) {
+    var a = config && config.animations && config.animations[mode];
+    var bbox = a && a.bbox;
+    if (!bbox) {
+      return {
+        x: Math.round(imgRect.left), y: Math.round(imgRect.top),
+        w: Math.round(imgRect.width), h: Math.round(imgRect.height),
+      };
+    }
+    var scale = imgRect.width / CANVAS;
+    return {
+      x: Math.round(imgRect.left + bbox.x * scale),
+      y: Math.round(imgRect.top + bbox.y * scale),
+      w: Math.round(bbox.w * scale),
+      h: Math.round(bbox.h * scale),
+    };
+  }
+
+  // ── 鼠标：拖动 / 单击 / 右键 ──
+  //
+  // 用 Pointer Events + setPointerCapture 而不是 mousedown/mousemove：
+  // 拖动过程中光标很容易移出这个 280×300 的小窗，没有指针捕获时
+  // 渲染层再也收不到 pointerup，主进程的「交互中」状态会永久卡住、
+  // 桌宠从此不再穿透。捕获后事件会持续投递到本元素，直到松手。
+
+  // 双保险：即使某些平台/属性没生效，也不允许页面内任何原生拖拽
+  // （否则拖动桌宠会拖出「图片幽灵」，而不是移动窗口）
+  document.addEventListener('dragstart', function (e) {
+    e.preventDefault();
+  });
+  document.addEventListener('selectstart', function (e) {
+    e.preventDefault();
+  });
+
+  var drag = { active: false, moved: false, sx: 0, sy: 0, lastX: 0, lastY: 0, pointerId: null };
+
+  function endDrag() {
+    if (!drag.active) return;
+    drag.active = false;
+    drag.pointerId = null;
+    document.body.classList.remove('is-dragging');
+    // 松手恢复气泡（位置由主进程在 drag-end 后推新的可见区间）
+    if (bubbleHidden) {
+      bubbleHidden = false;
+      updateBubble();
+    }
+    if (drag.moved) {
+      // 结束拖动：让主进程退出交互态（恢复穿透判定）并把位置落盘
+      api.dragEnd();
+    }
+  }
+
+  document.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;
+    if (e.target.closest && e.target.closest('.act')) return; // 按钮自己处理
+    drag.active = true;
+    drag.moved = false;
+    drag.pointerId = e.pointerId;
+    drag.sx = drag.lastX = e.screenX;
+    drag.sy = drag.lastY = e.screenY;
+    try {
+      document.body.setPointerCapture(e.pointerId);
+    } catch (err) {
+      // 捕获失败不致命：退化为普通事件流，下方 buttons 兜底仍能收尾
+    }
+  });
+
+  document.addEventListener('pointermove', function (e) {
+    if (!drag.active) return;
+    // 兜底：指针已不是按下态（捕获失败/系统抢走指针）→ 立即收尾
+    if (e.buttons === 0) { endDrag(); return; }
+    if (e.pointerId !== drag.pointerId) return;
+    var dx = e.screenX - drag.lastX;
+    var dy = e.screenY - drag.lastY;
+    if (!drag.moved && (Math.abs(e.screenX - drag.sx) > 2 || Math.abs(e.screenY - drag.sy) > 2)) {
+      drag.moved = true;
+      // 越过阈值才算拖动：这时才切握拳手型，单击不会闪一下
+      document.body.classList.add('is-dragging');
+      // 拖动期间收起气泡（跟着窗口晃很干扰，也会遮住落点）
+      if (!bubbleHidden) {
+        bubbleHidden = true;
+        updateBubble();
+      }
+    }
+    if (drag.moved) {
+      api.dragMove({ dx: dx, dy: dy });
+      drag.lastX = e.screenX;
+      drag.lastY = e.screenY;
+    }
+  });
+
+  document.addEventListener('pointerup', function (e) {
+    if (!drag.active || e.pointerId !== drag.pointerId) return;
+    var wasMoved = drag.moved;
+    try {
+      document.body.releasePointerCapture(e.pointerId);
+    } catch (err) {
+      // 已自动释放
+    }
+    endDrag();
+    if (!wasMoved && e.button === 0) api.click({ sessionId: currentSessionId });
+  });
+
+  // 窗口失焦（比如点了别的应用）→ 收尾，避免卡在交互态
+  window.addEventListener('blur', function () {
+    if (drag.active) endDrag();
+  });
+
+  document.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+    api.contextMenu({ x: e.screenX, y: e.screenY });
+  });
+
+  document.getElementById('btn-open').addEventListener('click', function (e) {
+    e.stopPropagation();
+    api.click({ sessionId: currentSessionId });
+  });
+  document.getElementById('btn-stop').addEventListener('click', function (e) {
+    e.stopPropagation();
+    api.stopSession({ sessionId: currentSessionId });
+  });
+
+  // ── IPC 接入 ──
+  if (api) {
+    api.onConfig(function (cfgJson) {
+      try {
+        config = typeof cfgJson === 'string' ? JSON.parse(cfgJson) : cfgJson;
+      } catch (err) {
+        console.error('sprites.json 解析失败', err);
+        return;
+      }
+      if (config && config.canvas && config.canvas.w) CANVAS = config.canvas.w;
+      // 配置可能晚于状态到达（状态里带了 walk/run）：以状态为准重放一次，
+      // 否则会卡在 idle 直到下一次状态推送
+      play('idle');
+      if (state && state.mode && state.mode !== 'idle') setMode(state.mode, true);
+      renderBubble();
+    });
+
+    api.onState(function (s) {
+      state = s || {};
+      currentSessionId = s && s.sessionId ? s.sessionId : null;
+      if (s && s.mode) setMode(s.mode);
+      renderBubble();
+    });
+
+    api.onSettings(function (s) {
+      if (s && typeof s.opacity === 'number') {
+        root.style.opacity = String(Math.max(0, Math.min(100, s.opacity)) / 100);
+      }
+    });
+
+    // 屏幕可见区间变化（拖动落点后主进程下发）→ 气泡重新让路
+    api.onClip(function (c) {
+      clip = c && typeof c.left === 'number' && typeof c.right === 'number' ? c : null;
+      if (bubble.classList.contains('show')) positionBubble();
+      reportGeometry();
+    });
+
+    api.ready();
+  }
+
+  // 首次布局完成后报一次（字体/图片加载会改变气泡高度）
+  window.addEventListener("load", reportGeometry);
+  if (window.ResizeObserver) {
+    new ResizeObserver(reportGeometry).observe(bubble);
+  }
+  setTimeout(reportGeometry, 60);
+  setTimeout(reportGeometry, 300);
+})();
+</script>
+</body>
+</html>

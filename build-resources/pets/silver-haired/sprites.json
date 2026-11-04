@@ -1,0 +1,63 @@
+{
+  "name": "银发少女_Q版",
+  "version": "1.0.0",
+  "description": "Q版银发少女桌面宠物动画序列",
+  "canvas": {
+    "w": 384,
+    "h": 384
+  },
+  "animations": {
+    "idle": {
+      "label": "待机",
+      "fps": 6,
+      "loop": true,
+      "count": 33,
+      "dir": "frames/idle",
+      "bbox": {
+        "x": 133,
+        "y": 7,
+        "w": 118,
+        "h": 369
+      }
+    },
+    "walk": {
+      "label": "快走",
+      "fps": 10,
+      "loop": true,
+      "count": 9,
+      "dir": "frames/walk",
+      "bbox": {
+        "x": 89,
+        "y": 15,
+        "w": 199,
+        "h": 354
+      }
+    },
+    "run": {
+      "label": "奔跑",
+      "fps": 8,
+      "loop": true,
+      "count": 8,
+      "dir": "frames/run",
+      "bbox": {
+        "x": 54,
+        "y": 17,
+        "w": 265,
+        "h": 356
+      }
+    },
+    "yawn": {
+      "label": "打哈欠",
+      "fps": 8,
+      "loop": false,
+      "count": 37,
+      "dir": "frames/yawn",
+      "bbox": {
+        "x": 121,
+        "y": 9,
+        "w": 131,
+        "h": 365
+      }
+    }
+  }
+}

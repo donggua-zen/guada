@@ -214,11 +214,36 @@ export interface ElectronAPI {
     error?: string
   }>
 
-  // 托盘悬浮窗统计推送
-  updateTrayStats: (stats: { running: number; unread: number }) => void
+  // 桌宠/托盘统计推送（托盘提示、任务栏角标、桌宠状态同源）
+  updateTrayStats: (stats: {
+    running: number
+    unread: number
+    mode?: 'idle' | 'walk' | 'run' | 'yawn'
+    title?: string
+    toolLabel?: string
+    sessionId?: string | null
+  }) => void
 
-  // 托盘悬浮窗配置（显隐 + 透明度）
-  updateTraySettings: (settings: { enabled: boolean; opacity: number }) => void
+  // 桌宠配置（形象 + 显隐 + 透明度）
+  updatePetSettings: (settings: {
+    enabled: boolean
+    opacity: number
+    avatarId?: string
+  }) => void
+
+  /** 桌宠可用形象列表（预览图为 data URL，dev/prod 通用） */
+  listPetAvatars: () => Promise<
+    Array<{ id: string; name: string; previewDataUrl: string | null }>
+  >
+
+  /** 桌宠发起、需在主窗口渲染层完成的操作（主进程 → 渲染层） */
+  onPetAction: (
+    callback: (payload: {
+      kind: 'toggle-enabled' | 'open-session' | 'stop-session'
+      enabled?: boolean
+      sessionId?: string | null
+    }) => void
+  ) => () => void
 
   // 防休眠模式（桌面端生效；落盘由后端负责，这里只驱动主进程的 powerSaveBlocker）
   updateKeepAwakeMode: (mode: 'off' | 'busy' | 'always') => void
