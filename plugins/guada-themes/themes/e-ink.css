@@ -52,7 +52,8 @@
   /* 基础表面与文字 */
   --gd-color-text: #2a2a2a;
   --gd-color-text-gray: #6a6558;
-  --gd-color-text-disabled: #b0aaa0;
+  /* 原 #b0aaa0 在纸面只有 2.05:1（占位符/时间戳/计数都在用它），提到 ≈3.3:1 */
+  --gd-color-text-disabled: #8a8578;
   --gd-color-surface: #ede9de;
   --gd-color-surface-border: #d0cabb;
   --gd-color-bg: #f5f1e8;
@@ -100,13 +101,43 @@
   --gd-code-block-header-bg: #ede9de;
   --gd-code-block-border: #d0cabb;
 
-  /* 排版与细节 */
-  --gd-size-text-base: 15px;
-  --gd-size-text-sm: 14px;
+  /* 语义色：默认主题的 #f56c6c/#67c23a/#e6a23c 在米面上只有 2.4/1.85/1.8:1，
+     且与本主题「无饱和色」冲突。压成低饱和深色调，靠明度分层（实测 6.0-7.7:1） */
+  --gd-color-success: #3f5a3a;
+  --gd-color-warning: #6b5320;
+  --gd-color-danger: #7a2f1f;
+
+  /* 排版：字号保持全站默认 14px——15px 在这套 css 里不整除：
+     markdown.css 的派生阶梯除数是按 7 的倍数选的（/3.5 /1.75 /7 /4.67），
+     TurnItem 的正文又是 line-height 1.5，15px 会掉出 22.5px 这类半像素
+     （实测整页 29 处小数高度，14px 时 0 处）。
+     电子书的"读感"改由衬线字体 + 66ch 阅读柱 + 更松行高给，见下面的细则。
+     圆角则必须全局收敛：原先只在气泡/输入/代码块手写了 4px，
+     全局 token 实测仍是 12px / 18px。 */
+  --gd-size-surface-radius: 4px;
+  --gd-size-rounded-radius: 6px;
+  --gd-size-dialog-rounded-radius: 4px;
+  --gd-size-overview-panel-radius: 4px;
+  --gd-layout-card-radius: 4px;
+
+  /* 字体：只换「阅读文字」，UI 保持无衬线；代码换成 XP 时代的等宽 */
+  --gd-md-font-family: Georgia, "Iowan Old Style", "Songti SC", SimSun, "宋体", serif;
+  --gd-md-heading-font-family: var(--gd-md-font-family);
+  --gd-font-mono: "Lucida Console", "Courier New", monospace;
+
+  /* 语法高亮灰阶：markdown.css 的 9 组 .hljs-* 全吃这些 token，主题只赋值即可 */
+  --gd-md-syntax-comment: #6a6558;
+  --gd-md-syntax-keyword: #2a2a2a;
+  --gd-md-syntax-string: #555550;
+  --gd-md-syntax-number: #555550;
+  --gd-md-syntax-function: #1a1a1a;
+  --gd-md-syntax-type: #3a3a3a;
+  --gd-md-syntax-property: #3a3a3a;
+  --gd-md-syntax-tag: #2a2a2a;
+  --gd-md-syntax-punctuation: #6a6558;
+
   --gd-shimmer-base: #b0aaa0;
   --gd-shimmer-highlight: #2a2a2a;
-
-  --gd-color-surface: #ede9de;
 }
 html.dark[data-theme="e-ink"] {
   /* 主色：柔白墨迹 */
@@ -151,7 +182,8 @@ html.dark[data-theme="e-ink"] {
   /* 基础表面与文字 */
   --gd-color-text: #c8c4b8;
   --gd-color-text-gray: #8a8578;
-  --gd-color-text-disabled: #555550;
+  /* 原 #555550 在夜间底上 2.6:1，提到 ≈3.1:1（仍比副文字淡一档） */
+  --gd-color-text-disabled: #6a6558;
   --gd-color-surface: #1e1e1c;
   --gd-color-surface-border: #3a3a36;
   --gd-color-bg: #181816;
@@ -199,23 +231,48 @@ html.dark[data-theme="e-ink"] {
   --gd-code-block-header-bg: #232321;
   --gd-code-block-border: #3a3a36;
 
+  /* 语义色（夜间前光）：同样压到低饱和，靠明度分层（作为前景压在纸面上 7.5-8.2:1）。
+     夜间这三个是「提亮」方向，做实心按钮底色时字必须翻深：--gd-color-*-text 只在
+     :root 给了 #fff，html.dark 不覆盖，白压浅红实测只有 2.2:1 */
+  --gd-color-success: #9db59a;
+  --gd-color-warning: #c8b487;
+  --gd-color-danger: #d4a294;
+  --gd-color-success-text: #12200f;
+  --gd-color-warning-text: #241a05;
+  --gd-color-danger-text: #2a1008;
+  --gd-color-success-text-disabled: rgba(18, 32, 15, 0.55);
+  --gd-color-warning-text-disabled: rgba(36, 26, 5, 0.55);
+  --gd-color-danger-text-disabled: rgba(42, 16, 8, 0.55);
+
   /* 排版与细节 */
-  --gd-size-text-base: 15px;
-  --gd-size-text-sm: 14px;
   --gd-shimmer-base: #555550;
   --gd-shimmer-highlight: #c8c4b8;
+
+  /* 语法高亮灰阶（暗色成对给值） */
+  --gd-md-syntax-comment: #7a766c;
+  --gd-md-syntax-keyword: #e2ddd0;
+  --gd-md-syntax-string: #b0aca0;
+  --gd-md-syntax-number: #b0aca0;
+  --gd-md-syntax-function: #f0ece2;
+  --gd-md-syntax-type: #d8d4c8;
+  --gd-md-syntax-property: #d8d4c8;
+  --gd-md-syntax-tag: #e2ddd0;
+  --gd-md-syntax-punctuation: #8a8578;
 }
 
 /* ---------- 主题专属细节 ---------- */
-/* 纸张纤维纹理：极淡的横纹，模拟电子纸表面 */
+/* 纸张纤维纹理：单向 1px/3px 等距横纹在 100% 缩放下会拍出自带周期的摩尔纹，
+   改成横竖双纹 + 更低 alpha + 更宽间距（4px/5px 错开，避免同频） */
 html[data-theme="e-ink"] body::before {
   background-image:
-    repeating-linear-gradient(0deg, rgba(58, 58, 58, 0.018) 0 1px, transparent 1px 3px);
+    repeating-linear-gradient(0deg, rgba(58, 58, 58, 0.014) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(90deg, rgba(58, 58, 58, 0.010) 0 1px, transparent 1px 5px);
   background-color: var(--gd-color-bg);
 }
 html.dark[data-theme="e-ink"] body::before {
   background-image:
-    repeating-linear-gradient(0deg, rgba(200, 196, 184, 0.015) 0 1px, transparent 1px 3px);
+    repeating-linear-gradient(0deg, rgba(200, 196, 184, 0.014) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(90deg, rgba(200, 196, 184, 0.010) 0 1px, transparent 1px 5px);
 }
 
 /* 用户气泡：细线边框，像纸上批注 */
@@ -267,5 +324,76 @@ html.dark[data-theme="e-ink"] .markdown-text .code-header {
 html[data-theme="e-ink"] .markdown-text .custom-code-block pre.hljs,
 html.dark[data-theme="e-ink"] .markdown-text .custom-code-block pre.hljs {
   border: none;
+  border-radius: 0;
+}
+
+/* ============================================================
+   阅读柱与排版（电子书主题的核心，实测原主题完全没有）
+   ============================================================ */
+
+/* 行宽：实测 .markdown-text 744px、15px 字号 ≈ 每行 85-100 字符，远超 45-75ch。
+   只收段落/标题/列表/引用——代码块与表格收进来会被裁，保持全宽。
+   注意不能用 `>`：markdown 渲染结果外面还包一层 div（实测 .markdown-text > div > p） */
+html[data-theme="e-ink"] .markdown-text :is(p, h1, h2, h3, h4, ul, ol, blockquote) {
+  max-width: 66ch;
+}
+
+/* 行高/段距：纸面阅读比屏幕更松一档（+10 → +12）。
+   这批派生 token 声明在 .markdown-text / .custom-code-block 自己身上
+   （markdown.css:20 的注释解释了为什么不放 :root），从主题根节点覆盖会被
+   元素自身声明吃掉，必须叠在同一层选择器上 */
+html[data-theme="e-ink"] .markdown-text,
+html[data-theme="e-ink"] .custom-code-block {
+  --gd-md-line-height: calc(var(--gd-md-font-size) + 12px);
+  --gd-md-gap-block: calc(var(--gd-md-font-size) + 2px);
+  --gd-md-gap-heading: calc(var(--gd-md-font-size) * 2 + 4px);
+}
+
+/* 分节：标题下的印刷体细线；引用块退化成左竖线，不抢卡片感 */
+html[data-theme="e-ink"] .markdown-text h2 {
+  border-bottom: 1px solid var(--gd-color-border);
+  padding-bottom: 4px;
+}
+html[data-theme="e-ink"] .markdown-text blockquote {
+  border-left: 2px solid var(--gd-color-text-disabled);
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0 0 12px;
+  color: var(--gd-color-text-gray);
+}
+
+/* 选区：默认主题的蓝色高亮落在灰阶纸面上很跳（原主题漏了这条） */
+html[data-theme="e-ink"] ::selection {
+  background: #2a2a2a;
+  color: #f5f1e8;
+}
+html.dark[data-theme="e-ink"] ::selection {
+  background: #e2ddd0;
+  color: #1a1a18;
+}
+
+/* 标签：描边代替色块填充，语义色已经压暗，填充会糊成一片 */
+html[data-theme="e-ink"] .gd-tag {
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
+
+/* 头像去彩（电子纸不显示饱和色）。**只动头像**：正文/工作区里的用户图片
+   是真实工作内容，去彩会影响判断，明确不处理 */
+html[data-theme="e-ink"] .avatar-image {
+  filter: saturate(0.06) contrast(1.04);
+}
+
+/* 滚动条：轨道用页面底色、滑块用深一档纸灰、直角 */
+html[data-theme="e-ink"] *::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+html[data-theme="e-ink"] *::-webkit-scrollbar-track {
+  background: var(--gd-color-bg);
+}
+html[data-theme="e-ink"] *::-webkit-scrollbar-thumb {
+  background-color: var(--gd-color-sidebar-bg-active);
+  border: 1px solid var(--gd-color-border);
   border-radius: 0;
 }

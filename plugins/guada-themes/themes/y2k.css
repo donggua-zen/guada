@@ -8,8 +8,9 @@
 
 /* ---------- 亮色模式：银白铬面 ---------- */
 [data-theme="y2k"] {
-  /* 主色：电子蓝紫 */
-  --gd-color-primary: #6673f0;
+  /* 主色：电子蓝紫。原 #6673f0 上的白字实测只有 3.98:1（按钮文字达不到 4.5），
+     压半档到 #5b68ea = 4.55:1，色相与"糖果"感不变 */
+  --gd-color-primary: #5b68ea;
   --gd-color-primary-hover: #4f5ce0;
   --gd-color-primary-active: #3c46b8;
   --gd-color-primary-disabled: #b9c0f5;
@@ -27,10 +28,11 @@
   --gd-color-primary-900: #1b1f58;
   --gd-color-primary-950: #0e1030;
 
-  /* 副色：糖果粉 */
-  --gd-color-secondary: #e854ae;
-  --gd-color-secondary-hover: #d13b97;
-  --gd-color-secondary-active: #a82c78;
+  /* 副色：糖果粉。原 #e854ae 白字只有 3.33:1，压到 #c9308f = 4.88:1；
+     hover/active 同步下移，避免出现"悬停反而变亮" */
+  --gd-color-secondary: #c9308f;
+  --gd-color-secondary-hover: #b62885;
+  --gd-color-secondary-active: #9a1f6e;
   --gd-color-secondary-disabled: #f2b3da;
   --gd-color-secondary-text: #ffffff;
   --gd-color-secondary-text-disabled: rgba(255, 255, 255, 0.6);
@@ -49,7 +51,8 @@
   /* 基础表面与文字 */
   --gd-color-text: #2a2f45;
   --gd-color-text-gray: #6b7290;
-  --gd-color-text-disabled: #aab0c8;
+  /* 禁用态：原 #aab0c8 在纸面上只有 1.74:1，提到 #767f9d（bg 3.20 / 面 3.67） */
+  --gd-color-text-disabled: #767f9d;
   --gd-color-surface: #f4f6fb;
   --gd-color-surface-border: #d3d8e8;
   --gd-color-bg: #e3e7f0;
@@ -92,12 +95,23 @@
   --gd-code-block-bg: #e9edf6;
   --gd-color-input-bg: #ffffff;
 
-  /* 排版与细节 */
-  --gd-size-text-base: 15px;
-  --gd-size-text-sm: 14px;
+  /* 语义色：主题原本没管，沿用默认 #f56c6c/#67c23a/#e6a23c 时在铬面上只有
+     2.68 / 2.08 / 2.02:1，且糖果红绿和蓝紫粉打架。压深后 5.03 / 5.91 / 6.28 */
+  --gd-color-success: #2f6b3a;
+  --gd-color-warning: #8a4b0f;
+  --gd-color-danger: #c0392b;
+
+  /* 排版：字号保持默认 14px——15px 在这套 css 里不整除（markdown.css 的派生
+     阶梯除数是 7 的倍数，气泡还有 line-height 1.5），实测整页多出 98 处小数高度。
+     字体必须走 token：原先只硬写了 body，正文/代码实测仍是 -apple-system / ui-monospace，
+     "半 Y2K 半现代"；--theme-font 是个无人消费的变量，已删 */
+  --gd-font-sans: Verdana, "Trebuchet MS", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --gd-md-font-family: var(--gd-font-sans);
+  --gd-md-heading-font-family: var(--gd-font-sans);
+  --gd-font-mono: Tahoma, "Lucida Console", "Courier New", monospace;
+
   --gd-shimmer-base: #aab0c8;
   --gd-shimmer-highlight: #2a2f45;
-  --theme-font: Verdana, 'Trebuchet MS', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
 /* ---------- 暗色模式：午夜镭射 ---------- */
@@ -143,7 +157,8 @@ html.dark[data-theme="y2k"] {
   /* 基础表面与文字 */
   --gd-color-text: #e4e7f7;
   --gd-color-text-gray: #8f95b8;
-  --gd-color-text-disabled: #4d5378;
+  /* 原 #4d5378 在夜间底上 2.50:1，提到 #6a7299 = 3.96:1 */
+  --gd-color-text-disabled: #6a7299;
   --gd-color-surface: #1a1d30;
   --gd-color-surface-border: #30355a;
   --gd-color-bg: #101221;
@@ -186,20 +201,26 @@ html.dark[data-theme="y2k"] {
   --gd-code-block-bg: #101221;
   --gd-color-input-bg: #141628;
 
-  /* 排版与细节 */
-  --gd-size-text-base: 15px;
-  --gd-size-text-sm: 14px;
+  /* 排版与细节（字号同亮色保持默认，理由见亮色块注释） */
+  --gd-color-success: #8fd48f;
+  --gd-color-warning: #f0c07a;
+  --gd-color-danger: #ff9a8a;
+  /* 夜间这三个语义色是「提亮」方向（亮色块反过来压深），所以实心按钮/标签的字必须成对翻深。
+     --gd-color-*-text 只在 :root 给了 #fff、html.dark 不覆盖，沿用会白字压浅红底实测 2.05:1 */
+  --gd-color-success-text: #0d2110;
+  --gd-color-warning-text: #241a05;
+  --gd-color-danger-text: #2a0f0a;
+  --gd-color-success-text-disabled: rgba(13, 33, 16, 0.55);
+  --gd-color-warning-text-disabled: rgba(36, 26, 5, 0.55);
+  --gd-color-danger-text-disabled: rgba(42, 15, 10, 0.55);
   --gd-shimmer-base: #4d5378;
   --gd-shimmer-highlight: #e4e7f7;
-  --theme-font: Verdana, 'Trebuchet MS', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-}
-
-/* ---------- 字体 ---------- */
-html[data-theme="y2k"] body {
-  font-family: Verdana, 'Trebuchet MS', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
 /* ---------- 主题专属细节 ---------- */
+/* 字体不再硬写 body：改由上面块里的 --gd-font-sans / --gd-md-font-family 承担，
+   否则 markdown 正文与代码拿不到 Verdana（实测曾是 -apple-system / ui-monospace） */
+
 /* 镭射幻彩光晕：粉 / 薄荷 / 蓝紫三色漂浮 */
 html[data-theme="y2k"] body::before {
   background-image:
@@ -221,13 +242,13 @@ html[data-theme="y2k"] .user-section .message-item__card {
   border: 1px solid var(--gd-color-bubble-user-border);
   border-radius: 20px 20px 6px 20px;
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 2px 0 rgba(255, 255, 255, 0.9),
     0 4px 14px rgba(102, 115, 240, 0.20);
 }
 html.dark[data-theme="y2k"] .user-section .message-item__card {
   background: linear-gradient(180deg, #3a4178 0%, var(--gd-color-bubble-user-bg) 60%);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.18),
+    inset 0 2px 0 rgba(255, 255, 255, 0.18),
     0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
@@ -255,24 +276,102 @@ html.dark[data-theme="y2k"] .workspace-sidebar {
   box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.06), inset 8px 0 18px rgba(0, 0, 0, 0.25);
 }
 
-/* 输入框：全圆角胶囊 + 顶部高光 */
-html[data-theme="y2k"] .mock-inputbar {
+/* 输入框：矩形圆角 + 顶部高光（跟 surface/代码块同档，胶囊在这么高的容器上两端会被读成"被压扁"）。
+   真实类名是 .input-area（ChatInput.vue 的根），原来写的是 .mock-inputbar、
+   .md-code —— 实测 DOM 里 0 命中，这两条签名细节从未生效 */
+html[data-theme="y2k"] .input-area {
   background: linear-gradient(180deg, #ffffff 0%, var(--gd-color-surface) 70%);
   border: 1px solid var(--gd-color-border);
-  border-radius: 999px;
+  border-radius: var(--gd-size-surface-radius);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.9),
+    inset 0 2px 0 rgba(255, 255, 255, 0.9),
     0 6px 20px rgba(102, 115, 240, 0.16);
 }
-html.dark[data-theme="y2k"] .mock-inputbar {
+html.dark[data-theme="y2k"] .input-area {
   background: linear-gradient(180deg, #232748 0%, var(--gd-color-surface) 70%);
   box-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.14),
+    inset 0 2px 0 rgba(255, 255, 255, 0.14),
     0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 /* 代码块：半透明糖壳 */
-html[data-theme="y2k"] .md-code {
+html[data-theme="y2k"] .custom-code-block {
   border-radius: 14px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 4px 14px rgba(102, 115, 240, 0.12);
+}
+
+/* ============================================================
+   铬面语言化：让"圆润胶囊 + 内高光"覆盖到控件，而不只是气泡
+   ============================================================ */
+/* 圆角走 token（原主题只在气泡手写 20px/16px，全局实测仍是默认 12/18/12）。
+   不动 --gd-size-rounded-radius：它还被 ChatInputToolbar 的 rounded-t-() 复用，
+   设成 999 会把那条容器拉成巨大圆弧 —— 胶囊改由下面的逐控件规则给 */
+html[data-theme="y2k"] {
+  --gd-size-surface-radius: 14px;
+  --gd-size-dialog-rounded-radius: 18px;
+  --gd-size-overview-panel-radius: 14px;
+  --gd-layout-card-radius: 14px;
+}
+
+/* GdButton 的圆角是 Tailwind rounded-md 写死、没有 token 钩子（与 winxp 同一手法）。
+   这里刻意不给 background-image：按钮的底是组件用 --btn-bg / --btn-hover / --btn-active /
+   --btn-bg-disabled 四个状态变量驱动的，任何不透明渐变都会盖掉后三档（实测 danger 按钮
+   变成糖果白底 + 白字，1.9:1）；而 link/text/plain 三种按钮底是 transparent，画上去就是
+   一条实心药丸。铬面只用 1px 内高光表达，各变体的状态色继续走组件自己那套。 */
+html[data-theme="y2k"] .gd-button {
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+html.dark[data-theme="y2k"] .gd-button {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+
+/* 标签：胶囊 + 细描边（填充语义色压深后不再糊） */
+html[data-theme="y2k"] .gd-tag {
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+}
+
+/* 侧栏/会话选中项：铬面高光槽（原来只有淡紫平涂，跟"液态铬"不接） */
+html[data-theme="y2k"] .nav-item-active,
+html[data-theme="y2k"] .session-item-active {
+  background-image: linear-gradient(180deg, #ffffff 0%, var(--gd-color-sidebar-bg-active) 70%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(42, 47, 69, 0.08);
+}
+html.dark[data-theme="y2k"] .nav-item-active,
+html.dark[data-theme="y2k"] .session-item-active {
+  background-image: linear-gradient(180deg, #343a63 0%, var(--gd-color-sidebar-bg-active) 70%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* 选区与滚动条：原主题两者都没管（浏览器默认蓝滚轮/选区会破掉铬面） */
+html[data-theme="y2k"] ::selection {
+  background: #4f5ce0;
+  color: #ffffff;
+}
+html.dark[data-theme="y2k"] ::selection {
+  background: #a6b0ff;
+  color: #14163a;
+}
+html[data-theme="y2k"] *::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+html[data-theme="y2k"] *::-webkit-scrollbar-track {
+  background: var(--gd-color-bg);
+}
+html[data-theme="y2k"] *::-webkit-scrollbar-thumb {
+  background-image: linear-gradient(180deg, #ffffff 0%, var(--gd-color-sidebar-bg-active) 70%);
+  border: 1px solid var(--gd-color-border);
+  border-radius: 999px;
+}
+html.dark[data-theme="y2k"] *::-webkit-scrollbar-thumb {
+  background-image: linear-gradient(180deg, #3a4178 0%, var(--gd-color-sidebar-bg-active) 70%);
 }

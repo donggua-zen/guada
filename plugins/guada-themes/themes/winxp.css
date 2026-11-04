@@ -107,9 +107,10 @@
   --gd-color-danger: #c7502b;
   --gd-color-info: #6b6b6b;
 
-  /* 尺寸：XP 控件接近直角，仅保留微小圆角 */
-  --gd-size-text-base: 13px;
-  --gd-size-text-sm: 12px;
+  /* 尺寸：XP 控件接近直角，仅保留微小圆角。
+     字号刻意不降——真实 XP 是 Tahoma 11px，但正文走 --gd-md-font-size（=全局 text-base），
+     主题里改成 13 会让对话整段等比缩小（行高/标题/代码都由它派生），
+     用户反馈「字体偏小」正是这里，字号交给全局 token，XP 只负责形与色。 */
   --gd-size-rounded-radius: 4px;
   --gd-size-surface-radius: 4px;
   --gd-size-overview-panel-radius: 4px;
@@ -137,16 +138,18 @@
   --gd-code-block-header-bg: #ece9d8;      /* 标题栏 = 对话框米色 */
   --gd-code-block-language-color: #0058e6;
 
-  /* 字体栈：Tahoma + 宋体，XP 中文界面原味 */
-  --theme-font: Tahoma, Verdana, SimSun, "宋体", sans-serif;
+  /* 字体：走全局 token 才能铺满全站——body 吃 --gd-font-sans，
+     markdown 正文/标题吃 --gd-md-font-family（=var(--gd-font-sans)），代码吃 --gd-font-mono。
+     （原先只写了 body 的 font-family 和一个无人消费的 --theme-font，正文区根本没换上 Tahoma，
+     结果字号变小、字体没变，纯亏。） */
+  --gd-font-sans: Tahoma, Verdana, SimSun, "宋体", sans-serif;
+  /* 等宽：Lucida Console 是 XP 自带的控制台字体；Nerd Font 仍留在链里——
+     字体回退按字符发生，ASCII 走 Lucida Console，代码块里的 PUA 图标才会落到 Nerd 字形上。 */
+  --gd-font-mono: "Lucida Console", "Courier New", "MesloLGS NF",
+    "JetBrainsMono Nerd Font", monospace;
 }
 
-/* ---------- 字体 ---------- */
-html[data-theme="winxp"] body {
-  font-family: Tahoma, Verdana, SimSun, "宋体", sans-serif;
-}
-
-/* 经典选中色：#316AC5 白字 */
+/* ---------- 选中色 ---------- */
 html[data-theme="winxp"] ::selection {
   background: #316ac5;
   color: #ffffff;
