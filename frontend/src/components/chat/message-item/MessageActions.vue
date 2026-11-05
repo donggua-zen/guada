@@ -44,10 +44,6 @@
           <MoreHorizontal16Regular class="w-4 h-4 pointer-events-none" />
         </div>
       <template #dropdown>
-        <DropdownMenuItem command="edit">
-          <Edit16Regular class="w-3.5 h-3.5 mr-2" />
-          {{ t('chat.messageActions.editContent') }}
-        </DropdownMenuItem>
         <DropdownMenuItem command="delete">
           <Delete16Regular class="w-3.5 h-3.5 mr-2" />
           {{ t('chat.messageActions.deleteTurn') }}
@@ -92,7 +88,6 @@ import {
   Clock12Regular,
   MoreHorizontal16Regular,
   Delete16Regular,
-  Edit16Regular,
   BranchFork16Regular,
 } from '@vicons/fluent';
 
@@ -155,15 +150,12 @@ const emit = defineEmits<{
   (e: 'copy'): void;
   (e: 'generate'): void;
   (e: 'regenerate'): void;
-  (e: 'edit'): void;
   (e: 'delete'): void;
   (e: 'branch'): void;
 }>();
 
 const handleCommand = (command: string) => {
-  if (command === 'edit') {
-    emit('edit');
-  } else if (command === 'delete') {
+  if (command === 'delete') {
     emit('delete');
   }
 };

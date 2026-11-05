@@ -48,7 +48,6 @@ import {
   IMessageStore,
   ContextLoadParams,
   TurnFinish,
-  TurnUpdate,
   TokenBreakdown,
 } from './message-store.interface';
 
@@ -966,40 +965,6 @@ export class JsonlMessageService implements IMessageStore {
     // 必须位于 turn/finish 落盘之后——快照永不超前于日志。
     await this.maybeSnapshot(sessionId);
     return finalized.seq;
-  }
-
-  /**
-   * 编辑轮次（带 sessionId）。
-   * 支持：content → 内容编辑（追加 message/prune 记录新内容，简化处理）
-   *
-   * 定位用 applyCompressionPrune=false 的折叠 surface：保留压缩裁剪的完整原文。
-   * 注意未传 ignoreCompaction，compaction 遮蔽（前缀删除 + 摘要置头）仍然生效——
-   * 被遮蔽消息不在该 surface 内；若需编辑已被压缩的消息，须改用
-   * { applyCompressionPrune: false, ignoreCompaction: true }（对齐会话搜索链路）。
-   */
-  async updateTurn(
-    sessionId: string,
-    turnId: string,
-    data: TurnUpdate,
-  ): Promise<{ success: boolean }> {
-    const events = await this.backend.getAllEvents(sessionId);
-    const state = foldEvents(events, undefined, { applyCompressionPrune: false });
-
-    // 内容编辑（简化：追加 message/prune 记录新内容）
-    if (data?.content !== undefined) {
-      const textMsg = state.messages
-        .filter((n) => n.turnId === turnId)
-        .find((m) => m.content.some((b) => b.type === 'text'));
-      if (textMsg) {
-        await this.appendPrune(sessionId, {
-          messageId: textMsg.id,
-          newContent: String(data.content),
-          strategy: 'user_edit',
-        });
-        return { success: true };
-      }
-    }
-    return { success: false };
   }
 
   /**

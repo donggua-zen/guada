@@ -192,7 +192,6 @@ export interface MessageApi {
   clearSessionMessages(sessionId: string): Promise<boolean>;
   /** 删除本轮对话（按回合 id，整轮遮蔽） */
   deleteTurn(sessionId: string, turnId: string): Promise<{ success: boolean }>;
-  updateMessage(sessionId: string, messageId: string, data: Record<string, unknown>): Promise<Message>;
   /** 后端暂无此路由（web 搜索由插件侧实现），保留占位待接 */
   webSearch(messageId: string): Promise<unknown>;
   /** 统一交互应答（审批/询问共用；requestId 为 ask_requested 帧携带的临时凭证 uuid，
@@ -275,13 +274,6 @@ export const messageApi: MessageApi = {
   /** 删除本轮对话：DELETE /sessions/:sessionId/turns/:turnId */
   async deleteTurn(this: ApiContext, sessionId: string, turnId: string) {
     return await this._request(`/sessions/${sessionId}/turns/${turnId}`, { method: "DELETE" });
-  },
-
-  async updateMessage(this: ApiContext, sessionId: string, messageId: string, data: Record<string, unknown>) {
-    return await this._request<Message>(`/sessions/${sessionId}/messages/${messageId}`, {
-      method: "PUT",
-      data,
-    });
   },
 
   async webSearch(this: ApiContext, messageId: string) {

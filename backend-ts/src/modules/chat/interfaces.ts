@@ -10,7 +10,6 @@ export type {
   IMessageStore,
   ContextLoadParams,
   TurnFinish,
-  TurnUpdate,
 } from "../../common/persistence/message-store.interface";
 export { MESSAGE_STORE_TOKEN } from "../../common/persistence/message-store.interface";
 

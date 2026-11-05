@@ -63,7 +63,7 @@
                     :agent-name="currentSession?.agent?.name"
                     :agent-avatar="currentSession?.agent?.avatarUrl" :is-last="index === visibleTurns.length - 1"
                     :allow-generate="!isStreaming && index === lastUserMessageIndex"
-                    :animate-in="animateIds.includes(turn.id)" @delete="deleteTurnMessage" @edit="editMessage"
+                    :animate-in="animateIds.includes(turn.id)" @delete="deleteTurnMessage"
                     @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
                     @branch="branchFromTurn"
                     :branching="branchingTurnId === turn.id" :branch-disabled="disableBranch || branchingTurnId !== null"
@@ -271,7 +271,7 @@ import GdPopover from '@/components/ui/GdPopover.vue'
 
 
 // 弹出层工具
-const { confirm, editText } = usePopup();
+const { confirm } = usePopup();
 // 队列补发：打开会话时若后端已空闲但队列非空（错过终态事件）则补一次消费
 const { refreshQueue } = useSessionEvents();
 const authStore = useAuthStore()
@@ -1746,37 +1746,6 @@ async function branchFromTurn(turn: Turn) {
 }
 
 type MessageActionTarget = TurnContent | ReturnType<typeof toUserMessageView> | null
-
-async function editMessage(block: MessageActionTarget) {
-  try {
-    // 无 assistant 块（如立即报错无任何产出）→ 无可编辑内容，提前返回
-    if (!block) {
-      toast.info(t('chat.panel.editCancelled'));
-      return;
-    }
-
-    const result = await editText({
-      title: t('chat.panel.editMessageTitle'),
-      defaultValue: block.content || "",
-      confirmText: t('common.save'),
-      cancelText: t('common.cancel')
-    });
-
-    if (result != null && currentSessionId.value) {
-      // 块对象即回合树内的响应式引用,就地改写即已更新 UI;
-      // 持久化走 updateMessage API(按消息级 messageId 回传,块继承自所属消息)。
-      // (旧版还调 sessionStore.updateMessage 改扁平数组,回合制后恒空、从未生效,已清除)
-      block.content = result;
-      await apiService.updateMessage(currentSessionId.value, block.messageId, { content: result });
-      toast.success(t('common.updateSuccess'));
-    } else if (result === null || result === undefined) {
-      toast.info(t('chat.panel.editCancelled'));
-    }
-  } catch (error) {
-    toast.error(t('common.error.operationFailed'));
-    console.error("更新消息失败:", error);
-  }
-}
 
 async function copyMessage(block: MessageActionTarget) {
   try {

@@ -160,7 +160,7 @@ export function foldGoalChange(state: ReplayState, event: BaseEvent): void {
  * 折叠产物同为扁平 surface，仅内容规则不同。
  * - LLM 链路（默认）：压缩裁剪就地应用省 token；compaction 遮蔽前缀删除 + 摘要置消息头
  * - applyCompressionPrune=false：压缩裁剪不应用（tool-result 保持完整原文）。
- *   当前后端消费者：updateTurn（编辑定位）、会话内容搜索（另加 ignoreCompaction）
+ *   当前后端消费者：会话内容搜索（另加 ignoreCompaction）
  * - 用户编辑（strategy='user_edit'）无论哪条链路都应用（所见即所得，必须回显）
  * - ignoreCompaction=true：整段忽略 compaction/* 括号（不删前缀、不插摘要），
  *   被压缩消息保留参与内容检索；搜索链路用此对齐"界面全量显示"的语义

@@ -48,7 +48,7 @@
         <!-- 用户操作按钮 -->
         <MessageActions :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
           :time-full="userTime.full" :time-friendly="userTime.firendly"
-          @copy="emit('copy', userView)" @generate="emit('generate', props.turn)" @edit="emit('edit', userView)"
+          @copy="emit('copy', userView)" @generate="emit('generate', props.turn)"
           @delete="emit('delete', props.turn)" />
       </div>
     </div>
@@ -191,7 +191,7 @@
     <MessageActions v-if="!streamingState.isStreaming" :is-assistant="true" :is-last="isLast"
       :allow-generate="false" :time-full="assistantTime.full" :time-friendly="assistantTime.firendly"
       :duration-ms="durationMs" :token-usage="tokenUsage" @copy="emit('copy', activeBlock)"
-      @regenerate="emit('regenerate', props.turn)" @edit="emit('edit', activeBlock)"
+      @regenerate="emit('regenerate', props.turn)"
       @delete="emit('delete', props.turn)" @branch="emit('branch', props.turn)"
       :branching="branching" :branch-disabled="branchDisabled" />
 
@@ -253,7 +253,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   delete: [turn: Turn]
   /** 用户消息以聚合视图传出（跨块文本+附件，带 id=messageId）；assistant 传块 */
-  edit: [block: TurnContent | ReturnType<typeof toUserMessageView> | null]
   copy: [block: TurnContent | ReturnType<typeof toUserMessageView> | null]
   generate: [turn: Turn]
   regenerate: [turn: Turn]

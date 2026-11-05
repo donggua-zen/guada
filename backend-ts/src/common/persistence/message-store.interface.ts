@@ -62,13 +62,6 @@ export interface TurnFinish {
   breakdown?: TokenBreakdown;
 }
 
-/** 编辑轮次（版本切换 / 内容编辑） */
-export interface TurnUpdate {
-  currentVersionId?: string;
-  content?: string;
-  [key: string]: unknown;
-}
-
 /** 单块懒加载详情（工具调用参数+结果） */
 // ============================================================================
 // 消息存储统一接口
@@ -148,12 +141,6 @@ export interface IMessageStore {
     durationMs: number,
     finish: TurnFinish,
   ): Promise<number>;
-  /** 编辑轮次：内容编辑（追加 message/prune 记录新内容） */
-  updateTurn(
-    sessionId: string,
-    turnId: string,
-    data: TurnUpdate,
-  ): Promise<{ success: boolean }>;
   /** 删除轮次：删 user 外壳 → 其全部 assistant 版本遮蔽 */
   deleteTurn(sessionId: string, turnId: string): Promise<void>;
   /**

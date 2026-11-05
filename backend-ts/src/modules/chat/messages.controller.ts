@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Put,
   Delete,
   Body,
   Param,
@@ -55,19 +54,6 @@ export class MessagesController {
       beforeSeq: beforeSeq !== undefined ? parseInt(beforeSeq, 10) : undefined,
       turns: turns !== undefined ? parseInt(turns, 10) : 30,
     });
-  }
-
-  /**
-   * 更新轮次（版本切换 / 内容编辑）
-   */
-  @Put("sessions/:sessionId/messages/:messageId")
-  async updateMessage(
-    @Param("sessionId") sessionId: string,
-    @Param("messageId") messageId: string,
-    @Body() body: any,
-  ) {
-    await this.ensureSession(sessionId);
-    return this.messageStore.updateTurn(sessionId, messageId, body);
   }
 
   /**

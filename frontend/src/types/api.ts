@@ -290,7 +290,6 @@ export interface ApiResponses {
 
     // 消息相关
     createMessage: Message
-    updateMessage: Message
     deleteTurn: { success: boolean }
 
     // 认证相关
