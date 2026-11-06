@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { t } from '@/locales'
 import { useFullscreen } from '@/composables/useFullscreen'
 
@@ -44,8 +44,10 @@ watch(() => props.visible, (val) => {
     failed.value = false
     loading.value = false
     lockBodyScroll()
+    attachKeydown()
   } else {
     unlockBodyScroll()
+    detachKeydown()
   }
 })
 
@@ -81,7 +83,13 @@ function close() {
   emit('close')
 }
 
+/**
+ * 只在查看器打开期间接管键盘。
+ * 不做「焦点在输入框就放行」的守卫：查看器是全屏模态遮罩，方向键在此时就该切图；
+ * 而遮罩关闭前焦点可能还留在输入框里，放行会让方向键落到不可见的光标上、切图失效。
+ */
 function handleKeydown(e: KeyboardEvent) {
+  if (!props.visible) return
   if (e.key === 'Escape' && props.closeOnPressEscape) {
     e.stopPropagation()
     close()
@@ -92,6 +100,21 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault()
     next()
   }
+}
+
+/**
+ * 监听生命周期跟随 visible：只在打开期间挂在 document 上。
+ * 早期实现在 setup 里无条件注册，宿主常驻挂载（每回合一个 TurnItem）后，
+ * 一个全局监听就把全 App 输入框的左右方向键全吞了（preventDefault 取消 caret 移动）。
+ */
+function attachKeydown(): void {
+  if (typeof document === 'undefined') return
+  document.addEventListener('keydown', handleKeydown)
+}
+
+function detachKeydown(): void {
+  if (typeof document === 'undefined') return
+  document.removeEventListener('keydown', handleKeydown)
 }
 
 function handleImgLoad() {
@@ -146,12 +169,14 @@ const barStyle = computed(() => {
   return { paddingTop: `${TITLEBAR_HEIGHT_PX + 8}px` }
 })
 
-// 键盘监听挂在 document 上：查看器内无输入焦点元素，全局监听最简
-if (typeof document !== 'undefined') {
-  document.addEventListener('keydown', handleKeydown)
-}
+// 键盘监听挂在 document 上：查看器内无输入焦点元素，全局监听最简。
+// 注册/注销由上面的 visible watch 驱动；挂载时就已打开的情况（宿主 v-if 内挂载）
+// 由 onMounted 补上，与 watch 同一套条件。
+onMounted(() => {
+  if (props.visible) attachKeydown()
+})
 onBeforeUnmount(() => {
-  document.removeEventListener('keydown', handleKeydown)
+  detachKeydown()
   if (scrollLocked) unlockBodyScroll()
 })
 </script>
