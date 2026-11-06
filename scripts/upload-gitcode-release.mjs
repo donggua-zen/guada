@@ -35,10 +35,12 @@ const tag = args.find((a) => !a.startsWith('--'));
 const dryRun = args.includes('--dry-run');
 const dirArg = args.includes('--dir') ? args[args.indexOf('--dir') + 1] : null;
 const skipArg = args.includes('--skip') ? args[args.indexOf('--skip') + 1] : null;
+// 默认跑完清理临时工作目录；--keep-temp 可保留（重跑时复用已下载的安装包）。
+const keepTemp = args.includes('--keep-temp');
 
 if (!tag) {
   console.error(
-    '用法: node scripts/upload-gitcode-release.mjs <tag> [--dir <目录>] [--skip <名字片段>] [--dry-run]',
+    '用法: node scripts/upload-gitcode-release.mjs <tag> [--dir <目录>] [--skip <名字片段>] [--dry-run] [--keep-temp]',
   );
   process.exit(1);
 }
@@ -147,6 +149,39 @@ async function main() {
   const workDir = dirArg ? path.resolve(dirArg) : path.join(os.tmpdir(), `guada-${tag}`);
   fs.mkdirSync(workDir, { recursive: true });
   console.log(`本地目录: ${workDir}`);
+  // 只有脚本自己创建的临时目录才清理；--dir 指向用户目录时绝不动。
+  const ownsWorkDir = !dirArg;
+  if (ownsWorkDir && !keepTemp) {
+    // 脚本里有多个 process.exit() 提前返回的分支，用 exit 钩子保证每条路径都清理。
+    // 每次发版这里会留一份 500MB+ 的安装包，不清就会越攒越多。
+    process.on('exit', () => {
+      try {
+        fs.rmSync(workDir, { recursive: true, force: true });
+        fs.rmSync(path.join(os.tmpdir(), 'guada-upload-resp.txt'), { force: true });
+      } catch {
+        /* 清理失败不影响发版结果 */
+      }
+    });
+
+    // 顺手扫掉历史版本留下的 %TEMP%\guada-vX.Y.Z（旧脚本没有清理逻辑）。
+    // 只匹配 guada-v<数字版本> 且必须是目录，避免误删别人的文件。
+    const tmpRoot = os.tmpdir();
+    const stalePattern = /^guada-v\d+\.\d+\.\d+$/;
+    let reclaimed = 0;
+    for (const entry of fs.readdirSync(tmpRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !stalePattern.test(entry.name)) continue;
+      const target = path.join(tmpRoot, entry.name);
+      if (path.resolve(target) === path.resolve(workDir)) continue;
+      try {
+        fs.rmSync(target, { recursive: true, force: true });
+        reclaimed += 1;
+        console.log(`清理历史临时目录: ${entry.name}`);
+      } catch {
+        /* 被占用时跳过，下次发版再清 */
+      }
+    }
+    if (reclaimed === 0) console.log('未发现历史临时目录残留');
+  }
 
   // GitHub 会把资产名里的空格换成点（GuaDa Setup x.exe → GuaDa.Setup.x.exe），
   // 本地文件通常是带空格的原始名 —— 两种都认，按「去空格去点后同名 + 大小一致」匹配
@@ -255,6 +290,11 @@ async function main() {
     process.exit(1);
   }
   console.log(`\n✅ 全部就位（本次上传 ${uploaded} 个）`);
+  if (ownsWorkDir && !keepTemp) {
+    console.log(`临时目录将在退出时清理：${workDir}`);
+  } else if (ownsWorkDir && keepTemp) {
+    console.log(`保留临时目录（--keep-temp）：${workDir}`);
+  }
 }
 
 await main();
