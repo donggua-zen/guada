@@ -17,6 +17,7 @@ import { t } from "@/locales";
 import { parse as partialParse } from "partial-json";
 import { SUB_AGENT_SPAWN_TOOL } from "./subAgentTools";
 import { WORKFLOW_RUN_TOOL } from "./workflowTools";
+import { splitPathDisplay, type FilePathDisplay } from "./pathDisplay";
 
 export interface ToolCall {
   /** 工具调用 id（= 后端 toolCallId），与 toolCallsResponse[].toolCallId 对应。
@@ -221,7 +222,19 @@ export function getToolArgs(
   return tool.arguments ?? tool.args;
 }
 
-export function getArgsText(tool: ToolCall): string | undefined {
+/** 参数摘要的展示形态：纯文本，或拆成「文件名 + 目录」的文件路径 */
+export interface ArgsDisplay {
+  /** 通用一行摘要（数组计数 / pattern / 未知工具兜底等） */
+  text?: string;
+  /** argsKey 指向 file_path 时的路径拆分结果 */
+  file?: FilePathDisplay;
+}
+
+/**
+ * 参数摘要的结构化版本：文件类工具（argsKey = "file_path"）拆成
+ * 文件名 + 目录两段（ZCode 同款交互），其余场景与 getArgsText 一致。
+ */
+export function getArgsDisplay(tool: ToolCall): ArgsDisplay | undefined {
   const params = getToolArgs(tool);
   if (!params) return undefined;
 
@@ -245,12 +258,19 @@ export function getArgsText(tool: ToolCall): string | undefined {
     //（argsCountUnit）。用于"已询问用户 3 个问题"这类只报数量的行。
     if (Array.isArray(value)) {
       const unit = config.argsCountUnit ? ` ${config.argsCountUnit}` : "";
-      return `${value.length}${unit}`;
+      return { text: `${value.length}${unit}` };
+    }
+    // 文件路径：拆成「文件名 + 目录」两段展示（行头布局由组件负责）。
+    // file_path 声明即视为路径语义：空值不回落标量分支（否则会出 { text: "" } 空摘要）。
+    if (config.argsKey === "file_path" && typeof value === "string") {
+      if (!value.trim()) return undefined;
+      const file = splitPathDisplay(value);
+      return file ? { file } : undefined;
     }
     // argsKey 约定指向**标量**字段（file_path / pattern / action / q / plan …）；
     // 对象等非标量没有一行摘要的通用表示 → 不显示，绝不 String(value) 打出 [object Object]
     if (typeof value === "string" || typeof value === "number") {
-      return formatArgSummary(value);
+      return { text: formatArgSummary(value) };
     }
   }
 
@@ -258,9 +278,17 @@ export function getArgsText(tool: ToolCall): string | undefined {
 
   for (const value of Object.values(parsedParams)) {
     if (typeof value === "string" && value.length > 0) {
-      return formatArgSummary(value);
+      return { text: formatArgSummary(value) };
     }
   }
+  return undefined;
+}
+
+export function getArgsText(tool: ToolCall): string | undefined {
+  const display = getArgsDisplay(tool);
+  if (!display) return undefined;
+  if (display.text) return display.text;
+  if (display.file) return display.file.fullPath;
   return undefined;
 }
 

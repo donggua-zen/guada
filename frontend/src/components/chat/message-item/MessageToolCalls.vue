@@ -16,7 +16,20 @@
           <span class="shrink-0"
             :class="tool.outcome === 'aborted' ? 'text-gray-400 dark:text-gray-500 font-medium' : 'text-gray-700 dark:text-gray-300 font-medium'">{{
               getActionText(tool, toolIndex) }}</span>
-          <span v-if="rowDisplays[toolIndex].argsText" class="text-sm ml-2 truncate">{{ rowDisplays[toolIndex].argsText }}</span>
+          <!-- 文件类工具：三段式行头（ZCode 同款）——文件名 chip（扩展名图标 + basename，
+               优先显示、hover 看全路径）+ 目录串（带尾斜杠，次要色，优先被截断） -->
+          <template v-if="rowDisplays[toolIndex].file">
+            <span v-if="rowDisplays[toolIndex].remoteName" class="shrink-0 ml-2 text-sm">{{ t('chat.toolCalls.remote') }}·</span>
+            <span class="inline-flex min-w-0 max-w-full items-center gap-1 ml-2"
+              :title="rowDisplays[toolIndex].file!.fullPath">
+              <img :src="rowDisplays[toolIndex].fileIcon" class="w-4 h-4 shrink-0" alt="" />
+              <span class="min-w-0 truncate text-gray-600 dark:text-gray-300">{{ rowDisplays[toolIndex].file!.fileName }}</span>
+            </span>
+            <span v-if="rowDisplays[toolIndex].file!.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-gray-400 dark:text-gray-500"
+              :title="rowDisplays[toolIndex].file!.fullPath">{{ rowDisplays[toolIndex].file!.dirPath }}</span>
+          </template>
+          <!-- 其余工具：单行参数摘要（原样/计数，可截断） -->
+          <span v-else-if="rowDisplays[toolIndex].argsText" class="text-sm ml-2 truncate">{{ rowDisplays[toolIndex].argsText }}</span>
           <!-- 工具产出图片数量徽标（缩略图在展开区；此处让闭合状态也能看出有图） -->
           <span v-if="toolImages[toolIndex].length" class="tool-image-count shrink-0"
             :title="t('chat.toolCalls.imageCount', { count: toolImages[toolIndex].length })">
@@ -119,7 +132,7 @@ import {
   type ToolRendererInfo,
   type PlanCardStatus,
   getToolConfig, getToolIcon,
-  getToolArgs, getArgsText,
+  getToolArgs, getArgsDisplay,
   getToolRenderer, getRendererArgs,
   isStandaloneRendererKind, isStandaloneTool,
   resolvePlanCardStatus, resolveToolName,
@@ -129,6 +142,7 @@ import { WORKFLOW_RUN_TOOL } from '@/utils/workflowTools';
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
 import { formatArgsTextWithRemote, getRemoteWorkspaceName } from '@/utils/toolWorkspace';
+import { getFileIcon } from '@/composables/useFileIcon';
 import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
 import type { ToolCallResponseEntry } from '@/types/message';
 import type { FileRef } from '@/types/stream/content-block.types';
@@ -291,14 +305,20 @@ const responseTexts = computed<string[]>(() =>
 
 // ── 远程工作区标识（通用 workspace 参数约定，无工具名白名单）──
 // 单行摘要加「远程·」前缀；展开区显示连接名。本地调用两项均为空。
+// 文件类工具（argsKey = file_path）拆成「文件名 + 目录」三段式行头：
+// 文件名 chip 带扩展名图标、尽量完整显示；目录串（带尾斜杠）次要色、优先被截断。
 const rowDisplays = computed(() => {
   const span = perfStart('toolCalls.rowDisplays');
   const rows = props.toolCalls.map((tool) => {
     const remoteName = getRemoteWorkspaceName(tool);
+    const display = getArgsDisplay(tool);
+    const file = display?.file ?? null;
     return {
       remoteName,
+      file,
+      fileIcon: file ? getFileIcon(file.fileName) : '',
       argsText: formatArgsTextWithRemote(
-        getArgsText(tool),
+        display?.text,
         remoteName,
         t('chat.toolCalls.remote'),
       ),

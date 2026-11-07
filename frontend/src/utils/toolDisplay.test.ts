@@ -10,6 +10,7 @@ import {
   getToolRenderer,
   getRendererArgs,
   getArgsText,
+  getArgsDisplay,
   isStandaloneTool,
   isStandaloneRendererKind,
   resolvePlanCardStatus,
@@ -264,6 +265,63 @@ describe("getArgsText（行内参数摘要）", () => {
     expect(
       getArgsText({ name: "task_output", arguments: { timeout: 30000 } } as ToolCall),
     ).toBe("30000");
+  });
+});
+
+describe("getArgsDisplay（结构化参数摘要：文件路径拆分）", () => {
+  beforeEach(() => {
+    setPluginToolDisplays({});
+  });
+
+  it("argsKey = file_path：拆成文件名 + 目录（Windows 反斜杠）", () => {
+    setPluginToolDisplays({
+      read: { text: { executing: "", completed: "" }, argsKey: "file_path" },
+    });
+    const d = getArgsDisplay({
+      name: "read",
+      arguments: { file_path: "D:\\proj\\frontend\\src\\main.ts" },
+    } as ToolCall);
+    expect(d?.file).toBeDefined();
+    expect(d?.file!.fileName).toBe("main.ts");
+    expect(d?.file!.dirPath).toBe("D:/proj/frontend/src/");
+    expect(d?.file!.fullPath).toBe("D:\\proj\\frontend\\src\\main.ts");
+    expect(d?.text).toBeUndefined();
+  });
+
+  it("argsKey = file_path 但值为空：不走 file 分支", () => {
+    setPluginToolDisplays({
+      read: { text: { executing: "", completed: "" }, argsKey: "file_path" },
+    });
+    expect(getArgsDisplay({ name: "read", arguments: { file_path: "" } } as ToolCall)).toBeUndefined();
+  });
+
+  it("argsKey = pattern（glob/grep）：保持纯文本，不做路径拆分", () => {
+    setPluginToolDisplays({
+      glob: { text: { executing: "", completed: "" }, argsKey: "pattern" },
+    });
+    const d = getArgsDisplay({
+      name: "glob",
+      arguments: { pattern: "src/**/*.test.ts" },
+    } as ToolCall);
+    expect(d?.text).toBe("src/**/*.test.ts");
+    expect(d?.file).toBeUndefined();
+  });
+
+  it("未知工具兜底：第一个非空字符串参数仍为 text", () => {
+    const d = getArgsDisplay({
+      name: "mcp__whois",
+      arguments: { query: "example.com" },
+    } as ToolCall);
+    expect(d?.text).toBe("example.com");
+    expect(d?.file).toBeUndefined();
+  });
+
+  it("getArgsText 兼容包装：file 场景返回完整原始路径", () => {
+    setPluginToolDisplays({
+      read: { text: { executing: "", completed: "" }, argsKey: "file_path" },
+    });
+    const tool = { name: "read", arguments: { file_path: "src/a/b.ts" } } as ToolCall;
+    expect(getArgsText(tool)).toBe("src/a/b.ts");
   });
 });
 

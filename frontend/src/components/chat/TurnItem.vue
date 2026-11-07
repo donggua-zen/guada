@@ -103,7 +103,18 @@
                       :style="isGroupExpanded(groupIndex, group) ? {} : { transform: 'rotate(-90deg)' }" />
                   </span>
                   <span class="shrink-0 font-medium ml-1.5">{{ parts.action }}</span>
-                  <span v-if="parts.args" class="text-sm truncate ml-1.5"
+                  <!-- 文件类工具：文件名 chip（扩展名图标 + basename，hover 全路径）+ 目录串（次要色，优先截断） -->
+                  <template v-if="parts.file">
+                    <span class="inline-flex min-w-0 max-w-full items-center gap-1 ml-1.5"
+                      :title="parts.file.fullPath">
+                      <img :src="getFileIcon(parts.file.fileName)" class="w-4 h-4 shrink-0" alt="" />
+                      <span class="min-w-0 truncate text-gray-600 dark:text-gray-300">{{ parts.file.fileName }}</span>
+                    </span>
+                    <span v-if="parts.file.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-gray-400 dark:text-gray-500"
+                      :title="parts.file.fullPath">{{ parts.file.dirPath }}</span>
+                  </template>
+                  <!-- 其余工具：单行参数摘要 -->
+                  <span v-else-if="parts.args" class="text-sm truncate ml-1.5"
                     :class="{ 'text-gray-400 dark:text-gray-400': !isGroupBusy(groupIndex) }">{{ parts.args }}</span>
                 </template>
               </div>
@@ -232,6 +243,7 @@ import { isHiddenBlock, getThinkingPreview } from '@/utils/messageUtils';
 import { isJobNoticeSource } from '@/utils/jobNotice';
 import { previewFile } from '@/utils/workspacePreview';
 import { resolveGroupExpanded, nextGroupExpandOverride, hasUnfinishedSteps, isToolCallExecuting, resolveGroupTitlePhase, estimateGroupLines } from './groupExpansion';
+import { getFileIcon } from '@/composables/useFileIcon';
 import { perfCount, perfStart } from '@/utils/perf';
 
 const { t } = useI18n();
@@ -574,6 +586,7 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
         icon: getToolIcon(refTool),
         action: config.text.executing || t('chat.turn.executingSteps', { n: 1 }),
         args: getArgsText(refTool) || '',
+        file: getArgsDisplay(refTool)?.file ?? null,
       };
     }
     return { icon: Wrench24Filled, action: t('chat.turn.executingSteps', { n: executing.length }), args: '' };
@@ -611,6 +624,7 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
       icon: getToolIcon(refTool),
       action: config.text.completed || t('chat.turn.executedSteps', { n: 1 }),
       args: getArgsText(refTool) || '',
+      file: getArgsDisplay(refTool)?.file ?? null,
     };
   }
 
