@@ -50,6 +50,18 @@
           :rows="4"
           @update:model-value="updateField(field.key, $event)"
         />
+
+        <!-- boolean -->
+        <GdSwitch
+          v-else-if="field.type === 'boolean'"
+          :model-value="Boolean(modelValue[field.key] ?? field.default ?? false)"
+          @update:model-value="updateField(field.key, $event)"
+        />
+
+        <!-- 字段说明 -->
+        <span v-if="field.description" class="text-xs text-gray-400 dark:text-[#8b8d95]">
+          {{ field.description }}
+        </span>
       </div>
     </template>
   </div>
@@ -62,6 +74,7 @@ import GdInput from '@/components/ui/GdInput.vue';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
+import GdSwitch from '@/components/ui/GdSwitch.vue';
 
 const props = defineProps<{
   fields: ConfigField[]
@@ -79,7 +92,15 @@ const emit = defineEmits<{
 const visibleFields = computed(() => {
   return props.fields.filter((field) => {
     if (!field.showIf) return true
-    return props.modelValue[field.showIf.field] === field.showIf.equals
+    const condition = field.showIf as {
+      field?: string
+      equals?: unknown
+      anyOf?: Array<{ field: string; equals: unknown }>
+    }
+    if (Array.isArray(condition.anyOf)) {
+      return condition.anyOf.some((c) => props.modelValue[c.field] === c.equals)
+    }
+    return props.modelValue[condition.field as string] === condition.equals
   })
 })
 

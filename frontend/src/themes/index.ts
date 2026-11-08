@@ -1,19 +1,31 @@
 /**
- * 主题注册表与加载器
+ * 主题注册表与加载器（v3：主题 = 皮肤）
  *
- * 内置主题仅保留 default（无 CSS）；其余 10 个主题已迁移为插件注册
- * （plugins/guada-themes，category=system），由 pluginSlots 消费后端
- * themes 清单后经 registerExternalTheme / replaceThemesByPlugin 注册，
- * CSS 走插件 assets 端点（http(s)://.../plugins/:id/assets/:file.css）。
+ * 统一模型：
+ * - 纯 CSS 主题：只给 cssFile/cssFiles，靠 `html[data-theme=x]` 变量覆盖；
+ * - 富主题（原「皮肤」）：额外带 runtimeScript/assetBase/bodyAttribute/settings，
+ *   由 `services/theme-runtime` 统一应用（body 作用域 + 资源 + 自建 DOM + 可还原）。
  *
  * 关键点：
- * - themePresets 是响应式数组（reactive），插件注册/移除后设置下拉自动更新；
+ * - themePresets 是响应式数组，插件注册/移除后设置下拉自动更新；
  * - applyThemePreset 对"未知主题 id"（清单尚未到达的插件主题）不发起加载，
  *   记录为 pending，待注册表变化（retryPendingTheme）后补应用；
- * - 切换防闪烁：新 CSS onload 后再移除旧 CSS，避免闪白。
+ * - 切换防闪烁：新 CSS onload 后再移除旧 CSS（由 theme-runtime 负责）。
  */
 
 import { reactive } from "vue";
+import {
+  applyTheme,
+  removeTheme,
+  activeThemeId,
+  notifyThemeSetting,
+  isRichTheme,
+  themeAssetUrl,
+  type ThemeManifest,
+} from "@/services/theme-runtime";
+
+export { isRichTheme, themeAssetUrl, notifyThemeSetting };
+export type { ThemeManifest };
 
 export interface ThemePresetInfo {
   id: string;
@@ -28,8 +40,19 @@ export interface ThemePresetInfo {
   mode?: "light" | "dark" | "all";
   /** 插件主题专用：所属插件 ID（用于卸载/禁用时按插件移除） */
   pluginId?: string;
-  /** 插件主题专用：CSS 文件名（相对插件 frontend/dist，由 pluginSlots 拼完整 URL） */
+  /** 插件主题专用：CSS 文件（相对插件根） */
   cssFile?: string;
+  /** 插件主题专用：亮/暗分文件 */
+  cssFiles?: { light?: string; dark?: string };
+  /** 富主题字段（原「皮肤」） */
+  runtimeScript?: string;
+  assetBase?: string;
+  bodyAttribute?: string;
+  settings?: ThemeManifest["settings"];
+  preview?: { light?: string; dark?: string };
+  ownsBackground?: boolean;
+  recommendedThemes?: string[];
+  rev?: string;
 }
 
 /**
@@ -159,61 +182,79 @@ function getThemeCssUrl(themeId: string): string {
   return `${import.meta.env.BASE_URL}themes/${themeId}.css`;
 }
 
-/** 当前活跃的 <link> 元素 */
-let activeThemeLink: HTMLLinkElement | null = null;
-
-/** 当前已应用的预设 id（与 link/attribute 状态一致） */
+/** 当前已应用的预设 id（与 DOM/运行时状态一致） */
 let appliedPresetId: string | null = null;
 
 /**
- * 应用主题预设
- * 先加载新主题 CSS，onload 后再移除旧主题，避免闪烁。
+ * 应用主题预设（纯 CSS 或富主题统一入口）
+ *
  * 未知主题 id（插件清单尚未到达）→ 记录 pending，不发起加载。
  */
 export function applyThemePreset(presetId: string): void {
   // 幂等：与当前已应用主题相同则跳过（避免重复请求）
-  if (appliedPresetId === presetId) return;
+  if (appliedPresetId === presetId && activeThemeId() === presetId) return;
+  if (appliedPresetId === presetId && presetId === "default") return;
 
   // 未知主题：置 pending，等注册表变化后补应用（retryPendingTheme）
-  if (!getThemePreset(presetId)) {
+  const preset = getThemePreset(presetId);
+  if (!preset) {
     pendingPresetId = presetId;
     return;
   }
 
-  const oldLink = activeThemeLink;
-  activeThemeLink = null;
   appliedPresetId = presetId;
 
-  // default 主题：无 CSS 文件，直接清除 data-theme 并移除旧 CSS
+  // default 主题：无 CSS，卸载富主题并清除 data-theme
   if (presetId === "default") {
-    if (oldLink) oldLink.remove();
+    removeTheme();
     document.documentElement.removeAttribute("data-theme");
     return;
   }
 
-  // 创建新 <link>，加载完成后再移除旧的
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = getThemeCssUrl(presetId);
-  link.onload = () => {
-    // 新主题已就绪，安全移除旧主题
-    if (oldLink && oldLink.parentNode) {
-      oldLink.remove();
-    }
+  const manifest: ThemeManifest = {
+    pluginId: preset.pluginId || "",
+    id: preset.id,
+    name: preset.name,
+    primaryColor: preset.primaryColor,
+    secondaryColor: preset.secondaryColor,
+    mode: preset.mode,
+    cssFile: preset.cssFile,
+    cssFiles: preset.cssFiles,
+    runtimeScript: preset.runtimeScript,
+    assetBase: preset.assetBase,
+    bodyAttribute: preset.bodyAttribute,
+    settings: preset.settings,
+    preview: preset.preview,
+    ownsBackground: preset.ownsBackground,
+    recommendedThemes: preset.recommendedThemes,
+    rev: preset.rev,
+    cssUrl: getThemeCssUrl(presetId),
   };
-  // 加载失败也需移除旧主题，避免卡在中间状态
-  link.onerror = () => {
-    if (oldLink && oldLink.parentNode) {
-      oldLink.remove();
-    }
-  };
-  document.head.appendChild(link);
-  activeThemeLink = link;
 
-  // 设置 data-theme 属性，使 CSS 选择器匹配
-  // 新旧 CSS 同时存在期间，data-theme 已指向新主题，
-  // 旧 CSS 的 [data-theme="oldId"] 不再匹配，新 CSS 的 [data-theme="newId"] 匹配
-  document.documentElement.setAttribute("data-theme", presetId);
+  // 富主题：设置值来自 plugin:<id> 数据（异步读取，读不到就用默认值）
+  if (isRichTheme(manifest) && preset.pluginId) {
+    void loadThemeSettings(preset.pluginId)
+      .then((values) => applyTheme(manifest, values))
+      .catch((error) => {
+        console.warn("[themes] load theme settings failed, applying with defaults", error);
+        void applyTheme(manifest, {});
+      });
+    return;
+  }
+
+  void applyTheme(manifest, {});
+}
+
+/** 动态读取插件数据，避免 themes 模块强依赖 apiService（破坏测试/启动顺序） */
+async function loadThemeSettings(pluginId: string): Promise<Record<string, unknown>> {
+  const shared = (window as any).__GuaDaShared__;
+  const api = shared?.pluginApi;
+  if (!api?.getPluginData) return {};
+  try {
+    return (await api.getPluginData(pluginId)) || {};
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -238,10 +279,7 @@ export function getPendingPresetId(): string | null {
 export function _resetThemeState(): void {
   appliedPresetId = null;
   pendingPresetId = null;
-  if (activeThemeLink) {
-    activeThemeLink.remove();
-    activeThemeLink = null;
-  }
+  removeTheme();
 }
 
 /**

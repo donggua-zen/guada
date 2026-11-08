@@ -385,6 +385,7 @@ import { useSessionStore } from '../stores/session'
 import { useWorkflowRunsStore } from '../stores/workflowRuns'
 import { useSessionGroupStore, GENERAL_PROJECT_GROUP_ID } from '../stores/sessionGroup'
 import { useWorkspaceStore } from '../stores/workspace'
+import { usePluginSlots } from '../stores/pluginSlots'
 import { UNGROUPED_ID } from '../stores/session'
 import { useTheme, type ThemeMode } from '../composables/useTheme'
 import { isMobileDevice } from '../composables/useDevice'
@@ -424,6 +425,7 @@ import {
   ArrowMinimize16Regular,
   ClockAlarm20Regular,
   Apps20Regular,
+  PuzzlePiece20Regular,
   Edit16Regular,
   Delete20Regular,
   Folder20Regular,
@@ -448,6 +450,8 @@ const { isFullscreen } = useFullscreen()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const pluginSlots = usePluginSlots()
+void pluginSlots.init()
 const layoutStore = useLayoutStore()
 const sessionStore = useSessionStore()
 const sessionGroupStore = useSessionGroupStore()
@@ -761,7 +765,16 @@ const navItems = computed(() => [
     key: 'scheduler',
     label: t('ui.sidebar.navScheduler'),
     icon: ClockAlarm20Regular
-  }
+  },
+  // v3：插件全页工作台（`main` slot）自动出现在导航里，无需插件改宿主
+  ...pluginSlots
+    .rawOf('main')
+    .map((item) => ({
+      key: `plugin:${item.pluginId}:${item.component}`,
+      label: String(item.meta?.label || item.pluginId),
+      icon: PuzzlePiece20Regular,
+      shortcut: '' as string,
+    })),
 ])
 
 // 当前激活的 tab（根据路由）
@@ -779,6 +792,11 @@ const currentActiveTab = computed(() => {
   if (routeName === 'KnowledgeBase') return 'knowledge-base'
   if (routeName === 'Plugins') return 'plugins'
   if (routeName === 'Scheduler') return 'scheduler'
+  if (routeName === 'PluginPage') {
+    const pluginId = route.params.pluginId
+    const slotKey = route.params.slotKey
+    return `plugin:${Array.isArray(pluginId) ? pluginId[0] : pluginId}:${Array.isArray(slotKey) ? slotKey[0] : (slotKey || '')}`
+  }
   return ''
 })
 
@@ -1105,6 +1123,10 @@ const handleNavClick = (tab: string) => {
     router.replace({ name: 'Plugins' })
   } else if (tab === 'scheduler') {
     router.replace({ name: 'Scheduler' })
+  } else if (tab.startsWith('plugin:')) {
+    // v3：插件全页工作台。key 形如 `plugin:<pluginId>:<slotKey>`
+    const [, pluginId, slotKey] = tab.split(':')
+    router.replace({ name: 'PluginPage', params: { pluginId, slotKey: slotKey || '' } })
   }
 }
 

@@ -140,6 +140,7 @@
     plugins: 'Plugins',
     knowledgeBase: 'Knowledge Base',
     scheduler: 'Scheduler',
+    pluginPage: 'Plugin',
     login: 'Login',
     password: 'Password Settings',
   },

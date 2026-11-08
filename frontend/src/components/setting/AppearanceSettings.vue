@@ -63,6 +63,14 @@
                       :style="{ backgroundColor: theme.secondaryColor }"
                     />
                     <span>{{ themeName(theme) }}</span>
+                    <GdTag
+                      v-if="theme.runtimeScript || theme.assetBase"
+                      size="small"
+                      type="primary"
+                      effect="plain"
+                    >
+                      {{ t('settings.appearance.richTheme') }}
+                    </GdTag>
                   </div>
                 </GdOption>
                 <template #prefix>
@@ -74,6 +82,32 @@
                 </template>
               </GdSelect>
             </div>
+          </div>
+
+          <!-- 富主题（原「皮肤」）：显示配置入口 + 接管背景提示 -->
+          <div
+            v-if="currentRichTheme"
+            class="px-4 py-3.5 flex items-center justify-between gap-4 border-t border-gray-100 dark:border-[#2e3035]"
+          >
+            <div class="flex flex-col gap-1 min-w-0">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">
+                {{ t('settings.appearance.themeConfigTitle') }}
+              </span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
+                <template v-if="currentRichTheme.ownsBackground">
+                  {{ t('settings.appearance.themeConfigOwnsBackground') }}
+                </template>
+                <template v-else>
+                  {{ t('settings.appearance.themeConfigHint') }}
+                </template>
+              </span>
+            </div>
+            <GdButton
+              v-if="currentRichTheme.settings?.length"
+              @click="openThemeConfig"
+            >
+              {{ t('settings.appearance.themeConfigOpen') }}
+            </GdButton>
           </div>
         </div>
       </div>
@@ -193,6 +227,17 @@
       </div>
     </div>
   </div>
+
+  <!-- 富主题配置弹窗（复用通用插件配置组件） -->
+  <PluginConfigDialog
+    v-if="currentRichTheme?.pluginId"
+    v-model:visible="themeConfigVisible"
+    :plugin-id="currentRichTheme.pluginId"
+    :name="themeName(currentRichTheme)"
+    :schema="currentRichTheme.settings ? { fields: currentRichTheme.settings } : undefined"
+    :config="themeConfigValues"
+    @saved="handleThemeConfigSaved"
+  />
 </template>
 
 <script setup lang="ts">
@@ -210,6 +255,8 @@ import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
 import { themePresets, type ThemePresetInfo } from '@/themes'
+import { notifyThemeSetting } from '@/services/theme-runtime'
+import PluginConfigDialog from '@/components/plugins/PluginConfigDialog.vue'
 import type { AppearanceGroupSettings } from '@/types/service'
 import { useI18n } from 'vue-i18n'
 
@@ -237,6 +284,47 @@ const selectedThemePreset = ref<string>(activeThemePreset.value)
 const currentThemeInfo = computed<ThemePresetInfo | undefined>(() =>
   themePresets.find(t => t.id === selectedThemePreset.value)
 )
+
+/** 当前选中的是否为富主题（原「皮肤」：带 runtimeScript/assetBase） */
+const currentRichTheme = computed<ThemePresetInfo | undefined>(() => {
+  const theme = currentThemeInfo.value
+  if (!theme) return undefined
+  return theme.runtimeScript || theme.assetBase ? theme : undefined
+})
+
+/** 富主题配置弹窗 */
+const themeConfigVisible = ref(false)
+const themeConfigValues = ref<Record<string, unknown>>({})
+
+function openThemeConfig() {
+  const theme = currentRichTheme.value
+  if (!theme?.pluginId) return
+  themeConfigValues.value = {}
+  void apiService
+    .getPluginData(theme.pluginId)
+    .then((data) => {
+      themeConfigValues.value = (data as Record<string, unknown>) || {}
+      themeConfigVisible.value = true
+    })
+    .catch(() => {
+      themeConfigVisible.value = true
+    })
+}
+
+/** 保存后即时通知主题运行时（不重新加载 CSS/脚本） */
+function handleThemeConfigSaved() {
+  const theme = currentRichTheme.value
+  if (!theme) return
+  void apiService
+    .getPluginData(theme.pluginId!)
+    .then((data) => {
+      const values = (data as Record<string, unknown>) || {}
+      for (const [key, value] of Object.entries(values)) {
+        notifyThemeSetting(key, value)
+      }
+    })
+    .catch(() => {})
+}
 
 // 显示模式切换时，下拉同步到对应模式的预设
 watch(activeThemePreset, (val) => {
@@ -449,7 +537,3 @@ onMounted(() => {
   loadSettings()
 })
 </script>
-
-<style scoped>
-
-</style>

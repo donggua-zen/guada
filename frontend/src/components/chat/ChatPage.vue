@@ -124,6 +124,15 @@
                       <AppsListDetail20Regular class="w-5 h-5" />
                     </div>
                   </GdTooltip>
+                  <!-- v3：插件侧栏面板入口（仅当有插件注册 conversation.side.panel 时出现） -->
+                  <GdTooltip v-if="mainSession && pluginPanelsList.length"
+                    :content="pluginPanelOpen ? t('plugins.sidePanel.close') : t('plugins.sidePanel.open')"
+                    placement="bottom">
+                    <div class="header-icon-btn" :class="{ active: pluginPanelOpen }"
+                      @click="toggleFirstPluginPanel">
+                      <PuzzlePiece20Regular class="w-5 h-5" />
+                    </div>
+                  </GdTooltip>
                   <!-- 工作目录切换 -->
                   <GdTooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? t('chat.header.closeWorkspace') : t('chat.header.openWorkspace')" placement="bottom">
                   <div class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
@@ -149,9 +158,41 @@
                   <!-- 工作区概览：ChatPanel 右侧 aside 槽位（滚动条左侧）。折叠状态机见
                        overviewPanelShown：空间不足自动折叠（意图冻结），临时展开不计入还原状态 -->
                   <template #aside>
-                    <div ref="asideSlotRef" class="h-full w-full">
-                      <OverviewPanel v-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
-                        :agent="mainSession?.agent ?? null" />
+                    <div ref="asideSlotRef" class="h-full w-full flex flex-col">
+                      <!-- v3：侧栏页签（概览 + 插件面板），只有存在插件面板时才显示 -->
+                      <div v-if="pluginPanelsList.length"
+                        class="shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-(--gd-color-border)">
+                        <button type="button"
+                          class="px-2 py-1 rounded-md text-xs transition-colors"
+                          :class="!pluginPanelOpen
+                            ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active) font-medium'
+                            : 'text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover)'"
+                          @click="selectAsideTab('overview')">
+                          {{ t('git.overviewTitle') }}
+                        </button>
+                        <button v-for="panel in pluginPanelsList" :key="panel.pluginId + ':' + panel.component"
+                          type="button" class="px-2 py-1 rounded-md text-xs transition-colors truncate max-w-32"
+                          :class="isActivePanel(panel)
+                            ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active) font-medium'
+                            : 'text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover)'"
+                          @click="selectAsideTab('plugin', panel)">
+                          {{ panel.meta?.label || panel.pluginId }}
+                        </button>
+                        <GdTooltip :content="t('plugins.sidePanel.close')" placement="bottom">
+                          <button type="button"
+                            class="ml-auto shrink-0 w-6 h-6 inline-flex items-center justify-center rounded-md text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover)"
+                            @click="closeAside">
+                            <Dismiss16Regular class="w-4 h-4" />
+                          </button>
+                        </GdTooltip>
+                      </div>
+                      <div class="flex-1 min-h-0">
+                        <component v-if="activePluginPanel" :is="activePluginPanel.component"
+                          :key="activePluginPanel.pluginId + ':' + activePluginPanel.slotKey"
+                          v-bind="{ pluginId: activePluginPanel.pluginId, sessionId: mainSession?.id ?? null, host: pluginHost }" />
+                        <OverviewPanel v-else-if="asideWidth > 0" :session-id="mainSession?.id ?? null"
+                          :agent="mainSession?.agent ?? null" />
+                      </div>
                     </div>
                   </template>
                 </ChatPanel>
@@ -221,7 +262,7 @@ import DropdownMenu from "@/components/ui/DropdownMenu.vue";
 import DropdownMenuItem from "@/components/ui/DropdownMenuItem.vue";
 import {
   PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular, MoreHorizontal24Regular, Dismiss24Regular,
-  Delete16Regular, Copy16Regular, WindowConsole20Regular,
+  Delete16Regular, Copy16Regular, WindowConsole20Regular, Dismiss16Regular, PuzzlePiece20Regular,
 } from "@vicons/fluent";
 import { VsCode, WindowsExplorer, Finder } from "@/components/icons";
 
@@ -232,6 +273,11 @@ import { useStorage } from '@vueuse/core';
 import WorkspaceSidebar from "./workspace/WorkspaceSidebar.vue";
 const OverviewPanel = defineAsyncComponent(() => import("./workspace/OverviewPanel.vue"));
 const GitCommitDialog = defineAsyncComponent(() => import("./workspace/GitCommitDialog.vue"));
+
+// v3：插件侧栏面板（conversation.side.panel）
+import { usePluginSlots, type ResolvedSlotItem } from "@/stores/pluginSlots";
+import { usePluginPanels } from "@/stores/pluginPanels";
+import { usePluginHost } from "@/services/plugin-host";
 
 /** 工作区概览列显隐（持久化；折叠为窄条后点按钮恢复） */
 const overviewVisible = useStorage('workspaceOverviewVisible', true);
@@ -298,11 +344,77 @@ const overviewPanelShown = computed(
  *  工作区全屏时对话搬进悬浮面板（默认宽 430px），概览必然放不下：直接钉 0，
  *  省掉 asideFit 的反复翻转与 OverviewPanel（异步重组件）的创建销毁 */
 const asideReserveWidth = computed(() =>
-  layoutStore.workspaceFullscreen ? 0 : (overviewVisible.value && asideFit.value ? ASIDE_WIDTH : 0));
+  layoutStore.workspaceFullscreen
+    ? 0
+    : ((overviewVisible.value && asideFit.value) || pluginPanelOpen.value ? ASIDE_WIDTH : 0));
 
 /** 浮层面板宽：面板可见即恒为浮层渲染（占位归占位、浮层归浮层） */
 const asideWidth = computed(() =>
-  layoutStore.workspaceFullscreen ? 0 : (overviewPanelShown.value ? ASIDE_WIDTH : 0));
+  layoutStore.workspaceFullscreen
+    ? 0
+    : (overviewPanelShown.value || pluginPanelOpen.value ? ASIDE_WIDTH : 0));
+
+// ── v3：插件侧栏面板（conversation.side.panel）──
+const pluginSlots = usePluginSlots()
+const pluginPanels = usePluginPanels()
+const pluginHost = usePluginHost()
+
+const pluginPanelsList = computed(() => pluginSlots.rawOf('conversation.side.panel'))
+
+const activePluginPanel = computed<ResolvedSlotItem | null>(() => {
+  const active = pluginPanels.active
+  if (!active) return null
+  const resolved = pluginSlots
+    .resolve('conversation.side.panel')
+    .find((item) => item.pluginId === active.pluginId && item.slotKey === active.slotKey)
+  return resolved || null
+})
+
+const pluginPanelOpen = computed(() => !!activePluginPanel.value)
+
+function isActivePanel(panel: { pluginId: string; component: string }): boolean {
+  return (
+    pluginPanels.active?.pluginId === panel.pluginId &&
+    pluginPanels.active?.slotKey === panel.component
+  )
+}
+
+/** 页签切换：overview = 内置概览；plugin = 插件面板 */
+function selectAsideTab(kind: 'overview' | 'plugin', panel?: { pluginId: string; component: string }): void {
+  if (kind === 'overview') {
+    pluginPanels.close(mainSession.value?.id)
+    if (!overviewVisible.value) overviewVisible.value = true
+    return
+  }
+  if (!panel) return
+  pluginPanels.open(panel.pluginId, panel.component, mainSession.value?.id)
+}
+
+function closeAside(): void {
+  pluginPanels.close(mainSession.value?.id)
+  overviewVisible.value = false
+}
+
+/** 头部按钮：没有打开的面板 → 开第一个；已打开 → 关掉 */
+function toggleFirstPluginPanel(): void {
+  if (pluginPanelOpen.value) {
+    pluginPanels.close(mainSession.value?.id)
+    return
+  }
+  const first = pluginPanelsList.value[0]
+  if (!first) return
+  pluginPanels.open(first.pluginId, first.component, mainSession.value?.id)
+}
+
+// 插件被禁用/卸载：当前面板消失就关掉，避免白屏
+watch(
+  () => pluginSlots.version,
+  () => {
+    if (pluginPanels.active && !activePluginPanel.value) {
+      pluginPanels.close(mainSession.value?.id)
+    }
+  },
+)
 
 // 空间变化即清临时展开：变不足 → 自动折叠；变足够 → 按 overviewVisible 还原
 watch(asideFit, () => {

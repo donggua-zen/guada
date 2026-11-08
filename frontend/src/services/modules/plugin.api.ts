@@ -15,12 +15,15 @@ export interface PluginSlotItem {
 export interface ConfigField {
   key: string;
   label: string;
-  type: "text" | "password" | "number" | "select" | "textarea";
+  type: "text" | "password" | "number" | "select" | "textarea" | "boolean";
   required?: boolean;
   /** 缺省值（插件自定义，形状随字段类型变化） */
   default?: unknown;
   placeholder?: string;
-  showIf?: { field: string; equals: unknown };
+  description?: string;
+  showIf?:
+    | { field: string; equals: unknown }
+    | { anyOf: Array<{ field: string; equals: unknown }> };
   options?: { label: string; value: unknown }[];
 }
 
@@ -73,7 +76,12 @@ export interface PluginApi {
   getPluginAttachments(pluginId: string): Promise<PluginAttachmentList[]>;
   getPluginUiPages(area?: string): Promise<UiPageInfo[]>;
   /** 获取所有插件的 slot 注册清单（v2 插件 UI）与插件主题清单 */
-  getPluginSlots(): Promise<{ slots: Record<string, PluginSlotItem[]>; themes?: PluginThemeManifest[] }>;
+  getPluginSlots(): Promise<{
+    slots: Record<string, PluginSlotItem[]>;
+    themes?: PluginThemeManifest[];
+    /** v2.2：皮肤注册表 */
+    skins?: unknown[];
+  }>;
   /** 调用插件后端 RPC 方法（args/返回值形状由插件自定义） */
   call(pluginId: string, method: string, args?: unknown): Promise<unknown>;
   /** 获取共享运行时上下文（用户/会话等基础信息，形状 = plugin-runtime.d.ts 的共享 reactive） */
@@ -106,6 +114,11 @@ export interface PluginApi {
   updatePlugin(pluginId: string): Promise<{ success: boolean }>;
   /** 启用/停用插件 */
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<{ success: boolean }>;
+  /** 批量保存插件配置（v2.1 通用配置页；只写 configSchema 声明过的字段） */
+  savePluginConfig(
+    pluginId: string,
+    values: Record<string, unknown>,
+  ): Promise<{ success: boolean; updated: string[] }>;
 }
 
 export const pluginApi: PluginApi = {
@@ -122,7 +135,11 @@ export const pluginApi: PluginApi = {
     return await this._request(`/plugins/ui-pages${q}`);
   },
   async getPluginSlots(this: ApiContext) {
-    return await this._request<{ slots: Record<string, PluginSlotItem[]>; themes?: PluginThemeManifest[] }>("/plugins/slots");
+    return await this._request<{
+      slots: Record<string, PluginSlotItem[]>;
+      themes?: PluginThemeManifest[];
+      skins?: unknown[];
+    }>("/plugins/slots");
   },
 
   async call(this: ApiContext, pluginId: string, method: string, args?: unknown) {
@@ -192,5 +209,12 @@ export const pluginApi: PluginApi = {
       method: "PUT",
       data: { pluginId, enabled },
     });
+  },
+
+  async savePluginConfig(this: ApiContext, pluginId: string, values: Record<string, unknown>) {
+    return await this._request<{ success: boolean; updated: string[] }>(
+      `/plugins/${pluginId}/config`,
+      { method: "PUT", data: { values } },
+    );
   },
 };

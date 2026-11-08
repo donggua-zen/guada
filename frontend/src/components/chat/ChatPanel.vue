@@ -1,6 +1,6 @@
 <template>
   <!-- 消息+输入 区域容器 -->
-  <div class="flex-1 overflow-hidden w-full relative">
+  <div data-gd-slot="conversation" class="flex-1 overflow-hidden w-full relative">
     <ScrollContainer ref="scrollContainerRef" class="h-full chat-scroll-container transition-opacity duration-300 px-5"
       :auto-scroll="isFollowingScroll" @scroll="handleScroll" @near-top="handleNearTop"
       @following-change="handleFollowingChange" @content-resize="handleContentResizeForScrollRestore">
@@ -79,7 +79,7 @@
                内部功能（编辑器/配置入口/发送）由 ChatInput 的 readonly 禁用矩阵收口。
                审批/询问卡待答时，输入区三件（编辑提示条 / ChatInput / 工作目录条）整体隐藏，
                由 SessionCards 顶替其位置（见 hasPendingAsk 注释）。 -->
-          <div class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
+          <div data-gd-slot="composer" class="chat-input-area sticky bottom-0 left-0 right-0 z-30 pb-2" style="margin-top: auto;">
             <!-- 底部渐变遮罩：输入区上方（滚动区底部）；宽=输入区(=scroll-main 避让) -->
             <div v-if="!hasWallpaper" class="chat-bottom-fade chat-column mx-auto"></div>
             <div class="chat-column mx-auto flex flex-col items-start relative" style="z-index: 1;">

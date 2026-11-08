@@ -322,4 +322,20 @@ export default {
     desktopOnly: '此功能仅在桌面客户端中可用',
     repository: '项目仓库',
   },
+  config: {
+    title: '{name} 配置',
+    empty: '该插件未声明可配置项',
+    hint: '保存后立即生效；路径类配置需与当前会话 workspace 兼容。',
+    saved: '配置已保存',
+    open: '配置',
+  },
+  pageView: {
+    missing: '该插件页面不可用（插件可能已禁用或卸载）',
+    loading: '正在加载插件页面…',
+  },
+  sidePanel: {
+    title: '侧栏面板',
+    close: '关闭面板',
+    open: '打开插件面板',
+  },
 }

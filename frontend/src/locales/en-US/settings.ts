@@ -3,6 +3,11 @@ export default {
     light: 'Light',
     dark: 'Dark',
     system: 'System',
+    richTheme: 'Full theme',
+    themeConfigTitle: 'Theme settings',
+    themeConfigOwnsBackground: 'This theme paints its own background; the wallpaper is temporarily disabled.',
+    themeConfigHint: 'This theme provides additional settings (ornaments, colors, etc.).',
+    themeConfigOpen: 'Configure',
   },
 
   pet: {
@@ -573,6 +578,9 @@ export default {
       key: 'Press key',
       scroll: 'Scroll',
       focus_window: 'Focus window',
+      set_value: 'Set element value',
+      drag: 'Drag',
+      launch_app: 'Launch app',
     },
     actionDescriptions: {
       screenshot: 'Capture the screen and return the image and coordinate basis',
@@ -589,6 +597,9 @@ export default {
       key: 'Send a key combination',
       scroll: 'Scroll at the given position',
       focus_window: 'Activate a window',
+      set_value: "Set an element's complete value natively via the UIA Value pattern",
+      drag: 'Drag from a start point to an end point in screenshot coordinates',
+      launch_app: 'Launch a desktop application by absolute path',
     },
   },
 

@@ -140,6 +140,7 @@ export default {
     plugins: '插件',
     knowledgeBase: '知识库',
     scheduler: '定时任务',
+    pluginPage: '插件',
     login: '登录',
     password: '密码设置',
   },

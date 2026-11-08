@@ -141,6 +141,13 @@ const routes = [
         component: () => import("./components/scheduler/SchedulerPage.vue"),
       },
       {
+        // 插件全页工作台（v3 `main` slot）：/:pluginId/:slotKey?
+        path: "plugin-page/:pluginId/:slotKey?",
+        name: "PluginPage",
+        meta: { titleKey: "common.route.pluginPage", requiresAuth: true },
+        component: () => import("./views/PluginPageView.vue"),
+      },
+      {
         // 模型管理已并入设置页「模型供应商」分区，此路径仅重定向兜底旧链接
         path: "models",
         redirect: "/setting/providers",

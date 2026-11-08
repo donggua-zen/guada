@@ -3,13 +3,17 @@ import { markRaw, defineAsyncComponent, type Component } from 'vue'
 
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
-import {
-  replaceThemesByPlugin,
-  removeThemesByPlugin,
-} from '@/themes'
 import { useTheme } from '@/composables/useTheme'
 import type { GuaDaModuleLoader } from '@/types/plugin-runtime'
 import type { PluginThemeManifest } from '@/services/modules/plugin.api'
+import {
+  replaceThemesByPlugin,
+  removeThemesByPlugin,
+  getThemePreset,
+  isRichTheme,
+  notifyThemeSetting,
+} from '@/themes'
+import { removeTheme, activeThemeId } from '@/services/theme-runtime'
 import { toast } from '@/components/ui/toastService';
 
 // 主应用内置组件 import map：'builtin:xxx' 从这里解析
@@ -36,6 +40,8 @@ export interface SlotItem {
 /** resolve() 返回项：component 已解析为可渲染组件 */
 export interface ResolvedSlotItem extends Omit<SlotItem, 'component'> {
   component: Component
+  /** 原始组件标识（字符串），component 被解析后用于路由/页签匹配 */
+  slotKey: string
 }
 
 interface PluginSlotsState {
@@ -103,11 +109,17 @@ export const usePluginSlots = defineStore('pluginSlots', {
       const items = (state.slots[name] || []).slice().sort((a, b) => a.order - b.order)
       return items.map((item) => ({
         ...item,
+        // 保留原始组件标识（component 会被替换成已解析组件，路由/页签仍需字符串 key）
+        slotKey: item.component,
         component: item.component.startsWith('builtin:')
           ? resolveBuiltin(item.component.slice(8))
           : asyncPluginComponent(item),
       }))
     },
+
+    /** 原始 slot 条目（component 仍是字符串），供路由/导航等需要稳定 key 的场景 */
+    rawOf: (state) => (name: string): SlotItem[] =>
+      (state.slots[name] || []).slice().sort((a, b) => a.order - b.order),
 
     metaOf: (state) => (name: string): NonNullable<SlotItem['meta']>[] =>
       (state.slots[name] || []).map((i) => i.meta).filter((m): m is NonNullable<SlotItem['meta']> => Boolean(m)),
@@ -119,12 +131,17 @@ export const usePluginSlots = defineStore('pluginSlots', {
     async init() {
       if (this.initialized) return
       const data = await apiService.getPluginSlots()
-      this.applySlots(data.slots || {}, data.themes || [])
+      // applySlots 内部会 await 前的同步调用 syncSkins，这里不再重复
+      this.applySlots(data.slots || {}, data.themes || [], data.skins || [])
       this.initialized = true
       this.watchRefresh()
     },
 
-    applySlots(slots: Record<string, SlotItem[]>, themes: PluginThemeManifest[] = []) {
+    applySlots(
+      slots: Record<string, SlotItem[]>,
+      themes: PluginThemeManifest[] = [],
+      skins: unknown[] = [],
+    ) {
       for (const [slot, items] of Object.entries(slots)) {
         for (const item of items) {
           this.prepareExternal(item)
@@ -132,7 +149,28 @@ export const usePluginSlots = defineStore('pluginSlots', {
         this.slots[slot] = items.map(markRaw)
       }
       this.syncThemes(themes)
+      void this.syncSkins(skins)
       this.version++
+    },
+
+    /**
+     * 同步富主题（v3：原「皮肤」已并入主题）
+     *
+     * 富主题由主题选择（`gd:theme-preset-light/dark`）驱动，不走独立的皮肤开关；
+     * 这里只处理「当前生效的富主题被移除」的回退。
+     */
+    async syncSkins(skins: unknown[]) {
+      const rich = (skins || []) as Array<Record<string, any>>
+      if (rich.length === 0 && activeThemeId() && isRichTheme(getThemePreset(activeThemeId()!))) {
+        // 插件被禁用/卸载：富主题清单清空，但主题 id 还指向它
+        removeTheme()
+        toast.warning('当前主题已被移除，已还原默认外观')
+      }
+    },
+
+    /** 皮肤设置变更后通知运行时（v3 起统一走主题运行时） */
+    notifySkinSetting(key: string, value: unknown) {
+      notifyThemeSetting(key, value)
     },
 
     /**
@@ -156,6 +194,16 @@ export const usePluginSlots = defineStore('pluginSlots', {
               mode: t.mode,
               pluginId: t.pluginId,
               cssFile: t.cssFile,
+              // v3：富主题字段（原「皮肤」）
+              cssFiles: (t as any).cssFiles,
+              runtimeScript: (t as any).runtimeScript,
+              assetBase: (t as any).assetBase,
+              bodyAttribute: (t as any).bodyAttribute,
+              settings: (t as any).settings,
+              preview: (t as any).preview,
+              ownsBackground: (t as any).ownsBackground,
+              recommendedThemes: (t as any).recommendedThemes,
+              rev: t.rev,
             },
             cssUrl: this.themeCssUrl(t),
           }))
@@ -232,7 +280,7 @@ export const usePluginSlots = defineStore('pluginSlots', {
           try {
             const data = await apiService.getPluginSlots()
             this.slots = {}
-            this.applySlots(data.slots || {}, data.themes || [])
+            this.applySlots(data.slots || {}, data.themes || [], data.skins || [])
           } catch (e) {
             console.error('[pluginSlots] refresh failed', e)
           }

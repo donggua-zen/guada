@@ -10,11 +10,14 @@
     :sidebarWidth="layoutStore.sidebarWidth" resizable @update:sidebarWidth="layoutStore.setSidebarWidth"
     :showToggleButton="false" sidebarPosition="left" :z-index="20" class="flex-1">
     <template #sidebar>
-      <GlobalSidebar v-if="!isSettingsRoute" />
-      <div v-else id="settings-sidebar-portal" class="h-full"></div>
+      <div data-gd-slot="sidebar" class="h-full">
+        <GlobalSidebar v-if="!isSettingsRoute" />
+        <div v-else id="settings-sidebar-portal" class="h-full"></div>
+      </div>
     </template>
     <template #content>
       <div
+        data-gd-slot="content"
         class="content-card relative flex-1 min-w-0 overflow-hidden content-clear-wallpaper"
         :class="{ 'sidebar-collapsed': !layoutStore.sidebarEffectiveVisible }">
         <RouterView />
@@ -24,6 +27,9 @@
 
   <!-- 浏览器 Webview 浮层（跨会话持久，fixed 定位覆盖在预览占位区域上方） -->
   <BrowserWebviewLayer />
+
+  <!-- 全局浮层锚点（v2.2 皮肤/插件用；本身不可见，只提供定位上下文） -->
+  <div data-gd-slot="overlay" class="pointer-events-none fixed inset-0 z-[9999] hidden"></div>
 </template>
 
 <script setup lang="ts">

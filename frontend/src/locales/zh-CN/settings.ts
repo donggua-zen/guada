@@ -3,6 +3,11 @@ export default {
     light: '浅色',
     dark: '深色',
     system: '系统',
+    richTheme: '完整主题',
+    themeConfigTitle: '主题配置',
+    themeConfigOwnsBackground: '该主题自绘背景，已临时关闭壁纸。',
+    themeConfigHint: '该主题提供额外设置项（装饰、配色等）。',
+    themeConfigOpen: '配置',
   },
 
   pet: {
@@ -568,6 +573,9 @@ export default {
       key: '按键',
       scroll: '滚动',
       focus_window: '聚焦窗口',
+      set_value: '设置元素值',
+      drag: '拖拽',
+      launch_app: '启动应用',
     },
     actionDescriptions: {
       screenshot: '截取屏幕并返回图片与坐标基准',
@@ -584,6 +592,9 @@ export default {
       key: '发送组合键',
       scroll: '在指定位置滚动',
       focus_window: '激活指定窗口',
+      set_value: '通过无障碍 Value 模式一次性写入元素完整值',
+      drag: '按截图坐标从起点拖拽到终点',
+      launch_app: '按绝对路径启动桌面应用',
     },
   },
 

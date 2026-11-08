@@ -1,5 +1,5 @@
 <template>
-  <div class="turn-wrapper last:min-h-[60vh]" :class="{ 'turn-wrapper--last': isLast, 'animate-in': animateIn }"
+  <div data-gd-slot="message" class="turn-wrapper last:min-h-[60vh]" :class="{ 'turn-wrapper--last': isLast, 'animate-in': animateIn }"
     :data-message-id="user?.messageId">
     <!-- ============================================ -->
     <!-- User 部分 -->
@@ -82,7 +82,8 @@
           <template v-for="(group, groupIndex) in displayGroups" :key="group.id">
             <template v-if="group.type === 'content'">
               <template v-for="item in group.items" :key="item.id">
-                <MarkdownContent class="message-item__text markdown-text" :content="item.content || ''" />
+                <MarkdownContent class="message-item__text markdown-text" :content="item.content || ''"
+          :streaming="streamingState.isStreaming" />
               </template>
             </template>
             <div v-else class="process-group">
@@ -127,9 +128,7 @@
                 <div class="process-group__body"
                   :class="{ 'is-skipped': isGroupBodySkipped(groupIndex, group) }">
                   <div class="process-group__body-scroll space-y-2"
-                    :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible }"
-                    :ref="isLastActive(groupIndex) ? setActiveBodyRef : undefined"
-                    @scroll="isLastActive(groupIndex) ? onActiveBodyScroll($event) : undefined">
+                    :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible }">
                     <template v-for="item in group.items" :key="item.id">
                       <MessageThinkingSection v-if="item.type === 'think'"
                         :reasoning-content="item.reasoningContent || ''"
@@ -218,7 +217,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, inject, onBeforeUnmount, type Component } from "vue";
+import { computed, ref, nextTick, onBeforeUnmount, type Component } from "vue";
 import { useI18n } from "vue-i18n";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, BookOpen16Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
@@ -227,7 +226,7 @@ import { toResourceUrl } from '../../utils/url';
 import { isVisionImageMediaType } from '@/utils/media-type';
 import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
 import type { Turn, MessageContent, TurnContent, FileAttachment } from '@/types/message';
-import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, type ToolCall } from '@/utils/toolDisplay';
+import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, getArgsDisplay, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
 import ThinkingStatus from './ThinkingStatus.vue';
@@ -239,12 +238,12 @@ import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChang
 import { useElapsedTicker } from '@/composables/useElapsedTicker';
 import { useTabStore } from '@/stores/tab';
 import { useLayoutStore } from '@/stores/layout';
-import { isHiddenBlock, getThinkingPreview } from '@/utils/messageUtils';
+import { isHiddenBlock, getThinkingPreview, formatDuration as formatThinkingDuration } from '@/utils/messageUtils';
 import { isJobNoticeSource } from '@/utils/jobNotice';
 import { previewFile } from '@/utils/workspacePreview';
 import { resolveGroupExpanded, nextGroupExpandOverride, hasUnfinishedSteps, isToolCallExecuting, resolveGroupTitlePhase, estimateGroupLines } from './groupExpansion';
 import { getFileIcon } from '@/composables/useFileIcon';
-import { perfCount, perfStart } from '@/utils/perf';
+import { perfCount } from '@/utils/perf';
 
 const { t } = useI18n();
 
@@ -300,27 +299,6 @@ const currentPreViewIndex = ref(0);
  * 缺省不落状态：由 isGroupExpanded 按运行态派生——流式中的最后一组展开、其余收起。
  */
 const groupExpandOverrides = ref<Map<string, boolean>>(new Map());
-
-// 从 ChatPanel 注入锁定滚动方法，展开分组时调用
-const lockScrollAnchor = inject<() => void>('lockScrollAnchor', () => { });
-
-// 激活分组内容区 ref，用于自动滚动
-const activeBodyRef = ref<HTMLElement | null>(null);
-// 标记用户是否手动滚动了
-let userScrolledAway = false;
-
-// ref 绑定函数
-const setActiveBodyRef = (el: Element | { $el: HTMLElement } | null) => {
-  activeBodyRef.value =
-    (el && "$el" in el ? el.$el : undefined) || (el as HTMLElement) || null;
-};
-
-// 用户滚动检测：距底部超过 40px 视为手动滚动
-const onActiveBodyScroll = (e: Event) => {
-  const el = e.target as HTMLElement;
-  const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
-  userScrolledAway = !atBottom;
-};
 
 /**
  * 分组展开态：显式覆盖优先；无覆盖时按运行态派生——进行中的最后一组默认展开。
@@ -381,15 +359,11 @@ const isGroupBodySkipped = (groupIndex: number, group: DisplayGroup): boolean =>
   && !animatingGroupIds.value.has(group.id);
 
 const toggleGroup = (groupIndex: number, group: DisplayGroup) => {
-  const expanded = isGroupExpanded(groupIndex, group);
   const active = isLastActive(groupIndex);
   groupExpandOverrides.value.set(group.id, nextGroupExpandOverride(groupExpandOverrides.value, group.id, active));
   // 动画期间内容必须保持可见（否则收起动画会当场把内容摘掉）。
   // 两个写入在同一帧提交，渲染结果就是"可见 + is-expanded"，0fr→1fr 的过渡不会丢帧。
   if (!isGroupInstant(group)) markGroupAnimating(group.id);
-  if (!expanded && !active) {
-    lockScrollAnchor()
-  }
   // 归因：点击次数 vs ChatPanel 的 chat.contentResize（每次尺寸变化 = 一帧重排）
   perfCount('turn.expand');
 };
@@ -461,21 +435,8 @@ const openFilePreview = (entry: FileChangeEntry) => {
   void previewFile(entry.filePath);
 };
 
-// 激活分组内容更新时自动滚动到底部（用户手动滚动后不干扰）
-watch(activeContents, () => {
-  perfCount('turnItem.deepWatch');
-  if (!streamingState.value.isStreaming) return;
-  nextTick(() => {
-    const el = activeBodyRef.value;
-    if (!el || userScrolledAway) return;
-    const span = perfStart('scroll.groupBody');
-    try {
-      el.scrollTop = el.scrollHeight;
-    } finally {
-      span?.end();
-    }
-  });
-}, { deep: true });
+// 流式贴底由外层 ScrollContainer/useScrollAnchor 的 ResizeObserver 负责（高度信号）；
+// 本组件内容区没有独立滚动盒（max-height 已取消），不再本地 follow。
 
 // 流式过程中最后一组是否为进行中的过程分组（该组默认展开）
 const hasActiveGroup = computed(() => {
@@ -532,6 +493,19 @@ const getActiveStatusParts = (executing: ToolCall[]): { icon: Component; text: s
     };
   }
   return { icon: Wrench24Filled, text: t('chat.turn.executingSteps', { n: executing.length }) };
+};
+
+/**
+ * 分组内思考时长文案（多段思考按块级 timing 累加）。
+ * 权威时长由 reasoning block_end 派生，未到时返回空串——标题只显示「已深度思考」，
+ * 不补近似值（避免与 block_end 的累加逻辑冲突）。
+ */
+const thinkingDurationText = (group: DisplayGroup): string => {
+  let totalMs = 0;
+  for (const item of group.items) {
+    if (item.type === 'think') totalMs += item.source.thinkingDurationMs ?? 0;
+  }
+  return totalMs > 0 ? formatThinkingDuration(totalMs) : '';
 };
 
 // 统一的分组标题生成：busy=存在未完成步骤，expanded 由调用方传入。
@@ -592,7 +566,7 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
     return { icon: Wrench24Filled, action: t('chat.turn.executingSteps', { n: executing.length }), args: '' };
   }
 
-  // 收起态：纯思考，或工具已完成、当前正在思考 → 思考摘要（只有这种时候才显示思考）
+  // 收起态：纯思考，或工具已完成、当前正在思考 → 思考态（只有这种时候才显示思考）
   if (phase === 'thinking') {
     const thinkItem = group.items.find(i => i.type === 'think' && i.source.state?.isThinking)
       ?? group.items.find(i => i.type === 'think');
@@ -600,7 +574,8 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
     return {
       icon: BrainCircuit20Regular,
       action: isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone'),
-      args: getThinkingPreview(thinkItem?.reasoningContent),
+      // 思考中实时跟最后一行摘要；结束后只显示时长，不再透出内容
+      args: isThinking ? getThinkingPreview(thinkItem?.reasoningContent) : thinkingDurationText(group),
     };
   }
 

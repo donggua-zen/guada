@@ -64,6 +64,22 @@ export interface PluginQueryPlugin {
   }
   tools?: PluginQueryTool[]
   toolkits: PluginQueryToolkit[]
+  /** v2.1：通用配置页 schema（manifest.configSchema 归一化后的字段） */
+  configSchema?: {
+    fields: Array<{
+      key: string
+      label: string
+      type: 'text' | 'password' | 'number' | 'select' | 'textarea' | 'boolean'
+      required?: boolean
+      default?: unknown
+      placeholder?: string
+      description?: string
+      showIf?: { field: string; equals: unknown }
+      options?: Array<{ label: string; value: unknown }>
+    }>
+  }
+  /** v2.1：当前配置值（plugin:<id> 数据） */
+  config?: Record<string, unknown>
 }
 
 /** /plugins/query 的工具条目 */

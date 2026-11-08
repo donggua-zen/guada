@@ -322,4 +322,20 @@
     desktopOnly: 'This feature is only available in the desktop client',
     repository: 'Repository',
   },
+  config: {
+    title: '{name} configuration',
+    empty: 'This plugin declares no configurable fields',
+    hint: 'Changes apply immediately; path fields must stay compatible with the current session workspace.',
+    saved: 'Configuration saved',
+    open: 'Configure',
+  },
+  pageView: {
+    missing: 'This plugin page is unavailable (the plugin may be disabled or removed)',
+    loading: 'Loading plugin page…',
+  },
+  sidePanel: {
+    title: 'Side panel',
+    close: 'Close panel',
+    open: 'Open plugin panel',
+  },
 }

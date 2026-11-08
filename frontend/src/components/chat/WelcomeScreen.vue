@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center justify-center h-full min-h-125 py-10 px-5">
+  <div data-gd-slot="landing" class="flex items-center justify-center h-full min-h-125 py-10 px-5">
     <div class="max-w-150 w-full text-center p-10 rounded-2xl animate-fade-in-up">
       <!-- 头像区域 -->
       <div class="relative inline-block mb-5">

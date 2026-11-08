@@ -3,6 +3,7 @@
     <!-- 输入框区域：只读模式（子代理会话）仍渲染输入区外壳——承载停止按钮；
          内部按 readonly 禁用矩阵收口：编辑器不可编辑、模型选择/拖拽入口守卫、发送禁用。 -->
     <div
+      data-gd-slot="composer-card"
       class="input-area p-[12px_8px_10px_8px] min-h-15 w-full bg-(--gd-color-input-bg) border border-(--gd-color-input-border) rounded-(--gd-size-rounded-radius) transition-[border-color,background-color] duration-150"
       :class="[styleClass, { 'drag-over': isDragOver }, { 'bg-(--gd-color-input-bg)': !backdrop }, { 'bg-(--gd-color-input-bg)/60 backdrop-blur-xl ': backdrop }]"
       @dragover.prevent @dragenter.prevent="handleDragEnter" @dragleave.prevent="handleDragLeave"

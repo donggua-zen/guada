@@ -118,9 +118,26 @@
       </div>
 
       <template #footer>
+        <GdButton
+          v-if="currentTool?.configSchema?.fields?.length"
+          type="primary"
+          @click="openConfig(currentTool)"
+        >
+          {{ t('plugins.config.open') }}
+        </GdButton>
         <GdButton @click="detailVisible = false">{{ t('common.close') }}</GdButton>
       </template>
     </GdDialog>
+
+    <!-- 通用插件配置弹窗（v2.1：manifest.configSchema → 表单） -->
+    <PluginConfigDialog
+      v-model:visible="configVisible"
+      :plugin-id="configTarget?.pluginId || ''"
+      :name="configTarget?.displayName || configTarget?.pluginId || ''"
+      :schema="configTarget?.configSchema"
+      :config="configTarget?.config"
+      @saved="loadGlobalTools"
+    />
   </div>
 </template>
 
@@ -146,6 +163,7 @@ import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
 import PluginSection from './PluginSection.vue'
 import PluginTabHeader from './PluginTabHeader.vue'
+import PluginConfigDialog from './PluginConfigDialog.vue'
 import type { PluginRowMenuItem } from './pluginList.types'
 import type { PluginQueryPlugin } from '@/services/modules/settings.api'
 
@@ -164,6 +182,14 @@ const pluginGroups = computed(() => groupPlugins(globalTools.value))
 // Detail dialog
 const detailVisible = ref(false)
 const currentTool = ref<PluginQueryPlugin | null>(null)
+const configVisible = ref(false)
+const configTarget = ref<PluginQueryPlugin | null>(null)
+
+function openConfig(tool: PluginQueryPlugin) {
+  configTarget.value = tool
+  detailVisible.value = false
+  configVisible.value = true
+}
 
 function showDetail(tool: PluginQueryPlugin) {
   currentTool.value = tool

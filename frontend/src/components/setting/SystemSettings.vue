@@ -1,5 +1,5 @@
 <template>
-    <div class="h-full flex">
+    <div data-gd-slot="settings" class="h-full flex">
         <Teleport v-if="portalReady" to="#settings-sidebar-portal">
             <!-- 设置侧边栏：Teleport 到全局侧边栏位置以复用侧边栏背景与透明度 -->
             <div
