@@ -3024,6 +3024,9 @@ app.whenReady().then(async () => {
     bridgeServer.registerHandler("computer_input", (params: any) =>
       sidecar.dispatch("computer_input", params)
     );
+    bridgeServer.registerHandler("launch_app", (params: any) =>
+      sidecar.dispatch("launch_app", params)
+    );
     bridgeServer.registerHandler("computer_status", () =>
       sidecar.dispatch("computer_status", {})
     );

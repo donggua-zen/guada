@@ -74,11 +74,12 @@ describe("ComputerPlugin", () => {
     expect(plugin.manifest.category).toBe("extended");
   });
 
-  it("registers the three lazy tools", () => {
+  it("registers the four lazy tools", () => {
     const { tools } = createHarness();
     expect(tools.map((entry) => entry.name).sort()).toEqual([
       "computer_a11y_observe",
       "computer_input",
+      "computer_launch",
       "computer_observe",
     ]);
   });
@@ -225,6 +226,40 @@ describe("ComputerPlugin", () => {
         context()
       )
     ).rejects.toThrow(/requires a accessibility observation/);
+  });
+
+  it("computer_launch denies under a launch_app deny policy", async () => {
+    const { tools, bridgeClient, askService } = createHarness({
+      actions: { launch_app: "deny" },
+    });
+
+    await expect(
+      tool(tools, "computer_launch").handler({ path: "C:/Windows/System32/notepad.exe" }, context())
+    ).rejects.toThrow(/denies/);
+    expect(bridgeClient.request).not.toHaveBeenCalled();
+    expect(askService.requestComputerUseApproval).not.toHaveBeenCalled();
+  });
+
+  it("computer_launch asks for approval and forwards to the bridge", async () => {
+    const { tools, bridgeClient, askService } = createHarness({
+      responses: {
+        launch_app: { action: "launch_app", ok: true, message: "Launched notepad." },
+      },
+    });
+
+    const result = await tool(tools, "computer_launch").handler(
+      { path: "C:/Windows/System32/notepad.exe" },
+      context()
+    );
+
+    expect(result).toContain("Launched notepad.");
+    expect(result).toContain("observe again");
+    expect(askService.requestComputerUseApproval).toHaveBeenCalledTimes(1);
+    expect(bridgeClient.request).toHaveBeenCalledWith(
+      "launch_app",
+      { path: "C:/Windows/System32/notepad.exe" },
+      undefined
+    );
   });
 
   it("does not treat the settings-group enabled flag as a second hard gate", async () => {

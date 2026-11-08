@@ -6,7 +6,7 @@
   "binaries": {
     "win32-x64": {
       "path": "build-resources/computer-sidecar/guada-computer.exe",
-      "sha256": "3c4a912e578b3735a2d69ab44e8b68feac54b0a2541c59ff0ae630f235dc26a8"
+      "sha256": "d648b64b09fdfdd8e874f3ac665ab2bafbf0326036b7f0cd91fd3928c24ae883"
     }
   }
 }

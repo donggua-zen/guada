@@ -14,5 +14,9 @@
   "computer_input.executing": "操作桌面",
   "computer_input.completed": "桌面操作完成",
   "computer_input.aggregate.executing": "操作桌面",
-  "computer_input.aggregate.completed": "已执行 {n} 次桌面操作"
+  "computer_input.aggregate.completed": "已执行 {n} 次桌面操作",
+  "computer_launch.executing": "启动应用",
+  "computer_launch.completed": "应用启动完成",
+  "computer_launch.aggregate.executing": "启动应用",
+  "computer_launch.aggregate.completed": "已启动 {n} 个应用"
 }

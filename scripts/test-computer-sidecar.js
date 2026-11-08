@@ -37,8 +37,13 @@ test("computer sidecar responds to ping and shutdown", { timeout: 20000 }, async
     const entry = pending.get(String(message.id));
     if (!entry) return;
     pending.delete(String(message.id));
-    if (message.error) entry.reject(new Error(message.error.message));
-    else entry.resolve(message.result);
+    if (message.error) {
+      const error = new Error(message.error.message);
+      error.code = message.error.code;
+      entry.reject(error);
+    } else {
+      entry.resolve(message.result);
+    }
   });
 
   function request(method, params = {}, timeoutMs = 5000) {
@@ -62,6 +67,15 @@ test("computer sidecar responds to ping and shutdown", { timeout: 20000 }, async
     });
   }
 
+  async function requestError(method, params) {
+    try {
+      await request(method, params);
+    } catch (error) {
+      return error.code;
+    }
+    throw new Error(`${method} unexpectedly succeeded`);
+  }
+
   try {
     const ping = await request("ping");
     assert.equal(ping.protocol, "1");
@@ -71,6 +85,43 @@ test("computer sidecar responds to ping and shutdown", { timeout: 20000 }, async
     if (ping.capabilities) {
       assert.equal(ping.capabilities.screenshot, true);
     }
+
+    // New RPC surface must reject unguarded calls with stable error codes.
+    // No live desktop is required: every case below fails at the lease or
+    // parameter validation layer before touching input or the shell.
+    assert.equal(
+      await requestError("input", {
+        action: "drag",
+        x: 10,
+        y: 10,
+        to_x: 20,
+        to_y: 20,
+        expected_generation: 1,
+      }),
+      "STALE_REFERENCE"
+    );
+    assert.equal(
+      await requestError("input", {
+        action: "set_value",
+        ref: 1,
+        text: "x",
+        expected_generation: 1,
+      }),
+      "STALE_REFERENCE"
+    );
+    assert.equal(
+      await requestError("input", {
+        action: "click_element",
+        element_name: "x",
+        expected_generation: 1,
+      }),
+      "STALE_REFERENCE"
+    );
+    assert.equal(await requestError("launch_app", { path: "" }), "UNSUPPORTED");
+    assert.equal(
+      await requestError("launch_app", { path: "C:/guada-sidecar-smoke-missing.exe" }),
+      "NOT_FOUND"
+    );
 
     await request("shutdown");
     assert.equal(await waitForExit(child, 5000), true, "sidecar did not exit after shutdown");

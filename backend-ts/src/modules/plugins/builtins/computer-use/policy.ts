@@ -15,6 +15,9 @@ export const COMPUTER_POLICY_KEYS = [
   "key",
   "scroll",
   "focus_window",
+  "set_value",
+  "drag",
+  "launch_app",
 ] as const;
 
 export type ComputerPolicyKey = (typeof COMPUTER_POLICY_KEYS)[number];
@@ -36,6 +39,9 @@ export const DEFAULT_COMPUTER_POLICY: ComputerPolicy = {
   key: "ask",
   scroll: "ask",
   focus_window: "ask",
+  set_value: "ask",
+  drag: "ask",
+  launch_app: "ask",
 };
 
 export function isComputerPolicyKey(value: string): value is ComputerPolicyKey {

@@ -14,5 +14,9 @@
   "computer_input.executing": "Operating the desktop",
   "computer_input.completed": "Desktop operation completed",
   "computer_input.aggregate.executing": "Operating the desktop",
-  "computer_input.aggregate.completed": "Completed {n} desktop operation(s)"
+  "computer_input.aggregate.completed": "Completed {n} desktop operation(s)",
+  "computer_launch.executing": "Launching application",
+  "computer_launch.completed": "Application launch completed",
+  "computer_launch.aggregate.executing": "Launching application",
+  "computer_launch.aggregate.completed": "Launched {n} application(s)"
 }

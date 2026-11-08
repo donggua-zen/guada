@@ -213,6 +213,8 @@ export class ComputerSidecarClient {
         return this.request("a11y.observe", params, { timeoutMs: A11Y_TIMEOUT_MS });
       case "computer_input":
         return this.request("input", params, { timeoutMs: 30_000 });
+      case "launch_app":
+        return this.request("launch_app", params, { timeoutMs: 15_000 });
       case "computer_status":
         return this.start();
       case "computer_test":

@@ -30,6 +30,8 @@ const COMPUTER_INPUT_ACTIONS = [
   "key",
   "scroll",
   "focus_window",
+  "set_value",
+  "drag",
 ] as const;
 
 @Injectable()
@@ -70,10 +72,10 @@ export class ComputerPlugin extends PluginBase {
         toolkit.registerTool({
           name: "computer_observe",
           description:
-            "Observe the desktop without changing it. action='screenshot' captures the selected display and returns an image; action='cursor_position' reports the cursor; action='list_windows' lists visible top-level windows with ids; action='wait' sleeps up to 5 seconds. A screenshot or window list returns a generation that must be passed to computer_input.",
+            "Observe the desktop without changing it. action='screenshot' captures the selected display and returns an image; action='cursor_position' reports the cursor; action='list_windows' lists visible top-level windows with ids; action='list_apps' groups windows by application; action='wait' sleeps up to 5 seconds. A screenshot or window list returns a generation that must be passed to computer_input.",
           inputSchema: z.object({
             action: z
-              .enum(["screenshot", "cursor_position", "list_windows", "wait"])
+              .enum(["screenshot", "cursor_position", "list_windows", "list_apps", "wait"])
               .describe("Observation to perform"),
             display: z
               .number()
@@ -183,7 +185,7 @@ export class ComputerPlugin extends PluginBase {
         toolkit.registerTool({
           name: "computer_input",
           description:
-            "Operate the desktop. First call computer_a11y_observe or computer_observe and copy its generation into expected_generation. click_element uses a [ref] from the latest accessibility snapshot and may fall back to a validated pixel click. Pixel actions use x/y in the latest screenshot's coordinate space. type/key/scroll/focus_window use their own parameters. Any input invalidates the observation, so observe again before the next input.",
+            "Operate the desktop. First call computer_a11y_observe or computer_observe and copy its generation into expected_generation. click_element and set_value use a [ref] (or element_name) from the latest accessibility snapshot; click_element may fall back to a validated pixel click. Pixel actions use x/y in the latest screenshot's coordinate space. type/key/scroll/focus_window/drag use their own parameters. Any input invalidates the observation, so observe again before the next input.",
           inputSchema: z
             .object({
               action: z.enum([...COMPUTER_INPUT_ACTIONS]).describe("Input operation"),
@@ -192,9 +194,32 @@ export class ComputerPlugin extends PluginBase {
                 .int()
                 .positive()
                 .describe("Generation returned by the observation this input is based on"),
-              ref: z.number().int().nonnegative().optional().describe("Element ref for click_element"),
+              ref: z
+                .number()
+                .int()
+                .nonnegative()
+                .optional()
+                .describe("Element ref for click_element/set_value"),
+              element_name: z
+                .string()
+                .min(1)
+                .max(256)
+                .optional()
+                .describe(
+                  "Accessible name (or value) substring for click_element/set_value; must match exactly one element, otherwise use ref"
+                ),
               x: z.number().int().optional().describe("X coordinate in screenshot space"),
               y: z.number().int().optional().describe("Y coordinate in screenshot space"),
+              to_x: z
+                .number()
+                .int()
+                .optional()
+                .describe("End X coordinate in screenshot space for action='drag'"),
+              to_y: z
+                .number()
+                .int()
+                .optional()
+                .describe("End Y coordinate in screenshot space for action='drag'"),
               text: z.string().max(65536).optional().describe("Text for action='type'"),
               key: z
                 .string()
@@ -221,11 +246,26 @@ export class ComputerPlugin extends PluginBase {
                 .describe("Window id for action='focus_window' from computer_observe list_windows"),
             })
             .superRefine((args, ctx) => {
-              if (args.action === "click_element" && args.ref === undefined) {
-                ctx.addIssue({ code: "custom", path: ["ref"], message: "ref is required for click_element" });
+              if (
+                (args.action === "click_element" || args.action === "set_value") &&
+                args.ref === undefined &&
+                args.element_name === undefined
+              ) {
+                ctx.addIssue({
+                  code: "custom",
+                  path: ["ref"],
+                  message: `ref or element_name is required for ${args.action}`,
+                });
+              }
+              if (args.action === "drag" && (args.to_x === undefined || args.to_y === undefined)) {
+                ctx.addIssue({
+                  code: "custom",
+                  path: ["to_x"],
+                  message: "to_x and to_y are required for drag",
+                });
               }
               if (
-                ["left_click", "right_click", "middle_click", "double_click", "triple_click", "mouse_move"].includes(
+                ["left_click", "right_click", "middle_click", "double_click", "triple_click", "mouse_move", "drag"].includes(
                   args.action
                 ) &&
                 (args.x === undefined || args.y === undefined)
@@ -324,6 +364,56 @@ export class ComputerPlugin extends PluginBase {
           dangerLevel: "critical",
         });
 
+        toolkit.registerTool({
+          name: "computer_launch",
+          description:
+            "Launch a desktop application by absolute executable path (for example C:/Windows/System32/notepad.exe). Arguments are not supported. Launching changes the desktop; observe again afterwards. Requires the launch_app action policy.",
+          inputSchema: z.object({
+            path: z
+              .string()
+              .min(1)
+              .max(1024)
+              .describe("Absolute path of the executable to launch"),
+          }),
+          execute: async (args, ctx, signal) => {
+            const policy = await this.loadPolicy();
+            const decision = policy.launch_app ?? "ask";
+            if (decision === "deny") {
+              throw new Error("Computer Use policy denies launching applications.");
+            }
+            if (decision === "ask") {
+              if (!ctx || !ctx.session.hasAnswerSurface()) {
+                throw new Error(
+                  "Computer Use requires user confirmation, but this session has no answer surface."
+                );
+              }
+              await this.askService.requestComputerUseApproval(ctx.session, {
+                toolCallId: ctx?.toolCallId,
+                toolName: "computer_launch",
+                detail: `Launch ${args.path}`,
+                abortSignal: signal,
+              });
+            }
+            const result = await this.sendRequest("launch_app", { path: args.path }, signal);
+            return `${result?.message ?? "Launch completed."}
+The desktop changed; observe again before any input.`;
+          },
+          display: {
+            text: {
+              executing: "%computer_launch.executing%",
+              completed: "%computer_launch.completed%",
+            },
+            aggregate: {
+              executing: "%computer_launch.aggregate.executing%",
+              completed: "%computer_launch.aggregate.completed%",
+            },
+            argsKey: "path",
+            icon: "computer",
+          },
+          requiresUserInteraction: true,
+          dangerLevel: "critical",
+        });
+
         toolkit.registerPrompt({
           frequency: "REGULAR",
           description: "Computer Use 使用说明",
@@ -334,10 +424,12 @@ export class ComputerPlugin extends PluginBase {
             "",
             "1. Observe first: `computer_a11y_observe` for element refs, or `computer_observe` with `action=screenshot` for pixels and window lists.",
             "2. Use the returned `generation` as `expected_generation` on the next `computer_input` call.",
-            "3. `click_element` uses a `[ref]` from the latest accessibility snapshot. Pixel actions use `x`/`y` in the latest screenshot's coordinate space.",
+            "3. `click_element` and `set_value` use a `[ref]` from the latest accessibility snapshot, or an `element_name` that matches exactly one element. Pixel actions use `x`/`y` in the latest screenshot's coordinate space.",
             "4. Any input invalidates the observation. Observe again before the next input.",
             "5. If an action reports `STALE_REFERENCE`, observe again; never reuse an old ref or coordinate.",
             "6. Input actions may be approved by the user. If the user denies an action, do not retry it unchanged.",
+            "7. Prefer `set_value` for filling edit fields: it sets the whole value natively instead of typing character by character.",
+            "8. `drag` moves from x/y to to_x/to_y in screenshot coordinates. Use `computer_launch` to start an app by absolute path.",
           ].join("\n"),
         });
       },
@@ -417,6 +509,8 @@ function describeAction(args: {
   direction?: string;
   amount?: number;
   window_id?: number;
+  to_x?: number;
+  to_y?: number;
 }): string {
   switch (args.action) {
     case "click_element":
@@ -444,6 +538,13 @@ function describeAction(args: {
       return `Scroll ${args.direction} by ${args.amount ?? 3}`;
     case "focus_window":
       return `Focus window ${args.window_id}`;
+    case "set_value": {
+      const text = args.text ?? "";
+      const preview = text.length > 120 ? `${text.slice(0, 120)}…` : text;
+      return `Set element value (${text.length} character(s)): ${preview}`;
+    }
+    case "drag":
+      return `Drag from (${args.x}, ${args.y}) to (${args.to_x}, ${args.to_y})`;
     default:
       return args.action;
   }

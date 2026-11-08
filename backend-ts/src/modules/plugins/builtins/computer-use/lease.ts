@@ -61,6 +61,7 @@ export function requiredObservationKind(
 ): ObservationKind | null {
   switch (action) {
     case "click_element":
+    case "set_value":
       return "accessibility";
     case "left_click":
     case "right_click":
@@ -68,6 +69,7 @@ export function requiredObservationKind(
     case "double_click":
     case "triple_click":
     case "mouse_move":
+    case "drag":
       return "screenshot";
     case "focus_window":
       return "window_list";

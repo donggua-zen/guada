@@ -7,10 +7,11 @@ backend process.
 ## Scope
 
 - Platform: Windows x64 (first release)
-- Observe: screenshot, cursor position, window list, UI Automation tree
-- Act: element click, pixel click, type, key, scroll, focus window
-- Out of scope for this release: application launch, drag, macOS, Linux,
-  Set-of-Marks overlays, OCR
+- Observe: screenshot, cursor position, window list, per-application window
+  groups, UI Automation tree
+- Act: element click (by ref or accessible name), element value set, pixel
+  click, type, key, scroll, drag, focus window, app launch by absolute path
+- Out of scope for this release: macOS, Linux, Set-of-Marks overlays, OCR
 
 The capability is opt-in. The plugin is registered as an `extended` plugin, so
 it is disabled by default on a fresh install and stays disabled until the user
@@ -123,9 +124,10 @@ Methods:
 | Method | Purpose |
 | --- | --- |
 | `ping` | version, protocol and capabilities |
-| `observe` | `screenshot`, `cursor_position`, `list_windows`, `wait` |
+| `observe` | `screenshot`, `cursor_position`, `list_windows`, `list_apps`, `wait` |
 | `a11y.observe` | UI Automation snapshot with `[ref]` entries |
-| `input` | click, type, key, scroll, focus window |
+| `input` | click, set_value, drag, type, key, scroll, focus window |
+| `launch_app` | start an executable by absolute path |
 | `shutdown` | graceful process exit |
 
 Error codes: `UNSUPPORTED`, `NOT_FOUND`, `STALE_REFERENCE`,
@@ -145,8 +147,8 @@ input must carry `expected_generation` and the kind must match:
 
 | Input | Required observation |
 | --- | --- |
-| `click_element` | accessibility |
-| pixel clicks, `mouse_move` | screenshot |
+| `click_element`, `set_value` | accessibility |
+| pixel clicks, `mouse_move`, `drag` | screenshot |
 | `focus_window` | window list |
 | `type`, `key`, `scroll` without coordinates | any |
 | `scroll` with coordinates | screenshot |
@@ -191,11 +193,16 @@ Settings group `computerUse`:
     "type": "ask",
     "key": "ask",
     "scroll": "ask",
-    "focus_window": "ask"
+    "focus_window": "ask",
+    "set_value": "ask",
+    "drag": "ask",
+    "launch_app": "ask"
   }
 }
 ```
 
+- `launch_app` is a separate tool (`computer_launch`) with its own policy key;
+  it only accepts absolute executable paths and never forwards arguments.
 - `allow`: execute without a card.
 - `ask`: show the `computer-use-approval` card. Options are "allow once",
   "allow for this turn" and "deny".
@@ -267,8 +274,11 @@ Manual acceptance:
 ## Roadmap
 
 - macOS AX backend, TCC permission attribution and notarization
-- Drag and application launch
 - Screenshot retention controls
 - Optional Set-of-Marks overlay and OCR
+- Batched multi-step actions with automatic re-verification (a `run_steps`
+  style tool that carries window, screenshot and snapshot state across steps)
+- Window-scoped coordinates and window-relative screenshots
 
-These are deliberately outside the first Windows release.
+Drag and application launch shipped in v0.1.0 of the sidecar's second
+revision. The remaining items are deliberately outside the current release.
