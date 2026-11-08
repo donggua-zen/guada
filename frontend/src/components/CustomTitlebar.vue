@@ -65,17 +65,42 @@ function syncOverlayColors() {
 }
 
 let observer: MutationObserver | null = null
+let headObserver: MutationObserver | null = null
+const loadBound = new WeakSet<HTMLLinkElement>()
+
+/** 主题的 --gd-color-titlebar-bg 是异步 <link> 带进来的：data-theme 变了不等于样式已生效。
+    只在 mount 时算一次的话，读到的是基础值（style.css:119 亮色是 #f6f6f6）→ 判定"浅"→
+    给出黑符号；而深色顶栏主题（如柒的舱顶、红白机的红条）就此黑压黑，
+    且原先只监听 html 属性变化，样式表 load 不算属性变化，永远不会重算。 */
+function watchThemeStylesheets() {
+  for (const link of Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))) {
+    if (link.sheet || loadBound.has(link)) continue
+    loadBound.add(link)
+    link.addEventListener('load', syncOverlayColors, { once: true })
+  }
+}
+
+function resyncOverlayColors() {
+  watchThemeStylesheets()
+  syncOverlayColors()
+}
 
 onMounted(() => {
-  syncOverlayColors()
+  resyncOverlayColors()
   // 主题以 html 上的 class/style 切换，变更即重同步
-  observer = new MutationObserver(syncOverlayColors)
+  observer = new MutationObserver(resyncOverlayColors)
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme'] })
+  // 主题 <link> 的注入与换 href 同样是一次变更（样式真正生效由上面的 load 监听补算）
+  headObserver = new MutationObserver(resyncOverlayColors)
+  headObserver.observe(document.head, { childList: true, subtree: true, attributes: true, attributeFilter: ['href'] })
 })
 
-onUnmounted(() => observer?.disconnect())
+onUnmounted(() => {
+  observer?.disconnect()
+  headObserver?.disconnect()
+})
 
-watch(isElectron, syncOverlayColors)
+watch(isElectron, resyncOverlayColors)
 </script>
 
 <style scoped>

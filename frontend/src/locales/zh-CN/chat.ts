@@ -300,6 +300,7 @@ export default {
   // ── 消息操作 ──
   messageActions: {
     copy: '复制',
+    edit: '编辑',
     regenerate: '重新生成',
     prevVersion: '上一个版本',
     nextVersion: '下一个版本',

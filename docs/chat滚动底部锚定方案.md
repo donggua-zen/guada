@@ -63,7 +63,7 @@
 ## 五、退役项
 
 - `needScrollToBottom` / `lastScrollTop` / `scrollTicking` / `updateScrollButtonVisibility` / `SCROLL_TOP_THRESHOLD` 全部删除。
-- `provide('lockScrollAnchor')` 撤掉：`TurnItem.vue` 与 `MessageThinkingSection.vue` 里的 `inject` 带 no-op 默认值，自动降级——展开分组是布局变化，按状态机语义本就动不了 `following`，不再需要"锁"这个例外。
+- `provide('lockScrollAnchor')` 撤掉：`TurnItem.vue` 与 `MessageThinkingSection.vue` 里的 `inject` 带 no-op 默认值，自动降级——展开分组是布局变化，按状态机语义本就动不了 `following`，不再需要"锁"这个例外。（2026-11 补充：两处 no-op inject 已随 TurnItem 内层失效的贴底 watcher 一并删除，贴底职责完全归本模块。）
 - 回到底部按钮显隐改为**跟随态事件驱动**（`following-change`），删掉 100ms 防抖与 rAF 规避逻辑（按钮是绝对定位浮层，显隐不改变 scrollHeight）。
 - `ScrollContainer` 内容包装 div 加 `overflow-anchor: none`，覆盖全部四个消费方（其余三处内容静态，无锚定收益可失）。原因是内容子树里放着一个 sticky 底部的写作区，它会被 Chrome 的原生滚动锚定选作锚点候选，并在高度变化后覆盖我们 layout 阶段的贴底/恢复值。
 

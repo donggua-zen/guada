@@ -10,9 +10,9 @@
     </GdTooltip>
 
     <template v-if="!isAssistant && allowGenerate">
-      <GdTooltip :content="t('chat.messageActions.regenerate')" placement="top">
+      <GdTooltip :content="t('chat.messageActions.edit')" placement="top">
         <div class="message-action-button" @click="$emit('generate')">
-          <ArrowDown16Regular class="w-4 h-4" />
+          <Edit16Regular class="w-4 h-4" />
         </div>
       </GdTooltip>
     </template>
@@ -83,11 +83,11 @@ import {
   Copy16Regular,
   ArrowClockwise16Regular,
   ArrowSync16Regular,
-  ArrowDown16Regular,
   ChartMultiple20Regular,
   Clock12Regular,
   MoreHorizontal16Regular,
   Delete16Regular,
+  Edit16Regular,
   BranchFork16Regular,
 } from '@vicons/fluent';
 

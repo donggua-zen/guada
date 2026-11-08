@@ -300,6 +300,7 @@
   // ── 消息操作 ──
   messageActions: {
     copy: 'Copy',
+    edit: 'Edit',
     regenerate: 'Regenerate',
     prevVersion: 'Previous Version',
     nextVersion: 'Next Version',
