@@ -2,7 +2,7 @@
  * 桌宠窗口冒烟测试（独立 Electron 进程，不启动后端/主窗口）
  *
  * 验证四件事：
- * 1. pet.html 能被 loadFile 加载（file:// 下 sprites.json 由主进程读盘下发）
+ * 1. pet.html 能被 loadFile 加载（file:// 下 manifest.json 由主进程读盘下发）
  * 2. 渲染层收到的配置能驱动 idle 动画（截图非空且透明区域占比合理）
  * 3. 命中几何上报链路（pet:hit-geometry）能走通，且紧包围盒显著窄于图片
  * 4. 穿透开关（setIgnoreMouseEvents）被正确调用
@@ -60,7 +60,7 @@ app.whenReady().then(async () => {
 
   ipcMain.on("pet:ready", () => {
     rendererReady = true;
-    win.webContents.send("pet:config", fs.readFileSync(path.join(ASSET_DIR, "sprites.json"), "utf8"));
+    win.webContents.send("pet:config", fs.readFileSync(path.join(ASSET_DIR, "manifest.json"), "utf8"));
     win.webContents.send("pet:settings", { opacity: 100 });
     win.webContents.send("pet:state", {
       mode: "walk",

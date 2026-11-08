@@ -1,0 +1,68 @@
+{
+  "name": "柒（Q版）",
+  "version": "1.0.0",
+  "frameSize": {
+    "w": 384,
+    "h": 384
+  },
+  "anchor": {
+    "x": 0.5,
+    "y": 1
+  },
+  "animations": {
+    "idle": {
+      "label": "待机",
+      "fps": 6,
+      "loop": true,
+      "dir": "idle",
+      "count": 33,
+      "bbox": {
+        "x": 133,
+        "y": 7,
+        "w": 118,
+        "h": 369
+      }
+    },
+    "run": {
+      "label": "跑步",
+      "fps": 12,
+      "loop": true,
+      "dir": "run",
+      "count": 8,
+      "bbox": {
+        "x": 54,
+        "y": 17,
+        "w": 264,
+        "h": 357
+      }
+    },
+    "walk": {
+      "label": "快走",
+      "fps": 10,
+      "loop": true,
+      "dir": "walk",
+      "count": 9,
+      "bbox": {
+        "x": 89,
+        "y": 15,
+        "w": 199,
+        "h": 354
+      }
+    },
+    "yawn": {
+      "label": "打哈欠",
+      "fps": 8,
+      "loop": false,
+      "dir": "yawn",
+      "count": 37,
+      "bbox": {
+        "x": 121,
+        "y": 9,
+        "w": 131,
+        "h": 365
+      }
+    }
+  },
+  "bakedAt": "2026-11-06T09:30:46.779Z",
+  "source": "F:\\视频项目\\吉祥物\\桌面宠物立绘\\银发女_Q版\\animations"
+}

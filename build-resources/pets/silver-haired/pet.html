@@ -96,6 +96,58 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
+  /* ── 多会话列表 ─────────────────────────────────────────
+     载荷带 sessions 时替代单行副行：每行一条会话（状态点 + 标题 + 行内按钮） */
+  .bubble-list {
+    display: flex; flex-direction: column;
+    margin-top: 2px;
+  }
+  .pet-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 2px;
+    border-radius: 6px;
+    cursor: default;
+  }
+  .pet-row:hover { background: rgba(255, 255, 255, 0.06); }
+  .pet-row + .pet-row { border-top: 1px solid rgba(255, 255, 255, 0.05); }
+  .pet-row .row-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: #f0a95c; flex-shrink: 0;
+  }
+  .pet-row[data-status="running"] .row-dot {
+    background: #7fb3ff; animation: pulse 1.1s ease-in-out infinite;
+  }
+  .pet-row[data-status="awaiting"] .row-dot {
+    background: #f0a95c; animation: pulse 1.1s ease-in-out infinite;
+  }
+  .pet-row .row-title {
+    flex: 1; min-width: 0;
+    font-size: 11px; line-height: 1.3;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #e8e7e3;
+  }
+  .pet-row[data-status="awaiting"] .row-title { color: #ffd39b; }
+  .pet-row .row-act {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.10);
+    color: #e8e7e3;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0;
+    transition: background 120ms ease, transform 120ms ease;
+  }
+  .pet-row .row-act:hover { background: rgba(255, 255, 255, 0.20); }
+  .pet-row .row-act:active { transform: scale(0.94); }
+  .pet-row .row-act svg { width: 10px; height: 10px; display: block; }
+  .pet-row .row-act.row-stop {
+    color: #ff8f86; border-color: rgba(255, 143, 134, 0.35);
+    background: rgba(255, 90, 78, 0.16);
+  }
+  .pet-row .row-act.row-stop:hover { background: rgba(255, 90, 78, 0.28); }
+  .pet-row .row-act.row-stop .square {
+    width: 7px; height: 7px; border-radius: 2px; background: currentColor;
+  }
+
   /* ── 宠物本体 ─────────────────────────────────────────── */
   .stage {
     position: relative;
@@ -158,10 +210,11 @@
         </div>
       </div>
     </div>
-    <div class="bubble-sub">
+    <div class="bubble-sub" id="sub-row">
       <span class="dot" id="dot"></span>
       <span class="label" id="sub"></span>
     </div>
+    <div class="bubble-list" id="pet-list"></div>
   </div>
 
   <div class="stage" id="stage">
@@ -172,15 +225,17 @@
 <script>
 (function () {
   var api = window.petAPI;
-  /** 画布边长（由 sprites.json 的 canvas 决定；烘焙脚本缩图后这里自动跟随） */
-  var CANVAS = 720;
+  /** 画布边长（manifest.frameSize；烘焙缩图后自动跟随） */
+  var CANVAS = 384;
 
   var root = document.getElementById('root');
   var bubble = document.getElementById('bubble');
   var titleEl = document.getElementById('title');
   var subEl = document.getElementById('sub');
+  var subRowEl = document.getElementById('sub-row');
   var dotEl = document.getElementById('dot');
   var actionsEl = document.getElementById('actions');
+  var listEl = document.getElementById('pet-list');
   var img = document.getElementById('pet');
 
   // ── 动画配置（由主进程读盘下发；file:// 下 fetch 会被 CORS 拦，故不走 fetch） ──
@@ -198,10 +253,14 @@
   var yawnPlayed = false;
   var currentSessionId = null;
   var state = { running: 0, unread: 0, title: '', toolLabel: '' };
+  /** 上次状态载荷的 JSON（2s 轮询去重用） */
+  var lastStateJson = '';
 
   function frameSrc(key, i) {
-    var n = String(i).padStart(2, '0');
-    return 'frames/' + key + '/frame_' + n + '-nobg.webp';
+    // 美术侧序列帧规范：<anim 目录>/frame_001.webp（三位补零，数字即播放顺序）
+    var a = config && config.animations && config.animations[key];
+    var dir = (a && a.dir) || key;
+    return dir + '/frame_' + String(i).padStart(3, '0') + '.webp';
   }
 
   function load(key) {
@@ -268,26 +327,85 @@
   /** 窗口在屏幕上的可见区间（窗口内坐标）；null = 未知，按全宽处理 */
   var clip = null;
 
+  var OPEN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-4.6a8.4 8.4 0 0 1-.9-3.9 8.4 8.4 0 0 1 8.4-8.4h.6a8.4 8.4 0 0 1 8.4 8.4z"/></svg>';
+  var STOP_HTML = '<span class="square"></span>';
+
+  /** 单行会话卡片（状态点 + 标题 + 行内按钮）；sid/status 走 data 属性供委托读取 */
+  function buildRowHtml(item) {
+    var sid = String(item.sessionId || '');
+    var st = item.status || 'unread';
+    var acts = '<div class="row-act row-open" data-act="open" data-sid="' + sid + '" title="打开会话">' + OPEN_SVG + '</div>';
+    if (st === 'running' || st === 'awaiting') {
+      acts += '<div class="row-act row-stop" data-act="stop" data-sid="' + sid + '" title="停止执行">' + STOP_HTML + '</div>';
+    }
+    return '<div class="pet-row" data-status="' + st + '">'
+      + '<span class="row-dot"></span>'
+      + '<span class="row-title"></span>'
+      + acts
+      + '</div>';
+  }
+
   function renderBubble() {
     var running = state.running || 0;
     var unread = state.unread || 0;
+    var awaiting = state.awaiting || 0;
+    var sessions = Array.isArray(state.sessions) ? state.sessions : [];
 
-    bubbleWanted = running > 0 || unread > 0;
-    if (running > 0) {
-      titleEl.textContent = state.title || (running + ' 个会话运行中');
-      subEl.textContent = '正在执行 · ' + (state.toolLabel || '工具调用');
-      dotEl.classList.remove('idle');
-      actionsEl.style.display = 'flex';
-    } else if (unread > 0) {
-      titleEl.textContent = unread + ' 个会话有未读消息';
-      subEl.textContent = '点击打开最近会话';
-      dotEl.classList.add('idle');
-      actionsEl.style.display = 'none';
+    bubbleWanted = awaiting > 0 || running > 0 || unread > 0;
+    if (bubbleWanted) {
+      titleEl.textContent = state.title || (running > 0 ? running + ' 个会话运行中' : '');
+      // 列表模式：载荷带 sessions（≥1 条）时逐行画会话，副行退化为摘要引导
+      if (sessions.length > 0) {
+        var html = '';
+        for (var i = 0; i < sessions.length && i < 3; i++) {
+          html += buildRowHtml(sessions[i]);
+        }
+        listEl.innerHTML = html;
+        // 行标题单独填 textContent，会话标题里的任何字符都不会变成标签
+        var rows = listEl.querySelectorAll('.pet-row');
+        for (var r = 0; r < rows.length; r++) {
+          rows[r].querySelector('.row-title').textContent =
+            sessions[r].title || sessions[r].sessionId;
+        }
+        listEl.style.display = 'flex';
+        actionsEl.style.display = 'none';
+        subRowEl.style.display = 'none';
+      } else {
+        listEl.style.display = 'none';
+        listEl.innerHTML = '';
+        // 老载荷回退：单行副行 + 整气泡按钮
+        if (running > 0) {
+          subEl.textContent = '正在执行 · ' + (state.toolLabel || '工具调用');
+          dotEl.classList.remove('idle');
+          actionsEl.style.display = 'flex';
+        } else {
+          subEl.textContent = '点击打开最近会话';
+          dotEl.classList.add('idle');
+          actionsEl.style.display = 'none';
+        }
+        subRowEl.style.display = 'flex';
+      }
     } else {
       actionsEl.style.display = 'none';
     }
     updateBubble();
   }
+
+  // 列表行事件（委托：行是动态重建的）。点按钮开/停对应会话，点行空白处 = 打开。
+  listEl.addEventListener('click', function (e) {
+    var row = e.target && e.target.closest ? e.target.closest('.pet-row') : null;
+    if (!row || !listEl.contains(row)) return;
+    e.stopPropagation();
+    var btn = e.target.closest('.row-act');
+    var sid = (btn || row.querySelector('.row-act'));
+    sid = sid ? sid.getAttribute('data-sid') : null;
+    if (!sid) return;
+    if (btn && btn.getAttribute('data-act') === 'stop') {
+      api.stopSession({ sessionId: sid });
+    } else {
+      api.click({ sessionId: sid });
+    }
+  });
 
   /** 应用显隐 + 位置，并重报几何（气泡矩形参与命中判定） */
   function updateBubble() {
@@ -395,6 +513,7 @@
   document.addEventListener('pointerdown', function (e) {
     if (e.button !== 0) return;
     if (e.target.closest && e.target.closest('.act')) return; // 按钮自己处理
+    if (e.target.closest && e.target.closest('.pet-row')) return; // 列表行自己处理（点行=打开）
     drag.active = true;
     drag.moved = false;
     drag.pointerId = e.pointerId;
@@ -440,7 +559,9 @@
       // 已自动释放
     }
     endDrag();
-    if (!wasMoved && e.button === 0) api.click({ sessionId: currentSessionId });
+    if (!wasMoved && e.button === 0 && !(e.target.closest && e.target.closest('.pet-row'))) {
+      api.click({ sessionId: currentSessionId });
+    }
   });
 
   // 窗口失焦（比如点了别的应用）→ 收尾，避免卡在交互态
@@ -468,10 +589,11 @@
       try {
         config = typeof cfgJson === 'string' ? JSON.parse(cfgJson) : cfgJson;
       } catch (err) {
-        console.error('sprites.json 解析失败', err);
+        console.error('manifest.json 解析失败', err);
         return;
       }
-      if (config && config.canvas && config.canvas.w) CANVAS = config.canvas.w;
+      var frameSize = config && config.frameSize;
+      if (frameSize && frameSize.w) CANVAS = frameSize.w;
       // 配置可能晚于状态到达（状态里带了 walk/run）：以状态为准重放一次，
       // 否则会卡在 idle 直到下一次状态推送
       play('idle');
@@ -480,9 +602,14 @@
     });
 
     api.onState(function (s) {
-      state = s || {};
-      currentSessionId = s && s.sessionId ? s.sessionId : null;
-      if (s && s.mode) setMode(s.mode);
+      var next = s || {};
+      // 状态每 2s 全量重推，内容没变就别重画（列表重渲染会闪掉 hover 态）
+      var json = JSON.stringify(next);
+      if (json === lastStateJson) return;
+      lastStateJson = json;
+      state = next;
+      currentSessionId = next && next.sessionId ? next.sessionId : null;
+      if (next && next.mode) setMode(next.mode);
       renderBubble();
     });
 

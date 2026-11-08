@@ -1965,10 +1965,12 @@ function setupIpcHandlers() {
       stats: {
         running: number;
         unread: number;
+        awaiting?: number;
         mode?: PetStatePayload["mode"];
         title?: string;
         toolLabel?: string;
         sessionId?: string | null;
+        sessions?: PetStatePayload["sessions"];
       },
     ) => {
       trayStats = { running: stats.running, unread: stats.unread };
@@ -1983,14 +1985,16 @@ function setupIpcHandlers() {
       }
       // 更新托盘菜单
       updateTrayMenu();
-      // 更新桌宠（模式/计数/标题/工具名）
+      // 更新桌宠（模式/计数/标题/工具名/会话列表）
       petState = {
         mode: stats.mode ?? "idle",
         running: stats.running,
         unread: stats.unread,
+        awaiting: stats.awaiting,
         title: stats.title ?? "",
         toolLabel: stats.toolLabel ?? "",
         sessionId: stats.sessionId ?? null,
+        sessions: stats.sessions,
       };
       petWindow?.pushState(petState);
       // 任务栏/Dock 未读角标与桌宠、托盘菜单同源（stats.unread）

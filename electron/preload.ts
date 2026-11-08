@@ -162,10 +162,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateTrayStats: (stats: {
     running: number
     unread: number
+    awaiting?: number
     mode?: 'idle' | 'walk' | 'run' | 'yawn'
     title?: string
     toolLabel?: string
     sessionId?: string | null
+    /** 摘要列表（已按 待答>运行中>未读 择优，≤3 条），桌宠气泡列表用 */
+    sessions?: Array<{
+      sessionId: string
+      title: string
+      status: 'awaiting' | 'running' | 'unread'
+      toolLabel?: string
+    }>
   }) => ipcRenderer.send('tray:update-stats', stats),
 
   // 桌宠：推送配置（形象 + 显隐 + 透明度）

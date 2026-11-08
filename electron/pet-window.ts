@@ -25,10 +25,10 @@ import log from "electron-log";
  * 窗口逻辑尺寸（DIP）。
  * 宽度取 360 而不是「气泡宽 250」：宠物贴边时窗口会有一截在屏幕外，
  * 气泡要往左让，必须留出这段余量，否则贴边后气泡会被压到读不清。
- * 高度 = 宠物 216 + 气泡 ~60 + 余量。
+ * 高度 = 宠物 216 + 气泡（多会话列表最高 ~120）+ 余量。
  */
 export const PET_WINDOW_WIDTH = 360;
-export const PET_WINDOW_HEIGHT = 300;
+export const PET_WINDOW_HEIGHT = 380;
 /** 命中判定轮询间隔：40ms ≈ 25Hz，肉眼无延迟且开销可忽略 */
 export const PET_HIT_POLL_MS = 40;
 
@@ -123,7 +123,7 @@ export function listPetAvatars(petsRootDir: string): PetAvatarInfo[] {
   for (const entry of entries) {
     if (!entry.isDirectory() || !isValidAvatarId(entry.name)) continue;
     const dir = path.join(petsRootDir, entry.name);
-    const configPath = path.join(dir, "sprites.json");
+    const configPath = path.join(dir, "manifest.json");
     if (!fs.existsSync(configPath)) continue;
 
     let name = entry.name;
@@ -135,7 +135,7 @@ export function listPetAvatars(petsRootDir: string): PetAvatarInfo[] {
         name = config.name.trim();
       }
     } catch (error) {
-      log.warn(`[pet] 形象 ${entry.name} 的 sprites.json 解析失败:`, error);
+      log.warn(`[pet] 形象 ${entry.name} 的 manifest.json 解析失败:`, error);
     }
 
     let previewDataUrl: string | null = null;
@@ -313,14 +313,25 @@ export interface PetWindowOptions {
   positionFile: string;
 }
 
+/** 桌宠气泡列表里的一条会话摘要（与前端 petState.ts 的 PetSessionBrief 同构） */
+export interface PetSessionBrief {
+  sessionId: string;
+  title: string;
+  status: "awaiting" | "running" | "unread";
+  toolLabel?: string;
+}
+
 /** 主进程 → 桌宠的状态载荷 */
 export interface PetStatePayload {
   mode: "idle" | "walk" | "run" | "yawn";
   running: number;
   unread: number;
+  awaiting?: number;
   title?: string;
   toolLabel?: string;
   sessionId?: string | null;
+  /** 摘要列表（已按 待答>运行中>未读 择优，≤3 条）；缺失时桌宠退化为单行气泡 */
+  sessions?: PetSessionBrief[];
 }
 
 export class PetWindowController {
@@ -545,11 +556,11 @@ export class PetWindowController {
   /** 主进程 → 渲染层：动画清单（file:// 下渲染层 fetch 会被拦，统一由主进程读盘下发） */
   pushConfig(): void {
     if (this.configJson === null) {
-      const configPath = path.join(this.assetDir, "sprites.json");
+      const configPath = path.join(this.assetDir, "manifest.json");
       try {
         this.configJson = fs.readFileSync(configPath, "utf8");
       } catch (error) {
-        log.warn("[pet] 读取 sprites.json 失败:", error);
+        log.warn("[pet] 读取 manifest.json 失败:", error);
         return;
       }
     }

@@ -1,6 +1,12 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useSessionStore } from '@/stores/session'
-import { buildPetBubble, derivePetMode, type PetMode } from '@/utils/petState'
+import {
+  buildPetBubble,
+  derivePetMode,
+  pickPetSessions,
+  type PetMode,
+  type PetSessionBrief,
+} from '@/utils/petState'
 import type { ToolCallEntry } from '@/types/message'
 
 /**
@@ -61,51 +67,110 @@ export function useTrayStats() {
   function computeStats() {
     let running = 0
     let unread = 0
+    let awaiting = 0
     /** 最近活跃的运行中会话（标题/工具名/跳转锚点都取它） */
     let activeSessionId: string | null = null
     let activeAt = 0
+    /** 候选会话列表（最近活跃降序收集，气泡列表再按状态优先级择优） */
+    const briefs: Array<PetSessionBrief & { at: number }> = []
 
     const map = sessionStore.sessionsMap
     if (map) {
       for (const [sid, session] of map) {
         if (!sid) continue
+        // 与侧边栏可见性对齐：归档会话和 bot/sub_agent 不进桌宠
+        if (session?.archived) continue
+        if (session?.sessionType === 'bot' || session?.sessionType === 'sub_agent')
+          continue
         const state = sessionStore.getSidebarState(sid)
-        if (state.working) {
+        const at = new Date(
+          session?.lastActiveAt || session?.updatedAt || 0,
+        ).getTime()
+        // 待答（agent 提问/请求批准）：最高优先级，跨会话可感知（含未打开会话）
+        const isAwaiting = sessionStore.peekSessionPendingAskQueue(sid).length > 0
+        const isRunning = state.working
+
+        if (isAwaiting) {
+          awaiting++
+          briefs.push({
+            sessionId: sid,
+            title: session?.title ?? '',
+            status: 'awaiting',
+            at,
+          })
+        } else if (isRunning) {
           running++
-          const at = new Date(
-            session?.lastActiveAt || session?.updatedAt || 0,
-          ).getTime()
-          if (at > activeAt) {
-            activeAt = at
-            activeSessionId = sid
+          briefs.push({
+            sessionId: sid,
+            title: session?.title ?? '',
+            status: 'running',
+            at,
+          })
+        }
+        if (state.unread) {
+          unread++
+          // awaiting/running 已隐含「需要关注」，列表里不再重复占一行
+          if (!isAwaiting && !isRunning) {
+            briefs.push({
+              sessionId: sid,
+              title: session?.title ?? '',
+              status: 'unread',
+              at,
+            })
           }
         }
-        if (state.unread) unread++
+
+        if (isRunning && at > activeAt) {
+          activeAt = at
+          activeSessionId = sid
+        }
       }
     }
 
-    // 活动时间戳：有任务或有未读都算「用户有事可做」，重置长空闲计时
-    if (running > 0 || unread > 0) {
+    // 活动时间戳：有待答、有任务或有未读都算「用户有事可做」，重置长空闲计时
+    if (running > 0 || unread > 0 || awaiting > 0) {
       lastActiveAt = Date.now()
     }
     const idleMs = Date.now() - lastActiveAt
 
-    const mode: PetMode = derivePetMode({ running, unread, idleMs })
+    const mode: PetMode = derivePetMode({ running, unread, awaiting, idleMs })
     const title = activeSessionId
       ? sessionStore.getSession(activeSessionId)?.title ?? ''
       : ''
     const toolLabel = activeSessionId ? lastToolLabel(activeSessionId) : ''
-    // 有未读无任务时，点击气泡应跳到最近有未读的会话
-    const bubbleSessionId = activeSessionId ?? findLatestUnreadSessionId()
-    const bubble = buildPetBubble({ running, unread, title, toolLabel })
+    // 摘要列表：按状态优先级排序截取（awaiting > running > unread），
+    // 先剥掉排序用的 at 字段再择优，避免内部时间戳漏进 IPC 载荷
+    const sessions: PetSessionBrief[] = pickPetSessions(
+      briefs.sort((a, b) => b.at - a.at).map(({ at: _at, ...brief }) => brief),
+    ).map((brief) => {
+      if (brief.status === 'running') {
+        brief.toolLabel = lastToolLabel(brief.sessionId)
+      }
+      return brief
+    })
+
+    // 有未读无任务时，点击气泡应跳到最近有未读的会话；
+    // 有列表时以最高优先级会话为准（列表首项）
+    const bubbleSessionId =
+      sessions[0]?.sessionId ?? activeSessionId ?? findLatestUnreadSessionId()
+    const bubble = buildPetBubble({
+      running,
+      unread,
+      awaiting,
+      title,
+      toolLabel,
+      sessions,
+    })
 
     return {
       running,
       unread,
+      awaiting,
       mode,
       title: bubble?.text ?? '',
       toolLabel: bubble?.tone === 'busy' ? toolLabel : '',
       sessionId: bubble ? bubbleSessionId : null,
+      sessions,
     }
   }
 

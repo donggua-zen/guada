@@ -61,7 +61,7 @@ function main() {
   const avatars = listPetAvatars(realRoot);
   assert.ok(avatars.length >= 1, `至少应扫描到一个形象，实际 ${avatars.length}`);
   assert.strictEqual(avatars[0].id, PET_AVATAR_DEFAULT, "默认形象应排在最前");
-  assert.ok(avatars[0].name.length > 0, "形象应有名称（取自 sprites.json）");
+  assert.ok(avatars[0].name.length > 0, "形象应有名称（取自 manifest.json）");
   assert.ok(
     avatars[0].previewDataUrl?.startsWith("data:image/webp;base64,"),
     "预览图应是 webp data URL",
