@@ -6,11 +6,11 @@
   "author": "dev",
   "category": "user",
   "icon": "assets/logo.svg",
-  "main": "index.ts",
+  "main": "index.js",
   "apiVersion": 3,
   "permissions": ["http", "llm"],
   "entries": {
-    "backend": "index.ts",
+    "backend": "index.js",
     "frontend": "frontend/dist"
   }
 }

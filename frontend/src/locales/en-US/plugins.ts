@@ -1,4 +1,4 @@
-﻿export default {
+export default {
   // ── 插件页面 (PluginsPage.vue) ──
   page: {
     title: 'Plugins',
@@ -13,6 +13,26 @@
     info: 'About',
     marketOpenWeb: 'Open market in browser',
     goMarket: 'Browse the market',
+  },
+
+  // ── 插件市场 (PluginMarket.vue) ──
+  market: {
+    searchPlaceholder: 'Search by name, description, author…',
+    tagAll: 'All',
+    verified: 'Verified',
+    installed: 'Installed',
+    install: 'Install',
+    reinstall: 'Reinstall',
+    empty: 'No matching plugins',
+    loadFailed: 'Marketplace unavailable, please retry later',
+    author: 'Author',
+    downloads: 'Installs',
+    changelog: 'Changelog',
+    sourceLabel: 'Install source (paste into the Plugins tab to install manually)',
+    copied: 'Install source copied',
+    copyFailed: 'Copy failed',
+    openRepo: 'Open repository',
+    installingTitle: 'Install plugin',
   },
 
   // ── MCP 服务器 (MCPServers.vue) ──
@@ -263,6 +283,7 @@
 
   // ── 本地工具 (LocalTools.vue) ──
   localTools: {
+    viewLocal: 'Installed',
     title: 'Plugins',
     subtitle: 'Global tool settings determine which tools are available to all agents. Agent-level tool settings further restrict on top of this.',
     loading: 'Loading...',
@@ -288,6 +309,8 @@
     installPlugin: 'Install Plugin',
     installTitle: 'Install Plugin',
     installBtn: 'Install',
+    installSourcePlaceholder: 'Paste a repo link / owner/repo / local folder path, or a canonical source like github:…',
+    installSourceHint: 'Paste a GitHub / Gitee / GitCode repository URL directly — the source is detected automatically. For local install, use the full path of the plugin folder.',
     installWaiting: 'Waiting for installation…',
     installSuccessLog: 'Installation succeeded',
     installFailedLog: 'Installation failed',

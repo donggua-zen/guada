@@ -119,6 +119,56 @@ export interface PluginApi {
     pluginId: string,
     values: Record<string, unknown>,
   ): Promise<{ success: boolean; updated: string[] }>;
+  /** 插件市场列表（官网索引透传，分页/keyword/tag） */
+  fetchMarketList(params: {
+    page?: number;
+    pageSize?: number;
+    keyword?: string;
+    tag?: string;
+  }): Promise<MarketListResponse>;
+  /** 插件市场详情 */
+  fetchMarketDetail(id: string): Promise<MarketPluginDetail>;
+  /** 插件市场标签聚合 */
+  fetchMarketTags(): Promise<{ tags: MarketTag[] }>;
+  /** 从市场一键安装（返回 jobId，复用 install-log 轮询） */
+  installFromMarket(id: string): Promise<{ jobId: string; source: string }>;
+}
+
+/** 插件市场条目（官网索引序列化形态，见 docs/plugin-market/registry-guide.md） */
+export interface MarketPlugin {
+  id: string;
+  name: string;
+  description: string;
+  author?: string;
+  tags: string[];
+  icon?: string | null;
+  source: { type: string; ref?: string; install: string };
+  repository?: string;
+  latest?: {
+    version?: string;
+    apiVersion?: number;
+    channel?: string;
+    changelog?: string;
+    publishedAt?: string;
+  } | null;
+  verified: boolean;
+  featured: boolean;
+  downloads: number;
+}
+
+export interface MarketPluginDetail extends MarketPlugin {
+  screenshots: string[];
+  homepage?: string;
+}
+
+export interface MarketListResponse {
+  items: MarketPlugin[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export interface MarketTag {
+  name: string;
+  count: number;
 }
 
 export const pluginApi: PluginApi = {
@@ -215,6 +265,32 @@ export const pluginApi: PluginApi = {
     return await this._request<{ success: boolean; updated: string[] }>(
       `/plugins/${pluginId}/config`,
       { method: "PUT", data: { values } },
+    );
+  },
+
+  async fetchMarketList(this: ApiContext, params) {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    if (params.keyword) q.set("keyword", params.keyword);
+    if (params.tag) q.set("tag", params.tag);
+    return await this._request<MarketListResponse>(`/plugins/market/list?${q.toString()}`);
+  },
+
+  async fetchMarketDetail(this: ApiContext, id: string) {
+    return await this._request<MarketPluginDetail>(
+      `/plugins/market/detail?id=${encodeURIComponent(id)}`,
+    );
+  },
+
+  async fetchMarketTags(this: ApiContext) {
+    return await this._request<{ tags: MarketTag[] }>("/plugins/market/tags");
+  },
+
+  async installFromMarket(this: ApiContext, id: string) {
+    return await this._request<{ jobId: string; source: string }>(
+      `/plugins/market/install/${encodeURIComponent(id)}`,
+      { method: "POST" },
     );
   },
 };

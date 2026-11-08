@@ -15,6 +15,26 @@ export default {
     goMarket: '去市场看看',
   },
 
+  // ── 插件市场 (PluginMarket.vue) ──
+  market: {
+    searchPlaceholder: '搜索插件名称、简介、作者…',
+    tagAll: '全部',
+    verified: '已审核',
+    installed: '已安装',
+    install: '安装',
+    reinstall: '重新安装',
+    empty: '没有匹配的插件',
+    loadFailed: '插件市场暂不可用，请稍后重试',
+    author: '作者',
+    downloads: '安装量',
+    changelog: '更新说明',
+    sourceLabel: '安装源（可复制到"插件"页手动安装）',
+    copied: '已复制安装源',
+    copyFailed: '复制失败',
+    openRepo: '打开仓库',
+    installingTitle: '安装插件',
+  },
+
   // ── MCP 服务器 (MCPServers.vue) ──
   mcp: {
     viewAdded: '已添加',
@@ -263,6 +283,7 @@ export default {
 
   // ── 插件 (LocalTools.vue) ──
   localTools: {
+    viewLocal: '本地插件',
     title: '插件',
     subtitle: '全局工具设置决定了哪些工具对所有智能体可用。智能体级别的工具设置会在此基础上进一步限制。',
     loading: '加载中...',
@@ -288,6 +309,8 @@ export default {
     installPlugin: '安装插件',
     installTitle: '安装插件',
     installBtn: '安装',
+    installSourcePlaceholder: '粘贴仓库链接 / owner/repo / 本地目录路径，或 github:… 等规范源',
+    installSourceHint: '可直接粘贴 GitHub / Gitee / GitCode 仓库地址，自动识别安装源；本地安装填插件目录的完整路径。',
     installWaiting: '等待安装…',
     installSuccessLog: '安装成功',
     installFailedLog: '安装失败',

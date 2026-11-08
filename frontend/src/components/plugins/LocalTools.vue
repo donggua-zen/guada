@@ -1,17 +1,46 @@
 <template>
   <div class="flex-1">
-    <PluginTabHeader :title="t('plugins.localTools.title')" :subtitle="t('plugins.localTools.subtitle')">
-      <template #actions>
-        <GdButton circle :loading="loading" :title="t('common.refresh')" @click="loadGlobalTools">
-          <template #icon>
-            <ArrowClockwise16Regular class="size-4" />
-          </template>
-        </GdButton>
-        <GdButton type="primary" @click="startInstallDialog">{{ t('plugins.localTools.installPlugin') }}</GdButton>
-      </template>
-    </PluginTabHeader>
+    <!-- 视图条：二级切换（本地 / 市场） + 当前视图的动作（与 Skills / MCP 同构） -->
+    <div class="plugins-view-bar">
+      <div class="plugins-view-bar__left">
+        <PluginViewSwitch v-model="view" :items="viewItems" />
+        <GdTooltip :content="t('plugins.localTools.subtitle')" placement="top">
+          <button type="button" class="plugins-view-info" :aria-label="t('plugins.page.info')">
+            <Info24Regular />
+          </button>
+        </GdTooltip>
+      </div>
+      <div class="plugins-view-bar__right">
+        <template v-if="view === 'installed'">
+          <GdButton circle :loading="loading" :title="t('common.refresh')" @click="loadGlobalTools">
+            <template #icon>
+              <ArrowClockwise16Regular class="size-4" />
+            </template>
+          </GdButton>
+          <GdButton type="primary" @click="startInstallDialog">{{ t('plugins.localTools.installPlugin') }}</GdButton>
+        </template>
+        <template v-else>
+          <GdInput
+            v-model="marketKeyword"
+            :placeholder="t('plugins.market.searchPlaceholder')"
+            clearable
+            size="default"
+            class="plugins-search"
+          >
+            <template #prefix>
+              <Search16Regular class="size-4" />
+            </template>
+          </GdInput>
+          <GdButton circle size="small" :title="t('plugins.page.marketOpenWeb')" @click="handleOpenMarketSite">
+            <template #icon>
+              <ArrowUpRight16Regular />
+            </template>
+          </GdButton>
+        </template>
+      </div>
+    </div>
 
-    <!-- 安装进度弹窗（输入 source → 假终端进度） -->
+    <!-- 本地视图：安装进度弹窗（输入 source → 假终端进度） -->
     <GdDialog v-model="installDialogVisible" size="md" :close-on-click-modal="false" destroy-on-close @closed="handleInstallClosed">
       <template #header>
         <span>{{ t('plugins.localTools.installTitle') }}</span>
@@ -20,7 +49,7 @@
       <div class="install-row">
         <GdInput
           v-model="installSource"
-          placeholder="github:owner/repo#ref / gitee:owner/repo / git:https://…#ref / local:path"
+          :placeholder="t('plugins.localTools.installSourcePlaceholder')"
           clearable
           @keyup.enter="beginInstall"
         />
@@ -31,56 +60,65 @@
         <pre class="install-log">{{ installLog || t('plugins.localTools.installWaiting') }}</pre>
         <span v-if="installing" class="terminal-cursor"></span>
       </div>
-      <div class="text-xs text-gray-400 mt-2">{{ t('plugins.localTools.providerPackHint') }}</div>
+      <div class="text-xs text-gray-400 mt-2">{{ t('plugins.localTools.installSourceHint') }}</div>
+      <div class="text-xs text-gray-400 mt-1">{{ t('plugins.localTools.providerPackHint') }}</div>
       <template #footer>
         <GdButton v-if="installing" @click="cancelInstallDialog">{{ t('common.cancel') }}</GdButton>
         <GdButton v-else @click="installDialogVisible = false">{{ t('common.close') }}</GdButton>
       </template>
     </GdDialog>
 
-    <!-- 分区行列表 -->
-    <template v-if="pluginGroups.length > 0">
-      <PluginSection
-        v-for="group in pluginGroups"
-        :key="group.key"
-        :title="t(`plugins.localTools.groups.${group.key}`)"
-      >
-        <PluginListRow
-          v-for="tool in group.items"
-          :key="tool.pluginId"
-          :name="tool.displayName || tool.name || tool.pluginId"
-          :description="tool.description || t('plugins.localTools.noDescription')"
-          :icon-src="tool.icon ? resolvePluginIconUrl(tool.pluginId, tool.iconRev) : null"
-          :menu-items="getPluginMenuItems(tool)"
-          @click="showDetail(tool)"
-          @command="(command) => handlePluginCommand(command, tool)"
+    <!-- 本地视图：分区行列表（v-show 保留状态） -->
+    <div v-show="view === 'installed'" class="plugins-view-fade">
+      <template v-if="pluginGroups.length > 0">
+        <PluginSection
+          v-for="group in pluginGroups"
+          :key="group.key"
+          :title="t(`plugins.localTools.groups.${group.key}`)"
         >
-          <template #badges>
-            <GdTag v-if="tool.provides" size="small" type="primary" effect="plain">{{ t('plugins.localTools.sourceProvider') }}</GdTag>
-            <GdTag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</GdTag>
-            <GdTag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</GdTag>
-          </template>
-          <template #actions>
-            <!-- 系统插件恒启用、后端拒绝禁用，不提供启停控件 -->
-            <GdSwitch
-              v-if="!isPluginLocked(tool)"
-              :model-value="tool.enabled"
-              :loading="updatingTools.has(tool.pluginId)"
-              @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
-              @click.stop
-              size="small"
-            />
-          </template>
-        </PluginListRow>
-      </PluginSection>
-    </template>
+          <PluginListRow
+            v-for="tool in group.items"
+            :key="tool.pluginId"
+            :name="tool.displayName || tool.name || tool.pluginId"
+            :description="tool.description || t('plugins.localTools.noDescription')"
+            :icon-src="tool.icon ? resolvePluginIconUrl(tool.pluginId, tool.iconRev) : null"
+            :menu-items="getPluginMenuItems(tool)"
+            @click="showDetail(tool)"
+            @command="(command) => handlePluginCommand(command, tool)"
+          >
+            <template #badges>
+              <GdTag v-if="tool.provides" size="small" type="primary" effect="plain">{{ t('plugins.localTools.sourceProvider') }}</GdTag>
+              <GdTag v-if="tool.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</GdTag>
+              <GdTag v-else-if="tool.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</GdTag>
+            </template>
+            <template #actions>
+              <!-- 系统插件恒启用、后端拒绝禁用，不提供启停控件 -->
+              <GdSwitch
+                v-if="!isPluginLocked(tool)"
+                :model-value="tool.enabled"
+                :loading="updatingTools.has(tool.pluginId)"
+                @update:model-value="(val: string | number | boolean) => handleToggleTool(tool.pluginId, !!val)"
+                @click.stop
+                size="small"
+              />
+            </template>
+          </PluginListRow>
+        </PluginSection>
+      </template>
 
-    <div
-      v-else-if="!loading"
-      class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-10 text-center"
-    >
-      <div class="text-sm text-(--gd-color-text-gray)">{{ t('plugins.localTools.empty') }}</div>
-      <div class="mt-1 text-xs text-(--gd-color-text-disabled)">{{ t('plugins.localTools.emptyHint') }}</div>
+      <div
+        v-else-if="!loading"
+        class="rounded-[var(--gd-size-surface-radius)] bg-(--gd-color-surface-subtle) p-10 text-center"
+      >
+        <div class="text-sm text-(--gd-color-text-gray)">{{ t('plugins.localTools.empty') }}</div>
+        <div class="mt-1 text-xs text-(--gd-color-text-disabled)">{{ t('plugins.localTools.emptyHint') }}</div>
+        <GdButton class="mt-4" @click="view = 'market'">{{ t('plugins.page.goMarket') }}</GdButton>
+      </div>
+    </div>
+
+    <!-- 市场视图：v-show 保留实例，切回来不重新请求、搜索与筛选状态都在 -->
+    <div v-show="view === 'market'" class="plugins-view-fade">
+      <PluginMarket v-model:keyword="marketKeyword" :active="view === 'market'" @installed="loadGlobalTools" />
     </div>
 
     <!-- Detail Dialog -->
@@ -151,21 +189,30 @@ import GdTag from '@/components/ui/GdTag.vue';
 import { toast } from '@/components/ui/toastService';
 import GdInput from '@/components/ui/GdInput.vue';
 import GdSwitch from '@/components/ui/GdSwitch.vue';
+import GdTooltip from '@/components/ui/GdTooltip.vue';
 
-import { ArrowClockwise16Regular } from '@vicons/fluent'
+import {
+  ArrowClockwise16Regular,
+  ArrowUpRight16Regular,
+  Info24Regular,
+  Search16Regular
+} from '@vicons/fluent'
 import { apiService } from '@/services/ApiService'
 import { getLocale } from '@/locales'
 import { usePopup } from '@/composables/usePopup'
 import { groupPlugins, isPluginLocked } from '@/utils/pluginGroups'
 import { resolvePluginIconUrl } from '@/utils/pluginIcon'
+import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
 import PluginSection from './PluginSection.vue'
-import PluginTabHeader from './PluginTabHeader.vue'
+import PluginViewSwitch from './PluginViewSwitch.vue'
+import PluginMarket from './PluginMarket.vue'
 import PluginConfigDialog from './PluginConfigDialog.vue'
-import type { PluginRowMenuItem } from './pluginList.types'
+import type { PluginRowMenuItem, PluginViewSwitchItem } from './pluginList.types'
 import type { PluginQueryPlugin } from '@/services/modules/settings.api'
+import { usePluginViewQuery } from '@/composables/usePluginViewQuery'
 
 const { t } = useI18n()
 const { confirm } = usePopup()
@@ -175,6 +222,20 @@ const error = ref<string | null>(null)
 const updatingTools = ref<Set<string>>(new Set())
 const installSource = ref('')
 const installing = ref(false)
+
+// ── 二级视图：本地 / 市场（状态落 route query，刷新与前进后退不丢）──
+const view = usePluginViewQuery('installed', ['installed', 'market'], 'local-tools')
+/** 市场搜索词由页面工具栏持有，市场组件常驻不销毁，切回来仍保留 */
+const marketKeyword = ref('')
+
+const viewItems = computed<PluginViewSwitchItem[]>(() => [
+  { value: 'installed', label: t('plugins.localTools.viewLocal') },
+  { value: 'market', label: t('plugins.page.viewMarket') },
+])
+
+function handleOpenMarketSite() {
+  openInExternalBrowser('https://ai.dingd.cn/plugins')
+}
 
 const globalTools = ref<PluginQueryPlugin[]>([])
 const pluginGroups = computed(() => groupPlugins(globalTools.value))

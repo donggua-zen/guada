@@ -31,10 +31,15 @@ export const ALLOWED_MARKET_HOSTS = [
  * 主机策略：
  * - hosts：精确枚举（默认策略，保持既有行为不变）；
  * - hostPatterns：受限正则，仅给「下载跳转」这类主机不可预知的链路使用。
+ * - allowInsecure：本地联调逃生舱（插件市场 PLUGINS_MARKET_URL 指向
+ *   127.0.0.1:3001 的官网后端）。仅在显式覆盖策略时置位；默认策略与所有
+ *   内置市场策略保持原严格行为（https + 443），不会受此字段影响。
  */
 export interface MarketHostPolicy {
   hosts?: readonly string[];
   hostPatterns?: readonly RegExp[];
+  /** 允许 http 与非 443 端口（仅限 localhost/127.0.0.1/::1）；默认 false */
+  allowInsecure?: boolean;
 }
 
 export const DEFAULT_MARKET_HOST_POLICY: MarketHostPolicy = {
@@ -110,9 +115,19 @@ export function isAllowedMarketUrl(
   } catch {
     return false;
   }
-  if (parsed.protocol !== "https:") return false;
+  // allowInsecure 仅放宽到本机回环地址（显式覆盖策略才会置位）；
+  // 默认策略不变：https + 443 + 无 userinfo，防止把白名单变成 SSRF 跳板。
+  const loopback =
+    parsed.hostname === "127.0.0.1" ||
+    parsed.hostname === "localhost" ||
+    parsed.hostname === "::1";
+  if (parsed.protocol !== "https:" && !(policy.allowInsecure && loopback)) {
+    return false;
+  }
   if (parsed.username || parsed.password) return false;
-  if (parsed.port && parsed.port !== "443") return false;
+  if (parsed.port && parsed.port !== "443" && !(policy.allowInsecure && loopback)) {
+    return false;
+  }
   const host = parsed.hostname.toLowerCase();
   const exact = policy.hosts ?? [];
   if (exact.includes(host)) return true;

@@ -31,10 +31,11 @@ import { JobsModule } from "../jobs/jobs.module";
 import { PluginHttpRegistry } from "./http/plugin-http.registry";
 import { PluginHttpController } from "./http/plugin-http.controller";
 import { PluginLlmService } from "./llm/plugin-llm.service";
+import { PluginMarketModule } from "./market/market.module";
 
 @Global()
 @Module({
-  imports: [forwardRef(() => AuthModule), RemoteWorkspaceModule, JobsModule],
+  imports: [forwardRef(() => AuthModule), RemoteWorkspaceModule, JobsModule, PluginMarketModule],
   controllers: [PluginsController, PluginHttpController],
   providers: [
     PluginManager,
