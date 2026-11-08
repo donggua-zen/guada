@@ -40,14 +40,13 @@ __gdPerf.exportJSON()  // 导出 JSON 字符串（可保存做前后对比）
 | `session.listPainted` | 骨架屏隐藏 → 首次绘制（double rAF，250ms 兜底；后台标签页 rAF 暂停时用兜底） |
 | `session.listUnmount` | 骨架屏出现 → 旧列表卸载完成（nextTick） |
 | `group.build` | `groupContentsForDisplay` 分组构建；meta：`blocks`、`groups` |
-| `markdown.parse` / `markdown.diff` | 流式更新时的同步 Markdown 解析、diff-dom；meta：`chars` / `html` |
+| `markdown.parse` / `markdown.diff` | 流式更新时的 Markdown 渲染与 diff-dom。流式期间喂给渲染的值按 150ms 节流，且稳定块复用块级缓存，只重解析尾部 2 块；meta：parse 的 `chars`/`blocks`/`reused`，diff 的 `html` |
 | `markdown.initial.parse` / `markdown.initial.dom` | 挂载首渲染的同步解析、`innerHTML` 写入；meta：`chars` |
 | `outline.recompute` | 大纲 `outlineItems` 重算；meta：`turns` |
 | `fileChanges.compute` | 回合级文件变更聚合（每个 write/edit 跑一次 `diffLines`）；meta：`blocks`、`edits`、`chars` |
 | `diff.countLines` | `countDiffLines` 单次行级 diff；meta：`oldChars`、`newChars` |
 | `thinking.preview` | 思考摘要（`split('\n')` 全文）；meta：`chars` |
-| `turnItem.deepWatch` | 分组 deep watch 触发次数（纯计数） |
-| `scroll.groupBody` / `scroll.bottom` | 两处贴底布局读写耗时 |
+| `scroll.bottom` | 外层滚动容器贴底布局读写耗时（`useScrollAnchor`） |
 | `toolCalls.rowDisplays` / `toolCalls.rendererInfos` | 工具行 computed 重算（含 `partialParse`）；meta：`calls` |
 | `vue.<Component> mount` / `init` / `render` / `patch` | Vue 内置组件阶段 measure（需 `app.config.performance`）：同步挂载总耗时、setup、渲染函数、子树 patch；`mount`/`patch` 含子组件 |
 
@@ -200,28 +199,28 @@ v1 已知限制：占位高度是固定 800px 估算（上方挂载时做高度�
 
 - `live.chunk.*`：`text_delta` 次数通常最多，单次耗时应很小；`tool_calls_response` 若偏高，
   与 `findBlockByToolCallId` 全树扫描有关。
-- `markdown.parse` / `markdown.diff`：与正文长度成正比，每次 delta 全量重解析；
-  整条消息累计呈 O(L²) 量级。
+- `markdown.parse` / `markdown.diff`：流式期间按 150ms 窗口合并渲染（不再是每个 delta 一次），
+  稳定块（除尾部 2 块外）复用缓存 HTML；单次成本仍随尾部块/代码块体积增长，但整条消息累计
+  不再是 O(L²)。看 `meta.reused/blocks` 判断缓存命中比例。
 - `outline.recompute`：每次 delta 重算全部回合预览，固定成本。
-- `turnItem.deepWatch` 计数：与 delta 次数同量级即符合预期。
 
 ### 3. 交互与滚动
 
 展开/收起分组、连续滚动、点击「回到底部」，然后 report。
 
-重点看 `scroll.groupBody` / `scroll.bottom` 的 p95 与长任务。两处都会强制布局读
-（`scrollHeight`）+ 写（`scrollTop`）。
+重点看 `scroll.bottom` 的 p95 与长任务。它会强制布局读（`scrollHeight`）+ 写（`scrollTop`）。
+流式贴底统一由外层 `ScrollContainer` / `useScrollAnchor` 的 ResizeObserver 驱动，
+可结合 `chat.contentResize` 计数一起看（每次内容尺寸变化 = 一次重排）。
 
 ## 解读顺序
 
 按 `totalMs` 降序看，先区分「固定成本」与「随内容量增长」：
 
-1. `markdown.parse` / `markdown.diff` —— 随正文长度增长，流式期间是主成本。
+1. `markdown.parse` / `markdown.diff` —— 已做 150ms 节流 + 稳定块缓存；继续观察 `meta.reused` 比例与尾部块大小。
 2. `outline.recompute` —— 与新增内容量不成正比的固定成本（每 delta 全量扫回合）。
-3. `turnItem.deepWatch` —— 深遍历固定成本，只能看触发次数与长任务间接判断。
-4. `group.build` —— 每 delta 全量重建 DisplayItem/DisplayGroup 对象。
-5. `toolCalls.*` —— 参数增量到达时重复 `partialParse`。
-6. `replay.foldEvents` —— 仅在打开/翻页时发生，但随已加载事件数线性增长、随页数二次增长。
+3. `group.build` —— 每 delta 全量重建 DisplayItem/DisplayGroup 对象。
+4. `toolCalls.*` —— 参数增量到达时重复 `partialParse`。
+5. `replay.foldEvents` —— 仅在打开/翻页时发生，但随已加载事件数线性增长、随页数二次增长。
 
 需要火焰图级别的下钻时，配合 Electron / Chrome DevTools 的 Performance 面板；
 dev 下已设置 `app.config.performance = true`，Vue DevTools 的 Performance 时间线可直接

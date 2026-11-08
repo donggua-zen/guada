@@ -8,9 +8,8 @@
       <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
         <span class="shrink-0 text-gray-700 dark:text-gray-300 font-medium"
           :class="{ 'shimmer-text': isThinking }">{{ isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone') }}</span>
-        <!-- 摘要：思考内容最后一行（思考中实时跟随，结束后保留） -->
-        <span v-if="previewText" class="text-sm ml-2 truncate"
-          :class="{ 'shimmer-text': isThinking }">{{ previewText }}</span>
+        <!-- 摘要：思考内容最后一行，仅思考中实时跟随；结束后只剩「已深度思考 + 时长」 -->
+        <span v-if="isThinking && previewText" class="text-sm ml-2 truncate shimmer-text">{{ previewText }}</span>
         <span v-if="thinkingDuration" class="shrink-0 text-xs text-gray-400 ml-2">
           {{ formattedDuration }}
         </span>
@@ -23,8 +22,8 @@
     <!-- 内容区：仅展开时渲染；折叠态为纯单行步骤，与工具行完全一致 -->
     <div v-if="isExpanded" class="thinking-section__content-wrapper text-sm">
       <div class="thinking-content">
-        <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
-          :content="reasoningContent" />
+      <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
+        :content="reasoningContent" :streaming="isThinking" />
       </div>
     </div>
 
@@ -32,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, inject } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { BrainCircuit20Regular, ChevronDown12Regular } from '@vicons/fluent';
 import MarkdownContent from '../../ui/MarkdownContent.vue';
@@ -55,13 +54,7 @@ const emit = defineEmits<{
 
 const isExpanded = ref(false);
 
-// 从 ChatPanel 注入锁定滚动方法，展开思考内容时调用
-const lockScrollAnchor = inject<() => void>('lockScrollAnchor', () => {});
-
 const handleToggle = () => {
-  if (!isExpanded.value) {
-    lockScrollAnchor();
-  }
   isExpanded.value = !isExpanded.value;
 };
 

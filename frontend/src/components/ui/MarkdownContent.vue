@@ -5,11 +5,13 @@
     </div>
 </template>
 <script setup lang="ts">
-import { watch, ref, onMounted, onBeforeUnmount } from 'vue';
+import { watch, ref, onMounted, computed } from 'vue';
 
 import { useI18n } from 'vue-i18n';
 import { useMarkdown, delegateMarkdownCodeClick } from "../../composables/useMarkdown";
 import { useDiffDOM } from "../../composables/useDiffDOM";
+import { useThrottledValue } from "../../composables/useThrottledValue";
+import { createBlockCachedRenderer, type BlockRenderResult } from "../../utils/markdownBlocks";
 import { DiffDOM } from 'diff-dom';
 import { perfStart } from '../../utils/perf';
 import { toast } from '@/components/ui/toastService';
@@ -28,9 +30,22 @@ const handleCodeBlockClick = (event: MouseEvent) => {
 
 
 // 定义 Props - 类型化
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     content: string;
-}>();
+    /** 流式正文：渲染值走节流（150ms），避免每个 SSE chunk 整篇 parse + 全树 diff */
+    streaming?: boolean;
+}>(), {
+    streaming: false,
+});
+
+// 流式节流：leading 立即、trailing 必达；非流式（静态文档/面板切换）走原值立即渲染，
+// 不会出现"切内容后仍显示上一份"的滞后（与 PlanPanel 的条件节流策略一致）。
+const STREAM_RENDER_INTERVAL_MS = 150;
+const throttledContent = useThrottledValue(() => props.content, STREAM_RENDER_INTERVAL_MS);
+const renderedContent = computed(() => (props.streaming ? throttledContent.value : props.content));
+
+// 块级渲染缓存：流式追加时复用稳定块的 HTML，只重渲染尾部块
+const blockRenderer = createBlockCachedRenderer(marked);
 
 // ============================================
 // DOM 节点级增量更新（使用 diff-dom）
@@ -48,25 +63,37 @@ onMounted(() => {
 /**
  * 初始渲染：直接解析 Markdown，不进行 diff 对比
  */
-const initialRender = async () => {
-    if (!markdownContainerRef.value || !props.content) return;
-    const chars = props.content.length;
+const initialRender = () => {
+    const container = markdownContainerRef.value;
+    if (!container) return;
 
-    // marked 配置为 async:false：只对同步 parse 计时。
-    // 不能把 await 之后的微任务等待算进来——226 个块同一次挂载时区间会互相吞并。
-    const parseSpan = perfStart('markdown.initial.parse');
-    let parsed: string | Promise<string>;
-    try {
-        parsed = marked.parse(props.content) as string | Promise<string>;
-    } finally {
-        parseSpan?.end({ chars });
+    const content = renderedContent.value;
+    if (!content) {
+        blockRenderer.reset();
+        container.innerHTML = '';
+        lastRenderedHTML = '';
+        return;
     }
-    const newHTML = await parsed;
+
+    const chars = content.length;
+
+    // 块级渲染是同步的（marked async:false），只对同步 parse 计时。
+    const parseSpan = perfStart('markdown.initial.parse');
+    let result: BlockRenderResult | null = null;
+    try {
+        result = blockRenderer.render(content);
+    } catch (error) {
+        console.error('[MarkdownContent] Markdown 解析失败:', error);
+        return;
+    } finally {
+        parseSpan?.end({ chars, blocks: result?.blocks ?? 0, reused: result?.reused ?? 0 });
+    }
+    if (!result) return;
 
     const domSpan = perfStart('markdown.initial.dom');
     try {
-        markdownContainerRef.value.innerHTML = newHTML;
-        lastRenderedHTML = newHTML;
+        container.innerHTML = result.html;
+        lastRenderedHTML = result.html;
     } finally {
         domSpan?.end({ chars });
     }
@@ -76,20 +103,37 @@ const initialRender = async () => {
  * 使用 diff-dom 进行增量更新
  * 专业的 DOM 差异对比和更新库
  */
-const renderWithDiffDOM = async () => {
-    // 局部常量承载 ref 值：await 会使模板窄化失效，后文需以非空值调用 diff-dom
+const renderWithDiffDOM = () => {
+    // 局部常量承载 ref 值：diff-dom 调用需要非空值
     const container = markdownContainerRef.value;
-    if (!container || !props.content) return;
+    if (!container) return;
 
-    // 1. 将最新的 Markdown 解析为 HTML（只计同步 parse，await 语义保持不变）
-    const parseSpan = perfStart('markdown.parse');
-    let parsed: string | Promise<string>;
-    try {
-        parsed = marked.parse(props.content) as string | Promise<string>;
-    } finally {
-        parseSpan?.end({ chars: props.content.length });
+    const content = renderedContent.value;
+
+    // 内容变空（编辑清空/切换）时必须清掉旧 DOM，否则残留上一份内容
+    if (!content) {
+        blockRenderer.reset();
+        if (lastRenderedHTML !== '') {
+            container.innerHTML = '';
+            lastRenderedHTML = '';
+        }
+        return;
     }
-    const newHTML = await parsed;
+
+    // 1. 渲染为最新 HTML（稳定块复用缓存，尾部块重渲染并高亮）
+    const parseSpan = perfStart('markdown.parse');
+    let result: BlockRenderResult | null = null;
+    try {
+        result = blockRenderer.render(content);
+    } catch (error) {
+        // 解析失败保留上一帧 DOM，避免整块内容被清空
+        console.error('[MarkdownContent] Markdown 解析失败:', error);
+        return;
+    } finally {
+        parseSpan?.end({ chars: content.length, blocks: result?.blocks ?? 0, reused: result?.reused ?? 0 });
+    }
+    if (!result) return;
+    const newHTML = result.html;
 
     // 2. 与上一次渲染的 HTML 进行比较
     if (newHTML === lastRenderedHTML) {
@@ -107,49 +151,36 @@ const renderWithDiffDOM = async () => {
         const diffs = diffEngine.diff(container, tempContainer);
 
         if (diffs && diffs.length > 0) {
-            // 应用差异
-            if (!diffEngine) return;
+            const applied = diffEngine.apply(container, diffs);
 
-            const result = diffEngine.apply(container, diffs);
-
-            if (result !== false && result !== undefined) {
+            if (applied !== false && applied !== undefined) {
                 // 5. 更新记录
-                lastRenderedHTML = newHTML as string;
-
-                // 6. 触发事件
-            
+                lastRenderedHTML = newHTML;
             } else {
                 console.error('[Markdown-DiffDOM] Failed to apply changes');
             }
         } else {
-            lastRenderedHTML = newHTML as string;
+            lastRenderedHTML = newHTML;
         }
     } catch (error) {
         console.error('[Markdown-DiffDOM] Error:', error);
 
         // 降级方案：全量替换
         console.warn('[Markdown-DiffDOM] Fallback to full replacement');
-        container.innerHTML = newHTML as string;
-        lastRenderedHTML = newHTML as string;
-    
+        container.innerHTML = newHTML;
+        lastRenderedHTML = newHTML;
     } finally {
         diffSpan?.end({ html: newHTML.length });
     }
 };
 
-// 监听 content 变化，直接渲染
+// 监听渲染值变化（流式时是节流后的值）
 watch(
-    () => props.content,
+    renderedContent,
     () => {
         renderWithDiffDOM();
     },
 );
-
-// 生命周期：清理资源
-onBeforeUnmount(() => {
-    // useDebounceFn 返回的函数不需要手动清理
-    // VueUse 会自动处理
-});
 </script>
 
 <style scoped>

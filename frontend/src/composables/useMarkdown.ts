@@ -4,7 +4,6 @@ import {
   type Renderer,
   type Tokens,
 } from "marked";
-import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js/lib/core";
 import markdownCssRaw from "@/assets/markdown.css?raw";
 import hljsCssRaw from "highlight.js/styles/foundation.css?raw";
@@ -202,16 +201,7 @@ export function delegateMarkdownCodeClick(
  * 创建 Marked 实例
  */
 export function createMarkedInstance(options?: MarkdownOptions): Marked {
-  const marked = new Marked(
-    markedHighlight({
-      emptyLangClass: "hljs",
-      langPrefix: "hljs language-",
-      highlight(code: string, lang: string): string {
-        const language = hljs.getLanguage(lang) ? lang : "plaintext";
-        return hljs.highlight(code, { language }).value;
-      },
-    }),
-  );
+  const marked = new Marked();
 
   const renderer: Partial<CustomRenderer> = {
     table(table: Tokens.Table): string {
@@ -239,6 +229,10 @@ export function createMarkedInstance(options?: MarkdownOptions): Marked {
       const lines = code.text.split("\n").length;
       // 折叠与否按行数判定（对齐 Qoder 的 280px 折叠高度）：读 DOM 尺寸会在流式期反复触发强制布局
       const collapsible = lines > CODE_COLLAPSE_MIN_LINES;
+      // 高亮放在 renderer 而不是 lex 的 walkTokens：块级缓存复用的稳定块不再重复跑
+      // hljs（旧实现由 marked-highlight 在 lex 阶段高亮整篇所有代码块，缓存无法省掉）。
+      const grammar = hljs.getLanguage(lang) ? lang : "plaintext";
+      const highlighted = hljs.highlight(code.text, { language: grammar }).value;
       return `
         <div class="custom-code-block${collapsible ? " is-collapsible" : ""}">
           <div class="code-header">
@@ -248,7 +242,7 @@ export function createMarkedInstance(options?: MarkdownOptions): Marked {
               <button class="copy-code-button" title="复制代码">${copySvg}</button>
             </span>
           </div>
-          <div class="code-scroll"><pre class="hljs language-${lang}"><code class="hljs language-${lang}">${code.text}</code></pre></div>
+          <div class="code-scroll"><pre class="hljs language-${lang}"><code class="hljs language-${lang}">${highlighted}</code></pre></div>
           ${collapsible ? `<button class="code-expand" aria-expanded="false" title="展开/收起代码块">${chevronSvg}</button>` : ""}
         </div>
       `;
