@@ -482,9 +482,26 @@ ${html}
     if (e.button === 2) return;
     parent.postMessage({ type: 'md-preview-dismiss-menu' }, '*');
   }, true);
-  document.addEventListener('scroll', function(){
-    parent.postMessage({ type: 'md-preview-dismiss-menu' }, '*');
-  }, true);
+  // 滚动位置上报（capture 阶段）：iframe 文档被 srcdoc 更新整体重建后，
+  // 父页面凭此记录，在 load 后下发恢复，避免外部修改/手动刷新时滚动条跳回顶部；
+  // 同时沿用原职责——滚动时通知父页面关闭右键菜单
+  var se = document.scrollingElement;
+  if (se) {
+    document.addEventListener('scroll', function(){
+      parent.postMessage({ type: 'md-preview-dismiss-menu' }, '*');
+      parent.postMessage({ type: 'md-preview-scroll', top: se.scrollTop, height: se.scrollHeight }, '*');
+    }, true);
+    // 父页面在 iframe load 后下发：按新旧文档高度比例换算，内容增删时保持相对位置，
+    // 浏览器会把超出范围的值 clamp 到合法区间
+    window.addEventListener('message', function(e){
+      var d = e.data;
+      if (!d || d.type !== 'md-preview-restore-scroll') return;
+      var target = d.height > 0 && d.height !== se.scrollHeight
+        ? d.top * se.scrollHeight / d.height
+        : d.top;
+      se.scrollTop = target;
+    });
+  }
 })();
 <\/script>
 </body></html>`;

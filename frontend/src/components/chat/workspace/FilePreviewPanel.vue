@@ -143,7 +143,8 @@
 
                     <!-- Markdown 渲染模式（iframe srcdoc + <base> 让浏览器原生解析相对路径） -->
                     <iframe v-else-if="isMarkdownFile && renderMode === 'rendered'" :srcdoc="markdownSrcDoc"
-                        ref="markdownIframeRef" class="w-full border-0" style="height: 100%;background-color: transparent !important;
+                        ref="markdownIframeRef" @load="onMarkdownIframeLoad"
+                        class="w-full border-0" style="height: 100%;background-color: transparent !important;
     color-scheme: light; /* 强制使用浅色模式以确保透明生效 */" allowtransparency="true" sandbox="allow-same-origin allow-scripts" />
 
                     <!-- 编辑模式：md/html/svg 切到源码时，以及所有无渲染形态的文本文件
@@ -176,6 +177,7 @@
 <script setup lang="ts">
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { decidePreviewRefresh } from '@/utils/previewRefresh'
+import { recordMarkdownScroll, consumeMarkdownScrollRestore } from '@/composables/useMarkdownScrollState'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 
 import GdButton from '@/components/ui/GdButton.vue';
@@ -765,7 +767,21 @@ function onMarkdownMessage(e: MessageEvent): void {
     } else if (data.type === 'md-preview-dismiss-menu') {
         // iframe 内的点击/滚动不会冒泡到父页面，需由此显式关闭菜单
         contextMenuVisible.value = false
+    } else if (data.type === 'md-preview-scroll') {
+        // 记录最后滚动位置：文档被 srcdoc 更新整体重建时用于 load 后恢复
+        recordMarkdownScroll(selectedFile.value?.path || '', {
+            top: Number(data.top) || 0,
+            scrollHeight: Number(data.height) || 0,
+        })
     }
+}
+
+/** iframe 文档（重新）加载完成：同文件的滚动记忆仍在则下发恢复，切文件/首次打开无记录自然回顶 */
+function onMarkdownIframeLoad(): void {
+    const restore = consumeMarkdownScrollRestore(selectedFile.value?.path || '')
+    if (!restore) return
+    markdownIframeRef.value?.contentWindow?.postMessage(
+        { type: 'md-preview-restore-scroll', top: restore.top, height: restore.scrollHeight }, '*')
 }
 
 // ── 选区提取 + Snip 构建 ──
