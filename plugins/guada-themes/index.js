@@ -58,6 +58,9 @@ const THEMES = [
     secondaryColor: "#3a9b3a",
     mode: "light",
   },
+  { id: "qi-cel", name: "柒·义体夜航", primaryColor: "#a84b34", secondaryColor: "#4a585f" },
+  // qi-dusk（柒·残月都市）已迁出为独立外置皮肤插件 plugins/qi-dusk-skin/：
+  // 主题带大体积图片资源（原始 PNG ~6MB），不适合随安装包内置，见该插件 index.js 头注。
 ];
 
 class GuadaThemesPlugin {
@@ -82,6 +85,7 @@ class GuadaThemesPlugin {
         primaryColor: t.primaryColor,
         secondaryColor: t.secondaryColor,
         mode: t.mode,
+        ownsBackground: t.ownsBackground,
         cssFile: `themes/${t.id}.css`,
       });
     }

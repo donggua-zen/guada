@@ -1,0 +1,582 @@
+/* ============================================================
+   主题：柒（义体夜航 · 暗舱 / 夜视）
+   风格：原创 IP「柒」· 后启示录机器人 · 平涂赛璐璐 + HUD 终端
+   ============================================================
+   配色来自立绘实测（不是凭手感）：重采样到 360×640、剔除 >242 的平涂白底
+   （非背景像素占 29.2%）后分区统计——HEAD/TORSO 主簇是暖墨 #2a2a24 一族、
+   LEGS 近黑 #181212、装甲中灰 #5a4e4e、发丝高光 #e0e0e0；全图唯一的高饱和簇是
+   #c07860（167 px，hue≈12°，赤陶锈红），既是眼睛也是标识色。
+   锈红原色压白字只有 3.44:1，做按钮底要压深到 #a84b34（5.64:1）。
+
+   角色定位是电影版素子那一路的高冷，所以主体要有末日 / 未来感。
+   「往哪压暗」是有讲究的：前端里 87 个文件用了 dark: 配对、`text-gray-800/900`
+   出现 142 次、`bg-white` 23 次，这些都不吃 --gd-* token，只跟 html.dark 分支。
+   也就是说「亮色模式整体压暗」会让黑压黑满地都是。所以分工是：
+     亮色 = 冷钢舱 + 一块黑终端屏（靠材质：接缝、铆钉、HUD 网格、警示斜纹、等宽读数）
+     暗色 = 暗舱夜视（整舱沉到 #0d1214，连屏也收成灰绿——这条路上那些 dark: 配对本就对）
+
+   顶栏颜色还有一条硬约束（实测）：Windows 三态钮是 Electron 原生 titleBarOverlay
+   （electron/main.ts:1705 底色 #00000000），符号色由 CustomTitlebar.vue:60 在 mount 时
+   用 titlebarIsLight() 算一次——它对 R/G/B 取裸加权和（0.2126r+0.7152g+0.0722b）跟 140 比，
+   且只监听 html 的 class/style/data-theme 属性变化；主题 <link> 生效不算事件，
+   而那会儿读到的还是 style.css:119 的基础值 #f6f6f6（浅）→ 给出黑符号。
+   所以亮色顶栏必须留在「裸亮度 > 140」这一侧：#a8b8bd = 181，黑符号正好是对的；
+   再深一档的 #7d929b 只有 142，余量太薄，不用。
+   渲染层改成按主题样式表实际生效再同步一次（公共层，待批）之后，亮色才允许用深顶栏。
+   ============================================================ */
+
+/* ---------- 亮色：冷钢舱 + 黑终端屏 ----------
+   选择器一律带 html：只写 [data-theme]（0,1,0）会输给 html.dark（0,1,1），
+   红白机主题就是这么让亮色块压不住暗色块的 */
+html[data-theme="qi-cel"] {
+  --qi-ink: #1c2427;          /* 冷墨（立绘的暖墨 #23231f 转向钢青，气质更素子） */
+  --qi-line: #2b3538;         /* 2px 描线 */
+  --qi-hull: #eef1f1;         /* 舱底 */
+  --qi-screen: #f8faf9;       /* 亮屏（正文卡） */
+  --qi-panel: #d7e0e2;        /* 凸起面板：输入坞 */
+  --qi-canopy: #a8b8bd;       /* 舱顶（裸亮度 181，见文件头） */
+  --qi-seam: #6f8188;         /* 1px 接缝细线 */
+  --qi-seam-soft: #c2cdd1;
+  --qi-rivet: #8b9ba1;        /* 铆钉 / 滑块 */
+  --qi-shade: #dfe5e6;        /* 二分阴影面 */
+  --qi-rust: #a84b34;
+  --qi-mark: #c07860;         /* 立绘实测原色，只做装饰与标识 */
+  --qi-hud: #0d6a76;          /* 屏内链接青：亮屏上 6.00:1 */
+  --qi-hud-bright: #4fd7e0;   /* 只进深色终端块；压浅底只有 1.9:1，绝不用作浅底文字 */
+  --qi-term: #162024;         /* 终端块 */
+  --qi-term-head: #0c1216;
+  --qi-hazard: rgba(176, 120, 20, 0.55);
+
+  --gd-color-primary: var(--qi-rust);
+  --gd-color-primary-hover: #8f3d2a;
+  --gd-color-primary-active: #7a3322;
+  --gd-color-primary-text: #ffffff;
+  --gd-color-secondary: #4a585f;
+  --gd-color-secondary-hover: #3d4a50;
+  --gd-color-secondary-active: #334046;
+  --gd-color-secondary-text: #ffffff;
+
+  --gd-color-text: var(--qi-ink);        /* 舱底 13.89:1 / 亮屏 15.05:1 */
+  --gd-color-text-gray: #5a6a6e;         /* 4.97:1 */
+  --gd-color-text-disabled: #68767a;     /* 3.90:1（更浅的 #7c8b8f 只有 3.11，压不住） */
+  --gd-color-bg: var(--qi-hull);
+  --gd-color-surface: var(--qi-screen);
+  --gd-color-border: var(--qi-seam);
+  --gd-color-surface-border: var(--qi-seam-soft);
+
+  --gd-color-sidebar-bg: #dfe5e6;
+  --gd-color-sidebar-bg-hover: #d2dade;
+  --gd-color-sidebar-bg-active: var(--qi-rust);
+  --gd-color-sidebar-text: var(--qi-ink);
+  --gd-color-sidebar-text-hover: var(--qi-ink);
+  --gd-color-sidebar-text-active: #ffffff;
+
+  --gd-color-titlebar-bg: var(--qi-canopy);
+  --gd-color-titlebar-border: var(--qi-line);
+  --gd-titlebar-text-color: var(--qi-ink);
+  --gd-titlebar-hover-bg: #98abb2;
+
+  --gd-color-conversation-bg: var(--qi-hull);
+  --gd-color-conversation-text: var(--qi-ink);
+  --gd-color-conversation-border: var(--qi-seam-soft);
+  --gd-color-conversation-bg-active: var(--qi-rust);
+  --gd-color-conversation-text-active: #ffffff;
+  --gd-color-conversation-bg-hover: #dfe5e6;
+  --gd-color-conversation-text-hover: var(--qi-ink);
+
+  /* 她身上的暖色只留三处：用户气泡、主按钮、危险件；其余全是钢与青 */
+  --gd-color-bubble-user-bg: var(--qi-rust);
+  --gd-color-bubble-user-text: #ffffff;
+  --gd-color-bubble-user-border: var(--qi-line);
+  --gd-color-bubble-assitant-bg: var(--qi-screen);
+  --gd-color-bubble-assitant-text: var(--qi-ink);
+  --gd-color-bubble-assitant-border: var(--qi-line);
+  --gd-color-bubble-assitant-text-strong: var(--qi-hud);
+
+  --gd-color-input-bg: var(--qi-panel);
+  --gd-color-input-border: var(--qi-line);
+  --gd-color-dialog-bg: var(--qi-screen);
+
+  /* 代码块是一块黑终端屏嵌在亮舱里——这是「未来感」最省力的那一笔，
+     而且自带高对比，不影响正文阅读（终端内正文实测 13.14:1） */
+  --gd-code-block-bg: var(--qi-term);
+  --gd-md-fill-tertiary: var(--qi-term);
+  --gd-md-radius: 3px;
+  --gd-md-inline-code-radius: 2px;
+  --gd-md-code-header-text: #4fd7e0;
+  --gd-md-accent: #0d6a76;               /* 链接（markdown.css:128 消费） */
+
+  /* 语法高亮：终端块底 #162024 上的配色 */
+  --gd-md-syntax-text: #dfe6e9;
+  --gd-md-syntax-keyword: #4fd7e0;
+  --gd-md-syntax-string: #58d3a6;
+  --gd-md-syntax-number: #e0b83f;
+  --gd-md-syntax-comment: #7d8f96;
+  --gd-md-syntax-function: #eaf1f3;
+  --gd-md-syntax-type: #7fb0c4;
+  --gd-md-syntax-property: #d98b72;
+  --gd-md-syntax-tag: #4fd7e0;
+  --gd-md-syntax-punctuation: #9fb0b6;
+
+  /* 状态灯三件：在线 / 低功率 / 受损。填充时白字，作前景压浅屏也够 */
+  --gd-color-success: #0f7a5f;   /* 亮屏 5.05:1 */
+  --gd-color-warning: #8a5a00;   /* 5.65:1 */
+  --gd-color-danger: #a02a1e;    /* 前景 7.04:1 / 白字填充 7.38:1 */
+  --gd-color-success-text: #ffffff;
+  --gd-color-warning-text: #ffffff;
+  --gd-color-danger-text: #ffffff;
+
+  /* 平涂不是像素画：小圆角留着，风格靠描线、接缝与光。
+     字号一律不动——动 --gd-size-text-base 会顺着 markdown.css 的派生除法
+     把整页推回半像素（红白机实测 98 处） */
+  --gd-size-surface-radius: 4px;
+  --gd-size-rounded-radius: 4px;
+  --gd-size-dialog-rounded-radius: 6px;
+  --gd-size-overview-panel-radius: 4px;
+  --gd-layout-card-radius: 4px;
+}
+
+/* ---------- 暗色：暗舱夜视 ----------
+   这一档才让整舱沉下去。两条要点：
+   1) 描线换材质——夜里没有黑线，线是抬起的接缝 #26343a，落影走纯黑；
+   2) 夜视仪的颜色是灰绿不是纯黑，所以文字偏青白，屏也收成 #171f22 而不是惨白。 */
+html.dark[data-theme="qi-cel"] {
+  --qi-ink: #dbe6e9;
+  --qi-line: #26343a;
+  --qi-hull: #0d1214;
+  --qi-screen: #171f22;
+  --qi-panel: #1a2429;
+  --qi-canopy: #0a0f11;
+  --qi-seam: #33454c;
+  --qi-seam-soft: #26343a;
+  --qi-rivet: #3d5158;
+  --qi-shade: #10181b;
+  --qi-rust: #b8563c;
+  --qi-mark: #d98b72;
+  --qi-hud: #62e3ee;
+  --qi-hud-bright: #62e3ee;
+  --qi-term: #080d0f;
+  --qi-term-head: #05090b;
+  --qi-hazard: rgba(224, 184, 63, 0.6);
+
+  --gd-color-primary: #b8563c;
+  --gd-color-primary-hover: #c9674c;
+  --gd-color-primary-active: #99452f;
+  --gd-color-primary-text: #ffffff;
+  --gd-color-secondary: #62e3ee;
+  --gd-color-secondary-hover: #7debf4;
+  --gd-color-secondary-active: #45c8d4;
+  --gd-color-secondary-text: #06222a;
+
+  --gd-color-text: #dbe6e9;            /* 舱底 14.93:1 */
+  --gd-color-text-gray: #9fb0b6;       /* 7.52:1 */
+  --gd-color-text-disabled: #6d7f86;   /* 4.04:1 */
+  --gd-color-bg: var(--qi-hull);
+  --gd-color-surface: var(--qi-screen);
+  --gd-color-border: var(--qi-seam);
+  --gd-color-surface-border: var(--qi-seam-soft);
+
+  --gd-color-sidebar-bg: #131a1d;
+  --gd-color-sidebar-bg-hover: #1a2429;
+  --gd-color-sidebar-bg-active: #b8563c;
+  --gd-color-sidebar-text: #dbe6e9;
+  --gd-color-sidebar-text-hover: #eaf1f3;
+  --gd-color-sidebar-text-active: #ffffff;
+
+  --gd-color-titlebar-bg: var(--qi-canopy);
+  --gd-color-titlebar-border: var(--qi-seam);
+  --gd-titlebar-text-color: #dbe6e9;
+  --gd-titlebar-hover-bg: #1a2429;
+
+  --gd-color-conversation-bg: var(--qi-hull);
+  --gd-color-conversation-text: #dbe6e9;
+  --gd-color-conversation-border: var(--qi-seam-soft);
+  --gd-color-conversation-bg-active: #b8563c;
+  --gd-color-conversation-text-active: #ffffff;
+  --gd-color-conversation-bg-hover: #1a2429;
+  --gd-color-conversation-text-hover: #eaf1f3;
+
+  --gd-color-bubble-user-bg: #b8563c;
+  --gd-color-bubble-user-text: #ffffff;
+  --gd-color-bubble-user-border: #04070a;
+  --gd-color-bubble-assitant-bg: var(--qi-screen);
+  --gd-color-bubble-assitant-text: #dbe6e9;
+  --gd-color-bubble-assitant-border: var(--qi-seam);
+  --gd-color-bubble-assitant-text-strong: #62e3ee;
+
+  --gd-color-input-bg: var(--qi-panel);
+  --gd-color-input-border: var(--qi-seam);
+  --gd-color-dialog-bg: #131a1d;
+  --gd-code-block-bg: var(--qi-term);
+  --gd-md-fill-tertiary: var(--qi-term);
+  --gd-md-radius: 3px;
+  --gd-md-inline-code-radius: 2px;
+  --gd-md-code-header-text: #62e3ee;
+  --gd-md-accent: #62e3ee;
+  --gd-md-syntax-text: #dbe6e9;
+  --gd-md-syntax-keyword: #62e3ee;
+  --gd-md-syntax-string: #58d3a6;
+  --gd-md-syntax-number: #e0b83f;
+  --gd-md-syntax-comment: #7d8f96;
+  --gd-md-syntax-function: #eaf1f3;
+  --gd-md-syntax-type: #7fb0c4;
+  --gd-md-syntax-property: #d98b72;
+  --gd-md-syntax-tag: #62e3ee;
+  --gd-md-syntax-punctuation: #9fb0b6;
+
+  /* 夜里语义色是「提亮」方向，实心件的字必须成对翻深（白压浅红只有 2.x:1） */
+  --gd-color-success: #58d3a6;
+  --gd-color-warning: #e0b83f;
+  --gd-color-danger: #f08074;
+  --gd-color-success-text: #04211a;
+  --gd-color-warning-text: #221a00;
+  --gd-color-danger-text: #2a0605;
+
+  --gd-size-surface-radius: 4px;
+  --gd-size-rounded-radius: 4px;
+  --gd-size-dialog-rounded-radius: 6px;
+  --gd-size-overview-panel-radius: 4px;
+  --gd-layout-card-radius: 4px;
+}
+
+/* ============================================================
+   描线与落影：一致粗细的外线 + 不模糊的位移硬影
+   ============================================================ */
+html[data-theme="qi-cel"] .global-sidebar {
+  border-right: 2px solid var(--qi-seam-soft);
+  box-shadow: none;
+}
+html[data-theme="qi-cel"] .workspace-sidebar {
+  border-left: 2px solid var(--qi-seam-soft);
+}
+html[data-theme="qi-cel"] .custom-titlebar {
+  border-bottom: 2px solid var(--qi-line);
+}
+html.dark[data-theme="qi-cel"] .custom-titlebar { border-bottom-color: var(--qi-seam) }
+
+html[data-theme="qi-cel"] .assistant-section .message-item__card,
+html[data-theme="qi-cel"] .user-section .message-item__card,
+html[data-theme="qi-cel"] .input-area,
+html[data-theme="qi-cel"] .gd-button,
+html[data-theme="qi-cel"] .gd-tag,
+html[data-theme="qi-cel"] .gd-popover,
+html[data-theme="qi-cel"] .l-dialog,
+html[data-theme="qi-cel"] .custom-code-block,
+html[data-theme="qi-cel"] .gd-select,
+html[data-theme="qi-cel"] .gd-input,
+html[data-theme="qi-cel"] .gd-date-picker,
+html[data-theme="qi-cel"] .gd-time-picker,
+html[data-theme="qi-cel"] .avatar-image {
+  border-width: 2px;
+  border-style: solid;
+}
+html[data-theme="qi-cel"] .assistant-section .message-item__card,
+html[data-theme="qi-cel"] .gd-popover,
+html[data-theme="qi-cel"] .l-dialog,
+html[data-theme="qi-cel"] .custom-code-block {
+  border-color: var(--qi-line);
+  box-shadow: 3px 3px 0 rgba(20, 32, 38, 0.22);
+}
+html.dark[data-theme="qi-cel"] .assistant-section .message-item__card,
+html.dark[data-theme="qi-cel"] .gd-popover,
+html.dark[data-theme="qi-cel"] .l-dialog,
+html.dark[data-theme="qi-cel"] .custom-code-block {
+  border-color: var(--qi-seam);
+  box-shadow: 3px 3px 0 rgba(4, 8, 10, 0.6);
+}
+/* 实心件的描边显式给色：Tailwind preflight 已把全局 border-style 设成 solid，
+   只写 border-width 会画出 2px currentColor——红白机实测过，白字主按钮会被糊出一圈白边 */
+html[data-theme="qi-cel"] .gd-button { border-color: var(--qi-seam) }
+html[data-theme="qi-cel"] .gd-button[data-variant="primary"],
+html[data-theme="qi-cel"] .gd-button[data-variant="danger"] { border-color: rgba(0, 0, 0, 0.35) }
+html[data-theme="qi-cel"] .gd-button[data-variant="secondary"],
+html[data-theme="qi-cel"] .gd-button[data-variant="warning"] { border-color: rgba(0, 0, 0, 0.3) }
+/* 状态标签描边走 currentColor：标签底是对应语义色的淡底，同色 2px 圈才是
+   赛璐璐的「色块 + 线」；不显式给会继承成 transparent，白占 4px 却没有线 */
+html[data-theme="qi-cel"] .gd-tag { border-color: currentColor }
+html[data-theme="qi-cel"] .gd-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 rgba(20, 32, 38, 0.22);
+}
+html[data-theme="qi-cel"] .session-item-active,
+html[data-theme="qi-cel"] .nav-item-active,
+html[data-theme="qi-cel"] .conversation-item-active {
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.22),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.22);
+}
+
+/* ============================================================
+   平涂二分 + HUD 底纹 + 铆钉
+   ============================================================ */
+
+/* 受光面 / 阴影面之间是硬边界（cel 的「平涂」就在这条线上，柔渐变会把风格抹平）。
+   铆钉与底色写在同一个 background-image 列表里：分成两条规则的话，
+   后写的底色会把先写的铆钉盖掉 */
+html[data-theme="qi-cel"] .assistant-section .message-item__card {
+  background-image:
+    radial-gradient(circle at 8px 8px, rgba(28, 36, 39, 0.24) 0 2px, transparent 2px),
+    radial-gradient(circle at calc(100% - 8px) 8px, rgba(28, 36, 39, 0.24) 0 2px, transparent 2px),
+    linear-gradient(180deg, var(--gd-color-surface) 0 58%, var(--qi-shade) 58% 100%);
+  background-repeat: no-repeat;
+}
+html.dark[data-theme="qi-cel"] .assistant-section .message-item__card {
+  background-image:
+    radial-gradient(circle at 8px 8px, var(--qi-rivet) 0 2px, transparent 2px),
+    radial-gradient(circle at calc(100% - 8px) 8px, var(--qi-rivet) 0 2px, transparent 2px),
+    linear-gradient(180deg, var(--gd-color-surface) 0 58%, var(--qi-hull) 58% 100%);
+}
+html[data-theme="qi-cel"] .gd-popover {
+  background-image: linear-gradient(180deg,
+    var(--gd-color-surface) 0 58%, var(--qi-shade) 58% 100%);
+}
+html.dark[data-theme="qi-cel"] .gd-popover {
+  background-image: linear-gradient(180deg,
+    var(--gd-color-surface) 0 58%, var(--qi-hull) 58% 100%);
+}
+html[data-theme="qi-cel"] .gd-button {
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.45) 0 46%, rgba(255, 255, 255, 0) 46%);
+}
+html.dark[data-theme="qi-cel"] .gd-button {
+  background-image: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.09) 0 46%, rgba(255, 255, 255, 0) 46%);
+}
+
+/* HUD 网格（4px 细格）只铺无信息区：侧栏与顶栏。
+   正文区铺了会啃汉字笔画——比灰底更伤可读性。
+   夜视档在侧栏多压一层 2px 扫描线（只铺壳，不铺屏，不吃正文对比） */
+html[data-theme="qi-cel"] .global-sidebar {
+  background-image:
+    linear-gradient(rgba(13, 106, 118, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(13, 106, 118, 0.06) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+html.dark[data-theme="qi-cel"] .global-sidebar {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.26) 0 2px, rgba(98, 227, 238, 0.02) 2px 4px),
+    linear-gradient(rgba(98, 227, 238, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(98, 227, 238, 0.05) 1px, transparent 1px);
+  background-size: 100% 4px, 4px 4px, 4px 4px;
+}
+/* 舱盖：极淡网格 + 一道内高光，把「灯罩」感做出来 */
+html[data-theme="qi-cel"] .custom-titlebar {
+  background-image:
+    linear-gradient(rgba(28, 36, 39, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(28, 36, 39, 0.05) 1px, transparent 1px);
+  background-size: 4px 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+html.dark[data-theme="qi-cel"] .custom-titlebar {
+  background-image:
+    linear-gradient(rgba(98, 227, 238, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(98, 227, 238, 0.04) 1px, transparent 1px);
+  box-shadow: inset 0 1px 0 rgba(219, 230, 233, 0.08);
+}
+
+/* ============================================================
+   终端条：代码块 header 变成命令行——深底 + 下沿接缝 +
+   语言名大写等宽 + 6px 信号方块
+   ============================================================ */
+html[data-theme="qi-cel"] .custom-code-block {
+  background-color: var(--qi-term);
+  background-image:
+    radial-gradient(circle at 8px 10px, var(--qi-rivet) 0 2px, transparent 2px),
+    radial-gradient(circle at calc(100% - 8px) 10px, var(--qi-rivet) 0 2px, transparent 2px);
+  background-repeat: no-repeat;
+}
+html[data-theme="qi-cel"] .code-header {
+  background-color: var(--qi-term-head);
+  border-bottom: 1px solid var(--qi-seam-soft);
+}
+html.dark[data-theme="qi-cel"] .code-header { border-bottom-color: var(--qi-seam) }
+html[data-theme="qi-cel"] .code-language {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+html[data-theme="qi-cel"] .code-language::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--qi-hud-bright);
+}
+/* 终端块与纸面共用几个 markdown token（--gd-md-text-tertiary 既管纸上的 h6
+   也管块内图标，--gd-md-accent 既管纸上的链接也管按下态图标），
+   一个值伺候不了两种底，所以块内控件的颜色点名给 */
+html[data-theme="qi-cel"] .markdown-text pre,
+html[data-theme="qi-cel"] .code-scroll { color: #dfe6e9 }
+html[data-theme="qi-cel"] .code-actions button { color: #9fb0b6 }
+html[data-theme="qi-cel"] .code-actions button:hover {
+  color: #eaf1f3;
+  background-color: rgba(98, 227, 238, 0.12);
+}
+html[data-theme="qi-cel"] .code-actions button[aria-pressed='true'] { color: var(--qi-hud-bright) }
+html[data-theme="qi-cel"] .code-expand { color: #9fb0b6 }
+
+/* 读数等宽：目录名、token 上限、语言名——像仪表，不像正文。
+   只列实测存在的钩子：时间戳 / 耗时在 DOM 里只有 Tailwind 工具类、没有语义类，
+   主题不写脆弱选择器，等公共层补 class 再接 */
+html[data-theme="qi-cel"] .wdb-name,
+html[data-theme="qi-cel"] .token-limit-control,
+html[data-theme="qi-cel"] .code-language {
+  font-family: var(--gd-font-mono);
+  letter-spacing: 0.06em;
+}
+
+/* ============================================================
+   舱门与危险：警示斜纹只给这两处，多了就是噪声
+   ============================================================ */
+html[data-theme="qi-cel"] .input-area {
+  background-image: repeating-linear-gradient(45deg,
+    var(--qi-hazard) 0 6px, transparent 6px 12px);
+  background-size: 100% 4px;
+  background-position: left top;
+  background-repeat: no-repeat;
+  padding-top: 14px;
+}
+html[data-theme="qi-cel"] .gd-button[data-variant="danger"] { border-color: rgba(0, 0, 0, 0.45) }
+
+/* ============================================================
+   交互面：滚动条 / 选区 / 焦点 / 发送键 / 状态方块
+   ============================================================ */
+html[data-theme="qi-cel"] ::-webkit-scrollbar { width: 12px; height: 12px }
+html[data-theme="qi-cel"] ::-webkit-scrollbar-track {
+  background-color: var(--qi-shade);
+  background-image: linear-gradient(rgba(13, 106, 118, 0.07) 1px, transparent 1px);
+  background-size: 100% 4px;
+}
+html[data-theme="qi-cel"] ::-webkit-scrollbar-thumb {
+  background: var(--qi-rivet);
+  border: 2px solid var(--qi-hull);
+  border-radius: 2px;
+}
+html[data-theme="qi-cel"] ::-webkit-scrollbar-thumb:hover { background: var(--qi-hud) }
+html.dark[data-theme="qi-cel"] ::-webkit-scrollbar-track {
+  background-color: var(--qi-term);
+  background-image: linear-gradient(rgba(98, 227, 238, 0.06) 1px, transparent 1px);
+}
+html.dark[data-theme="qi-cel"] ::-webkit-scrollbar-thumb { border-color: var(--qi-hull) }
+html.dark[data-theme="qi-cel"] ::-webkit-scrollbar-thumb:hover { background: #62e3ee }
+/* 选区：屏内用深青实底 + 白字；夜视档反过来 */
+html[data-theme="qi-cel"] ::selection { background: var(--qi-hud); color: #f8faf9 }
+html.dark[data-theme="qi-cel"] ::selection { background: #62e3ee; color: #06222a }
+/* HUD 定位框：实线青 + 外扩一层弱光（默认蓝环一出现就出戏） */
+html[data-theme="qi-cel"] :focus-visible {
+  outline: 2px solid var(--qi-hud);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(13, 106, 118, 0.14);
+}
+html.dark[data-theme="qi-cel"] :focus-visible {
+  outline-color: #62e3ee;
+  box-shadow: 0 0 0 5px rgba(98, 227, 238, 0.14);
+}
+
+/* 发送键：跟按钮同材质，按下整体下沉并把影收掉。
+   禁用态连壳带图标一起给：组件是 background-color: var(--gd-color-text-disabled)
+   + 白图标 + opacity .45，而这是前景 token——红白机就踩过把它当底色用的坑 */
+html[data-theme="qi-cel"] .send-btn {
+  border: 2px solid rgba(0, 0, 0, 0.4);
+  box-shadow: 2px 2px 0 rgba(20, 32, 38, 0.3);
+}
+html.dark[data-theme="qi-cel"] .send-btn {
+  border-color: rgba(0, 0, 0, 0.6);
+  box-shadow: 2px 2px 0 rgba(4, 8, 10, 0.65);
+}
+html[data-theme="qi-cel"] .send-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+html[data-theme="qi-cel"] .send-btn:disabled {
+  background-color: var(--qi-seam-soft);
+  color: rgba(28, 36, 39, 0.72);
+  opacity: 1;
+  filter: none;
+}
+html.dark[data-theme="qi-cel"] .send-btn:disabled { color: rgba(219, 230, 233, 0.72) }
+
+/* 状态方块：选中行行首一枚青块。
+   所有行统一让出 18px 左槽，否则选中瞬间整行文字会跳 */
+html[data-theme="qi-cel"] .session-item {
+  border-radius: var(--gd-size-rounded-radius);  /* 组件写死 rounded-md（实测 6px），不吃 token，得点名 */
+  padding-left: 18px;
+}
+html[data-theme="qi-cel"] .session-item-active::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  margin-top: -4px;
+  width: 8px;
+  height: 8px;
+  background: var(--qi-hud);
+}
+html.dark[data-theme="qi-cel"] .session-item-active::before { background: #62e3ee }
+
+/* ============================================================
+   空状态：四格信号条（纯 CSS 画；不往中文 UI 里注入英文文案）
+   ============================================================ */
+html[data-theme="qi-cel"] .gd-empty::after {
+  content: "";
+  width: 46px;
+  height: 12px;
+  margin-top: 8px;
+  background-image:
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-size: 8px 3px, 8px 6px, 8px 9px, 8px 12px;
+  background-position: 0 bottom, 12px bottom, 24px bottom, 36px bottom;
+  background-repeat: no-repeat;
+  opacity: 0.55;
+}
+
+/* ============================================================
+   立绘层。载体选择踩过两个坑，都实测过：
+   1) 不能用 body::before——那是应用的壁纸层，基础样式给了 opacity:0，只有
+      html.wallpaper-loaded 才显形（没设壁纸时实测就是 0，画上去整层看不见），
+      而且用户设了壁纸时主题的图还会盖掉壁纸；
+   2) 最初用的 .content-clear-wallpaper 挂在 MainLayout.vue:18 的内容卡上，是全局容器
+      ——人物会跟到设置页去。改用 ChatPage.vue:65 的 .chat-pane-content：只在对话页出现。
+   夜视档让她退一层（舱内不该有明亮的人形抢正文），遮罩色跟 --qi-hull 走；
+   亮档不加遮罩——她就是舱里唯一那块暖色。
+   两层（遮罩 + 图）的 position/size 必须成对写：只给一层的话另一层回落到默认位置，
+   人会跑到左上角去。
+   bottom 150px：输入框 sticky 在同一盒子底部（实测输入框上沿 y=1001、卡底 1141，
+   即底部约 140px 属于输入带）。原先按 bottom -10 铺时她垂到输入框背后，
+   实测重叠 23920px²——人被切成半截，比不放更糟。人高 min(720px, 62%)=705，
+   底边落 991，比输入框上沿留 10px；矮窗口由外层 overflow:hidden 切头顶。 */
+html[data-theme="qi-cel"] .chat-pane-content {
+  background-image: url('img/qi-side.webp');
+  background-repeat: no-repeat;
+  background-position: right 0 bottom 150px;
+  background-size: auto min(720px, 62%);
+}
+html.dark[data-theme="qi-cel"] .chat-pane-content {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--qi-hull) 62%, transparent),
+                    color-mix(in srgb, var(--qi-hull) 62%, transparent)),
+    url('img/qi-side.webp');
+  background-repeat: no-repeat, no-repeat;
+  background-position: right 0 bottom 150px, right 0 bottom 150px;
+  background-size: auto min(720px, 62%), auto min(720px, 62%);
+}
+
+/* 人物在右下，正文必须让位：长行收到 66ch；
+   代码块与表格仍占满（它们需要宽度） */
+html[data-theme="qi-cel"] .markdown-text p,
+html[data-theme="qi-cel"] .markdown-text li {
+  max-width: 66ch;
+}
+
+/* 用户气泡右上斜切 14px：呼应她肩甲与护臂的分面。
+   clip-path 会把切角处那 2px 描边一起剪掉，所以描边内侧再走一道 outline 亮线，
+   切口读起来是「设计」而不是「掉线」。只切用户气泡——实测
+   .user-section .message-item__card 里只有 .message-item__text，知识库 chips
+   是兄弟节点（TurnItem.vue:8-30），切角区 0 个子元素；助手卡片不切，那里浮着操作条 */
+html[data-theme="qi-cel"] .user-section .message-item__card {
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+}

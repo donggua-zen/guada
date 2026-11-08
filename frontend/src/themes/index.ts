@@ -27,6 +27,8 @@ import {
 export { isRichTheme, themeAssetUrl, notifyThemeSetting };
 export type { ThemeManifest };
 
+import { isMobileDevice } from "@/composables/useDevice";
+
 export interface ThemePresetInfo {
   id: string;
   name: string;
@@ -189,8 +191,23 @@ let appliedPresetId: string | null = null;
  * 应用主题预设（纯 CSS 或富主题统一入口）
  *
  * 未知主题 id（插件清单尚未到达）→ 记录 pending，不发起加载。
+ *
+ * 移动端：预设主题一律不生效（移动端布局极端，皮肤的面板/立绘/切角
+ * 无法适配），只保留基础 token 的亮/暗响应（html.dark 与主题预设无关）。
+ * 持久化层（localStorage / 后端 appearance）照常记录用户选择，
+ * 回到桌面端无缝恢复；守卫必须放在幂等检查之前——否则桌面端已应用
+ * qi-dusk 后切到移动端，幂等短路会跳过卸载，皮肤残留在移动页面上。
  */
 export function applyThemePreset(presetId: string): void {
+  if (isMobileDevice) {
+    if (appliedPresetId === "default") return;
+    appliedPresetId = "default";
+    pendingPresetId = presetId === "default" ? null : presetId;
+    removeTheme();
+    document.documentElement.removeAttribute("data-theme");
+    return;
+  }
+
   // 幂等：与当前已应用主题相同则跳过（避免重复请求）
   if (appliedPresetId === presetId && activeThemeId() === presetId) return;
   if (appliedPresetId === presetId && presetId === "default") return;

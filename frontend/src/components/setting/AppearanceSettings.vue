@@ -36,10 +36,11 @@
             <div class="flex flex-col gap-1 min-w-0">
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">配色主题</span>
               <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
-               浅色/深色可分别设置, 当前：<span class="font-bold">{{ isDark ? '深色' : '浅色' }}</span>
+               <template v-if="!isMobileDevice">浅色/深色可分别设置, 当前：<span class="font-bold">{{ isDark ? '深色' : '浅色' }}</span></template>
+               <template v-else>移动端不加载配色主题，仅响应浅色/深色；选择会被记住，回到桌面端生效</template>
               </span>
             </div>
-            <div class="shrink-0 w-52">
+            <div class="shrink-0 w-52" :class="{ 'opacity-50 pointer-events-none': isMobileDevice }">
               <GdSelect
                 v-model="selectedThemePreset"
                 @change="handleThemePresetChange"
@@ -254,6 +255,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
 import { useTheme, type ThemeMode } from '@/composables/useTheme'
+import { isMobileDevice } from '@/composables/useDevice'
 import { themePresets, type ThemePresetInfo } from '@/themes'
 import { notifyThemeSetting } from '@/services/theme-runtime'
 import PluginConfigDialog from '@/components/plugins/PluginConfigDialog.vue'

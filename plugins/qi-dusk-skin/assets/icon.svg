@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 残月 + 绯红：主题标识 -->
+  <rect width="64" height="64" rx="12" fill="#141216"/>
+  <path d="M44 8a24 24 0 1 0 12 32A20 20 0 0 1 44 8z" fill="#b13440"/>
+  <path d="M10 50 L54 14" stroke="#d24a52" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+</svg>
