@@ -285,6 +285,59 @@ async function tryPrebuildInstall() {
     return true
   } catch (e) {
     console.warn('⚠️  prebuild-install failed: ' + String(e.message || e).split('\n')[0])
+    if (/EBUSY|EPERM|locked|占用/i.test(String(e.message || e))) {
+      console.warn('   文件被占用：请先关闭正在运行的 GuaDa / dev 后端，再重新执行本脚本')
+    }
+    return false
+  }
+}
+
+/**
+ * 校验 better-sqlite3 真的能在目标 Electron 上加载。
+ *
+ * 标记文件只能证明「曾经重建过」，不能证明当前文件就是那次产物：
+ * - pnpm install 可能把 store 里的 Node ABI 预编译包重新链回来；
+ * - 构建中断/文件被占用时，也可能留下旧的 .node。
+ * 两者都会让打包版后端在 bootstrap 阶段直接退出（NODE_MODULE_VERSION 141 vs 145），
+ * 而构建看起来是成功的。所以这里不看标记，直接用目标 Electron 的 Node 模式实跑一次。
+ */
+function verifyBetterSqlite3Abi() {
+  // 交叉构建时本机没有目标平台的 Electron，无法实跑，只能信任标记
+  if (TARGET_PLATFORM !== process.platform || TARGET_ARCH !== process.arch) {
+    console.log('  · 交叉构建，跳过 better-sqlite3 ABI 加载校验')
+    return true
+  }
+
+  const bs3Dir = path.join(productionModulesPath, 'better-sqlite3')
+  const nativeBinary = path.join(bs3Dir, 'build', 'Release', 'better_sqlite3.node')
+  if (!fs.existsSync(nativeBinary)) {
+    console.warn('  ⚠️  better-sqlite3 原生二进制不存在')
+    return false
+  }
+
+  let electronBin
+  try {
+    // devDependency 的 electron 包默认导出可执行文件路径
+    electronBin = require('electron')
+  } catch (e) {
+    console.warn('  ⚠️  找不到 electron，跳过 ABI 加载校验')
+    return true
+  }
+
+  const { execFileSync } = require('child_process')
+  const probe = `const D=require(${JSON.stringify(bs3Dir)});new D(':memory:').close()`
+  try {
+    execFileSync(electronBin, ['-e', probe], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      stdio: 'pipe',
+      timeout: 60 * 1000,
+    })
+    return true
+  } catch (e) {
+    const detail = String(e.stderr || e.message || '')
+      .split(/\r?\n/)
+      .find((line) => line.includes('NODE_MODULE_VERSION'))
+    console.warn(`  ⚠️  better-sqlite3 无法在 Electron ${ELECTRON_VERSION} 下加载${detail ? '：' + detail.trim() : ''}`)
     return false
   }
 }
@@ -342,11 +395,19 @@ async function main() {
     `.rebuild-electron-${ELECTRON_VERSION}-${TARGET_PLATFORM}-${TARGET_ARCH}`
   )
 
-  if (fs.existsSync(markerFile)) {
+  const markerExists = fs.existsSync(markerFile)
+  const abiOk = markerExists ? verifyBetterSqlite3Abi() : false
+
+  if (markerExists && abiOk) {
     console.log('✓ Rebuild marker found, skipping better-sqlite3 rebuild')
     console.log(`  (Marker: ${path.basename(markerFile)})`)
     console.log('  Delete the marker file to force a rebuild')
   } else {
+    if (markerExists) {
+      console.log('⚠️  标记文件存在，但 better-sqlite3 与 Electron ABI 不匹配，强制重建')
+      fs.rmSync(markerFile, { force: true })
+      console.log()
+    }
     console.log(`Rebuilding ${COMPILE_MODULES.join(', ')} for Electron ${ELECTRON_VERSION}...`)
     console.log()
 
@@ -385,6 +446,15 @@ async function main() {
         process.exit(1)
       }
     }
+
+    // 重建后必须实跑验证，避免「标记已写、二进制仍是旧 ABI」的假成功
+    if (!verifyBetterSqlite3Abi()) {
+      console.error()
+      console.error('❌ 重建后 better-sqlite3 仍无法在 Electron 下加载，打包版后端起不来。')
+      console.error('   请检查 prebuild-install 是否下载到了目标 ABI 的预编译包，或安装 VS Build Tools 后重试。')
+      process.exit(1)
+    }
+    console.log('✓ better-sqlite3 ABI 校验通过（Electron 下可加载）')
 
     // 写入 marker，供后续构建跳过
     fs.writeFileSync(markerFile, `${new Date().toISOString()}\n`)
