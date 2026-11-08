@@ -7,6 +7,9 @@ import {
   SlotRegistration,
   ThemeRegistration,
   RpcHandler,
+  PromptSectionDef,
+  PromptTransformDef,
+  SkinRegistration,
 } from "../types/plugin.types";
 import { PluginBase } from "../base-plugin";
 import type { WorkspaceProviderFactory } from "../../../common/workspace/workspace-provider.interface";
@@ -27,6 +30,12 @@ interface PluginRegistration {
   uiPages: UiPageRegistration[];
   slots: SlotRegistration[];
   themes: ThemeRegistration[];
+  /** v2.2：皮肤注册（v3 起并入 themes，保留字段仅为类型兼容） */
+  skins: SkinRegistration[];
+  /** v2：命名提示词段 */
+  promptSections: PromptSectionDef[];
+  /** v2：装配后变换 */
+  promptTransforms: PromptTransformDef[];
   rpcHandlers: Record<string, RpcHandler>;
   ctor?: new (...args: any[]) => PluginBase;
 }
@@ -36,7 +45,7 @@ class PluginRegistryImpl {
 
   registerManifest(manifest: PluginManifest) {
     if (this.registrations.has(manifest.id)) return;
-    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], workspaceProviders: [], attachmentTypes: [], uiPages: [], slots: [], themes: [], rpcHandlers: {} });
+    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [], workspaceProviders: [], attachmentTypes: [], uiPages: [], slots: [], themes: [], skins: [], promptSections: [], promptTransforms: [], rpcHandlers: {} });
   }
 
   getTools(pluginId: string): ToolHandlerDef[] {
@@ -70,6 +79,36 @@ class PluginRegistryImpl {
   getPromptMetas(pluginId: string) {
     const reg = this.registrations.get(pluginId);
     return { prompts: reg?.prompts || [] };
+  }
+
+  /** v2：注册命名提示词段（同插件同名同作用域幂等） */
+  registerPromptSection(pluginId: string, reg: PromptSectionDef) {
+    const pReg = this.registrations.get(pluginId);
+    if (!pReg) return;
+    const scope = reg.scope || "global";
+    const dup = pReg.promptSections.find(
+      (x) => x.name === reg.name && (x.scope || "global") === scope,
+    );
+    if (dup) return;
+    pReg.promptSections.push({ ...reg, scope });
+  }
+
+  /** v2：获取插件的提示词段 */
+  getPromptSections(pluginId: string): PromptSectionDef[] {
+    return this.registrations.get(pluginId)?.promptSections || [];
+  }
+
+  /** v2：注册装配后变换（同插件同 id 幂等） */
+  registerPromptTransform(pluginId: string, reg: PromptTransformDef) {
+    const pReg = this.registrations.get(pluginId);
+    if (!pReg) return;
+    if (pReg.promptTransforms.find((x) => x.id === reg.id)) return;
+    pReg.promptTransforms.push(reg);
+  }
+
+  /** v2：获取插件的装配变换 */
+  getPromptTransforms(pluginId: string): PromptTransformDef[] {
+    return this.registrations.get(pluginId)?.promptTransforms || [];
   }
 
   /** 注册 WorkspaceProvider 工厂 */
@@ -190,6 +229,32 @@ class PluginRegistryImpl {
       for (const theme of reg.themes) result.push({ pluginId, reg: theme });
     }
     return result;
+  }
+
+  // ── 皮肤（v2.2；v3 起并入主题） ──
+
+  /**
+   * @deprecated v3 起主题与皮肤统一：等价于 registerTheme。
+   */
+  registerSkin(pluginId: string, reg: SkinRegistration) {
+    this.registerTheme(pluginId, reg);
+  }
+
+  /**
+   * 获取插件的「富主题」（带 runtimeScript 或 assetBase）。
+   * 兼容 v2.2 的 getSkins 语义；新代码请直接用 getThemes。
+   */
+  getSkins(pluginId: string): SkinRegistration[] {
+    return this.getThemes(pluginId).filter(
+      (theme) => theme.runtimeScript || theme.assetBase,
+    );
+  }
+
+  /**
+   * 获取所有插件的「富主题」（跨插件互斥由前端保证）
+   */
+  getAllSkins(): Array<{ pluginId: string; reg: SkinRegistration }> {
+    return this.getAllThemes().filter(({ reg }) => reg.runtimeScript || reg.assetBase);
   }
 
   /** 注册 RPC handler */

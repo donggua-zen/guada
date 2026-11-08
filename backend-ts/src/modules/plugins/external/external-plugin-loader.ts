@@ -9,7 +9,8 @@ import fg from "fast-glob";
 import * as yaml from "js-yaml";
 import { PluginManager } from "../plugin.manager";
 import { PluginBase } from "../base-plugin";
-import { PluginManifest } from "../types/plugin.types";
+import { PluginManifest, PLUGIN_API_VERSION } from "../types/plugin.types";
+import type { PluginPermission } from "../types/plugin.types";
 import { NlsService } from "../i18n/nls.service";
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { parsePluginSource } from "./plugin-source";
@@ -33,6 +34,12 @@ interface ExternalManifest {
   essential?: boolean;
   icon?: string;
   main?: string;
+  /** v2：插件声明的 PluginApi 版本；缺省 1 */
+  apiVersion?: number;
+  /** v2：权限声明（安装确认/审计展示） */
+  permissions?: PluginPermission[];
+  /** v2：配置 schema（市场自动表单） */
+  configSchema?: Record<string, any>;
   providerApi?: number;
   provides?: {
     providerTypes?: string[];
@@ -443,6 +450,19 @@ export class ExternalPluginLoader implements OnModuleInit {
     if (!m.version) throw new Error("manifest.json: version is required");
     if (!m.description)
       throw new Error("manifest.json: description is required");
+
+    // v2：PluginApi 版本兼容性。缺省按 1（历史行为），高于宿主则拒绝加载。
+    if (m.apiVersion !== undefined) {
+      const v = Number(m.apiVersion);
+      if (!Number.isInteger(v) || v < 1) {
+        throw new Error("manifest.json: apiVersion must be a positive integer");
+      }
+      if (v > PLUGIN_API_VERSION) {
+        throw new Error(
+          `manifest.json: apiVersion ${v} is newer than supported ${PLUGIN_API_VERSION}; upgrade GuaDa or use an older plugin build`,
+        );
+      }
+    }
 
     const provides = m.provides;
     if (provides !== undefined) {

@@ -23,6 +23,12 @@ import { NlsService } from "./i18n/nls.service";
 import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
 import { isToolkitAllowedByRoleConfig } from "./utils/role-toolkit-filter";
 import { ProviderContributionCoordinator } from "../llm-core/provider-contribution.coordinator";
+import { PluginPathsService } from "./paths/plugin-paths.service";
+import { PluginHookRegistry } from "./hooks/plugin-hook.registry";
+import { LocalSlashCommandRegistry } from "../chat/commands/local-slash-command.registry";
+import { JobRegistryService } from "../jobs/job-registry.service";
+import { PluginHttpRegistry } from "./http/plugin-http.registry";
+import { PluginLlmService } from "./llm/plugin-llm.service";
 
 // ──
 
@@ -73,7 +79,30 @@ export class PluginManager {
     /** 供应商包贡献协调器；llm-core 提供（测试可省略） */
     @Optional()
     private readonly providerCoordinator?: ProviderContributionCoordinator,
-  ) {}
+    /** v2：插件数据目录（测试可省略） */
+    @Optional()
+    private readonly pluginPaths?: PluginPathsService,
+    /** v2：插件 Hook 注册表（测试可省略） */
+    @Optional()
+    private readonly hookRegistry?: PluginHookRegistry,
+    /** v2：动作型本地命令注册表（测试可省略） */
+    @Optional()
+    private readonly localCommandRegistry?: LocalSlashCommandRegistry,
+    /** v2.1：后台作业注册表（测试可省略） */
+    @Optional()
+    private readonly jobRegistry?: JobRegistryService,
+    /** v3：插件 HTTP 路由注册表（测试可省略） */
+    @Optional()
+    private readonly httpRegistry?: PluginHttpRegistry,
+    /** v3：插件 LLM 能力（测试可省略） */
+    @Optional()
+    private readonly pluginLlm?: PluginLlmService,
+  ) {
+    // Hook 启用态由本管理器裁决（禁用插件不执行 hook，但保留注册避免抖动）
+    this.hookRegistry?.setEnabledResolver((pluginId) => this.isPluginEnabled(pluginId));
+    // HTTP 路由同理：禁用后请求 404，但保留注册避免反复启停抖动
+    this.httpRegistry?.setEnabledResolver((pluginId) => this.isPluginEnabled(pluginId));
+  }
 
   // ── 生命周期 ──
 
@@ -105,6 +134,12 @@ export class PluginManager {
     }
 
     // 创建 api 并调用 onLoad
+    let dataDir: string | undefined;
+    try {
+      dataDir = this.pluginPaths?.getDataDir(id);
+    } catch (err: any) {
+      this.logger.warn(`Plugin ${id} data dir unavailable: ${err?.message ?? err}`);
+    }
     const api = new PluginApiImpl(
       id,
       plugin.manifest.name,
@@ -112,6 +147,12 @@ export class PluginManager {
       this.settingsStorage,
       plugin.manifest.source,
       this.turnReminderRegistry,
+      { pluginDir: plugin.manifest.pluginPath, dataDir },
+      this.localCommandRegistry,
+      this.hookRegistry,
+      this.jobRegistry,
+      this.httpRegistry,
+      this.pluginLlm,
     );
     if (plugin.onLoad) {
       let onLoadError: any = null;
@@ -223,6 +264,10 @@ export class PluginManager {
     }
     PluginRegistry.clearPlugin(pluginId);
     this.providerCoordinator?.remove(pluginId);
+    this.hookRegistry?.unregisterPlugin(pluginId);
+    this.localCommandRegistry?.unregisterByPlugin(pluginId);
+    this.turnReminderRegistry?.unregisterByPlugin(pluginId);
+    this.httpRegistry?.unregisterPlugin(pluginId);
     this.instances.delete(pluginId);
     this.logger.log(`Plugin unregistered: ${pluginId}`);
     this.eventBus.emit("plugins.changed", { pluginId, action: "unregistered" });

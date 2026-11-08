@@ -8,6 +8,18 @@ import {
   SlotRegistration,
   ThemeRegistration,
   RpcHandler,
+  SkinRegistration,
+  PromptSectionDef,
+  PromptTransformDef,
+  LocalCommandDef,
+  PluginHookDef,
+  PluginJobDef,
+  PluginHttpRouteDef,
+  PluginLlmCompleteOptions,
+  PluginLlmResult,
+  PluginLlmStreamChunk,
+  PluginLlmModelInfo,
+  PLUGIN_API_VERSION,
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
 import { Toolkit } from "../toolkit/toolkit";
@@ -140,6 +152,81 @@ export interface PluginApi {
 
   registerRawTool(def: ToolHandlerDef): void;
 
+  // ── 提示词段（v2） ──
+
+  /**
+   * 注册命名提示词段。
+   *
+   * 与 registerPrompt 的区别：稳定 name + 数值 order + 作用域，
+   * 同名同作用域冲突在注册期报错（不再静默拼接）。
+   */
+  registerPromptSection(def: PromptSectionDef): void;
+
+  /**
+   * 注册装配后整体变换（waterfall，按 order 串行）。
+   * 默认禁止删除 `builtin.*` 段；需要 manifest 声明 permissions: ["prompt"]
+   * 且由插件自行提供用户开关。
+   */
+  registerPromptTransform(def: PromptTransformDef): void;
+
+  // ── 动作型本地命令（v2） ──
+
+  /**
+   * 注册动作型斜杠命令（如 `/purge apply`）。
+   * 命中后由后端直接执行 handler，不写用户消息、不建流、不进 LLM 上下文。
+   */
+  registerLocalCommand(def: LocalCommandDef): void;
+
+  // ── Hook（v2） ──
+
+  /**
+   * 注册生命周期钩子（白名单见 PluginHookName）。
+   * 包装器会检查插件启用态；异常 fail-open（仅记日志）。
+   */
+  registerHook(def: PluginHookDef): void;
+
+  // ── 路径（v2） ──
+
+  /** 插件安装目录（只读；自带 skills/presets/assets） */
+  getPluginDir(): string | undefined;
+  /** 插件数据目录（可写；提示词/规则/快照） */
+  getDataDir(): string;
+
+  /** 宿主支持的 PluginApi 版本 */
+  getApiVersion(): number;
+
+  // ── 后台作业（v2.1） ──
+
+  /**
+   * 登记一个后台作业并返回 jobId。
+   *
+   * 作业按 shell 语义登记（字节日志 + 默认完成通知），因此模型可用
+   * 现成的 job_read / job_list / job_stop 读取与取消。
+   *
+   * @throws 没有会话上下文（sessionId）时抛错
+   */
+  startJob(def: PluginJobDef, sessionId?: string): string;
+
+  // ── HTTP 路由（v3） ──
+
+  /**
+   * 注册自定义 HTTP 路由。
+   *
+   * 对外 URL：`/api/v1/plugins/<pluginId>/http/<path>`
+   * handler 拿到原生 req/res，可以写流（SSE / 大文件 pipe）。
+   */
+  registerRoute(def: PluginHttpRouteDef): void;
+
+  // ── 模型调用（v3） ──
+
+  /** 非流式补全，复用宿主已配置的模型 */
+  complete(options: PluginLlmCompleteOptions): Promise<PluginLlmResult>;
+  /** 流式补全，chunk 已归一化为 text / reasoning / finish */
+  completeStream(options: PluginLlmCompleteOptions): AsyncGenerator<PluginLlmStreamChunk, void, unknown>;
+  /** 宿主已配置的模型清单 */
+  listModels(): Promise<PluginLlmModelInfo[]>;
+
+
   /**
    * 注册工具包（ToolKit）
    *
@@ -205,6 +292,14 @@ export interface PluginApi {
    * 前端下拉列表与启动应用均以本声明为准。
    */
   registerTheme(reg: import("../types/plugin.types").ThemeRegistration): void;
+
+  /**
+   * 注册皮肤（v2.2）
+   *
+   * 皮肤 = 多份 CSS（亮/暗）+ 可选运行时脚本 + 资源目录 + 设置项。
+   * 与主题互斥：同一时间只启用一个皮肤；切换时前端会卸载前一个并还原 DOM。
+   */
+  registerSkin(reg: SkinRegistration): void;
 
   // ── 供应商包（Provider Pack）──
 
@@ -285,6 +380,15 @@ export class PluginApiImpl implements PluginApi {
   }> = [];
   private _commandProviders: ICommandProvider[] = [];
   private _workspaceProviders: WorkspaceProviderFactory[] = [];
+  /** v2：命名提示词段 / 装配变换 */
+  private _promptSections: PromptSectionDef[] = [];
+  private _promptTransforms: PromptTransformDef[] = [];
+  /** v2：动作型本地命令 */
+  private _localCommands: LocalCommandDef[] = [];
+  /** v2：生命周期 Hook */
+  private _hooks: PluginHookDef[] = [];
+  /** v2.1：startJob 使用的会话 id（由 PluginManager/工具上下文注入） */
+  private jobSessionId?: string;
 
   constructor(
     private pluginId: string,
@@ -295,6 +399,48 @@ export class PluginApiImpl implements PluginApi {
     private pluginSource?: "builtin" | "dev" | "user",
     /** 每轮提醒注册表；插件在 onLoad 中注册 provider 后立即生效 */
     private turnReminderRegistry?: TurnReminderRegistry,
+    /** v2：插件目录与数据目录（由 PluginManager 注入） */
+    private pluginPaths?: { pluginDir?: string; dataDir?: string },
+    /** v2：动作命令注册表（flush 时提交，结构类型避免模块环） */
+    private localCommandRegistry?: {
+      register: (
+        name: string,
+        handler: (ctx: any) => any,
+        meta?: { description?: string; pluginId?: string; aliases?: string[] },
+      ) => void;
+      unregisterByPlugin?: (pluginId: string) => void;
+    },
+    /** v2：Hook 注册表（flush 时提交，结构类型避免模块环） */
+    private hookRegistry?: {
+      register: (pluginId: string, def: PluginHookDef) => void;
+    },
+    /** v2.1：后台作业注册表（结构类型避免模块环） */
+    private jobRegistry?: {
+      start: (spec: {
+        kind: "shell";
+        label: string;
+        sessionId: string;
+        logFilePath?: string;
+        notify?: boolean;
+        read: (opts: { offset?: number; maxBytes?: number }) => Promise<any>;
+        cancel: (reason?: string) => void | Promise<void>;
+        send?: (input: string) => Promise<void>;
+        done: Promise<any>;
+      }) => string;
+    },
+    /** v3：插件 HTTP 路由注册表（结构类型避免模块环） */
+    private httpRegistry?: {
+      register: (pluginId: string, def: PluginHttpRouteDef) => void;
+    },
+    /** v3：插件 LLM 能力 */
+    private llmService?: {
+      complete: (pluginId: string, options: PluginLlmCompleteOptions) => Promise<PluginLlmResult>;
+      completeStream: (
+        pluginId: string,
+        options: PluginLlmCompleteOptions,
+      ) => AsyncGenerator<PluginLlmStreamChunk, void, unknown>;
+      listModels: () => Promise<PluginLlmModelInfo[]>;
+    },
   ) {}
 
   registerTool(def: any): void {
@@ -454,6 +600,172 @@ export class PluginApiImpl implements PluginApi {
     }
   }
 
+  // ── v2：提示词段 / 变换 / 动作命令 / Hook / 路径 ──
+
+  registerPromptSection(def: PromptSectionDef): void {
+    if (!def?.name || typeof def.name !== "string") {
+      throw new Error(`plugin ${this.pluginId}: registerPromptSection requires a name`);
+    }
+    if (def.name.startsWith("builtin.")) {
+      throw new Error(`plugin ${this.pluginId}: prompt section name "${def.name}" uses reserved prefix "builtin."`);
+    }
+    const scope = def.scope || "global";
+    const dup = this._promptSections.find(
+      (x) => x.name === def.name && (x.scope || "global") === scope,
+    );
+    if (dup) {
+      throw new Error(
+        `plugin ${this.pluginId}: prompt section "${def.name}" already registered in scope "${scope}"`,
+      );
+    }
+    this._promptSections.push({ ...def, scope });
+  }
+
+  registerPromptTransform(def: PromptTransformDef): void {
+    if (!def?.id || typeof def.transform !== "function") {
+      throw new Error(`plugin ${this.pluginId}: registerPromptTransform requires id and transform`);
+    }
+    if (this._promptTransforms.find((x) => x.id === def.id)) {
+      throw new Error(`plugin ${this.pluginId}: prompt transform "${def.id}" already registered`);
+    }
+    this._promptTransforms.push(def);
+  }
+
+  registerLocalCommand(def: LocalCommandDef): void {
+    if (!def?.name || !/^[a-z][a-z0-9-]*$/.test(def.name)) {
+      throw new Error(
+        `plugin ${this.pluginId}: local command name must match ^[a-z][a-z0-9-]*$, got "${def?.name}"`,
+      );
+    }
+    if (typeof def.handler !== "function") {
+      throw new Error(`plugin ${this.pluginId}: local command "${def.name}" requires a handler`);
+    }
+    for (const name of [def.name, ...(def.aliases || [])]) {
+      if (this._localCommands.find((x) => x.name === name || (x.aliases || []).includes(name))) {
+        throw new Error(`plugin ${this.pluginId}: local command "${name}" already registered`);
+      }
+    }
+    this._localCommands.push(def);
+  }
+
+  registerHook(def: PluginHookDef): void {
+    const allowed = new Set<string>([
+      "agent.pre_step",
+      "agent.request_error",
+      "turn.stopping",
+      "session.created",
+    ]);
+    if (!def?.event || !allowed.has(def.event)) {
+      throw new Error(`plugin ${this.pluginId}: hook event "${def?.event}" is not open to plugins`);
+    }
+    if (typeof def.handler !== "function") {
+      throw new Error(`plugin ${this.pluginId}: hook "${def.event}" requires a handler`);
+    }
+    this._hooks.push(def);
+  }
+
+  getPluginDir(): string | undefined {
+    return this.pluginPaths?.pluginDir;
+  }
+
+  getDataDir(): string {
+    const dir = this.pluginPaths?.dataDir;
+    if (!dir) {
+      throw new Error(`plugin ${this.pluginId}: data dir is not configured`);
+    }
+    return dir;
+  }
+
+  getApiVersion(): number {
+    return PLUGIN_API_VERSION;
+  }
+
+  /**
+   * 登记后台作业（v2.1）。
+   *
+   * 复用 JobRegistry 的 shell 语义：字节日志 + 默认完成通知，
+   * 模型可用现成的 job_read / job_list / job_stop。
+   */
+  startJob(def: PluginJobDef, sessionId?: string): string {
+    if (!this.jobRegistry) {
+      throw new Error(
+        `plugin ${this.pluginId}: background jobs are not available in this host build`,
+      );
+    }
+    if (!def || typeof def.read !== "function" || typeof def.cancel !== "function") {
+      throw new Error(
+        `plugin ${this.pluginId}: startJob requires read and cancel functions`,
+      );
+    }
+    if (!def.done || typeof (def.done as any).then !== "function") {
+      throw new Error(`plugin ${this.pluginId}: startJob requires a done promise`);
+    }
+    const effectiveSession = sessionId || this.jobSessionId;
+    if (!effectiveSession) {
+      throw new Error(
+        `plugin ${this.pluginId}: startJob requires a session context (sessionId)`,
+      );
+    }
+    return this.jobRegistry.start({
+      kind: "shell",
+      label: def.label || `plugin:${this.pluginId}`,
+      sessionId: effectiveSession,
+      logFilePath: def.logFilePath,
+      notify: def.notify,
+      read: def.read,
+      cancel: def.cancel,
+      send: def.send,
+      done: def.done as any,
+    });
+  }
+
+  /** 由 PluginManager 在工具执行前注入当前会话 id（startJob 需要） */
+  setJobSession(sessionId: string | undefined): void {
+    this.jobSessionId = sessionId;
+  }
+
+  // ── v3：HTTP 路由 + 模型调用 ──
+
+  registerRoute(def: PluginHttpRouteDef): void {
+    if (!this.httpRegistry) {
+      throw new Error(
+        `plugin ${this.pluginId}: custom HTTP routes are not available in this host build`,
+      );
+    }
+    if (!def?.path) {
+      throw new Error(`plugin ${this.pluginId}: registerRoute requires a path`);
+    }
+    if (typeof def.handler !== "function") {
+      throw new Error(`plugin ${this.pluginId}: registerRoute requires a handler`);
+    }
+    this.httpRegistry.register(this.pluginId, def);
+  }
+
+  async complete(options: PluginLlmCompleteOptions): Promise<PluginLlmResult> {
+    if (!this.llmService) {
+      throw new Error(
+        `plugin ${this.pluginId}: LLM access is not available in this host build`,
+      );
+    }
+    return this.llmService.complete(this.pluginId, options || {});
+  }
+
+  completeStream(
+    options: PluginLlmCompleteOptions,
+  ): AsyncGenerator<PluginLlmStreamChunk, void, unknown> {
+    if (!this.llmService) {
+      throw new Error(
+        `plugin ${this.pluginId}: LLM access is not available in this host build`,
+      );
+    }
+    return this.llmService.completeStream(this.pluginId, options || {});
+  }
+
+  async listModels(): Promise<PluginLlmModelInfo[]> {
+    if (!this.llmService) return [];
+    return this.llmService.listModels();
+  }
+
   registerTurnReminderProvider(provider: TurnReminderProvider): void {
     this.turnReminderRegistry?.register(this.pluginId, provider);
   }
@@ -497,9 +809,29 @@ export class PluginApiImpl implements PluginApi {
     }
   }
   registerTheme(reg: ThemeRegistration): void {
-    if (!this._themes.find((x) => x.id === reg.id)) {
-      this._themes.push(reg);
+    if (!reg?.id) {
+      throw new Error(`plugin ${this.pluginId}: registerTheme requires an id`);
     }
+    const cssFiles =
+      reg.cssFiles ||
+      (reg.cssFile ? { light: reg.cssFile, dark: reg.cssFile } : undefined);
+    const isRich = Boolean(reg.runtimeScript || reg.assetBase);
+    // 纯 CSS 主题允许没有 cssFile（如 "default" 语义的占位），富主题必须有样式或脚本
+    if (!cssFiles?.light && !cssFiles?.dark && !isRich) {
+      throw new Error(
+        `plugin ${this.pluginId}: theme "${reg.id}" must declare cssFile / cssFiles or runtimeScript`,
+      );
+    }
+    if (this._themes.find((x) => x.id === reg.id)) return;
+    this._themes.push({ ...reg, cssFiles });
+  }
+
+  /**
+   * @deprecated v3 起主题与皮肤合并：等价于 registerTheme。
+   * 保留只为兼容按旧契约编写的插件。
+   */
+  registerSkin(reg: SkinRegistration): void {
+    this.registerTheme(reg);
   }
 
   registerProviderType(card: ProviderTypeCard): void {
@@ -699,6 +1031,32 @@ export class PluginApiImpl implements PluginApi {
       }
     }
 
+    // 注册 v2 提示词段 / 装配变换
+    for (const section of this._promptSections) {
+      PluginRegistry.registerPromptSection(this.pluginId, section);
+    }
+    for (const transform of this._promptTransforms) {
+      PluginRegistry.registerPromptTransform(this.pluginId, transform);
+    }
+
+    // 注册 v2 动作型本地命令（不落库、不调模型）
+    if (this.localCommandRegistry) {
+      for (const cmd of this._localCommands) {
+        this.localCommandRegistry.register(cmd.name, (ctx: any) => cmd.handler(ctx), {
+          description: cmd.description,
+          pluginId: this.pluginId,
+          aliases: cmd.aliases,
+        });
+      }
+    }
+
+    // 注册 v2 生命周期 Hook
+    if (this.hookRegistry) {
+      for (const hook of this._hooks) {
+        this.hookRegistry.register(this.pluginId, hook);
+      }
+    }
+
     // 注册 workspace providers
     for (const factory of this._workspaceProviders) {
       PluginRegistry.registerWorkspaceProvider(this.pluginId, factory);
@@ -714,7 +1072,7 @@ export class PluginApiImpl implements PluginApi {
       PluginRegistry.registerSlot(this.pluginId, slot);
     }
 
-    // 注册 themes
+    // 注册 themes（v3：主题与皮肤统一，皮肤就是富主题）
     for (const theme of this._themes) {
       PluginRegistry.registerTheme(this.pluginId, theme);
     }
@@ -736,5 +1094,30 @@ export class PluginApiImpl implements PluginApi {
   /** 获取 WorkspaceProvider 工厂 供 PluginManager 消费 */
   getWorkspaceProviders(): WorkspaceProviderFactory[] {
     return this._workspaceProviders;
+  }
+
+  /** v2：本次 onLoad 注册的提示词段（供生命周期回滚/诊断） */
+  getPromptSections(): PromptSectionDef[] {
+    return this._promptSections;
+  }
+
+  /** v2：本次 onLoad 注册的装配变换 */
+  getPromptTransforms(): PromptTransformDef[] {
+    return this._promptTransforms;
+  }
+
+  /** v2：本次 onLoad 注册的动作型本地命令 */
+  getLocalCommands(): LocalCommandDef[] {
+    return this._localCommands;
+  }
+
+  /** v2：本次 onLoad 注册的 Hook */
+  getHooks(): PluginHookDef[] {
+    return this._hooks;
+  }
+
+  /** v2.2：本次 onLoad 注册的皮肤（v3 起 = 富主题，即带 runtimeScript/assetBase 的主题） */
+  getSkins(): SkinRegistration[] {
+    return this._themes.filter((theme) => theme.runtimeScript || theme.assetBase);
   }
 }

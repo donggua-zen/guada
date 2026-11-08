@@ -29,6 +29,13 @@ export class TurnReminderRegistry {
     this.entries.set(`${pluginId}::${provider.id}`, { pluginId, provider });
   }
 
+  /** 插件卸载时移除其全部 provider（禁用由调用方 isEnabled 过滤） */
+  unregisterByPlugin(pluginId: string): void {
+    for (const [key, entry] of this.entries) {
+      if (entry.pluginId === pluginId) this.entries.delete(key);
+    }
+  }
+
   /** 按 order、注册顺序执行全部 provider；单个失败只记日志，不影响其他 provider */
   async collect(
     input: TurnReminderProviderInput,

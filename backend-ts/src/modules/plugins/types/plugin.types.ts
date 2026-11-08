@@ -5,6 +5,32 @@ import type { WorkspaceProviderFactory } from "../../../common/workspace/workspa
 
 // ==================== 插件元数据 ====================
 
+/**
+ * 宿主支持的最高 PluginApi 版本。
+ *
+ * - 1：历史隐式版本（registerTool/registerPrompt/registerSlot...）
+ * - 2：新增提示词段、装配 transform、动作型本地命令、Hook、插件数据目录
+ * - 3：新增自定义 HTTP 路由（registerRoute）、模型调用（complete/completeStream/listModels）、
+ *      `main` 与 `conversation.side.panel` 槽位
+ *
+ * 外部插件在 manifest.json 声明 `apiVersion`；缺省按 1 处理，
+ * 大于本常量则拒绝加载（避免用新 API 的插件在旧宿主上静默降级）。
+ */
+export const PLUGIN_API_VERSION = 3;
+
+/** 插件权限声明（安装确认与审计展示；本期不做运行时强制） */
+export type PluginPermission =
+  | "prompt"
+  | "fs"
+  | "net"
+  | "shell"
+  | "policy"
+  | "session"
+  /** v3：注册自定义 HTTP 路由 */
+  | "http"
+  /** v3：调用宿主已配置的模型 */
+  | "llm";
+
 export interface PluginManifest {
   id: string;
   name: string;
@@ -32,6 +58,20 @@ export interface PluginManifest {
   icon?: string;
   /** 入口文件（仅外部插件，默认 "index.js"） */
   main?: string;
+  /**
+   * 插件声明的 PluginApi 版本。
+   * 缺省 = 1（历史行为）；大于宿主 PLUGIN_API_VERSION 时拒绝加载。
+   */
+  apiVersion?: number;
+  /** 权限声明（安装确认/审计展示；运行时隔离见技术债） */
+  permissions?: PluginPermission[];
+  /** 配置 schema（JSON Schema，供后续市场自动生成设置面板） */
+  configSchema?: Record<string, any>;
+  /** 显式入口声明（缺省 main / frontend/dist） */
+  entries?: {
+    backend?: string;
+    frontend?: string;
+  };
   /**
    * Provider Pack 契约版本（缺失 = 非供应商包）。
    * 声明后该插件可按供应商包加载：声明式类型卡 + 可选协议适配器。
@@ -67,6 +107,114 @@ export interface PromptPiece {
   pluginId: string;
   /** 描述（用于调试和 UI） */
   description?: string;
+}
+
+// ==================== 提示词段（v2） ====================
+
+/**
+ * 插件声明的提示词段。
+ *
+ * 与旧 registerPrompt 的区别：
+ * - 有稳定 name（同名同作用域冲突在注册期报错，而不是静默拼接）
+ * - 有数值 order（可插到内置段之前/之后）
+ * - 有 scope（global/agent/session）
+ * - complete=true 时表示"接管整段系统提示词"（需 manifest permissions 含 prompt）
+ */
+export interface PromptSectionDef {
+  /** 段名；建议 `${pluginId}.${name}`。同作用域同名视为冲突 */
+  name: string;
+  /** 排序，越小越靠前；内置段使用 0 附近，插件段建议 1000+ */
+  order?: number;
+  /** 作用域，默认 global */
+  scope?: "global" | "agent" | "session";
+  /** 是否允许同作用域同名覆盖（默认 false） */
+  shadowable?: boolean;
+  /** 接管整段系统提示词（等价 DSH complete:true） */
+  complete?: boolean;
+  /** 文本或动态文本；返回空串表示本轮不注入 */
+  text: string | ((ctx: PluginContext) => string | Promise<string>);
+  /** 描述（调试/UI） */
+  description?: string;
+}
+
+/** 装配后的段（已求值） */
+export interface AssembledPromptSection {
+  name: string;
+  order: number;
+  text: string;
+  /** 来源插件；内置段为空 */
+  pluginId?: string;
+  complete?: boolean;
+}
+
+/** 一次系统提示词装配的输入/输出 */
+export interface PromptAssembly {
+  sections: AssembledPromptSection[];
+  systemText: string;
+}
+
+/**
+ * 装配后整体变换（waterfall 语义，按 order 串行）。
+ *
+ * 默认禁止删除 `builtin.*` 段；需要 manifest permissions 含 "prompt"
+ * 且插件自行提供用户开关时才允许改写。
+ */
+export interface PromptTransformDef {
+  id: string;
+  order?: number;
+  transform: (
+    assembly: PromptAssembly,
+    ctx: PluginContext,
+  ) => PromptAssembly | void | Promise<PromptAssembly | void>;
+}
+
+// ==================== 动作型本地命令（v2） ====================
+
+export interface LocalCommandResult {
+  /** 回显给用户的文本（toast / 事件卡） */
+  text?: string;
+  /** 附加结构化数据（插件前端可读取） */
+  data?: Record<string, unknown>;
+}
+
+export interface LocalCommandDef {
+  /** 命令名（不含 /），^[a-z][a-z0-9-]*$ */
+  name: string;
+  description: string;
+  /** 别名（同样参与冲突检测） */
+  aliases?: string[];
+  /** 执行；命令文本不落库、不调模型 */
+  handler: (
+    ctx: {
+      sessionId: string;
+      clientId?: string;
+      args?: string;
+      raw: string;
+    },
+    context?: PluginContext,
+  ) => LocalCommandResult | Promise<LocalCommandResult>;
+}
+
+// ==================== Hook（v2） ====================
+
+/** 首批向插件开放的钩子（白名单） */
+export type PluginHookName =
+  | "agent.pre_step"
+  | "agent.request_error"
+  | "turn.stopping"
+  | "session.created";
+
+export interface PluginHookDef {
+  event: PluginHookName;
+  /** 同事件内执行顺序，越小越先；缺省 0 */
+  order?: number;
+  /**
+   * 与宿主内部钩子同签名：
+   * - serial 语义（pre_step/request_error）：返回非 undefined 即接管
+   * - parallel 语义（turn.stopping）：返回续跑决策
+   * - emit 语义（session.created/preset.selected）：忽略返回值
+   */
+  handler: (payload: any) => unknown | Promise<unknown>;
 }
 
 export interface PluginContext {
@@ -382,6 +530,164 @@ export interface LLMResponseEvent {
   pluginId?: string;
 }
 
+// ==================== 后台作业（v2.1） ====================
+
+/**
+ * 插件声明的后台作业。
+ *
+ * 宿主用 JobRegistry 统一登记：模型可用现成的 job_read / job_list / job_stop 读取、
+ * 轮询与取消，无需插件自己造轮子。
+ *
+ * 语义说明：插件作业按 `kind: "shell"` 登记（字节日志 + 默认完成通知），
+ * 因此 read 的 offset/nextOffset 必须是稳定的字节偏移。
+ */
+export interface PluginJobReadResult {
+  text: string;
+  offset: number;
+  nextOffset: number;
+  size: number;
+  truncated: boolean;
+  logFilePath?: string;
+}
+
+export interface PluginJobOutcome {
+  status: "completed" | "killed" | "failed";
+  detail?: string;
+  output?: string;
+  exitCode?: number | null;
+}
+
+export interface PluginJobDef {
+  /** 作业标签（job_list 里显示） */
+  label: string;
+  /** 是否投递完成通知；默认 true */
+  notify?: boolean;
+  /** 日志文件路径（可选；给了 job_read 就能增量读） */
+  logFilePath?: string;
+  read: (opts: { offset?: number; maxBytes?: number }) => Promise<PluginJobReadResult>;
+  cancel: (reason?: string) => void | Promise<void>;
+  /** 可选：向运行中的作业投递原始输入 */
+  send?: (input: string) => Promise<void>;
+  /** 结算（进程结束时 resolve） */
+  done: Promise<PluginJobOutcome>;
+}
+
+// ==================== 插件配置（v2.1） ====================
+
+/** 配置字段类型（与前端 SchemaForm 一致） */
+export type PluginConfigFieldType =
+  | "text"
+  | "password"
+  | "number"
+  | "select"
+  | "textarea"
+  | "boolean";
+
+export interface PluginConfigField {
+  key: string;
+  label: string;
+  type: PluginConfigFieldType;
+  required?: boolean;
+  /** 缺省值 */
+  default?: unknown;
+  placeholder?: string;
+  /** 条件显示 */
+  showIf?: PluginConfigShowIf;
+  /** select 选项 */
+  options?: Array<{ label: string; value: unknown }>;
+  /** 帮助文本 */
+  description?: string;
+}
+
+/**
+ * 条件显示（v2.2 扩展 anyOf）
+ *
+ * - 单键形式：`{ field, equals }` —— 字段值等于 equals 时显示
+ * - 组合形式：`{ anyOf: [{field, equals}, ...] }` —— 任一满足即显示
+ *   （对齐 dsh 皮肤的 `visibleWhen.anyOf`，用于「桌面端或移动端任一开启」这类条件）
+ */
+export type PluginConfigShowIf =
+  | { field: string; equals: unknown }
+  | { anyOf: Array<{ field: string; equals: unknown }> };
+
+export interface PluginConfigSchema {
+  fields: PluginConfigField[];
+}
+
+// ==================== 插件 HTTP 路由（v3） ====================
+
+/** 插件路由 handler 拿到的上下文 */
+export interface PluginHttpContext {
+  pluginId: string;
+  /** `:name` 段解析结果 */
+  params: Record<string, string>;
+  query: Record<string, string | string[]>;
+  /** 已解析的 JSON body（无 body 时为 undefined） */
+  body: unknown;
+  /** 插件数据目录（同 getDataDir） */
+  dataDir: string;
+  method: string;
+  /** 原始 url（含 query） */
+  url: string;
+  headers: Record<string, string | string[] | undefined>;
+}
+
+/**
+ * 插件自定义 HTTP 路由定义。
+ *
+ * 对外 URL：`/api/v1/plugins/<pluginId>/http/<path>`
+ * handler 拿到原生 req/res，可以直接写流（SSE / 大文件 pipe）。
+ */
+export interface PluginHttpRouteDef {
+  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "ALL";
+  /** 相对插件命名空间，不含前导 `/`；支持 `:param` 与末尾 `*` */
+  path: string;
+  handler: (req: any, res: any, ctx: PluginHttpContext) => void | Promise<void>;
+}
+
+// ==================== 插件 LLM（v3） ====================
+
+export interface PluginLlmMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface PluginLlmCompleteOptions {
+  /** 指定模型 id；缺省用第一个可用模型 */
+  modelId?: string;
+  system?: string;
+  /** 单轮便捷写法；与 messages 二选一（同时给时 prompt 追加为最后一条 user） */
+  prompt?: string;
+  messages?: PluginLlmMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  signal?: AbortSignal;
+  /** 用量统计标签，默认 `plugin:<id>` */
+  purpose?: string;
+}
+
+export interface PluginLlmResult {
+  text: string;
+  model: string;
+  usage?: { promptTokens?: number; completionTokens?: number };
+}
+
+export interface PluginLlmStreamChunk {
+  type: "text" | "reasoning" | "finish";
+  text?: string;
+  finishReason?: string;
+}
+
+export interface PluginLlmModelInfo {
+  id: string;
+  name: string;
+  providerId: string;
+  providerName: string;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  features?: string[];
+}
+
 // ==================== 插件决议信息 ====================
 
 // ── 附件类型（AttachmentType）──
@@ -434,6 +740,19 @@ export interface SlotRegistration {
 
 // ── 主题注册（v2：插件主题能力）──
 
+/**
+ * 主题注册（v3：主题与皮肤统一）
+ *
+ * 一个「主题」可以只是配色（传统 CSS 变量覆盖），也可以是完整展示层：
+ * 多份 CSS（亮/暗）+ 运行时脚本（挂自建 DOM）+ 资源目录 + 设置项。
+ *
+ * 分层语义（统一模型）：
+ * - 纯 CSS 主题：只给 cssFile / cssFiles，靠变量覆盖；
+ * - 富主题（原「皮肤」）：额外给 runtimeScript / assetBase / bodyAttribute / settings，
+ *   由宿主在 `html[data-theme]` 之上再打 body 作用域属性并执行脚本。
+ *
+ * 互斥：同一时间只启用一个主题；切换时宿主必须先卸载前一个并还原其全部 DOM 写入。
+ */
 export interface ThemeRegistration {
   /** 主题全局唯一 ID（建议 `${pluginId}.${name}`，防跨插件冲突） */
   id: string;
@@ -447,9 +766,49 @@ export interface ThemeRegistration {
   secondaryColor?: string;
   /** 适用模式：'light' / 'dark' / 'all'（默认 all） */
   mode?: "light" | "dark" | "all";
-  /** 主题 CSS 文件名，相对插件 frontend/dist/（如 "neon.css"） */
-  cssFile: string;
+
+  // ── 样式 ──
+
+  /** 单份 CSS，相对插件根（如 "themes/neon.css"）。亮暗共用时用它 */
+  cssFile?: string;
+  /** 亮/暗分文件，相对插件根；给了就按当前模式自动切换 */
+  cssFiles?: { light?: string; dark?: string };
+
+  // ── 富主题（可选） ──
+
+  /**
+   * 运行时脚本（IIFE，相对插件根）。
+   * 执行后需调用 `window.__GuaDaTheme__(api, manifest)`，返回可选 disposer。
+   */
+  runtimeScript?: string;
+  /** 资源目录（相对插件根），前端用 /plugins/:id/assets/ 取 */
+  assetBase?: string;
+  /**
+   * 打到 document.body 的作用域属性名（如 "data-gd-theme-maid"）。
+   * 缺省 = `data-gd-theme-<id 的短横线形式>`。
+   */
+  bodyAttribute?: string;
+  /** 主题设置项（复用配置字段格式；值存 plugin:<id> 数据） */
+  settings?: PluginConfigField[];
+  /** 预览图（相对插件根），用于设置页缩略 */
+  preview?: { light?: string; dark?: string };
+  /**
+   * 主题是否接管背景层（自绘背景）。
+   * 置 true 时宿主会临时清空壁纸变量，避免两层背景叠加。
+   */
+  ownsBackground?: boolean;
+  /** 推荐搭配的主题 id（设置页仅作提示，不强制） */
+  recommendedThemes?: string[];
 }
+
+/**
+ * 皮肤注册（v2.2，已并入主题）
+ *
+ * @deprecated 从 v3 起「主题」与「皮肤」是同一个概念：请直接用
+ * `ThemeRegistration`（支持 cssFiles / runtimeScript / assetBase / settings）。
+ * 本类型仅为兼容旧插件保留，字段与 ThemeRegistration 完全一致。
+ */
+export type SkinRegistration = ThemeRegistration;
 
 /** RPC 方法 handler：参数与返回值为可序列化 JSON */
 export type RpcHandler = (

@@ -102,7 +102,10 @@ export class ChatController {
     // 必须在标签解析与 chatRunner.startStream 之前拦截——一旦进入 startStream，
     // agent-engine 会先 addUserMessage 落库，再想"不发给模型"就只能删回合（zcode 同款做法是
     // 在 core runtime 的 addUser/persistUserPrompt 之前短路，见 zcode turn.ts executeTurnCommand）。
-    const localCommand = parseLocalSlashCommand(userMessage?.content);
+    const localCommand = parseLocalSlashCommand(
+      userMessage?.content,
+      (name) => this.localCommands.has(name),
+    );
     if (localCommand) {
       if (userMessage?.files?.length) {
         throw new BadRequestException({

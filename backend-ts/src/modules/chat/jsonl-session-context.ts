@@ -25,7 +25,7 @@ import { TokenBreakdown, TurnFinish } from './interfaces';
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { PluginManager } from '../plugins/plugin.manager';
 import { SessionStreamManager } from './session-stream.manager';
-import { PromptCollector } from '../plugins/prompt-collector.service';
+import { PromptAssembler } from '../plugins/prompt-assembler.service';
 import { WorkspaceService } from '../../common/services/workspace.service';
 import { turnApprovalMemory } from '../../common/services/turn-approval-memory';
 import { TokenMeterService } from './token-meter.service';
@@ -206,7 +206,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     @Inject(MESSAGE_STORE_TOKEN) private readonly messageStore: IMessageStore,
     private readonly modelStore: ProviderFileStore,
     private readonly pluginManager: PluginManager,
-    private readonly promptCollector: PromptCollector,
+    private readonly promptAssembler: PromptAssembler,
     private readonly workspaceService: WorkspaceService,
     private readonly tokenMeter: TokenMeterService,
     private readonly streamManager: SessionStreamManager,
@@ -1603,26 +1603,17 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
    * 含：智能体 systemPrompt + 插件 eager 提示词。
    */
   private async buildSystemText(): Promise<string> {
-    const systemPrompts: string[] = [this.effectiveSettings.systemPrompt];
     const modelName = this.currentModelName();
 
-    // 每次调用时动态搜集插件提示词，因为插件可能在运行时加载
+    // 每次调用时动态搜集插件提示词，因为插件可能在运行时加载。
+    // v2：交由 PromptAssembler 统一处理「内置段 + 命名段 + 旧 registerPrompt 兼容 + 装配变换」。
     const modePlugins = this.getResolvedPlugins();
-    if (modePlugins.length > 0) {
-      // eager → system prompt
-      const promptPieces = await this.promptCollector.collectPrompts(
-        modePlugins,
-        { session: this },
-      );
-      systemPrompts.push(
-        promptPieces
-          .map((p) => p.content)
-          .filter(Boolean)
-          .join('\n\n'),
-      );
-    }
-
-    const systemText = systemPrompts.filter(Boolean).join('\n\n');
+    const assembly = await this.promptAssembler.assemble({
+      basePrompt: this.effectiveSettings.systemPrompt,
+      resolvedPlugins: modePlugins,
+      context: { session: this },
+    });
+    const systemText = assembly.systemText;
     this.preludeTokenStats.systemPrompt =
       await this.tokenMeter.estimateTextTokens(modelName, systemText);
 

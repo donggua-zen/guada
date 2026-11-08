@@ -43,6 +43,9 @@ export const HOOKS = {
   TODO_UPDATED: 'todo.updated',
   /** 会话目标更新（前端胶囊 REST 重拉；SSE 不补发该事件） */
   GOAL_UPDATED: 'goal.updated',
+  // ── 会话生命周期（emit 通知；同时向插件开放）──
+  /** 会话创建/分支创建（payload 见 SessionCreatedPayload） */
+  SESSION_CREATED: 'session.created',
 } as const;
 
 export type HookName = (typeof HOOKS)[keyof typeof HOOKS];
@@ -87,4 +90,15 @@ export interface BeforeCompactionPayload {
   abortSignal?: AbortSignal;
   /** 摘要模式（memory_sync 触发记忆同步） */
   summaryMode: string;
+}
+
+// ─── SESSION_CREATED ───
+
+/** 会话创建事件负载（sessions.controller 发射；插件 hook 同形） */
+export interface SessionCreatedPayload {
+  sessionId: string;
+  timestamp: string;
+  /** 发起客户端 id（用于前端过滤自身事件） */
+  source?: string;
+  payload: { session: unknown };
 }

@@ -12,7 +12,7 @@ import {
 } from '../../common/persistence/message-store.interface';
 import { ProviderFileStore } from '../llm-core/provider-file.store';
 import { PluginManager } from '../plugins/plugin.manager';
-import { PromptCollector } from '../plugins/prompt-collector.service';
+import { PromptAssembler } from '../plugins/prompt-assembler.service';
 import { WorkspaceService } from '../../common/services/workspace.service';
 import { TokenMeterService } from './token-meter.service';
 import { SessionStreamManager } from './session-stream.manager';
@@ -28,7 +28,7 @@ export class JsonlSessionContextFactory {
     @Inject(MESSAGE_STORE_TOKEN) private readonly messageStore: IMessageStore,
     private readonly modelStore: ProviderFileStore,
     private readonly pluginManager: PluginManager,
-    private readonly promptCollector: PromptCollector,
+    private readonly promptAssembler: PromptAssembler,
     private readonly workspaceService: WorkspaceService,
     private readonly tokenMeter: TokenMeterService,
     private readonly streamManager: SessionStreamManager,
@@ -45,7 +45,7 @@ export class JsonlSessionContextFactory {
       this.messageStore,
       this.modelStore,
       this.pluginManager,
-      this.promptCollector,
+      this.promptAssembler,
       this.workspaceService,
       this.tokenMeter,
       this.streamManager,

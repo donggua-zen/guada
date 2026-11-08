@@ -21,18 +21,35 @@ import { BochaProvider } from "./builtins/search-providers/bocha.provider";
 import { DeepSeekProvider } from "./builtins/search-providers/deepseek.provider";
 import { AgentHomeProvider } from "./builtins/search-providers/agenthome.provider";
 import { PromptCollector } from "./prompt-collector.service";
+import { PromptAssembler } from "./prompt-assembler.service";
 import { NlsService } from "./i18n/nls.service";
 import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
+import { PluginPathsService } from "./paths/plugin-paths.service";
+import { PluginHookRegistry } from "./hooks/plugin-hook.registry";
+import { LocalSlashCommandRegistry } from "../chat/commands/local-slash-command.registry";
+import { JobsModule } from "../jobs/jobs.module";
+import { PluginHttpRegistry } from "./http/plugin-http.registry";
+import { PluginHttpController } from "./http/plugin-http.controller";
+import { PluginLlmService } from "./llm/plugin-llm.service";
 
 @Global()
 @Module({
-  imports: [forwardRef(() => AuthModule), RemoteWorkspaceModule],
-  controllers: [PluginsController],
+  imports: [forwardRef(() => AuthModule), RemoteWorkspaceModule, JobsModule],
+  controllers: [PluginsController, PluginHttpController],
   providers: [
     PluginManager,
     PromptCollector,
+    PromptAssembler,
     NlsService,
     TurnReminderRegistry,
+    PluginPathsService,
+    PluginHookRegistry,
+    // v3：插件 HTTP 路由注册表 + 模型调用服务
+    PluginHttpRegistry,
+    PluginLlmService,
+    // v2：动作型本地命令注册表上移到全局插件模块，
+    // 避免 PluginsModule ↔ ChatModule 的模块循环（ChatController 仍直接注入）。
+    LocalSlashCommandRegistry,
     // ExternalPluginLoader 放在内建插件之后，确保 onModuleInit 顺序
     ExternalPluginLoader,
     FilePlugin,
@@ -51,7 +68,18 @@ import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
     DeepSeekProvider,
     AgentHomeProvider,
   ],
-  exports: [PluginManager, PromptCollector, ExternalPluginLoader, NlsService, TurnReminderRegistry],
+  exports: [
+    PluginManager,
+    PromptCollector,
+    PromptAssembler,
+    ExternalPluginLoader,
+    NlsService,
+    TurnReminderRegistry,
+    PluginPathsService,
+    PluginHookRegistry,
+    LocalSlashCommandRegistry,
+    PluginHttpRegistry,
+  ],
 })
 export class PluginsModule implements OnModuleInit {
   constructor(

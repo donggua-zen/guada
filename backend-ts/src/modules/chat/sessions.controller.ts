@@ -26,6 +26,7 @@ import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { PlanHistoryService } from "./plan-history.service";
 import { EventBusService } from "../../common/events/event-bus.service";
+import { HOOKS } from "./types/hooks.contract";
 import { UpdateSessionDto } from "./dto/update-session.dto";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import { BranchSessionDto } from "./dto/branch-session.dto";
@@ -165,7 +166,7 @@ export class SessionsController {
     const session = await this.sessionService.createSession(data);
 
     // 广播会话创建事件，携带 source 使前端能过滤自身事件
-    this.eventBus.emit("session.created", {
+    this.eventBus.emit(HOOKS.SESSION_CREATED, {
       sessionId: session.id,
       timestamp: new Date().toISOString(),
       source: clientId || undefined,
@@ -195,7 +196,7 @@ export class SessionsController {
     });
 
     // 广播会话创建事件，携带 source 使前端能过滤自身事件（其他客户端侧边栏同步出现分支会话）
-    this.eventBus.emit("session.created", {
+    this.eventBus.emit(HOOKS.SESSION_CREATED, {
       sessionId: session.id,
       timestamp: new Date().toISOString(),
       source: clientId || undefined,

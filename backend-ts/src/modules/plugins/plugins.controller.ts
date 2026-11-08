@@ -24,6 +24,7 @@ import { ExternalPluginLoader } from "./external/external-plugin-loader";
 import { NlsService } from "./i18n/nls.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";import { PluginRegistry } from "./registry/plugin-registry";
 import { RolePluginConfig } from "./types/plugin.types";
+import { normalizeConfigSchema, resolveConfigSchemaNls } from "./config-schema.util";
 
 @Controller("plugins")
 export class PluginsController {
@@ -66,10 +67,28 @@ export class PluginsController {
     const nlsLocale = this.toNlsLocale(body?.lang);
     const includeSystem = body?.includeSystem === true;
 
+    // v2.1：通用配置页需要 schema + 当前值；一次性批量取，避免前端 N 次请求
+    const configByPlugin = new Map<string, Record<string, any>>();
+    for (const r of resolved) {
+      const schema = normalizeConfigSchema(r.plugin.configSchema);
+      if (schema.fields.length === 0) continue;
+      try {
+        const data = await this.settingsStorage.getSettings(`plugin:${r.plugin.id}`);
+        configByPlugin.set(r.plugin.id, data || {});
+      } catch {
+        configByPlugin.set(r.plugin.id, {});
+      }
+    }
+
     return {
       plugins: resolved
         .filter((r) => includeSystem || r.plugin.category !== "system")
-        .map((r) => ({
+        .map((r) => {
+          const schema = normalizeConfigSchema(r.plugin.configSchema);
+          const resolvedSchema = resolveConfigSchemaNls(schema, (text) =>
+            this.nlsService.resolveString(r.plugin.id, text, nlsLocale),
+          );
+          return {
           pluginId: r.plugin.id,
           effective: r.effective,
           name: r.plugin.id,
@@ -115,7 +134,11 @@ export class PluginsController {
             toolCount: k.toolCount,
             promptCount: k.promptCount,
           })),
-        })),
+          // v2.1：通用插件配置页（manifest.configSchema → fields）
+          configSchema: resolvedSchema.fields.length > 0 ? resolvedSchema : undefined,
+          config: configByPlugin.get(r.plugin.id),
+          };
+        }),
     };
   }
 
@@ -426,6 +449,44 @@ export class PluginsController {
   }
 
   /**
+   * 批量写入插件配置（v2.1 通用配置页）
+   *
+   * 一次提交整个配置对象，避免逐字段写入导致的半更新。
+   * 只写入 manifest.configSchema 声明过的字段（白名单），未知键忽略。
+   */
+  @UseGuards(AuthGuard)
+  @Put(":pluginId/config")
+  async setPluginConfig(
+    @Param("pluginId") pluginId: string,
+    @Body() body: { values?: Record<string, any> },
+  ) {
+    const resolved = await this.pluginManager.resolvePlugins(undefined, undefined, true);
+    const target = resolved.find((r) => r.plugin.id === pluginId);
+    if (!target) throw new NotFoundException(`plugin ${pluginId} not found`);
+
+    const schema = normalizeConfigSchema(target.plugin.configSchema);
+    // v3：主题设置与插件配置共用同一份数据；允许键 = manifest 字段 ∪ 该插件主题的 settings
+    const themeKeys = PluginRegistry.getThemes(pluginId).flatMap((theme) =>
+      (theme.settings || []).map((field) => field.key),
+    );
+    const allowed = new Set([...schema.fields.map((field) => field.key), ...themeKeys]);
+    if (allowed.size === 0) {
+      throw new BadRequestException(`plugin ${pluginId} declares no configSchema`);
+    }
+    const values = body?.values && typeof body.values === "object" ? body.values : {};
+    const patch: Record<string, any> = {};
+    for (const [key, value] of Object.entries(values)) {
+      if (!allowed.has(key)) continue;
+      patch[key] = value;
+    }
+    if (Object.keys(patch).length === 0) {
+      throw new BadRequestException("no known config keys provided");
+    }
+    await this.settingsStorage.updateSettings(`plugin:${pluginId}`, patch);
+    return { success: true, pluginId, updated: Object.keys(patch) };
+  }
+
+  /**
    * 删除插件数据的单个 key
    */
   @UseGuards(AuthGuard)
@@ -451,6 +512,7 @@ export class PluginsController {
     const nlsLocale = this.toNlsLocale(lang);
     const result: Record<string, Array<Record<string, any>>> = {};
     const themes: Array<Record<string, any>> = [];
+    const skins: Array<Record<string, any>> = [];
     for (const r of resolved) {
       if (!r.enabled) continue;
       const pluginPath = this.externalLoader.getPluginPath(r.plugin.id);
@@ -473,8 +535,9 @@ export class PluginsController {
           rev: pluginPath ? this.assetRev(pluginPath) : r.plugin.version || "1.0.0",
         });
       }
-      // 插件主题注册表（CSS 走 assets 端点，前端按 baseURL 拼完整 URL）
+      // 插件主题注册表（v3：主题 = 皮肤；CSS/脚本/资源均走 assets 端点）
       for (const theme of PluginRegistry.getThemes(r.plugin.id)) {
+        const rich = Boolean(theme.runtimeScript || theme.assetBase);
         themes.push({
           pluginId: r.plugin.id,
           id: theme.id,
@@ -485,14 +548,35 @@ export class PluginsController {
           secondaryColor: theme.secondaryColor,
           mode: theme.mode || "all",
           cssFile: theme.cssFile,
+          cssFiles: theme.cssFiles,
+          // 富主题字段（原「皮肤」）
+          rich,
+          runtimeScript: theme.runtimeScript,
+          assetBase: theme.assetBase,
+          bodyAttribute: rich
+            ? theme.bodyAttribute ||
+              `data-gd-theme-${theme.id.replace(/[^A-Za-z0-9]+/g, "-")}`
+            : undefined,
+          settings: theme.settings
+            ? resolveConfigSchemaNls({ fields: theme.settings }, (text) =>
+                this.nlsService.resolveString(r.plugin.id, text, nlsLocale),
+              ).fields
+            : undefined,
+          preview: theme.preview,
+          ownsBackground: theme.ownsBackground,
+          recommendedThemes: theme.recommendedThemes,
           rev: pluginPath ? this.assetRev(pluginPath) : r.plugin.version || "1.0.0",
         });
+        // 兼容字段：富主题同时出现在 skins 里（旧前端仍可读）
+        if (rich) {
+          skins.push({ ...themes[themes.length - 1] });
+        }
       }
     }
     for (const name of Object.keys(result)) {
       result[name].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
     }
-    return { slots: result, themes };
+    return { slots: result, themes, skins };
   }
 
   /**
