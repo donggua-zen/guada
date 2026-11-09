@@ -159,6 +159,8 @@
     moreActions: 'More Actions',
     copySessionId: 'Copy Session ID',
     clearRecords: 'Clear Records',
+    wideChatMode: 'Switch to Wide Chat',
+    narrowChatMode: 'Switch to Narrow Chat',
     exportRecords: 'Export Records',
     importRecords: 'Import Records',
   },

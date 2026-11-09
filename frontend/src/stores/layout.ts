@@ -147,6 +147,19 @@ export const useLayoutStore = defineStore('layout', () => {
   const petOpacity = useStorage<number>('petOpacity', 95)
   const petAvatarId = useStorage<string>('petAvatarId', 'silver-haired')
 
+  // 对话列宽模式（全局用户偏好）：narrow=744px / wide=1138px。
+  // 仅抬高 max-width 上限，窗口不够宽时列自然收缩（ChatPanel/.chat-column、
+  // PlanPanel/.plan-detail-doc、markdown 预览 iframe 的 .markdown-text 均走同一 var()）。
+  // 窄模式写空字符串清除内联值，回落 :root 定义（style.css --gd-chat-column-width），
+  // 与未启用本功能时零差异。
+  const chatColumnMode = useStorage<'narrow' | 'wide'>('gd-chat-column-mode', 'narrow')
+  watch(chatColumnMode, (mode) => {
+    document.documentElement.style.setProperty(
+      '--gd-chat-column-width',
+      mode === 'wide' ? '1138px' : '',
+    )
+  }, { immediate: true })
+
   // 防止重复加载壁纸的标志
   let isLoadingWallpaper = false
 
@@ -463,6 +476,7 @@ export const useLayoutStore = defineStore('layout', () => {
     wallpaperUrl,
     sidebarOpacity,
     contentOpacity,
+    chatColumnMode,
     petEnabled,
     petOpacity,
     petAvatarId,

@@ -159,6 +159,8 @@ export default {
     moreActions: '更多操作',
     copySessionId: '复制会话 ID',
     clearRecords: '清空记录',
+    wideChatMode: '切换为宽版对话',
+    narrowChatMode: '切换为窄版对话',
     exportRecords: '导出记录',
     importRecords: '导入记录',
   },

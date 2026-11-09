@@ -15,6 +15,12 @@
                   <MoreHorizontal24Regular class="w-5 h-5" />
                 </div>
                 <template #dropdown>
+                  <DropdownMenuItem command="toggle-chat-width">
+                    <span class="flex items-center gap-2">
+                      <ArrowAutofitWidth20Regular class="w-4 h-4" />
+                      <span>{{ layoutStore.chatColumnMode === 'wide' ? t('chat.header.narrowChatMode') : t('chat.header.wideChatMode') }}</span>
+                    </span>
+                  </DropdownMenuItem>
                   <DropdownMenuItem command="copy-session-id">
                     <span class="flex items-center gap-2">
                       <Copy16Regular class="w-4 h-4" />
@@ -73,6 +79,12 @@
                       <MoreHorizontal24Regular class="w-5 h-5" />
                     </div>
                     <template #dropdown>
+                      <DropdownMenuItem command="toggle-chat-width">
+                        <span class="flex items-center gap-2">
+                          <ArrowAutofitWidth20Regular class="w-4 h-4" />
+                          <span>{{ layoutStore.chatColumnMode === 'wide' ? t('chat.header.narrowChatMode') : t('chat.header.wideChatMode') }}</span>
+                        </span>
+                      </DropdownMenuItem>
                       <DropdownMenuItem command="copy-session-id">
                         <span class="flex items-center gap-2">
                           <Copy16Regular class="w-4 h-4" />
@@ -263,6 +275,7 @@ import DropdownMenuItem from "@/components/ui/DropdownMenuItem.vue";
 import {
   PanelRightExpand20Filled, AppsListDetail20Regular, ChevronDown16Regular, MoreHorizontal24Regular, Dismiss24Regular,
   Delete16Regular, Copy16Regular, WindowConsole20Regular, Dismiss16Regular, PuzzlePiece20Regular,
+  ArrowAutofitWidth20Regular,
 } from "@vicons/fluent";
 import { VsCode, WindowsExplorer, Finder } from "@/components/icons";
 
@@ -300,12 +313,11 @@ const overviewTempExpanded = ref(false);
 const ASIDE_WIDTH = 280;
 const ASIDE_GAP = 8;
 const ASIDE_TOTAL = ASIDE_WIDTH + ASIDE_GAP;
-/** 对话列目标宽：取自 CSS token --gd-chat-column-width（样式侧唯一真相），
- *  此处只在 setup 读一次快照，不参与逐帧计算。 */
-const MSG_MAX_WIDTH =
-  Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue("--gd-chat-column-width"),
-  ) || 744;
+/** 对话列目标宽（按模式）：与 CSS token --gd-chat-column-width 同源
+ *  （style.css 窄版 744px；宽版对话模式由 stores/layout.ts 运行时覆盖为 1138px）。
+ *  宽窄切换后 asideFit 迟滞判断必须跟着用新值，因此响应式取值而非 setup 一次性快照。
+ *  getter 依赖 layoutStore（声明在下方 :584 附近），故 MSG_MAX_WIDTH 定义在那之后。 */
+const CHAT_COLUMN_WIDTHS = { narrow: 744, wide: 1138 } as const;
 
 /** 决策用容器宽（ResizeObserver 实时上报） */
 const chatDecisionWidth = ref(0);
@@ -320,20 +332,10 @@ const chatContentWidth = computed(() => Math.max(0, chatDecisionWidth.value - 40
  * 空间是否容得下概览面板。
  * 带迟滞：进入要 ≥MSG_MAX_WIDTH，退出要 <MSG_MAX_WIDTH-48。单点阈值在拖拽穿越边界时
  * 会逐帧翻转 → asideReserve 0↔280 抖动 + OverviewPanel（异步挂载的重组件）反复创建销毁。
+ * asideFit 的重算 watch 在下方 MSG_MAX_WIDTH 定义之后（其 getter 依赖 layoutStore）。
  */
 const ASIDE_FIT_HYSTERESIS = 48;
 const asideFit = ref(false);
-
-watch(
-  chatContentWidth,
-  (w) => {
-    const avail = w - ASIDE_TOTAL;
-    asideFit.value = asideFit.value
-      ? avail >= MSG_MAX_WIDTH - ASIDE_FIT_HYSTERESIS
-      : avail >= MSG_MAX_WIDTH;
-  },
-  { immediate: true },
-);
 
 /** 面板实际可见：（意图开 && 空间足够）或 空间不足时的临时展开 */
 const overviewPanelShown = computed(
@@ -569,6 +571,22 @@ const title = useTitle();
 // 布局/会话 store 必须在 mainSession 及其 watch 之前初始化：
 // mainSession 是 store 派生 computed，watch 在 setup 阶段会立即求值一次。
 const layoutStore = useLayoutStore();
+
+/** 对话列目标宽：见上方 CHAT_COLUMN_WIDTHS 注释（依赖 layoutStore，须在其后定义） */
+const MSG_MAX_WIDTH = computed(() => CHAT_COLUMN_WIDTHS[layoutStore.chatColumnMode]);
+
+// 监听容器宽与对话列宽模式：任一变化都重算 asideFit（宽窄切换会改变阈值）
+watch(
+  [chatContentWidth, MSG_MAX_WIDTH],
+  ([w]) => {
+    const avail = w - ASIDE_TOTAL;
+    asideFit.value = asideFit.value
+      ? avail >= MSG_MAX_WIDTH.value - ASIDE_FIT_HYSTERESIS
+      : avail >= MSG_MAX_WIDTH.value;
+  },
+  { immediate: true },
+);
+
 // 浏览器 webview store（会话切换时同步当前会话 ID）
 const browserWebviewStore = useBrowserWebviewStore();
 const tabStore = useTabStore();
@@ -828,6 +846,11 @@ const handleSelectAgent = async (agent: Agent) => {
  */
 async function handleMoreSelect(key: string) {
   switch (key) {
+    case "toggle-chat-width":
+      // 宽窄对话模式（全局偏好）：翻转 layoutStore.chatColumnMode，
+      // CSS 变量联动见 stores/layout.ts 的 watcher
+      layoutStore.chatColumnMode = layoutStore.chatColumnMode === 'wide' ? 'narrow' : 'wide';
+      break;
     case "copy-session-id":
       await copySessionId();
       break;
