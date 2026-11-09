@@ -29,10 +29,10 @@
 const THEMES = [
   {
     id: "qi-dusk",
-    name: "柒·残月都市（仅暗色）",
+    name: "柒·残月都市",
     primaryColor: "#b13440",
     secondaryColor: "#565c66",
-    mode: "dark",
+    mode: "all",
     ownsBackground: true,
   },
 ];
@@ -43,7 +43,7 @@ class QiDuskSkinPlugin {
       id: "qi-dusk-skin",
       name: "柒·残月都市（皮肤）",
       version: "1.0.0",
-      description: "原创 IP「柒」主题皮肤：全窗背景 + 左右立绘 + 半透明装甲面板（仅暗色）",
+      description: "原创 IP「柒」主题皮肤：全窗背景 + 左右立绘 + 半透明装甲面板（亮暗通用）",
       category: "user",
     };
   }

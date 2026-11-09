@@ -1,5 +1,5 @@
 /* ============================================================
-   主题：柒·残月都市（qi-dusk，仅暗色）
+   主题：柒·残月都市（qi-dusk，亮暗通用）
    风格：银发红瞳「柒」× 废土月夜都市 —— 全窗背景画 + 半透明装甲面板
         + 暗面板消息卡 + 绯红点缀。构图语言参考竞品皮肤的：
         左右双立绘 / 斜切角面板 / 红色装甲线
@@ -30,7 +30,7 @@
    left/right bottom（原图下缘截断，贴角才不突兀）；88% 随视口等比。
    卸载：removeTheme 还原壁纸变量，本规则随 data-theme 摘除，互不残留。
    素材按设计原亮度呈现；若将来整体压暗，人物与城市必须一起压。 */
-html.dark[data-theme="qi-dusk"] body::before {
+html[data-theme="qi-dusk"] body::before {
   opacity: 1;
   background:
     url("img/qi-dusk-right.webp") right bottom / auto 71.3% no-repeat,
@@ -45,10 +45,20 @@ html.dark[data-theme="qi-dusk"] body::before {
 }
 
 /* ---------- token 全集（原 html 块：只放变量，背景画布已移到 body::before） ---------- */
-html.dark[data-theme="qi-dusk"] {
+html[data-theme="qi-dusk"] {
   /* ---- 私有变量 ---- */
   --qd-base: #0d0b0e;                      /* 页面底黑（背景图加载前兜底） */
-  --qd-shell: rgba(17, 15, 19, 0.8);       /* 侧栏/内容卡：半透明装甲壳 */
+  /* 壳层透明度是亮暗的唯一分档：同一套「暗底亮字」体系，亮档只是把面板壳
+     调得更透、让背景画更多透出（亮档 0.28 用户实测）；其余 token/元素规则
+     亮暗完全共用，亮暗切换走系统 html.dark 机制（--gd-* 亮暗自动换挡） */
+  --qd-shell: rgba(17, 15, 19, 0.68);      /* 暗档：侧栏/内容卡装甲壳 */
+  --qd-shell-light: rgba(17, 15, 19, 0.28); /* 亮档：同壳更透（背景透出更多） */
+  --qd-sidebar-bg: rgba(15, 13, 17, 0.74);  /* 暗档：侧栏底（比壳实一点） */
+  --qd-sidebar-veil: linear-gradient(180deg,
+    rgba(15, 13, 17, 0.35) 0%,
+    rgba(15, 13, 17, 0.58) 52%,
+    rgba(15, 13, 17, 0.88) 100%); /* 暗档：侧栏渐晕 */
+  --qd-titlebar-bg: rgba(11, 10, 13, 0.84); /* 暗档：标题栏底 */
   --qd-panel: rgba(20, 18, 23, 0.92);      /* 输入坞/浮层（更实一点） */
   --qd-red: #b13440;                       /* 绯红主色（立绘瞳色一族） */
   --qd-red-bright: #d24a52;                /* 亮红：暗底文字 / 悬停 / 标识块 */
@@ -96,7 +106,7 @@ html.dark[data-theme="qi-dusk"] {
   --gd-color-app-backdrop: #0d0b0e;
 
   /* ---- 侧栏 ---- */
-  --gd-color-sidebar-bg: rgba(15, 13, 17, 0.86);
+  --gd-color-sidebar-bg: var(--qd-sidebar-bg);
   --gd-color-sidebar-bg-hover: rgba(40, 36, 43, 0.85);
   --gd-color-sidebar-bg-active: var(--qd-red-deep);
   --gd-color-sidebar-text: #d6d3d0;
@@ -104,7 +114,7 @@ html.dark[data-theme="qi-dusk"] {
   --gd-color-sidebar-text-active: #ffffff;
 
   /* ---- 标题栏：近黑 + 红晕下沿线（暗色模式，无 titlebar 亮度约束） ---- */
-  --gd-color-titlebar-bg: rgba(11, 10, 13, 0.92);
+  --gd-color-titlebar-bg: var(--qd-titlebar-bg);
   --gd-color-titlebar-border: var(--qd-red-dim);
   --gd-titlebar-text-color: #d6d3d0;
   --gd-titlebar-hover-bg: rgba(46, 41, 49, 0.9);
@@ -201,16 +211,18 @@ html.dark[data-theme="qi-dusk"] {
 /* ---------- 侧栏：只负责压暗，不再承载立绘 ----------
    立绘已上移到 html 背景层（见上）。侧栏保留暗壳底色 + 自上而下渐沉的
    渐晕：头部区域可见、会话列表区沉底保文字可读。 */
-html.dark[data-theme="qi-dusk"] .global-sidebar {
+html[data-theme="qi-dusk"] .global-sidebar {
   border-right: 1px solid var(--qd-line);
-  background-image: linear-gradient(180deg,
-    rgba(15, 13, 17, 0.35) 0%,
-    rgba(15, 13, 17, 0.58) 52%,
-    rgba(15, 13, 17, 0.88) 100%);
+  /* 渐晕亮暗分档：暗档沉底保列表可读，亮档更浅（--qd-sidebar-veil 覆盖） */
+  background-image: var(--qd-sidebar-veil,
+    linear-gradient(180deg,
+      rgba(15, 13, 17, 0.35) 0%,
+      rgba(15, 13, 17, 0.58) 52%,
+      rgba(15, 13, 17, 0.88) 100%));
 }
 
 /* ---------- 标题栏：红晕下沿线 ---------- */
-html.dark[data-theme="qi-dusk"] .custom-titlebar {
+html[data-theme="qi-dusk"] .custom-titlebar {
   border-bottom: 2px solid var(--qd-red-dim);
 }
 
@@ -218,8 +230,8 @@ html.dark[data-theme="qi-dusk"] .custom-titlebar {
    内容卡的暗壳（--gd-color-bg 0.8）负责把她压到与整页一致的亮度。 */
 
 /* 人物占右侧 ~460px：正文长行收窄让位（代码块/表格仍占满） */
-html.dark[data-theme="qi-dusk"] .markdown-text p,
-html.dark[data-theme="qi-dusk"] .markdown-text li {
+html[data-theme="qi-dusk"] .markdown-text p,
+html[data-theme="qi-dusk"] .markdown-text li {
   max-width: 66ch;
 }
 
@@ -228,13 +240,13 @@ html.dark[data-theme="qi-dusk"] .markdown-text li {
    clip-path 会把 border 与阴影一起剪掉（qi-cel 实测），
    所以切角件一律靠底色对比立形，不描边不加影。
    ============================================================ */
-html.dark[data-theme="qi-dusk"] .assistant-section .message-item__card {
+html[data-theme="qi-dusk"] .assistant-section .message-item__card {
   /* 组件对助手卡是 padding:0 + 透明底（默认主题文字直接浮在页面上）；
      本主题给了可见的暗面板底色，必须补内边距，否则文字顶到卡缘 */
   padding: 12px 16px;
   clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
 }
-html.dark[data-theme="qi-dusk"] .user-section .message-item__card {
+html[data-theme="qi-dusk"] .user-section .message-item__card {
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
 }
 
@@ -244,7 +256,7 @@ html.dark[data-theme="qi-dusk"] .user-section .message-item__card {
    左下白斜纹。两层都 z:-1（在元素背景之上、内容之下）；元素背景透明，
    人物从玻璃透出。切角处 border 会被剪，所以不走 border，框线即
    ::after 的可视边缘。 */
-html.dark[data-theme="qi-dusk"] .input-area {
+html[data-theme="qi-dusk"] .input-area {
   border-color: transparent;
   background: transparent;
   clip-path: polygon(
@@ -252,7 +264,7 @@ html.dark[data-theme="qi-dusk"] .input-area {
     calc(100% - 20px) 100%, 20px 100%, 0 calc(100% - 20px), 0 20px
   );
 }
-html.dark[data-theme="qi-dusk"] .input-area::after {
+html[data-theme="qi-dusk"] .input-area::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -260,7 +272,7 @@ html.dark[data-theme="qi-dusk"] .input-area::after {
   /* 平涂版：去方向渐变，只留一层均匀金属灰 */
   background: rgba(112, 118, 128, 0.2);
 }
-html.dark[data-theme="qi-dusk"] .input-area::before {
+html[data-theme="qi-dusk"] .input-area::before {
   content: "";
   position: absolute;
   inset: 2px;
@@ -285,28 +297,28 @@ html.dark[data-theme="qi-dusk"] .input-area::before {
 }
 
 /* 发送键：红色光晕（参考 dock 的发光红钮） */
-html.dark[data-theme="qi-dusk"] .send-btn {
+html[data-theme="qi-dusk"] .send-btn {
   border-radius: 3px;
   clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
   box-shadow: 0 0 14px rgba(210, 74, 82, 0.45), 0 0 4px rgba(210, 74, 82, 0.55);
 }
 
 /* 主按钮：右上小切角；实底件的描边显式给色（qi-cel：不写会糊 currentColor） */
-html.dark[data-theme="qi-dusk"] .gd-button { border-radius: 2px }
-html.dark[data-theme="qi-dusk"] .gd-button[data-variant="primary"] {
+html[data-theme="qi-dusk"] .gd-button { border-radius: 2px }
+html[data-theme="qi-dusk"] .gd-button[data-variant="primary"] {
   clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
   border-color: rgba(0, 0, 0, 0.35);
 }
-html.dark[data-theme="qi-dusk"] .gd-button[data-variant="secondary"] { border-color: rgba(0, 0, 0, 0.3) }
+html[data-theme="qi-dusk"] .gd-button[data-variant="secondary"] { border-color: rgba(0, 0, 0, 0.3) }
 
 /* ============================================================
    选中态：行首红色装甲块 + 内嵌红条
    ============================================================ */
-html.dark[data-theme="qi-dusk"] .session-item {
+html[data-theme="qi-dusk"] .session-item {
   border-radius: 3px;
   padding-left: 18px;
 }
-html.dark[data-theme="qi-dusk"] .session-item-active::before {
+html[data-theme="qi-dusk"] .session-item-active::before {
   content: "";
   position: absolute;
   left: 5px;
@@ -316,25 +328,25 @@ html.dark[data-theme="qi-dusk"] .session-item-active::before {
   height: 8px;
   background: var(--qd-red-bright);
 }
-html.dark[data-theme="qi-dusk"] .nav-item-active,
-html.dark[data-theme="qi-dusk"] .conversation-item-active {
+html[data-theme="qi-dusk"] .nav-item-active,
+html[data-theme="qi-dusk"] .conversation-item-active {
   box-shadow: inset 2px 0 0 var(--qd-red-bright);
 }
 
 /* ============================================================
    终端块：块内控件点名给色（与暗面板共用 token，见上）
    ============================================================ */
-html.dark[data-theme="qi-dusk"] .markdown-text pre,
-html.dark[data-theme="qi-dusk"] .code-scroll { color: #d8d4d0 }
-html.dark[data-theme="qi-dusk"] .code-header {
+html[data-theme="qi-dusk"] .markdown-text pre,
+html[data-theme="qi-dusk"] .code-scroll { color: #d8d4d0 }
+html[data-theme="qi-dusk"] .code-header {
   background-color: #0a090c;
   border-bottom: 1px solid rgba(210, 74, 82, 0.25);
 }
-html.dark[data-theme="qi-dusk"] .code-language {
+html[data-theme="qi-dusk"] .code-language {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-html.dark[data-theme="qi-dusk"] .code-language::before {
+html[data-theme="qi-dusk"] .code-language::before {
   content: "";
   display: inline-block;
   width: 6px;
@@ -343,16 +355,16 @@ html.dark[data-theme="qi-dusk"] .code-language::before {
   vertical-align: middle;
   background: var(--qd-red-bright);
 }
-html.dark[data-theme="qi-dusk"] .code-actions button { color: #8d878c }
-html.dark[data-theme="qi-dusk"] .code-actions button:hover {
+html[data-theme="qi-dusk"] .code-actions button { color: #8d878c }
+html[data-theme="qi-dusk"] .code-actions button:hover {
   color: #e8e2da;
   background-color: rgba(210, 74, 82, 0.14);
 }
-html.dark[data-theme="qi-dusk"] .code-expand { color: #8d878c }
+html[data-theme="qi-dusk"] .code-expand { color: #8d878c }
 
 /* 行内码在暗面板上：fill-tertiary 是终端黑，与面板底几乎同色会隐形，
    改用亮 8% 的同族 chip（文字继承面板亮字）；终端黑只留给块级代码 */
-html.dark[data-theme="qi-dusk"] .assistant-section .message-item__card :not(pre) > code {
+html[data-theme="qi-dusk"] .assistant-section .message-item__card :not(pre) > code {
   background-color: rgba(255, 255, 255, 0.08);
   color: inherit;
 }
@@ -360,25 +372,25 @@ html.dark[data-theme="qi-dusk"] .assistant-section .message-item__card :not(pre)
 /* ============================================================
    交互面：滚动条 / 选区 / 焦点 / 空状态 / 工作区面板
    ============================================================ */
-html.dark[data-theme="qi-dusk"] ::-webkit-scrollbar { width: 12px; height: 12px }
-html.dark[data-theme="qi-dusk"] ::-webkit-scrollbar-track {
+html[data-theme="qi-dusk"] ::-webkit-scrollbar { width: 12px; height: 12px }
+html[data-theme="qi-dusk"] ::-webkit-scrollbar-track {
   background-color: rgba(14, 12, 16, 0.6);
 }
-html.dark[data-theme="qi-dusk"] ::-webkit-scrollbar-thumb {
+html[data-theme="qi-dusk"] ::-webkit-scrollbar-thumb {
   background: #453e47;
   border: 2px solid rgba(0, 0, 0, 0.35);
   border-radius: 2px;
 }
-html.dark[data-theme="qi-dusk"] ::-webkit-scrollbar-thumb:hover { background: var(--qd-red) }
+html[data-theme="qi-dusk"] ::-webkit-scrollbar-thumb:hover { background: var(--qd-red) }
 
-html.dark[data-theme="qi-dusk"] ::selection { background: var(--qd-red-deep); color: #f4f1ec }
-html.dark[data-theme="qi-dusk"] :focus-visible {
+html[data-theme="qi-dusk"] ::selection { background: var(--qd-red-deep); color: #f4f1ec }
+html[data-theme="qi-dusk"] :focus-visible {
   outline: 2px solid var(--qd-red-bright);
   outline-offset: 2px;
 }
 
 /* 空状态：三道红色斜切（纯 CSS，不注入文案） */
-html.dark[data-theme="qi-dusk"] .gd-empty::after {
+html[data-theme="qi-dusk"] .gd-empty::after {
   content: "";
   display: block;
   width: 56px;
@@ -388,6 +400,22 @@ html.dark[data-theme="qi-dusk"] .gd-empty::after {
   opacity: 0.55;
 }
 
-html.dark[data-theme="qi-dusk"] .workspace-sidebar {
+/* ---------- 亮色模式：只分档壳层透明度 ----------
+   同一套「暗底亮字」体系亮暗共用（上方全部规则无 dark 前缀）；
+   亮档的唯一区别是面板壳更透、背景画透出更多（用户实测 0.28 一档）。
+   系统亮暗切换走 html.dark：--gd-* 中引用这些变量的 token 自动跟随，
+   基础 token（文本/边框等）的亮暗由 style.css 的 html.dark 分支提供——
+   注意本主题的文本色是按暗底校准的，亮档下依旧成立（壳下始终是暗画）。 */
+html[data-theme="qi-dusk"]:not(.dark) {
+  --qd-shell: rgba(17, 15, 19, 0.28);       /* 亮档壳：更透 */
+  --qd-sidebar-bg: rgba(15, 13, 17, 0.32);  /* 亮档侧栏底 */
+  --qd-titlebar-bg: rgba(11, 10, 13, 0.42); /* 亮档标题栏底 */
+  /* 侧栏渐晕同步变浅：保住头部立绘可见度，列表区仍沉底 */
+  --qd-sidebar-veil: linear-gradient(180deg,
+    rgba(15, 13, 17, 0.12) 0%,
+    rgba(15, 13, 17, 0.26) 52%,
+    rgba(15, 13, 17, 0.55) 100%);
+}
+html[data-theme="qi-dusk"] .workspace-sidebar {
   border-left: 1px solid var(--qd-line);
 }
