@@ -246,6 +246,8 @@ import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 import { getErrorMessage, getApiErrorStatus } from '@/utils/errorMessage'
 import { perfStart, perfCount, traceSessionOpen, endSessionOpenTrace } from '@/utils/perf'
+import { themeOwnsBackground } from '@/services/theme-runtime'
+import { isResizeActivityActive } from '@/composables/useResizeActivity'
 import {
   parseLocalSlashCommand,
   type LocalSlashCommand,
@@ -282,7 +284,10 @@ const layoutStore = useLayoutStore();
 const router = useRouter();
 
 // 有壁纸时隐藏底部渐变遮罩（壁纸已有视觉层次，不透明遮罩会像补丁）
-const hasWallpaper = computed(() => !!layoutStore.wallpaperUrl);
+// 同时必须排除「主题自己接管背景」的情况：qi-dusk 等富主题用 ownsBackground 压掉壁纸变量，
+// 但 layoutStore.wallpaperUrl 仍保留用户配置（切回默认主题要恢复）。只看 store 会让输入框
+// 在主题画布上继续挂 backdrop-blur-xl（24px），拖拽/缩放时每帧重算模糊。
+const hasWallpaper = computed(() => !!layoutStore.wallpaperUrl && !themeOwnsBackground.value);
 
 /**
  * 当前是否渲染在悬浮面板里（工作区全屏 → ChatPage 把本组件 Teleport 进 #floating-chat）。
@@ -753,7 +758,10 @@ function handleContentResizeForScrollRestore() {
   // 2) 非贴底时把视口锚点钉回原位，避免内容被顶走。
   // chat.contentResize 每次 = 一帧重排：与 turn.expand 计数相比即可量出"一次展开放大成几帧"。
   perfCount('chat.contentResize')
-  scheduleMountVisiblePlaceholders()
+  // 拖拽分割条/缩放窗口期间宽度逐帧变化，每次都会走到这里；此时扫描占位（对全部占位
+  // 做 getBoundingClientRect）纯属浪费——横向变宽不改变垂直可见性，而且会和上一帧的
+  // 样式写入交替，插入强制同步布局。稳定后（松手 150ms）尾帧会自然补一次。
+  if (!isResizeActivityActive()) scheduleMountVisiblePlaceholders()
   scheduleAnchorRestore()
   if (!pendingScrollRestore || isFollowingScroll.value) return;
   // 首次写入之前一律不判定到位：此刻 scrollTop 还是替换内容后的初始值，
@@ -867,7 +875,7 @@ function resetLazyMountForOpen() {
   mountedTurnIds.value = new Set(list.slice(start).map((t) => t.id))
 }
 
-/** 全量挂载已加载回合（大纲跳转等需要真实 offsetTop 的场景；不做滚动补偿）。 */
+/** 全量挂载已加载回合（大纲跳转等需要目标元素真实存在的场景；不做滚动补偿）。 */
 function mountAllLoadedTurns() {
   const list = visibleTurns.value
   if (list.length === 0) return
@@ -2194,6 +2202,12 @@ defineExpose({
  *
  * 落点校正做有界多轮：屏外回合带 content-visibility，真实高度要等进入视口才展开，
  * 且每新展开一行都会再把目标推走一次，单轮校正不足以收敛。
+ *
+ * **不能用 `offsetTop` 定位**：TurnItem 根节点带 `content-visibility: auto`，
+ * 未渲染的回合按 `contain-intrinsic-size` 的估算值参与布局，实测 offsetTop 会从
+ * 2180 变成 20920（差 10 倍）。起点改用「目标元素相对容器顶部的实测偏移 + 当前
+ * scrollTop」推出，这个值来自真实渲染几何，不受估算影响；后续的多轮校正本来就用
+ * getBoundingClientRect，两者口径一致。
  */
 const SCROLL_TO_MESSAGE_MAX_CORRECTIONS = 4
 
@@ -2204,7 +2218,7 @@ const prefersReducedMotion = () =>
 async function scrollToMessage(messageId: string) {
   // 大纲跳转是明确的导航：挂载/滚动期间不要让旧锚点做补偿
   contentAnchor = null
-  // 懒挂载下目标回合可能还是占位：先全量挂载，保证锚点元素存在且 offsetTop 为真实高度。
+  // 懒挂载下目标回合可能还是占位：先全量挂载，保证锚点元素存在
   const targetTurn = visibleTurns.value.find((t) =>
     (t.messages ?? []).some((m) => m.messageId === messageId),
   )
@@ -2235,9 +2249,11 @@ async function scrollToMessage(messageId: string) {
     targetElement.getBoundingClientRect().top - container.getBoundingClientRect().top
 
   // 先取走滚动权，再用容器级滚动（避免 scrollIntoView 导致整个页面位移）。
-  // 消息锚点元素是 TurnItem 根 div（HTMLElement），offsetTop 仅存在于 HTMLElement 上
+  // 起点用「实测偏移 + 当前 scrollTop」而非 offsetTop：后者在 content-visibility 下
+  // 对未渲染回合返回按 contain-intrinsic-size 估算的位置（实测可差 10 倍）。
   anchor?.markUserIntent?.('awayFromBottom')
-  container.scrollTo({ top: (targetElement as HTMLElement).offsetTop, behavior })
+  const targetTop = container.scrollTop + driftToTarget()
+  container.scrollTo({ top: Math.max(0, targetTop), behavior })
 
   let corrections = 0
   const correct = () => {
@@ -2355,17 +2371,12 @@ async function scrollToMessage(messageId: string) {
   transform: scale(0.92) translateX(8px);
 }
 
-/* 分栏拖拽豁免：GdSplitpanes 拖拽时用
-   .lite-splitpanes--resizing * { transition: none !important } 屏蔽概览/避让过渡，
-   用更高特异性 + important 豁免，保证拖拽时概览显隐与避让占位也有动画 */
-.lite-splitpanes--resizing .chat-aside {
-  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
-
-/* 避让占位（flex-basis 变化）拖拽时同样豁免 */
-.lite-splitpanes--resizing .aside-bleed-col {
-  transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
+/* 分栏拖拽期间**不**豁免过渡：GdSplitpanes 在拖拽时用
+   `.lite-splitpanes--resizing * { transition: none !important }` 统一屏蔽过渡，
+   这里曾用更高特异性 + important 把 .chat-aside / .aside-bleed-col 的过渡重新打开，
+   想保留「拖拽中概览显隐也有动画」的观感。实测代价太高：flex-basis 过渡是**布局动画**，
+   拖拽期间每帧都要为一个变化中的 flex-basis 重跑一次过渡插值 + 布局，
+   叠加在 pane 宽度逐帧变化之上，等于每帧两次重排。观感收益远小于卡顿代价，故整体移除。 */
 
 /* 右侧 aside（工作区概览）：恒为浮层——absolute 定位、不随消息滚动；
    有占位时恰好落在避让空位上（视觉像停靠），无占位时悬浮于消息上方 */

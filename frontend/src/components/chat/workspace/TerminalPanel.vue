@@ -13,6 +13,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { TerminalSocketService } from "@/services/modules/TerminalSocketService";
 import { useTheme } from "@/composables/useTheme";
+import { isResizeActivityActive } from "@/composables/useResizeActivity";
 import type { ServerTerminalMessage } from "@/types/terminal.types";
 import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
@@ -165,14 +166,52 @@ async function initTerminal() {
         sendResize(cols, rows);
     });
 
-    const ro = new ResizeObserver(() => {
+    /**
+     * 几何变化后的 fit：**防抖**而非逐帧执行。
+     *
+     * fitAddon.fit() 会读容器尺寸、重算 cols/rows、重建渲染行，随后 sendResize 还要给
+     * PTY 发一条 resize 消息。拖拽分割条/缩放窗口期间容器宽度每帧都变，逐帧 fit 等于
+     * 每帧一次 xterm 重排 + 一次 IPC/WS 写入，而中间态的几何没有任何价值——用户看的是
+     * 最终落点。防抖到手势结束（150ms 静默）后做一次即可。
+     *
+     * 与全局调整态的配合：手势期间 isResizeActivityActive() 为真，这里直接跳过（连
+     * 计时器都不起，避免每帧重设）；稳定后由下一次 ResizeObserver 回调补上。
+     */
+    const FIT_DEBOUNCE_MS = 150;
+    let fitTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const fitNow = () => {
         if (fitAddon && t.element && terminalRef.value?.clientWidth && terminalRef.value?.clientHeight) {
             fitAddon.fit();
             sendResize(t.cols, t.rows);
         }
-    });
+    };
+
+    const scheduleFit = () => {
+        // 手势进行中：不起计时器，等稳定后的回调（ResizeObserver 在松手后仍会再触发一次）
+        if (isResizeActivityActive()) {
+            if (fitTimer !== null) {
+                clearTimeout(fitTimer);
+                fitTimer = null;
+            }
+            return;
+        }
+        if (fitTimer !== null) clearTimeout(fitTimer);
+        fitTimer = setTimeout(() => {
+            fitTimer = null;
+            fitNow();
+        }, FIT_DEBOUNCE_MS);
+    };
+
+    const ro = new ResizeObserver(scheduleFit);
     ro.observe(terminalRef.value);
-    disposers.push(() => ro.disconnect());
+    disposers.push(() => {
+        ro.disconnect();
+        if (fitTimer !== null) {
+            clearTimeout(fitTimer);
+            fitTimer = null;
+        }
+    });
 
     // WS 连接成功（open）后立即 fit + 强制发送一次尺寸。
     // 注意必须清空去重缓存：首次 fit 触发的 resize 发生在 WS 打开前，

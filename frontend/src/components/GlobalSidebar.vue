@@ -631,14 +631,37 @@ function measureThemeIndicator() {
   }
 }
 
+/**
+ * resize 入口：rAF 合并 + 轨道未挂载时短路。
+ *
+ * measureThemeIndicator 读 offsetWidth/offsetLeft，是强制同步布局；窗口缩放期间
+ * resize 事件频率可高于帧率，逐事件测量等于在「读布局 → 样式变化 → 再读布局」之间
+ * 反复插队。合并到每帧一次即可（用户看不出差别）。
+ * 轨道是 v-if 渲染，未打开时按钮根本不存在，提前返回省掉一次必然落空的布局读。
+ */
+let themeIndicatorRafId: number | null = null
+
+function scheduleMeasureThemeIndicator() {
+  if (!themeRailRef.value) return
+  if (themeIndicatorRafId !== null) return
+  themeIndicatorRafId = requestAnimationFrame(() => {
+    themeIndicatorRafId = null
+    measureThemeIndicator()
+  })
+}
+
 onMounted(async () => {
   await nextTick()
   measureThemeIndicator()
-  window.addEventListener('resize', measureThemeIndicator)
+  window.addEventListener('resize', scheduleMeasureThemeIndicator)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', measureThemeIndicator)
+  window.removeEventListener('resize', scheduleMeasureThemeIndicator)
+  if (themeIndicatorRafId !== null) {
+    cancelAnimationFrame(themeIndicatorRafId)
+    themeIndicatorRafId = null
+  }
 })
 
 watch(themeMode, async () => {

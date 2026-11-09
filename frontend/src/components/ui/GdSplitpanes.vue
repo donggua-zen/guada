@@ -42,6 +42,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted, watch, nextTick, type CSSProperties } from 'vue';
+import { beginResizeActivity } from '@/composables/useResizeActivity';
+import {
+  SPLITTER_SIZE,
+  computePixelModeWidths as computePixelModeWidthsPure,
+  computePercentModeWidths as computePercentModeWidthsPure,
+} from './splitpanesMath';
 
 const props = defineProps({
   /** pane1 的百分比尺寸 (0~100)，pane2 = 100 - splitSize */
@@ -64,11 +70,31 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  /**
+   * pane2 固定像素宽度：给定数字时按像素定宽 pane2、pane1 吃剩余空间，
+   * 忽略 splitSize/minSize/maxSize 的百分比语义。用于「右侧栏宽度固定、左侧预览弹性」
+   * 这类布局（Git 审阅面板）：窗口缩放时固定侧不变，不再需要父组件每帧把像素换算成
+   * 百分比再喂回来。
+   *
+   * 数字 0 是合法值（= 完全收起 pane2），因此「未启用」必须用 undefined 表达，
+   * 不能靠 0 判断。
+   */
+  pane2Px: {
+    type: Number,
+    default: undefined,
+  },
+  /** pane1 最小像素宽度（仅 pane2Px 模式下生效，替代百分比 minSize） */
+  minPane1Size: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const emit = defineEmits<{
   resize: [size: number]
   resized: [size: number]
+  /** pane2Px 模式下的拖拽结束：回传 pane2 的实际像素宽度 */
+  'pane2-resized': [px: number]
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -82,8 +108,6 @@ const containerWidth = ref(0);
 // pane 折叠状态
 const isPane1Collapsed = ref(false);
 const isPane2Collapsed = ref(false);
-
-const SPLITTER_SIZE = 1;
 
 /**
  * 将 splitSize 钳制到合法范围
@@ -101,61 +125,36 @@ function clampSplitSize(size: number): number {
 
 const currentSplitSize = ref(clampSplitSize(props.splitSize));
 
+/** pane2 像素模式的当前值（拖拽期间实时更新；props.pane2Px 变化时同步）。 */
+const currentPane2Px = ref(props.pane2Px ?? 0);
+
+/** 是否处于「pane2 固定像素」模式 */
+const isPixelMode = computed(() => typeof props.pane2Px === 'number');
+
 /**
- * 计算两个 pane 的实际像素宽度，考虑所有约束
- * 这是唯一的布局计算入口，同时服务于非拖拽态和拖拽态
- *
- * 全程取整：ResizeObserver 在缩放/DPI 下给的容器宽带小数，若 pane 宽跟着小数，
- * pane2（对话列所在）内的 .chat-column 是 mx-auto 居中（max-width 744）→ 左边缘落在
- * 小数 x 上，整列文字与图标都会按小数位置重采样。所有中间量先落整 CSS px，
- * 尾部再用「pane2 = available − pane1」保证两者相加恒等于可用宽（不留缝、不溢出）。
+ * 像素模式：pane2 定宽、pane1 吃剩余空间。
+ * 计算细节与边界约定见 splitpanesMath.ts 的 computePixelModeWidths。
+ */
+function computePixelModeWidths(cw: number, pane2Px: number): { p1Px: number; p2Px: number } {
+  return computePixelModeWidthsPure(cw, pane2Px, {
+    minPane1Size: props.minPane1Size,
+    minPane2Size: props.minPane2Size,
+  });
+}
+
+/**
+ * 百分比模式：按 pane1 百分比计算，应用约束并让 pane2 落偶数。
+ * 计算细节见 splitpanesMath.ts 的 computePercentModeWidths。
  *
  * @param applyConstraints 是否应用约束（折叠状态时不应用，否则无法完全折叠）
  */
 function computePixelWidths(cw: number, pct: number, applyConstraints = true): { p1Px: number; p2Px: number } {
-  const available = Math.round(cw) - SPLITTER_SIZE;
-  if (available <= 0) return { p1Px: 0, p2Px: 0 };
-
-  let p1Px = Math.round(available * pct / 100);
-  let p2Px = available - p1Px;
-  // 约束边界同样落整（后面拿它们做整数比较）
-  let p1Min = 0;
-  let p1Max = available;
-  let p2Min = 0;
-
-  if (applyConstraints) {
-    // pane2 最小百分比约束（来自 max-size）
-    const p2MinPct = 100 - props.maxSize;
-    if (p2MinPct > 0) p2Min = Math.max(p2Min, Math.round(available * p2MinPct / 100));
-    // pane2 最小像素约束
-    if (props.minPane2Size > 0) p2Min = Math.max(p2Min, Math.round(props.minPane2Size));
-
-    if (p2Min > 0 && p2Px < p2Min) {
-      p2Px = Math.min(p2Min, available);
-      p1Px = available - p2Px;
-    }
-
-    // pane1 最小/最大百分比约束
-    p1Min = Math.round(available * props.minSize / 100);
-    p1Max = Math.round(available * props.maxSize / 100);
-    if (p1Px < p1Min) { p1Px = p1Min; p2Px = available - p1Px; }
-    if (p1Px > p1Max) { p1Px = p1Max; p2Px = available - p1Px; }
-
-    // pane2 取偶数：px-5（40）、避让占位（268）、列宽（744）都是偶数，只有 pane2 偶数
-    // 才能让 .chat-column 的 mx-auto 余量为偶数、左边缘落整像素。±1px 修正，
-    // 两侧都触界时保持原值（硬约束优先于奇偶）。
-    if (p2Px % 2 !== 0) {
-      if (available - (p1Px + 1) >= p2Min && p1Px + 1 <= p1Max) p1Px += 1;
-      else if (p1Px - 1 >= p1Min) p1Px -= 1;
-      p2Px = available - p1Px;
-    }
-  }
-
-  // 兜底非负
-  p1Px = Math.max(0, p1Px);
-  p2Px = Math.max(0, p2Px);
-
-  return { p1Px, p2Px };
+  return computePercentModeWidthsPure(cw, pct, {
+    applyConstraints,
+    minSize: props.minSize,
+    maxSize: props.maxSize,
+    minPane2Size: props.minPane2Size,
+  });
 }
 
 /**
@@ -166,6 +165,12 @@ function computePixelWidths(cw: number, pct: number, applyConstraints = true): {
 const paneWidths = computed(() => {
   const cw = containerWidth.value;
   if (cw <= 0) return { p1: '0px', p2: '0px' };
+
+  // 像素模式：pane2 定宽、pane1 吃剩余（窗口缩放时固定侧不变）
+  if (isPixelMode.value) {
+    const { p1Px, p2Px } = computePixelModeWidths(cw, currentPane2Px.value);
+    return { p1: p1Px + 'px', p2: p2Px + 'px' };
+  }
 
   // 折叠状态不应用约束（否则 pane2 像素最小值会阻止完全折叠）
   const isCollapsing = currentSplitSize.value >= 100 || currentSplitSize.value <= 0;
@@ -203,14 +208,18 @@ const pane2Style = computed<CSSProperties>(() => {
 
 let resizeStartPos = 0;
 let resizeStartSize = 0;
+let resizeStartPane2Px = 0;
 let rafId: number | null = null;
 let pendingMouseEvent: MouseEvent | null = null;
+/** 拖拽期间持有的全局调整态票据（mouseup / 卸载时归还）。 */
+let releaseResizeActivity: (() => void) | null = null;
 
 function handleSplitterMouseDown(e: MouseEvent) {
   e.preventDefault();
   e.stopPropagation();
 
   isResizing.value = true;
+  releaseResizeActivity = beginResizeActivity();
   resizeStartPos = e.clientX;
 
   // 从 DOM 获取实际布局作为拖拽起点
@@ -220,11 +229,15 @@ function handleSplitterMouseDown(e: MouseEvent) {
     if (available > 0) {
       const p1Actual = pane1Ref.value.getBoundingClientRect().width;
       resizeStartSize = Math.min(100, Math.max(0, (p1Actual / available) * 100));
+      const p2Actual = pane2Ref.value ? pane2Ref.value.getBoundingClientRect().width : 0;
+      resizeStartPane2Px = Math.round(p2Actual);
     } else {
       resizeStartSize = currentSplitSize.value;
+      resizeStartPane2Px = currentPane2Px.value;
     }
   } else {
     resizeStartSize = currentSplitSize.value;
+    resizeStartPane2Px = currentPane2Px.value;
   }
 
   document.addEventListener('mousemove', handleSplitterMouseMove);
@@ -253,6 +266,14 @@ function handleSplitterMouseMove(e: MouseEvent) {
     const available = cw - SPLITTER_SIZE;
     if (available <= 0) return;
 
+    // 像素模式：分割条左移 = pane2 变宽，故取负 delta
+    if (isPixelMode.value) {
+      const nextPane2Px = computePixelModeWidths(cw, resizeStartPane2Px - delta).p2Px;
+      currentPane2Px.value = nextPane2Px;
+      emit('resize', nextPane2Px);
+      return;
+    }
+
     const deltaPct = (delta / available) * 100;
     let newSize = resizeStartSize + deltaPct;
 
@@ -280,6 +301,8 @@ function handleSplitterMouseMove(e: MouseEvent) {
 
 function handleSplitterMouseUp() {
   isResizing.value = false;
+  releaseResizeActivity?.();
+  releaseResizeActivity = null;
 
   if (rafId !== null) {
     cancelAnimationFrame(rafId);
@@ -292,7 +315,7 @@ function handleSplitterMouseUp() {
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
 
-  // 从 DOM 读取实际布局，同步到 currentSplitSize
+  // 从 DOM 读取实际布局，同步到内部尺寸状态
   if (pane1Ref.value && containerRef.value) {
     const cw = containerRef.value.getBoundingClientRect().width;
     const available = cw - SPLITTER_SIZE;
@@ -300,6 +323,13 @@ function handleSplitterMouseUp() {
       const p1Actual = pane1Ref.value.getBoundingClientRect().width;
       const p2Actual = pane2Ref.value ? pane2Ref.value.getBoundingClientRect().width : 0;
       const total = p1Actual + p2Actual;
+
+      if (isPixelMode.value) {
+        // 像素模式：落定 pane2 实际像素，父组件据此持久化
+        currentPane2Px.value = Math.round(p2Actual);
+        emit('pane2-resized', currentPane2Px.value);
+      }
+
       const pct = total > 0 ? (p1Actual / total) * 100 : 50;
       currentSplitSize.value = Math.min(100, Math.max(0, pct));
     }
@@ -311,6 +341,16 @@ function handleSplitterMouseUp() {
 // ==================== 折叠与尺寸同步 ====================
 
 function updateCollapseState() {
+  // 像素模式：折叠由 pane2 像素宽驱动（0 = 收起），与百分比语义相反——
+  // 百分比模式里 splitSize=100 表示「pane2 收起」，像素模式里 pane2=0 才是收起。
+  // 不单独映射的话，「收起目录树」后 1px 分割条会残留在最右缘。
+  if (isPixelMode.value) {
+    const p2 = Math.round(currentPane2Px.value);
+    isPane2Collapsed.value = p2 <= 0;
+    isPane1Collapsed.value = false;
+    return;
+  }
+
   const size = currentSplitSize.value;
   if (size >= 100) {
     isPane2Collapsed.value = true;
@@ -335,6 +375,20 @@ watch(
   },
 );
 
+// 像素模式：外部 pane2Px 变化（持久化值、重置等）同步到内部状态。
+// 拖拽中不跟随：拖拽期间的真相是鼠标位置，外部值要等 mouseup 后才重新对齐。
+watch(
+  () => props.pane2Px,
+  (px) => {
+    if (!isResizing.value && typeof px === 'number') {
+      currentPane2Px.value = px;
+      // 收起/展开由像素宽驱动，必须同步折叠态（否则分割条残留或 pane 被误隐藏）
+      nextTick(() => updateCollapseState());
+    }
+  },
+  { immediate: true },
+);
+
 // 容器尺寸变化时更新 containerWidth → 触发 paneWidths 重新计算
 const resizeObserver = new ResizeObserver((entries) => {
   for (const entry of entries) {
@@ -354,6 +408,9 @@ watch(containerRef, (el) => {
 
 onUnmounted(() => {
   if (rafId !== null) cancelAnimationFrame(rafId);
+  // 拖拽中被卸载（切换标签/会话）：必须归还调整态票据，否则 html.gd-resizing 永不摘除
+  releaseResizeActivity?.();
+  releaseResizeActivity = null;
   document.removeEventListener('mousemove', handleSplitterMouseMove);
   document.removeEventListener('mouseup', handleSplitterMouseUp);
   resizeObserver.disconnect();

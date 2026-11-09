@@ -1,5 +1,6 @@
 <template>
-  <div data-gd-slot="message" class="turn-wrapper last:min-h-[60vh]" :class="{ 'turn-wrapper--last': isLast, 'animate-in': animateIn }"
+  <div data-gd-slot="message" class="turn-wrapper last:min-h-[60vh]"
+    :class="{ 'turn-wrapper--last': isLast, 'animate-in': animateIn, 'turn-wrapper--no-cv': !contentVisibilityEnabled }"
     :data-message-id="user?.messageId">
     <!-- ============================================ -->
     <!-- User 部分 -->
@@ -246,6 +247,21 @@ import { getFileIcon } from '@/composables/useFileIcon';
 import { perfCount } from '@/utils/perf';
 
 const { t } = useI18n();
+
+/**
+ * 离屏回合是否跳过布局/绘制（content-visibility: auto）。
+ *
+ * 默认开启；`localStorage['gd:turn-cv']='0'` 后刷新可关闭做 A/B 对照
+ * （与 gd:lazy-turns 同一套约定）。模块级求值一次——这是构建期开关，
+ * 不需要响应式，避免每个回合实例各读一次 localStorage。
+ */
+const contentVisibilityEnabled = (() => {
+  try {
+    return localStorage.getItem('gd:turn-cv') !== '0';
+  } catch {
+    return true;
+  }
+})();
 
 const props = defineProps<{
   turn: Turn;
@@ -836,10 +852,23 @@ const handleImageClick = (file: FileAttachment) => {
   width: 100%;
   margin-top: 20px;
   margin-bottom: 25px;
-  /* 不再使用 content-visibility：懒挂载已把初始/滚动时的挂载量降下来，
-     而 content-visibility 的 800px 估算会在回合进入视口时替换成真实高度
-     （本应用回合中位数 ~1700px），关闭原生滚动锚定后就会表现为"内容突然被顶出去"。
-     现在已挂载回合始终按真实高度参与布局，占位挂载的锚点补偿才准确。 */
+  /* 离屏回合跳过布局与绘制 —— **只在拖拽/缩放期间生效**（见文件末尾的 gd-resizing 规则）。
+     ------------------------------------------------------------------
+     为什么不是常驻：`content-visibility: auto` 下，向上滚动经过「从未渲染过」的回合时，
+     它们按 `contain-intrinsic-size` 的估算值参与布局（本应用回合中位数 ~1700px），
+     真正进入视口后撑开，把视口里的内容整体顶走 —— 表现为向上滚动时内容跳动。
+     实测（40 个约 1700px 的回合，滚到底后向上滚 3000px）：
+       - 无 content-visibility：scrollHeight 恒定 3556，零跳动；
+       - 固定 800px 估算：scrollHeight 19297 → 6554（变化 12743px）；
+       - `auto 800px`：与固定估算完全相同（19297 → 6554）。
+     `auto` 关键字只能让「渲染过」的元素记住真实尺寸，对从未渲染的元素无效，
+     因此无法解决向上滚动场景。
+
+     为什么拖拽期间可以：拖拽分割条/缩放窗口时用户不会同时滚动，估算值不会被看到；
+     而这些操作恰恰是「每帧重绘视口外内容」代价最贵的时刻。把降级限定在那一刻，
+     既拿到性能收益，又完全避开滚动跳动。
+
+     实现见本文件末尾的 `html.gd-resizing .turn-wrapper` 规则。 */
   box-sizing: content-box;
   padding-inline: 4px;
   margin-inline: -4px;
@@ -848,6 +877,28 @@ const handleImageClick = (file: FileAttachment) => {
 
 .turn-wrapper.animate-in {
   animation: turn-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 拖拽/缩放期间：视口外回合跳过布局与绘制。
+   ------------------------------------------------------------------
+   devtools trace 实测拖拽分割条时，聊天滚动内容的绘制区高度是视口的 3.8 倍
+   （1129×5312，视口 1392），Paint 中位 8.5ms/帧，是帧预算里最大的单项，
+   且成本随会话长度线性增长。降级后视口外回合不再参与绘制。
+
+   只在「用户不会同时滚动」的时刻启用，因此 `contain-intrinsic-size` 的估算
+   永远不会被看到（滚动跳动的成因见 .turn-wrapper 注释）。
+
+   条件只挂 `html.gd-resizing`（由 useResizeActivity 挂载）：它已覆盖全部三条
+   入口——拖分割条、拖侧栏把手、窗口缩放——所以不需要再区分具体是哪种。
+   它还带 150ms 尾延迟，松手后不会立刻恢复，避免最后一帧的抖动。
+
+   为什么用固定估算而非 `auto`：调整期间不滚动，估算值不会被看到；固定值比
+   `auto` 少一次「记忆尺寸」的写回，更便宜。
+
+   A/B 对照：localStorage['gd:turn-cv']='0' 时 .turn-wrapper--no-cv 命中 :not() 被排除。 */
+html.gd-resizing .turn-wrapper:not(.turn-wrapper--no-cv) {
+  content-visibility: auto;
+  contain-intrinsic-size: 800px;
 }
 
 @keyframes turn-enter {

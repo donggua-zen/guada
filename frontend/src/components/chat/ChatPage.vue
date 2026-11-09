@@ -688,8 +688,12 @@ const goChatRoute = async (sessionId: string | null) => {
 
 
 function onPaneResize() {
-  // 拖拽开始时屏蔽 webview 指针事件（webview 在 MainLayout 层，不在 splitpanes scoped CSS 范围内）
-  browserWebviewStore.setDragging(true);
+  // 拖拽开始时屏蔽 webview 指针事件（webview 在 MainLayout 层，不在 splitpanes scoped CSS 范围内）。
+  // GdSplitpanes 每帧都会 emit resize，这里只在首帧真正写入，避免每帧做一次无意义的 ref 赋值
+  // （赋值本身会触发依赖 isDragging 的 style 重算）。
+  if (!browserWebviewStore.isDragging) {
+    browserWebviewStore.setDragging(true);
+  }
 }
 
 function onPaneResized(size: number) {

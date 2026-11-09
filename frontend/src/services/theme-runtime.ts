@@ -13,7 +13,10 @@
  * 3. **资源同源**：一律走 `/plugins/:id/assets/`，不内联进 bundle。
  */
 
+import { ref } from 'vue';
+
 const SHARED_KEY = '__GuaDaTheme__';
+
 
 export interface ThemeManifest {
   pluginId: string;
@@ -89,7 +92,20 @@ interface ActiveTheme {
   previousDataTheme: string | null;
 }
 
-let active: ActiveTheme | null = null;
+let active: ActiveTheme | null = null
+
+/**
+ * 当前主题是否接管了背景（ownsBackground）。
+ *
+ * 用途：富主题自己画全窗背景时会压掉宿主壁纸，但 `layoutStore.wallpaperUrl` 仍然留着
+ * 用户配置（那是「切回默认主题后该恢复什么」的唯一真相，不能清）。于是「有没有壁纸」
+ * 的消费方必须区分两件事：用户配过壁纸 ≠ 此刻屏幕上有壁纸。
+ * 只看 store 会导致 qi-dusk 下输入框继续挂 backdrop-blur-xl（24px），
+ * 压在主题的四层背景画布上每帧重算模糊。
+ *
+ * 用 ref 而不是纯函数：主题切换（含异步加载完 CSS）后消费方要能自动重算。
+ */
+export const themeOwnsBackground = ref(false);
 
 function baseURL(): string {
   const shared = (window as any).__GuaDaShared__;
@@ -211,6 +227,9 @@ export async function applyTheme(
       root.classList.remove('wallpaper-loaded');
     }
   }
+
+  // 背景接管态同步给消费方（CSS 变量只是「画面上没壁纸」，这是「逻辑上别当有壁纸」）
+  themeOwnsBackground.value = !!manifest.ownsBackground;
 
   // 4. 亮/暗切换：两套 CSS 都给时监听 html.class
   const files = manifest.cssFiles;
@@ -334,6 +353,7 @@ export function removeTheme(): void {
   const state = active;
   if (!state) return;
   active = null;
+  themeOwnsBackground.value = false;
 
   for (const dispose of state.disposers.splice(0)) {
     try {
@@ -412,4 +432,5 @@ export function notifyThemeSetting(key: string, value: unknown): void {
 /** 仅用于测试/热重载：清空内部状态 */
 export function _resetThemeRuntime(): void {
   if (active) removeTheme();
+  themeOwnsBackground.value = false;
 }

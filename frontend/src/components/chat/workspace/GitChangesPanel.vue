@@ -66,7 +66,7 @@
 
     <!-- 左：选中文件 diff 预览（弹性，窗口缩小时优先被压缩）| 右：变更文件目录树
          （固定像素宽，GdSplitpanes 拖拽分割；优先压缩的仍是 diff 预览，规则不变） -->
-    <div ref="bodyRef" class="git-body flex-1 min-h-0">
+    <div class="git-body flex-1 min-h-0">
       <!-- 大工作区降级：不建目录树、不渲染 diff，避免数十万 DOM 节点/Proxy 撑爆渲染进程 -->
       <div v-if="tooManyFiles" class="git-too-many">
         <div class="git-too-many-title">
@@ -97,11 +97,10 @@
       </div>
       <GdSplitpanes
         v-else
-        :split-size="diffSplitPct"
-        :min-size="diffMinPct"
-        :max-size="100"
+        :pane2-px="treePanePx"
+        :min-pane1-size="MIN_DIFF_WIDTH"
         :min-pane2-size="MIN_TREE_WIDTH"
-        @resized="onTreeSplitResized"
+        @pane2-resized="onTreeSplitResized"
       >
         <template #pane1>
           <!-- 左侧 diff 预览：两种视图都走「header 固定 + 自绘竖向滚动条 + 行虚拟化」
@@ -464,64 +463,22 @@ const fullHighlight = ref<FullHighlight | null>(null);
 
 /**
  * 目录宽度（右侧固定像素，GdSplitpanes 拖拽调整，持久化到 localStorage）。
- * diff 预览在 pane1 弹性吃剩余空间，窗口缩放时优先压缩 diff（规则不变）：
- * 存储与拖拽结果均为像素，渲染时换算 pane1（diff）百分比喂给 GdSplitpanes
- * （组件内部仍是百分比布局，换算保证 pane2 目录像素不变）。
+ *
+ * 直接以像素喂给 GdSplitpanes 的 `pane2-px`（该组件的像素模式：pane2 定宽、diff 吃剩余），
+ * 窗口缩放时目录宽度纹丝不动、diff 优先压缩——正是本面板期望的行为。
+ *
+ * 旧实现走「百分比」：本组件用 ResizeObserver 跟踪 .git-body 宽 → 换算成 pane1 百分比
+ * → 喂 splitSize → 拖拽结束再反算像素存回。每次外层 pane 宽度变化（拖分割条/缩放窗口）
+ * 都会让这条链跑一遍，等于把一次布局变化放大成两次。像素模式把这条链整体删掉。
  */
 const MIN_TREE_WIDTH = 160;
 /** diff 预览最小像素（弹性一侧的下限，避免窗口缩小时被压得过窄） */
 const MIN_DIFF_WIDTH = 200;
 const treePaneWidthPx = useStorage('guada-git-tree-width-px', 260);
 
-/** 分割容器（.git-body）引用：ResizeObserver 跟踪宽度用于换算 */
-const bodyRef = ref<HTMLElement | null>(null);
-const containerWidth = ref(0);
-let bodyResizeObserver: ResizeObserver | null = null;
-
-watch(bodyRef, (el) => {
-  bodyResizeObserver?.disconnect();
-  bodyResizeObserver = null;
-  if (!el) return;
-  containerWidth.value = el.clientWidth;
-  bodyResizeObserver = new ResizeObserver((entries) => {
-    for (const e of entries) containerWidth.value = e.contentRect.width;
-  });
-  bodyResizeObserver.observe(el);
-}, { flush: 'post' });
-
-/**
- * pane1（diff 预览）百分比 = 100 - 目录宽百分比：
- * 目录固定像素宽（treePaneWidthPx），diff 弹性吃剩余空间，
- * 窗口缩放时优先压缩 diff 预览（规则不变）。
- * 目录树隐藏（showTree=false）时返回 100 → GdSplitpanes 折叠 pane2（diff 占满）。
- */
-const diffSplitPct = computed(() => {
-  if (!showTree.value) return 100;
-  const cw = containerWidth.value;
-  if (cw <= 0) return 70;
-  const available = cw - 1; // 分割条 1px
-  const maxPx = Math.max(MIN_TREE_WIDTH, available - MIN_DIFF_WIDTH); // diff 最小 200px
-  const px = Math.max(MIN_TREE_WIDTH, Math.min(treePaneWidthPx.value, maxPx));
-  return 100 - (px / available) * 100;
-});
-
-/** pane1（diff 预览）最小百分比（200px 下限），保证拖拽时 diff 不被压爆 */
-const diffMinPct = computed(() => {
-  const cw = containerWidth.value;
-  if (cw <= 1) return 0;
-  return (MIN_DIFF_WIDTH / (cw - 1)) * 100;
-});
-
-/** 拖拽结束：pane1（diff）百分比反算目录宽像素持久化（再 clamp 一遍，防止超界值残留） */
-function onTreeSplitResized(size: number): void {
-  const cw = containerWidth.value;
-  if (cw <= 0) return;
-  const available = cw - 1;
-  const maxPx = Math.max(MIN_TREE_WIDTH, available - MIN_DIFF_WIDTH);
-  treePaneWidthPx.value = Math.max(
-    MIN_TREE_WIDTH,
-    Math.min(Math.round((available * (100 - size)) / 100), maxPx),
-  );
+/** 拖拽结束：GdSplitpanes 回传 pane2 实际像素，直接持久化（组件内部已按 min/max 钳制） */
+function onTreeSplitResized(px: number): void {
+  treePaneWidthPx.value = Math.max(MIN_TREE_WIDTH, Math.round(px));
 }
 
 /** 目录树搜索关键字 */
@@ -570,8 +527,11 @@ function onTreeToggle(row: TreeViewRow, expanded: boolean): void {
   collapsedDirs.value = next;
 }
 
-/** 右侧变更目录树显隐（持久化；隐藏时 GdSplitpanes splitSize=100 → pane2 折叠） */
+/** 右侧变更目录树显隐（持久化；隐藏时 pane2 宽度给 0 → diff 占满） */
 const showTree = useStorage("guada-git-tree-visible", true);
+
+/** 目录树显隐折算成像素宽（0 = 收起） */
+const treePanePx = computed(() => (showTree.value ? treePaneWidthPx.value : 0));
 
 /** 各会话上次打开的文件 key（group:path）——切换会话回来恢复选中（持久化） */
 const sessionSelection = useStorage("guada-git-session-selection", {} as Record<string, string>);
@@ -1367,8 +1327,6 @@ onUnmounted(() => {
   vScrollResizeObserver = null;
   document.removeEventListener("mousemove", onThumbMove);
   document.removeEventListener("mouseup", onThumbUp);
-  bodyResizeObserver?.disconnect();
-  bodyResizeObserver = null;
 });
 
 function statusClass(row: GitRow): string {

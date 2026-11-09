@@ -53,8 +53,21 @@ const hostViewport = ref({
   height: typeof window === 'undefined' ? 0 : window.innerHeight,
 })
 
+/**
+ * 宿主窗口尺寸：截图表面按它等比缩小，窗口 resize 时保持不超出可见区域。
+ *
+ * 用 rAF 合并 resize 事件（事件频率可高于帧率），并写进一个 reactive ref —— 该 ref 被
+ * getWebviewStyle 消费，每次变化都会让所有 webview 的 style 重算。逐事件写等于让
+ * 每个 guest 的布局盒在窗口缩放期间被反复改写，中间态毫无意义，合并到每帧一次即可。
+ */
+let hostViewportRafId: number | null = null
+
 function updateHostViewport(): void {
-  hostViewport.value = { width: window.innerWidth, height: window.innerHeight }
+  if (hostViewportRafId !== null) return
+  hostViewportRafId = requestAnimationFrame(() => {
+    hostViewportRafId = null
+    hostViewport.value = { width: window.innerWidth, height: window.innerHeight }
+  })
 }
 
 /**
@@ -453,6 +466,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateHostViewport)
+  if (hostViewportRafId !== null) {
+    cancelAnimationFrame(hostViewportRafId)
+    hostViewportRafId = null
+  }
   // IPC 监听器由主进程管理，无需手动移除
 })
 </script>

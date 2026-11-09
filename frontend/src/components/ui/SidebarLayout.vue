@@ -18,7 +18,7 @@
           zIndex: isMobileDrawer ? 1500 : undefined
         }">
       <div class="absolute right-0 h-full"
-        :style="{ width: (sidebarWidth ?? 278) < 0 ? '100vw' : `${sidebarWidth ?? 278}px` }">
+        :style="{ width: effectiveSidebarWidth < 0 ? '100vw' : `${effectiveSidebarWidth}px` }">
         <slot name="sidebar" :sidebar-visible="sidebarVisible" />
       </div>
 
@@ -60,6 +60,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from "vue";
+import { beginResizeActivity } from '@/composables/useResizeActivity';
 import {
   ChevronLeft16Regular as ArrowLeftTwotone,
   ChevronRight16Regular as ArrowRightTwotone
@@ -92,10 +93,15 @@ const props = withDefaults(defineProps<{
 });
 
 // 计算侧边栏实际位置类 - 类型化
+// 拖拽期间读 liveWidth（本地逐帧值），松手后回落 props —— 两者同一时刻只有一个生效，
+// 避免拖拽中 props 更新滞后造成「把手跟手、面板不跟手」的割裂
+const effectiveSidebarWidth = computed(() => liveWidth.value ?? props.sidebarWidth ?? 278);
+
 const sidebarContainerWidth = computed((): string => {
   if (props.sidebarVisible === false)
     return '0';
-  return (props.sidebarWidth ?? 278) < 0 ? '100%' : (props.sidebarWidth ?? 278) + 'px';
+  const width = effectiveSidebarWidth.value;
+  return width < 0 ? '100%' : width + 'px';
 });
 
 // Emits 类型化
@@ -115,6 +121,19 @@ let resizeStartX = 0;
 let resizeStartWidth = 0;
 let resizeRafId: number | null = null;
 let pendingResizeEvent: MouseEvent | null = null;
+/** 拖拽期间持有的全局调整态票据（mouseup / 卸载时归还）。 */
+let releaseResizeActivity: (() => void) | null = null;
+
+/**
+ * 拖拽期间的实时宽度。
+ *
+ * 只在本地 ref 里逐帧更新，**不 emit**——emit 会经 MainLayout 打到
+ * layoutStore.setSidebarWidth，而 sidebarWidth 是 useStorage 支撑的：每次赋值都
+ * 同步 JSON 序列化 + localStorage.setItem + 派发 StorageEvent，等于每帧一次磁盘写。
+ * FloatingChatPanel 早已按同一思路绕开（见其 commitSize 注释），这里对齐。
+ * 松手时才提交一次，持久化语义不变。
+ */
+const liveWidth = ref<number | null>(null);
 
 function clampSidebarWidth(width: number): number {
   // max 防御性取不小于 min，避免异常 props 把钳制区间变成空集
@@ -125,7 +144,7 @@ function clampSidebarWidth(width: number): number {
 function applyResizeDelta(e: MouseEvent): void {
   // sidebarPosition 为 right 时把手在左缘，拖拽方向取反
   const dir = (props.sidebarPosition ?? 'left') === 'left' ? 1 : -1;
-  emit('update:sidebarWidth', clampSidebarWidth(resizeStartWidth + dir * (e.clientX - resizeStartX)));
+  liveWidth.value = clampSidebarWidth(resizeStartWidth + dir * (e.clientX - resizeStartX));
 }
 
 function handleResizeMouseDown(e: MouseEvent): void {
@@ -133,8 +152,13 @@ function handleResizeMouseDown(e: MouseEvent): void {
   e.stopPropagation();
 
   isResizing.value = true;
+  releaseResizeActivity = beginResizeActivity();
   resizeStartX = e.clientX;
-  resizeStartWidth = props.sidebarWidth ?? 278;
+  // 负值是「占满视口」哨兵（见 sidebarContainerWidth），拖拽没有可用的起点宽度：
+  // 按上限起步，用户一拖就落到常规区间，不会出现「从 200px 突然跳到满宽」的错觉
+  const startWidth = props.sidebarWidth ?? 278;
+  resizeStartWidth = startWidth < 0 ? props.maxSidebarWidth : startWidth;
+  liveWidth.value = resizeStartWidth;
 
   document.addEventListener('mousemove', handleResizeMouseMove);
   document.addEventListener('mouseup', handleResizeMouseUp);
@@ -166,10 +190,19 @@ function handleResizeMouseUp(): void {
   }
 
   isResizing.value = false;
+  releaseResizeActivity?.();
+  releaseResizeActivity = null;
   document.removeEventListener('mousemove', handleResizeMouseMove);
   document.removeEventListener('mouseup', handleResizeMouseUp);
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
+
+  // 松手提交一次：既落盘持久化，也让父组件重新成为宽度的真相来源
+  const finalWidth = liveWidth.value;
+  liveWidth.value = null;
+  if (finalWidth !== null && finalWidth !== (props.sidebarWidth ?? 278)) {
+    emit('update:sidebarWidth', finalWidth);
+  }
 }
 
 /** 双击把手：重置为默认宽度 */
@@ -179,6 +212,9 @@ function handleResizeReset(): void {
 
 onUnmounted(() => {
   if (resizeRafId !== null) cancelAnimationFrame(resizeRafId);
+  // 拖拽中被卸载：归还调整态票据，否则 html.gd-resizing 永不摘除
+  releaseResizeActivity?.();
+  releaseResizeActivity = null;
   document.removeEventListener('mousemove', handleResizeMouseMove);
   document.removeEventListener('mouseup', handleResizeMouseUp);
 });

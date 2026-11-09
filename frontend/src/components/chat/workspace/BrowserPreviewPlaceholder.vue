@@ -166,6 +166,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBrowserWebviewStore } from '@/stores/browserWebview'
+import { isResizeActivityActive, RESIZE_ACTIVITY_TAIL_MS } from '@/composables/useResizeActivity'
 import {
   VIEWPORT_PRESETS, VIEWPORT_MIN, VIEWPORT_MAX, isValidViewportSize,
 } from '@/utils/browserViewport'
@@ -252,13 +253,30 @@ function applyCustomViewport(): void {
 
 let resizeObserver: ResizeObserver | null = null
 let rafId: number | null = null
+/** 手势期间被跳过的更新：稳定后补一次 */
+let trailingTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
  * 通过 ResizeObserver + requestAnimationFrame 实时报告占位区域坐标
+ *
+ * 拖拽分割条/缩放窗口期间**跳过**：占位区域每帧都在变，逐帧读 getBoundingClientRect
+ * 再写 store，会让 BrowserWebviewLayer 每帧重算 transform: scale() 并触发 guest 层重排
+ * （一个独立渲染进程的重新合成）。中间态的几何用户看不见，稳定后补一次即可。
  */
 function updateRect(): void {
+  if (isResizeActivityActive()) {
+    // 手势进行中：不读布局，只在稳定后补一次（多次触发合并成一个尾任务）
+    if (trailingTimer === null) {
+      trailingTimer = setTimeout(() => {
+        trailingTimer = null
+        updateRect()
+      }, RESIZE_ACTIVITY_TAIL_MS + 50)
+    }
+    return
+  }
   if (rafId !== null) cancelAnimationFrame(rafId)
   rafId = requestAnimationFrame(() => {
+    rafId = null
     const el = placeholderRef.value
     if (!el) return
     const rect = el.getBoundingClientRect()
@@ -372,6 +390,10 @@ onUnmounted(() => {
   resizeObserver?.disconnect()
   resizeObserver = null
   if (rafId !== null) cancelAnimationFrame(rafId)
+  if (trailingTimer !== null) {
+    clearTimeout(trailingTimer)
+    trailingTimer = null
+  }
   window.removeEventListener('resize', updateRect)
   store.setPreviewRect(null)
 })

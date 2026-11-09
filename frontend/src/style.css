@@ -1158,6 +1158,32 @@ html.mobile .content-card::after {
 }
 
 /* ====================
+   拖拽/缩放期间的绘制降级（html.gd-resizing，由 composables/useResizeActivity 挂载）
+
+   拖分割条、拖侧栏把手、缩放窗口时每帧都在改布局宽度，下列「常驻成本」会被乘上
+   60 次/秒，而它们在「手正在动」的瞬间没有观察价值：
+   - 无限 shimmer / 脉冲 / 旋转动画：改 background-position 或 transform，每帧重绘；
+   - backdrop-filter：每帧重算背后像素的模糊；
+   - 大面积 clip-path / mask：每帧重建裁剪表面。
+
+   只在手势期间生效，松手 150ms 后自动恢复，视觉上只在拖动中降级。
+   选择器全部写成具体类名而非 `*`：全局通配会在切换瞬间让整棵样式树失效重算，
+   反而制造一次长任务。新增常驻动画时把类名补进这里。
+   ==================== */
+html.gd-resizing .turn-placeholder__line,
+html.gd-resizing .ts-dot-matrix,
+html.gd-resizing .animate-spin,
+html.gd-resizing .animate-pulse,
+html.gd-resizing .shimmer-text {
+  animation-play-state: paused !important;
+}
+
+html.gd-resizing .backdrop-blur-xl {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ====================
    动效可及性兜底：系统开启「减少动态效果」时全部过渡/动画即时到位。
    统一兜底优于逐组件 motion-reduce（覆盖第三方/未来新增也无需记得处理）
    ==================== */
