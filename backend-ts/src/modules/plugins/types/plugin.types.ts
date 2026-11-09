@@ -127,6 +127,11 @@ export interface PromptSectionDef {
   order?: number;
   /** 作用域，默认 global */
   scope?: "global" | "agent" | "session";
+  /**
+   * 来自工具包时填工具包 id（由 `toolkit.registerPrompt` 自动折算）。
+   * 装配器据此检查该工具包在本轮是否为 eager：lazy/none 的段不进系统提示词。
+   */
+  toolkitId?: string;
   /** 是否允许同作用域同名覆盖（默认 false） */
   shadowable?: boolean;
   /** 接管整段系统提示词（等价 DSH complete:true） */

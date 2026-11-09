@@ -7,25 +7,18 @@ import {
 } from "./types/plugin.types";
 
 /**
- * 提示词收集器
+ * 提示词收集器（仅 lazy 通道）
  *
- * 职责：
- * 1. 按 loadMode（eager/lazy）收集插件的提示词
- * 2. 按 frequency（STATIC→REGULAR→VOLATILE）排序
+ * v3 起提示词只有**一条**注入管线：
+ * - eager（系统提示词）：`registerPrompt` / `toolkit.registerPrompt` 都折算成
+ *   提示词段，由 `PromptAssembler` 统一装配；
+ * - lazy（`skill_learn` / `tool_load` 后注入消息）：仍由本收集器按需取出。
+ *
+ * 因此这里只保留 lazy 收集；eager 不再经过收集器。
  */
 @Injectable()
 export class PromptCollector {
   private readonly logger = new Logger(PromptCollector.name);
-
-  /**
-   * 收集所有启用插件中 loadMode=eager 的提示词（始终注入 system prompt）
-   */
-  async collectPrompts(
-    resolvedPlugins: ResolvedPluginInfo[],
-    context: PluginContext,
-  ): Promise<PromptPiece[]> {
-    return this.collectByLoadMode(resolvedPlugins, context, "eager");
-  }
 
   /**
    * 收集所有启用插件中 loadMode=lazy 的提示词（仅在 tool_load 时注入）
@@ -38,11 +31,10 @@ export class PromptCollector {
   }
 
   /**
-   * 从已决议的插件信息中，按 loadMode 收集提示词
+   * 从已决议的插件信息中，按 loadMode 收集**工具包级**提示词
    *
-   * 提示词来源：
-   * - 通过 registerPrompt 注册在 ToolKit 中的提示词
-   * - 通过 api.registerPrompt 注册的插件级提示词（始终 eager）
+   * v3 起插件级 `registerPrompt` 已折算为命名提示词段，不再经过本收集器；
+   * 这里只剩工具包作用域的提示词（eager → 系统提示词；lazy → skill_learn 后注入）。
    */
   private async collectByLoadMode(
     resolvedPlugins: ResolvedPluginInfo[],
@@ -75,26 +67,6 @@ export class PromptCollector {
                 loadMode: tk.loadMode as any,
                 pluginId,
                 description: pm.description,
-              });
-            }
-          } catch {}
-        }
-      }
-
-      // 插件级 prompts（始终 eager）
-      if (loadMode === "eager") {
-        const { prompts: pluginPrompts } =
-          PluginRegistry.getPromptMetas(pluginId);
-        for (const meta of pluginPrompts) {
-          try {
-            const content = await meta.handler(context);
-            if (content) {
-              pieces.push({
-                content,
-                frequency: meta.frequency as any,
-                loadMode: "eager",
-                pluginId,
-                description: meta.description,
               });
             }
           } catch {}

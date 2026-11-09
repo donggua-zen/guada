@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { PromptCollector } from "./prompt-collector.service";
 import { PluginRegistry } from "./registry/plugin-registry";
 import {
   AssembledPromptSection,
@@ -22,20 +21,18 @@ export interface AssemblePromptInput {
 }
 
 /**
- * 系统提示词装配器（v2）
+ * 系统提示词装配器
  *
  * 段顺序：
  *   1. builtin.agent-system（order 0）
- *   2. 插件 registerPromptSection（按 order → name）
- *   3. 旧 registerPrompt（frequency 映射到 5000+，保持历史"追加在末尾"语义）
+ *   2. 提示词段（含 `registerPrompt` 折算出的 `${pluginId}.prompt.N`），按 order → name
+ *   3. 工具包级提示词（`toolkit.registerPrompt` + loadMode=eager），排在 5000+
  *
  * 装配后按 order 串行执行 registerPromptTransform。
  */
 @Injectable()
 export class PromptAssembler {
   private readonly logger = new Logger(PromptAssembler.name);
-
-  constructor(private readonly promptCollector: PromptCollector) {}
 
   async assemble(input: AssemblePromptInput): Promise<PromptAssembly> {
     const sections: AssembledPromptSection[] = [];
@@ -44,11 +41,26 @@ export class PromptAssembler {
       sections.push({ name: "builtin.agent-system", order: 0, text: base });
     }
 
-    // v2 命名段
+    // 提示词段（registerPrompt / toolkit.registerPrompt 都折算成了段）
     for (const rp of input.resolvedPlugins) {
       if (!rp.enabled) continue;
       const defs = PluginRegistry.getPromptSections(rp.plugin.id);
+      if (defs.length === 0) continue;
+
+      // 工具包本轮的实际 loadMode（可由 kit.handler 动态决定；none = 依赖缺失）
+      const kitModes = new Map<string, { enabled: boolean; loadMode: string }>(
+        (rp.enabledToolKits || []).map((kit) => [
+          kit.id,
+          { enabled: kit.enabled !== false, loadMode: String(kit.loadMode || "eager") },
+        ]),
+      );
+
       for (const def of defs) {
+        if (def.toolkitId) {
+          const kit = kitModes.get(def.toolkitId);
+          // 工具包被禁用 / lazy / none 时，其提示词不进系统提示词
+          if (!kit || !kit.enabled || kit.loadMode !== "eager") continue;
+        }
         if (!scopeMatches(def, input.context)) continue;
         const text = await this.resolveText(def, input.context);
         if (!text) continue;
@@ -61,22 +73,6 @@ export class PromptAssembler {
         });
       }
     }
-
-    // 旧 registerPrompt 兼容：保持"追加在末尾"
-    const legacy = await this.promptCollector.collectPrompts(
-      input.resolvedPlugins,
-      input.context,
-    );
-    legacy.forEach((piece, index) => {
-      const text = String(piece.content || "").trim();
-      if (!text) return;
-      sections.push({
-        name: `${piece.pluginId}.legacy-prompt.${index}`,
-        order: 5000 + index,
-        text,
-        pluginId: piece.pluginId,
-      });
-    });
 
     sections.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 

@@ -130,7 +130,7 @@ module.exports.default = MyPlugin;
 | `registerTool(def)` | 注册模型工具（Zod schema / JSON schema） |
 | `registerRawTool(def)` | 注册底层工具定义 |
 | `registerToolKit(def)` | 注册工具包（eager/lazy/none、activator、requiresAnyKits） |
-| `registerPrompt(def)` | 追加提示词（STATIC/REGULAR/VOLATILE），**兼容保留** |
+| `registerPrompt(def)` | 追加提示词（STATIC/REGULAR/VOLATILE）——v3 起是 `registerPromptSection` 的语法糖 |
 | `registerCommandProvider(def)` | 文本型斜杠/艾特命令（replacement + appendix） |
 | `registerTurnReminderProvider(provider)` | 每轮 LLM 前注入 persist/transient 消息 |
 | `registerSkill(input)` | 注册内嵌技能正文 |
@@ -188,8 +188,11 @@ api.registerPromptSection({
 
 ```text
 builtin.agent-system (order 0)
-  + 插件命名段（order asc, name asc）
-  + 旧 registerPrompt（映射到 5000+，保持"追加在末尾"）
+  + 提示词段（order asc, name asc）
+      ├─ 显式 registerPromptSection
+      ├─ registerPrompt 折算（`${pluginId}.prompt.N`，order 5000/6000/7000）
+      └─ toolkit.registerPrompt 折算（`${pluginId}.toolkit.<kitId>.N`，
+         order 5500/6500/7500；仅当该工具包本轮 loadMode=eager 时生效）
   → 按 order 串行执行 registerPromptTransform
   → systemText = sections.join('\n\n')
 ```
@@ -201,6 +204,38 @@ builtin.agent-system (order 0)
 - 返回空串 = 本轮不注入。
 - `scope`：`agent` 需要 `ctx.session.agentId`，`session` 需要 `ctx.session.sessionId`。
 - `complete: true` 为保留字段（接管整段提示词），当前版本不生效。
+
+### 提示词只有一条注入管线
+
+v3 起所有提示词都折算成「段」，区别只在**何时生效**：
+
+| 写法 | 折算 | 生效时机 |
+|---|---|---|
+| `registerPromptSection(def)` | 原样 | 每轮装配 |
+| `registerPrompt({content, frequency})` | `${pluginId}.prompt.N`，order 5000/6000/7000 | 每轮装配 |
+| `toolkit.registerPrompt({content, frequency})` | `${pluginId}.toolkit.<kitId>.N`，order 5500/6500/7500 | 仅当该工具包 `loadMode=eager` |
+| `toolkit.registerPrompt` + kit `loadMode=lazy` | 同上（段存在但装配时跳过） | `skill_learn` / `tool_load` 后由 `PromptCollector.collectLazyPrompts` 注入消息 |
+
+> `lazy` 分支不走系统提示词，是唯一的例外；它的内容仍从工具包注册表读取，不经过装配器。
+
+### `registerPrompt` 与 `registerPromptSection` 的关系
+
+`registerPrompt` 是简写，内部直接调用 `registerPromptSection`：
+
+| registerPrompt | 折算结果 |
+|---|---|
+| `content` | `text` |
+| `frequency: STATIC` | `order = 5000 + 序号` |
+| `frequency: REGULAR`（缺省） | `order = 6000 + 序号` |
+| `frequency: VOLATILE` | `order = 7000 + 序号` |
+| — | `name = ${pluginId}.prompt.<序号>`，`scope = global` |
+| `description` | 原样保留 |
+
+因此**两者没有功能重叠**：`registerPrompt` 是"内容 + 次频"的便捷写法，需要 `order` / `scope` / 覆盖能力时用 `registerPromptSection`。
+
+`toolkit.registerPrompt` 同样在 `flush()` 时折算为段（带 `toolkitId`），
+装配器按该工具包本轮的 `loadMode` 决定是否生效：`eager` 进系统提示词，
+`lazy` / `none` 跳过（lazy 内容改由 `collectLazyPrompts` 在工具加载后注入）。
 
 ### 装配后变换
 

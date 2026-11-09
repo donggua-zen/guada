@@ -371,13 +371,11 @@ export interface PluginApi {
 export class PluginApiImpl implements PluginApi {
   private _toolDefs: ToolHandlerDef[] = [];
   private _toolKits: Toolkit[] = [];
-  private _promptMetas: Array<{
-    methodName: string;
-    frequency: string;
-    toolSet?: string;
-    description: string;
-    handler: (context: any) => string | Promise<string>;
-  }> = [];
+  /**
+   * v3：`registerPrompt` 已收敛为 `registerPromptSection` 的语法糖，
+   * 不再单独存一份；这里只保留注册序号用于稳定命名。
+   */
+  private _promptSeq = 0;
   private _commandProviders: ICommandProvider[] = [];
   private _workspaceProviders: WorkspaceProviderFactory[] = [];
   /** v2：命名提示词段 / 装配变换 */
@@ -556,22 +554,33 @@ export class PluginApiImpl implements PluginApi {
     }
   }
 
+  /**
+   * 注册插件级提示词。
+   *
+   * v3 起是 `registerPromptSection` 的**语法糖**：内容 + 频率 → 命名段。
+   * 顺序映射（保持历史"追加在末尾"语义，排在所有显式 section 之后）：
+   *   STATIC 5000 / REGULAR 6000 / VOLATILE 7000（+ 注册序号）
+   * 同频内按注册顺序；跨插件按段名（含 pluginId）稳定排序。
+   *
+   * 需要 order / scope / 覆盖能力时，直接使用 `registerPromptSection`。
+   */
   registerPrompt(def: {
     content: string | ((ctx: PluginContext) => string | Promise<string>);
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
+    /** @deprecated 插件级 registerPrompt 上不消费；工具包作用域请用 toolkit.registerPrompt */
     toolSet?: string;
     description?: string;
   }): void {
-    const meta = {
-      methodName: "",
-      frequency: def.frequency || "REGULAR",
-      toolSet: def.toolSet,
-      description: def.description || "",
-      handler: (typeof def.content === "function"
-        ? def.content
-        : () => def.content) as (ctx: any) => string | Promise<string>,
-    };
-    this._promptMetas.push(meta);
+    const index = this._promptSeq++;
+    const base =
+      def.frequency === "STATIC" ? 5000 : def.frequency === "VOLATILE" ? 7000 : 6000;
+    this.registerPromptSection({
+      name: `${this.pluginId}.prompt.${index}`,
+      order: base + index,
+      scope: "global",
+      text: def.content,
+      description: def.description,
+    });
   }
 
   registerRawTool(def: ToolHandlerDef): void {
@@ -1018,20 +1027,35 @@ export class PluginApiImpl implements PluginApi {
     }
 
     // 注册 ToolKits
-    for (const tk of this._toolKits) {
-      PluginRegistry.registerToolKit(this.pluginId, tk.toRegistration());
+    const kitRegs = this._toolKits.map((tk) => tk.toRegistration());
+    for (const kitReg of kitRegs) {
+      PluginRegistry.registerToolKit(this.pluginId, kitReg);
     }
 
-    // 注册 prompts
-    if (reg) {
-      for (const pm of this._promptMetas) {
-        if (!reg.prompts.find((x) => x.description === pm.description)) {
-          reg.prompts.push(pm);
-        }
-      }
+    // 工具包级提示词 → 提示词段（v3：与 registerPrompt 同一条管线）
+    //
+    // 只有「本轮 eager」的段才会进系统提示词：装配器按 `toolkitId` 查
+    // resolvedPlugins[].enabledToolKits 的 loadMode 再决定是否跳过，
+    // 因为 loadMode 可以由 kit.handler 在运行时动态改变（lazy / none）。
+    for (const kitReg of kitRegs) {
+      kitReg.prompts.forEach((pm, index) => {
+        const base =
+          pm.frequency === "STATIC" ? 5500 : pm.frequency === "VOLATILE" ? 7500 : 6500;
+        const name = `${this.pluginId}.toolkit.${kitReg.def.id}.${index}`;
+        if (this._promptSections.find((x) => x.name === name)) return;
+        this._promptSections.push({
+          name,
+          order: base + index,
+          scope: "global",
+          toolkitId: kitReg.def.id,
+          text: pm.handler,
+          description: pm.description,
+        });
+      });
     }
 
     // 注册 v2 提示词段 / 装配变换
+    // （registerPrompt 与 toolkit.registerPrompt 都已在上面折算为段）
     for (const section of this._promptSections) {
       PluginRegistry.registerPromptSection(this.pluginId, section);
     }

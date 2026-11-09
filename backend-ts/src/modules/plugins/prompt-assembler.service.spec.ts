@@ -5,7 +5,10 @@ import { PromptAssembler } from "./prompt-assembler.service";
 
 const PLUGIN_ID = "test-plugin";
 
-function resolved(pluginId = PLUGIN_ID): any {
+function resolved(
+  pluginId = PLUGIN_ID,
+  toolKits: Array<{ id: string; loadMode?: string; enabled?: boolean }> = [],
+): any {
   return [
     {
       enabled: true,
@@ -19,7 +22,15 @@ function resolved(pluginId = PLUGIN_ID): any {
       },
       enabledTools: [],
       allTools: [],
-      enabledToolKits: [],
+      enabledToolKits: toolKits.map((kit) => ({
+        id: kit.id,
+        name: kit.id,
+        description: "",
+        loadMode: kit.loadMode || "eager",
+        enabled: kit.enabled !== false,
+        toolCount: 0,
+        promptCount: 0,
+      })),
       workspaceProviders: [],
       attachmentTypes: [],
       uiPages: [],
@@ -36,7 +47,7 @@ describe("PromptAssembler", () => {
   let api: PluginApiImpl;
 
   beforeEach(() => {
-    assembler = new PromptAssembler(new PromptCollector());
+    assembler = new PromptAssembler();
     api = new PluginApiImpl(PLUGIN_ID, "Test");
   });
 
@@ -44,7 +55,7 @@ describe("PromptAssembler", () => {
     PluginRegistry.clearPlugin(PLUGIN_ID);
   });
 
-  it("orders builtin, named and legacy sections", async () => {
+  it("treats registerPrompt as a named section (v3 sugar)", async () => {
     api.registerPromptSection({
       name: "test-plugin.persona",
       order: -100,
@@ -62,9 +73,92 @@ describe("PromptAssembler", () => {
     expect(out.sections.map((s) => s.name)).toEqual([
       "test-plugin.persona",
       "builtin.agent-system",
-      "test-plugin.legacy-prompt.0",
+      "test-plugin.prompt.0",
     ]);
     expect(out.systemText).toBe("PERSONA\n\nBASE\n\nLEGACY");
+  });
+
+  it("keeps STATIC → REGULAR → VOLATILE ordering for registerPrompt", async () => {
+    api.registerPrompt({ content: "VOLATILE", frequency: "VOLATILE" });
+    api.registerPrompt({ content: "STATIC", frequency: "STATIC" });
+    api.registerPrompt({ content: "REGULAR", frequency: "REGULAR" });
+    api.flush();
+
+    const out = await assembler.assemble({
+      basePrompt: "BASE",
+      resolvedPlugins: resolved(),
+      context: context(),
+    });
+    expect(out.sections.map((s) => s.text)).toEqual(["BASE", "STATIC", "REGULAR", "VOLATILE"]);
+  });
+
+  it("gives every registerPrompt call a distinct stable name", async () => {
+    api.registerPrompt({ content: "A" });
+    api.registerPrompt({ content: "B" });
+    api.flush();
+
+    const names = PluginRegistry.getPromptSections(PLUGIN_ID).map((s) => s.name);
+    expect(names).toEqual(["test-plugin.prompt.0", "test-plugin.prompt.1"]);
+  });
+
+  it("turns toolkit prompts into sections and keeps lazy kits out of the system prompt", async () => {
+    const tk = api.registerToolKit({ id: "demo-kit", name: "Demo" } as any);
+    tk.registerPrompt({ content: "KIT-EAGER", frequency: "REGULAR" });
+    api.flush();
+
+    // eager 工具包：段进系统提示词
+    const eager = await assembler.assemble({
+      basePrompt: "BASE",
+      resolvedPlugins: resolved(PLUGIN_ID, [{ id: "demo-kit", loadMode: "eager" }]),
+      context: context(),
+    });
+    expect(eager.sections.map((s) => s.name)).toContain("test-plugin.toolkit.demo-kit.0");
+    expect(eager.systemText).toContain("KIT-EAGER");
+
+    // lazy 工具包：同一条段被装配器跳过（运行时由 collectLazyPrompts 注入）
+    const lazy = await assembler.assemble({
+      basePrompt: "BASE",
+      resolvedPlugins: resolved(PLUGIN_ID, [{ id: "demo-kit", loadMode: "lazy" }]),
+      context: context(),
+    });
+    expect(lazy.systemText).not.toContain("KIT-EAGER");
+
+    // none（依赖缺失）：同样跳过
+    const none = await assembler.assemble({
+      basePrompt: "BASE",
+      resolvedPlugins: resolved(PLUGIN_ID, [{ id: "demo-kit", loadMode: "none" }]),
+      context: context(),
+    });
+    expect(none.systemText).not.toContain("KIT-EAGER");
+  });
+
+  it("drops toolkit sections entirely when the plugin resolves no kits", async () => {
+    const tk = api.registerToolKit({ id: "demo-kit", name: "Demo" } as any);
+    tk.registerPrompt({ content: "KIT-EAGER" });
+    api.flush();
+
+    const out = await assembler.assemble({
+      basePrompt: "BASE",
+      resolvedPlugins: resolved(),
+      context: context(),
+    });
+    expect(out.systemText).not.toContain("KIT-EAGER");
+  });
+
+  it("keeps lazy prompts reachable through the collector", async () => {
+    const tk = api.registerToolKit({
+      id: "demo-kit",
+      name: "Demo",
+      loadMode: "lazy",
+    } as any);
+    tk.registerPrompt({ content: "KIT-LAZY" });
+    api.flush();
+
+    const pieces = await new PromptCollector().collectLazyPrompts(
+      resolved(PLUGIN_ID, [{ id: "demo-kit", loadMode: "lazy" }]),
+      context(),
+    );
+    expect(pieces.map((p) => p.content)).toEqual(["KIT-LAZY"]);
   });
 
   it("skips empty dynamic sections", async () => {
