@@ -1,6 +1,14 @@
 <template>
-  <div data-gd-slot="titlebar" class="flex items-center justify-between gap-2 h-10 drag-region"
-    :class="{ 'mac-sidebar-collapsed-padding': isMac && !layoutStore.sidebarEffectiveVisible && !isFullscreen }">
+  <!-- 空白处充当窗口拖拽区**仅限 macOS**（与 WorkspaceSidebar 的 isMacDragRegion 同一规则）：
+       mac 没有 CustomTitlebar 那一行，内容首行必须能拖窗口；Windows/Linux 已由 h-9 的
+       CustomTitlebar 整行承担拖拽，这里再挂一次是重复实现——拖会话标题栏会意外拖走窗口，
+       且 Electron 拖拽区按布局算、不看层叠顺序，浮窗盖在这行上时会收不到鼠标事件。
+       注：这不是 platform-win 特判，Web 下 app-region 本就无效，isMac 即为唯一需要的条件。 -->
+  <div data-gd-slot="titlebar" class="flex items-center justify-between gap-2 h-10"
+    :class="{
+      'drag-region': isMac,
+      'mac-sidebar-collapsed-padding': isMac && !layoutStore.sidebarEffectiveVisible && !isFullscreen,
+    }">
     <!-- 左侧：侧边栏切换按钮 -->
     <div class="flex items-center justify-start no-drag ml-3">
       <GdTooltip v-if="!hideSidebarToggle" :content="layoutStore.sidebarEffectiveVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')" placement="bottom">
