@@ -265,15 +265,15 @@
           </DropdownMenuItem>
           <!-- 颜色主题：内联三态切换（滑动指示器跟随选中项） -->
           <div class="px-5 py-2 flex items-center gap-2">
-            <span class="text-sm text-gray-500 dark:text-gray-400 mr-1">{{ t('ui.sidebar.colorTheme') }}</span>
-            <div ref="themeRailRef" class="relative flex items-center gap-0.5 p-0.5 rounded-md bg-(--gd-color-sidebar-bg-active) dark:bg-[#1a1b1e]">
+            <span class="text-sm text-(--gd-color-text-gray) mr-1">{{ t('ui.sidebar.colorTheme') }}</span>
+            <div ref="themeRailRef" class="relative flex items-center gap-0.5 p-0.5 rounded-md bg-(--gd-color-sidebar-bg-active)">
               <span class="theme-indicator" :style="themeIndicatorStyle" aria-hidden="true"></span>
               <button v-for="(option, i) in themeOptions" :key="option.value" :ref="el => setThemeButton(i, el)"
                 @click="setTheme(option.value)"
                 class="relative z-[1] px-2 py-1 rounded text-xs font-medium transition-colors duration-200 flex items-center gap-1"
                 :class="themeMode === option.value
-                  ? 'text-gray-900 dark:text-[#e8e9ed]'
-                  : 'text-gray-500 dark:text-[#8b8d95] hover:text-gray-700 dark:hover:text-[#c0c1c5]'">
+                  ? 'text-(--gd-color-text)'
+                  : 'text-(--gd-color-text-gray) hover:text-(--gd-color-sidebar-text-hover)'">
                 <component :is="option.icon" class="w-3.5 h-3.5" />
                 {{ option.label }}
               </button>
