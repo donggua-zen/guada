@@ -1,6 +1,6 @@
 import type { ApiContext } from "./api-context";
 
-export type UsageRange = "7d" | "30d" | "all";
+export type UsageRange = "today" | "7d" | "30d" | "all";
 
 export interface UsageSummary {
   totalTokens: number;

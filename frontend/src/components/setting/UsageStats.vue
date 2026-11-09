@@ -102,8 +102,9 @@
                 </div>
             </section>
 
-            <!-- 每日模型堆叠 -->
-            <section class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) p-4">
+            <!-- 每日模型堆叠（今日只有单点，不展示趋势图；模型明细见下方排行） -->
+            <section v-if="!isToday"
+                class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) p-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed]">
                         {{ isMonthly ? t('settings.usage.trend.titleMonthly') : t('settings.usage.trend.title') }}
@@ -255,6 +256,7 @@ const {
 } = useUsageStats('7d')
 
 const rangeOptions: Array<{ value: UsageRange; labelKey: string }> = [
+    { value: 'today', labelKey: 'settings.usage.range.today' },
     { value: '7d', labelKey: 'settings.usage.range.7d' },
     { value: '30d', labelKey: 'settings.usage.range.30d' },
     { value: 'all', labelKey: 'settings.usage.range.all' },
@@ -307,8 +309,9 @@ const modelColorIndex = computed(() => {
 
 const topModels = computed(() => (snapshot.value?.models ?? []).slice(0, 6))
 
-/** all 范围按月度展示；7d/30d 按日 */
+/** all 范围按月度展示；7d/30d 按日；today 为单日 */
 const isMonthly = computed(() => snapshot.value?.range === 'all')
+const isToday = computed(() => snapshot.value?.range === 'today')
 
 const trendPoints = computed<TrendPoint[]>(() => {
     if (!snapshot.value) return []

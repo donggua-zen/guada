@@ -161,6 +161,51 @@ describe("UsageService", () => {
     expect(snapshot.sources[0].share).toBeCloseTo(0.8);
   });
 
+  it("today 范围只统计当天，返回单个日点", async () => {
+    const rows = buildRows();
+    const todayIndex = Math.floor(todayStart / DAY);
+    rows.since = todayStart;
+    rows.daily = [
+      {
+        dayIndex: todayIndex,
+        totalTokens: 300,
+        inputTokens: 220,
+        outputTokens: 80,
+        requestCount: 1,
+      },
+    ];
+    rows.dayModels = rows.dayModels.filter(
+      (row) => row.dayIndex === todayIndex,
+    );
+    rows.totals = {
+      ...rows.totals,
+      totalTokens: 300,
+      inputTokens: 220,
+      outputTokens: 80,
+      requestCount: 1,
+      sessionCount: 1,
+      turnCount: 1,
+    };
+
+    const store = { query: jest.fn(async () => rows) } as unknown as UsageStore;
+    const snapshot = await new UsageService(store, sessionMeta()).getSnapshot({
+      range: "today",
+      tzOffsetMinutes: 0,
+      now,
+    });
+
+    expect(snapshot.daily).toHaveLength(1);
+    expect(snapshot.daily[0]).toMatchObject({
+      date: "2026-10-18",
+      totalTokens: 300,
+    });
+    expect(snapshot.monthly).toEqual([]);
+    expect(snapshot.summary.totalTokens).toBe(300);
+    expect(snapshot.summary.requestCount).toBe(1);
+    expect(snapshot.summary.activeDays).toBe(1);
+    expect(snapshot.summary.currentStreakDays).toBe(1);
+  });
+
   it("按 purpose / session 推导来源", () => {
     const usage = service();
     expect(usage.resolveSource({ purpose: "compaction" })).toBe("compaction");

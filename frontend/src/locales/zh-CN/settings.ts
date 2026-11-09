@@ -837,6 +837,7 @@ export default {
     clearSuccess: '用量统计已清空',
     clearFailed: '清空失败',
     range: {
+      today: '今日',
       '7d': '近 7 天',
       '30d': '近 30 天',
       all: '全部',

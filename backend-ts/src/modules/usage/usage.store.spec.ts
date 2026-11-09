@@ -112,6 +112,48 @@ describe("UsageStore", () => {
     );
   });
 
+  it("today 范围只统计当天", async () => {
+    const now = Date.UTC(2026, 9, 18, 12, 0, 0);
+    record(store, {
+      sessionId: "s1",
+      modelId: "m1",
+      startedAt: now - 2 * DAY,
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+    });
+    record(store, {
+      sessionId: "s1",
+      modelId: "m1",
+      startedAt: now - 3_600_000,
+      promptTokens: 200,
+      completionTokens: 100,
+      totalTokens: 300,
+    });
+    record(store, {
+      sessionId: "s2",
+      modelId: "m2",
+      startedAt: now - 1_800_000,
+      promptTokens: 50,
+      completionTokens: 20,
+      totalTokens: 70,
+    });
+
+    const rows = await store.query({
+      range: "today",
+      tzOffsetMinutes: 0,
+      now,
+    });
+
+    expect(rows.totals.requestCount).toBe(2);
+    expect(rows.totals.totalTokens).toBe(370);
+    expect(rows.daily).toHaveLength(1);
+    expect(rows.daily[0]).toMatchObject({
+      totalTokens: 370,
+      requestCount: 2,
+    });
+  });
+
   it("回填模式遇到同一 message/attempt 时保留已有记录", async () => {
     const first = record(store, {
       id: "live-1",

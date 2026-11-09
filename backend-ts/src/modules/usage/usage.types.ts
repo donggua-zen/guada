@@ -10,7 +10,7 @@ import type { UsageSource } from "../llm-core/types/llm.types";
 
 export type { UsageSource } from "../llm-core/types/llm.types";
 
-export type UsageRange = "7d" | "30d" | "all";
+export type UsageRange = "today" | "7d" | "30d" | "all";
 
 export type UsageStatus = "completed" | "error" | "cancelled";
 

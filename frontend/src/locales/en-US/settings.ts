@@ -842,6 +842,7 @@ export default {
     clearSuccess: 'Usage statistics cleared',
     clearFailed: 'Failed to clear usage statistics',
     range: {
+      today: 'Today',
       '7d': 'Last 7 days',
       '30d': 'Last 30 days',
       all: 'All time',

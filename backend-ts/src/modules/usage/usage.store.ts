@@ -181,7 +181,14 @@ export class UsageStore implements UsagePort, OnModuleDestroy {
     const now = input.now ?? Date.now();
     const offsetMs = clampOffsetMinutes(input.tzOffsetMinutes) * 60_000;
     const until = now;
-    const dayCount = input.range === "7d" ? 7 : input.range === "30d" ? 30 : 0;
+    const dayCount =
+      input.range === "today"
+        ? 1
+        : input.range === "7d"
+          ? 7
+          : input.range === "30d"
+            ? 30
+            : 0;
     const todayStart = Math.floor((now + offsetMs) / DAY_MS) * DAY_MS - offsetMs;
     const since =
       dayCount > 0 ? todayStart - (dayCount - 1) * DAY_MS : 0;

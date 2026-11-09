@@ -59,7 +59,9 @@ export class UsageController {
 }
 
 function normalizeRange(value: string): UsageRange {
-  return value === "30d" || value === "all" ? value : "7d";
+  return value === "today" || value === "30d" || value === "all"
+    ? value
+    : "7d";
 }
 
 function parseOffset(value: string): number {
