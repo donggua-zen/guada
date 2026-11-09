@@ -9,13 +9,23 @@ import {
   UploadedFile,
   UseInterceptors,
   Body,
+  Res,
+  NotFoundException,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
 import { AuthGuard } from "../auth/auth.guard";
 import { KbFileService, OnDuplicateMode } from "./kb-file.service";
 import { RenameFileDto } from "./dto/rename-file.dto";
 import { MoveFileDto } from "./dto/move-file.dto";
 import { CreateFolderDto } from "./dto/create-folder.dto";
+import {
+  resolveServingMimeType,
+  isKnownExtension,
+} from "../../common/utils/media-type.util";
+import { sniffFileHead } from "../../common/utils/file-sniff.util";
+import * as fs from "fs";
+import * as path from "path";
 
 @Controller("knowledge-bases/:kb_id/files")
 @UseGuards(AuthGuard)
@@ -146,6 +156,60 @@ export class KbFilesController {
       Number(skip),
       Number(limit),
     );
+  }
+
+  /**
+   * 原件直出（前端原文预览 Tab 的 iframe/<img>/fetch 数据源）。
+   *
+   * `<img>`/iframe 无法带 Authorization 头，走 query `?token=` 通道（auth.guard
+   * 已支持，workspace raw-file 同款）。路径来自库内落盘记录，无用户可控路径。
+   * 用 sendFile 而非 pipe：自带 Range/206/ETag，PDF 翻页/大文件按需加载依赖它。
+   */
+  @Get(":file_id/raw")
+  async getRawFile(
+    @Param("kb_id") kbId: string,
+    @Param("file_id") fileId: string,
+    @Res() res: Response,
+  ) {
+    const raw = await this.kbFileService.getRawFileForPreview(kbId, fileId);
+    if (!raw) throw new NotFoundException("原件不存在");
+
+    const ext = path.extname(raw.rawName).toLowerCase();
+    let mimeType = resolveServingMimeType(ext);
+    // 后缀未登记 → 嗅探文件头，避免真实格式被发成 octet-stream
+    if (!isKnownExtension(ext)) {
+      const sniff = await sniffFileHead(raw.absolutePath);
+      if (sniff.mimeType) mimeType = sniff.mimeType;
+    }
+    res.setHeader("Content-Type", mimeType);
+    // inline：预览语义；RFC 5987 编码文件名支持中文
+    const asciiName = raw.rawName.replace(/[^\x20-\x7e]/g, "_");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(raw.rawName)}`,
+    );
+
+    res.sendFile(raw.absolutePath, { dotfiles: "allow" }, (err) => {
+      if (!err || res.headersSent) return;
+      const status = (err as any).status || ((err as any).code === "ENOENT" ? 404 : undefined);
+      if (status === 404) {
+        res.status(404).json({ message: "原件不存在" });
+      } else {
+        console.error(`[kb raw] sendFile failed: ${raw.absolutePath}: ${err.message}`);
+        res.status(500).json({ message: "原件读取失败" });
+      }
+    });
+  }
+
+  /**
+   * 去重叠解析全文（docx/xlsx/OCR 图片等无原版面可直出的格式的回退预览数据源）。
+   */
+  @Get(":file_id/preview-text")
+  async getPreviewText(
+    @Param("kb_id") kbId: string,
+    @Param("file_id") fileId: string,
+  ) {
+    return await this.kbFileService.getDeoverlappedPreviewText(kbId, fileId);
   }
 
   @Post(":file_id/rename")

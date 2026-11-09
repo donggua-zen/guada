@@ -198,6 +198,17 @@ export default {
     noFileSelected: '未选择文件或知识库',
     fileNotReady: '文件尚未处理完成，无法查看分块内容',
     loadFailed: '获取文件分块失败',
+    // ── 双 Tab 预览 ──
+    tabOriginal: '原文预览',
+    tabChunks: '分块',
+    copy: '复制',
+    copySuccess: '分块内容已复制',
+    copyFailed: '复制失败',
+    // 原文预览：各形态
+    originalLoadFailed: '加载原文失败',
+    originalEmpty: '原件缺失，无法预览原文',
+    fallbackNotice: '该格式暂不支持原版面预览，显示解析后的文本（与入库内容一致）',
+    imageLoadFailed: '图片加载失败',
   },
 
   // ── 树节点 (TreeNode.vue) ──

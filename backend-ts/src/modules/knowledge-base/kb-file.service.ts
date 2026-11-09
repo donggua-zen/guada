@@ -1269,4 +1269,84 @@ export class KbFileService implements OnModuleInit {
 
     return await this.chunkRepo.findByItemId(kbId, fileId, skip, limit);
   }
+
+  /**
+   * 取原件预览信息（GET :file_id/raw 端点用）。
+   *
+   * 只回信息不读文件：控制器拿 absolutePath 走 res.sendFile（自带 Range/206），
+   * 前端 iframe/`<img>` 才能按需加载。路径来自库内落盘记录（itemId 目录 +
+   * 落盘时已净化的 rawName），不含用户可控路径。
+   */
+  async getRawFileForPreview(
+    kbId: string,
+    fileId: string,
+  ): Promise<{ absolutePath: string; rawName: string; fileExtension: string } | null> {
+    const kb = await this.kbMetaStore.getKb(kbId);
+    if (!kb) throw new NotFoundException("知识库不存在");
+
+    const file = await this.fileRepo.findById(kbId, fileId);
+    if (!file) throw new NotFoundException("文件不存在");
+
+    const absolutePath = this.rawFilePath(kbId, fileId, file.rawName);
+    if (!absolutePath || !fs.existsSync(absolutePath)) return null;
+
+    return {
+      absolutePath,
+      rawName: file.rawName!,
+      fileExtension: file.fileExtension ?? "",
+    };
+  }
+
+  /**
+   * 去重叠全文预览文本（GET :file_id/preview-text 端点用）。
+   *
+   * docx/xlsx/OCR 图片没有可直出的原文形态，回退展示解析文本。分块内容带
+   * overlap（除第 0 块外每块都以重叠文本开头，见 chunking.service 的重叠逻辑），
+   * 直接按序拼接会出现重复段落 —— 这里对每块求「前块尾部 ∥ 本块头部」的最长
+   * 后缀-前缀匹配并剥离。重叠段是前块末 N 个 token 的解码文本，token↔字符数
+   * 不等（CJK ≈ 0.5~1 字/token，英文 ≈ 4 字/token），所以按内容匹配而非按
+   * 字符数截断；匹配失败（旧策略数据等）则原样保留，宁多勿缺。
+   */
+  async getDeoverlappedPreviewText(
+    kbId: string,
+    fileId: string,
+  ): Promise<{ text: string; chunkCount: number }> {
+    const kb = await this.kbMetaStore.getKb(kbId);
+    if (!kb) throw new NotFoundException("知识库不存在");
+
+    const file = await this.fileRepo.findById(kbId, fileId);
+    if (!file) throw new NotFoundException("文件不存在");
+
+    // limit=-1：SQLite 语义为不限制
+    const chunks = await this.chunkRepo.findByItemId(kbId, fileId, 0, -1);
+    if (chunks.length === 0) return { text: "", chunkCount: 0 };
+
+    const parts: string[] = [];
+    let prev = "";
+    for (const chunk of chunks) {
+      let content = chunk.content;
+      const overlapTokens = Number(chunk.metadata?.overlapLength ?? 0);
+      if (overlapTokens > 0 && prev && content) {
+        // 重叠字符数上界给足余量（CJK 低、英文高，×8 覆盖两端）
+        const maxK = Math.min(prev.length, content.length, overlapTokens * 8 + 16);
+        // match(k) 成立 ⇒ match(k-1) 成立（后缀-前缀匹配单调向下），可二分求最大 k
+        let lo = 0;
+        let hi = maxK;
+        while (lo < hi) {
+          const mid = Math.ceil((lo + hi + 1) / 2);
+          if (prev.endsWith(content.slice(0, mid))) {
+            lo = mid;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        content = content.slice(lo);
+      }
+      const trimmed = content.trim();
+      if (trimmed) parts.push(trimmed);
+      prev = content;
+    }
+
+    return { text: parts.join("\n\n"), chunkCount: chunks.length };
+  }
 }

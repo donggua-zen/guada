@@ -179,6 +179,17 @@
     noFileSelected: 'No file or knowledge base selected',
     fileNotReady: 'File has not been processed yet, cannot view chunks',
     loadFailed: 'Failed to load file chunks',
+    // ── Dual-tab preview ──
+    tabOriginal: 'Original',
+    tabChunks: 'Chunks',
+    copy: 'Copy',
+    copySuccess: 'Chunk content copied',
+    copyFailed: 'Copy failed',
+    // Original preview variants
+    originalLoadFailed: 'Failed to load original file',
+    originalEmpty: 'Original file is missing, cannot preview',
+    fallbackNotice: 'Original layout preview is not available for this format; showing the parsed text (same as indexed content)',
+    imageLoadFailed: 'Failed to load image',
   },
 
   treeNode: {

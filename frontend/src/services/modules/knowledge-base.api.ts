@@ -30,6 +30,10 @@ export interface KnowledgeBaseApi {
   batchGetFileProcessingStatus(kbId: string, fileIds: string[]): Promise<KBFile[]>;
   retryKBFile(kbId: string, fileId: string): Promise<{ success: boolean; message: string }>;
   getKBFileChunks(kbId: string, fileId: string, skip?: number, limit?: number): Promise<KBChunk[]>;
+  /** 原件直出 URL（原文预览 Tab 的 iframe/<img>/fetch 数据源；img/iframe 无法带鉴权头，走 ?token= 通道） */
+  getKBFileRawUrl(kbId: string, fileId: string): string;
+  /** 去重叠解析全文（docx/xlsx/OCR 图片等无原版面格式的回退预览数据源） */
+  getKBFilePreviewText(kbId: string, fileId: string): Promise<KBPreviewText>;
   searchKnowledgeBase(kbId: string, query: string, topK?: number, filterFileId?: string): Promise<{ results: KBSearchResult[] }>;
 }
 
@@ -39,6 +43,12 @@ export interface KBChunk {
   chunkIndex: number
   tokenCount?: number
   content: string
+}
+
+/** 去重叠解析全文（GET files/:id/preview-text） */
+export interface KBPreviewText {
+  text: string
+  chunkCount: number
 }
 
 /** 搜索结果 metadata（后端 mergeMetadata 产物：分块快照元信息 + 条目当前信息 + chunkId/chunkIndex 定位列，其余键动态） */
@@ -226,6 +236,18 @@ export const knowledgeBaseApi: KnowledgeBaseApi = {
   async getKBFileChunks(this: ApiContext, kbId: string, fileId: string, skip: number = 0, limit: number = 10) {
     return await this._request<KBChunk[]>(
       `/knowledge-bases/${kbId}/files/${fileId}/chunks?skip=${skip}&limit=${limit}`,
+    );
+  },
+
+  getKBFileRawUrl(this: ApiContext, kbId: string, fileId: string) {
+    const baseUrl = this.baseURL.replace(/\/$/, '');
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token") || '';
+    return `${baseUrl}/knowledge-bases/${kbId}/files/${fileId}/raw?token=${encodeURIComponent(token)}`;
+  },
+
+  async getKBFilePreviewText(this: ApiContext, kbId: string, fileId: string) {
+    return await this._request<KBPreviewText>(
+      `/knowledge-bases/${kbId}/files/${fileId}/preview-text`,
     );
   },
 

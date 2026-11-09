@@ -182,7 +182,8 @@
   </GdDialog>
 
   <!-- 文件分块查看弹窗 -->
-  <FileChunksViewer v-model="showFileChunksModal" :selected-file="selectedFile" />
+  <FileChunksViewer v-model="showFileChunksModal" :selected-file="selectedFile"
+      :initial-tab="chunksViewerInitialTab" :initial-chunk-index="chunksViewerInitialChunkIndex" />
 
   <!-- 上传任务弹窗 -->
   <UploadTaskModal v-model="showUploadTaskModal" :upload-tasks="uploadTasksList" @retry="handleRetryFile"
@@ -231,6 +232,9 @@ const router = useRouter()
 const showKbDialog = ref(false)
 const dialogMode = ref<'create' | 'edit'>('create')
 const showFileChunksModal = ref(false)  // 文件分块查看弹窗
+// 预览弹窗初始 Tab 与定位（检索结果点击直达分块；普通查看由 handleViewFile 重置为原文）
+const chunksViewerInitialTab = ref<'original' | 'chunks'>('original')
+const chunksViewerInitialChunkIndex = ref<number | null>(null)
 const showUploadTaskModal = ref(false)  // 上传任务弹窗
 const selectedFile = ref<KBFile | null>(null)  // 选中的文件
 const activeTab = ref('files')  // 当前激活的 Tab: 'files' 或 'search'
@@ -664,7 +668,11 @@ async function handleSearchResultClick(result: KBSearchResult) {
     if (kbId !== store.activeKnowledgeBaseId) {
       store.setActiveKnowledgeBase(kbId)
     }
+    // 先走通用打开（内部会重置为原文 Tab），同 tick 内覆写为分块直达——
+    // 子组件的 modelValue watcher 在本轮同步代码全部结束后才执行，以最后写入为准
     handleViewFile(file as KBFile)
+    chunksViewerInitialTab.value = 'chunks'
+    chunksViewerInitialChunkIndex.value = typeof meta.chunkIndex === 'number' ? meta.chunkIndex : null
   } catch (error) {
     toast.error(getErrorMessage(error) || t('knowledge.search.resultUnavailable'))
   }
@@ -680,9 +688,11 @@ function handleViewFile(file: KBFile) {
     return
   }
 
-  // 打开分块查看弹窗
+  // 打开预览弹窗（默认原文预览 Tab；检索入口已在 handleSearchResultClick 里改写）
   showFileChunksModal.value = true
   selectedFile.value = file
+  chunksViewerInitialTab.value = 'original'
+  chunksViewerInitialChunkIndex.value = null
 }
 
 /**
