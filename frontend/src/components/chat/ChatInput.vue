@@ -4,7 +4,7 @@
          内部按 readonly 禁用矩阵收口：编辑器不可编辑、模型选择/拖拽入口守卫、发送禁用。 -->
     <div
       data-gd-slot="composer-card"
-      class="input-area p-[12px_8px_10px_8px] min-h-15 w-full bg-(--gd-color-input-bg) border border-(--gd-color-input-border) rounded-(--gd-size-rounded-radius) transition-[border-color,background-color] duration-150"
+      class="input-area p-[12px_8px_10px_8px] min-h-[108px] w-full bg-(--gd-color-input-bg) border border-(--gd-color-input-border) rounded-(--gd-size-rounded-radius) transition-[border-color,background-color] duration-150"
       :class="[styleClass, { 'drag-over': isDragOver }, { 'bg-(--gd-color-input-bg)': !backdrop }, { 'bg-(--gd-color-input-bg)/60 backdrop-blur-xl ': backdrop }]"
       @dragover.prevent @dragenter.prevent="handleDragEnter" @dragleave.prevent="handleDragLeave"
       @drop.prevent="handleDrop">
@@ -1452,13 +1452,22 @@ const loadCommands = async (trigger: 'slash' | 'mention') => {
 };
 
 
-// 编辑器高度自适应
+// 编辑器高度刻度：与样式 .message-editor .ProseMirror 的 min/max-height 必须同值，
+// 三处（样式 + 本 watch + 编辑器 onUpdate）不一致会在首次输入时顶跳输入框（旧 52/58 混用即此病）。
+// 最低 58：卡片总高 = 12(上内边距) + 58(编辑器) + 28(工具行) + 10(下内边距) + 2(边框) = 110px；
+// 上限 240 = 10×24 行高，超出后编辑器内部滚动
+const EDITOR_MIN_HEIGHT = 58;
+const EDITOR_MAX_HEIGHT = 240;
+
+// 编辑器高度自适应：内容撑开由 CSS 盒模型接管，这里只恒定下发 min/max 刻度——
+// 内容实需高度低于最低刻度时被 min-height 兜住不压缩（scrollHeight 永不小于 min-height），
+// 高于上限时 maxHeight 内部滚动，两者皆不需要 JS 逐帧算高
 watch(editorContent, () => {
   nextTick(() => {
     const pmEl = document.querySelector('.message-editor .ProseMirror') as HTMLElement | null;
     if (pmEl) {
-      pmEl.style.minHeight = '48px';
-      pmEl.style.maxHeight = '240px';
+      pmEl.style.minHeight = `${EDITOR_MIN_HEIGHT}px`;
+      pmEl.style.maxHeight = `${EDITOR_MAX_HEIGHT}px`;
     }
   });
 });
@@ -1554,9 +1563,9 @@ onMounted(() => {
         nextTick(() => {
           const pmEl = document.querySelector('.message-editor .ProseMirror') as HTMLElement | null;
           if (pmEl) {
-            // 与 mount 分支同值：两处不一致会在首次输入时把输入框顶跳 6px
-            pmEl.style.minHeight = '48px';
-            pmEl.style.maxHeight = '240px';
+            // 与 mount 分支、editorContent watch 同值：三处不一致会在首次输入时把输入框顶跳 6px
+            pmEl.style.minHeight = `${EDITOR_MIN_HEIGHT}px`;
+            pmEl.style.maxHeight = `${EDITOR_MAX_HEIGHT}px`;
             // 自动滚动光标到可见区域（修复 Shift+Enter 换行时光标被遮挡）
             ed.commands.scrollIntoView();
           }
@@ -1698,11 +1707,14 @@ defineExpose({ insertText, insertBadge });
 /* Tiptap 编辑器样式 - 模拟 textarea */
 :deep(.message-editor .ProseMirror) {
   width: 100%;
-  /* 2 行 / 10 行的整数行高刻度：行高 24px（与 markdown 正文 --gd-md-line-height 同源），
-     48 = 2×24、240 = 10×24。原 min-height 52/58 与 line-height 22.4px 都是小数几何：
-     行高小数 → 每行基线落在设备像素之间（发虚）；min-height 在首次输入时 52→58
-     还会让输入框（含上方全部内容）跳 6px；240 ÷ 22.4 = 10.71 行 → 滚动时末行半行裁切。 */
-  min-height: 48px;
+  /* 整数行高刻度：行高 24px（与 markdown 正文 --gd-md-line-height 同源）。
+     最低 58px（≈2.4 行，刻意介于 2~3 行之间）：输入卡片总高
+     12(上内边距)+58(编辑器)+28(工具行)+10(下内边距)+2(边框)=110px，
+     落在 108~110 的目标区间；内容不足 58px 时被 min-height 兜住不再回缩。
+     上限 240 = 10×24，超出后编辑器内部滚动（旧 240÷22.4=10.71 行的半行裁切已随行高整化消除）。
+     此值必须与 script 里的 EDITOR_MIN_HEIGHT / EDITOR_MAX_HEIGHT 常量同值，
+     三处不一致会在首次输入时顶跳输入框（旧 52/58 混用即此病）。 */
+  min-height: 58px;
   max-height: 240px;
   border: none;
   resize: none;
