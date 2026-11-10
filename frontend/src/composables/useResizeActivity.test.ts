@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   beginResizeActivity,
   isResizeActivityActive,
+  markResizeMoved,
   resetResizeActivity,
   RESIZE_ACTIVITY_CLASS,
+  RESIZE_ACTIVITY_MOVED_CLASS,
   RESIZE_ACTIVITY_TAIL_MS,
 } from './useResizeActivity'
 
@@ -15,7 +17,10 @@ import {
  */
 
 /** 记录 class 挂载状态的极简 DOM 桩 */
-function installDocumentStub(): { hasClass: () => boolean } {
+function installDocumentStub(): {
+  hasClass: () => boolean
+  hasMovedClass: () => boolean
+} {
   const classes = new Set<string>()
   const stub = {
     documentElement: {
@@ -30,7 +35,10 @@ function installDocumentStub(): { hasClass: () => boolean } {
     },
   }
   ;(globalThis as { document?: unknown }).document = stub
-  return { hasClass: () => classes.has(RESIZE_ACTIVITY_CLASS) }
+  return {
+    hasClass: () => classes.has(RESIZE_ACTIVITY_CLASS),
+    hasMovedClass: () => classes.has(RESIZE_ACTIVITY_MOVED_CLASS),
+  }
 }
 
 /**
@@ -80,11 +88,85 @@ describe('模块加载即绑定 window resize（回归）', () => {
     for (const fn of resizeListeners) fn()
     expect(mod.isResizeActivityActive()).toBe(true)
     expect(doc.hasClass()).toBe(true)
+    // 窗口缩放的 resize 事件本身就意味着尺寸变了 → 同时点亮「已移动」
+    expect(doc.hasMovedClass()).toBe(true)
 
     // 尾延迟后自动退出
     await vi.advanceTimersByTimeAsync(mod.RESIZE_ACTIVITY_TAIL_MS)
     expect(mod.isResizeActivityActive()).toBe(false)
     expect(doc.hasClass()).toBe(false)
+    expect(doc.hasMovedClass()).toBe(false)
+  })
+})
+
+/**
+ * 「按下不动不应触发会改布局的降级」的回归测试。
+ *
+ * 背景：`content-visibility` 会改变离屏回合的高度估算，如果在 pointerdown 就启用，
+ * 用户只是按住还没拖动时内容就会塌陷（实测 40 回合 scrollHeight 60245 → 35469，
+ * 可见内容整轮后退）。因此拆出 gd-resizing-moved，只在真实位移后才挂。
+ */
+describe('markResizeMoved（按下不动不降级）', () => {
+  let doc: ReturnType<typeof installDocumentStub>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    doc = installDocumentStub()
+    resetResizeActivity()
+  })
+
+  afterEach(() => {
+    resetResizeActivity()
+    vi.useRealTimers()
+    delete (globalThis as { document?: unknown }).document
+  })
+
+  it('仅 begin 不调 mark：只有 gd-resizing，没有 gd-resizing-moved', () => {
+    const release = beginResizeActivity()
+    expect(doc.hasClass()).toBe(true)
+    // 关键断言：按下不动时不能有 moved 类，否则 content-visibility 会触发塌陷
+    expect(doc.hasMovedClass()).toBe(false)
+    release()
+  })
+
+  it('begin + mark：两个类都挂上', () => {
+    const release = beginResizeActivity()
+    markResizeMoved()
+    expect(doc.hasClass()).toBe(true)
+    expect(doc.hasMovedClass()).toBe(true)
+    release()
+  })
+
+  it('非调整态调 mark 无效（不会在空闲时点亮降级）', () => {
+    markResizeMoved()
+    expect(doc.hasMovedClass()).toBe(false)
+  })
+
+  it('退出时两个类一起摘掉', () => {
+    const release = beginResizeActivity()
+    markResizeMoved()
+    release()
+
+    // 尾延迟内仍保持（避免松手瞬间的回落抖动）
+    expect(doc.hasMovedClass()).toBe(true)
+
+    vi.advanceTimersByTime(RESIZE_ACTIVITY_TAIL_MS)
+    expect(doc.hasMovedClass()).toBe(false)
+    expect(doc.hasClass()).toBe(false)
+  })
+
+  it('新一轮拖拽从「未移动」重新开始（不残留上一轮的 moved）', () => {
+    const first = beginResizeActivity()
+    markResizeMoved()
+    first()
+    vi.advanceTimersByTime(RESIZE_ACTIVITY_TAIL_MS)
+    expect(doc.hasMovedClass()).toBe(false)
+
+    // 第二次按下但不动：不能带上一轮的 moved
+    const second = beginResizeActivity()
+    expect(doc.hasClass()).toBe(true)
+    expect(doc.hasMovedClass()).toBe(false)
+    second()
   })
 })
 

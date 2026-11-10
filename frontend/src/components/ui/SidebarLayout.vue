@@ -60,7 +60,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onUnmounted } from "vue";
-import { beginResizeActivity } from '@/composables/useResizeActivity';
+import { beginResizeActivity, markResizeMoved } from '@/composables/useResizeActivity';
 import {
   ChevronLeft16Regular as ArrowLeftTwotone,
   ChevronRight16Regular as ArrowRightTwotone
@@ -144,7 +144,11 @@ function clampSidebarWidth(width: number): number {
 function applyResizeDelta(e: MouseEvent): void {
   // sidebarPosition 为 right 时把手在左缘，拖拽方向取反
   const dir = (props.sidebarPosition ?? 'left') === 'left' ? 1 : -1;
-  liveWidth.value = clampSidebarWidth(resizeStartWidth + dir * (e.clientX - resizeStartX));
+  const next = clampSidebarWidth(resizeStartWidth + dir * (e.clientX - resizeStartX));
+  // 只有真的算出不同宽度才算「已移动」——按下不动时不触发会改布局的降级，
+  // 否则侧栏宽度虽然没变，聊天区的离屏回合也会先塌陷一次。
+  if (next !== liveWidth.value) markResizeMoved();
+  liveWidth.value = next;
 }
 
 function handleResizeMouseDown(e: MouseEvent): void {

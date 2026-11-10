@@ -42,7 +42,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted, watch, nextTick, type CSSProperties } from 'vue';
-import { beginResizeActivity } from '@/composables/useResizeActivity';
+import { beginResizeActivity, markResizeMoved } from '@/composables/useResizeActivity';
 import {
   SPLITTER_SIZE,
   computePixelModeWidths as computePixelModeWidthsPure,
@@ -259,6 +259,9 @@ function handleSplitterMouseMove(e: MouseEvent) {
     if (!containerRef.value) return;
 
     const delta = ev.clientX - resizeStartPos;
+    // 真正产生位移后才允许「会改变布局」的降级（离屏回合跳过绘制）：
+    // 按下不动时 delta 恒为 0，不能让内容塌陷。详见 useResizeActivity 的注释。
+    if (delta !== 0) markResizeMoved();
     // 用 ResizeObserver 维护的容器宽，而不是每帧 getBoundingClientRect：
     // 后者紧跟上一帧的 style 写入，等于每帧插入一次强制同步布局。
     // 拖拽期间容器宽恒定，只有窗口尺寸变化才会动它。
@@ -295,6 +298,7 @@ function handleSplitterMouseMove(e: MouseEvent) {
 
     // 更新 currentSplitSize → 触发 paneWidths computed → :style 自动更新
     currentSplitSize.value = newSize;
+    // 注：不在这里 markResizeMoved —— 见 handleSplitterMouseMove 开头的位移判定
     emit('resize', newSize);
   });
 }

@@ -879,24 +879,28 @@ const handleImageClick = (file: FileAttachment) => {
   animation: turn-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* 拖拽/缩放期间：视口外回合跳过布局与绘制。
+/* 拖拽/缩放**真正产生位移**后：视口外回合跳过布局与绘制。
    ------------------------------------------------------------------
    devtools trace 实测拖拽分割条时，聊天滚动内容的绘制区高度是视口的 3.8 倍
    （1129×5312，视口 1392），Paint 中位 8.5ms/帧，是帧预算里最大的单项，
    且成本随会话长度线性增长。降级后视口外回合不再参与绘制。
 
-   只在「用户不会同时滚动」的时刻启用，因此 `contain-intrinsic-size` 的估算
-   永远不会被看到（滚动跳动的成因见 .turn-wrapper 注释）。
+   **为什么挂 gd-resizing-moved 而不是 gd-resizing**：
+   `content-visibility` 会改变布局高度（离屏回合按 contain-intrinsic-size 估算），
+   如果在 pointerdown 就启用，用户只是**按住还没拖动**时内容就会塌陷。
+   实测按住不动一圈 40 回合（每个真实高度约 1486px）：
+     - 启用前：scrollHeight 60245，贴底时距底 800px，可见 turn 39
+     - 启用后：scrollHeight 35469（少 24776px），scrollTop 被浏览器从 59445
+       钳到 32660，距底变成 2809px，可见内容整轮后退到 turn 38
+   即「按下不动，滚动条自己跳，稍微一拖又还原」。
+   改用 gd-resizing-moved（第一帧真实位移后才挂）后，按下不动完全无副作用；
+   一旦开始拖拽，宽度本就逐帧变化、内容本就要重排，塌陷被真实重排掩盖，不可见。
 
-   条件只挂 `html.gd-resizing`（由 useResizeActivity 挂载）：它已覆盖全部三条
-   入口——拖分割条、拖侧栏把手、窗口缩放——所以不需要再区分具体是哪种。
-   它还带 150ms 尾延迟，松手后不会立刻恢复，避免最后一帧的抖动。
-
-   为什么用固定估算而非 `auto`：调整期间不滚动，估算值不会被看到；固定值比
-   `auto` 少一次「记忆尺寸」的写回，更便宜。
+   为什么用固定估算而非 `auto`：调整期间用户不会滚动，估算值不会被看到；
+   固定值比 `auto` 少一次「记忆尺寸」的写回，更便宜。
 
    A/B 对照：localStorage['gd:turn-cv']='0' 时 .turn-wrapper--no-cv 命中 :not() 被排除。 */
-html.gd-resizing .turn-wrapper:not(.turn-wrapper--no-cv) {
+html.gd-resizing-moved .turn-wrapper:not(.turn-wrapper--no-cv) {
   content-visibility: auto;
   contain-intrinsic-size: 800px;
 }

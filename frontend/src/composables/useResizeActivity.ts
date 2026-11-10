@@ -29,6 +29,19 @@ export const RESIZE_ACTIVITY_TAIL_MS = 150
 /** 挂在 <html> 上的类名，CSS 侧据此暂停动画 / 关掉 backdrop-filter。 */
 export const RESIZE_ACTIVITY_CLASS = 'gd-resizing'
 
+/**
+ * 「已真正开始调整」类名：只有尺寸实际变化过才会挂上。
+ *
+ * 分开的原因：部分降级（如回合的 `content-visibility`）会改变布局高度，
+ * 如果在 pointerdown 就启用，用户**只是按下、还没拖动**时内容就会塌陷——
+ * 实测按住不动一圈 40 回合，scrollHeight 60245 → 35469（少 24776px），
+ * 浏览器把 scrollTop 从 59445 钳到 32660，可见内容整轮后退。
+ *
+ * 只在「尺寸确实变了」之后启用，按下不动则完全无副作用；一旦开始拖拽，
+ * 宽度本来就在逐帧变化、内容本来就要重排，塌陷被真实重排掩盖，不可见。
+ */
+export const RESIZE_ACTIVITY_MOVED_CLASS = 'gd-resizing-moved'
+
 /** 嵌套计数：只有归零才进入收尾流程。 */
 let activeCount = 0
 /** 唯一权威态：布尔值与 DOM class 都读它。 */
@@ -37,12 +50,32 @@ const isResizeActive = computed(() => active.value)
 
 let tailTimer: ReturnType<typeof setTimeout> | null = null
 let classApplied = false
+let movedClassApplied = false
 
 function setClass(on: boolean): void {
   if (typeof document === 'undefined') return
   if (on === classApplied) return
   classApplied = on
   document.documentElement.classList.toggle(RESIZE_ACTIVITY_CLASS, on)
+}
+
+function setMovedClass(on: boolean): void {
+  if (typeof document === 'undefined') return
+  if (on === movedClassApplied) return
+  movedClassApplied = on
+  document.documentElement.classList.toggle(RESIZE_ACTIVITY_MOVED_CLASS, on)
+}
+
+/**
+ * 标记「尺寸已实际变化」。由各拖拽实现在**第一帧真实位移**时调用：
+ * - GdSplitpanes / SidebarLayout：鼠标相对按下的位置产生了非零位移
+ * - 窗口缩放：任何一次 resize 事件都算（事件本身就意味着尺寸变了）
+ *
+ * 幂等，非调整态调用无效（退出尾延迟期间的 resize 事件不会重新点亮它）。
+ */
+export function markResizeMoved(): void {
+  if (!active.value) return
+  setMovedClass(true)
 }
 
 function clearTail(): void {
@@ -69,6 +102,8 @@ function scheduleExit(): void {
     tailTimer = null
     if (activeCount > 0) return
     active.value = false
+    // 先摘「已移动」再摘主态：两个 class 同帧变化，避免降级残留一帧
+    setMovedClass(false)
     setClass(false)
   }, RESIZE_ACTIVITY_TAIL_MS)
 }
@@ -83,6 +118,8 @@ function touch(): void {
     active.value = true
     setClass(true)
   }
+  // 窗口 resize 事件一出现就说明尺寸已变，直接点亮「已移动」
+  setMovedClass(true)
   scheduleExit()
 }
 
@@ -107,6 +144,7 @@ export function resetResizeActivity(): void {
   clearTail()
   activeCount = 0
   active.value = false
+  setMovedClass(false)
   setClass(false)
 }
 
