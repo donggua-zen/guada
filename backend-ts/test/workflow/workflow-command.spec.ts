@@ -20,9 +20,16 @@ function makeProvider(opts?: {
 }
 
 async function loadPluginProvider(sessionService: any) {
-  const plugin = new WorkflowPlugin({} as any, {} as any, sessionService);
+  // 构造签名 v4.1 起为 (workflowEngine, sessionService)：agent 清单改由 sub-agent
+  // 能力包提供，agentStore 参数已移除。
+  const plugin = new WorkflowPlugin({} as any, sessionService);
   const providers: any[] = [];
-  const kit = { registerTool: jest.fn(), registerPrompt: jest.fn() };
+  const kit = {
+    registerTool: jest.fn(),
+    registerPrompt: jest.fn(),
+    // v4.1：完整脚本指南注册为能力包技能（skill_learn 按需加载）
+    registerSkill: jest.fn(),
+  };
   const api = {
     registerNls: jest.fn(),
     registerCommandProvider: (provider: any) => providers.push(provider),

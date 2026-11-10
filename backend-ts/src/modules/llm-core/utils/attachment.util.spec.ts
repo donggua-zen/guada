@@ -58,9 +58,12 @@ describe('attachment.util', () => {
         base64: raw.toString('base64'),
       });
 
-      // 修改文件 → mtime 变化 → 缓存失效
+      // 修改文件 → mtime 变化 → 缓存失效。
+      // Windows/部分文件系统上两次紧邻的 writeFile 可能拿到同一 mtimeMs（时间戳
+      // 精度问题，实测约 1/3 概率偶发），显式 utimes 保证时间戳前进，让断言确定。
       const raw2 = Buffer.from('updated');
       await fs.writeFile(file, raw2);
+      await fs.utimes(file, new Date(), new Date(Date.now() + 1000));
       const part2 = await attachmentToPart(ref);
       expect(part2).toEqual({
         kind: 'base64',

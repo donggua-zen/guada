@@ -96,14 +96,24 @@ function createContext(overrides: any = {}) {
     publish: jest.fn(),
     ...(overrides.streamManager || {}),
   };
+  // PromptAssembler（v3 起替代 promptCollector）：默认只回内置段 =
+  // 会话 systemPrompt，等价于「无插件提示词」，与本文件关注的注入语义无关。
+  const promptAssembler = {
+    assemble: jest.fn(async (input: any) => {
+      const base = String(input?.basePrompt || '').trim();
+      return {
+        sections: base ? [{ name: 'builtin.agent-system', order: 0, text: base }] : [],
+        systemText: base,
+      };
+    }),
+    ...(overrides.promptAssembler || {}),
+  };
   const ctx = new JsonlSessionContext(
     makeSession(overrides.session),
     messageStore as any,
     { findModel: jest.fn() } as any,
     { resolvePlugins: jest.fn(async () => []) } as any,
-    {
-      collectPrompts: jest.fn(async () => []),
-    } as any,
+    promptAssembler as any,
     { resolveSessionWorkspaceDir: jest.fn(async () => '') } as any,
     tokenMeter as any,
     streamManager as any,

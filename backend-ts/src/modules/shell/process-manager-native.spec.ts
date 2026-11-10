@@ -160,7 +160,11 @@ describeWin("ProcessManagerService native Win32 Job spawn", () => {
     const newFiles = fs
       .readdirSync(logDir)
       .filter((f) => !filesBefore.has(f));
-    expect(newFiles).toEqual([path.basename(logPath!)]);
+    // guada-logs 是 os.tmpdir() 下的跨进程共享目录：全量并行跑时其它用例
+    // （如 process-manager-ui 的 sess-purged-*）会同时写日志，不能断言精确相等。
+    // 本用例只关心两点：目标日志已落盘、且没有额外的 .raw.log spool。
+    expect(newFiles).toContain(path.basename(logPath!));
+    expect(newFiles.filter((f) => f.endsWith(".raw.log"))).toEqual([]);
     // 有 jobId 时通知权归 Registry（job.settled → notifier），不再直接 enqueue
     expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
 

@@ -157,6 +157,19 @@ describe("TerminalGateway（WS 集成）", () => {
     return { ws, messages, closed, opened };
   }
 
+  /**
+   * 轮询等待条件成立 —— 替代固定 `setTimeout(50)`。
+   * 全量并行跑时机器争用会让 50ms 偶发不够（WS 往返 + 事件循环延迟），
+   * 固定等待会随机漏消息；这里最多等 2s，条件满足即返回。
+   */
+  async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (!predicate()) {
+      if (Date.now() >= deadline) return; // 交给断言报错，保留真实失败信息
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
+
   beforeEach(async () => {
     jest.spyOn(Logger.prototype, "log").mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
@@ -231,7 +244,7 @@ describe("TerminalGateway（WS 集成）", () => {
   describe("成功连接", () => {
     it("新建终端后下发 ready 携带后端生成的 terminalId", async () => {
       const { messages } = openClient();
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => messages.length > 0);
 
       expect(messages[0]).toMatchObject({ type: "ready", terminalId: "created-1" });
     });
@@ -242,7 +255,7 @@ describe("TerminalGateway（WS 集成）", () => {
       handles.set("t-1", orphan);
 
       const { messages } = openClient("/api/v1/terminal/ws?token=t&sessionId=s1&terminalId=t-1");
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => messages.some((m) => m.type === "transcript"));
 
       const transcript = messages.find((m) => m.type === "transcript");
       expect(transcript).toMatchObject({ type: "transcript", text: "old output" });
@@ -254,7 +267,7 @@ describe("TerminalGateway（WS 集成）", () => {
       handles.set("orphan-1", orphan);
 
       const { messages } = openClient("/api/v1/terminal/ws?token=t&sessionId=s1&terminalId=orphan-1");
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => messages.length > 0);
 
       expect(messages[0]).toMatchObject({ type: "ready", terminalId: "orphan-1" });
       expect(handles.get("orphan-1")!.disconnectedAt).toBeUndefined();
@@ -267,7 +280,7 @@ describe("TerminalGateway（WS 集成）", () => {
       handles.set("foreign-1", foreign);
 
       const { messages } = openClient("/api/v1/terminal/ws?token=t&sessionId=s1&terminalId=foreign-1");
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => messages.length > 0);
 
       expect(messages[0].terminalId).toBe("created-2");
       expect(handles.get("foreign-1")!.disconnectedAt).toBeDefined(); // 未被碰过
@@ -281,7 +294,7 @@ describe("TerminalGateway（WS 集成）", () => {
       handle.disconnectedAt = Date.now();
       handles.set(id, handle);
       const client = openClient(`/api/v1/terminal/ws?token=t&sessionId=s1&terminalId=${id}`);
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => client.messages.length > 0); // ready 已下发
       return { handle, ...client };
     }
 
@@ -289,7 +302,7 @@ describe("TerminalGateway（WS 集成）", () => {
       const { handle, ws } = await connectAndGetHandle("p-1");
 
       ws.send(JSON.stringify({ type: "input", text: "ls\r" }));
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => handle.pty.written.length > 0);
 
       expect(handle.pty.written).toEqual(["ls\r"]);
     });
@@ -299,7 +312,7 @@ describe("TerminalGateway（WS 集成）", () => {
 
       ws.send(JSON.stringify({ type: "resize", cols: 100, rows: 40 }));
       ws.send(JSON.stringify({ type: "resize", cols: 0, rows: -5 }));
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => handle.pty.resized.length >= 2);
 
       expect(handle.pty.resized).toEqual([
         { cols: 100, rows: 40 },
@@ -312,7 +325,7 @@ describe("TerminalGateway（WS 集成）", () => {
 
       ws.send("not json at all");
       ws.send(JSON.stringify({ type: "input", text: "ok" }));
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => handle.pty.written.length > 0);
 
       expect(handle.pty.written).toEqual(["ok"]);
       expect(ws.readyState).toBe(WebSocket.OPEN);
@@ -331,7 +344,7 @@ describe("TerminalGateway（WS 集成）", () => {
       const { handle, messages } = await connectAndGetHandle("p-5");
 
       handle.pty.push("live data");
-      await new Promise((r) => setTimeout(r, 50));
+      await waitFor(() => messages.some((m) => m.type === "output"));
 
       expect(messages.find((m) => m.type === "output")).toMatchObject({ type: "output", text: "live data" });
     });
@@ -340,7 +353,11 @@ describe("TerminalGateway（WS 集成）", () => {
       const { ws } = await connectAndGetHandle("p-6");
 
       ws.terminate();
-      await new Promise((r) => setTimeout(r, 100));
+      // 上一个用例的 socket 在 afterEach 才 terminate，其 close 回调可能晚到并混进
+      // 本用例的 mock 记录；必须等「p-6 自己那条」，而不是随便一条调用。
+      await waitFor(() =>
+        markDisconnectedMock.mock.calls.some(([id]) => id === "p-6"),
+      );
 
       expect(markDisconnectedMock).toHaveBeenCalledWith("p-6");
       expect(disposeMock).not.toHaveBeenCalled();
