@@ -40,8 +40,9 @@ function isBuiltinCommandName(name: string): boolean {
  * 夹在正文中的斜杠（如 `请解释 /compact 是什么意思`、多行消息里的第二行）一律不命中，
  * 避免误吞正常提问。
  *
- * @param isKnown 命令是否已注册（默认只认内置词表；ChatController 传入
- *                LocalSlashCommandRegistry.has 以支持插件命令）
+ * @param isKnown 额外命令是否已注册（**叠加**在内置词表之上；ChatController 传入
+ *                LocalSlashCommandRegistry.has 以支持插件命令）。内置的 compact/compress
+ *                由 ChatController 直接处理、不进注册表，因此不能因为传了 isKnown 就丢。
  */
 export function parseLocalSlashCommand(
   input: string | undefined | null,
@@ -53,7 +54,8 @@ export function parseLocalSlashCommand(
   const [, rawName, rawArgs] = match;
   if (!rawName) return null;
   const name = rawName.toLowerCase();
-  const known = isKnown ? isKnown(name) : isBuiltinCommandName(name);
+  // 内置词表 ∪ 注册表：内置命令（/compact、/compress）不走注册表，必须始终命中
+  const known = isBuiltinCommandName(name) || (isKnown ? isKnown(name) : false);
   if (!known) return null;
   const instructions = rawArgs?.trim();
   return {

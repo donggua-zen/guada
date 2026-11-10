@@ -34,6 +34,26 @@ describe('parseLocalSlashCommand', () => {
     expect(parseLocalSlashCommand('/usr/bin/env')).toBeNull();
   });
 
+  it('传入 isKnown（注册表）时内置命令仍命中，注册表命令同时生效', () => {
+    // 回归：注册表里只有插件/goal 命令，没有 compact/compress（它们由控制器直接处理）。
+    // isKnown 必须叠加在内置词表之上，而不是替换——否则 /compact 会被当普通消息发给模型。
+    const noop = () => false;
+    expect(parseLocalSlashCommand('/compact', noop)).toMatchObject({
+      name: 'compact',
+    });
+    expect(parseLocalSlashCommand('/compress 只保留要点', noop)).toMatchObject({
+      name: 'compress',
+      instructions: '只保留要点',
+    });
+
+    const registered = (name: string) => name === 'mycmd';
+    expect(parseLocalSlashCommand('/mycmd arg', registered)).toMatchObject({
+      name: 'mycmd',
+      instructions: 'arg',
+    });
+    expect(parseLocalSlashCommand('/help', registered)).toBeNull();
+  });
+
   it('正文中的斜杠不命中（避免误吞正常提问）', () => {
     expect(parseLocalSlashCommand('请解释 /compact 是什么意思')).toBeNull();
     expect(parseLocalSlashCommand('第一行\n/compact')).toBeNull();

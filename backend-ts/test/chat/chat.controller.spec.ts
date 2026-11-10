@@ -23,6 +23,7 @@ function buildController(overrides?: { resolveAnswers?: boolean }) {
     {} as any, // tagParserPipeline
     interactionWait,
     { enqueue: jest.fn() } as any, // userInputQueue
+    { has: jest.fn(() => false), dispatch: jest.fn() } as any, // localCommands
   );
   // 挂起一个等待者（模拟 AskService.ask 原地阻塞中）
   const delivered = { value: false };
@@ -142,6 +143,8 @@ describe('ChatController - streamMessage 本地斜杠命令', () => {
       tagParserPipeline as any,
       new InteractionWaitService(),
       { enqueue: jest.fn() } as any, // userInputQueue
+      // 注册表为空：内置命令（compact/compress）由控制器直接处理，不依赖注册表
+      { has: jest.fn(() => false), dispatch: jest.fn() } as any, // localCommands
     );
     return { controller, res, sessionService, chatRunner, tagParserPipeline };
   }
