@@ -121,51 +121,9 @@
       <PluginMarket v-model:keyword="marketKeyword" :active="view === 'market'" @installed="loadGlobalTools" />
     </div>
 
-    <!-- Detail Dialog -->
-    <GdDialog v-model="detailVisible" size="sm" align-center destroy-on-close>
-      <template #header>
-        <div class="flex items-center gap-3">
-          <CardAvatar :src="currentTool?.icon ? resolvePluginIconUrl(currentTool?.pluginId, currentTool?.iconRev) : null" :name="currentTool?.displayName" size="md" tray />
-          <div class="flex items-center gap-2">
-            <span class="text-base font-semibold text-gray-900 dark:text-[#e8e9ed]">{{ currentTool?.displayName }}</span>
-            <GdTag v-if="currentTool?.provides" size="small" type="primary" effect="plain">{{ t('plugins.localTools.sourceProvider') }}</GdTag>
-            <GdTag v-if="currentTool?.source === 'dev'" size="small" type="warning" effect="dark">{{ t('plugins.localTools.sourceDev') }}</GdTag>
-            <GdTag v-else-if="currentTool?.source === 'user'" size="small" type="success" effect="plain">{{ t('plugins.localTools.sourceUser') }}</GdTag>
-          </div>
-        </div>
-      </template>
-
-      <div v-if="currentTool" class="space-y-4">
-        <div>
-          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-1">{{ t('plugins.localTools.descLabel') }}</div>
-          <p class="text-sm text-gray-700 dark:text-[#d0d1d5] leading-relaxed">{{ currentTool.description }}</p>
-        </div>
-
-        <div v-if="currentTool.tools && currentTool.tools.length > 0">
-          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-2">{{ t('plugins.localTools.toolsLabel', { count: currentTool.tools.length }) }}</div>
-          <div class="space-y-1.5">
-            <div v-for="sub in currentTool.tools" :key="sub.name"
-              class="flex items-start gap-2 py-1.5 px-3 rounded-[var(--gd-size-surface-radius)] bg-gray-50 dark:bg-[#2a2a2e]">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm text-gray-700 dark:text-[#d0d1d5] font-medium">{{ sub.name }}</div>
-                <div v-if="sub.description" class="text-xs text-gray-400 mt-0.5">{{ sub.description }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <template #footer>
-        <GdButton
-          v-if="currentTool?.configSchema?.fields?.length"
-          type="primary"
-          @click="openConfig(currentTool)"
-        >
-          {{ t('plugins.config.open') }}
-        </GdButton>
-        <GdButton @click="detailVisible = false">{{ t('common.close') }}</GdButton>
-      </template>
-    </GdDialog>
+    <!-- Detail Dialog（v4.1：完整贡献概览，见 PluginDetailDialog） -->
+    <PluginDetailDialog v-model:visible="detailVisible" :plugin="currentTool"
+      @open-config="currentTool && openConfig(currentTool)" />
 
     <!-- 通用插件配置弹窗（v2.1：manifest.configSchema → 表单） -->
     <PluginConfigDialog
@@ -203,8 +161,8 @@ import { usePopup } from '@/composables/usePopup'
 import { groupPlugins, isPluginLocked } from '@/utils/pluginGroups'
 import { resolvePluginIconUrl } from '@/utils/pluginIcon'
 import { openInExternalBrowser } from '@/utils/browserUtils'
-import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import PluginDetailDialog from './PluginDetailDialog.vue'
 import PluginListRow from './PluginListRow.vue'
 import PluginSection from './PluginSection.vue'
 import PluginViewSwitch from './PluginViewSwitch.vue'

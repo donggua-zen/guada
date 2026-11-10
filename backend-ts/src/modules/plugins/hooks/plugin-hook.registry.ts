@@ -95,6 +95,17 @@ export class PluginHookRegistry {
     }
   }
 
+  /** 枚举某插件注册的 Hook（详情/诊断用，不返回 handler） */
+  listByPlugin(pluginId: string): Array<{ event: string; order: number }> {
+    const out: Array<{ event: string; order: number }> = [];
+    for (const [event, list] of this.entries) {
+      for (const entry of list) {
+        if (entry.pluginId === pluginId) out.push({ event, order: entry.order });
+      }
+    }
+    return out;
+  }
+
   /** 诊断用：当前注册数 */
   size(): number {
     let n = 0;

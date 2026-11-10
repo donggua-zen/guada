@@ -80,6 +80,14 @@ export class PluginHttpRegistry {
     return this.routes.get(pluginId)?.length || 0;
   }
 
+  /** 枚举插件注册的路由（详情/诊断用，不返回 handler） */
+  listRoutes(pluginId: string): Array<{ method: string; path: string }> {
+    return (this.routes.get(pluginId) || []).map((r) => ({
+      method: r.method,
+      path: r.path,
+    }));
+  }
+
   /** 插件卸载/重载前清空 */
   unregisterPlugin(pluginId: string): void {
     if (this.routes.delete(pluginId)) {

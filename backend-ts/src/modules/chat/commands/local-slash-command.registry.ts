@@ -100,6 +100,11 @@ export class LocalSlashCommandRegistry {
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** 按插件枚举本地命令（详情/诊断用） */
+  getByPlugin(pluginId: string): LocalSlashCommandEntry[] {
+    return this.list().filter((entry) => entry.pluginId === pluginId);
+  }
+
   /** 插件卸载：移除该插件注册的主名与别名 */
   unregisterByPlugin(pluginId: string): void {
     const names: string[] = [];

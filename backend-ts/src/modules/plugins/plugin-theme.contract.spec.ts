@@ -93,6 +93,12 @@ describe("PluginsController.getSlots (themes 随清单下发)", () => {
       { getPluginPath: jest.fn().mockReturnValue("/tmp/plugins/p1") } as any,
       { resolveString: jest.fn((_id: string, s: string) => s) } as any,
       {} as any,
+      // v4.1 贡献聚合端点新增依赖（slots 用例不消费，给空桩）
+      { listRoutes: jest.fn().mockReturnValue([]) } as any,
+      { listByPlugin: jest.fn().mockReturnValue([]) } as any,
+      { listByPlugin: jest.fn().mockReturnValue([]) } as any,
+      { getByPlugin: jest.fn().mockReturnValue([]) } as any,
+      undefined,
     );
   }
 

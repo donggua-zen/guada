@@ -13,6 +13,7 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import * as fs from "fs";
@@ -23,8 +24,15 @@ import { PluginManager } from "./plugin.manager";
 import { ExternalPluginLoader } from "./external/external-plugin-loader";
 import { NlsService } from "./i18n/nls.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";import { PluginRegistry } from "./registry/plugin-registry";
+import { PluginAgentRegistry } from "./registry/plugin-agent.registry";
 import { RolePluginConfig } from "./types/plugin.types";
 import { normalizeConfigSchema, resolveConfigSchemaNls } from "./config-schema.util";
+import { PluginHttpRegistry } from "./http/plugin-http.registry";
+import { PluginHookRegistry } from "./hooks/plugin-hook.registry";
+import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
+import { LocalSlashCommandRegistry } from "../chat/commands/local-slash-command.registry";
+import { SkillRegistry } from "../skills/core/skill-registry.service";
+import { ProviderContributionCoordinator } from "../llm-core/provider-contribution.coordinator";
 
 @Controller("plugins")
 export class PluginsController {
@@ -35,6 +43,13 @@ export class PluginsController {
     private readonly externalLoader: ExternalPluginLoader,
     private readonly nlsService: NlsService,
     private readonly settingsStorage: SettingsStorage,
+    private readonly httpRegistry: PluginHttpRegistry,
+    private readonly hookRegistry: PluginHookRegistry,
+    private readonly turnReminderRegistry: TurnReminderRegistry,
+    private readonly localCommandRegistry: LocalSlashCommandRegistry,
+    /** 供应商包贡献（llm-core 提供；测试环境可省略） */
+    @Optional()
+    private readonly providerCoordinator?: ProviderContributionCoordinator,
   ) {}
 
   /**
@@ -139,6 +154,209 @@ export class PluginsController {
           config: configByPlugin.get(r.plugin.id),
           };
         }),
+    };
+  }
+
+  /**
+   * 单插件贡献概览（v4.1：插件详情弹窗）
+   *
+   * 汇总一个插件注册的全部能力，只返回摘要级元数据（名称/描述/数量），
+   * 刻意不返回 handler / 工具 parameters / 提示词正文等大字段。
+   *
+   * 工具与工具包直接读 PluginRegistry（而非 resolved 视图）：后者含
+   * 智能体层/visibleTo 裁剪，详情页应展示插件的真实贡献面。
+   * 插件禁用后注册表仍保留贡献（PluginRegistry 只在卸载时清理），
+   * 因此停用插件也能完整查看（enabled=false 由前端提示）。
+   */
+  @Public()
+  @Get(":pluginId/contributions")
+  async getPluginContributions(
+    @Param("pluginId") pluginId: string,
+    @Query("lang") lang?: string,
+  ) {
+    const resolved = await this.pluginManager.resolvePlugins(
+      undefined,
+      undefined,
+      true,
+    );
+    const r = resolved.find((item) => item.plugin.id === pluginId);
+    if (!r) throw new NotFoundException(`Plugin not found: ${pluginId}`);
+
+    const locale = this.toNlsLocale(lang);
+    const nls = (text: string | null | undefined) =>
+      text ? this.nlsService.resolveString(pluginId, text, locale) : "";
+
+    // ── 工具 / 工具包（注册表直读，不裁剪）──
+    const kits = PluginRegistry.getToolKits(pluginId);
+    const topTools = PluginRegistry.getTools(pluginId);
+    const tools = [
+      ...topTools.map((t) => ({
+        name: t.name,
+        description: nls(t.description),
+        toolkitId: t.toolSet || null,
+        dangerLevel: t.dangerLevel || null,
+        readOnly: t.readOnly === true,
+      })),
+      ...kits.flatMap((k) =>
+        k.tools.map((t) => ({
+          name: t.name,
+          description: nls(t.description),
+          toolkitId: k.def.id,
+          dangerLevel: t.dangerLevel || null,
+          readOnly: t.readOnly === true,
+        })),
+      ),
+    ];
+    const toolkits = kits.map((k) => ({
+      id: k.def.id,
+      name: nls(k.def.name || k.def.id),
+      description: nls(k.def.description || ""),
+      loadMode: k.def.loadMode || "eager",
+      toolCount: k.tools.length,
+      promptCount: k.prompts.length,
+    }));
+
+    // ── 提示词 ──
+    const promptSections = PluginRegistry.getPromptSections(pluginId).map(
+      (s) => ({
+        name: s.name,
+        order: s.order ?? 1000,
+        scope: s.scope || "global",
+        toolkitId: s.toolkitId || null,
+        description: nls(s.description || ""),
+        complete: s.complete === true,
+        visibleTo: s.visibleTo || null,
+      }),
+    );
+    const promptTransforms = PluginRegistry.getPromptTransforms(pluginId).map(
+      (t) => ({ id: t.id, order: t.order ?? 0 }),
+    );
+
+    // ── 技能（provider = plugin:<id>）──
+    const skills = (
+      SkillRegistry.getInstance()?.getByProvider(`plugin:${pluginId}`) || []
+    ).map((s) => ({
+      id: s.id,
+      name: nls(s.manifest?.name || s.id),
+      description: nls(s.manifest?.description || ""),
+      enabled: s.enabled !== false,
+    }));
+
+    // ── 智能体（虚拟注册表，含未启停过滤）──
+    const agents = PluginAgentRegistry.getByPlugin(pluginId).map((a) => ({
+      agentId: a.agentId,
+      defId: a.defId,
+      name: nls(a.def.name),
+      description: nls(a.def.description || ""),
+    }));
+
+    // ── 界面贡献 ──
+    const themes = PluginRegistry.getThemes(pluginId).map((t) => ({
+      id: t.id,
+      name: nls(t.name),
+      mode: t.mode || "all",
+      rich: Boolean(t.runtimeScript || t.assetBase),
+      primaryColor: t.primaryColor || null,
+    }));
+    const slots = PluginRegistry.getSlots(pluginId).map((s) => ({
+      name: s.name,
+      component: s.component,
+      mode: s.mode || "list",
+      order: s.order ?? 100,
+      label: s.meta?.label ? nls(s.meta.label) : "",
+    }));
+    const uiPages = PluginRegistry.getUiPages(pluginId).map((p) => ({
+      id: p.id,
+      area: p.area,
+      group: p.group,
+      tab: nls(p.tab),
+      icon: p.icon,
+    }));
+    const attachmentTypes = PluginRegistry.getAttachmentTypes(pluginId).map(
+      (a) => ({ id: a.id, label: nls(a.label), icon: a.icon }),
+    );
+    const workspaceProviders = PluginRegistry.getWorkspaceProviders(
+      pluginId,
+    ).map((w) => ({ scheme: w.scheme, label: nls(w.label) }));
+
+    // ── 命令 / 扩展接口 ──
+    const localCommands = this.localCommandRegistry.getByPlugin(pluginId).map(
+      (c) => ({
+        name: c.name,
+        description: nls(c.description),
+        aliases: c.aliases || [],
+      }),
+    );
+    const httpRoutes = this.httpRegistry.listRoutes(pluginId);
+    const rpcMethods = PluginRegistry.getRpcMethods(pluginId);
+    const hooks = this.hookRegistry.listByPlugin(pluginId);
+    const turnReminders = this.turnReminderRegistry.listByPlugin(pluginId);
+
+    // ── 供应商能力（适配器实例不可序列化，显式投影）──
+    const bundle = this.providerCoordinator?.getBundle(pluginId);
+    const providerActive =
+      this.providerCoordinator?.isActive(pluginId) ?? false;
+    const providerTypes = (bundle?.types || []).map((t) => ({
+      type: t.type,
+      name: nls(t.name),
+      protocol: t.protocol,
+      modelCount: Array.isArray((t as any).models)
+        ? (t as any).models.length
+        : 0,
+    }));
+    const providerProtocols = (bundle?.adapters || []).map((a) => ({
+      protocol: a.protocol,
+      displayName: nls(a.displayName || a.protocol),
+      capabilities: a.capabilities || null,
+      active: providerActive,
+    }));
+
+    const contributions = {
+      tools,
+      toolkits,
+      promptSections,
+      promptTransforms,
+      skills,
+      agents,
+      themes,
+      slots,
+      uiPages,
+      attachmentTypes,
+      workspaceProviders,
+      localCommands,
+      httpRoutes,
+      rpcMethods,
+      hooks,
+      turnReminders,
+      providerTypes,
+      providerProtocols,
+    };
+    const counts = Object.fromEntries(
+      Object.entries(contributions).map(([k, v]) => [k, v.length]),
+    );
+
+    return {
+      pluginId,
+      enabled: r.enabled,
+      manifest: {
+        name: pluginId,
+        displayName: nls(r.plugin.name),
+        description: nls(r.plugin.description),
+        version: r.plugin.version,
+        author: r.plugin.author,
+        category: r.plugin.category,
+        essential: r.plugin.essential === true,
+        source: r.source || r.plugin.source || "builtin",
+        icon: r.plugin.icon,
+        iconRev: this.iconRev(pluginId, r.plugin.icon),
+        providerApi: r.plugin.providerApi,
+        provides: r.plugin.provides,
+        permissions: r.plugin.permissions || [],
+        dependencies: r.plugin.dependencies || [],
+        apiVersion: r.plugin.apiVersion,
+      },
+      counts,
+      contributions,
     };
   }
 

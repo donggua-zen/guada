@@ -231,6 +231,16 @@ export class SkillRegistry {
   }
 
   /**
+   * 按提供方过滤技能（如 `plugin:<pluginId>`）。
+   * 插件详情/诊断用；注意插件禁用后其技能仍在表中，由 orchestrator 侧做可见性过滤。
+   */
+  getByProvider(provider: string): SkillDefinition[] {
+    return Array.from(this.skills.values()).filter(
+      (skill) => skill.provider === provider,
+    );
+  }
+
+  /**
    * 按标签搜索
    */
   searchByTags(tags: string[]): SkillDefinition[] {

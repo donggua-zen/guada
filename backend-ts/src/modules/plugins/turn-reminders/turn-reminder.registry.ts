@@ -36,6 +36,16 @@ export class TurnReminderRegistry {
     }
   }
 
+  /** 枚举某插件注册的每轮提醒 provider（详情/诊断用，不返回 build） */
+  listByPlugin(pluginId: string): Array<{ id: string; order: number }> {
+    const out: Array<{ id: string; order: number }> = [];
+    for (const entry of this.entries.values()) {
+      if (entry.pluginId !== pluginId) continue;
+      out.push({ id: entry.provider.id, order: entry.provider.order ?? 0 });
+    }
+    return out;
+  }
+
   /** 按 order、注册顺序执行全部 provider；单个失败只记日志，不影响其他 provider */
   async collect(
     input: TurnReminderProviderInput,

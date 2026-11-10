@@ -268,6 +268,12 @@ class PluginRegistryImpl {
   getRpcHandler(pluginId: string, method: string): RpcHandler | undefined {
     return this.registrations.get(pluginId)?.rpcHandlers?.[method];
   }
+
+  /** 枚举插件注册的 RPC 方法名（详情/诊断用，不返回 handler） */
+  getRpcMethods(pluginId: string): string[] {
+    const handlers = this.registrations.get(pluginId)?.rpcHandlers;
+    return handlers ? Object.keys(handlers) : [];
+  }
   getAllIds(): string[] { return Array.from(this.registrations.keys()); }
   getAll(): PluginRegistration[] { return Array.from(this.registrations.values()); }
 

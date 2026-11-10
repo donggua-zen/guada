@@ -25,6 +25,8 @@ export interface SettingsApi {
   updateGlobalToolStatus(pluginId: string, enabled: boolean): Promise<{ success: boolean }>;
   reloadPlugin(pluginId: string): Promise<{ success: boolean }>;
   fetchToolDisplays(lang?: string): Promise<Record<string, ToolDisplayConfig>>;
+  /** v4.1：单插件贡献概览（插件详情弹窗） */
+  fetchPluginContributions(pluginId: string, lang?: string): Promise<PluginContributions>;
 }
 
 /** /plugins/query 的工具包条目（与后端 plugins.controller 的视图同构） */
@@ -92,6 +94,111 @@ export interface PluginQueryTool {
 
 export interface PluginQueryResult {
   plugins: PluginQueryPlugin[]
+}
+
+// ── v4.1：单插件贡献概览（GET /plugins/:pluginId/contributions）──
+
+export interface PluginContributionCounts {
+  tools: number
+  toolkits: number
+  promptSections: number
+  promptTransforms: number
+  skills: number
+  agents: number
+  themes: number
+  slots: number
+  uiPages: number
+  attachmentTypes: number
+  workspaceProviders: number
+  localCommands: number
+  httpRoutes: number
+  rpcMethods: number
+  hooks: number
+  turnReminders: number
+  providerTypes: number
+  providerProtocols: number
+}
+
+export interface PluginContributions {
+  pluginId: string
+  /** 插件当前是否全局启用（停用时贡献仍完整返回，前端提示） */
+  enabled: boolean
+  manifest: {
+    name: string
+    displayName: string
+    description: string
+    version?: string
+    author?: string
+    category?: string
+    essential?: boolean
+    source?: string
+    icon?: string
+    iconRev?: string
+    providerApi?: number
+    provides?: { providerTypes?: string[]; providerAdapters?: string; assets?: string }
+    permissions?: string[]
+    dependencies?: string[]
+    apiVersion?: number
+  }
+  counts: PluginContributionCounts
+  contributions: {
+    tools: Array<{
+      name: string
+      description?: string
+      toolkitId?: string | null
+      dangerLevel?: string | null
+      readOnly?: boolean
+    }>
+    toolkits: Array<{
+      id: string
+      name?: string
+      description?: string
+      loadMode?: string
+      toolCount?: number
+      promptCount?: number
+    }>
+    promptSections: Array<{
+      name: string
+      order?: number
+      scope?: string
+      toolkitId?: string | null
+      description?: string
+      complete?: boolean
+      visibleTo?: string[] | null
+    }>
+    promptTransforms: Array<{ id: string; order?: number }>
+    skills: Array<{ id: string; name?: string; description?: string; enabled?: boolean }>
+    agents: Array<{ agentId: string; defId: string; name?: string; description?: string }>
+    themes: Array<{
+      id: string
+      name?: string
+      mode?: string
+      rich?: boolean
+      primaryColor?: string | null
+    }>
+    slots: Array<{
+      name: string
+      component: string
+      mode?: string
+      order?: number
+      label?: string
+    }>
+    uiPages: Array<{ id: string; area?: string; group?: string; tab?: string; icon?: string }>
+    attachmentTypes: Array<{ id: string; label?: string; icon?: string }>
+    workspaceProviders: Array<{ scheme: string; label?: string }>
+    localCommands: Array<{ name: string; description?: string; aliases?: string[] }>
+    httpRoutes: Array<{ method: string; path: string }>
+    rpcMethods: string[]
+    hooks: Array<{ event: string; order?: number }>
+    turnReminders: Array<{ id: string; order?: number }>
+    providerTypes: Array<{ type: string; name?: string; protocol?: string; modelCount?: number }>
+    providerProtocols: Array<{
+      protocol: string
+      displayName?: string
+      capabilities?: Record<string, unknown> | null
+      active?: boolean
+    }>
+  }
 }
 
 /**
@@ -166,5 +273,13 @@ export const settingsApi: SettingsApi = {
     return await this._request<Record<string, ToolDisplayConfig>>("/plugins/tool-displays", {
       params: lang ? { lang } : undefined,
     });
+  },
+
+  /** v4.1：单插件贡献概览（插件详情弹窗） */
+  async fetchPluginContributions(this: ApiContext, pluginId: string, lang?: string) {
+    return await this._request<PluginContributions>(
+      `/plugins/${encodeURIComponent(pluginId)}/contributions`,
+      { params: lang ? { lang } : undefined },
+    );
   },
 };
