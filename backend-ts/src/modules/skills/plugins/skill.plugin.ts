@@ -146,7 +146,8 @@ export class SkillPlugin extends PluginBase {
       }),
       execute: async (args, ctx) => {
         // v4：作用域声明校验——限定智能体的技能，其他智能体不可学习
-        const def = this.orchestrator.listSkills(true, ctx?.session.workspacePath, ctx?.session)
+        const def = this.orchestrator
+          .listSkills(true, ctx?.session?.workspacePath, ctx?.session)
           .find((s: any) => s.id === args.name.toLowerCase());
         if (def?.visibleTo) {
           const provider = String(def.provider || "");

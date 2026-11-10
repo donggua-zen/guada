@@ -77,8 +77,13 @@ describe("PluginsController.getPluginIcon", () => {
     controller = new PluginsController(
       pluginManager,
       externalLoader,
-      {} as any,
-      {} as any,
+      {} as any, // nlsService
+      {} as any, // settingsStorage
+      // 图标接口不触达贡献注册表：占位即可（构造签名随插件详情弹窗扩展）
+      {} as any, // httpRegistry
+      {} as any, // hookRegistry
+      {} as any, // turnReminderRegistry
+      {} as any, // localCommandRegistry
     );
   });
 

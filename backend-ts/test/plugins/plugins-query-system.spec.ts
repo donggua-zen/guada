@@ -47,9 +47,14 @@ describe("PluginsController.queryPlugins — 系统插件 opt-in", () => {
     };
     controller = new PluginsController(
       pluginManager,
-      {} as any,
+      {} as any, // externalLoader
       nlsService,
-      {} as any,
+      {} as any, // settingsStorage
+      // 列表查询不触达贡献注册表：占位即可（构造签名随插件详情弹窗扩展）
+      {} as any, // httpRegistry
+      {} as any, // hookRegistry
+      {} as any, // turnReminderRegistry
+      {} as any, // localCommandRegistry
     );
   });
 

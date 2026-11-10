@@ -262,11 +262,14 @@ describeUnix("ProcessManagerService 手动终止进程树", () => {
     expect(content).toContain("legacy-pipe");
     expect(content).toContain("legacy-err");
 
-    // 新文件里没有 spool；stderr（legacy-err）与 stdout 落同一份日志
+    // 新文件里没有 spool；stderr（legacy-err）与 stdout 落同一份日志。
+    // guada-logs 是 os.tmpdir() 下的跨进程共享目录：全量并行跑时其它用例会同时
+    // 写日志，不能断言精确相等（只关心目标日志落盘且没有 .raw.log spool）。
     const newFiles = fs
       .readdirSync(logDir)
       .filter((f) => !filesBefore.has(f));
-    expect(newFiles).toEqual([path.basename(logPath!)]);
+    expect(newFiles).toContain(path.basename(logPath!));
+    expect(newFiles.filter((f) => f.endsWith(".raw.log"))).toEqual([]);
 
     service.kill(processId);
   }, 30_000);
