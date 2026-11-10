@@ -885,19 +885,24 @@ const handleImageClick = (file: FileAttachment) => {
    （1129×5312，视口 1392），Paint 中位 8.5ms/帧，是帧预算里最大的单项，
    且成本随会话长度线性增长。降级后视口外回合不再参与绘制。
 
-   **为什么挂 gd-resizing-moved 而不是 gd-resizing**：
-   `content-visibility` 会改变布局高度（离屏回合按 contain-intrinsic-size 估算），
-   如果在 pointerdown 就启用，用户只是**按住还没拖动**时内容就会塌陷。
-   实测按住不动一圈 40 回合（每个真实高度约 1486px）：
-     - 启用前：scrollHeight 60245，贴底时距底 800px，可见 turn 39
-     - 启用后：scrollHeight 35469（少 24776px），scrollTop 被浏览器从 59445
-       钳到 32660，距底变成 2809px，可见内容整轮后退到 turn 38
-   即「按下不动，滚动条自己跳，稍微一拖又还原」。
-   改用 gd-resizing-moved（第一帧真实位移后才挂）后，按下不动完全无副作用；
-   一旦开始拖拽，宽度本就逐帧变化、内容本就要重排，塌陷被真实重排掩盖，不可见。
+   **两个前提，缺一不可**：
 
-   为什么用固定估算而非 `auto`：调整期间用户不会滚动，估算值不会被看到；
-   固定值比 `auto` 少一次「记忆尺寸」的写回，更便宜。
+   1. **必须挂 gd-resizing-moved，不能挂 gd-resizing**。
+      cv 会改变布局高度，若在 pointerdown 就启用，用户只是按住还没拖动时内容就会塌陷。
+      实测按住不动一圈 40 回合（每个真实高度约 1486px）：
+        scrollHeight 60245 → 35469（少 24776px），可见内容整轮后退。
+
+   2. **必须由 turnHeightFreeze 预先冻结每个回合的真实高度**（写内联
+      contain-intrinsic-size，见 composables/turnHeightFreeze.ts）。
+      cv 隐含 `contain: layout`，会阻止子元素 margin 折叠出父元素——即使不改宽度，
+      同一个回合在 cv 开/关两态下高度也不同。实测 40 回合：
+        只挂 cv：scrollHeight 20728 → 30562（涨 9834px），可见内容跳走
+        先冻结再挂 cv：heightDelta = 0、可见回合与滚动位置都不变
+      代价是一次全量读高度（300 回合约 1.3ms），只在手势产生位移时执行一次。
+
+   为什么用固定估算作兜底而非 `auto`：`auto` 只对「cv 生效期间渲染过」的元素记忆
+   尺寸，首次进入 cv 状态时无效；内联冻结值优先于此处的 800px，此值只服务于
+   拖拽期间新挂载的回合。
 
    A/B 对照：localStorage['gd:turn-cv']='0' 时 .turn-wrapper--no-cv 命中 :not() 被排除。 */
 html.gd-resizing-moved .turn-wrapper:not(.turn-wrapper--no-cv) {

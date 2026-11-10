@@ -33,6 +33,9 @@ function installDocumentStub(): {
         },
       },
     },
+    // 回合高度冻结会查询 .turn-wrapper；本模块测试不关心冻结细节，
+    // 返回空集即可（冻结逻辑由 turnHeightFreeze.test.ts 单独覆盖）
+    querySelectorAll: () => [] as unknown[],
   }
   ;(globalThis as { document?: unknown }).document = stub
   return {

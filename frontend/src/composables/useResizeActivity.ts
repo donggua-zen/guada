@@ -1,4 +1,5 @@
 import { computed, ref, type Ref } from 'vue'
+import { freezeTurnHeights, releaseTurnHeights } from './turnHeightFreeze'
 
 /**
  * 全局「正在调整尺寸」态：拖拽分割条、拖拽侧栏把手、缩放窗口都归入同一个开关。
@@ -72,9 +73,17 @@ function setMovedClass(on: boolean): void {
  * - 窗口缩放：任何一次 resize 事件都算（事件本身就意味着尺寸变了）
  *
  * 幂等，非调整态调用无效（退出尾延迟期间的 resize 事件不会重新点亮它）。
+ *
+ * 首次进入「已移动」时会先冻结回合高度（见 freezeTurnHeights 的注释）：
+ * `content-visibility` 隐含 `contain: layout`，会改变子元素 margin 折叠行为，
+ * 导致 cv 开/关两种状态下同一个回合高度不同。不冻结的话，哪怕只是 1px 的鼠标抖动
+ * 也会让整篇内容重排、滚动位置跳动。
+ * 只在**状态跃迁**时冻结一次——窗口缩放每帧都会调本函数，逐帧冻结不可接受。
  */
 export function markResizeMoved(): void {
   if (!active.value) return
+  if (movedClassApplied) return
+  freezeTurnHeights()
   setMovedClass(true)
 }
 
@@ -88,6 +97,13 @@ function clearTail(): void {
 /** 进入调整态并开始续期（尾延迟被推后）。 */
 function enter(): void {
   clearTail()
+  // 全新手势开始（上一个手势还在尾延迟里）：必须清掉上一轮遗留的
+  // 「已移动」状态与冻结高度。否则上一轮冻结的是拖拽起始时的高度，
+  // 相对本轮已过期——继续沿用会让 cv 按错误高度布局。
+  if (activeCount === 0) {
+    setMovedClass(false)
+    releaseTurnHeights()
+  }
   activeCount += 1
   if (!active.value) {
     active.value = true
@@ -102,8 +118,11 @@ function scheduleExit(): void {
     tailTimer = null
     if (activeCount > 0) return
     active.value = false
-    // 先摘「已移动」再摘主态：两个 class 同帧变化，避免降级残留一帧
+    // 先摘「已移动」让 cv 停止生效，再释放冻结的高度。
+    // 两者都是同步 DOM 写入、浏览器只会在同一帧末尾布局一次，没有中间帧；
+    // 但按依赖顺序写更不容易在将来被改坏（cv 仍生效时解冻 = 回落到 CSS 的 800px 估算）。
     setMovedClass(false)
+    releaseTurnHeights()
     setClass(false)
   }, RESIZE_ACTIVITY_TAIL_MS)
 }
@@ -118,8 +137,9 @@ function touch(): void {
     active.value = true
     setClass(true)
   }
-  // 窗口 resize 事件一出现就说明尺寸已变，直接点亮「已移动」
-  setMovedClass(true)
+  // 窗口 resize 事件一出现就说明尺寸已变，走与拖拽相同的「冻结高度 → 点亮降级」路径。
+  // markResizeMoved 内部幂等，每帧调用只会在第一次真正冻结。
+  markResizeMoved()
   scheduleExit()
 }
 
@@ -145,6 +165,7 @@ export function resetResizeActivity(): void {
   activeCount = 0
   active.value = false
   setMovedClass(false)
+  releaseTurnHeights()
   setClass(false)
 }
 
