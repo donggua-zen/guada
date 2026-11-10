@@ -144,7 +144,7 @@
           <div v-if="editModelForm.modelType === 'text'" class="transition-all flex flex-col gap-3">
             <GdFormField :label="t('settings.providerDetail.inputCapabilities')" label-width="120px" :error="errors.config_inputCapabilities">
               <GdCheckboxGroup v-model="editModelForm.config.inputCapabilities">
-                <GdCheckbox :model-value="editModelForm.config.inputCapabilities?.includes('text')" disabled>
+                <GdCheckbox value="text" disabled>
                   <span class="flex items-center gap-2">
                     <TextT24Regular class="size-4"  />
                     <span class="text-[13px] leading-none">{{ t('settings.providerDetail.text') }}</span>
@@ -153,7 +153,7 @@
                     </GdTooltip>
                   </span>
                 </GdCheckbox>
-                <GdCheckbox :model-value="editModelForm.config.inputCapabilities?.includes('image')">
+                <GdCheckbox value="image">
                   <span class="flex items-center gap-2">
                     <Image24Regular class="size-4"  />
                     <span class="text-[13px] leading-none">{{ t('settings.providerDetail.image') }}</span>
@@ -164,7 +164,7 @@
 
             <GdFormField :label="t('settings.providerDetail.outputCapabilities')" label-width="120px" :error="errors.config_outputCapabilities">
               <GdCheckboxGroup v-model="editModelForm.config.outputCapabilities">
-                <GdCheckbox :model-value="editModelForm.config.outputCapabilities?.includes('text')" disabled>
+                <GdCheckbox value="text" disabled>
                   <span class="flex items-center gap-2">
                     <TextT24Regular class="size-4"  />
                     <span class="text-[13px] leading-none">{{ t('settings.providerDetail.text') }}</span>
@@ -173,7 +173,7 @@
                     </GdTooltip>
                   </span>
                 </GdCheckbox>
-                <GdCheckbox :model-value="editModelForm.config.outputCapabilities?.includes('image')">
+                <GdCheckbox value="image">
                   <span class="flex items-center gap-2">
                     <Image24Regular class="size-4"  />
                     <span class="text-[13px] leading-none">{{ t('settings.providerDetail.image') }}</span>
@@ -184,7 +184,7 @@
 
             <GdFormField :label="t('settings.providerDetail.advancedFeatures')" label-width="120px" :error="errors.config_features">
               <GdCheckboxGroup v-model="editModelForm.config.features">
-                <GdCheckbox :model-value="editModelForm.config.features?.includes('tools')">
+                <GdCheckbox value="tools">
                   <span class="flex items-center gap-2">
                     <WrenchScrewdriver24Regular class="size-4"  />
                     <span class="text-[13px] leading-none">{{ t('settings.providerDetail.toolCalling') }}</span>
@@ -216,8 +216,7 @@
                       {{ t('settings.providerDetail.thinkingEffortMenu') }}
                     </div>
                     <GdCheckboxGroup v-model="editModelForm.thinkingEffortsMenu">
-                      <GdCheckbox v-for="effort in THINKING_EFFORT_OPTIONS" :key="effort"
-                        :model-value="editModelForm.thinkingEffortsMenu?.includes(effort)">
+                      <GdCheckbox v-for="effort in THINKING_EFFORT_OPTIONS" :key="effort" :value="effort">
                         <span class="ml-0.5 flex items-center gap-2">
                           <span class="text-[13px] leading-none">{{ getThinkingEffortLabelWithKey(effort) }}</span>
                         </span>

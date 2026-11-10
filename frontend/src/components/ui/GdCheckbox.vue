@@ -25,7 +25,8 @@
     </label>
 </template>
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, inject } from "vue";
+import { gdCheckboxGroupKey } from "./gdCheckboxGroupContext";
 
 defineOptions({ name: "GdCheckbox" });
 
@@ -35,8 +36,15 @@ const props = withDefaults(defineProps<{
     disabled?: boolean;
     /** 纯文本 label 快捷；富文本内容用默认插槽 */
     label?: string;
+    /**
+     * 组内取值（GdCheckboxGroup 的数组语义）：传了 value 且身处 Group 内时，
+     * 选中态由组的 has(value) 决定，点击走组的 toggle(value)，无需外部写 @change。
+     * 不传 value 时仍是普通单选框（受控 / v-model 两种写法）。
+     */
+    value?: string | number;
 }>(), {
     modelValue: false,
+    value: undefined,
 });
 
 const emits = defineEmits<{
@@ -44,10 +52,22 @@ const emits = defineEmits<{
     change: [value: boolean];
 }>();
 
-const isChecked = computed(() => !!props.modelValue);
+const group = inject(gdCheckboxGroupKey, null);
+// 组语义只在「传了 value + 在 Group 内」时启用，其余场景保持原有受控行为
+const inGroup = computed(() => !!group && props.value !== undefined);
+
+const isChecked = computed(() =>
+    inGroup.value ? !!group!.has(props.value as string | number) : !!props.modelValue,
+);
 
 const handleChange = (e: Event): void => {
     const value = (e.target as HTMLInputElement).checked;
+    if (inGroup.value) {
+        // 组内：值由父级数组驱动，勾选方向以组状态为准（避免受控值不同步时方向反转）
+        group!.toggle(props.value as string | number);
+        emits("change", value);
+        return;
+    }
     emits("update:modelValue", value);
     emits("change", value);
 };
