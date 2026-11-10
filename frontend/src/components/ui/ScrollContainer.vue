@@ -109,7 +109,7 @@ function handleScroll(event: Event): void {
     emit("scroll", event);
 }
 
-/** 尺寸变化入口：宽度变化进稳定窗（窗内不贴底），宽度未变且跟随中则贴底。 */
+/** 尺寸变化入口：跟随态一律贴底（宽度重排同帧完成）；离底时只做内容收缩对账。 */
 function handleContentResize(entry: ResizeObserverEntry): void {
     if (props.autoScroll === undefined) return;
     scrollAnchor.handleContentResize(entry);

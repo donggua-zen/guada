@@ -651,6 +651,13 @@ function handleNearTop() {
 function handleScroll() {
   // 按钮显隐由 showScrollToBottomBtn（跟随态 + 回合数派生），无需在此写入状态。
   // 保留本函数作为 @scroll 的接线点：ScrollContainer 的 emit 需要监听方。
+  //
+  // 拖拽分割条/缩放窗口期间：跟随态每帧贴底，会逐帧派发 scroll 事件。此时不调度
+  // 下面两件「量布局」的活——占位扫描是非重置的 80ms 一次性定时器，会在拖拽中途
+  // 扫描全部占位并挂载（800px 估算换成真实高度，凭空再改一次内容高度）；锚点刷新
+  // 会每 16ms 读一次 [data-turn-id] 布局。收尾的 content-resize（冻结高度释放）发生在
+  // 调整态退出之后，由 handleContentResizeForScrollRestore 正常补一次即可。
+  if (isResizeActivityActive()) return
   // 几何兜底：后台/遮挡时 IntersectionObserver 可能不回调，滚动时按位置补挂占位。
   scheduleMountVisiblePlaceholders()
   // 锚点保持器：滚动后重记视口内第一个回合，作为内容高度变化的参照
