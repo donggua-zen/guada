@@ -452,7 +452,8 @@ export interface ToolKitDef {
    * 自治理：标记后本工具包不参与智能体层过滤（__strategy / __default / 显式 deny 均不生效），
    * 由本工具包的 handler 依据 PluginContext.pluginsConfig 自行决定 loadMode。
    *
-   * 用于"有自己管理界面"的能力包（MCP 每服务器、skills、sub_agent）：
+   * 用于"有自己管理界面"的能力包（MCP 每服务器、skills、sub_agent），以及
+   * 生命周期由生产者决定的基础设施包（jobs：跟随 shell/sub_agent/workflow 可用性）：
    * 运行时过滤机制不变，只是过滤输入由自有界面写入、裁决权在该工具包自己手里。
    */
   governance?: "self";
@@ -488,6 +489,37 @@ export interface ToolKitRuntime {
   activator?: string;
 }
 
+/**
+ * 技能注册定义（v4.1）。
+ *
+ * 插件级 `api.registerSkill` 与能力包级 `toolkit.registerSkill` 共用本形状：
+ * 内嵌正文，skill_learn 按需加载；`provider` 恒为 `plugin:<pluginId>`，
+ * 能力包注册时额外携带 `toolkitId` 以跟随工具包门控。
+ */
+export interface PluginSkillDef {
+  /** 技能名（id 会转小写） */
+  name: string;
+  /** 一句话描述（进 # Skills 清单） */
+  description: string;
+  /** 技能正文（Markdown，内嵌，不读磁盘） */
+  content: string;
+  version?: string;
+  dependencies?: string[];
+  author?: string;
+  tags?: string[];
+  resourceBase?: {
+    kind: "directory" | "url" | "opaque";
+    path?: string;
+    url?: string;
+    description?: string;
+  };
+  /**
+   * 作用域声明（v4）：仅对哪些智能体可见；"self" = 本插件注册的智能体。
+   * 能力包注册时省略则继承 `ToolKitDef.visibleTo`。
+   */
+  visibleTo?: VisibleToAgent;
+}
+
 /** 工具包句柄（在 onLoad 回调中暴露给插件） */
 export interface ToolKitHandle {
   readonly id: string;
@@ -511,6 +543,8 @@ export interface ToolKitHandle {
     requiresUserInteraction?: boolean;
     /** 豁免通用大结果裁剪：本工具自行管理返回长度（自带上限与续读提示）；缺省 false */
     exemptFromLargeResult?: boolean;
+    /** 作用域声明（v4）：仅对哪些智能体可用；省略 = 全局可用 */
+    visibleTo?: VisibleToAgent;
   }): void;
   registerRawTool(def: ToolHandlerDef): void;
   registerPrompt(def: {
@@ -518,6 +552,14 @@ export interface ToolKitHandle {
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
     description?: string;
   }): void;
+  /**
+   * v4.1：注册能力包技能——技能随本工具包门控显隐。
+   *
+   * 运行时可见性：插件全局启用 && 本包 `enabled !== false && loadMode !== "none"`
+   * （即智能体禁用本包、handler 返回 none、子代理会话禁用时，技能同步不可见）。
+   * `visibleTo` 省略时继承 `ToolKitDef.visibleTo`。
+   */
+  registerSkill(def: PluginSkillDef): void;
 }
 
 /** 工具包注册后的内部存储结构 */
@@ -529,6 +571,8 @@ export interface ToolKitRegistration {
     description: string;
     handler: (ctx: any) => string | Promise<string>;
   }>;
+  /** v4.1：能力包技能（随本工具包门控显隐） */
+  skills: PluginSkillDef[];
 }
 
 export interface ToolUsingEvent {

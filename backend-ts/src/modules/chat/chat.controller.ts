@@ -164,8 +164,21 @@ export class ChatController {
     // 解析命令标记：正文永不改写，解析产物以注入块随消息落库（写入时冻结）
     if (userMessage?.content) {
       try {
+        // v4.1：/skill 等命令需要角色配置做能力包静态门控（技能随工具包启停）。
+        // 仅在内容含命令标签时读一次会话，避免普通消息多一次查询。
+        let roleCfg: any;
+        if (userMessage.content.includes("[/skill:")) {
+          try {
+            const session = await this.sessionService.getSessionById(sessionId);
+            roleCfg =
+              session?.settings?.plugins ?? session?.agent?.settings?.plugins;
+          } catch {
+            /* fail-open：取不到会话配置时不做门控 */
+          }
+        }
         const parsed = await this.tagParserPipeline.parse(userMessage.content, {
           sessionId,
+          ...(roleCfg ? { roleCfg } : {}),
         });
         if (parsed.injectionBlocks.length > 0) {
           source.injectedBlocks = parsed.injectionBlocks;

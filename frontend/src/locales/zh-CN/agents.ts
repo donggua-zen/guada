@@ -50,7 +50,7 @@ export default {
     groupTools: '工具与能力',
     navBasic: '基础',
     navPrompt: '提示词',
-    navLocalTools: '工具包',
+    navLocalTools: '能力包',
     navMcpTools: 'MCP 工具',
     navSkills: 'Skills',
     navSubAgents: '子代理',
@@ -115,7 +115,7 @@ export default {
     noSkillsHint: '请先到"插件 > Skills"中安装技能',
     sourceBuiltin: '内置',
     skillsSwitchHint:
-      '关闭仅隐藏真实技能清单；skill_learn 工具与懒加载工具包不受影响，后者由"本地工具"页的工具包开关控制。',
+      '关闭仅隐藏真实技能清单；skill_learn 工具与懒加载能力包不受影响，后者由"本地工具"页的能力包开关控制。',
     // 子代理
     loadingAgents: '加载中...',
     noAgents: '暂无可用的子代理',

@@ -49,6 +49,8 @@ export interface Skill {
     enabled: boolean
     /** 技能提供方名（溯源；如 "bundled"、"plugin:<id>"，缺省 = 非插件托管） */
     provider?: string
+    /** v4.1：所属能力包（工具包）id；非空时技能随该包启停/加载模式显隐 */
+    toolkitId?: string
     basePath?: string
     baseDir?: string
     contentHash?: string

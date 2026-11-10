@@ -6,6 +6,7 @@ import {
   ToolHandlerDef,
   ToolDisplay,
   PluginContext,
+  PluginSkillDef,
 } from "../types/plugin.types";
 
 /**
@@ -80,6 +81,8 @@ export class Toolkit implements ToolKitHandle {
     description: string;
     handler: (ctx: any) => string | Promise<string>;
   }> = [];
+  /** v4.1：能力包技能（flush 时提交到 SkillRegistry，带 toolkitId 跟随本包门控） */
+  private _skills: PluginSkillDef[] = [];
 
   constructor(
     public readonly def: ToolKitDef,
@@ -111,6 +114,8 @@ export class Toolkit implements ToolKitHandle {
     requiresUserInteraction?: boolean;
     /** 豁免通用大结果裁剪：本工具自行管理返回长度（自带上限与续读提示）；缺省 false */
     exemptFromLargeResult?: boolean;
+    /** 作用域声明（v4）：仅对哪些智能体可用；省略 = 全局可用 */
+    visibleTo?: ToolHandlerDef["visibleTo"];
   }): void {
     const zodSchema = def.inputSchema as any;
     const rawJson = z.toJSONSchema(zodSchema) as any;
@@ -173,7 +178,7 @@ export class Toolkit implements ToolKitHandle {
       displayText: def.display?.text,
       displayAggregate: def.display?.aggregate,
       displayRenderer: def.display?.renderer,
-      visibleTo: (def as { visibleTo?: ToolHandlerDef["visibleTo"] }).visibleTo,
+      visibleTo: def.visibleTo,
     };
 
     if (!this._tools.find((x) => x.name === entry.name)) {
@@ -204,6 +209,26 @@ export class Toolkit implements ToolKitHandle {
     });
   }
 
+  /**
+   * v4.1：能力包技能。
+   *
+   * 与 `api.registerSkill` 同形状；`visibleTo` 省略时继承本包的 `def.visibleTo`，
+   * 使「限定智能体可见的能力包」其技能也只在同一范围内可见。
+   */
+  registerSkill(def: PluginSkillDef): void {
+    if (!def?.name || typeof def.name !== "string") {
+      throw new Error(
+        `plugin ${this.pluginId}: toolkit "${this.id}" registerSkill requires a name`,
+      );
+    }
+    this._skills.push({
+      ...def,
+      ...(def.visibleTo || !this.def.visibleTo
+        ? {}
+        : { visibleTo: this.def.visibleTo }),
+    });
+  }
+
   // ── 内部方法（供 PluginApiImpl 使用） ──
 
   /** 获取注册的工具列表 */
@@ -217,6 +242,7 @@ export class Toolkit implements ToolKitHandle {
       def: this.def,
       tools: [...this._tools],
       prompts: [...this._prompts],
+      skills: [...this._skills],
     };
   }
 }

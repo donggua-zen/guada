@@ -20,6 +20,8 @@ import {
   PluginLlmStreamChunk,
   PluginLlmModelInfo,
   PluginAgentDef,
+  PluginSkillDef,
+  VisibleToAgent,
   PLUGIN_API_VERSION,
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
@@ -117,6 +119,8 @@ export interface PluginApi {
       requiresUserInteraction?: boolean;
       /** 豁免通用大结果裁剪：本工具自行管理返回长度（自带上限与续读提示）；缺省 false */
       exemptFromLargeResult?: boolean;
+      /** 作用域声明（v4）：仅对哪些智能体可用；省略 = 全局可用 */
+      visibleTo?: VisibleToAgent;
     }): void;
 
     /**
@@ -143,6 +147,8 @@ export interface PluginApi {
     requiresUserInteraction?: boolean;
     /** 豁免通用大结果裁剪：本工具自行管理返回长度（自带上限与续读提示）；缺省 false */
     exemptFromLargeResult?: boolean;
+    /** 作用域声明（v4）：仅对哪些智能体可用；省略 = 全局可用 */
+    visibleTo?: VisibleToAgent;
   }): void;
 
   registerPrompt(def: {
@@ -343,16 +349,7 @@ export interface PluginApi {
   /**
    * 注册技能（第三方插件注册技能，内嵌正文，无需文件/复制）
    */
-  registerSkill(input: {
-    name: string;
-    description: string;
-    content: string;
-    version?: string;
-    dependencies?: string[];
-    author?: string;
-    tags?: string[];
-    resourceBase?: { kind: "directory" | "url" | "opaque"; path?: string; url?: string; description?: string };
-  }): void;
+  registerSkill(input: PluginSkillDef): void;
 
   /**
    * 注册 RPC 方法（插件 UI 通过 pluginApi.call 调用）
@@ -954,18 +951,19 @@ export class PluginApiImpl implements PluginApi {
   /**
    * 注册技能（第三方插件）：构造 SkillDefinition（内嵌 content）并注入技能注册表。
    */
-  registerSkill(input: {
-    name: string;
-    description: string;
-    content: string;
-    version?: string;
-    dependencies?: string[];
-    author?: string;
-    tags?: string[];
-    resourceBase?: { kind: "directory" | "url" | "opaque"; path?: string; url?: string; description?: string };
-    /** 作用域声明（v4）：仅对哪些智能体可见；"self" = 本插件注册的智能体 */
-    visibleTo?: import("../types/plugin.types").VisibleToAgent;
-  }): void {
+  registerSkill(input: PluginSkillDef): void {
+    this.commitPluginSkill(input);
+  }
+
+  /**
+   * v4.1：技能提交实现——插件级与能力包级共用。
+   *
+   * @param toolkitId 能力包技能传入所属 kit id（运行时随该包门控显隐）
+   */
+  private commitPluginSkill(
+    input: PluginSkillDef,
+    toolkitId?: string,
+  ): void {
     const registry = SkillRegistry.getInstance();
     if (!registry) {
       console.warn(`[plugin:${this.pluginId}] SkillRegistry not ready, cannot register skill: ${input.name}`);
@@ -989,6 +987,7 @@ export class PluginApiImpl implements PluginApi {
       source: "system",
       enabled: true,
       provider: `plugin:${this.pluginId}`,
+      ...(toolkitId ? { toolkitId } : {}),
       ...(input.visibleTo ? { visibleTo: input.visibleTo } : {}),
       ...(rb
         ? {
@@ -999,7 +998,9 @@ export class PluginApiImpl implements PluginApi {
           }
         : {}),
     });
-    console.log(`[plugin:${this.pluginId}] registered skill: ${input.name}`);
+    console.log(
+      `[plugin:${this.pluginId}] registered skill: ${input.name}${toolkitId ? ` (toolkit: ${toolkitId})` : ""}`,
+    );
   }
 
   registerRpc(methods: Record<string, RpcHandler>): void {
@@ -1088,6 +1089,26 @@ export class PluginApiImpl implements PluginApi {
     const kitRegs = this._toolKits.map((tk) => tk.toRegistration());
     for (const kitReg of kitRegs) {
       PluginRegistry.registerToolKit(this.pluginId, kitReg);
+    }
+
+    // v4.1：能力包技能 → SkillRegistry（带 toolkitId，运行时随本包门控显隐）
+    //
+    // 与工具包提示词同一条提交时序（先提交 kit 注册，再提交其附属能力）。
+    // 警告：lazy 包的技能若与包同名，会遮蔽 skill_learn("<kit>") 的工具定义
+    // fallback（技能命中优先于工具包目录），导致模型拿不到 <tool_definition>。
+    for (const kitReg of kitRegs) {
+      for (const sk of kitReg.skills) {
+        if (
+          sk.name.toLowerCase() === kitReg.def.id.toLowerCase() &&
+          (kitReg.def.loadMode || "eager") === "lazy"
+        ) {
+          console.warn(
+            `[plugin:${this.pluginId}] toolkit "${kitReg.def.id}" is lazy but registers a same-name skill; ` +
+              `skill_learn("${sk.name}") will return the skill text and skip the lazy toolkit's tool definitions`,
+          );
+        }
+        this.commitPluginSkill(sk, kitReg.def.id);
+      }
     }
 
     // 工具包级提示词 → 提示词段（v3：与 registerPrompt 同一条管线）

@@ -1,4 +1,4 @@
-import { RolePluginEntryConfig } from "../types/plugin.types";
+import { RolePluginConfig, RolePluginEntryConfig } from "../types/plugin.types";
 
 /**
  * 依据智能体层条目判断某个工具包是否放行。
@@ -33,4 +33,33 @@ export function isToolkitAllowedByRoleConfig(
     return (entry.toolkits_allow || []).includes(toolkitId);
   }
   return !(entry.toolkits_deny || []).includes(toolkitId);
+}
+
+/**
+ * v4.1：按完整角色配置判断某个（非自治理）工具包是否放行。
+ *
+ * 与 `isToolkitAllowedByRoleConfig` 的区别：本函数消费顶层批量开关，
+ * 镜像 `PluginManager.applyRoleLayer` 的完整语义：
+ * - `__strategy: "deny_nonsystem"` → 全部非受保护包拒绝（静态场景无法识别
+ *   essential 插件，按拒绝处理；当前绑定技能的能力包均为 core 分类）
+ * - `__default: false` 白名单模式：无条目的插件 → 全部拒绝
+ * - 有条目 → 复用单条语义
+ *
+ * 供无 ISessionContext 的命令解析路径（如 /skill 内联）做能力包静态门控。
+ */
+export function isKitAllowedByRoleConfig(
+  roleCfg: RolePluginConfig | undefined | null,
+  pluginId: string,
+  toolkitId: string,
+): boolean {
+  if (!roleCfg || typeof roleCfg !== "object") return true;
+  if (roleCfg.__strategy === "deny_nonsystem") return false;
+  const entry = roleCfg[pluginId];
+  if (!entry || typeof entry !== "object") {
+    return roleCfg.__default !== false;
+  }
+  return isToolkitAllowedByRoleConfig(
+    entry as RolePluginEntryConfig,
+    toolkitId,
+  );
 }

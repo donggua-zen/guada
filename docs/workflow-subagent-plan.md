@@ -187,8 +187,9 @@ activator 又要求"用户显式要求"才可使用，导致用户不知道如�
 - 也可以直接输入 `/workflow 审查整个仓库的异常处理`。`ChatController` 在落库/建流前
   把整段命令规范化为 `[/workflow:workflow label="工作流"] 任务`，与面板选中走同一条链路。
 - `TagParserPipeline` 解析标签后调用 `WorkflowPlugin` 的 `parse`，把一段 `origin=system`
-  注入块随消息冻结：用户已显式要求工作流，模型应 `skill_learn("workflow")` 后经
-  `tool_use` 调用 `workflow_run`。正文不改写，徽标与注入块随消息冻结，历史稳定。
+  注入块随消息冻结：用户已显式要求工作流，模型应 `skill_learn("workflow")` 读取脚本 API
+  （技能承载完整 hooks/限制/示例，默认零注入），然后直接调用 `workflow_run`
+  （eager 薄工具已在 function list 中）。正文不改写，徽标与注入块随消息冻结，历史稳定。
 - 命令不新增执行通道，也不绕过现有门控；它只是把"显式要求"送到模型。
 
 可用性门控（`resolveWorkflowAvailability`）：

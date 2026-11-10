@@ -4,7 +4,10 @@ import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
 import { SkillOrchestrator } from "../core/skill-orchestrator.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
-import { isToolkitAllowedByRoleConfig } from "../../plugins/utils/role-toolkit-filter";
+import {
+  isKitAllowedByRoleConfig,
+  isToolkitAllowedByRoleConfig,
+} from "../../plugins/utils/role-toolkit-filter";
 import { isVisibleToAgent } from "../../plugins/utils/agent-visibility";
 import {
   formatSkillLocationHeader,
@@ -48,7 +51,20 @@ export class SkillPlugin extends PluginBase {
       parse: async (attrs, ctx) => {
         const name = attrs.name || "unknown";
 
-        const allSkills = this.orchestrator.listSkills(true);
+        // v4.1：/skill 无 ISessionContext，只能做静态门控——插件全局启用
+        // + 能力包技能按会话/智能体角色配置检查包是否放行（智能体禁用的包
+        // 其技能不再内联）。有 ctx.roleCfg 时生效；缺失则 fail-open。
+        const allSkills = this.orchestrator.listSkills(true).filter((s) => {
+          if (!this.orchestrator.isPluginSkillVisible(s)) return false;
+          if (!s.toolkitId) return true;
+          const provider = String(s.provider || "");
+          const pluginId = provider.startsWith("plugin:")
+            ? provider.substring("plugin:".length)
+            : "";
+          if (!pluginId) return true;
+          if (!ctx?.roleCfg) return true;
+          return isKitAllowedByRoleConfig(ctx.roleCfg, pluginId, s.toolkitId);
+        });
         const skill = allSkills.find(
           (s) => (s.manifest?.name || s.id) === name,
         );

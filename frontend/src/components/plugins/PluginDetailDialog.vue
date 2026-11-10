@@ -62,15 +62,15 @@
           </div>
         </section>
 
-        <!-- 技能 -->
-        <section v-if="data.counts.skills > 0" class="pd-section">
+        <!-- 技能：仅插件级（未归属能力包）的技能；能力包技能随包展示 -->
+        <section v-if="standaloneSkills.length > 0" class="pd-section">
           <div class="pd-section-head">
             <BookOpen20Regular class="pd-section-icon" />
             <span>{{ t('plugins.localTools.detail.skills') }}</span>
-            <GdTag size="small" type="info" effect="plain">{{ data.counts.skills }}</GdTag>
+            <GdTag size="small" type="info" effect="plain">{{ standaloneSkills.length }}</GdTag>
           </div>
           <div class="pd-list">
-            <div v-for="s in data.contributions.skills" :key="s.id" class="pd-row">
+            <div v-for="s in standaloneSkills" :key="s.id" class="pd-row">
               <div class="pd-row-main">
                 <span class="pd-name">{{ s.name || s.id }}</span>
                 <span v-if="s.description" class="pd-desc">{{ s.description }}</span>
@@ -107,31 +107,79 @@
           </div>
         </section>
 
-        <!-- 工具：工具包 + 工具 -->
-        <section v-if="data.counts.toolkits > 0 || data.counts.tools > 0" class="pd-section">
+        <!-- 能力包（包内工具/技能缩进、可折叠）；无能力包时退化为"工具"区 -->
+        <section v-if="data.counts.toolkits > 0 || looseTools.length > 0" class="pd-section">
           <div class="pd-section-head">
             <Wrench16Regular class="pd-section-icon" />
-            <span>{{ t('plugins.localTools.detail.tools') }}</span>
+            <span>{{ packsSectionLabel }}</span>
             <GdTag v-if="data.counts.toolkits > 0" size="small" type="info" effect="plain">
               {{ t('plugins.localTools.detail.toolkitCount', { count: data.counts.toolkits }) }}
             </GdTag>
             <GdTag size="small" type="info" effect="plain">
               {{ t('plugins.localTools.detail.toolCount', { count: data.counts.tools }) }}
             </GdTag>
+            <GdTag v-if="kitBoundSkills.length > 0" size="small" type="info" effect="plain">
+              {{ t('plugins.localTools.detail.skillCount', { count: kitBoundSkills.length }) }}
+            </GdTag>
           </div>
+
+          <!-- 能力包分组：工具与技能归属在包内 -->
           <div v-if="data.counts.toolkits > 0" class="pd-list mb-1.5">
-            <div v-for="k in data.contributions.toolkits" :key="k.id" class="pd-row">
-              <div class="pd-row-main">
-                <span class="pd-name">{{ k.name || k.id }}</span>
-                <span v-if="k.description" class="pd-desc">{{ k.description }}</span>
+            <div v-for="k in data.contributions.toolkits" :key="k.id" class="pd-kit-group">
+              <button type="button" class="pd-row pd-kit-head w-full text-left"
+                @click="toggleKitCollapsed(k.id)">
+                <ChevronRight16Regular class="pd-kit-chevron"
+                  :class="{ 'pd-kit-chevron-open': !isKitCollapsed(k.id) }" />
+                <div class="pd-row-main">
+                  <span class="pd-name">{{ k.name || k.id }}</span>
+                  <span v-if="k.description" class="pd-desc">{{ k.description }}</span>
+                </div>
+                <span class="pd-meta">
+                  {{ t('plugins.localTools.detail.kitMeta', { tools: k.toolCount || 0, prompts: k.promptCount || 0 }) }}
+                </span>
+              </button>
+              <div v-show="!isKitCollapsed(k.id)" class="pd-kit-tools">
+                <!-- 包内工具 -->
+                <div v-if="toolsOfKit(k.id).length > 0" class="pd-kit-subsection">
+                  <div v-if="kitSkills(k.id).length > 0" class="pd-kit-sublabel">
+                    {{ t('plugins.localTools.detail.tools') }}
+                  </div>
+                  <div v-for="tool in toolsOfKit(k.id)" :key="tool.name" class="pd-row pd-row-nested">
+                    <div class="pd-row-main">
+                      <span class="pd-name">{{ tool.name }}</span>
+                      <span v-if="tool.description" class="pd-desc pd-ellipsis">{{ tool.description }}</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- 包内技能 -->
+                <div v-if="kitSkills(k.id).length > 0" class="pd-kit-subsection">
+                  <div v-if="toolsOfKit(k.id).length > 0" class="pd-kit-sublabel">
+                    {{ t('plugins.localTools.detail.skills') }}
+                  </div>
+                  <div v-for="s in kitSkills(k.id)" :key="s.id" class="pd-row pd-row-nested">
+                    <div class="pd-row-main">
+                      <span class="pd-name">{{ s.name || s.id }}</span>
+                      <span v-if="s.description" class="pd-desc">{{ s.description }}</span>
+                    </div>
+                    <GdTag size="small" type="info" effect="plain">
+                      {{ t('plugins.localTools.detail.kitSkillTag') }}
+                    </GdTag>
+                  </div>
+                </div>
+                <div v-if="toolsOfKit(k.id).length === 0 && kitSkills(k.id).length === 0"
+                  class="pd-empty-hint">
+                  {{ t('plugins.localTools.detail.noToolsInKit') }}
+                </div>
               </div>
-              <span class="pd-meta">
-                {{ t('plugins.localTools.detail.kitMeta', { tools: k.toolCount || 0, prompts: k.promptCount || 0 }) }}
-              </span>
             </div>
           </div>
-          <div v-if="data.counts.tools > 0" class="pd-list">
-            <div v-for="tool in data.contributions.tools" :key="tool.name" class="pd-row">
+
+          <!-- 未归属能力包的顶层工具 -->
+          <div v-if="looseTools.length > 0" class="pd-list">
+            <div v-if="data.counts.toolkits > 0" class="pd-subtitle">
+              {{ t('plugins.localTools.detail.looseTools') }}
+            </div>
+            <div v-for="tool in looseTools" :key="tool.name" class="pd-row">
               <div class="pd-row-main">
                 <span class="pd-name">{{ tool.name }}</span>
                 <span v-if="tool.description" class="pd-desc pd-ellipsis">{{ tool.description }}</span>
@@ -418,6 +466,67 @@ const advancedGroups = computed(() => {
   ].filter((g) => g.rows.length > 0)
 })
 
+// ── 工具按能力包分组 ──
+
+/** 折叠的能力包 id（默认全部展开；点包头切换） */
+const collapsedKits = ref<Set<string>>(new Set())
+
+function isKitCollapsed(kitId: string): boolean {
+  return collapsedKits.value.has(kitId)
+}
+
+function toggleKitCollapsed(kitId: string) {
+  const next = new Set(collapsedKits.value)
+  if (next.has(kitId)) next.delete(kitId)
+  else next.add(kitId)
+  collapsedKits.value = next
+}
+
+/** 某能力包内的工具（toolkitId 精确匹配） */
+function toolsOfKit(kitId: string) {
+  return (data.value?.contributions.tools || []).filter(
+    (tool) => tool.toolkitId === kitId,
+  )
+}
+
+/** 未归属任何已注册能力包的顶层工具 */
+const looseTools = computed(() => {
+  const ct = data.value?.contributions
+  if (!ct) return []
+  const kitIds = new Set(ct.toolkits.map((k) => k.id))
+  return ct.tools.filter((tool) => !tool.toolkitId || !kitIds.has(tool.toolkitId))
+})
+
+/** 某能力包绑定的技能（toolkitId 精确匹配） */
+function kitSkills(kitId: string) {
+  return (data.value?.contributions.skills || []).filter(
+    (s) => s.toolkitId === kitId,
+  )
+}
+
+/** 全部能力包绑定的技能（用于计数徽标） */
+const kitBoundSkills = computed(() => {
+  const ct = data.value?.contributions
+  if (!ct) return []
+  const kitIds = new Set(ct.toolkits.map((k) => k.id))
+  return ct.skills.filter((s) => s.toolkitId && kitIds.has(s.toolkitId))
+})
+
+/** 插件级（未归属能力包）技能 */
+const standaloneSkills = computed(() => {
+  const ct = data.value?.contributions
+  if (!ct) return []
+  const kitIds = new Set(ct.toolkits.map((k) => k.id))
+  return ct.skills.filter((s) => !s.toolkitId || !kitIds.has(s.toolkitId))
+})
+
+/** 区块标题：有能力包时称「能力包」，纯顶层工具时退回「工具」 */
+const packsSectionLabel = computed(() =>
+  (data.value?.counts.toolkits || 0) > 0
+    ? t('plugins.localTools.detail.packs')
+    : t('plugins.localTools.detail.tools'),
+)
+
 async function load(pluginId: string) {
   data.value = null
   failed.value = false
@@ -552,5 +661,80 @@ watch(
   border: 1px solid rgba(0, 0, 0, 0.1);
   display: inline-block;
   flex-shrink: 0;
+}
+
+/* ── 能力包分组（工具缩进在包内） ── */
+
+.pd-kit-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.pd-kit-head {
+  cursor: pointer;
+  user-select: none;
+}
+
+.pd-kit-head:hover {
+  filter: brightness(0.98);
+}
+
+.pd-kit-chevron {
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-top: 0.125rem;
+  color: var(--gd-color-text-gray);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.pd-kit-chevron-open {
+  transform: rotate(90deg);
+}
+
+.pd-kit-tools {
+  margin-left: 1.125rem;
+  padding-left: 0.625rem;
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+:global(.dark) .pd-kit-tools {
+  border-left-color: rgba(255, 255, 255, 0.12);
+}
+
+.pd-row-nested {
+  background: transparent;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.pd-kit-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.pd-kit-subsection + .pd-kit-subsection {
+  margin-top: 0.375rem;
+}
+
+.pd-kit-sublabel {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gd-color-text-gray);
+  padding: 0 0.75rem;
+  margin-bottom: 0.125rem;
+}
+
+.pd-empty-hint {
+  font-size: 0.6875rem;
+  color: var(--gd-color-text-gray);
+  padding: 0.25rem 0.75rem;
 }
 </style>

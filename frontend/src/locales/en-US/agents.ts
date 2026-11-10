@@ -50,7 +50,7 @@
     groupTools: 'Tools & Capabilities',
     navBasic: 'Basics',
     navPrompt: 'Prompt',
-    navLocalTools: 'Toolkits',
+    navLocalTools: 'Capability Packs',
     navMcpTools: 'MCP Tools',
     navSkills: 'Skills',
     navSubAgents: 'Sub-agents',
@@ -115,7 +115,7 @@
     noSkillsHint: 'Please install skills in "Plugins > Skills" first',
     sourceBuiltin: 'Built-in',
     skillsSwitchHint:
-      'Turning this off only hides the real-skill list. The skill_learn tool and lazy-load toolkits are unaffected; toolkits are controlled by the toolkit switches on the "Local Tools" tab.',
+      'Turning this off only hides the real-skill list. The skill_learn tool and lazy-load capability packs are unaffected; capability packs are controlled by the switches on the "Local Tools" tab.',
     // 子代理
     loadingAgents: 'Loading...',
     noAgents: 'No sub-agents available',

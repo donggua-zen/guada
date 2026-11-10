@@ -167,7 +167,14 @@ export interface PluginContributions {
       visibleTo?: string[] | null
     }>
     promptTransforms: Array<{ id: string; order?: number }>
-    skills: Array<{ id: string; name?: string; description?: string; enabled?: boolean }>
+    skills: Array<{
+      id: string
+      name?: string
+      description?: string
+      enabled?: boolean
+      /** v4.1：所属能力包（工具包）id */
+      toolkitId?: string | null
+    }>
     agents: Array<{ agentId: string; defId: string; name?: string; description?: string }>
     themes: Array<{
       id: string

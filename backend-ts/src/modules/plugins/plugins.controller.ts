@@ -232,7 +232,7 @@ export class PluginsController {
       (t) => ({ id: t.id, order: t.order ?? 0 }),
     );
 
-    // ── 技能（provider = plugin:<id>）──
+    // ── 技能（provider = plugin:<id>；capability pack 技能带 toolkitId）──
     const skills = (
       SkillRegistry.getInstance()?.getByProvider(`plugin:${pluginId}`) || []
     ).map((s) => ({
@@ -240,6 +240,7 @@ export class PluginsController {
       name: nls(s.manifest?.name || s.id),
       description: nls(s.manifest?.description || ""),
       enabled: s.enabled !== false,
+      toolkitId: s.toolkitId || null,
     }));
 
     // ── 智能体（虚拟注册表，含未启停过滤）──

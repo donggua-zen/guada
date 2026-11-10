@@ -77,6 +77,12 @@ export interface SkillDefinition {
   /** 市场来源（详见 SkillOrigin；手动上传/Git 安装时缺省） */
   origin?: SkillOrigin;
   /**
+   * v4.1：所属能力包（工具包）id。
+   * 非空时技能随该工具包的运行时门控显隐：智能体禁用该包、handler 返回
+   * loadMode:"none"（如子代理会话）、包被全局禁用时同步不可见。
+   */
+  toolkitId?: string;
+  /**
    * v4：作用域声明（插件注册技能专用）——仅对哪些智能体可见。
    * "self" = 来源插件注册的智能体；其余 = 智能体 id。
    * 省略 = 全局可见（现状语义，仍受 settings.skills 偏好过滤）。

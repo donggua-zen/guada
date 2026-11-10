@@ -2,6 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { z } from "zod";
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
+import { RolePluginConfig } from "../plugins/types/plugin.types";
+import { isToolkitAllowedByRoleConfig } from "../plugins/utils/role-toolkit-filter";
 import { JobRegistryService } from "./job-registry.service";
 import type { JobId, JobSnapshot } from "./job.types";
 import { isByteLogJobKind } from "./job.types";
@@ -41,11 +43,24 @@ export class JobsPlugin extends PluginBase {
       id: "jobs",
       name: "%jobs.name%",
       description: "%jobs.toolkitDescription%",
-      activator:
-        "Track and interact with background jobs started by tools such as run_command or subagent_spawn.",
+      // 自治理：后台作业是 shell / sub_agent / workflow 等生产者的基础设施。
+      // 通用智能体层开关（全部禁用 / 新插件默认 / 逐包 deny）一律不作用于本包，
+      // 是否可用只由两件事决定：生产者可用性（requiresAnyKits）与本包自己的 handler。
+      // 通用「能力包」网格不展示本包（见前端 DEDICATED_PLUGIN_IDS）。
+      governance: "self",
       // 消费方跟随生产者：模型可发起的后台作业生产者（shell / subagent / workflow）
       // 全部被关闭时，job 工具族成为空壳——依赖缺失整包隐藏（scheduler 无 AI 入口不计入）。
       requiresAnyKits: ["shell:shell", "sub_agent:subagent", "workflow:workflow"],
+      // 保留显式条目通道（手改 AGENT.md 的 settings.plugins.jobs 仍可逐会话关闭）；
+      // 忽略 __strategy/__default 是自治理包的既定语义。
+      handler: (ctx) => {
+        const entry = (ctx.pluginsConfig as RolePluginConfig | undefined)?.jobs;
+        return {
+          loadMode: isToolkitAllowedByRoleConfig(entry, "jobs")
+            ? ("eager" as const)
+            : ("none" as const),
+        };
+      },
     });
 
     kit.registerTool({

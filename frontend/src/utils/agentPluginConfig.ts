@@ -10,8 +10,13 @@
  * `mcp` / `skill` / `sub_agent` 由各自管理页写条目，不参与网格重建。
  */
 
-/** 由各自管理页写入条目、不走通用工具包网格的插件 */
-export const DEDICATED_PLUGIN_IDS = ['mcp', 'skill', 'sub_agent'] as const
+/**
+ * 不参与通用能力包网格的插件：
+ * - mcp / skill / sub_agent：由各自管理页写入条目；
+ * - jobs：后端 self-governance（基础设施，跟随生产者可用性；通用开关不作用），
+ *   不再暴露逐包开关，保存时其条目不被网格重建。
+ */
+export const DEDICATED_PLUGIN_IDS = ['mcp', 'skill', 'sub_agent', 'jobs'] as const
 
 /** 单个插件的智能体层条目（规范化形态） */
 export interface RoleToolkitEntry {

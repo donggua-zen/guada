@@ -101,13 +101,48 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     return this.pluginManager.isPluginEnabled(pluginId);
   }
 
+  /**
+   * v4.1：能力包技能在当前会话是否可见。
+   *
+   * 判定：插件全局启用 &&（若技能归属工具包）该包在本会话 resolved 视图中
+   * `enabled !== false && loadMode !== "none"`。loadMode 含 handler 的动态决议
+   * （如 workflow 在子代理会话返回 none）与智能体层裁剪结果，因此技能会随
+   * 「智能体禁用工具包 / 无启用子代理 / 子代理会话」同步显隐。
+   *
+   * 以下路径 fail-open（不因缺少会话上下文把技能藏掉）：
+   * - 无 session：Skills 管理页、插件详情、命令面板目录；
+   * - resolvedPlugins 为空：无 tools 能力的模型（skill 清单本就无意义）或上下文未初始化。
+   */
+  isSkillVisibleInSession(skill: SkillDefinition, session?: any): boolean {
+    if (!this.isPluginSkillVisible(skill)) return false;
+    if (!skill.toolkitId) return true;
+    if (!session) return true;
+
+    const resolved: any[] =
+      typeof session.getResolvedPlugins === "function"
+        ? session.getResolvedPlugins() || []
+        : [];
+    if (resolved.length === 0) return true;
+
+    const pluginId = skill.provider?.startsWith("plugin:")
+      ? skill.provider.slice("plugin:".length)
+      : "";
+    if (!pluginId) return true;
+    const rp = resolved.find((p) => p?.plugin?.id === pluginId);
+    if (!rp || !rp.enabled) return false;
+    const kit = (rp.enabledToolKits || []).find(
+      (k: any) => k?.id === skill.toolkitId,
+    );
+    return !!kit && kit.enabled !== false && kit.loadMode !== "none";
+  }
+
   /** 按会话过滤技能集合 */
   private filterByPlugins(
     skills: SkillDefinition[],
     session?: any,
   ): SkillDefinition[] {
     if (!session) return skills;
-    return skills.filter((s) => this.isPluginSkillVisible(s));
+    return skills.filter((s) => this.isSkillVisibleInSession(s, session));
   }
 
   /**
@@ -168,8 +203,9 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   ): Promise<SkillLearnResult | null> {
     const skill = this.registry.get(name.toLowerCase());
     if (skill) {
-      // 对齐工具：插件关闭（当前会话岗位/智能体配置下未启用）→ 该插件技能等同于不存在
-      if (!this.isPluginSkillVisible(skill)) return null;
+      // 对齐工具：插件关闭（当前会话岗位/智能体配置下未启用）或所属能力包
+      // 本会话不可用（智能体禁用/子代理会话等）→ 该技能等同于不存在
+      if (!this.isSkillVisibleInSession(skill, session)) return null;
       return this.loadRealSkill(skill);
     }
 

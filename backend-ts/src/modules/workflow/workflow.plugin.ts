@@ -2,8 +2,6 @@ import { Injectable, Logger } from "@nestjs/common";
 import { z } from "zod";
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
-import { PluginContext } from "../plugins/types/plugin.types";
-import { AgentFileStore } from "../agents/agent-file.store";
 import { SessionService } from "../chat/session.service";
 import { isToolkitAllowedByRoleConfig } from "../plugins/utils/role-toolkit-filter";
 import { WorkflowEngineService, WORKFLOW_RESULT_MAX_CHARS } from "./workflow-engine.service";
@@ -12,9 +10,23 @@ import {
   createWorkflowCommandProvider,
   type WorkflowAvailability,
 } from "./workflow.command";
+import { WORKFLOW_SKILL, WORKFLOW_SKILL_DESCRIPTION } from "./workflow.skill";
+import { SkillRegistry } from "../skills/core/skill-registry.service";
 import langZh from "./workflow.lang.zh.json";
 import langEn from "./workflow.lang.en.json";
 
+/**
+ * Workflow —— 多子代理编排。
+ *
+ * 加载模型（v4.1，对齐 browser-script 的「薄工具 + 技能」范式）：
+ * - 工具包 eager：workflow_run 作为单入口常驻 function list，描述只保留
+ *   必要约定（能力一行 + 必须先 skill_learn("workflow") + 脚本基本形态）；
+ * - 完整脚本 API（hooks/失败语义/限制/示例）注册为插件技能，skill_learn
+ *   时才进入上下文，默认零注入；
+ * - 不再注册 toolkit prompt：静态指南已进技能；可用智能体清单由 sub-agent
+ *   插件（同为 eager）的 "## Available Agents" 段提供，条件与 workflow 一致
+ *   （均要求 settings.agents 有启用项），无需重复注入。
+ */
 @Injectable()
 export class WorkflowPlugin extends PluginBase {
   private readonly logger = new Logger(WorkflowPlugin.name);
@@ -30,7 +42,6 @@ export class WorkflowPlugin extends PluginBase {
 
   constructor(
     private workflowEngine: WorkflowEngineService,
-    private agentStore: AgentFileStore,
     private sessionService: SessionService,
   ) {
     super();
@@ -42,7 +53,7 @@ export class WorkflowPlugin extends PluginBase {
 
     // ── 斜杠命令 /workflow：用户显式发起工作流的入口 ──
     // 只做意图标记与可用性引导，不新增执行通道：标签由 TagParserPipeline 冻结为
-    // origin=system 注入块，模型仍走 skill_learn("workflow") → tool_use → workflow_run。
+    // origin=system 注入块，模型仍走 skill_learn("workflow") → workflow_run。
     api.registerCommandProvider(
       createWorkflowCommandProvider({
         isEnabled: () => this._enabled,
@@ -55,17 +66,15 @@ export class WorkflowPlugin extends PluginBase {
       id: "workflow",
       name: "%workflow.toolkitName%",
       description: "%workflow.toolkitDescription%",
-      loadMode: "eager", // 注册默认值；实际 loadMode 由 handler 按会话动态决议
-      // 目录行是本工具包唯一常驻的模型面文本，承担使用门槛：
-      // 低频重型编排按需学习（skill_learn），API 规格收敛在工具描述里一次性下发
-      activator:
-        "Use ONLY when the user explicitly asks for a workflow (for example by invoking the /workflow command) or for large multi-agent orchestration: learn this toolkit to write a JavaScript script that fans work out across many sub-agents with phases and structured results. For one or two delegations, prefer plain subagent calls.",
+      // eager：单入口工具直接进 function list（薄描述成本）；长文档在技能里。
+      // 运行时仍由 handler 按会话收口：子代理会话 / 无启用子代理 → none。
+      loadMode: "eager",
       handler: async (ctx) => {
         // 子代理会话禁止递归编排（与 sub_agent 工具同一防线）
         if (ctx.session.sessionType === "sub_agent") {
           return { loadMode: "none" as const };
         }
-        // agents 白名单非空才提供，且为懒加载：目录行常驻，skill_learn 时才进上下文
+        // 无已启用子代理时不注入工具（避免无意义占用）
         const agentsCfg = ctx.session?.getSettings?.("agents");
         const hasEnabledAgent =
           typeof agentsCfg === "object" &&
@@ -74,29 +83,33 @@ export class WorkflowPlugin extends PluginBase {
             ([k, v]) => !k.startsWith("__") && v === true,
           );
         return {
-          loadMode: hasEnabledAgent ? ("lazy" as const) : ("none" as const),
+          loadMode: hasEnabledAgent ? ("eager" as const) : ("none" as const),
         };
       },
     });
 
+    // ── 能力包技能：完整脚本 API 指南（skill_learn("workflow") 按需加载）──
+    // 注册为 workflow 能力包的技能：随该包门控显隐——智能体禁用 workflow 包、
+    // 子代理会话（handler → none）、无启用子代理时，技能与工具同步消失。
+    // description 会出现在系统提示词 # Skills 清单里，承担"调用前必读"的引导。
+    kit.registerSkill({
+      name: "workflow",
+      description: WORKFLOW_SKILL_DESCRIPTION,
+      content: WORKFLOW_SKILL,
+      version: "1.0.0",
+      tags: ["workflow", "orchestration", "sub-agent"],
+    });
+
     // ── workflow_run：一次调用执行整段编排脚本（前台阻塞）──
-    // 工具描述即脚本 API 的唯一规格（钩子语义/错误纪律/约束都在这里），
-    // 使用指南与参数描述不重复承担 API 教学
+    // 薄描述：只做能力声明 + 必读引导 + 脚本基本形态；完整 hooks/限制/示例
+    // 在 workflow 技能里（skill_learn 按需加载）
     kit.registerTool({
       name: "workflow_run",
-      description: `Run a JavaScript workflow script that orchestrates sub-agents at scale. Use this for work that fans out across many independent pieces — an audit over many files, a migration, multi-angle research, adversarial verification of findings — where you write the orchestration as a script instead of delegating turn by turn.
+      description: `Run a JavaScript workflow script that orchestrates sub-agents at scale (fan-out audits, migrations, multi-angle research, adversarial verification). Use ONLY when the user explicitly asks for a workflow (including the /workflow command) or for large multi-agent orchestration; for one or two delegations, prefer plain subagent_spawn calls.
 
-Workflow identity rides the \`name\`, \`description\` and optional \`phases\` parameters as plain JSON (never code). The \`script\` parameter is the plain JavaScript body ONLY (NOT TypeScript), running with top-level await; end with \`return <value>\` — the value must be JSON-serializable and is this tool's result.
+PREREQUISITE: call skill_learn("workflow") before using this tool. It is the only source of truth for the script hooks (agent/pipeline/parallel/phase/log), failure semantics, limits and agent selection; do not write scripts from memory.
 
-Script-body hooks:
-- \`agent(prompt, opts?): Promise<string | null>\` — run one sub-agent to completion (independent session with its own tools); resolves to the child's final output text, or null when the child fails (filter with \`.filter(Boolean)\`). opts: \`agentId\` (persona id from the Available Agents list), \`label\` (display), \`phase\` (progress group). Anything else is rejected loudly.
-- \`pipeline(items, ...stages): Promise<any[]>\` — run each item through the stages independently with NO barrier between stages (prefer this for multi-stage work). Each stage receives \`(prev, item, index)\`. An ordinary stage throw drops that ITEM to null and skips its remaining stages.
-- \`parallel(thunks): Promise<any[]>\` — run zero-argument functions concurrently and await ALL of them (a barrier; use only when a stage genuinely needs every prior result together). A throwing thunk resolves to null.
-- \`phase(title)\` — start a progress phase; \`log(message)\` — narrate progress; \`args\` — the tool call's \`args\` input, verbatim.
-
-Misused hooks (bad arguments, unknown options, tripped caps) throw errors that ALWAYS kill the script — they never dissolve into a per-item null.
-
-Constraints: concurrency and total-agent caps apply; no filesystem, network, timers, or Node.js APIs are provided — the agents do the work, the script only coordinates them. The run executes in the foreground: this call returns when the whole script finishes.`,
+The script is a plain-JavaScript body (NOT TypeScript) with top-level await and must end with return <JSON-serializable value>, which becomes this tool's result. The call executes in the foreground: it returns when the whole script finishes.`,
       inputSchema: z.object({
         name: z
           .string()
@@ -188,63 +201,16 @@ Constraints: concurrency and total-agent caps apply; no filesystem, network, tim
         icon: "generic",
       },
     });
+  }
 
-    // ── Prompt: workflow 使用指南 + 可用智能体列表 ──
-    kit.registerPrompt({
-      frequency: "REGULAR",
-      description: "Workflow orchestration usage guide and available agents list",
-      content: async (context: PluginContext) => {
-        if (context?.session.sessionType === "sub_agent") return "";
-
-        const genericAgent = {
-          id: "generic",
-          name: "Generic Sub-Agent",
-          description:
-            "A general-purpose agent capable of handling any task. Tasks that don't match a dedicated sub-agent can be delegated to this generic agent.",
-        };
-        const items = (await this.agentStore.listAgents()).slice(0, 200);
-        const currentAgentId = context?.session?.agentId;
-        const dbCandidates = currentAgentId
-          ? items.filter((c: any) => c.id !== currentAgentId)
-          : items;
-        const charAgentCfg = context?.session.getSettings?.("agents");
-        let agents: any[];
-        if (charAgentCfg && typeof charAgentCfg === "object") {
-          agents = [genericAgent, ...dbCandidates].filter(
-            (c: any) => charAgentCfg[c.id] === true,
-          );
-        } else {
-          agents = [];
-        }
-
-        const sections: string[] = [
-          "# Workflow Orchestration",
-          "",
-          "Use the workflow_run tool ONLY when the user explicitly asks for a workflow (including invoking the /workflow command) or for large multi-agent orchestration; for one or two delegations, prefer plain subagent_spawn calls. The tool description documents the exact script format and hooks.",
-          "",
-          "Rules:",
-          "   - Write self-contained prompts: sub-agents cannot see this conversation or each other; pass all needed context in the prompt text.",
-          "   - Never assign the same file to multiple sub-agents for modification.",
-          "   - The tool call blocks until the whole workflow finishes (the user watches live progress and can stop it); make the return value a well-organized summary — it is the tool result you will read.",
-        ];
-
-        if (agents.length > 0) {
-          const agentXml = agents
-            .map((a: any) => `   - name: ${a.name}\nid: ${a.id}\ndescription: ${a.description || ""}`)
-            .join("\n");
-          sections.push(
-            "",
-            "## Available Agents (usable as agent() opts.agentId)",
-            "",
-            "<agents>",
-            agentXml,
-            "</agents>",
-          );
-        }
-
-        return sections.join("\n");
-      },
-    });
+  /**
+   * 卸载时清除插件技能。
+   *
+   * 刻意不放 onStop：禁用→启用只走 onStart，不会重新执行 onLoad，
+   * 放 onStop 会导致技能永久消失（与 browser-script 同一纪律）。
+   */
+  async onUnload(): Promise<void> {
+    SkillRegistry.getInstance()?.unregisterByProvider("plugin:workflow");
   }
 
   /**

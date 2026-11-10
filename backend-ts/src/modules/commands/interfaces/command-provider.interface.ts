@@ -4,6 +4,12 @@ export interface CommandContext {
   agentId?: string | null;
   /** 本次消息中提取到的标记总数（TagParserPipeline 透传，供 parse 判断单/多命令注入策略） */
   commandCount?: number;
+  /**
+   * v4.1：会话/智能体层插件配置（`settings.plugins`）。
+   * 供 /skill 等命令在无 ISessionContext 的场景做能力包静态门控
+   * （如技能隶属的工具包被当前智能体禁用时不再内联）。
+   */
+  roleCfg?: import("../../plugins/types/plugin.types").RolePluginConfig;
 }
 
 /** 解析器单次产出 */

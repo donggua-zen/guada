@@ -401,7 +401,7 @@
 
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, watch, computed, onMounted, onUnmounted, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLocale } from '@/locales'
 import {
@@ -423,6 +423,7 @@ import { toast, type ToastHandle } from '@/components/ui/toastService';
 import {
   type ParsedPluginConfig,
   type UnrenderedRefs,
+  DEDICATED_PLUGIN_IDS,
   buildPluginConfig,
   effectiveKitEnabled,
   parseAllAgentsDisabled,
@@ -441,19 +442,6 @@ const autoEnableOptions = computed(() => [
   { label: t('agents.setting.autoEnable'), value: false },
   { label: t('agents.setting.keepDisabled'), value: true }
 ])
-
-// v4.1：插件智能体锁定面
-const isPluginLocked = computed(() => Boolean(props.pluginLock))
-const lockedKitKeys = computed(
-  () => new Set<string>(props.pluginLock?.lockedKitKeys ?? []),
-)
-const lockedSkillIds = computed(
-  () => new Set<string>(props.pluginLock?.lockedSkillIds ?? []),
-)
-const isKitLocked = (pluginId: string, kitId: string): boolean =>
-  lockedKitKeys.value.has(`${pluginId}::${kitId}`)
-const isSkillLocked = (skillId: string): boolean =>
-  lockedSkillIds.value.has(skillId)
 
 // Props
 const props = defineProps({
@@ -492,13 +480,31 @@ const props = defineProps({
    * 锁定项由后端常开豁免兜底，UI 状态仅展示。
    */
   pluginLock: {
-    type: Object,
+    // 显式允许 null（普通智能体）——运行时声明 type:Object 会被 vue-tsc
+    // 推断为非空 Record，AgentModal 传 null 会报 TS2322。
+    type: Object as PropType<{
+      lockedKitKeys: Set<string>
+      lockedSkillIds: Set<string>
+    } | null>,
     default: null
   }
 })
 
 // Emits
 const emit = defineEmits(['update:data', 'update:tab', 'saved'])
+
+// v4.1：插件智能体锁定面（props 声明之后初始化，避免依赖编译期提升）
+const isPluginLocked = computed(() => Boolean(props.pluginLock))
+const lockedKitKeys = computed(
+  () => new Set<string>(props.pluginLock?.lockedKitKeys ?? []),
+)
+const lockedSkillIds = computed(
+  () => new Set<string>(props.pluginLock?.lockedSkillIds ?? []),
+)
+const isKitLocked = (pluginId: string, kitId: string): boolean =>
+  lockedKitKeys.value.has(`${pluginId}::${kitId}`)
+const isSkillLocked = (skillId: string): boolean =>
+  lockedSkillIds.value.has(skillId)
 
 // 响应式数据
 // 页面级加载：常驻 loading toast（原 v-loading 指令，去 Element 化后改用 GdToast）
@@ -1072,8 +1078,13 @@ async function loadLocalTools() {
 
       const plugins = response.plugins || [];
       // 本地工具列表：后端已过滤 system 插件；此处只保留全局启用的插件
-      // （全局关闭的插件其工具包对智能体层不可见，二级过滤）
-      localTools.value = plugins.filter(p => p.enabled);
+      // （全局关闭的插件其工具包对智能体层不可见，二级过滤），
+      // 并排除不参与通用网格的自治理/专用插件（mcp/skill/sub_agent/jobs）
+      localTools.value = plugins.filter(
+        (p) =>
+          p.enabled &&
+          !(DEDICATED_PLUGIN_IDS as readonly string[]).includes(p.pluginId),
+      );
       initKitSettings(stored);
     } else {
       // 全部禁用：仅传 strategy，由后端拒绝所有非受保护插件的能力包
@@ -1083,7 +1094,11 @@ async function loadLocalTools() {
 
       const plugins = response.plugins || [];
       // 全部禁用模式下仍只展示全局启用的插件（全局关闭的插件工具包不可见）
-      localTools.value = plugins.filter(p => p.enabled);
+      localTools.value = plugins.filter(
+        (p) =>
+          p.enabled &&
+          !(DEDICATED_PLUGIN_IDS as readonly string[]).includes(p.pluginId),
+      );
       initKitSettings(stored);
     }
   } catch (error) {
