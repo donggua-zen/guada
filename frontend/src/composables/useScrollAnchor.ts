@@ -32,9 +32,6 @@ export const USER_SCROLL_INTENT_TTL_MS = 1200
 /** 布局滚动保护窗：本模块自身写入 scrollTop 时标记，窗内的 scroll 事件不改变 following。 */
 export const LAYOUT_SCROLL_GUARD_MS = 250
 
-/** 宽度变化的稳定窗：拖拽分割条/窗口缩放会连续触发多轮重排，窗内暂停贴底，结束后只贴一次。 */
-export const CONTENT_WIDTH_RESIZE_SETTLE_MS = 120
-
 export interface ScrollMetrics {
   /** 滚动容器 scrollTop。 */
   scrollTop: number
@@ -118,14 +115,21 @@ export function reconcileFollowingForContentAnchor(input: {
 }
 
 /**
- * 内容变化（新行追加 / 流式 delta 撑高 / 动态展开）后的动作：
- * 跟随中 → 贴底；已解除或宽度变化中 → 保持阅读位置（绝不拉回）。
+ * 内容收缩后的跟随态对账：折叠分组、删除消息等使内容变短，scrollTop 被浏览器
+ * 向底部钳制。若钳制后落点已在底部，「用户离底阅读」的前提已消失 → 恢复跟随
+ * （「回到底部」按钮随之消失）。仅适用于内容高度下降；增长路径由贴底分支处理，
+ * 不能按落点对账——用户上滚后流式增长也会把落点留在原地（离底）以外的位置。
  */
-export function anchorActionAfterContentChange(
-  following: boolean,
-  contentWidthChanging: boolean = false,
-): 'stickToBottom' | 'hold' {
-  return following && !contentWidthChanging ? 'stickToBottom' : 'hold'
+export function resolveFollowingAfterContentShrink(input: {
+  following: boolean
+  metrics: ScrollMetrics
+  /** 本次内容高度变化量（当前 - 上一次），负值 = 收缩。 */
+  heightDelta: number
+  bottomEpsilonPx?: number
+}): boolean {
+  if (input.following) return true
+  if (input.heightDelta >= 0) return input.following
+  return isAtBottom(input.metrics, input.bottomEpsilonPx ?? BOTTOM_ANCHOR_EPSILON_PX)
 }
 
 /** wheel 的 deltaY 与 scrollTop 同向：负值阅读更早内容，正值靠近底部。 */
@@ -248,9 +252,10 @@ export function useScrollAnchor(options: ScrollAnchorOptions = {}) {
   let lastObservedScrollTop = 0
   /** 上一次账目的视口高度：用于区分「容器变小 clamp」与「用户上滚」。 */
   let lastObservedViewportHeight = 0
+  /** 上一次账目的内容宽度：仅用于判断本次高度变化是否由宽度重排引起。 */
   let lastContentWidth = 0
-  let contentWidthChanging = false
-  let widthSettleTimer: ReturnType<typeof setTimeout> | null = null
+  /** 上一次账目的内容高度（scrollHeight）：识别收缩（折叠/删除 → 钳制贴底）。 */
+  let lastContentHeight = 0
 
   function commitFollowing(next: boolean): void {
     if (following.value === next) return
@@ -337,26 +342,40 @@ export function useScrollAnchor(options: ScrollAnchorOptions = {}) {
   }
 
   /**
-   * 内容尺寸变化（ResizeObserver on 内容元素）：
-   * - 宽度变化 → 进稳定窗，窗内暂停贴底，结束后只贴一次（拖拽分割条/窗口缩放场景）；
-   * - 宽度未变且仍在跟随 → 贴底（图片加载、流式正文、展开折叠等异步高度增长）。
-   * 宽度判定用条目自身的 contentRect，不在回调里读布局。
+   * 内容尺寸变化（ResizeObserver on 内容元素）。
+   *
+   * **跟随态一律贴底，宽度变化也不例外。** 拖拽分割条 / 缩放窗口会逐帧改宽度，
+   * 文字重排使内容自然变高；贴底必须与这次变高同帧完成，否则用户会看到
+   * 「滚动条脱离底部 → 停下 → 突然跳回」。
+   *
+   * 为什么每帧贴底是安全的：ResizeObserver 回调在布局之后、绘制之前投递，
+   * 这里读 `scrollHeight` 不会插入强制布局（旧实现在此暂停贴底，是误以为会）；
+   * 写 `scrollTop` 也不使布局失效。每帧成本只有一次 offset 读 + 一次写。
+   *
+   * 已解除跟随时宽度变化不参与收缩对账：宽度重排引起的高度变化不是「内容被折叠」，
+   * 用户的阅读位置可能仍在原处，不能按钳制落点把 following 翻回 true。
+   * 判定用条目自身的 contentRect，不在回调里读布局。
    */
   function handleContentResize(entry: ResizeObserverEntry): void {
     const width = entry.contentRect.width
     const reflowedByWidth = lastContentWidth > 0 && Math.abs(width - lastContentWidth) > 0.5
     lastContentWidth = width
-    if (reflowedByWidth) {
-      contentWidthChanging = true
-      if (widthSettleTimer !== null) clearTimeout(widthSettleTimer)
-      widthSettleTimer = setTimeout(() => {
-        widthSettleTimer = null
-        contentWidthChanging = false
-        if (following.value) scrollToBottomImmediate()
-      }, CONTENT_WIDTH_RESIZE_SETTLE_MS)
-    } else if (following.value && !contentWidthChanging) {
+    if (following.value) {
       scrollToBottomImmediate()
+    } else if (!reflowedByWidth) {
+      // 已解除跟随 + 内容收缩：折叠分组/删除消息使内容变短，浏览器把 scrollTop
+      // 向底部钳制——几何上用户已被推到（或推近）底部，「离底阅读」的前提消失，
+      // 按落点对账恢复跟随，「回到底部」按钮随之消失。增长不在此对账：
+      // 用户上滚后流式增高落点仍离底，保持阅读位置（上面的贴底分支不适用）。
+      const metrics = getScrollMetrics()
+      if (metrics) {
+        const heightDelta = metrics.contentHeight - lastContentHeight
+        if (heightDelta < 0) {
+          commitFollowing(resolveFollowingAfterContentShrink({ following: following.value, metrics, heightDelta }))
+        }
+      }
     }
+    lastContentHeight = entry.target.scrollHeight
     options.onContentResize?.(entry)
   }
 
@@ -471,6 +490,7 @@ export function useScrollAnchor(options: ScrollAnchorOptions = {}) {
     lastObservedScrollTop = element.scrollTop
     lastObservedViewportHeight = element.clientHeight
     lastContentWidth = 0
+    lastContentHeight = 0
     const capture = { capture: true } as const
     element.addEventListener('wheel', handleWheel, capture)
     element.addEventListener('touchstart', handleTouchStart, capture)
@@ -497,11 +517,6 @@ export function useScrollAnchor(options: ScrollAnchorOptions = {}) {
       element.removeEventListener('pointerup', handlePointerEnd, capture)
       element.removeEventListener('pointercancel', handlePointerEnd, capture)
     }
-    if (widthSettleTimer !== null) {
-      clearTimeout(widthSettleTimer)
-      widthSettleTimer = null
-    }
-    contentWidthChanging = false
     clearUserScrollIntent()
   }
 

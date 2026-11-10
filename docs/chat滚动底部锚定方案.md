@@ -55,7 +55,7 @@
 - **`markLayoutScroll` 保护窗实际参与裁决**：本模块写入 scrollTop 后浏览器派发的那一次 scroll 事件，落点往往低于账目值，若不豁免会被误判成"未观察上滚"而解除跟随。做法是在该轮对账里把账目基线置 `null`（跳过未观察上滚检测），语义见 `reconcileFollowingForContentAnchor` 的 `lastObservedScrollTop` 参数。
 - **视口缩小 clamp 不算上滚**：容器变小会把 scrollTop 向下钳制，那不是用户意图。新增 `viewportShrank` 参数，比较上一次账目的 `clientHeight` 判定，只豁免该轮。
 - **到顶补页只在用户滚到位时触发**：恢复位置、贴底 clamp、前插补偿这些程序化滚动不冒充"用户拉取历史"（`onNearTop` 只在 `source === 'user'` 分支调用）。
-- **宽度稳定窗 120ms**（`CONTENT_WIDTH_RESIZE_SETTLE_MS`）：拖拽分割条/窗口缩放会连续触发多轮重排，窗内暂停贴底，结束后只贴一次，避免逐帧"读 scrollHeight + 写 scrollTop"的强制布局。
+- **跟随态每帧贴底，宽度变化不例外**：拖拽分割条/窗口缩放会逐帧改变宽度并引发文本重排，内容随之变高。ResizeObserver 回调在布局之后、绘制之前投递，回调里读 `scrollHeight` 不会插入强制布局、写 `scrollTop` 也不使布局失效，因此跟随态可以直接当帧贴底，不需要「暂停—稳定后补一次」的窗口（该窗口会让滚动条先脱离底部、再突然跳回，见 §十二）。宽度变化的唯一特殊之处是：离底阅读时，它引起的高度变化不参与「收缩钳到贴底 → 恢复跟随」对账。
 - **会话滚动记忆按 sessionId 隔离**（不叠加工作区路径）：保存发生在切换瞬间，此刻能读到的会话对象可能已是"切过去"的那个，叠加工作区会让同一会话算出两个键、记忆静默失效。
 - **恢复需要重试**：屏外回合带 `content-visibility`，首帧按 `contain-intrinsic-size: auto 800px` 估算，记忆位置可能超出当时的可滚动范围（被钳到上限）。`shouldRetryScrollMemoryRestore` + `content-resize` 回调在内容撑高后补落，直到到位或用户滚动（意图优先）即放弃。
 - **发消息/重答显式取回跟随**：这两个入口是"我要看新回合"的明确意图，即便此前在上滚状态也置 `following=true`，否则新回复流式增长时内容继续在视野外长高。
@@ -135,3 +135,52 @@
 5. 顺带清掉 `pendingScrollRestore`，避免会话位置恢复与用户接管抢位置。
 
 **取舍**：按钮点击即隐藏（跟随态立即置真），不实现"落底后再隐藏"。另外长会话里 `content-visibility` 的屏外回合会在动画途中展开、触发尺寸变化，跟随态为真时贴底路径会直接把视图落到底——表现为"平滑变即时"，结果正确、观感略生硬。若后续要求严格保留动画，需要再加"平滑滚动期间抑制贴底 + 落底校正"的窗口机制。
+
+## 十一、修复记录：折叠工具组后「回到底部」按钮不消失
+
+**日期**：2026-11-10
+
+**现象**：工具组展开很长 → 上滚离底，出现「回到底部」按钮 → 折叠该工具组，内容骤短、视图自然回到（或接近）底部，但按钮仍然显示，需要再手动点一次按钮或手动滚一下才消失。
+
+**根因**：状态机的规则是"只有真实用户输入能改变 `following`"，而折叠工具组是点击折叠按钮，不产生任何经过滚动容器的 wheel/touch/key 意图。内容收缩后浏览器把 `scrollTop` 向底部钳制，由此派发的 scroll 事件按"无意图 → layout 来源"分类，`resolveFollowingAfterScroll` 对 layout 来源原样保持 `following=false`；`reconcileFollowingForContentAnchor` 的 `userScrollIntent === 'none'` 分支也直接返回原状态；ResizeObserver 的 `handleContentResize` 只在 `following=true` 时贴底。三条路都不动 `following`——"离底阅读"这个前提已经被收缩摧毁了，状态机却没有任何机制知道这一点。
+
+这是"只有用户输入能改变 following"规则的**漏例**：内容**收缩**可以在零用户输入的情况下把用户推到几何底部。增长没有这个问题（流式增高时落点仍离底，保持阅读位置是正确的），所以对账必须区分收缩与增长，不能按落点无差别判回。
+
+**修法**（`useScrollAnchor.ts`）：
+
+1. 新增纯函数 `resolveFollowingAfterContentShrink`：仅当内容高度下降（`heightDelta < 0`）且钳制落点在 `BOTTOM_ANCHOR_EPSILON_PX` 内时恢复跟随，其余情况原样保持。
+2. `handleContentResize` 加收缩对账分支：新增 `lastContentHeight` 账目变量（模式同 `lastContentWidth`，`attach` 时置 0），宽度未变、已解除跟随且高度下降时读一次 metrics 对账。折叠是 0fr→1fr 动画，多帧 ResizeObserver 逐帧触发，收缩到某一帧落点进 48px 内即恢复跟随，后续帧走既有 `following=true → 贴底` 分支，动画全程视图自然贴底。
+3. 对账恢复后的次序是安全的：`commitFollowing` 同步 emit `following-change`，ChatPanel 的 `handleFollowingChange` 先更新 `isFollowingScroll`，随后的 `content-resize` 里锚点钉回（`scheduleAnchorRestore`）因 `isFollowingScroll=true` 自动跳过，不与贴底抢位置。
+
+**已知未修的同构场景**：拖大聊天视口使全部内容可见时，同样会被钳到贴底而按钮残留——触发频率低（需要拖视口而非折叠内容），暂不处理；若要修，同一对账函数可直接复用（视口增大的对账条件是 `viewportHeight` 上升而非内容高度下降）。
+
+**教训**：不变量"following 只由用户输入改变"的正确性依赖一个隐含前提——"离底"必然来自用户输入。内容收缩破坏了这个前提：几何落点可以在无输入的情况下变得与 `following=false` 矛盾。凡是维护"用户位置"类状态的地方，都要问一句：除了用户输入，还有什么操作会改变这个状态的前提？
+
+## 十二、修复记录：挤压聊天区时滚动条脱离底部再跳回
+
+**日期**：2026-11-10
+
+**现象**：长会话置底时拖分割条把聊天区压窄，内容随文字重排自然变长，滚动条先脱离底部；拖拽中途一停顿，滚动条又突然跳回底部；继续拖会反复上下跳。把聊天区拖得比 `max-width: 744px` 宽时不复现（此时改宽度不改变排版，`scrollHeight` 不变）。
+
+**根因是两个互不知情的计时器**：
+
+1. `handleContentResize` 把宽度变化当成需要 120ms 稳定的重排：`contentWidthChanging = true`，窗内**完全停止贴底**。连续拖拽时每次宽度变化都重置定时器；一旦停顿超过 120ms，定时器执行 `scrollTop = scrollHeight` 的瞬时跳回。继续拖 → 再次脱离 → 再次跳回。
+2. 松手后 `useResizeActivity` 还有 150ms 尾延迟：到期时先摘 `gd-resizing-moved`、再 `releaseTurnHeights()`。冻结值是**拖拽起点（较宽）时**的一次性快照（`markResizeMoved` 幂等，整个手势只冻结一次），拖窄后离屏回合的真实高度已经变大，解冻让 `scrollHeight` 再阶跃一次 → 若 `following` 仍为真，再贴一次底。120ms 与 150ms 两个计时器叠加，用户看到两次硬跳。
+
+不是锚点保持器：`scheduleAnchorRestore()` 在 `following=true` 时直接早退，拖拽中 `following` 从未改变；真正把人拉回底部的是宽度稳定窗里的 `scrollToBottomImmediate()`。
+
+**对标 deepseek-harness**：它在 pinned 态不做宽度特判——ResizeObserver 观察内容列，每次尺寸变化（含宽度重排）都同步 `scrollTop = scrollHeight` 并记账；用 `observedTopRef` 账目过滤 scroll 事件，落点与账目一致就不改跟随权。离底阅读它没有自研宽度锚定，依赖原生 `overflow-anchor`，其 `ui-layout/README.md` 明确承认「No scroll anchoring during squeeze reflow」。本项目因 sticky 输入区必须 `overflow-anchor: none`，所以离底仍由 `ChatPanel` 的内容锚点保持器负责，只借鉴 pinned 这一半。
+
+**修法**：
+
+1. `handleContentResize` 中 `following=true` 时无条件 `scrollToBottomImmediate()`，删除 `contentWidthChanging` / `widthSettleTimer` / `CONTENT_WIDTH_RESIZE_SETTLE_MS`。ResizeObserver 回调在布局后、绘制前，写入当帧生效，不存在「先画出脱离底部的一帧」。
+2. 宽度变化只保留一个特殊语义：离底时它引起的高度变化不参与 `resolveFollowingAfterContentShrink` 对账（避免「拖宽 → 钳到底 → 按钮消失」）。
+3. `ChatPanel.handleScroll` 在调整态期间跳过 `scheduleMountVisiblePlaceholders()` 与 `scheduleAnchorRefresh()`：每帧贴底会逐帧派发 scroll 事件，前者是非重置的 80ms 一次性定时器，会在拖拽中途扫描全部占位并挂载（800px 估算换成真实高度，再制造一次高度突变）；后者每 16ms 读一次 `[data-turn-id]` 布局。拖拽收尾的 `content-resize`（冻结高度释放）发生在调整态退出之后，现有门禁会正常补一次。
+4. 删除无生产调用的纯函数 `anchorActionAfterContentChange`（仅测试引用）。
+
+**验证**：`useScrollAnchor.test.ts` 新增 6 条运行时用例（假滚动元素 + 假 ResizeObserverEntry）：挤压当帧贴底、连续 5 帧保持贴底、无延迟写入、离底挤压不拉回、宽度不变收缩恢复跟随、宽度变化收缩不对账。全量 `vitest run` 通过。
+
+**已知残余**：
+
+- 拖拽期间离屏回合的冻结高度来自拖拽前的宽度，`scrollHeight` 会低估；滚动条滑块在拖拽中略长、松手后恢复。不影响视口底部位置，也不产生跳动。
+- 「拖大聊天视口使全部内容可见时按钮残留」仍是 §十一 记录的另一场景（与视口高度有关，不是宽度重排），本次不改。
