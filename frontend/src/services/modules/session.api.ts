@@ -1,10 +1,11 @@
 import type { ApiContext } from "./api-context";
-import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, SidebarProjectSessionsResponse, ProjectGroup, GroupStats, ArchiveSessionGroupResult, ArchiveProjectGroupResult, DeleteProjectGroupResult, CreateSessionRequest, UpdateSessionRequest, SessionPlanItem, GoalStateResponse } from "@/types/session";
+import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, SidebarProjectSessionsResponse, ProjectGroup, GroupStats, ArchiveSessionGroupResult, ArchiveProjectGroupResult, DeleteProjectGroupResult, CreateSessionRequest, UpdateSessionRequest, SessionPlanItem, GoalStateResponse, SessionCreatedResponse } from "@/types/session";
 
 export interface SessionApi {
-  createSession(data: CreateSessionRequest): Promise<Session>;
+  /** 创建会话；响应可能回带本次写时注册的目录分组（projectGroup） */
+  createSession(data: CreateSessionRequest): Promise<SessionCreatedResponse>;
   /** 分支会话：以指定回合（助手消息所在回合）为节点完整复制源会话 */
-  branchSession(sessionId: string, data: { turnId: string; title?: string }): Promise<Session>;
+  branchSession(sessionId: string, data: { turnId: string; title?: string }): Promise<SessionCreatedResponse>;
   deleteSession(sessionId: string, deleteWorkspace?: boolean): Promise<{ success: boolean }>;
   fetchSession(sessionId: string): Promise<Session>;
   /** 计划历史（转录构建：身份 = ExitPlanMode toolCallId，含状态与正文；「计划」面板用） */
@@ -419,11 +420,11 @@ export interface SessionSummaryItem {
 
 export const sessionApi: SessionApi = {
   async createSession(this: ApiContext, data: CreateSessionRequest) {
-    return await this._request<Session>("/sessions", { method: "POST", data });
+    return await this._request<SessionCreatedResponse>("/sessions", { method: "POST", data });
   },
 
   async branchSession(this: ApiContext, sessionId: string, data: { turnId: string; title?: string }) {
-    return await this._request(`/sessions/${sessionId}/branch`, { method: "POST", data });
+    return await this._request<SessionCreatedResponse>(`/sessions/${sessionId}/branch`, { method: "POST", data });
   },
 
   async deleteSession(this: ApiContext, sessionId: string, deleteWorkspace: boolean = false) {

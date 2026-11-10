@@ -213,6 +213,7 @@ import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { toast, notify } from '@/components/ui/toastService';
 import { useSessionStore } from "../../stores/session";
+import { useSessionGroupStore } from "../../stores/sessionGroup";
 import { useAuthStore } from "../../stores/auth"
 import { useLayoutStore } from "@/stores/layout"
 import { useCapabilitiesStore } from "@/stores/capabilities"
@@ -1749,6 +1750,11 @@ async function branchFromTurn(turn: Turn) {
     const newSession = await apiService.branchSession(currentSessionId.value, {
       turnId: turn.id,
     });
+    // 分支继承源目录：后端会把写时注册的目录分组回带，先补进分组缓存再写会话，
+    // 否则侧栏目录模式会先把分支会话归到「通用」桶。
+    if (newSession.projectGroup) {
+      useSessionGroupStore().upsertProjectGroup(newSession.projectGroup);
+    }
     sessionStore.setSession(newSession);
     toast.success(t('chat.panel.branchSuccess'));
     router.replace({ name: 'Chat', params: { sessionId: newSession.id } });

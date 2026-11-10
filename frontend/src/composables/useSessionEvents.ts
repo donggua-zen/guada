@@ -14,6 +14,7 @@ import { useRouter, useRoute } from "vue-router";
 import { NEW_SESSION_ID } from "@/constants";
 import { t } from "@/locales";
 import { useSessionStore } from "@/stores/session";
+import { useSessionGroupStore } from "@/stores/sessionGroup";
 import { useAuthStore } from "@/stores/auth";
 import { apiService } from "@/services/ApiService";
 import { streamReceiver } from "@/services/modules/StreamReceiver";
@@ -212,6 +213,11 @@ export function useSessionEvents() {
           return;
         if (payload?.session) {
           const session = payload.session;
+          // 其它窗口/定时任务在全新目录建会话时，后端会把写时注册的目录分组
+          // 一起广播；先补进分组缓存，否则本窗口会先把会话归到「通用」桶。
+          if (session.projectGroup) {
+            useSessionGroupStore().upsertProjectGroup(session.projectGroup);
+          }
           if (!sessionStore.getSession(session.id)) {
             sessionStore.setSession(session);
           }

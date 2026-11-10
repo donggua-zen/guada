@@ -304,6 +304,54 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
     }
   }
 
+  /**
+   * 增量写入一个目录分组（创建会话时后端回带的 projectGroup）。
+   *
+   * 侧栏目录模式的桶归属只看本地 `projectGroups`（见 resolveProjectBucketId），
+   * 新目录若不在这里出现，首个使用它的会话会先落进「通用」桶，直到下次整表刷新。
+   * 这里只做增量补写，不重拉侧栏（重拉会重置各分组的「加载更多」分页窗口）。
+   *
+   * - 虚拟「通用」桶（kind !== 'workspace'）忽略：它由 setProjectGroups 合成。
+   * - 已存在同 id：只合并元信息，保留本地已有顺序与折叠态，不重复插入。
+   * - 不存在：插到「通用」桶之前；尚无「通用」桶时一并补上（侧栏未加载就先建会话）。
+   */
+  const upsertProjectGroup = (group: ProjectGroup): void => {
+    if (!group || group.kind !== 'workspace') return
+    const index = projectGroups.value.findIndex((g) => g.id === group.id)
+    if (index !== -1) {
+      projectGroups.value[index] = {
+        ...projectGroups.value[index],
+        ...group,
+        // 顺序由本地维护（拖拽排序 / 首屏拉取），不让增量写入打乱
+        sortOrder: projectGroups.value[index].sortOrder,
+        kind: 'workspace',
+      }
+      return
+    }
+
+    const next = [...projectGroups.value]
+    const generalIndex = next.findIndex((g) => g.kind === 'general')
+    if (generalIndex === -1) {
+      next.push(group)
+      next.push({
+        id: GENERAL_PROJECT_GROUP_ID,
+        name: '',
+        path: null,
+        pathKey: null,
+        sortOrder: Number.MAX_SAFE_INTEGER,
+        isOverridden: false,
+        icon: null,
+        kind: 'general',
+      })
+    } else {
+      next.splice(generalIndex, 0, group)
+    }
+    projectGroups.value = next
+    if (!expandedState.value.has(group.id)) {
+      expandedState.value.set(group.id, true)
+    }
+  }
+
   /** 更新目录分组显示名和/或图标（只改显示名，不改磁盘目录） */
   const updateProjectGroup = async (
     groupId: string,
@@ -445,6 +493,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
     archiveGroup,
     setLoadingMore,
     setProjectGroups,
+    upsertProjectGroup,
     updateProjectGroup,
     reorderProjectGroups,
     deleteProjectGroup,
