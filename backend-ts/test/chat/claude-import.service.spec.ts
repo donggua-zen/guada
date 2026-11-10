@@ -612,3 +612,116 @@ describe("ClaudeImportService Codex 来源", () => {
     expect(result.skipped).toEqual([{ sessionId: "nope", reason: "session_not_found" }]);
   });
 });
+
+describe("ClaudeImportService WorkBuddy 来源", () => {
+  const WB_ID = "2f46c25b-1111-2222-3333-444455556666";
+  let tmpHome: string;
+  let createSession: jest.Mock;
+  let importTurns: jest.Mock;
+  let getSessionById: jest.Mock;
+  let deleteSession: jest.Mock;
+  let service: ClaudeImportService;
+
+  beforeAll(() => {
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "workbuddy-import-"));
+    const dir = path.join(tmpHome, "projects", "proj");
+    fs.mkdirSync(dir, { recursive: true });
+    const at = (i: number) => T1 + i * 1000;
+    const lines = [
+      JSON.stringify({
+        id: "u-1",
+        timestamp: at(1),
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "<system-reminder>注入</system-reminder>\n<user_query>WB 问题</user_query>" }],
+        sessionId: WB_ID,
+        cwd: null,
+      }),
+      JSON.stringify({
+        id: "a-1",
+        parentId: "u-1",
+        timestamp: at(2),
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: "WB 回答" }],
+        providerData: { model: "deepseek-v4.1-flash" },
+        sessionId: WB_ID,
+      }),
+      JSON.stringify({
+        id: "title-1",
+        timestamp: at(3),
+        type: "ai-title",
+        aiTitle: "WB 显式标题",
+        sessionId: WB_ID,
+      }),
+    ];
+    fs.writeFileSync(path.join(dir, `${WB_ID}.jsonl`), lines.join("\n") + "\n", "utf8");
+    process.env.CODEX_HOME = tmpHome; // 防串扰：清掉真实 codex 根影响
+    delete process.env.CODEX_HOME;
+    process.env.WORKBUDDY_HOME = tmpHome;
+  });
+
+  afterAll(() => {
+    delete process.env.WORKBUDDY_HOME;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  beforeEach(() => {
+    createSession = jest.fn(async (data: any) => ({ id: `new-wb-${data.title}`, ...data }));
+    importTurns = jest.fn(async () => ({ imported: 2 }));
+    getSessionById = jest.fn(async () => null);
+    deleteSession = jest.fn(async () => ({}));
+    service = new ClaudeImportService(
+      { getSessionById, createSession, deleteSession } as any,
+      { listAgents: jest.fn(async () => [{ id: "default-agent" }]) } as any,
+      { findModel: jest.fn((id: string) => ({ id, config: MODEL_CONFIG })), listModels: jest.fn(() => [{ id: "fallback-model" }]) } as any,
+      { importTurns } as any,
+      { getManyByIds: jest.fn(async () => []) } as any,
+    );
+  });
+
+  it("扫描：候选来自 ~/.workbuddy-ai/projects，首问兜底标题", async () => {
+    const { candidates, roots } = await service.scanWorkbuddySessions();
+    expect(roots.length).toBeGreaterThan(0);
+    const target = candidates.find((c) => c.sessionId === WB_ID);
+    expect(target).toBeDefined();
+    expect(target!.provider).toBe("workbuddy");
+    expect(target!.previewTitle).toBe("WB 问题"); // 扫描层不读 ai-title，首问兜底
+  });
+
+  it("导入：migrationSource=workbuddy + ai-title 作标题 + 有效窗口锚点", async () => {
+    const result = await service.importWorkbuddySessions({ sessionIds: [WB_ID], agentId: "agent-1" });
+    expect(result.imported).toHaveLength(1);
+    const arg = createSession.mock.calls[0][0];
+    expect(arg.agentId).toBe("agent-1");
+    expect(arg.title).toBe("WB 显式标题"); // 导入解析 ai-title 优先
+    expect(arg.data.migrationSource).toBe("workbuddy");
+    expect(arg.data.importedSessionId).toMatch(/^workbuddy-/);
+    expect(arg.data.sourceModel).toBe("deepseek-v4.1-flash");
+    const turns = importTurns.mock.calls[0][1];
+    expect(turns).toHaveLength(1);
+    expect((turns[0].messages[1].content[0] as any).text).toBe("WB 回答");
+    expect(importTurns.mock.calls[0][2]?.effectiveContextWindow).toBe(EXPECTED_EFFECTIVE_WINDOW);
+  });
+
+  it("幂等：getSessionById 命中 → skipped already_imported", async () => {
+    getSessionById.mockResolvedValue({ id: "workbuddy-existing" });
+    const result = await service.importWorkbuddySessions({ sessionIds: [WB_ID] });
+    expect(result.skipped).toEqual([{ sessionId: WB_ID, reason: "already_imported" }]);
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it("导入消息失败 → 回滚删除半成品会话并记 failed", async () => {
+    importTurns.mockRejectedValue(new Error("write failed"));
+    const result = await service.importWorkbuddySessions({ sessionIds: [WB_ID] });
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0].reason).toContain("write failed");
+    expect(deleteSession).toHaveBeenCalled();
+  });
+
+  it("不存在的 sessionId → skipped session_not_found", async () => {
+    const result = await service.importWorkbuddySessions({ sessionIds: ["nope"] });
+    expect(result.skipped).toEqual([{ sessionId: "nope", reason: "session_not_found" }]);
+  });
+});

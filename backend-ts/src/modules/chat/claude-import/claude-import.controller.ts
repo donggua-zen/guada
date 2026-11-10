@@ -9,21 +9,14 @@ export class ClaudeImportController {
 
   /**
    * 扫描可导入会话。
-   * source: claudeCode（缺省）| zcode | dsh | codex。缺省值保证旧调用方行为不变。
+   * source: claudeCode（缺省）| zcode | dsh | codex | workbuddy。缺省值保证旧调用方行为不变。
    */
   @Post("scan")
   async scan(
     @Body()
     body: { source?: ImportSource; modifiedSince?: number; limit?: number } = {},
   ) {
-    const source: ImportSource =
-      body?.source === "zcode"
-        ? "zcode"
-        : body?.source === "dsh"
-          ? "dsh"
-          : body?.source === "codex"
-            ? "codex"
-            : "claudeCode";
+    const source: ImportSource = this.normalizeSource(body?.source);
     const opts = {
       ...(typeof body?.modifiedSince === "number" ? { modifiedSince: body.modifiedSince } : {}),
       ...(typeof body?.limit === "number" ? { limit: body.limit } : {}),
@@ -36,6 +29,9 @@ export class ClaudeImportController {
     }
     if (source === "codex") {
       return this.claudeImportService.scanCodexSessions(opts);
+    }
+    if (source === "workbuddy") {
+      return this.claudeImportService.scanWorkbuddySessions(opts);
     }
     return this.claudeImportService.scanClaudeSessions(opts);
   }
@@ -51,14 +47,7 @@ export class ClaudeImportController {
       groupId?: string;
     },
   ) {
-    const source: ImportSource =
-      body?.source === "zcode"
-        ? "zcode"
-        : body?.source === "dsh"
-          ? "dsh"
-          : body?.source === "codex"
-            ? "codex"
-            : "claudeCode";
+    const source: ImportSource = this.normalizeSource(body?.source);
     const params = {
       sessionIds: Array.isArray(body?.sessionIds) ? body.sessionIds : [],
       ...(body?.agentId ? { agentId: body.agentId } : {}),
@@ -73,6 +62,17 @@ export class ClaudeImportController {
     if (source === "codex") {
       return this.claudeImportService.importCodexSessions(params);
     }
+    if (source === "workbuddy") {
+      return this.claudeImportService.importWorkbuddySessions(params);
+    }
     return this.claudeImportService.importClaudeSessions(params);
+  }
+
+  private normalizeSource(value?: ImportSource): ImportSource {
+    if (value === "zcode") return "zcode";
+    if (value === "dsh") return "dsh";
+    if (value === "codex") return "codex";
+    if (value === "workbuddy") return "workbuddy";
+    return "claudeCode";
   }
 }
