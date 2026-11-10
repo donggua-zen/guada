@@ -447,6 +447,7 @@ export default {
     sourceZcode: 'ZCode',
     sourceDsh: 'DSH (DeepSeek)',
     sourceCodex: 'Codex',
+    sourceWorkbuddy: 'WorkBuddy',
     info: '只读扫描 {path}，不改动源文件；导入会新建本地副本，原始时间与对话内容保留，同一会话重复导入会自动跳过。',
     infoAria: '导入说明',
     guideOpen: '导入说明',

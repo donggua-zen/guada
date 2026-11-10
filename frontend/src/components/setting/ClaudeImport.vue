@@ -306,7 +306,7 @@ interface SourceState {
     error?: string
 }
 
-const SOURCES: ImportSource[] = ['claudeCode', 'zcode', 'dsh', 'codex']
+const SOURCES: ImportSource[] = ['claudeCode', 'zcode', 'dsh', 'codex', 'workbuddy']
 
 const source = ref<ImportSource>('claudeCode')
 const sources = reactive<Record<ImportSource, SourceState>>({
@@ -314,6 +314,7 @@ const sources = reactive<Record<ImportSource, SourceState>>({
     zcode: { status: 'idle', candidates: [], roots: [] },
     dsh: { status: 'idle', candidates: [], roots: [] },
     codex: { status: 'idle', candidates: [], roots: [] },
+    workbuddy: { status: 'idle', candidates: [], roots: [] },
 })
 /** 勾选按来源隔离：各来源的 sessionId 空间与幂等锚点都不同 */
 const selection = reactive<Record<ImportSource, Set<string>>>({
@@ -321,6 +322,7 @@ const selection = reactive<Record<ImportSource, Set<string>>>({
     zcode: new Set(),
     dsh: new Set(),
     codex: new Set(),
+    workbuddy: new Set(),
 })
 
 const keyword = ref('')
@@ -367,6 +369,7 @@ function sourceLabel(value: ImportSource): string {
     if (value === 'zcode') return t('settings.claudeImport.sourceZcode')
     if (value === 'dsh') return t('settings.claudeImport.sourceDsh')
     if (value === 'codex') return t('settings.claudeImport.sourceCodex')
+    if (value === 'workbuddy') return t('settings.claudeImport.sourceWorkbuddy')
     return t('settings.claudeImport.sourceClaude')
 }
 
@@ -505,6 +508,7 @@ function scannedPath(): string {
     if (source.value === 'zcode') return '~/.zcode/cli/db/db.sqlite'
     if (source.value === 'dsh') return '~/.dsh/sessions'
     if (source.value === 'codex') return '~/.codex/sessions'
+    if (source.value === 'workbuddy') return '~/.workbuddy/projects（或 ~/.workbuddy-ai/projects）'
     return '~/.claude/projects'
 }
 

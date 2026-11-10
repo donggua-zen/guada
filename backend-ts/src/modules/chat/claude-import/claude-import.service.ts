@@ -51,6 +51,12 @@ import {
   scanCodexSessions as scanCodexSessionSummaries,
   type CodexSessionSummary,
 } from "./codex-session.reader";
+import {
+  readWorkbuddySession,
+  scanWorkbuddySessions as scanWorkbuddySessionSummaries,
+  workbuddyProjectRoots,
+  type WorkbuddySessionSummary,
+} from "./workbuddy-session.reader";
 import type { ImportCompactionPoint } from "../../../common/persistence/types";
 import type { Turn } from "../../../common/types/conversation.types";
 import { resolveContextWindowBudget } from "../compaction/window-budget";
@@ -85,8 +91,8 @@ export interface ClaudeImportResult {
   failed: Array<{ sessionId: string; reason: string }>;
 }
 
-/** 导入来源：claudeCode（~/.claude/projects jsonl）| zcode（~/.zcode/cli/db/db.sqlite）| dsh（~/.dsh/sessions）| codex（~/.codex/sessions） */
-export type ImportSource = "claudeCode" | "zcode" | "dsh" | "codex";
+/** 导入来源：claudeCode | zcode | dsh | codex | workbuddy（腾讯 AI 编程应用） */
+export type ImportSource = "claudeCode" | "zcode" | "dsh" | "codex" | "workbuddy";
 
 export interface ZcodeImportCandidate extends ImportCandidateExtras {
   provider: "zcode";
@@ -110,6 +116,16 @@ export interface DshImportCandidate extends ImportCandidateExtras {
 
 export interface CodexImportCandidate extends ImportCandidateExtras {
   provider: "codex";
+  sessionId: string;
+  sourcePath: string;
+  workspacePath?: string;
+  previewTitle?: string;
+  createdAt?: number;
+  updatedAt: number;
+}
+
+export interface WorkbuddyImportCandidate extends ImportCandidateExtras {
+  provider: "workbuddy";
   sessionId: string;
   sourcePath: string;
   workspacePath?: string;
@@ -282,7 +298,15 @@ export class ClaudeImportService {
       .update(`${source}:${normalized}:${sessionId}`)
       .digest("hex");
     const prefix =
-      source === "zcode" ? "zcode" : source === "dsh" ? "dsh" : source === "codex" ? "codex" : "claude";
+      source === "zcode"
+        ? "zcode"
+        : source === "dsh"
+          ? "dsh"
+          : source === "codex"
+            ? "codex"
+            : source === "workbuddy"
+              ? "workbuddy"
+              : "claude";
     return `${prefix}-${hash.slice(0, 20)}`;
   }
 
@@ -1140,6 +1164,191 @@ export class ClaudeImportService {
 
     this.logger.log(
       `已导入 Codex 会话 ${summary.id} → ${session.id}（${parsed.turns.length} 轮）`,
+    );
+    result.imported.push({
+      sessionId: summary.id,
+      importedSessionId: session.id,
+      title,
+    });
+  }
+
+  // ══════════════ WorkBuddy 来源（~/.workbuddy[-ai]/projects） ══════════════
+
+  /** 扫描 WorkBuddy 会话（双根）；目录不存在返回空候选 */
+  async scanWorkbuddySessions(
+    opts: { modifiedSince?: number; limit?: number; withImported?: boolean } = {},
+  ): Promise<{ candidates: WorkbuddyImportCandidate[]; roots: string[] }> {
+    const roots = workbuddyProjectRoots();
+    if (roots.length === 0) return { candidates: [], roots: [] };
+    const limit = Math.min(Math.max(opts.limit ?? MAX_SCAN_RESULTS, 1), MAX_SCAN_RESULTS);
+
+    let summaries: WorkbuddySessionSummary[] = [];
+    try {
+      summaries = scanWorkbuddySessionSummaries(roots);
+    } catch (err: any) {
+      this.logger.warn(`扫描 WorkBuddy 会话失败: ${err?.message ?? err}`);
+      return { candidates: [], roots };
+    }
+
+    const candidates: WorkbuddyImportCandidate[] = [];
+    for (const summary of summaries) {
+      if (candidates.length >= limit) break;
+      if (opts.modifiedSince !== undefined && summary.updatedAt < opts.modifiedSince) continue;
+      let sizeBytes = 0;
+      try {
+        sizeBytes = fs.statSync(summary.sourcePath).size;
+      } catch {
+        // 文件刚被移除：忽略体积
+      }
+      candidates.push({
+        provider: "workbuddy",
+        sessionId: summary.id,
+        sourcePath: summary.sourcePath,
+        ...(summary.cwd ? { workspacePath: summary.cwd } : {}),
+        ...(summary.previewTitle ? { previewTitle: summary.previewTitle } : {}),
+        ...(summary.createdAt !== undefined ? { createdAt: summary.createdAt } : {}),
+        updatedAt: summary.updatedAt,
+        ...(sizeBytes > 0 ? { sizeBytes } : {}),
+      });
+    }
+
+    candidates.sort((a, b) => b.updatedAt - a.updatedAt);
+    const page = candidates.slice(0, limit);
+    if (opts.withImported !== false) {
+      await this.annotateImported(page, "workbuddy");
+    }
+    return { candidates: page, roots };
+  }
+
+  async importWorkbuddySessions(params: {
+    sessionIds: string[];
+    agentId?: string;
+    groupId?: string;
+  }): Promise<ClaudeImportResult> {
+    const result: ClaudeImportResult = { imported: [], skipped: [], failed: [] };
+    const sessionIds = Array.from(new Set(params.sessionIds.map((id) => id.trim()).filter(Boolean)));
+    if (sessionIds.length === 0) return result;
+
+    const agentId = await this.resolveAgentId(params.agentId);
+    const modelId = await this.resolveModelId(agentId);
+    const effectiveContextWindow = this.resolveEffectiveContextWindow(modelId);
+
+    const roots = workbuddyProjectRoots();
+    if (roots.length === 0) {
+      for (const sessionId of sessionIds) {
+        result.skipped.push({ sessionId, reason: "db_not_found" });
+      }
+      return result;
+    }
+
+    // sessionId → 会话摘要（双根同名时取 mtime 新者）
+    const byId = new Map<string, WorkbuddySessionSummary>();
+    try {
+      for (const summary of scanWorkbuddySessionSummaries(roots)) {
+        const existing = byId.get(summary.id);
+        if (!existing || summary.updatedAt > existing.updatedAt) byId.set(summary.id, summary);
+      }
+    } catch (err: any) {
+      this.logger.warn(`扫描 WorkBuddy 会话失败: ${err?.message ?? err}`);
+    }
+
+    for (const sessionId of sessionIds) {
+      try {
+        const found = byId.get(sessionId);
+        if (!found) {
+          result.skipped.push({ sessionId, reason: "session_not_found" });
+          continue;
+        }
+        await this.importWorkbuddySingle(
+          found,
+          { ...params, agentId, modelId, effectiveContextWindow },
+          result,
+        );
+      } catch (err: any) {
+        this.logger.warn(`导入 WorkBuddy 会话失败 ${sessionId}: ${this.describeImportError(err)}`);
+        result.failed.push({ sessionId, reason: this.describeImportError(err) });
+      }
+    }
+    return result;
+  }
+
+  private async importWorkbuddySingle(
+    summary: WorkbuddySessionSummary,
+    params: {
+      agentId?: string;
+      modelId?: string;
+      groupId?: string;
+      effectiveContextWindow?: number;
+    },
+    result: ClaudeImportResult,
+  ): Promise<void> {
+    const importedId = ClaudeImportService.importedSessionId(
+      summary.sourcePath,
+      summary.id,
+      "workbuddy",
+    );
+
+    const existing = await this.sessionService.getSessionById(importedId).catch(() => null);
+    if (existing) {
+      result.skipped.push({ sessionId: summary.id, reason: "already_imported" });
+      return;
+    }
+
+    const parsed = readWorkbuddySession(summary.sourcePath);
+    if (parsed.turns.length === 0) {
+      result.skipped.push({ sessionId: summary.id, reason: "no_visible_turns" });
+      return;
+    }
+
+    // workspace：源 cwd 仍存在才复用
+    const dir = summary.cwd;
+    let workspacePath: string | undefined;
+    if (dir && fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
+      workspacePath = dir;
+    }
+
+    const title =
+      parsed.meta.title ||
+      summary.previewTitle ||
+      `Imported WorkBuddy session ${summary.id.slice(0, 8)}`;
+
+    const session = await this.sessionService.createSession({
+      agentId: params.agentId,
+      ...(params.modelId ? { modelId: params.modelId } : {}),
+      title,
+      ...(workspacePath ? { workspacePath } : {}),
+      ...(params.groupId ? { groupId: params.groupId } : {}),
+      data: {
+        migrationSource: "workbuddy",
+        importedSessionId: importedId,
+        importedFrom: summary.sourcePath,
+        importedSessionKey: summary.id,
+        ...(parsed.meta.model ? { sourceModel: parsed.meta.model } : {}),
+      },
+    });
+
+    try {
+      // WorkBuddy 无压缩事件：无需合成 compaction
+      const importOpts = {
+        ...(params.effectiveContextWindow !== undefined
+          ? { effectiveContextWindow: params.effectiveContextWindow }
+          : {}),
+      };
+      await this.messageStore.importTurns(
+        session.id,
+        parsed.turns,
+        Object.keys(importOpts).length > 0 ? importOpts : undefined,
+      );
+    } catch (err: any) {
+      this.logger.error(
+        `导入消息失败，回滚会话 ${session.id}: ${err?.message ?? err}`,
+      );
+      await this.sessionService.deleteSession(session.id).catch(() => {});
+      throw err;
+    }
+
+    this.logger.log(
+      `已导入 WorkBuddy 会话 ${summary.id} → ${session.id}（${parsed.turns.length} 轮）`,
     );
     result.imported.push({
       sessionId: summary.id,

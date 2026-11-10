@@ -8,15 +8,16 @@ import type { ApiContext } from "./api-context";
  * - zcode：只读扫描本机 ~/.zcode/cli/db/db.sqlite
  * - dsh：只读扫描本机 ~/.dsh/sessions 的事件日志（多帧 zstd）
  * - codex：只读扫描本机 ~/.codex/sessions 的 rollout 分页
+ * - workbuddy：只读扫描本机 ~/.workbuddy[-ai]/projects 的事件 JSONL
  *
  * import 幂等：同源已导入过返回 skipped already_imported。
  */
 
 /** 导入来源 */
-export type ImportSource = "claudeCode" | "zcode" | "dsh" | "codex";
+export type ImportSource = "claudeCode" | "zcode" | "dsh" | "codex" | "workbuddy";
 
 export interface ClaudeImportCandidate {
-  provider: "claudeCode" | "zcode" | "dsh" | "codex";
+  provider: "claudeCode" | "zcode" | "dsh" | "codex" | "workbuddy";
   sessionId: string;
   sourcePath: string;
   workspacePath?: string;

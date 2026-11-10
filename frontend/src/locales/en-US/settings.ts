@@ -452,6 +452,7 @@ export default {
     sourceZcode: 'ZCode',
     sourceDsh: 'DSH (DeepSeek)',
     sourceCodex: 'Codex',
+    sourceWorkbuddy: 'WorkBuddy',
     info: 'Scans {path} read-only and never touches the source files. Importing creates local copies with original timestamps and conversation content preserved; re-importing the same session is skipped.',
     infoAria: 'Import help',
     guideOpen: 'What gets imported',
