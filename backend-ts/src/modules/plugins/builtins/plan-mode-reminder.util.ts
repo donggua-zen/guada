@@ -29,11 +29,18 @@ const ASK_USER_TOOL_NAME = "ask_user";
 /** 计划模式插件 id（用于确认插件确实启用，禁用插件也会执行 onLoad） */
 const PLAN_MODE_PLUGIN_ID = "plan-mode";
 
+/**
+ * 提醒文案版本。
+ * 内容变更时递增：已落库的旧版本完整提醒会被视为过期，下次运行补一份新版本。
+ */
+export const PLAN_MODE_REMINDER_VERSION = 2;
+
 export type PlanModeReminderKind = "full" | "exit";
 
 export interface PlanModeMarker {
   kind: PlanModeReminderKind;
   epoch: string | null;
+  version: number | null;
 }
 
 /**
@@ -54,8 +61,8 @@ function buildFullReminder(
   const phase1 = hasSubAgentTool
     ? `### Phase 1: Initial Understanding
 ${phase1Goal}
-1. Broad search first: launch up to 3 read-only research sub-agents in parallel (a single message with multiple tool calls), one search focus each (the code path, existing patterns worth reusing, tests). Use a single sub-agent when the task is isolated to known files. Once you delegate a search, do not also run it yourself — wait for the result.
-2. Read-only commands are available (${READ_ONLY_NOTE}). Use them to inspect repository state, or to investigate directly when delegating is not worthwhile.
+1. Critical: For broad codebase exploration, delegate to read-only research sub-agents. Launch up to 3 in parallel (a single message with multiple tool calls), one search focus each (the code path, existing patterns worth reusing, tests). Use a single sub-agent when the task is isolated to known files. Once you delegate a search, do not also run it yourself — you keep the conclusion, not the file dumps.
+2. Read-only commands are available (${READ_ONLY_NOTE}). Read a known file or run a targeted check yourself; for broad or multi-area exploration, let the sub-agents cover it.
 3. Focus on understanding the request and the code it touches. Actively search for existing functions, utilities, and patterns that can be reused — avoid proposing new code when suitable implementations already exist.`
     : `### Phase 1: Initial Understanding
 ${phase1Goal}
@@ -103,14 +110,20 @@ At the very end of your turn, once you are happy with your final plan, call Exit
 ${important}`;
 }
 
-/** 稀疏提醒（同 run 的后续迭代，控制 token 成本）——提问方式同样按工具面二选一 */
-function buildSparseReminder(hasAskTool: boolean): string {
+/** 稀疏提醒（同 run 的后续迭代，控制 token 成本）——提问/子代理方式同样按工具面二选一 */
+function buildSparseReminder(
+  hasAskTool: boolean,
+  hasSubAgentTool: boolean,
+): string {
   const ending = hasAskTool
     ? "End your turn with either the ask_user tool (for clarifications) or ExitPlanMode (for plan approval)."
     : "End your turn with ExitPlanMode when the plan is ready.";
+  const delegation = hasSubAgentTool
+    ? "For broad exploration, delegate to read-only research sub-agents in parallel; do not repeat their searches. "
+    : "";
   return (
     "Plan mode still active (see the full instructions earlier in the conversation). " +
-    `Read-only. Follow the 4-phase workflow. ${ending}`
+    `Read-only. Follow the 4-phase workflow. ${delegation}${ending}`
   );
 }
 
@@ -132,6 +145,10 @@ export function findLatestPlanModeMarker(
         epoch:
           typeof metadata.planModeEpoch === "string"
             ? metadata.planModeEpoch
+            : null,
+        version:
+          typeof metadata.planModeReminderVersion === "number"
+            ? metadata.planModeReminderVersion
             : null,
       };
     }
@@ -177,6 +194,7 @@ function persistedReminderMessage(
       plugin: PLAN_MODE_PLUGIN_ID,
       hidden: true,
       planModeReminder: kind,
+      planModeReminderVersion: PLAN_MODE_REMINDER_VERSION,
       ...(epoch ? { planModeEpoch: epoch } : {}),
     },
     content: [{ type: "text", text: wrapSystemReminder(text) }],
@@ -241,23 +259,32 @@ export function buildPlanModeTurnInjection(
   if (!hasTool(resolved, "ExitPlanMode")) return {};
 
   const hasAskTool = hasTool(resolved, ASK_USER_TOOL_NAME);
+  const hasSubAgentTool = hasTool(resolved, "subagent_spawn");
 
-  // 当前周期已有可见完整提醒：后续迭代只给稀疏版
-  if (latest?.kind === "full" && latest.epoch === epoch) {
+  // 当前周期已有可见且版本匹配的完整提醒：后续迭代只给稀疏版
+  if (
+    latest?.kind === "full" &&
+    latest.epoch === epoch &&
+    latest.version === PLAN_MODE_REMINDER_VERSION
+  ) {
     if (iterationCount > 1) {
       return {
-        transient: [transientReminderMessage(buildSparseReminder(hasAskTool))],
+        transient: [
+          transientReminderMessage(
+            buildSparseReminder(hasAskTool, hasSubAgentTool),
+          ),
+        ],
       };
     }
     return {};
   }
 
-  // 无完整提醒 / epoch 不匹配 / 被压缩遮蔽：重新落一份完整版
+  // 无完整提醒 / epoch 不匹配 / 版本过期 / 被压缩遮蔽：重新落一份完整版
   return {
     persist: [
       persistedReminderMessage(
         sessionContext,
-        buildFullReminder(hasTool(resolved, "subagent_spawn"), hasAskTool),
+        buildFullReminder(hasSubAgentTool, hasAskTool),
         "full",
         epoch,
       ),

@@ -171,6 +171,64 @@ describe("SubAgentManager", () => {
       });
     });
 
+    it("计划模式下 spawn：子会话继承 planEnabled 并强制只读", async () => {
+      const { manager, sessionStore, chatRunner } = setup();
+      completesImmediately(chatRunner);
+      const parentContext = createFakeParentContext({
+        getPlanEnabled: () => true,
+        getSandboxMode: () => "danger-full-access",
+      });
+
+      await manager.spawn({ parentContext, name: "调研", task: "查一下" });
+
+      expect(sessionStore.createCalls[0].settings).toMatchObject({
+        planEnabled: true,
+        sandboxMode: "read-only",
+      });
+    });
+
+    it("计划模式下指定 agentId 也应用只读继承", async () => {
+      const { manager, sessionStore, chatRunner, agentStore } = setup();
+      completesImmediately(chatRunner);
+      agentStore.agents.set("coder", {
+        id: "coder",
+        name: "Coder",
+        modelId: "m-coder",
+      });
+      const parentContext = createFakeParentContext({
+        getPlanEnabled: () => true,
+        getSandboxMode: () => "workspace-write",
+      });
+
+      await manager.spawn({
+        parentContext,
+        name: "调研",
+        task: "查一下",
+        agentId: "coder",
+      });
+
+      expect(sessionStore.createCalls[0].settings).toMatchObject({
+        planEnabled: true,
+        sandboxMode: "read-only",
+      });
+    });
+
+    it("非计划模式：继续继承父 sandboxMode，不写 planEnabled", async () => {
+      const { manager, sessionStore, chatRunner } = setup();
+      completesImmediately(chatRunner);
+      const parentContext = createFakeParentContext({
+        getPlanEnabled: () => false,
+        getSandboxMode: () => "danger-full-access",
+      });
+
+      await manager.spawn({ parentContext, name: "执行", task: "跑一下" });
+
+      expect(sessionStore.createCalls[0].settings.sandboxMode).toBe(
+        "danger-full-access",
+      );
+      expect(sessionStore.createCalls[0].settings.planEnabled).toBeUndefined();
+    });
+
     it("Windows 上继承的 read-only 归一化为 workspace-write（旧会话迁移）", async () => {
       const { manager, sessionStore, chatRunner } = setup();
       completesImmediately(chatRunner);

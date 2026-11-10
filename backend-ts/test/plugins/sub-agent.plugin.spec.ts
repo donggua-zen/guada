@@ -93,6 +93,49 @@ describe("SubAgentPlugin 注册契约", () => {
     expect(captured.commandProviders[0].trigger).toBe("mention");
   });
 
+  it("subagent_spawn 描述把“跨文件调研/并行”写成显式用途", async () => {
+    const { plugin } = makePlugin();
+    const { api, captured } = makeApi();
+    await plugin.onLoad(api);
+
+    const description = String(captured.tools[0].description);
+    expect(description).toContain("research/explore the codebase in parallel");
+    expect(description).toContain("multiple files, directories, or naming conventions");
+    expect(description).toContain("you only need the conclusion, not the file dumps");
+    expect(description).toContain("Once you delegate a search, do not also run it yourself");
+    expect(description).toContain("In plan mode, sub-agents run read-only");
+  });
+
+  it("agentId 为可选：省略时走 generic，schema 不再拒绝", async () => {
+    const { plugin } = makePlugin();
+    const { api, captured } = makeApi();
+    await plugin.onLoad(api);
+
+    const schema = captured.tools[0].inputSchema;
+    expect(() => schema.parse({ name: "调研", task: "查一下" })).not.toThrow();
+    expect(() =>
+      schema.parse({ name: "调研", task: "查一下", agentId: "generic" }),
+    ).not.toThrow();
+  });
+
+  it("使用指南包含广搜委派、单文件直查与计划模式只读约束", async () => {
+    const { plugin } = makePlugin();
+    const { api, captured } = makeApi();
+    await plugin.onLoad(api);
+
+    const text = await captured.prompts[0].content({
+      session: {
+        sessionType: "web",
+        getSettings: () => ({ generic: true }),
+      },
+    });
+
+    expect(text).toContain("Broad codebase exploration/research across multiple files");
+    expect(text).toContain("single known-file lookup");
+    expect(text).toContain("In plan mode, sub-agents are read-only");
+    expect(text).toContain("do not repeat the same search yourself");
+  });
+
   it("toolkit 的自治理标记与递归保护保持不变", async () => {
     const { plugin } = makePlugin();
     const { api, captured } = makeApi();

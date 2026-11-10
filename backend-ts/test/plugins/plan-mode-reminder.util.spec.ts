@@ -1,6 +1,7 @@
 import {
   buildPlanModeTurnInjection,
   findLatestPlanModeMarker,
+  PLAN_MODE_REMINDER_VERSION,
 } from "../../src/modules/plugins/builtins/plan-mode-reminder.util";
 import type { ISessionContext } from "../../src/modules/chat/session-context";
 import type { Message } from "../../src/common/types/conversation.types";
@@ -65,6 +66,7 @@ describe("buildPlanModeTurnInjection", () => {
       metadata: {
         planModeReminder: kind,
         planModeEpoch: epoch,
+        planModeReminderVersion: PLAN_MODE_REMINDER_VERSION,
         ...extra,
       },
       content: [{ type: "text", text: "marker" }],
@@ -92,6 +94,14 @@ describe("buildPlanModeTurnInjection", () => {
     expect(textOf(message)).toContain("<system_reminder>");
     expect(textOf(message)).toContain("</system_reminder>");
     expect(textOf(message)).toContain("Plan mode is active");
+    expect(textOf(message)).toContain(
+      "Critical: For broad codebase exploration, delegate to read-only research sub-agents",
+    );
+    expect(textOf(message)).toContain("up to 3 in parallel");
+    expect(textOf(message)).toContain(
+      "you keep the conclusion, not the file dumps",
+    );
+    expect(textOf(message)).toContain("do not also run it yourself");
     expect(textOf(message)).toContain("Phase 1");
     expect(textOf(message)).toContain("ExitPlanMode");
     expect(message.kind).toBe("model");
@@ -123,9 +133,25 @@ describe("buildPlanModeTurnInjection", () => {
     expect(textOf(message)).toContain("<system_reminder>");
     expect(textOf(message)).toContain("</system_reminder>");
     expect(textOf(message)).toContain("Plan mode still active");
+    expect(textOf(message)).toContain(
+      "delegate to read-only research sub-agents in parallel",
+    );
+    expect(textOf(message)).toContain("do not repeat their searches");
     expect(textOf(message)).not.toContain("Phase 1");
     expect(message.metadata?.transient).toBe(true);
     expect(message.metadata?.planModeReminder).toBeUndefined();
+  });
+
+  it("子代理工具不在册：稀疏提醒不提子代理", () => {
+    const result = buildPlanModeTurnInjection(
+      createContext({ planEnabled: true, subAgentTool: false }),
+      2,
+      [markerMessage("full", "epoch-1")],
+    );
+    const text = textOf(result.transient![0]);
+    expect(text).toContain("Plan mode still active");
+    expect(text).not.toContain("sub-agent");
+    expect(text).not.toContain("subagent_spawn");
   });
 
   it("完整提醒被压缩遮蔽（历史里找不到）：后续迭代重新落库", () => {
@@ -137,6 +163,23 @@ describe("buildPlanModeTurnInjection", () => {
     expect(result.persist).toHaveLength(1);
     expect(result.persist![0].metadata?.planModeReminder).toBe("full");
     expect(result.transient ?? []).toHaveLength(0);
+  });
+
+  it("旧版本完整提醒视为过期：补一份当前版本的完整提醒", () => {
+    const result = buildPlanModeTurnInjection(
+      createContext({ planEnabled: true }),
+      1,
+      [
+        markerMessage("full", "epoch-1", {
+          planModeReminderVersion: PLAN_MODE_REMINDER_VERSION - 1,
+        }),
+      ],
+    );
+    expect(result.persist).toHaveLength(1);
+    expect(result.persist![0].metadata?.planModeReminder).toBe("full");
+    expect(result.persist![0].metadata?.planModeReminderVersion).toBe(
+      PLAN_MODE_REMINDER_VERSION,
+    );
   });
 
   it("旧 epoch 的完整提醒不算数：重进计划模式会落新的一份", () => {
@@ -240,9 +283,9 @@ describe("buildPlanModeTurnInjection", () => {
       [],
     );
     const text = textOf(result.persist![0]);
-    expect(text).toContain(
-      "launch up to 3 read-only research sub-agents in parallel",
-    );
+    expect(text).toContain("delegate to read-only research sub-agents");
+    expect(text).toContain("Launch up to 3 in parallel");
+    expect(text).toContain("do not also run it yourself");
   });
 
   it("subagent_spawn 不在册：Phase 1 退回直接调查，不提子代理", () => {
@@ -267,7 +310,11 @@ describe("findLatestPlanModeMarker", () => {
     role: "user",
     kind: "model",
     source: { kind: "plugin", plugin: "plan-mode" },
-    metadata: { planModeReminder: kind, planModeEpoch: epoch },
+    metadata: {
+      planModeReminder: kind,
+      planModeEpoch: epoch,
+      planModeReminderVersion: PLAN_MODE_REMINDER_VERSION,
+    },
     content: [{ type: "text", text: "x" }],
   });
 
@@ -278,7 +325,26 @@ describe("findLatestPlanModeMarker", () => {
         { id: "u", role: "user", kind: "user", content: [] } as Message,
         marker("exit", "e1"),
       ]),
-    ).toEqual({ kind: "exit", epoch: "e1" });
+    ).toEqual({
+      kind: "exit",
+      epoch: "e1",
+      version: PLAN_MODE_REMINDER_VERSION,
+    });
+  });
+
+  it("无版本号的旧标记：version 返回 null", () => {
+    expect(
+      findLatestPlanModeMarker([
+        {
+          id: "old",
+          role: "user",
+          kind: "model",
+          source: { kind: "plugin", plugin: "plan-mode" },
+          metadata: { planModeReminder: "full", planModeEpoch: "e1" },
+          content: [{ type: "text", text: "x" }],
+        } as Message,
+      ]),
+    ).toEqual({ kind: "full", epoch: "e1", version: null });
   });
 
   it("没有标记返回 null", () => {

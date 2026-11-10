@@ -242,8 +242,15 @@ export class SubAgentManager implements OnModuleInit {
 
     // 思考强度：无论是否有智能体，都从父会话继承
     settings.thinkingEffort = parentContext.getSettings("thinkingEffort");
-    // 安全模式：从父会话继承，防止子代理权限逃逸（如 workspace-write → danger-full-access）
-    settings.sandboxMode = normalizeSandboxMode(parentContext.getSandboxMode());
+    // 安全模式：从父会话继承，防止子代理权限逃逸（如 workspace-write → danger-full-access）。
+    // 父会话在计划模式时强制只读：sandbox + planEnabled 双保险。
+    // Windows 上 sandboxMode 会被 normalize 成 workspace-write（用户档位已取消），
+    // 但子会话继承 planEnabled 后，ToolExecutor 计划门 + shell 只读仍然生效。
+    const parentPlanMode = parentContext.getPlanEnabled?.() === true;
+    settings.sandboxMode = parentPlanMode
+      ? "read-only"
+      : normalizeSandboxMode(parentContext.getSandboxMode());
+    if (parentPlanMode) settings.planEnabled = true;
     // 附加连接配置：从父会话继承（如 ssh-connection 远程连接），使子代理可复用主代理绑定的连接
     settings.attachments = parentContext.getSettings("attachments") ?? {};
 

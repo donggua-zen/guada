@@ -105,8 +105,10 @@ export class SubAgentPlugin extends PluginBase {
     // ── spawn：创建 + 执行子代理 ──
     subKit.registerTool({
       name: "subagent_spawn",
-      description: `Create a sub-agent to execute an independent task.
-The sub-agent has its own independent conversation context and tool capabilities.
+      description: `Create a sub-agent to execute an independent task, or to research/explore the codebase in parallel.
+Use it when answering means sweeping multiple files, directories, or naming conventions and you only need the conclusion, not the file dumps; also for independent sub-tasks that can run concurrently.
+The sub-agent has its own independent conversation context and tool capabilities. Once you delegate a search, do not also run it yourself — wait for the result.
+In plan mode, sub-agents run read-only; use them for research, not for edits or state-changing commands.
 Foreground (default) blocks until done and returns the result. Background mode returns a Job ID immediately; track it with job_read / job_stop, continue the conversation with job_send, and you will be notified when it finishes.`,
       inputSchema: z.object({
         name: z
@@ -117,7 +119,12 @@ Foreground (default) blocks until done and returns the result. Background mode r
         task: z
           .string()
           .describe("Specific task description for the sub-agent to complete"),
-        agentId: z.string().describe("Agent ID"),
+        agentId: z
+          .string()
+          .optional()
+          .describe(
+            'Agent ID; omit or pass "generic" to use the generic sub-agent',
+          ),
         mode: z
           .enum(["foreground", "background"])
           .optional()
@@ -230,13 +237,19 @@ Foreground (default) blocks until done and returns the result. Background mode r
           "## Usage Guide",
           "",
           "### 1. When to Use",
+          "   - Broad codebase exploration/research across multiple files, directories, or naming conventions — especially when you only need the conclusion, not the file dumps.",
+          "   - Multiple independent research questions that can run in parallel; send them in a single message with multiple subagent_spawn calls.",
           "   - The task involves heavy reasoning, e.g., in-depth debugging, complex code review, technical research.",
           "   - You care only about the final deliverable and do not need to intervene in the sub-task's execution in real time.",
           "   - The sub-task is independent and can run in parallel with other tasks without blocking.",
           "",
           "### 2. When NOT to Use",
-          "   - The task can be completed with a single tool call → directly call that tool; no need to spawn a sub-agent.",
+          "   - A single known-file lookup or a task completable with one tool call → do it directly; broad or multi-area exploration → delegate.",
           "   - The task requires soliciting user input or obtaining real-time feedback during execution → sub-agents cannot directly interact with users; such interactions must remain in the main flow.",
+          "",
+          "### 2b. Plan Mode",
+          "   - In plan mode, sub-agents are read-only; do not ask them to write or run state-changing commands. Use them for research and report findings.",
+          "   - Once you delegate a search, do not repeat the same search yourself — wait for the sub-agent's conclusion.",
           "",
           "### 3. Priority for Selecting a Sub-Agent",
           "   When you decide that a sub-task is needed, determine which agent to use strictly in the following priority:",
