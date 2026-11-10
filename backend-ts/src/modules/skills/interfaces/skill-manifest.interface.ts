@@ -76,6 +76,12 @@ export interface SkillDefinition {
   resourceBase?: SkillResourceBase;
   /** 市场来源（详见 SkillOrigin；手动上传/Git 安装时缺省） */
   origin?: SkillOrigin;
+  /**
+   * v4：作用域声明（插件注册技能专用）——仅对哪些智能体可见。
+   * "self" = 来源插件注册的智能体；其余 = 智能体 id。
+   * 省略 = 全局可见（现状语义，仍受 settings.skills 偏好过滤）。
+   */
+  visibleTo?: import("../../plugins/types/plugin.types").VisibleToAgent;
 }
 
 /**

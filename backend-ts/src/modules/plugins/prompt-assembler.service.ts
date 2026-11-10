@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PluginRegistry } from "./registry/plugin-registry";
+import { isVisibleToAgent } from "./utils/agent-visibility";
 import {
   AssembledPromptSection,
   PluginContext,
@@ -62,6 +63,16 @@ export class PromptAssembler {
           if (!kit || !kit.enabled || kit.loadMode !== "eager") continue;
         }
         if (!scopeMatches(def, input.context)) continue;
+        // v4：作用域声明——限定智能体的段只对该智能体注入
+        if (
+          !isVisibleToAgent(
+            def.visibleTo,
+            rp.plugin.id,
+            input.context.session?.agentId ?? null,
+          )
+        ) {
+          continue;
+        }
         const text = await this.resolveText(def, input.context);
         if (!text) continue;
         sections.push({

@@ -18,6 +18,9 @@
     noDescription: 'No description',
     useAgent: 'Use this agent',
     agentSettings: 'Agent Settings',
+    pluginAgentBadge: 'Plugin',
+    pluginAgentTip: 'Plugin-registered agent (source: {plugin}); prompt & bound capabilities locked by plugin, the rest editable',
+    viewAgent: 'View',
     empty: 'No agents',
     emptyHint: 'Click the button above to create your first agent',
     importSuccess: 'Successfully imported {count} agents',
@@ -29,6 +32,11 @@
   modal: {
     editTitle: 'Edit Agent',
     createTitle: 'New Agent',
+    pluginViewTitle: 'Plugin Agent',
+    pluginBadge: 'Plugin-provided · partially editable',
+    pluginSource: 'Registered by plugin "{plugin}"',
+    readonlyHint: 'This agent is registered by a plugin: its prompt and capability scope are defined by the plugin code and cannot be edited. Disable or uninstall the plugin to remove it.',
+    promptSection: 'System Prompt (provided by plugin)',
     applyAll: 'Apply All Settings',
     saveSuccess: 'Agent updated successfully',
     saveFailed: 'Failed to save agent',
@@ -82,6 +90,9 @@
     tierAggressiveDesc: 'Aggressive - triggers at 90%, keeps 20%',
     // 提示词
     systemPromptLabel: 'System Prompt (Agent Settings)',
+    pluginPromptLocked: 'Prompt is provided by the plugin and cannot be edited',
+    pluginLockedKitBadge: 'Plugin-bound',
+    pluginLockedKitTip: 'Bound by the plugin: always on, cannot be toggled',
     systemPromptPlaceholder: 'Enter detailed settings',
     // 本地工具
     toolToggle: 'Feature Toggles',

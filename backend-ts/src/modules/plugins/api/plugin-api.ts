@@ -19,9 +19,11 @@ import {
   PluginLlmResult,
   PluginLlmStreamChunk,
   PluginLlmModelInfo,
+  PluginAgentDef,
   PLUGIN_API_VERSION,
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
+import { PluginAgentRegistry } from "../registry/plugin-agent.registry";
 import { Toolkit } from "../toolkit/toolkit";
 import { SkillRegistry } from "../../skills/core/skill-registry.service";
 import { createHash } from "crypto";
@@ -148,9 +150,23 @@ export interface PluginApi {
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
     toolSet?: string;
     description?: string;
+    /** 作用域声明（v4）：仅对哪些智能体注入本段；省略 = 全局 */
+    visibleTo?: import("../types/plugin.types").VisibleToAgent;
   }): void;
 
   registerRawTool(def: ToolHandlerDef): void;
+
+  // ── 插件专属智能体（v4） ──
+
+  /**
+   * 注册一个插件专属智能体（虚拟、不落盘，生命周期跟随插件）。
+   *
+   * 宿主把 id 归一化为 `plugin-<pluginId>-<id>`；能力默认收口为白名单
+   * （本插件的工具包与技能），其他智能体不受影响。配合能力侧
+   * `visibleTo: ["self"]` 声明可实现「专属智能体 + 专属能力」的隔离。
+   * 用户不可编辑/删除本智能体（HTTP 层 400）。
+   */
+  registerAgent(def: PluginAgentDef): void;
 
   // ── 提示词段（v2） ──
 
@@ -496,6 +512,7 @@ export class PluginApiImpl implements PluginApi {
         displayText: def.display?.text,
         displayAggregate: def.display?.aggregate,
         displayRenderer: def.display?.renderer,
+        visibleTo: def.visibleTo,
       };
 
       if (!this._toolDefs.find((x) => x.name === entry.name)) {
@@ -547,6 +564,7 @@ export class PluginApiImpl implements PluginApi {
       displayText: def.display?.text,
       displayAggregate: def.display?.aggregate,
       displayRenderer: def.display?.renderer,
+      visibleTo: def.visibleTo,
     };
 
     if (!this._toolDefs.find((x) => x.name === entry.name)) {
@@ -570,6 +588,8 @@ export class PluginApiImpl implements PluginApi {
     /** @deprecated 插件级 registerPrompt 上不消费；工具包作用域请用 toolkit.registerPrompt */
     toolSet?: string;
     description?: string;
+    /** 作用域声明（v4）：仅对哪些智能体注入本段；省略 = 全局 */
+    visibleTo?: import("../types/plugin.types").VisibleToAgent;
   }): void {
     const index = this._promptSeq++;
     const base =
@@ -580,6 +600,7 @@ export class PluginApiImpl implements PluginApi {
       scope: "global",
       text: def.content,
       description: def.description,
+      ...(def.visibleTo ? { visibleTo: def.visibleTo } : {}),
     });
   }
 
@@ -610,6 +631,39 @@ export class PluginApiImpl implements PluginApi {
   }
 
   // ── v2：提示词段 / 变换 / 动作命令 / Hook / 路径 ──
+
+  registerAgent(def: PluginAgentDef): void {
+    if (!def || typeof def !== "object") {
+      throw new Error(`plugin ${this.pluginId}: registerAgent requires a def`);
+    }
+    if (!def.id || typeof def.id !== "string") {
+      throw new Error(`plugin ${this.pluginId}: registerAgent requires an id`);
+    }
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(def.id)) {
+      throw new Error(
+        `plugin ${this.pluginId}: agent id "${def.id}" must match ^[a-z0-9][a-z0-9-]*$`,
+      );
+    }
+    if (!def.name || typeof def.name !== "string") {
+      throw new Error(
+        `plugin ${this.pluginId}: registerAgent("${def.id}") requires a name`,
+      );
+    }
+    if (
+      def.systemPrompt !== undefined &&
+      typeof def.systemPrompt !== "string"
+    ) {
+      throw new Error(
+        `plugin ${this.pluginId}: registerAgent("${def.id}") systemPrompt must be a string`,
+      );
+    }
+    if (this._agentDefs.find((x) => x.id === def.id)) {
+      throw new Error(
+        `plugin ${this.pluginId}: agent "${def.id}" already registered`,
+      );
+    }
+    this._agentDefs.push({ ...def });
+  }
 
   registerPromptSection(def: PromptSectionDef): void {
     if (!def?.name || typeof def.name !== "string") {
@@ -800,6 +854,7 @@ export class PluginApiImpl implements PluginApi {
   private _rpcHandlers: Record<string, RpcHandler> = {};
   private _providerTypeCards: ProviderTypeCard[] = [];
   private _protocolAdapters: ProtocolAdapterContribution[] = [];
+  private _agentDefs: PluginAgentDef[] = [];
 
   registerAttachmentType(reg: AttachmentTypeRegistration): void {
     if (!this._attachmentTypes.find((x) => x.id === reg.id)) {
@@ -908,6 +963,8 @@ export class PluginApiImpl implements PluginApi {
     author?: string;
     tags?: string[];
     resourceBase?: { kind: "directory" | "url" | "opaque"; path?: string; url?: string; description?: string };
+    /** 作用域声明（v4）：仅对哪些智能体可见；"self" = 本插件注册的智能体 */
+    visibleTo?: import("../types/plugin.types").VisibleToAgent;
   }): void {
     const registry = SkillRegistry.getInstance();
     if (!registry) {
@@ -932,6 +989,7 @@ export class PluginApiImpl implements PluginApi {
       source: "system",
       enabled: true,
       provider: `plugin:${this.pluginId}`,
+      ...(input.visibleTo ? { visibleTo: input.visibleTo } : {}),
       ...(rb
         ? {
             resourceBase:
@@ -1108,6 +1166,19 @@ export class PluginApiImpl implements PluginApi {
     for (const page of this._uiPages) {
       PluginRegistry.registerUiPage(this.pluginId, page);
     }
+
+    // 注册插件智能体（v4）：toolkits 缺省在此定格为本插件当前全部工具包，
+    // 之后插件内新增/删除工具包不会追溯改变已注册智能体的能力面。
+    for (const def of this._agentDefs) {
+      const resolved: PluginAgentDef = {
+        ...def,
+        toolkits:
+          def.toolkits ??
+          this._toolKits.map((tk) => tk.toRegistration().def.id),
+        skills: def.skills ?? undefined,
+      };
+      PluginAgentRegistry.commit(this.pluginId, def.id, resolved);
+    }
   }
 
   /** 获取命令提供者 供 PluginManager 消费 */
@@ -1143,5 +1214,10 @@ export class PluginApiImpl implements PluginApi {
   /** v2.2：本次 onLoad 注册的皮肤（v3 起 = 富主题，即带 runtimeScript/assetBase 的主题） */
   getSkins(): SkinRegistration[] {
     return this._themes.filter((theme) => theme.runtimeScript || theme.assetBase);
+  }
+
+  /** v4：本次 onLoad 注册的智能体声明（供生命周期诊断） */
+  getAgentDefs(): PluginAgentDef[] {
+    return this._agentDefs;
   }
 }

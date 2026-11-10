@@ -5,6 +5,7 @@ import { PluginContext } from "../../plugins/types/plugin.types";
 import { SkillOrchestrator } from "../core/skill-orchestrator.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
 import { isToolkitAllowedByRoleConfig } from "../../plugins/utils/role-toolkit-filter";
+import { isVisibleToAgent } from "../../plugins/utils/agent-visibility";
 import {
   formatSkillLocationHeader,
   truncateSkillInstructions,
@@ -128,6 +129,20 @@ export class SkillPlugin extends PluginBase {
           ),
       }),
       execute: async (args, ctx) => {
+        // v4：作用域声明校验——限定智能体的技能，其他智能体不可学习
+        const def = this.orchestrator.listSkills(true, ctx?.session.workspacePath, ctx?.session)
+          .find((s: any) => s.id === args.name.toLowerCase());
+        if (def?.visibleTo) {
+          const provider = String(def.provider || "");
+          const ownerPluginId = provider.startsWith("plugin:")
+            ? provider.substring("plugin:".length)
+            : "";
+          if (
+            !isVisibleToAgent(def.visibleTo, ownerPluginId, ctx?.session?.agentId ?? null)
+          ) {
+            throw new Error(`skill "${args.name}" is not available to this agent`);
+          }
+        }
         const result = await this.orchestrator.skillLearn(args.name, ctx?.session);
         if (!result) {
           throw new Error(`skill "${args.name}" not found`);
@@ -185,6 +200,17 @@ export class SkillPlugin extends PluginBase {
             context?.session,
           );
 
+          // v4：作用域声明过滤——插件限定智能体的技能只出现在该智能体的清单里
+          const agentId = context?.session?.agentId ?? null;
+          const scopedSkills = allSkills.filter((s: any) => {
+            if (!s.visibleTo) return true;
+            const provider = String(s.provider || "");
+            const ownerPluginId = provider.startsWith("plugin:")
+              ? provider.substring("plugin:".length)
+              : "";
+            return isVisibleToAgent(s.visibleTo, ownerPluginId, agentId);
+          });
+
           // 按智能体级偏好过滤
           const charSkillCfg = context?.session.getSettings?.("skills");
           let skills: any[];
@@ -193,13 +219,13 @@ export class SkillPlugin extends PluginBase {
           } else if (typeof charSkillCfg === "object" && charSkillCfg !== null) {
             if (charSkillCfg.__default === false) {
               // 白名单模式：只保留显式 enabled: true 的技能
-              skills = allSkills.filter((s: any) => charSkillCfg[s.id] === true);
+              skills = scopedSkills.filter((s: any) => charSkillCfg[s.id] === true);
             } else {
               // 黑名单模式：排除显式 enabled: false 的技能
-              skills = allSkills.filter((s: any) => charSkillCfg[s.id] !== false);
+              skills = scopedSkills.filter((s: any) => charSkillCfg[s.id] !== false);
             }
           } else {
-            skills = allSkills;
+            skills = scopedSkills;
           }
 
           if (skills.length > 0) {

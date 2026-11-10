@@ -18,6 +18,9 @@ export default {
     noDescription: '暂无描述',
     useAgent: '使用此智能体',
     agentSettings: '智能体设置',
+    pluginAgentBadge: '插件',
+    pluginAgentTip: '插件注册的智能体（来源：{plugin}），提示词与绑定能力由插件锁定，其余可编辑',
+    viewAgent: '查看',
     empty: '暂无智能体',
     emptyHint: '点击上方按钮创建第一个智能体',
     importSuccess: '成功导入 {count} 个智能体',
@@ -29,6 +32,11 @@ export default {
   modal: {
     editTitle: '编辑智能体',
     createTitle: '新建智能体',
+    pluginViewTitle: '插件智能体',
+    pluginBadge: '插件提供 · 部分可编辑',
+    pluginSource: '由插件「{plugin}」注册',
+    readonlyHint: '此智能体由插件注册：提示词与能力范围由插件代码定义，不可编辑；禁用或卸载该插件即可移除。',
+    promptSection: '系统提示词（插件提供）',
     applyAll: '应用全部设置',
     saveSuccess: '智能体更新成功',
     saveFailed: '智能体保存失败',
@@ -82,6 +90,9 @@ export default {
     tierAggressiveDesc: '激进 - 90% 触发、保留 20%',
     // 提示词
     systemPromptLabel: '系统系提示(智能体设定)',
+    pluginPromptLocked: '提示词由插件提供，不可编辑',
+    pluginLockedKitBadge: '插件绑定',
+    pluginLockedKitTip: '插件绑定能力：始终开启，不可关闭',
     systemPromptPlaceholder: '请输入详细设定',
     // 本地工具
     toolToggle: '功能开关',

@@ -22,6 +22,12 @@ import { CommandProviderRegistry } from "../commands/command-provider-registry.s
 import { NlsService } from "./i18n/nls.service";
 import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
 import { isToolkitAllowedByRoleConfig } from "./utils/role-toolkit-filter";
+import { isVisibleToAgent } from "./utils/agent-visibility";
+import {
+  PluginAgentRegistry,
+  isPluginAgentId,
+} from "./registry/plugin-agent.registry";
+import { normalizeKitRefs } from "./registry/plugin-agent-settings";
 import { ProviderContributionCoordinator } from "../llm-core/provider-contribution.coordinator";
 import { PluginPathsService } from "./paths/plugin-paths.service";
 import { PluginHookRegistry } from "./hooks/plugin-hook.registry";
@@ -102,6 +108,10 @@ export class PluginManager {
     this.hookRegistry?.setEnabledResolver((pluginId) => this.isPluginEnabled(pluginId));
     // HTTP 路由同理：禁用后请求 404，但保留注册避免反复启停抖动
     this.httpRegistry?.setEnabledResolver((pluginId) => this.isPluginEnabled(pluginId));
+    // v4：插件智能体的可见性跟随插件全局启停（checker 注入，避免 agents 模块反向依赖）
+    PluginAgentRegistry.setAvailabilityChecker((pluginId) =>
+      this.isPluginEnabled(pluginId),
+    );
   }
 
   // ── 生命周期 ──
@@ -263,6 +273,7 @@ export class PluginManager {
       });
     }
     PluginRegistry.clearPlugin(pluginId);
+    PluginAgentRegistry.removeByPlugin(pluginId);
     this.providerCoordinator?.remove(pluginId);
     this.hookRegistry?.unregisterPlugin(pluginId);
     this.localCommandRegistry?.unregisterByPlugin(pluginId);
@@ -452,6 +463,8 @@ export class PluginManager {
     // 全局层 → 智能体层：两个配置各自独立解析，互不耦合
     const stateMap = await this.resolveGlobalLayer();
     this.applyRoleLayer(stateMap, roleCfg);
+    this.applyVisibilityLayer(stateMap, session?.agentId ?? null);
+    this.applyLockedKitLayer(stateMap, session?.agentId ?? null);
     const kitAvailability = this.buildKitAvailability(stateMap, roleCfg);
 
     const result: ResolvedPluginInfo[] = [];
@@ -467,6 +480,38 @@ export class PluginManager {
       );
     }
     return result;
+  }
+
+  /**
+   * 锁定常开层（v4.1）：插件智能体绑定的工具包豁免一切智能体层裁剪。
+   *
+   * 在 roleLayer（消费侧收窄）与 visibilityLayer（生产侧收窄）之后执行：
+   * agentId 命中插件智能体时，把其绑定工具包从 deniedToolkits 移除——
+   * 用户的 `__strategy: "deny_nonsystem"` / 白名单 / 黑名单都压不过绑定声明，
+   * 语义镜像 essential 插件的"工具包不可被任何方式拒绝"。
+   *
+   * 自治理（governance:"self"）包不在此豁免：mcp/skill/sub_agent 的可见性
+   * 由各自 handler 按 roleCfg 裁决，store 层合成 settings 已重申其门控。
+   */
+  private applyLockedKitLayer(
+    stateMap: Map<string, PluginResolutionState>,
+    agentId: string | null | undefined,
+  ): void {
+    if (!agentId || !isPluginAgentId(agentId)) return;
+    const reg = PluginAgentRegistry.findVisibleById(agentId);
+    if (!reg) return;
+    const lockedRefs = normalizeKitRefs(reg);
+    if (lockedRefs.length === 0) return;
+
+    for (const { pluginId, kitId } of lockedRefs) {
+      const state = stateMap.get(pluginId);
+      if (!state || !state.enabled) continue; // 全局禁用：能力面整体消失
+      const kitReg = PluginRegistry.getToolKits(pluginId).find(
+        (k) => k.def.id === kitId,
+      );
+      if (!kitReg || kitReg.def.governance === "self") continue;
+      state.deniedToolkits.delete(kitId);
+    }
   }
 
   /**
@@ -498,7 +543,6 @@ export class PluginManager {
     }
     return availability;
   }
-
   /**
    * 从全局配置读取单个插件的启停状态（registerPlugin 与 resolveGlobalLayer 共用，
    * 保证启动装载与运行时决议对同一份持久化配置的解读一致）
@@ -618,6 +662,34 @@ export class PluginManager {
   }
 
   /**
+   * 作用域层决议（v4）：插件注册侧声明的 visibleTo。
+   *
+   * 与 applyRoleLayer 的方向相反——roleLayer 是消费侧收窄（智能体配置裁插件能力），
+   * 本层是生产侧收窄（插件声明能力只给谁用）。在 roleLayer 之后执行并追加拒绝，
+   * 压过白名单 allow：智能体配置不能把限定作用域的工具包"复活"。
+   *
+   * 自治理（governance:"self"）工具包不适用：它们的可见性由各自 handler 裁决
+   * （本期限定外部插件不可声明 governance，内建包不声明 visibleTo）。
+   */
+  private applyVisibilityLayer(
+    stateMap: Map<string, PluginResolutionState>,
+    agentId: string | null | undefined,
+  ): void {
+    for (const [id, state] of stateMap) {
+      if (!state.enabled) continue;
+      for (const kitReg of PluginRegistry.getToolKits(id)) {
+        if (kitReg.def.governance === "self") continue;
+        if (
+          !isVisibleToAgent(kitReg.def.visibleTo, id, agentId) &&
+          !state.deniedToolkits.has(kitReg.def.id)
+        ) {
+          state.deniedToolkits.add(kitReg.def.id);
+        }
+      }
+    }
+  }
+
+  /**
    * 根据插件状态构建 ResolvedPluginInfo
    *
    * enabledToolKits 返回全部工具包：被智能体层裁剪的以 enabled=false 标记，
@@ -663,7 +735,11 @@ export class PluginManager {
 
     const enabledTools: ToolHandlerDef[] = [
       ...PluginRegistry.getTools(manifest.id),
-    ];
+    ].filter(
+      // v4：顶层工具的作用域声明——其他智能体/无智能体上下文时不可见。
+      // findTool 执行侧同样从 enabledTools 查找，自然 fail-closed。
+      (t) => isVisibleToAgent(t.visibleTo, manifest.id, session?.agentId ?? null),
+    );
     const enabledToolKits: ResolvedPluginInfo["enabledToolKits"] = [];
 
     for (const kitReg of PluginRegistry.getToolKits(manifest.id)) {

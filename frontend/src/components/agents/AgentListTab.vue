@@ -48,15 +48,23 @@
               <Avatar class="w-11 h-11" :src="agent.avatarUrl" :name="agent.name" type="assistant" />
               <div class="flex-1 min-w-0">
                 <div class="flex items-start justify-between">
-                  <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="agent.name">
-                    {{ agent.name }}
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="agent.name">
+                      {{ agent.name }}
+                    </div>
+                    <!-- 插件智能体徽标：只读，随插件启停 -->
+                    <span v-if="agent.pluginId"
+                      class="shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] leading-none rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300"
+                      :title="t('agents.list.pluginAgentTip', { plugin: agent.pluginId })">
+                      {{ t('agents.list.pluginAgentBadge') }}
+                    </span>
                   </div>
                   <GdButton v-if="canDelete(agent)" link size="small" type="danger"
                     class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
                     @click.stop="$emit('deleteAgent', agent)">
-                    
+
                       <Delete20Regular class="w-4.5 h-4.5"  />
-                    
+
                   </GdButton>
                 </div>
                 <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5 font-mono truncate" :title="agent.id">
@@ -76,7 +84,7 @@
               {{ t('agents.list.useAgent') }}
             </GdButton>
             <GdButton size="small" class="flex-1 shadow-sm" @click.stop="$emit('editAgent', agent)">
-              {{ t('agents.list.agentSettings') }}
+              {{ agent.pluginId ? t('agents.list.viewAgent') : t('agents.list.agentSettings') }}
             </GdButton>
           </div>
         </div>
@@ -125,7 +133,9 @@ const emit = defineEmits<{
 // 内置默认智能体：后端保证恒排第一且禁止删除，前端同步隐藏删除入口
 const DEFAULT_AGENT_ID = 'assistant-agent'
 
-const canDelete = (agent: Agent): boolean => agent.id !== DEFAULT_AGENT_ID
+// 插件注册的智能体：只读（随插件启停，定义由插件代码权威）
+const canDelete = (agent: Agent): boolean =>
+  agent.id !== DEFAULT_AGENT_ID && !agent.pluginId
 
 const fileInputRef = ref<HTMLInputElement>()
 

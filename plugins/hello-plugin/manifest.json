@@ -1,13 +1,13 @@
 {
   "id": "hello-plugin",
   "name": "Hello Plugin",
-  "version": "1.1.0",
-  "description": "示例外部插件 — 工具 / 提示词 / HTTP 路由 / 模型调用 / 页面槽位",
+  "version": "1.2.0",
+  "description": "示例外部插件 — 工具 / 提示词 / 插件智能体 / HTTP 路由 / 模型调用 / 页面槽位",
   "author": "dev",
   "category": "user",
   "icon": "assets/logo.svg",
   "main": "index.js",
-  "apiVersion": 3,
+  "apiVersion": 4,
   "permissions": ["http", "llm"],
   "entries": {
     "backend": "index.js",

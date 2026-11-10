@@ -21,6 +21,18 @@ export interface Agent {
     settings?: AgentSettings
     /** 是否来自随包内置模板 */
     bundled?: boolean
+    /**
+     * 来源插件 ID（非空 = 插件注册的虚拟智能体）。
+     * 不落盘、生命周期跟随插件；提示词与绑定能力锁定，其余配置可编辑。
+     */
+    pluginId?: string | null
+    /**
+     * 插件绑定的工具包（`${pluginId}:${kitId}`，含跨插件引用）。
+     * 锁定"永远打开"：UI 开关禁用，后端豁免一切裁剪。
+     */
+    lockedToolkits?: string[]
+    /** 插件绑定的技能 id（同样锁定常开） */
+    lockedSkills?: string[]
 }
 
 /**

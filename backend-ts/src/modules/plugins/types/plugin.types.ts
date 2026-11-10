@@ -12,11 +12,13 @@ import type { WorkspaceProviderFactory } from "../../../common/workspace/workspa
  * - 2：新增提示词段、装配 transform、动作型本地命令、Hook、插件数据目录
  * - 3：新增自定义 HTTP 路由（registerRoute）、模型调用（complete/completeStream/listModels）、
  *      `main` 与 `conversation.side.panel` 槽位
+ * - 4：新增插件专属智能体（registerAgent）与能力作用域声明（visibleTo：
+ *      工具/工具包/提示词段/技能可声明仅对特定智能体可见）
  *
  * 外部插件在 manifest.json 声明 `apiVersion`；缺省按 1 处理，
  * 大于本常量则拒绝加载（避免用新 API 的插件在旧宿主上静默降级）。
  */
-export const PLUGIN_API_VERSION = 3;
+export const PLUGIN_API_VERSION = 4;
 
 /** 插件权限声明（安装确认与审计展示；本期不做运行时强制） */
 export type PluginPermission =
@@ -120,6 +122,19 @@ export interface PromptPiece {
  * - 有 scope（global/agent/session）
  * - complete=true 时表示"接管整段系统提示词"（需 manifest permissions 含 prompt）
  */
+/**
+ * 能力作用域声明（v4）：注册内容仅对哪些智能体可见。
+ *
+ * - 省略 = 全局可见（现状语义，仍受智能体层 toolkits 治理约束）
+ * - "self" = 仅本插件通过 registerAgent 注册的智能体
+ * - 其余字符串 = 智能体 id（精确匹配，可多个）
+ *
+ * 仅对外部能力生效（工具/工具包/提示词段/技能）；声明后其他智能体
+ * 完全不可见该能力（工具不进 tools 列表、提示词不进系统提示词、
+ * 技能不进 <available_skills> 且 skill_learn 拒绝读取）。
+ */
+export type VisibleToAgent = Array<"self" | string>;
+
 export interface PromptSectionDef {
   /** 段名；建议 `${pluginId}.${name}`。同作用域同名视为冲突 */
   name: string;
@@ -140,6 +155,8 @@ export interface PromptSectionDef {
   text: string | ((ctx: PluginContext) => string | Promise<string>);
   /** 描述（调试/UI） */
   description?: string;
+  /** 作用域声明（v4）：仅对哪些智能体注入本段；省略 = 全局 */
+  visibleTo?: VisibleToAgent;
 }
 
 /** 装配后的段（已求值） */
@@ -410,6 +427,8 @@ export interface ToolHandlerDef {
   displayAggregate?: { executing: string; completed: string };
   /** 定制渲染器声明（前端按 kind 选择渲染组件） */
   displayRenderer?: ToolRendererDecl;
+  /** 作用域声明（v4）：仅对哪些智能体可用；省略 = 全局可用（仍受智能体层治理） */
+  visibleTo?: VisibleToAgent;
 }
 
 // ==================== 工具包定义（ToolKit，新版） ====================
@@ -454,6 +473,13 @@ export interface ToolKitDef {
   ) => Promise<Partial<ToolKitRuntime>> | Partial<ToolKitRuntime>;
   /** 初始化回调（可在此回调中注册工具/提示词） */
   onLoad?: (toolkit: ToolKitHandle) => void | Promise<void>;
+  /**
+   * 作用域声明（v4）：仅对哪些智能体开放本包；省略 = 全局开放。
+   * 裁决在智能体层（applyRoleLayer）末尾追加拒绝，压过 allow 白名单——
+   * 防止智能体配置把限定作用域的工具包"复活"。
+   * 自治理（governance:"self"）工具包不适用本声明。
+   */
+  visibleTo?: VisibleToAgent;
 }
 
 /** 工具包运行时属性 */
@@ -820,6 +846,47 @@ export type RpcHandler = (
   args: any,
   ctx: { sessionId?: string; workspaceId?: string },
 ) => unknown | Promise<unknown>;
+
+// ── 插件专属智能体（v4）──
+
+/**
+ * 插件注册的智能体定义（api.registerAgent）。
+ *
+ * 智能体不落盘（虚拟视图，读取层由 AgentFileStore 合并），生命周期跟随插件：
+ * 插件加载即出现、卸载/禁用即消失。宿主归一化 id 为 `plugin-<pluginId>-<id>`，
+ * 保留前缀 `plugin-` 对用户创建的智能体不可用。
+ *
+ * 能力默认收口为白名单：只带本插件声明的工具包与技能（可通过 toolkits/skills
+ * 调整），其他智能体不受本插件任何能力影响；配合能力侧 visibleTo:"self"
+ * 声明实现「专属智能体 + 专属能力」的开箱即用隔离。
+ */
+export interface PluginAgentDef {
+  /** 插件内唯一 ID（ASCII slug）；实际 id 归一化为 plugin-<pluginId>-<id> */
+  id: string;
+  /** 显示名 */
+  name: string;
+  /** 描述（智能体列表/新建会话面板展示） */
+  description?: string;
+  /** 头像：相对插件根路径（经 /plugins/:id/assets/ 服务）或 http(s) URL */
+  avatar?: string;
+  /** 默认模型引用（形如 `{实例id}:{模型名}`）；空 = 会话创建时回退当前默认模型 */
+  modelId?: string | null;
+  /** 系统提示词正文（虚拟 AGENT.md 的 Markdown body） */
+  systemPrompt?: string;
+  /** 额外透传的智能体设置（memory/assistantName/temperature 等既有键） */
+  settings?: Record<string, any>;
+  /**
+   * 开放给本智能体的工具包（"kitId"=本插件内的包，"pluginId:kitId"=跨插件）。
+   * 缺省 = 本插件注册的全部工具包。skill/mcp/sub_agent 等系统包未显式列入时
+   * 对本智能体关闭。
+   */
+  toolkits?: string[];
+  /**
+   * 开放给本智能体的技能（本插件 registerSkill 的技能名）。
+   * 缺省 = 本插件注册的全部技能。
+   */
+  skills?: string[];
+}
 
 /**
  * 插件决议后的信息（统一由 PluginManager.resolvePlugins 返回）

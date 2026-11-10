@@ -13,6 +13,22 @@ import {
   parseAgentMarkdown,
   serializeAgentMarkdown,
 } from "./agent-file.mapper";
+import {
+  PluginAgentRegistry,
+  isPluginAgentId,
+  PLUGIN_AGENT_ID_PREFIX,
+} from "../plugins/registry/plugin-agent.registry";
+import {
+  composePluginAgentSettings,
+  composePluginAgentAvatarUrl,
+  mergePluginAgentOverrides,
+  normalizeKitRefs,
+  PluginAgentOverride,
+} from "../plugins/registry/plugin-agent-settings";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";
+
+/** 用户覆盖层持久化 group（SettingsStorage，<dir>/agent-overrides.json） */
+const AGENT_OVERRIDES_GROUP = "agent-overrides";
 
 /**
  * 智能体文件存储（对齐 DSH「预设就是文件」与本项目 providers/*.yaml 的既有范式）
@@ -64,6 +80,18 @@ export interface AgentDefinition {
   updatedAt: Date;
   /** 是否来自 bundled 模板（补种复制后仍标记来源） */
   bundled: boolean;
+  /**
+   * v4：来源插件 ID（虚拟插件智能体专属标记）。
+   * 非空 = 该智能体由插件注册，不落盘、用户不可编辑/删除。
+   */
+  pluginId?: string | null;
+  /**
+   * v4.1：插件绑定的工具包（`${pluginId}:${kitId}`，含跨插件引用）。
+   * 这些包对用户锁定"永远打开"：UI 开关禁用，后端裁决层豁免一切裁剪。
+   */
+  lockedToolkits?: string[];
+  /** v4.1：插件绑定的技能 id（同样锁定常开） */
+  lockedSkills?: string[];
 }
 
 export interface AgentCreateInput {
@@ -101,8 +129,10 @@ export class AgentFileStore {
   private cache = new Map<string, CachedAgent>();
   private loadErrors = new Map<string, AgentLoadError>();
   private ready: Promise<void> | null = null;
+  /** v4.1：插件智能体用户覆盖层（agentId → override），initialize 时加载、写时同步更新 */
+  private overrides = new Map<string, PluginAgentOverride>();
 
-  constructor() {
+  constructor(private readonly settingsStorage: SettingsStorage) {
     this.usersDir = resolveAgentsDir();
   }
 
@@ -119,8 +149,21 @@ export class AgentFileStore {
   private async doInitialize(): Promise<void> {
     await fsp.mkdir(this.usersDir, { recursive: true });
     await this.loadAll();
+    // v4.1：加载插件智能体的用户覆盖层（失败视为无覆盖，fail-soft）
+    try {
+      const raw = await this.settingsStorage.getSettings(AGENT_OVERRIDES_GROUP);
+      if (raw && typeof raw === "object") {
+        for (const [id, value] of Object.entries(raw)) {
+          if (value && typeof value === "object") {
+            this.overrides.set(id, value as PluginAgentOverride);
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`加载智能体覆盖层失败（视为无覆盖）: ${err?.message ?? err}`);
+    }
     this.logger.log(
-      `Agent file store ready at ${this.usersDir} (${this.cache.size} agent(s))`,
+      `Agent file store ready at ${this.usersDir} (${this.cache.size} agent(s), ${this.overrides.size} override(s))`,
     );
   }
 
@@ -135,10 +178,12 @@ export class AgentFileStore {
   /**
    * 列表排序：`DEFAULT_AGENT_ID` 恒排第一；其余按文件创建时间升序
    * （缺失回退 mtime），同刻回退 id 字典序。
+   *
+   * v4：合并插件注册的虚拟智能体（磁盘智能体之后），跟随插件全局启停。
    */
   async listAgents(): Promise<AgentDefinition[]> {
     await this.initialize();
-    return Array.from(this.cache.values())
+    const diskAgents = Array.from(this.cache.values())
       .sort((a, b) => {
         if (a.id === DEFAULT_AGENT_ID) return b.id === DEFAULT_AGENT_ID ? 0 : -1;
         if (b.id === DEFAULT_AGENT_ID) return 1;
@@ -148,14 +193,83 @@ export class AgentFileStore {
         );
       })
       .map((c) => this.toView(c));
+    return [...diskAgents, ...this.listVirtualAgents()];
+  }
+
+  /** v4：插件注册的虚拟智能体视图（生命周期跟随插件，含启停过滤） */
+  private listVirtualAgents(): AgentDefinition[] {
+    return PluginAgentRegistry.listVisible().map((reg) =>
+      this.virtualToView(reg),
+    );
+  }
+
+  private virtualToView(
+    reg: import("../plugins/registry/plugin-agent.registry").PluginAgentRegistration,
+  ): AgentDefinition {
+    const now = new Date();
+    // v4.1：合成声明 + 用户 override + 锁定重申（唯一合并收口，列表/findById 共用）
+    const merged = mergePluginAgentOverrides(reg, this.overrides.get(reg.agentId));
+    return {
+      id: reg.agentId,
+      name: merged.name,
+      description: merged.description,
+      avatarUrl: composePluginAgentAvatarUrl(reg),
+      modelId: merged.modelId,
+      settings: merged.settings,
+      createdAt: now,
+      updatedAt: now,
+      bundled: false,
+      pluginId: reg.pluginId,
+      lockedToolkits: normalizeKitRefs(reg).map(
+        (r) => `${r.pluginId}:${r.kitId}`,
+      ),
+      lockedSkills: (reg.def.skills ?? []).map((s) => String(s).toLowerCase()),
+    };
+  }
+
+  /**
+   * v4.1：更新插件智能体的用户覆盖层（内存 + 落盘）。
+   *
+   * 只接受字段白名单（name/description/modelId/settings 剔除锁定键），
+   * 由 AgentService.updateAgent 分流调用；全量替换该 agentId 的 override。
+   * 智能体当前不可见（插件禁用/卸载）时仍允许写入——重装后自动恢复。
+   */
+  async updateOverride(
+    agentId: string,
+    patch: PluginAgentOverride,
+  ): Promise<void> {
+    const next: PluginAgentOverride = {
+      name: patch.name,
+      description: patch.description,
+      modelId: patch.modelId,
+      settings: patch.settings,
+    };
+    this.overrides.set(agentId, next);
+    try {
+      await this.settingsStorage.updateSettings(AGENT_OVERRIDES_GROUP, {
+        [agentId]: next,
+      });
+    } catch (err: any) {
+      // 落盘失败：回滚内存，保持视图与存储一致
+      this.overrides.delete(agentId);
+      throw new Error(`保存智能体配置失败: ${err?.message ?? err}`);
+    }
   }
 
   /**
    * 按 id 查找。缓存优先；未命中则直接拼 `<usersDir>/<id>/AGENT.md` 读取
    * （目录名即 id，无需索引）。
+   *
+   * v4：`plugin-` 前缀的 id 先查插件智能体注册表（虚拟视图），不落盘。
    */
   async findById(id: string): Promise<AgentDefinition | undefined> {
     if (!id || !isValidAgentId(id)) return undefined;
+    // 虚拟插件智能体优先（id 形态 plugin-<pluginId>-<defId>，磁盘不可能同名——
+    // 保留前缀对用户创建智能体不可用）
+    if (isPluginAgentId(id)) {
+      const reg = PluginAgentRegistry.findVisibleById(id);
+      return reg ? this.virtualToView(reg) : undefined;
+    }
     const cached = this.cache.get(id);
     if (cached) return this.toView(cached);
     const def = await this.readFromDisk(id);
@@ -435,6 +549,7 @@ export class AgentFileStore {
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       bundled: c.bundled,
+      pluginId: null,
     };
   }
 
@@ -462,6 +577,10 @@ export class AgentFileStore {
       base.length > AGENT_ID_MAX_LENGTH
         ? base.slice(0, AGENT_ID_MAX_LENGTH)
         : base;
+    // v4：保留前缀 plugin- 归插件智能体，用户创建的智能体不落其上
+    if (candidate.toLowerCase().startsWith(PLUGIN_AGENT_ID_PREFIX)) {
+      candidate = `user-${candidate}`;
+    }
     let n = 2;
     while (taken.has(candidate.toLowerCase())) {
       const suffix = `-${n++}`;

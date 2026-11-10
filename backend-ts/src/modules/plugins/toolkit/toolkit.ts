@@ -173,6 +173,7 @@ export class Toolkit implements ToolKitHandle {
       displayText: def.display?.text,
       displayAggregate: def.display?.aggregate,
       displayRenderer: def.display?.renderer,
+      visibleTo: (def as { visibleTo?: ToolHandlerDef["visibleTo"] }).visibleTo,
     };
 
     if (!this._tools.find((x) => x.name === entry.name)) {

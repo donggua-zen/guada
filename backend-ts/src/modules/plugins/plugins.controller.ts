@@ -620,10 +620,14 @@ export class PluginsController {
     ) {
       return res.status(403).send("Invalid asset path");
     }
-    const pluginPath = this.externalLoader.getPluginPath(pluginId);
-    if (!pluginPath) return res.status(404).send("Plugin directory not found");
-    // 基路径 = 扫描记录的真实插件目录；纵深防御：解析后必须仍在插件目录内
-    const base = path.resolve(pluginPath);
+    // 基路径：外部插件 = 扫描记录的真实目录；内置插件（无插件目录）回落
+    // STATIC_DIR（与 resolveIconPath 同规则）——内置插件 registerAgent 的
+    // avatar 相对 STATIC_DIR 出图
+    const base = path.resolve(
+      this.externalLoader.getPluginPath(pluginId) ||
+        process.env.STATIC_DIR ||
+        path.join(__dirname, "..", "..", "..", "static"),
+    );
     const filePath = path.resolve(base, assetPath);
     if (filePath !== base && !filePath.startsWith(base + path.sep)) {
       return res.status(403).send("Access denied");

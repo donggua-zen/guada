@@ -3,12 +3,16 @@
         :style="{ height: '70vh', maxWidth: '90vw' }" class="agent-setting-dialog" destroy-on-close append-to-body>
         <template #header>
             <div class="dialog-header">
-                <span class="dialog-title">{{ currentAgent?.id ? t('agents.modal.editTitle') : t('agents.modal.createTitle') }}</span>
+                <span class="dialog-title">{{ modalTitle }}</span>
+                <span v-if="isPluginAgent" class="ml-2 inline-flex items-center px-2 py-0.5 text-xs rounded-full border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300">
+                    {{ t('agents.modal.pluginBadge') }}
+                </span>
             </div>
         </template>
 
         <div class="dialog-content">
-            <AgentSettingPanel ref="settingPanelRef" :data="currentAgent" :is-new="!props.agentId" :simple="false" class="flex-1" />
+            <AgentSettingPanel ref="settingPanelRef" :data="currentAgent" :is-new="!props.agentId" :simple="false"
+                :plugin-lock="pluginLock" class="flex-1" />
         </div>
 
         <template #footer>
@@ -20,7 +24,7 @@
 
 <script setup lang="ts">
 import GdButton from '@/components/ui/GdButton.vue';
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import AgentSettingPanel from './AgentSettingPanel.vue'
@@ -50,6 +54,29 @@ const saving = ref(false)
 const currentAgent = ref<Partial<Agent>>({})
 const settingPanelRef = ref<InstanceType<typeof AgentSettingPanel> | null>(null)
 const panelHasChanges = ref(true)
+
+// v4.1：插件注册的智能体 → 部分可编辑（提示词/绑定能力锁定，其余开放）
+const isPluginAgent = computed(() => Boolean(currentAgent.value?.pluginId))
+
+// 锁定面：插件绑定的工具包 key（`${pluginId}::${kitId}`，与面板 visibleKitCards 的 key 同构）
+// 与技能 id，传给 AgentSettingPanel 禁用对应开关
+const pluginLock = computed(() => {
+    if (!isPluginAgent.value) return null
+    const lockedKitKeys = new Set<string>()
+    for (const ref of currentAgent.value?.lockedToolkits ?? []) {
+        const sep = String(ref).indexOf(':')
+        if (sep <= 0) continue
+        lockedKitKeys.add(`${ref.slice(0, sep)}::${ref.slice(sep + 1)}`)
+    }
+    const lockedSkillIds = new Set<string>(
+        (currentAgent.value?.lockedSkills ?? []).map(String),
+    )
+    return { lockedKitKeys, lockedSkillIds }
+})
+const modalTitle = computed(() => {
+    if (isPluginAgent.value) return t('agents.modal.pluginViewTitle')
+    return currentAgent.value?.id ? t('agents.modal.editTitle') : t('agents.modal.createTitle')
+})
 
 // 监听显示状态
 watch(() => props.show, (newVal) => {
@@ -108,7 +135,8 @@ const handleSave = async (): Promise<void> => {
             agent = response;
         }
 
-        if (agent && avatarFile) {
+        if (agent && avatarFile && !isPluginAgent.value) {
+            // 插件智能体头像由插件提供（后端对上传返回 400），跳过上传
             const response = await apiService.uploadAvatar(agent['id'], avatarFile);
             agent.avatarUrl = response.url;
             settingPanelRef.value.clearAvatarFile();

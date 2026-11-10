@@ -104,6 +104,12 @@ export class UrlService {
       // 静态资源
       const fullPath = `${this.staticPrefix}/${normalizedPath.substring("static/".length)}`;
       return this.baseUrl ? `${this.baseUrl}${fullPath}` : fullPath;
+    } else if (normalizedPath.startsWith("plugins/")) {
+      // v4：插件资源（插件智能体头像等），规范形式 `plugins/<pluginId>/assets/<path>`
+      // → 插件 assets 端点。虚拟智能体头像存相对形态：agents 列表与会话水合
+      // 都会再走一次 toResourceAbsoluteUrl，已有 http(s) URL 则原样直通。
+      const fullPath = `/api/v1/${normalizedPath}`;
+      return this.baseUrl ? `${this.baseUrl}${fullPath}` : fullPath;
     } else if (normalizedPath.startsWith("agents/")) {
       // 智能体目录内资源（头像等）
       const fullPath = `${this.agentsPrefix}/${normalizedPath.substring("agents/".length)}`;

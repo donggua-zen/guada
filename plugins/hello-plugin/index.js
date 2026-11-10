@@ -24,13 +24,13 @@ class HelloPlugin {
   manifest = {
     id: "hello-plugin",
     name: "Hello Plugin",
-    version: "1.1.0",
-    description: "示例外部插件（工具 / 提示词 / HTTP 路由 / 模型调用 / 页面槽位）",
+    version: "1.2.0",
+    description: "示例外部插件（工具 / 提示词 / 插件智能体 / HTTP 路由 / 模型调用 / 页面槽位）",
     author: "GuaDa",
     category: "user",
     icon: "assets/logo.svg",
     main: "index.js",
-    apiVersion: 3,
+    apiVersion: 4,
     permissions: ["http", "llm"],
     entries: { backend: "index.js", frontend: "frontend/dist" },
   };
@@ -44,6 +44,7 @@ class HelloPlugin {
   async onLoad(api) {
     this.registerTools(api);
     this.registerPrompt(api);
+    this.registerPluginAgent(api);
     this.registerRoutes(api);
     this.registerUi(api);
     this.registerRpc(api);
@@ -89,6 +90,51 @@ class HelloPlugin {
       content: "## Hello Plugin\n这是一个示例外部插件，提供 hello_say 工具。",
       frequency: "REGULAR",
       description: "Hello Plugin 说明",
+    });
+
+    // v4：作用域声明——本段只对插件注册的智能体（"self"）注入，
+    // 其他任何智能体的系统提示词里都看不到它。
+    api.registerPrompt({
+      content:
+        "## Hello Agent 专属指引\n你是插件注册的专属智能体。 hello_say 工具为你专属开放，" +
+        "遇到寒暄类请求时优先使用它。",
+      frequency: "REGULAR",
+      visibleTo: ["self"],
+      description: "仅插件智能体可见的指引",
+    });
+  }
+
+  // ── v4：插件专属智能体 ──
+  //
+  // 注册一个「开箱即用」的智能体：
+  // - 宿主归一化 id 为 plugin-hello-plugin-demo（保留前缀 plugin-，用户不可占用）
+  // - 不落盘，生命周期跟随本插件（禁用/卸载即消失，已绑定会话降级不崩溃）
+  // - 能力收口：只开放本插件的工具（toolkits 缺省 = 本插件全部工具包）；
+  //   skill/mcp/sub_agent 未列入 → 对该智能体关闭
+  // - 会话级设置无法覆盖其提示词与能力门控（后端锁定）
+  // - 用户不可编辑/删除它（HTTP 层 400，前端只读展示）
+  registerPluginAgent(api) {
+    api.registerAgent({
+      id: "demo",
+      name: "Hello 演示智能体",
+      description:
+        "hello-plugin 注册的专属智能体：只带本插件的能力，提示词不可编辑。用于验证插件智能体全链路。",
+      modelId: null, // 空 = 建会话时回退当前默认模型
+      systemPrompt: [
+        "你是「Hello 演示智能体」，由 hello-plugin 插件注册。",
+        "",
+        "职责：演示插件专属智能体的隔离能力——",
+        "1. 你拥有专属工具 hello_say（其他智能体看不到它）；",
+        "2. 你的提示词由插件代码定义，用户不可修改；",
+        "3. 你没有技能、MCP 与子代理能力（被插件收口）。",
+        "",
+        "与用户寒暄时使用 hello_say；其余请求正常回答。",
+      ].join("\n"),
+      // toolkits: ["hello_kit"],        // 缺省 = 本插件全部工具包；也可显式列出
+      // skills: ["hello_skill"],        // 缺省 = 本插件注册的全部技能
+      settings: {
+        assistantName: "Hello 演示智能体",
+      },
     });
   }
 

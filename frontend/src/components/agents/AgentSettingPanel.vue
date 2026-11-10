@@ -131,13 +131,16 @@
               <div class="flex-1 flex flex-col min-h-0">
                 <div class="flex items-center w-full justify-between" style="flex-shrink: 0;">
                   <span>{{ t('agents.setting.systemPromptLabel') }}</span>
+                  <span v-if="isPluginLocked" class="text-xs text-purple-600 dark:text-purple-300">
+                    {{ t('agents.setting.pluginPromptLocked') }}
+                  </span>
                 </div>
 
                 <!-- 详细设定：铺满剩余区域。
                      父级必须是 flex 容器（不能只给 flex-1）：flex 布局下子项高度由
                      stretch 决定，textarea 的 h-full 才有确定基准；block 容器里
                      height:100% 会因父级 height:auto 回落成 auto -->
-                <div class="flex-1 min-h-40 flex flex-col">
+                <div class="flex-1 min-h-40 flex flex-col" :class="{ 'opacity-60 pointer-events-none': isPluginLocked }">
                   <GdInput v-model="agentForm.systemPrompt" type="textarea" class="flex-1 min-h-0"
                     :placeholder="t('agents.setting.systemPromptPlaceholder')" resize="none" />
                 </div>
@@ -181,7 +184,12 @@
                     class="tool-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] bg-gray-50/60 dark:bg-[#242629]/60">
                     <div class="flex items-start justify-between gap-2 mb-1">
                       <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ card.kit.name || card.kit.id }}</div>
-                      <GdSwitch :model-value="isKitEnabled(card.pluginId, card.kit.id)"
+                      <span v-if="isKitLocked(card.pluginId, card.kit.id)"
+                        :title="t('agents.setting.pluginLockedKitTip')"
+                        class="shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] leading-none rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300">
+                        {{ t('agents.setting.pluginLockedKitBadge') }}
+                      </span>
+                      <GdSwitch v-else :model-value="isKitEnabled(card.pluginId, card.kit.id)"
                         @update:model-value="(val) => handleKitToggle(card.pluginId, card.kit.id, !!val)"
                         :disabled="allDisabled" size="small" inline-prompt />
                     </div>
@@ -314,7 +322,11 @@
                     <div class="flex items-start justify-between gap-2 mb-2">
                       <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ getSkillDisplayName(skill.manifest, skill.id) }}</div>
                       <div class="flex items-center gap-1.5 shrink-0">
-                        <GdSwitch :model-value="getSkillEffectiveEnabled(skill)"
+                        <span v-if="isSkillLocked(skill.id)" :title="t('agents.setting.pluginLockedKitTip')"
+                          class="inline-flex items-center px-1.5 py-0.5 text-[10px] leading-none rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300">
+                          {{ t('agents.setting.pluginLockedKitBadge') }}
+                        </span>
+                        <GdSwitch v-else :model-value="getSkillEffectiveEnabled(skill)"
                           :loading="updatingSkills.has(skill.id)"
                           @update:model-value="(val) => handleSkillToggle(skill.id, !!val)" :disabled="allSkillsDisabled"
                           size="small" inline-prompt :active-text="t('common.enable')" :inactive-text="t('common.disable')" />
@@ -430,6 +442,19 @@ const autoEnableOptions = computed(() => [
   { label: t('agents.setting.keepDisabled'), value: true }
 ])
 
+// v4.1：插件智能体锁定面
+const isPluginLocked = computed(() => Boolean(props.pluginLock))
+const lockedKitKeys = computed(
+  () => new Set<string>(props.pluginLock?.lockedKitKeys ?? []),
+)
+const lockedSkillIds = computed(
+  () => new Set<string>(props.pluginLock?.lockedSkillIds ?? []),
+)
+const isKitLocked = (pluginId: string, kitId: string): boolean =>
+  lockedKitKeys.value.has(`${pluginId}::${kitId}`)
+const isSkillLocked = (skillId: string): boolean =>
+  lockedSkillIds.value.has(skillId)
+
 // Props
 const props = defineProps({
   simple: {
@@ -459,6 +484,16 @@ const props = defineProps({
   isNew: {
     type: Boolean,
     default: false
+  },
+  /**
+   * v4.1：插件智能体锁定面（AgentModal 传入；null = 普通智能体）。
+   * lockedKitKeys：`${pluginId}::${kitId}` 集合——对应卡片开关禁用且恒 ON；
+   * lockedSkillIds：锁定技能 id 集合——同理；提示词 textarea 一并禁用。
+   * 锁定项由后端常开豁免兜底，UI 状态仅展示。
+   */
+  pluginLock: {
+    type: Object,
+    default: null
   }
 })
 
@@ -1146,7 +1181,10 @@ const getFormData = () => {
             for (const tk of p.toolkits || []) {
               (byPlugin[p.pluginId] ||= []).push({
                 kitId: tk.id,
-                enabled: !!agentToolSettings.value[kitKey(p.pluginId, tk.id)],
+                // v4.1：插件锁定的工具包恒 ON（UI 不写 agentToolSettings，后端常开豁免兜底）
+                enabled:
+                  isKitLocked(p.pluginId, tk.id) ||
+                  !!agentToolSettings.value[kitKey(p.pluginId, tk.id)],
               });
             }
           }
@@ -1167,7 +1205,9 @@ const getFormData = () => {
         // 遍历所有技能，按当前显示状态保存
         const skillsOut: Record<string, boolean> = {};
         for (const skill of skillsList.value) {
-          const effectiveEnabled = getSkillEffectiveEnabled(skill);
+          // v4.1：插件锁定的技能恒 true（后端合并时也会重申，双保险）
+          const effectiveEnabled =
+            isSkillLocked(skill.id) || getSkillEffectiveEnabled(skill);
           if (skillsAllowlistMode.value) {
             // 白名单：当前显示为 ON 的全部存 true
             if (effectiveEnabled) skillsOut[skill.id] = true;

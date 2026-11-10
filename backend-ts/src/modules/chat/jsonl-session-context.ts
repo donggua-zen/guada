@@ -1535,17 +1535,26 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   /**
    * 合并会话设置与智能体默认配置（优先级：会话 > 智能体）。
+   *
+   * v4：插件注册的智能体（agent.pluginId 非空）锁定四个隔离字段——
+   * plugins/skills/agents/systemPrompt 强制取智能体侧，会话级覆盖不生效。
+   * 这是能力收口的最后一道闸：白名单门控若可被会话设置穿透，隔离即失效。
    */
   private buildEffectiveSettings(): EffectiveSettings {
     const sessionSettings = this.session.settings || {};
     const agentSettings = this.session.agent?.settings || {};
 
-    const mergedTools = sessionSettings.plugins ?? agentSettings.plugins;
-    const mergedSkills = sessionSettings.skills ?? agentSettings.skills;
-    const mergedAgents = sessionSettings.agents ?? agentSettings.agents;
+    const agentIsPluginOwned = Boolean(this.session.agent?.pluginId);
+    const pick = (sessionVal: any, agentVal: any) =>
+      agentIsPluginOwned ? agentVal : (sessionVal ?? agentVal);
 
-    let systemPrompt =
-      sessionSettings.systemPrompt || agentSettings.systemPrompt || '';
+    const mergedTools = pick(sessionSettings.plugins, agentSettings.plugins);
+    const mergedSkills = pick(sessionSettings.skills, agentSettings.skills);
+    const mergedAgents = pick(sessionSettings.agents, agentSettings.agents);
+
+    let systemPrompt = agentIsPluginOwned
+      ? agentSettings.systemPrompt || ''
+      : sessionSettings.systemPrompt || agentSettings.systemPrompt || '';
 
     const merged: EffectiveSettings = {
       systemPrompt,
