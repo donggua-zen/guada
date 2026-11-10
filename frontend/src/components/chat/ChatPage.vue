@@ -250,6 +250,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
 import { toast } from '@/components/ui/toastService';
 import { useSessionStore } from "@/stores/session";
+import { useSessionGroupStore } from "@/stores/sessionGroup";
 import { useNewSessionDraftStore } from "@/stores/newSessionDraft";
 import { useAuthStore } from "@/stores/auth";
 import { useLayoutStore } from "@/stores/layout";
@@ -593,6 +594,8 @@ const tabStore = useTabStore();
 // 登录信息
 const authStore = useAuthStore();
 const sessionStore = useSessionStore();
+// 目录分组缓存（新建会话时后端回带的新分组增量补写，见 handleCreateSessionWithMessage）
+const sessionGroupStore = useSessionGroupStore();
 // 新建页暂存草稿（切换走再切回时恢复输入内容；创建成功即清空）
 const newSessionDraftStore = useNewSessionDraftStore();
 
@@ -813,6 +816,11 @@ const handleCreateSessionWithMessage = async (session: CreateSessionRequest, inp
   }
   try {
     const response = await apiService.createSession(session)
+    // 新目录的会话归属：后端在创建时写时注册了目录分组并随响应回带，
+    // 必须先补进分组缓存，否则侧栏目录模式会把会话先归到「通用」桶。
+    if (response.projectGroup) {
+      sessionGroupStore.upsertProjectGroup(response.projectGroup)
+    }
     // 写入统一数据源，侧边栏通过响应式自动更新
     sessionStore.setSession(response)
 

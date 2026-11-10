@@ -7,6 +7,7 @@ import type { BaseEvent } from "../../common/persistence/types";
 import { GENERAL_PROJECT_GROUP_ID, toRow } from "./session-meta.store";
 import { SESSION_STORE_TOKEN } from "./session-store.facade";
 import type { SessionStoreFacade } from "./session-store.facade";
+import type { ProjectGroupRow } from "../../common/store/ports/types";
 import {
   extractTodoStateFromEvents,
   writeTodoStore,
@@ -330,16 +331,7 @@ export class SessionService {
 
     return {
       groupBy: "workspace",
-      groups: visible.map(({ group }) => ({
-        id: group.id,
-        name: group.name,
-        path: group.path,
-        pathKey: group.pathKey,
-        icon: group.icon,
-        sortOrder: group.position,
-        isOverridden: group.nameOverridden,
-        kind: "workspace",
-      })),
+      groups: visible.map(({ group }) => this.toProjectGroupView(group)),
       // 名称由前端 i18n 提供（后端不做文案）
       generalGroup: { id: GENERAL_PROJECT_GROUP_ID, kind: "general" },
       groupSessions: [
@@ -618,15 +610,19 @@ export class SessionService {
    *
    * 只有用户显式指定的真实目录才注册；自动生成目录与 `<baseDir>/public` 不注册
    * —— 它们在侧栏目录模式下统一归入「通用」桶（避免自动目录撑爆分组列表）。
+   *
+   * 返回本次 ensure 出来的分组行（未注册/失败 → null），供创建响应回带：
+   * 前端侧栏目录模式的桶归属完全依赖本地缓存的 projectGroups，不把新分组
+   * 一起下发，首次使用某目录的会话会先落进「通用」，直到下次刷新才归位。
    */
   private async registerProjectGroupForWorkspace(
     workspacePath: string | null | undefined,
-  ): Promise<void> {
-    if (!workspacePath) return;
+  ): Promise<ProjectGroupRow | null> {
+    if (!workspacePath) return null;
     try {
       const baseDir = await this.workspaceService.getEffectiveBaseDir();
-      if (!qualifiesForProjectGroup(workspacePath, baseDir)) return;
-      await this.sessionStore.ensureProjectGroup({
+      if (!qualifiesForProjectGroup(workspacePath, baseDir)) return null;
+      return await this.sessionStore.ensureProjectGroup({
         path: workspacePath,
         prepend: true,
       });
@@ -634,7 +630,27 @@ export class SessionService {
       this.logger.warn(
         `Directory group registration failed for ${workspacePath}: ${err?.message ?? err}`,
       );
+      return null;
     }
+  }
+
+  /**
+   * 目录分组行 → 侧栏/创建响应的投影（字段口径唯一）。
+   *
+   * `sortOrder` 取 position、`isOverridden` 取 nameOverridden，与
+   * `getSidebarSessionsByProject` 的分组投影保持一致，避免两端字段漂移。
+   */
+  private toProjectGroupView(group: ProjectGroupRow) {
+    return {
+      id: group.id,
+      name: group.name,
+      path: group.path,
+      pathKey: group.pathKey,
+      icon: group.icon,
+      sortOrder: group.position,
+      isOverridden: group.nameOverridden,
+      kind: "workspace" as const,
+    };
   }
 
   /**
@@ -704,7 +720,9 @@ export class SessionService {
     const session: any = await this.sessionStore.create(sessionData);
 
     // 目录分组：显式目录写时注册（幂等）。失败不影响建会话。
-    await this.registerProjectGroupForWorkspace(finalWorkspacePath);
+    const projectGroup = await this.registerProjectGroupForWorkspace(
+      finalWorkspacePath,
+    );
 
     // 创建即初始化 JSONL 事件存储（eager 创建）：此后所有并发请求 hasSession 恒为 true，
     // 消除懒创建在首屏并行请求下的 TOCTOU 竞态（ensureSession 内部另有串行化兜底）。
@@ -723,6 +741,9 @@ export class SessionService {
       avatarUrl: session.avatarUrl
         ? this.urlService.toResourceAbsoluteUrl(session.avatarUrl)
         : null,
+      // 本次顺带注册的目录分组（未注册目录为 null）：前端据此增量补齐侧栏分组，
+      // 否则首个使用新目录的会话会先落进「通用」桶。
+      projectGroup: projectGroup ? this.toProjectGroupView(projectGroup) : null,
     };
   }
 
@@ -799,7 +820,9 @@ export class SessionService {
     const newSessionId = created.id as string;
 
     // 分支继承同一工作目录 → 确保对应目录分组已注册（幂等）
-    await this.registerProjectGroupForWorkspace(source.workspacePath);
+    const projectGroup = await this.registerProjectGroupForWorkspace(
+      source.workspacePath,
+    );
 
     // 事件前缀：锚点回合（含）之前的全部事件
     const prefix = events.filter(
@@ -865,6 +888,7 @@ export class SessionService {
       avatarUrl: created.avatarUrl
         ? this.urlService.toResourceAbsoluteUrl(created.avatarUrl)
         : null,
+      projectGroup: projectGroup ? this.toProjectGroupView(projectGroup) : null,
     };
   }
 

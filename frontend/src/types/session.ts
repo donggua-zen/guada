@@ -457,6 +457,18 @@ export interface SidebarProjectSessionsResponse {
     groupSessions: SidebarGroupSessions[]
 }
 
+/**
+ * 创建 / 分支会话的响应。
+ *
+ * 后端在创建时会把显式目录写时注册进 `project_groups`，并把该分组随响应回带。
+ * 侧栏目录模式的桶归属依赖前端缓存的 projectGroups —— 缺了这一步，首次使用某个
+ * 目录的会话会先落进「通用」桶，直到下次刷新才归位。
+ */
+export interface SessionCreatedResponse extends Session {
+    /** 本次创建顺带注册的目录分组；自动目录 / public / 空路径时为 null */
+    projectGroup?: ProjectGroup | null
+}
+
 /** 分组统计（手工分组与目录分组共用形状；仅 web 会话） */
 export interface GroupStats {
     total: number
