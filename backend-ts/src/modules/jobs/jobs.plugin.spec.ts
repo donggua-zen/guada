@@ -133,6 +133,69 @@ describe("JobsPlugin", () => {
     expect(second.content).toContain("hello world appended");
   });
 
+  it("job_read 无新输出时说 no new output，且不报截断", async () => {
+    const logText = "build finished";
+    const { spec } = makeSpec({
+      read: jest.fn(async (opts: any) => {
+        const buf = Buffer.from(logText, "utf8");
+        const start = Math.min(opts.offset ?? 0, buf.length);
+        const end = Math.min(buf.length, start + (opts.maxBytes ?? buf.length));
+        return {
+          text: buf.subarray(start, end).toString("utf8"),
+          offset: start,
+          nextOffset: end,
+          size: buf.length,
+          // reader 的旧语义（start > 0 即 truncated）；registry 必须归一掉
+          truncated: start > 0 || end < buf.length,
+          logFilePath: "/tmp/guada.log",
+        };
+      }),
+    });
+    const id = registry.start(spec) as JobId;
+
+    await tools.get("job_read").execute({ job_id: id }, ctx);
+    const again = (await tools.get("job_read").execute(
+      { job_id: id },
+      ctx,
+    )) as { content: string };
+
+    expect(again.content).toContain("(no new output since last read)");
+    expect(again.content).not.toContain("Output was truncated");
+    expect(again.content).toContain("[status: running]");
+  });
+
+  it("job_read 超上限丢弃最早部分时告知跳过量与日志路径", async () => {
+    const logText = "A".repeat(100 * 1024);
+    const { spec } = makeSpec({
+      read: jest.fn(async (opts: any) => {
+        const buf = Buffer.from(logText, "utf8");
+        const start = Math.min(opts.offset ?? 0, buf.length);
+        const end = Math.min(buf.length, start + (opts.maxBytes ?? buf.length));
+        return {
+          text: buf.subarray(start, end).toString("utf8"),
+          offset: start,
+          nextOffset: end,
+          size: buf.length,
+          truncated: start > 0 || end < buf.length,
+          logFilePath: "/tmp/guada.log",
+        };
+      }),
+    });
+    const id = registry.start(spec) as JobId;
+
+    const result = (await tools.get("job_read").execute(
+      { job_id: id },
+      ctx,
+    )) as { content: string; meta: Record<string, any> };
+
+    // 100KB - 64KB = 36KB 被跳过
+    expect(result.content).toContain("36 KB of output was skipped");
+    expect(result.content).toContain("only the latest 64 KB is shown");
+    expect(result.content).toContain("/tmp/guada.log");
+    expect(result.meta.droppedBytes).toBe(36 * 1024);
+    expect(result.meta.truncated).toBe(true);
+  });
+
   it("job_read wait_ms 在终态后返回并置 reported", async () => {
     const { spec, done } = makeSpec();
     const id = registry.start(spec) as JobId;

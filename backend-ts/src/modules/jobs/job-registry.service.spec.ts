@@ -261,7 +261,7 @@ describe("JobRegistryService", () => {
     expect(modelRead.job.reported).toBe(true);
   });
 
-  it("readIncremental 字节日志类：首读无 offset（尾部），二读从游标继续，REST read 不受游标影响", async () => {
+  it("readIncremental 字节日志类：首读尾部，二读从游标继续，REST read 不受游标影响", async () => {
     // 模拟一个增长的日志：read 按 offset 切片
     let logText = "hello world";
     const read = jest.fn(async (opts: any) => {
@@ -277,32 +277,132 @@ describe("JobRegistryService", () => {
         offset: start,
         nextOffset: end,
         size: buf.length,
+        // 故意沿用 reader 的旧语义：start > 0 就是 true，验证 registry 会归一
         truncated: start > 0 || end < buf.length,
       };
     });
     const { spec } = makeSpec({ read });
     const id = registry.start(spec);
 
-    // 首读：不带 offset（尾部语义）
+    // 首读：游标从 0 开始，读完整个小日志
     const first = await registry.readIncremental(id, "s1");
-    expect(read).toHaveBeenNthCalledWith(1, { maxBytes: 65536 });
+    expect(first.incremental).toBe(false);
+    expect(read).toHaveBeenNthCalledWith(1, { offset: 0, maxBytes: 65536 });
     expect(first.output.text).toBe("hello world");
+    // 读到 EOF 且没有丢弃 → 不算截断（旧实现这里会误报 true）
+    expect(first.output.truncated).toBe(false);
+    expect(first.output.droppedBytes).toBe(0);
 
     // 日志增长后：第二次从游标（11）继续，只拿到新增部分
     logText = "hello world appended";
     const second = await registry.readIncremental(id, "s1");
+    expect(second.incremental).toBe(true);
     expect(read).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ offset: 11, maxBytes: 65536 }),
     );
     expect(second.output.text).toBe(" appended");
+    expect(second.output.truncated).toBe(false);
 
     // REST 显式 offset 路径不受模型游标影响
     await registry.read(id, "s1", { offset: 0 }, { markReported: false });
-    expect(read).toHaveBeenNthCalledWith(
-      3,
+    expect(read).toHaveBeenLastCalledWith(
       expect.objectContaining({ offset: 0 }),
     );
+  });
+
+  it("readIncremental 无新输出时返回空正文且不报截断", async () => {
+    const logText = "done";
+    const read = jest.fn(async (opts: any) => {
+      const buf = Buffer.from(logText, "utf8");
+      const maxBytes = opts.maxBytes ?? buf.length;
+      const start = Math.min(opts.offset ?? 0, buf.length);
+      const end = Math.min(buf.length, start + maxBytes);
+      return {
+        text: buf.subarray(start, end).toString("utf8"),
+        offset: start,
+        nextOffset: end,
+        size: buf.length,
+        truncated: start > 0 || end < buf.length,
+      };
+    });
+    const { spec } = makeSpec({ read });
+    const id = registry.start(spec);
+
+    await registry.readIncremental(id, "s1");
+    const again = await registry.readIncremental(id, "s1");
+
+    expect(again.output.text).toBe("");
+    expect(again.output.droppedBytes).toBe(0);
+    expect(again.output.truncated).toBe(false);
+  });
+
+  it("readIncremental 未读内容超上限时丢弃最早的，只留最新一段", async () => {
+    const maxBytes = 64 * 1024;
+    let logText = "A".repeat(100 * 1024);
+    const read = jest.fn(async (opts: any) => {
+      const buf = Buffer.from(logText, "utf8");
+      const limit = opts.maxBytes ?? buf.length;
+      const start = Math.min(opts.offset ?? 0, buf.length);
+      const end = Math.min(buf.length, start + limit);
+      return {
+        text: buf.subarray(start, end).toString("utf8"),
+        offset: start,
+        nextOffset: end,
+        size: buf.length,
+        truncated: start > 0 || end < buf.length,
+      };
+    });
+    const { spec } = makeSpec({ read });
+    const id = registry.start(spec);
+
+    const first = await registry.readIncremental(id, "s1");
+
+    // 丢了最早的 36KB，返回最后 64KB
+    expect(first.output.droppedBytes).toBe(100 * 1024 - maxBytes);
+    expect(first.output.offset).toBe(100 * 1024 - maxBytes);
+    expect(Buffer.byteLength(first.output.text, "utf8")).toBe(maxBytes);
+    expect(first.output.truncated).toBe(true);
+
+    // 游标已推到 EOF：再读没有新内容，也不再报丢弃
+    const second = await registry.readIncremental(id, "s1");
+    expect(second.output.text).toBe("");
+    expect(second.output.droppedBytes).toBe(0);
+    expect(second.output.truncated).toBe(false);
+
+    // 之后追加的新内容能被精确读到（不重复、不丢弃）
+    logText += "TAIL";
+    const third = await registry.readIncremental(id, "s1");
+    expect(third.output.text).toBe("TAIL");
+    expect(third.output.droppedBytes).toBe(0);
+    expect(third.output.truncated).toBe(false);
+  });
+
+  it("readIncremental 首读大日志同样只留最新一段", async () => {
+    const maxBytes = 64 * 1024;
+    const logText = "A".repeat(200 * 1024);
+    const read = jest.fn(async (opts: any) => {
+      const buf = Buffer.from(logText, "utf8");
+      const limit = opts.maxBytes ?? buf.length;
+      const start = Math.min(opts.offset ?? 0, buf.length);
+      const end = Math.min(buf.length, start + limit);
+      return {
+        text: buf.subarray(start, end).toString("utf8"),
+        offset: start,
+        nextOffset: end,
+        size: buf.length,
+        truncated: start > 0 || end < buf.length,
+      };
+    });
+    const { spec } = makeSpec({ read });
+    const id = registry.start(spec);
+
+    const first = await registry.readIncremental(id, "s1");
+
+    expect(first.incremental).toBe(false);
+    expect(first.output.droppedBytes).toBe(200 * 1024 - maxBytes);
+    expect(first.output.nextOffset).toBe(200 * 1024);
+    expect(first.output.truncated).toBe(true);
   });
 
   it("readIncremental 内存文本类（subagent）：按最大上限一次给全", async () => {

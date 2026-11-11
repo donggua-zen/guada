@@ -272,9 +272,10 @@ export class JobRegistryService
    * 模型侧自动增量读取（job_read 专用）。
    *
    * 按 kind 分派：
-   * - 字节日志类（shell/remote-shell/pty）：首次读尾部，之后读 [游标, 新末尾)，
-   *   游标随返回推进——模型零参数拿到「上次没读的部分」，单次增量超上限时截断，
-   *   再调一次自然续读；
+   * - 字节日志类（shell/remote-shell/pty）：从游标读未读部分，**超上限只留末尾**——
+   *   日志的关键信息（报错、最终状态）在尾部，所以宁可丢最早的一段，也要让模型
+   *   一次调用就追到最新进度；被丢弃的字节数经 droppedBytes 交给调用方告知模型，
+   *   完整内容仍在日志文件里。游标一律推进到 EOF，下次调用接着读新增。
    * - 内存文本类（subagent/workflow/scheduler）：无稳定字节空间（快照每次整体重生成），
    *   以最大上限一次给全。
    *
@@ -284,31 +285,56 @@ export class JobRegistryService
     id: JobId,
     sessionId: string,
     readOptions: { markReported?: boolean } = {},
-  ): Promise<{ output: JobOutputRead; job: JobSnapshot }> {
+  ): Promise<{ output: JobOutputRead; job: JobSnapshot; incremental: boolean }> {
     const record = this.getRecord(id, sessionId);
-    const isByteLogKind = isByteLogJobKind(record.spec.kind);
 
-    if (isByteLogKind && record.modelReadOffset !== undefined) {
+    if (!isByteLogJobKind(record.spec.kind)) {
       const result = await this.read(
         id,
         sessionId,
-        { offset: record.modelReadOffset },
+        { maxBytes: JOB_READ_MAX_MAX_BYTES },
         readOptions,
       );
-      record.modelReadOffset = result.output.nextOffset;
-      return result;
+      return { ...result, incremental: false };
     }
-    if (isByteLogKind) {
-      const result = await this.read(id, sessionId, {}, readOptions);
-      record.modelReadOffset = result.output.nextOffset;
-      return result;
-    }
-    return this.read(
+
+    const maxBytes = JOB_READ_DEFAULT_MAX_BYTES;
+    const incremental = record.modelReadOffset !== undefined;
+    const cursor = record.modelReadOffset ?? 0;
+
+    // 先按游标正常读一段。读到的窗口没到 EOF，说明未读内容超过一次上限。
+    let result = await this.read(
       id,
       sessionId,
-      { maxBytes: JOB_READ_MAX_MAX_BYTES },
+      { offset: cursor, maxBytes },
       readOptions,
     );
+    let droppedBytes = 0;
+
+    if (result.output.nextOffset < result.output.size) {
+      // 超上限：丢掉最早的一段，只保留最新的 maxBytes，让模型一次调用就追到最新。
+      const start = Math.max(cursor, result.output.size - maxBytes);
+      droppedBytes = start - cursor;
+      result = await this.read(
+        id,
+        sessionId,
+        { offset: start, maxBytes },
+        readOptions,
+      );
+    }
+    record.modelReadOffset = result.output.nextOffset;
+
+    return {
+      output: {
+        ...result.output,
+        droppedBytes,
+        // 读取期间日志可能又增长：nextOffset 未到当时的 EOF 也算还有未读。
+        truncated:
+          droppedBytes > 0 || result.output.nextOffset < result.output.size,
+      },
+      job: result.job,
+      incremental,
+    };
   }
 
   /**
