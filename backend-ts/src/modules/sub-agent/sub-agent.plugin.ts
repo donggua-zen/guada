@@ -207,7 +207,11 @@ Foreground (default) blocks until done and returns the result. Background mode r
             "A general-purpose agent capable of handling any task. Tasks that don't match a dedicated sub-agent can be delegated to this generic agent.",
         };
 
-        const items = (await this.agentStore.listAgents()).slice(0, 200);
+        // includeHidden：插件声明的执行角色（hidden:true）不出现在列表，
+        // 但派活时必须让模型看到它们的 id 与描述。
+        const items = (
+          await this.agentStore.listAgents({ includeHidden: true })
+        ).slice(0, 200);
 
         // 排除当前会话自身的智能体
         const currentAgentId = context?.session?.agentId;

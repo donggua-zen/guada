@@ -930,6 +930,19 @@ export interface PluginAgentDef {
    * 缺省 = 本插件注册的全部技能。
    */
   skills?: string[];
+  /**
+   * 允许本智能体派生的执行角色（"roleId" = 本插件另一个插件智能体，
+   * "pluginId:roleId" = 跨插件，"generic" = 通用子代理）。缺省 = 不能派生子代理。
+   *
+   * 声明后 `settings.agents` 会写成 `{ __default: false, <resolvedId>: true }`，
+   * 且这些项在用户 override 合并时被锁定（用户可增删未声明的项）。
+   */
+  agents?: string[];
+  /**
+   * 不在智能体列表 / 新建面板 / @ 提及中展示，但仍可被 `subagent_spawn` 指定。
+   * 用于「指挥智能体 + 隐藏执行角色」这类结构。
+   */
+  hidden?: boolean;
 }
 
 /**

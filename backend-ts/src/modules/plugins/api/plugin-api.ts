@@ -659,6 +659,33 @@ export class PluginApiImpl implements PluginApi {
         `plugin ${this.pluginId}: agent "${def.id}" already registered`,
       );
     }
+    // 角色引用：本插件 "roleId"、跨插件 "pluginId:roleId"、或 "generic"
+    if (def.agents !== undefined) {
+      if (!Array.isArray(def.agents)) {
+        throw new Error(
+          `plugin ${this.pluginId}: registerAgent("${def.id}") agents must be an array`,
+        );
+      }
+      for (const raw of def.agents) {
+        const ref = String(raw ?? "").trim();
+        if (!ref) {
+          throw new Error(
+            `plugin ${this.pluginId}: registerAgent("${def.id}") agents contains an empty ref`,
+          );
+        }
+        const ok = /^(generic|[A-Za-z0-9._-]+(:[a-z0-9][a-z0-9-]*)?)$/.test(ref);
+        if (!ok) {
+          throw new Error(
+            `plugin ${this.pluginId}: registerAgent("${def.id}") invalid agent ref "${ref}"`,
+          );
+        }
+      }
+    }
+    if (def.hidden !== undefined && typeof def.hidden !== "boolean") {
+      throw new Error(
+        `plugin ${this.pluginId}: registerAgent("${def.id}") hidden must be a boolean`,
+      );
+    }
     this._agentDefs.push({ ...def });
   }
 
