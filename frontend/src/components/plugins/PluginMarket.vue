@@ -178,10 +178,10 @@
             </template>
             <div ref="installLogBox" class="market-install-terminal">
                 <pre class="market-install-log">{{ installLog || t('plugins.localTools.installWaiting') }}</pre>
-                <span v-if="installing" class="terminal-cursor"></span>
+                <span v-if="installDialogActive" class="terminal-cursor"></span>
             </div>
             <template #footer>
-                <GdButton v-if="installing" @click="cancelInstallPoll">{{ t('common.cancel') }}</GdButton>
+                <GdButton v-if="installDialogActive" @click="cancelInstallPoll">{{ t('common.cancel') }}</GdButton>
                 <GdButton v-else @click="installDialogVisible = false">{{ t('common.close') }}</GdButton>
             </template>
         </GdDialog>
@@ -246,6 +246,9 @@ const detail = ref<MarketPluginDetail | null>(null)
 const installDialogVisible = ref(false)
 const installLog = ref('')
 const installLogBox = ref<HTMLElement | null>(null)
+// 弹窗内是否处于"安装中"：控制终端光标与 取消/关闭 按钮。
+// 不能用 installing（Set）判断——Set 对象恒为真，安装结束后按钮永远是「取消」且点了不关窗
+const installDialogActive = ref(false)
 let installPollCancelled = false
 let activeInstallJobId: string | null = null
 
@@ -362,6 +365,7 @@ async function handleInstall(plugin: MarketPlugin) {
     installing.value.add(plugin.id)
     installLog.value = ''
     installPollCancelled = false
+    installDialogActive.value = true
     installDialogVisible.value = true
     try {
         const { jobId } = await apiService.installFromMarket(plugin.id)
@@ -387,6 +391,7 @@ async function handleInstall(plugin: MarketPlugin) {
         installLog.value += '\n❌ ' + (getErrorMessage(err) || t('plugins.localTools.installFailedLog'))
     } finally {
         installing.value.delete(plugin.id)
+        installDialogActive.value = false
     }
 }
 
@@ -396,6 +401,9 @@ function cancelInstallPoll() {
     }
     installPollCancelled = true
     activeInstallJobId = null
+    installDialogActive.value = false
+    // 取消 = 终止本次安装并关闭弹窗（此前只停轮询不关窗，点击看起来毫无反应）
+    installDialogVisible.value = false
 }
 
 // 自动滚动假终端到底部

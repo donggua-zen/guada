@@ -117,7 +117,10 @@ const updatePosition = () => {
     // 面板会停在未定位的默认位置（视口底部）
     {
         const actualHeight = popoverElement.offsetHeight
-        const popoverWidth = typeof props.width === 'number' ? props.width : 320
+        // 用实测宽度而不是 props.width：元素可能被 max-width 收缩（移动端视口兜底），
+        // 拿声明宽度做边界计算会让"右移量"偏小，面板右缘仍溢出
+        const popoverWidth = popoverElement.offsetWidth
+            || (typeof props.width === 'number' ? props.width : 320)
         const spacing = props.spacing
 
         // 计算水平位置：start 左缘对齐锚点，center 以按钮为中心对齐（默认）
@@ -312,10 +315,12 @@ onUnmounted(() => {
     opacity: 0;
 }
 
-/* 移动端适配 */
+/* 移动端适配：宽度不得超过视口。
+   （此前选择器写成已不存在的 .custom-popover，规则从未生效，
+   固定 width="373" 的弹窗在 360px 级视口上右侧被裁掉） */
 @media (max-width: 768px) {
-    .custom-popover {
-        max-width: calc(100vw - 32px);
+    .gd-popover {
+        max-width: calc(100vw - 20px);
         max-height: 50vh;
     }
 }

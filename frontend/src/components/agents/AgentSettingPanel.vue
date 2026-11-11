@@ -143,9 +143,12 @@
                 <!-- 详细设定：铺满剩余区域。
                      父级必须是 flex 容器（不能只给 flex-1）：flex 布局下子项高度由
                      stretch 决定，textarea 的 h-full 才有确定基准；block 容器里
-                     height:100% 会因父级 height:auto 回落成 auto -->
-                <div class="flex-1 min-h-40 flex flex-col" :class="{ 'opacity-60 pointer-events-none': isPluginLocked }">
+                     height:100% 会因父级 height:auto 回落成 auto。
+                     插件锁定时用 readonly 而非 pointer-events-none：后者连滚动条一起禁用，
+                     长提示词无法翻阅；readonly 仍可滚动/选中复制，只是不可编辑 -->
+                <div class="flex-1 min-h-40 flex flex-col" :class="{ 'opacity-60': isPluginLocked }">
                   <GdInput v-model="agentForm.systemPrompt" type="textarea" class="flex-1 min-h-0"
+                    :readonly="isPluginLocked"
                     :placeholder="t('agents.setting.systemPromptPlaceholder')" resize="none" />
                 </div>
 

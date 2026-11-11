@@ -284,6 +284,8 @@ function cancelInstallDialog() {
   installPollCancelled = true
   activeInstallJobId = null
   installing.value = false
+  // 取消 = 终止本次安装并关闭弹窗（只停轮询不关窗，按钮看起来没反应）
+  installDialogVisible.value = false
 }
 
 function handleInstallClosed() {
