@@ -692,6 +692,52 @@ log.transports.file.level = "info";
 log.transports.file.maxSize = 50 * 1024 * 1024; // 50MB
 log.transports.file.format = "[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}";
 
+// ── console transport 断管保护 ──
+// 背景：dev 下 Ctrl+C / 关闭终端只打到 concurrently 这一层，Electron 的 stdout 管道随即断开。
+// 此后任何一次 log 调用都会在 console transport 里抛 EPIPE，而 electron-log 的
+// processInternalErrorFn 又会回头再写一次 console，形成「写日志失败 → 记错误 → 再写日志」
+// 的自激循环。2026-11-11 现场：几分钟内刷满 50MB 并触发轮转，真正的启动日志被完全淹没。
+// 处理：把 console 写入包一层，一旦写失败就永久关闭该 transport，只保留文件日志。
+const consoleTransport = log.transports.console;
+const rawConsoleWrite = consoleTransport.writeFn.bind(consoleTransport);
+let consoleTransportBroken = false;
+
+/** 关闭 console transport，并把这条事实写进文件日志（不再经过 console，避免自激） */
+function disableConsoleTransport(reason: string): void {
+  if (consoleTransportBroken) return;
+  consoleTransportBroken = true;
+  consoleTransport.level = false;
+  try {
+    log.processMessage(
+      {
+        data: [`[Log] console transport disabled after write failure: ${reason}`],
+        date: new Date(),
+        level: "error",
+      },
+      { transports: ["file"] },
+    );
+  } catch {
+    /* 文件也写不进去就彻底放弃：此时任何日志通路都不可用 */
+  }
+}
+
+consoleTransport.writeFn = (options) => {
+  if (consoleTransportBroken) return;
+  try {
+    rawConsoleWrite(options);
+  } catch (error) {
+    disableConsoleTransport(error instanceof Error ? error.message : String(error));
+  }
+};
+
+// 管道断开时 process.stdout/stderr 还会异步发 'error'，未监听会直接崩进程；
+// 这里统一转成「关掉 console transport」，让应用带着文件日志继续跑。
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error: NodeJS.ErrnoException) => {
+    disableConsoleTransport(`stream error ${error.code || error.message}`);
+  });
+}
+
 // 将 console 输出重定向到日志文件（可选，生产环境建议启用）
 // Object.assign(console, log.functions)
 
