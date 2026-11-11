@@ -52,6 +52,7 @@
     "test:pet-controller:electron": "pnpm run build:electron-ts && node scripts/run-electron.cjs scripts/test-pet-controller-electron.js",
     "bake:pet-assets": "node scripts/bake-pet-assets.mjs",
     "test:webview-navigation-crash": "node --test --test-concurrency=1 scripts/test-webview-navigation-crash.js",
+    "test:epipe-log-loop": "node scripts/test-epipe-log-loop.js",
     "test:computer-sidecar": "node --test scripts/test-computer-sidecar.js",
     "test:computer-sidecar:electron": "pnpm run build:electron-ts && electron scripts/test-computer-sidecar-electron.js",
     "build:electron:clean": "node scripts/clean-release.js",
