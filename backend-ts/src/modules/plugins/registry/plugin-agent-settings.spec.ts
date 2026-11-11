@@ -1,5 +1,6 @@
 import {
   mergePluginAgentOverrides,
+  normalizeAgentRefs,
   normalizeKitRefs,
 } from "./plugin-agent-settings";
 import { PluginAgentRegistration } from "./plugin-agent.registry";
@@ -137,6 +138,81 @@ describe("mergePluginAgentOverrides", () => {
     expect(merged.settings.plugins.mcp).toEqual({
       toolkits_filter: "allow",
       toolkits_allow: ["mcp_s1"],
+    });
+  });
+});
+
+describe("normalizeAgentRefs（执行角色白名单）", () => {
+  const reg = (agents?: string[]) =>
+    makeRegistration({ agents } as any);
+
+  it("本插件角色解析为 plugin-<pluginId>-<roleId>", () => {
+    expect(normalizeAgentRefs(reg(["recon", "exploit"]))).toEqual([
+      "plugin-demo-recon",
+      "plugin-demo-exploit",
+    ]);
+  });
+
+  it("跨插件引用与 generic 原样处理", () => {
+    expect(normalizeAgentRefs(reg(["other:critic", "generic"]))).toEqual([
+      "plugin-other-critic",
+      "generic",
+    ]);
+  });
+
+  it("去重并跳过空串", () => {
+    expect(normalizeAgentRefs(reg(["recon", "", "recon"]))).toEqual([
+      "plugin-demo-recon",
+    ]);
+  });
+
+  it("未声明时为空数组", () => {
+    expect(normalizeAgentRefs(reg(undefined))).toEqual([]);
+  });
+});
+
+describe("settings.agents 合成与锁定", () => {
+  it("未声明角色 → 仍是 {__default:false}（不能派子代理）", () => {
+    const merged = mergePluginAgentOverrides(makeRegistration(), null);
+    expect(merged.settings.agents).toEqual({ __default: false });
+  });
+
+  it("声明角色 → 合成白名单逐项 true", () => {
+    const merged = mergePluginAgentOverrides(
+      makeRegistration({ agents: ["recon", "assess"] } as any),
+      null,
+    );
+    expect(merged.settings.agents).toEqual({
+      __default: false,
+      "plugin-demo-recon": true,
+      "plugin-demo-assess": true,
+    });
+  });
+
+  it("引用不存在的角色也保留（插件启用顺序无关）", () => {
+    const merged = mergePluginAgentOverrides(
+      makeRegistration({ agents: ["ghost"] } as any),
+      null,
+    );
+    expect(merged.settings.agents["plugin-demo-ghost"]).toBe(true);
+  });
+
+  it("用户 override 关不掉声明角色", () => {
+    const merged = mergePluginAgentOverrides(
+      makeRegistration({ agents: ["recon"] } as any),
+      { settings: { agents: { __default: false, "plugin-demo-recon": false } } },
+    );
+    expect(merged.settings.agents["plugin-demo-recon"]).toBe(true);
+  });
+
+  it("用户可以追加未声明的白名单项", () => {
+    const merged = mergePluginAgentOverrides(
+      makeRegistration({ agents: ["recon"] } as any),
+      { settings: { agents: { "plugin-other-critic": true } } },
+    );
+    expect(merged.settings.agents).toEqual({
+      "plugin-other-critic": true,
+      "plugin-demo-recon": true,
     });
   });
 });

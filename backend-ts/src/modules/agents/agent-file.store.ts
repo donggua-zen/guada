@@ -181,7 +181,7 @@ export class AgentFileStore {
    *
    * v4：合并插件注册的虚拟智能体（磁盘智能体之后），跟随插件全局启停。
    */
-  async listAgents(): Promise<AgentDefinition[]> {
+  async listAgents(options?: { includeHidden?: boolean }): Promise<AgentDefinition[]> {
     await this.initialize();
     const diskAgents = Array.from(this.cache.values())
       .sort((a, b) => {
@@ -193,14 +193,23 @@ export class AgentFileStore {
         );
       })
       .map((c) => this.toView(c));
-    return [...diskAgents, ...this.listVirtualAgents()];
+    return [...diskAgents, ...this.listVirtualAgents(options)];
   }
 
-  /** v4：插件注册的虚拟智能体视图（生命周期跟随插件，含启停过滤） */
-  private listVirtualAgents(): AgentDefinition[] {
-    return PluginAgentRegistry.listVisible().map((reg) =>
-      this.virtualToView(reg),
-    );
+  /**
+   * v4：插件注册的虚拟智能体视图（生命周期跟随插件，含启停过滤）
+   *
+   * `includeHidden` 缺省 false：插件声明 `hidden: true` 的执行角色不出现在
+   * 列表 / 新建面板 / @ 提及；但 `subagent_spawn` 的可用清单需要它们，
+   * 由调用方显式传 true（否则模型不知道能派谁）。
+   */
+  private listVirtualAgents(options?: {
+    includeHidden?: boolean;
+  }): AgentDefinition[] {
+    const includeHidden = options?.includeHidden === true;
+    return PluginAgentRegistry.listVisible()
+      .filter((reg) => includeHidden || reg.def.hidden !== true)
+      .map((reg) => this.virtualToView(reg));
   }
 
   private virtualToView(

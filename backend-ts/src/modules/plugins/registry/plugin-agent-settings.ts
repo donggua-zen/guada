@@ -84,8 +84,15 @@ export function composePluginAgentSettings(
     ...Object.fromEntries(requestedSkills.map((s) => [s, true])),
   };
 
-  // ── 子代理白名单：插件智能体不可派生子代理 ──
-  settings.agents = { __default: false };
+  // ── 子代理白名单 ──
+  // 缺省不可派生子代理（{__default:false}）；`def.agents` 声明的执行角色逐项放行。
+  // 不在此处做存在性校验：插件启用顺序不定（被引用方可能尚未加载），
+  // 多一个不存在的 id 只会让它不在清单里、模型也不会派，无害。
+  const agentRefs = normalizeAgentRefs(registration);
+  settings.agents = {
+    __default: false,
+    ...Object.fromEntries(agentRefs.map((id) => [id, true])),
+  };
 
   // 标记来源（调试与会话锁定识别）
   settings.__pluginAgent = agentId;
@@ -164,6 +171,36 @@ export function normalizeKitRefs(registration: PluginAgentRegistration): LockedK
     }
   }
   return refs;
+}
+
+/**
+ * 归一化 def.agents（允许派生的执行角色）为完整 agentId 列表。
+ *
+ * - `"generic"` 原样
+ * - `"roleId"` → `plugin-<pluginId>-<roleId>`
+ * - `"pluginId:roleId"` → `plugin-<pluginId>-<roleId>`
+ *
+ * 顺序即声明顺序，按完整 id 去重。
+ */
+export function normalizeAgentRefs(registration: PluginAgentRegistration): string[] {
+  const { def, pluginId } = registration;
+  const out: string[] = [];
+  for (const raw of def.agents ?? []) {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) continue;
+    let id: string;
+    if (trimmed === "generic") {
+      id = "generic";
+    } else {
+      const sep = trimmed.indexOf(":");
+      id =
+        sep > 0
+          ? `plugin-${trimmed.slice(0, sep)}-${trimmed.slice(sep + 1)}`
+          : `plugin-${pluginId}-${trimmed}`;
+    }
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
 }
 
 /** settings 中用户不可覆盖的键（提示词与内部标记，权威在插件代码） */
@@ -265,5 +302,17 @@ export function mergePluginAgentOverrides(
   }
 
   mergedSettings.plugins = plugins;
+
+  // 插件声明的执行角色：settings.agents 强制 true（用户可增删未声明的项）。
+  // 语义与「锁定工具包」一致：插件绑定的派活能力不应被用户误关掉。
+  const lockedAgents = normalizeAgentRefs(registration);
+  if (lockedAgents.length > 0) {
+    const userAgents = mergedSettings.agents;
+    mergedSettings.agents = {
+      ...(userAgents && typeof userAgents === "object" ? userAgents : {}),
+      ...Object.fromEntries(lockedAgents.map((id) => [id, true])),
+    };
+  }
+
   return { name, description, modelId, settings: mergedSettings };
 }
