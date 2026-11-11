@@ -34,8 +34,12 @@
                     <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('agents.setting.avatarTitle') }} <span class="text-xs text-gray-400">{{ t('agents.setting.avatarOptional') }}</span></span>
                     <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('agents.setting.avatarHint') }}</span>
                   </div>
-                  <AvatarPreview :src="agentForm.avatarUrl" type="assistant" class="w-10"
-                    :name="agentForm.name" @avatar-changed="handleAvatarChanged" />
+                  <!-- 控件列：与其他行（名称/描述/ID 的输入框）同一起点，
+                       不再被 justify-between 推到卡片最右缘 -->
+                  <div class="w-1/2 flex justify-start">
+                    <AvatarPreview :src="agentForm.avatarUrl" type="assistant" class="w-10"
+                      :name="agentForm.name" @avatar-changed="handleAvatarChanged" />
+                  </div>
                 </div>
                 <!-- 智能体名称 -->
                 <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
