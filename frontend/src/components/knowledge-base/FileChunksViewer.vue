@@ -5,16 +5,9 @@
         <!-- flex 外壳：Tab 栏固定，内容区自适应填满弹窗剩余高度（弹窗本体上限 85vh，
              定高 calc 会溢出产生双滚动，所以内容一律 flex-1 自伸缩） -->
         <div class="preview-shell">
-            <!-- 双 Tab：默认原文预览，分块是调参核对效果的第二入口 -->
-            <div class="flex items-center gap-2 mb-3 flex-shrink-0">
-                <button type="button" class="tab-btn" :class="{ 'tab-btn--active': activeTab === 'original' }"
-                    @click="switchTab('original')">
-                    {{ t('knowledge.chunks.tabOriginal') }}
-                </button>
-                <button type="button" class="tab-btn" :class="{ 'tab-btn--active': activeTab === 'chunks' }"
-                    @click="switchTab('chunks')">
-                    {{ t('knowledge.chunks.tabChunks') }}
-                </button>
+            <!-- 双 Tab：默认原文预览，分块是调参核对效果的第二入口（胶囊分段切换，同插件页二级视图） -->
+            <div class="flex items-center mb-3 flex-shrink-0">
+                <PluginViewSwitch v-model="activeTab" :items="tabItems" />
             </div>
 
             <!-- ══ 原文预览 Tab ══ -->
@@ -133,6 +126,7 @@ import { apiService } from '@/services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import GdPagination from '@/components/ui/GdPagination.vue'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
+import PluginViewSwitch from '@/components/plugins/PluginViewSwitch.vue'
 
 interface Props {
     modelValue: boolean
@@ -174,6 +168,23 @@ const pageSize = ref(10)
 const chunkStrategyOutdated = computed(() => props.selectedFile?.chunkStrategyOutdated === true)
 
 const dialogTitle = computed(() => t('knowledge.chunks.title', { name: props.selectedFile?.displayName }))
+
+/** 胶囊分段切换项（PluginViewSwitch 数据源） */
+const tabItems = computed(() => [
+    { value: 'original' as const, label: t('knowledge.chunks.tabOriginal') },
+    { value: 'chunks' as const, label: t('knowledge.chunks.tabChunks') },
+])
+
+/** PluginViewSwitch v-model 直写 activeTab，这里负责懒加载数据 */
+watch(activeTab, (tab, prev) => {
+    if (tab === prev) return
+    if (tab === 'chunks') {
+        // 首次进分块 Tab 才拉数据
+        if (chunks.value.length === 0) loadChunks()
+    } else if (!rawUrl.value && !originalText.value && !previewText.value) {
+        loadOriginal()
+    }
+})
 
 /** 回退文本里 xlsx 由后端转成 Markdown 表格 → 走渲染；其余纯文本走 pre-wrap */
 const isMarkdownLikeText = computed(() => {
@@ -236,17 +247,6 @@ function openPreview() {
         loadChunks()
     } else {
         currentPage.value = 1
-        loadOriginal()
-    }
-}
-
-function switchTab(tab: 'original' | 'chunks') {
-    if (activeTab.value === tab) return
-    activeTab.value = tab
-    if (tab === 'chunks') {
-        // 首次进分块 Tab 才拉数据；totalChunks 已知时跳过重复请求
-        if (chunks.value.length === 0) loadChunks()
-    } else if (!rawUrl.value && !originalText.value && !previewText.value) {
         loadOriginal()
     }
 }
@@ -366,35 +366,15 @@ defineExpose({
 </script>
 
 <style scoped>
-.tab-btn {
-    padding: 4px 14px;
-    font-size: 13px;
-    border-radius: 6px;
-    border: 1px solid var(--gd-color-border);
-    background: transparent;
-    color: var(--gd-color-text-gray, #888);
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.tab-btn:hover {
-    color: var(--gd-color-text);
-    background: var(--gd-color-surface-hover, rgba(0, 0, 0, 0.04));
-}
-
-.tab-btn--active {
-    background: var(--gd-color-primary);
-    border-color: var(--gd-color-primary);
-    color: #fff;
-}
-
-/* flex 外壳：占满弹窗 body（弹窗是 flex column，body flex:1），Tab 栏固定、内容区自适应。
-   弹窗本体上限 85vh，定高 calc 会溢出产生双滚动，所以内容一律 flex-1 自伸缩 */
+/* flex 外壳：GdDialog 的高度由内容撑起（body 高度 auto，max-height 85vh 只是上限），
+   height:100% 在 auto 链上解析不出值，flex 链会塌陷成"扁弹窗"。
+   所以直接给视口定高：85vh 弹窗上限 − header(~40px) − body 上下 padding(24px)
+   − Tab 行(~44px)，留余量取 120px；min-height 兜底小窗口。 */
 .preview-shell {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    min-height: 0;
+    height: calc(85vh - 120px);
+    min-height: 320px;
 }
 
 /* 原文滚动容器：Tab 固定在弹窗头部，内容区独立滚动 */
