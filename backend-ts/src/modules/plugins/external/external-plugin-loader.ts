@@ -567,6 +567,12 @@ export class ExternalPluginLoader implements OnModuleInit {
   /**
    * 从分发源安装插件（github:/gitee:/git:/local:）
    * 下载到用户插件目录 → 加载 → 广播 plugins.changed。onLog 实时推送进度行。
+   *
+   * 目录命名：一律用 **manifest.id**，不用源路径/仓库名。
+   * 否则「仓库叫 guada-plugin-purge、插件 id 叫 guada-purge」会出现两个名字，
+   * 卸载/更新按 id 找不到目录、同 id 装两份时后一份被静默跳过。
+   *
+   * 两阶段：先落到 `.staging-*`（扫描器跳过 `.` 开头目录）→ 读 manifest 定名 → rename 落地。
    */
   private async doInstall(
     source: string,
@@ -575,33 +581,68 @@ export class ExternalPluginLoader implements OnModuleInit {
   ): Promise<{ id: string; dir: string }> {
     const parsed = parsePluginSource(source);
     const userDir = this.userPluginDir();
-    const targetDir = path.join(userDir, parsed.dirName);
     const push = (line: string) => onLog?.(line);
+    const stagingDir = path.join(
+      userDir,
+      `.staging-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    );
 
-    if (fs.existsSync(targetDir)) {
-      throw new Error(`插件目录已存在，请先卸载或使用更新: ${parsed.dirName}`);
-    }
-
-    // 下载
-    if (parsed.protocol === "local") {
-      if (!fs.existsSync(parsed.localPath)) {
-        throw new Error(`本地插件路径不存在: ${parsed.localPath}`);
-      }
-      push(`[local] 复制本地插件: ${parsed.localPath}`);
-      await fs.promises.cp(parsed.localPath, targetDir, { recursive: true });
-    } else {
-      const tmpDir = `${targetDir}.tmp-${Date.now()}`;
-      push(`[git] 克隆 ${parsed.display}${parsed.ref ? ` @${parsed.ref}` : ""}`);
-      try {
-        await this.gitClone(parsed.cloneUrl!, parsed.ref, tmpDir, push, signal);
-        await fs.promises.rename(tmpDir, targetDir);
+    try {
+      // 1) 下载 / 复制到暂存目录
+      if (parsed.protocol === "local") {
+        if (!fs.existsSync(parsed.localPath)) {
+          throw new Error(`本地插件路径不存在: ${parsed.localPath}`);
+        }
+        push(`[local] 复制本地插件: ${parsed.localPath}`);
+        await fs.promises.cp(parsed.localPath, stagingDir, { recursive: true });
+      } else {
+        push(`[git] 克隆 ${parsed.display}${parsed.ref ? ` @${parsed.ref}` : ""}`);
+        await this.gitClone(parsed.cloneUrl!, parsed.ref, stagingDir, push, signal);
         push(`[git] 下载完成`);
-      } catch (err: any) {
-        await fs.promises.rm(tmpDir, { recursive: true, force: true });
-        throw err;
       }
-    }
 
+      // 2) 读 manifest 决定最终目录名（id 必须在暂存阶段就确定）
+      const manifest = this.readManifest(stagingDir);
+      const pluginId = manifest?.id ? String(manifest.id).trim() : "";
+      if (!pluginId) {
+        throw new Error(
+          `插件清单缺失或缺少 id（${parsed.display}）：安装目录根下必须有合法的 manifest.json`,
+        );
+      }
+
+      // 3) 同 id 是否已安装（含旧版按源名命名的目录）
+      const existing = await this.findInstalledDir(userDir, pluginId);
+      if (existing) {
+        const existingName = path.basename(existing);
+        throw new Error(
+          existingName === pluginId
+            ? `插件 ${pluginId} 已安装，请先卸载或使用更新`
+            : `插件 ${pluginId} 已安装（目录 ${existingName}），请先卸载或使用更新`,
+        );
+      }
+
+      // 4) 落地到 userDir/<id>
+      const targetDir = path.join(userDir, pluginId);
+      await fs.promises.rename(stagingDir, targetDir);
+
+      await this.finalizeInstall(targetDir, source, pluginId, manifest, push);
+      return { id: pluginId, dir: targetDir };
+    } catch (err) {
+      await fs.promises
+        .rm(stagingDir, { recursive: true, force: true })
+        .catch(() => undefined);
+      throw err;
+    }
+  }
+
+  /** 安装落地后的收尾：记录分发源 → 加载 → 广播 */
+  private async finalizeInstall(
+    targetDir: string,
+    source: string,
+    pluginId: string,
+    manifest: ExternalManifest | null,
+    push: (line: string) => void,
+  ): Promise<void> {
     // 记录分发源（供 update/溯源）
     try {
       await fs.promises.writeFile(path.join(targetDir, ".gd-source"), source, "utf-8");
@@ -609,26 +650,48 @@ export class ExternalPluginLoader implements OnModuleInit {
       /* 记录失败不致命 */
     }
 
-    // 加载
-    const manifest = this.readManifest(targetDir);
     const isProviderPack = !!manifest?.provides;
     if (isProviderPack) {
       push(`[info] 供应商包：安装后可在 设置 → 模型供应商 中添加`);
-      if (manifest.main || manifest.provides?.providerAdapters) {
+      if (manifest?.main || manifest?.provides?.providerAdapters) {
         push(`[warn] 该包包含代码适配器，将在后端主进程内执行`);
       }
     }
-    push(`[load] 加载插件 ${parsed.dirName} …`);
+    push(`[load] 加载插件 ${pluginId} …`);
     await this.loadExternalPlugin(targetDir, "user");
-    const id = this.readManifestId(targetDir);
-    this.eventBus.emit("plugins.changed", { pluginId: id, action: "installed" });
-    this.logger.log(`Plugin installed: ${id} from ${source}`);
+    this.eventBus.emit("plugins.changed", { pluginId, action: "installed" });
+    this.logger.log(`Plugin installed: ${pluginId} from ${source}`);
     push(
       isProviderPack
-        ? `[done] 供应商包已安装: ${id}`
-        : `[done] 插件已安装: ${id}`,
+        ? `[done] 供应商包已安装: ${pluginId}`
+        : `[done] 插件已安装: ${pluginId}`,
     );
-    return { id, dir: targetDir };
+  }
+
+  /**
+   * 在用户插件目录里按 manifest.id 查找已安装目录。
+   *
+   * 需要遍历而不是直接拼 `<id>`：历史版本按源名建目录
+   * （如 `guada-plugin-purge/` 里装着 id=`guada-purge`），
+   * 只查 `<id>` 会漏掉它们，导致同一插件装成两份。
+   */
+  private async findInstalledDir(
+    userDir: string,
+    pluginId: string,
+  ): Promise<string | null> {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(userDir, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const dir = path.join(userDir, entry.name);
+      const manifest = this.readManifest(dir);
+      if (manifest && String(manifest.id || "").trim() === pluginId) return dir;
+    }
+    return null;
   }
 
   /** 同步安装（内部/测试用），无日志回调 */
@@ -747,10 +810,5 @@ export class ExternalPluginLoader implements OnModuleInit {
     } catch {
       return null;
     }
-  }
-
-  /** 读取插件目录 manifest 的 id */
-  private readManifestId(dir: string): string {
-    return this.readManifest(dir)?.id || path.basename(dir);
   }
 }
