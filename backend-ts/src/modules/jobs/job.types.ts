@@ -115,6 +115,11 @@ export interface JobOutputRead {
   /** 读取时日志总大小 */
   size: number;
   truncated: boolean;
+  /**
+   * 本次因超过单次读取上限而被丢弃的字节数（丢的是最早的部分）。
+   * 0/缺省表示没有丢弃。job_read 据此告诉模型「跳过了多少，完整内容在日志文件里」。
+   */
+  droppedBytes?: number;
   logFilePath?: string;
 }
 

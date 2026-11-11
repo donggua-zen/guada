@@ -6,12 +6,20 @@ import { RolePluginConfig } from "../plugins/types/plugin.types";
 import { isToolkitAllowedByRoleConfig } from "../plugins/utils/role-toolkit-filter";
 import { JobRegistryService } from "./job-registry.service";
 import type { JobId, JobSnapshot } from "./job.types";
-import { isByteLogJobKind } from "./job.types";
+import { JOB_READ_DEFAULT_MAX_BYTES, isByteLogJobKind } from "./job.types";
 import langZh from "./jobs.lang.zh.json";
 import langEn from "./jobs.lang.en.json";
 
 /** job_read 的 wait_ms 上限（缺省/0 = 不阻塞，由调用方显式给出等待时长） */
 const WAIT_MAX_MS = 10 * 60_000;
+
+/** 字节数的人类可读形式，只用于给模型的提示文案 */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
 
 /**
  * 后台作业的唯一模型工具集：job_read / job_list / job_stop / job_send。
@@ -68,7 +76,8 @@ export class JobsPlugin extends PluginBase {
       description: `Read a background job's output.
 
 - Each call returns the output that arrived since your last read (the first call returns the tail). No parameters needed for paging.
-- If the output is truncated, read the log file (path is included) with the read tool for the full content.
+- If more than one read's worth (64 KB) is waiting, the earliest part is skipped and only the newest 64 KB is returned; the note tells you how much was skipped. The complete log file is always available at the path in the response.
+- If nothing new arrived since your last read, the body is "(no new output since last read)" — that is not an error.
 - wait_ms blocks up to that many milliseconds for a terminal status (omit or 0 = return immediately; max 10min). A timed-out wait returns [status: running] and leaves the job alive.
 - Reading a terminal job marks it observed and suppresses the completion notice; reading a running job is only a snapshot.
 - Every response ends with [status: ...].`,
@@ -95,7 +104,7 @@ export class JobsPlugin extends PluginBase {
         }
 
         const result = await this.registry.readIncremental(jobId, sessionId);
-        return this.renderOutput(result.output, result.job);
+        return this.renderOutput(result.output, result.job, result.incremental);
       },
       display: {
         actionType: "process",
@@ -207,7 +216,7 @@ export class JobsPlugin extends PluginBase {
 
 - Tools that start background work return a stable **job id**. Track it.
 - The system notifies you in-session when a job finishes; do not busy-poll or sleep on it.
-- job_list shows this session's jobs; job_read returns the output since your last read (pass wait_ms only when genuinely blocked); job_send feeds input verbatim — include "\n" yourself for keyboard-style input (shell stdin, or a follow-up message that resumes a sub-agent); job_stop cancels work that no longer matters. Truncated output: read the log file with the read tool.
+- job_list shows this session's jobs; job_read returns the output since your last read (pass wait_ms only when genuinely blocked); job_send feeds input verbatim — include "\n" yourself for keyboard-style input (shell stdin, or a follow-up message that resumes a sub-agent); job_stop cancels work that no longer matters. job_read keeps only the newest 64 KB when more is waiting — the note says how much was skipped, and the full log is at the given path.
 - Before giving a final answer, collect every still-relevant job with job_read, and job_stop the ones that are no longer needed.`,
     });
   }
@@ -226,21 +235,32 @@ export class JobsPlugin extends PluginBase {
   }
 
   private renderOutput(
-    output: { text: string; truncated: boolean },
+    output: { text: string; truncated: boolean; droppedBytes?: number },
     job: JobSnapshot,
+    incremental: boolean,
   ): { content: string; meta: Record<string, any> } {
-    const body = output.text.length > 0 ? output.text : "(no output)";
+    const dropped = output.droppedBytes ?? 0;
+    // 续读没拿到新内容时，说清"上次之后没有新增"，不要含糊成 "(no output)"
+    const body = output.text.length > 0
+      ? output.text
+      : incremental
+        ? "(no new output since last read)"
+        : "(no output)";
     const exit =
       job.exitCode !== undefined && job.exitCode !== null
         ? `, exit code: ${job.exitCode}`
         : "";
     const log = job.logFilePath ? `\nLog file: ${job.logFilePath}` : "";
-    // 截断指引与 run_command 前台同款：有日志文件就读文件，没有（内存文本类）就说只剩部分
-    const truncatedNote = output.truncated
+    // 超过单次上限时丢的是最早的一段，只保留最新的；说清丢了多少、完整内容在哪
+    const truncatedNote = dropped > 0
       ? job.logFilePath
-        ? `\n[Note: Output was truncated. The complete log is saved at: ${job.logFilePath}. Read it with the read tool for full content.]`
-        : `\n[Note: Output was truncated; only part of it is shown.]`
-      : "";
+        ? `\n[Note: ${formatBytes(dropped)} of output was skipped (only the latest ${formatBytes(JOB_READ_DEFAULT_MAX_BYTES)} is shown). The complete log is saved at: ${job.logFilePath}. Read it with the read tool for full content.]`
+        : `\n[Note: ${formatBytes(dropped)} of output was skipped; only the latest part is shown.]`
+      : output.truncated
+        ? job.logFilePath
+          ? `\n[Note: Output was truncated. The complete log is saved at: ${job.logFilePath}. Read it with the read tool for full content.]`
+          : `\n[Note: Output was truncated; only part of it is shown.]`
+        : "";
     const statusLine = `[status: ${job.status}${exit}]`;
 
     return {
@@ -251,7 +271,8 @@ export class JobsPlugin extends PluginBase {
         jobId: job.id,
         jobStatus: job.status,
         handle: job.handle,
-        truncated: output.truncated,
+        truncated: output.truncated || dropped > 0,
+        ...(dropped > 0 ? { droppedBytes: dropped } : {}),
         ...(job.logFilePath ? { logFilePath: job.logFilePath } : {}),
       },
     };
