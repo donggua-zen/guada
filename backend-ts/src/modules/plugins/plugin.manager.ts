@@ -20,6 +20,7 @@ import { PromptCollector } from "./prompt-collector.service";
 import { ISessionContext } from "../chat/session-context";
 import { CommandProviderRegistry } from "../commands/command-provider-registry.service";
 import { NlsService } from "./i18n/nls.service";
+import { SkillRegistry } from "../skills/core/skill-registry.service";
 import { TurnReminderRegistry } from "./turn-reminders/turn-reminder.registry";
 import { isToolkitAllowedByRoleConfig } from "./utils/role-toolkit-filter";
 import { isVisibleToAgent } from "./utils/agent-visibility";
@@ -279,6 +280,14 @@ export class PluginManager {
     this.localCommandRegistry?.unregisterByPlugin(pluginId);
     this.turnReminderRegistry?.unregisterByPlugin(pluginId);
     this.httpRegistry?.unregisterPlugin(pluginId);
+    // 插件注册过的技能由宿主代清：外部插件拿不到 SkillRegistry 实例，
+    // 不清会留下「同 id 重新安装后旧技能复活」的幽灵能力
+    // （技能可见性靠 isPluginEnabled 判定，但插件重新启用后它就又可见了）。
+    try {
+      SkillRegistry.getInstance()?.unregisterByProvider(`plugin:${pluginId}`);
+    } catch (err: any) {
+      this.logger.warn(`Skill cleanup for ${pluginId} failed: ${err?.message ?? err}`);
+    }
     this.instances.delete(pluginId);
     this.logger.log(`Plugin unregistered: ${pluginId}`);
     this.eventBus.emit("plugins.changed", { pluginId, action: "unregistered" });
