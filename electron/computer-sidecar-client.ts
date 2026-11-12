@@ -299,7 +299,11 @@ export class ComputerSidecarClient {
       log.warn(`[ComputerSidecar] forcing process tree ${child.pid} to stop`);
       if (process.platform === "win32") {
         await new Promise<void>((resolve) => {
-          execFile("taskkill", ["/pid", String(child.pid), "/T", "/F"], () => resolve());
+          // 主进程是 GUI 子系统、无控制台：缺 windowsHide 会新建控制台窗口
+          // （与 backend-ts 的 exit 兜底同类，见 MEMORY.md 2026-10-10）。
+          execFile("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }, () =>
+            resolve(),
+          );
         });
       } else {
         child.kill("SIGKILL");
