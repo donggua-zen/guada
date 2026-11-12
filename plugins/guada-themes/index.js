@@ -59,8 +59,9 @@ const THEMES = [
     mode: "light",
   },
   { id: "qi-cel", name: "柒·义体夜航", primaryColor: "#a84b34", secondaryColor: "#4a585f" },
-  // qi-dusk（柒·残月都市）已迁出为独立外置皮肤插件 plugins/qi-dusk-skin/：
-  // 主题带大体积图片资源（原始 PNG ~6MB），不适合随安装包内置，见该插件 index.js 头注。
+  // qi-dusk（柒·残月都市）已独立为外置皮肤插件，不再随主仓分发：
+  // 见插件市场 github:donggua-zen/guada-plugin-qi-dusk-skin
+  // （本地开发工作区：../guada_plugins/guada-plugin-qi-dusk-skin）。
 ];
 
 class GuadaThemesPlugin {
