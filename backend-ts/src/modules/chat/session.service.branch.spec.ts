@@ -13,7 +13,7 @@ import { TODO_META_CARD } from "../../common/utils/todo-store.util";
  *
  * 覆盖：事件前缀按锚点截断并剔除 session/init 与 session/rotate、会话目录内附件
  * 随迁与引用改写、子代理子会话不再克隆、TODO 从锚点前最后一个 todo 工具结果的
- * meta 重建、锚点/类型/流式守卫、失败回滚。
+ * meta 重建、锚点/类型校验、流式中分支（在途回合不可作锚点）、失败回滚。
  */
 
 const SOURCE_ID = "session-src";
@@ -315,6 +315,8 @@ describe("SessionService.branchSession", () => {
     sessionType?: string;
     withToolImage?: boolean;
     withToolResultImage?: boolean;
+    /** 追加一个只有 turn/start、没有 turn/finish 的在途回合（模拟流式中） */
+    withActiveTurn?: boolean;
   }) {
     await store.create({
       id: SOURCE_ID,
@@ -365,15 +367,22 @@ describe("SessionService.branchSession", () => {
       JSON.stringify({ type: "session/init", seq: 0 }) + "\n",
     );
 
-    messages.seed(
-      SOURCE_ID,
-      buildSourceEvents({
-        todoMetaItems: opts?.todoMetaItems,
-        omitTodoMeta: opts?.omitTodoMeta,
-        withToolImage: opts?.withToolImage,
-        withToolResultImage: opts?.withToolResultImage,
-      }),
-    );
+    const events = buildSourceEvents({
+      todoMetaItems: opts?.todoMetaItems,
+      omitTodoMeta: opts?.omitTodoMeta,
+      withToolImage: opts?.withToolImage,
+      withToolResultImage: opts?.withToolResultImage,
+    });
+    if (opts?.withActiveTurn) {
+      // 在途回合：turn/start 已落盘、turn/finish 尚未写入（流式中的真实形态）
+      events.push({
+        type: "turn/start",
+        seq: events.reduce((max, e) => Math.max(max, e.seq), -1) + 1,
+        time: Date.now(),
+        data: { turnId: "turn-active", kind: "turn" },
+      });
+    }
+    messages.seed(SOURCE_ID, events);
   }
 
   it("事件前缀按锚点截断，并剔除 session/init 与 session/rotate", async () => {
@@ -649,24 +658,43 @@ describe("SessionService.branchSession", () => {
     expect(err.getStatus()).toBe(400);
   });
 
-  it("源会话流式中 → 409", async () => {
-    await seedSource();
+  it("源会话流式中，已完成回合仍可分支且不复制在途回合", async () => {
+    await seedSource({ withActiveTurn: true });
     streaming.add(SOURCE_ID);
-
-    const err = await catchHttp(
-      service.branchSession(SOURCE_ID, { turnId: "turn-a" }),
-    );
-    expect(err.getStatus()).toBe(409);
-  });
-
-  it("子代理运行中不再阻止分支（守卫已移除）", async () => {
-    await seedSource();
-    streaming.add("session-child");
 
     const branched = await service.branchSession(SOURCE_ID, {
       turnId: "turn-a",
     });
-    expect(branched.id).toBeTruthy();
+
+    const imported = messages.importCalls.find(
+      (c) => c.sessionId === branched.id,
+    );
+    expect(imported).toBeDefined();
+    expect(imported!.events.map((e) => e.type)).toEqual([
+      "turn/start",
+      "user/message",
+      "assistant/message",
+      "tool/result",
+      "turn/finish",
+    ]);
+    // 在途回合事件（seq 大于锚点 finish）不进入分支
+    expect(
+      imported!.events.some(
+        (e) => (e.data as { turnId?: string }).turnId === "turn-active",
+      ),
+    ).toBe(false);
+  });
+
+  it("流式中的回合本身不能作为分支锚点 → 400", async () => {
+    await seedSource({ withActiveTurn: true });
+    streaming.add(SOURCE_ID);
+
+    const err = await catchHttp(
+      service.branchSession(SOURCE_ID, { turnId: "turn-active" }),
+    );
+    expect(err.getStatus()).toBe(400);
+    // 未产生任何分支
+    expect((await store.query({}, "createdAsc")).length).toBe(2);
   });
 
   it("事件导入失败 → 回滚半成品分支", async () => {

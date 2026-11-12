@@ -751,7 +751,9 @@ export class SessionService {
    * 分支会话：以指定助手消息所在回合为节点，复制源会话（元信息 + 事件前缀）为新会话。
    *
    * 只允许以「已完成回合」（存在 turn/finish）为节点——分支必须是完整的一轮对话，
-   * 不能是中间状态。复制范围：
+   * 不能是中间状态。会话仍在流式生成时也可分支：流式中的回合尚未写入 turn/finish，
+   * 天然无法通过锚点校验；锚点之前的日志前缀在 finish 落盘后即不可变，在途追加
+   * 只产生 seq 更大的事件，不会被复制。复制范围：
    * - meta 业务字段（workspacePath 共用：分支延续同一工作目录上下文）
    * - 事件前缀（seq ≤ 锚点回合 turn/finish；剔除 session/init 与 session/rotate，
    *   两者由新会话自有初始化承担、重放均为 no-op），消息/回合 id 保留原值
@@ -774,17 +776,9 @@ export class SessionService {
     if (source.sessionType !== "web") {
       throw new HttpException("仅支持对网页会话分支", HttpStatus.BAD_REQUEST);
     }
-    // 流式防护（对齐 deleteSession）：生成中的回合未完成，不能作为分支节点
-    if (this.streamManager.hasActiveStream(sourceSessionId)) {
-      throw new HttpException(
-        {
-          error: "会话正在流式输出中，无法分支",
-          code: "SESSION_STREAMING",
-        },
-        HttpStatus.CONFLICT,
-      );
-    }
-    // 锚点校验：目标回合必须已完整结束（turn/finish 存在即完整一轮）
+    // 锚点校验：目标回合必须已完整结束（turn/finish 存在即完整一轮）。
+    // 不按会话级活跃流拦截——流式中的回合没有 turn/finish，这里会拒绝；
+    // 已完成回合的事件前缀不受在途追加影响，流式中分支是安全的。
     const events = await this.contextManager.getAllEvents(sourceSessionId);
     const anchorFinish = events.find(
       (e) =>
@@ -793,7 +787,7 @@ export class SessionService {
     );
     if (!anchorFinish) {
       throw new HttpException(
-        "分支锚点不存在或该回合尚未完成（仅支持以完整一轮对话为节点分支）",
+        "分支锚点不存在或该回合尚未完成（流式中的回合不能分支，仅支持以完整一轮对话为节点分支）",
         HttpStatus.BAD_REQUEST,
       );
     }
