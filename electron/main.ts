@@ -2096,6 +2096,8 @@ function setupIpcHandlers() {
         running: number;
         unread: number;
         awaiting?: number;
+        /** 语义状态（渲染层按素材能力映射成动作）；漏传会让 atlas 素材永远 idle */
+        mood?: PetStatePayload["mood"];
         mode?: PetStatePayload["mode"];
         title?: string;
         toolLabel?: string;
@@ -2117,6 +2119,9 @@ function setupIpcHandlers() {
       updateTrayMenu();
       // 更新桌宠（模式/计数/标题/工具名/会话列表）
       petState = {
+        // mood 是语义状态（渲染层按素材能力映射成动作）；
+        // 漏传它会退回 mode（4 段素材的动作名），atlas 素材里没有 walk/run → 永远 idle
+        mood: stats.mood ?? "idle",
         mode: stats.mode ?? "idle",
         running: stats.running,
         unread: stats.unread,
