@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const {
   resolvePetsRootDir,
+  resolvePetUiHtmlPath,
   findPetAvatarDir,
   firstPetAvatarId,
   isValidAvatarId,
@@ -38,6 +39,21 @@ function main() {
     `prod 根目录应指向 resources/build-resources/pets，实际 ${prodRoot}`,
   );
   console.log("PET_OK resolvePetsRootDir:prod");
+
+  // 桌宠页面（所有形象共用）：dev 走仓库、prod 走 resources（打包后路径）
+  const devUi = resolvePetUiHtmlPath(true, "/app/electron/dist", "/res");
+  assert.ok(
+    devUi.replace(/\\/g, "/").endsWith("build-resources/pet-ui/pet.html"),
+    `dev 页面路径应是 build-resources/pet-ui/pet.html，实际 ${devUi}`,
+  );
+  assert.ok(!devUi.startsWith("/res"), "dev 不应使用 resourcesPath");
+  const prodUi = resolvePetUiHtmlPath(false, "/app/electron/dist", "/app/resources");
+  assert.strictEqual(
+    prodUi.replace(/\\/g, "/"),
+    "/app/resources/build-resources/pet-ui/pet.html",
+    "prod 页面路径必须在 resources 下（extraResources 拷 build-resources 到 resources/）",
+  );
+  console.log("PET_OK resolvePetUiHtmlPath");
 
   // ── 形象目录解析（多根，用户优先） ──────────────────────
   const bundledRoot = path.join(__dirname, "..", "build-resources", "pets");
