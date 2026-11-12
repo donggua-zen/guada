@@ -63,9 +63,9 @@ LLM
 | `browser.open(url, { newTab? })` | 导航；不自动快照 |
 | `browser.tabs.list()` | 列出当前会话标签，返回 `TabInfo[]` |
 | `browser.tabs.new(url?)` | 显式新建并选中标签，默认 `about:blank`；返回与 `tab.goto` 相同 |
-| `browser.tabs.select(index)` | 切换当前标签，返回选中的 `TabInfo` |
-| `browser.tabs.close(index?)` | 关闭标签，返回 `{ ok, closedTabId, currentTabId }` |
-| `browser.tabs.closeAll()` | 关闭当前会话全部标签，返回 `{ ok, closedCount }` |
+| `browser.tabs.select(indexOrTabId)` | 切换当前标签，返回选中的 `TabInfo` |
+| `browser.tabs.close(indexOrTabId?)` | 关闭标签；无参数关闭当前标签，返回 `{ ok, closedTabId, currentTabId, tabs? }` |
+| `browser.tabs.closeAll()` | 关闭当前会话全部标签，返回 `{ ok, closedCount, tabs? }` |
 | `browser.snapshot({ type? })` | 同 `tab.snapshot` |
 | `browser.current()` | `TabInfo` 或 `null` |
 
@@ -73,7 +73,7 @@ LLM
 
 | 调用 | 说明 |
 |---|---|
-| `tab.goto(url, { newTab?, waitUntil? })` | `waitUntil`: `"domcontentloaded"`（默认）、`"load"`、`"none"`；当前会话无标签时自动创建，`newTab:true` 强制新建 |
+| `tab.goto(url, { newTab?, waitUntil? })` | `waitUntil`: `"domcontentloaded"`（默认）、`"load"`、`"none"`；当前标签失效但会话仍有标签时接管其中一个，零标签才自动创建；`newTab:true` 强制新建 |
 | `tab.snapshot({ type? })` | `simple`（默认）/ `struct` / `summary`，仅这三个值；只观察，不产生动作句柄 |
 | `tab.click(target, options)` | 任意元素；动作前自动等待可操作性 |
 | `tab.dblclick(target, options)` / `tab.focus(target)` / `tab.clear(target, options)` | 双击 / 聚焦 / 清空 |
@@ -101,6 +101,15 @@ LLM
 | `tab.downloads()` | 当前标签最近的下载记录（新→旧） |
 
 非导航命令（`snapshot`、locator、`click` 等）不会隐式创建标签；当前会话没有标签时先 `tab.goto(url)` 或 `browser.tabs.new()`。
+
+### 标签预算与清理
+
+- 每个 AI 会话（`createdBy`）最多 8 个 AI 创建的标签；用户手动打开的标签不计数，子 Agent 独立计数。
+- 6 个起结果附带 `tabs.items` 和 `tabs.warning`；第 9 个新建返回 `TAB_LIMIT`，`details.tabs` 列出当前标签。
+- `tab.goto` / `browser.open` / `browser.tabs.new` 返回 `tabs: { count, limit, current, items?, warning? }`；新建标签时总是带完整列表。
+- 复用当前标签不受上限影响：预算满时仍可 `tab.goto(url)`。
+- 脚本结束时若剩余多个标签，工具结果会列出并提示清理；不会自动关闭。用 `browser.tabs.close(indexOrTabId)` / `closeAll()` 清理。
+- 页面 `window.open` / `target=_blank` 也计入预算；满额时回退为在发起标签中导航。
 
 ### 原生弹窗
 
@@ -142,7 +151,7 @@ const target = tab.locator("article").nth(4);
 await target.locator("p").first().hover();
 ```
 
-未实现的其他 Playwright Locator 方法（`filter`、`all`、`getAttribute`、`inputValue`、`isChecked`、`dragTo`、`setInputFiles` 等）会抛 `UNSUPPORTED`，错误信息列出当前支持的方法；读取属性或计算样式请用 `tab.evaluate(...)`。
+未实现的其他 Playwright Locator 方法（`filter`、`all`、`dragTo`、`setInputFiles` 等）会抛 `UNSUPPORTED`，错误信息列出当前支持的方法；计算样式等更复杂的读取请用 `tab.evaluate(...)`。
 
 ### target
 
@@ -167,7 +176,7 @@ type TabInfo = {
 
 | 调用 | 返回 |
 |---|---|
-| `tab.goto` / `browser.open` | `{ ok, tabId, url, title, readyState? }` |
+| `tab.goto` / `browser.open` | `{ ok, tabId, url, title, readyState?, tabs? }` |
 | `locator.click` / `hover` / `press` | `{ ok, action, target?, url, title, ... }` |
 | `locator.fill` | `{ ok, action, target, value, url, title }` |
 | `locator.selectOption` | `{ ok, action, target, selected, url, title }` |
@@ -185,9 +194,11 @@ type TabInfo = {
 | `tab.console` | console 日志数组 |
 | `browser.tabs.list` | `TabInfo[]` |
 | `browser.tabs.select` | `TabInfo` |
-| `browser.tabs.close` | `{ ok, closedTabId, currentTabId }` |
-| `browser.tabs.closeAll` | `{ ok, closedCount }` |
+| `browser.tabs.close` | `{ ok, closedTabId, currentTabId, tabs? }` |
+| `browser.tabs.closeAll` | `{ ok, closedCount, tabs? }` |
 | `browser.current` / `tab.info` | `TabInfo` 或 `null` |
+
+`TabSummary = { count, limit, current, items?, warning? }`；`items` 与 `browser.tabs.list()` 的 `TabInfo` 同形，`index` 可直接用于 `browser.tabs.close(index)`。
 
 ## 快照对象
 
@@ -271,6 +282,7 @@ type TabInfo = {
 | `NAVIGATION_FAILED` | 导航失败或落在错误页 |
 | `TABS_FAILED` | 标签操作失败 |
 | `TAB_NOT_FOUND` | 当前标签已消失 |
+| `TAB_LIMIT` | 当前会话 AI 标签达到上限 8；details.tabs 列出当前标签 |
 | `SCREENSHOT_FAILED` | 截图/落盘失败 |
 | `CONSOLE_FAILED` | console 日志读取失败 |
 | `NAVIGATION_BLOCKED` | 只允许 http:/https:/about:blank |

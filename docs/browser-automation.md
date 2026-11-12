@@ -213,7 +213,7 @@ children: [e4, e5]
 
 | method | 请求 | 成功返回 |
 |---|---|---|
-| `browser_navigate` | `url, new_tab?, wait_until?, session_path?, session_id?, created_by?` | `{ok, tabId, url, title, readyState?}` |
+| `browser_navigate` | `url, new_tab?, wait_until?, session_path?, session_id?, created_by?` | `{ok, tabId, url, title, readyState?, tabs?}` |
 | `browser_snapshot` | `type?, wait_for_load?, created_by` | `{type, url, title, source?, stats?, tree}` |
 | `browser_locator` | `descriptor, action, options?, value?, key?, values?, checked?, state?, timeout?, created_by` | 动作结果 / count / text / isVisible / state / wait |
 | `browser_press` | `key, modifiers?, timeout?, trusted?, created_by` | `{ok, action, key, url, title}` |
@@ -225,12 +225,14 @@ children: [e4, e5]
 | `browser_dialog` | `action: "get"\|"handle", accept?, prompt_text?, created_by` | get: `{dialog: {type,message,defaultPrompt?}\|null}`；handle: `{ok:true}` |
 | `browser_download` | `action: "wait"\|"list", timeout?, created_by` | wait: `{ok, download: DownloadRecord\|null, timeout}`；list: `{ok, downloads: DownloadRecord[]}` |
 | `browser_history` | `action: "back"\|"forward"\|"reload", created_by` | `{ok, url}` |
-| `browser_tabs` | `action: "list"\|"current"\|"select"\|"close"\|"close_all", index?, tab_id?, created_by` | list: `TabInfo[]`；current: `TabInfo\|null`；select: `TabInfo`；close: `{ok,closedTabId,currentTabId}`；close_all: `{ok,closedCount}` |
+| `browser_tabs` | `action: "list"\|"current"\|"select"\|"close"\|"close_all", index?, tab_id?, created_by` | list: `TabInfo[]`；current: `TabInfo\|null`；select: `TabInfo`；close: `{ok,closedTabId,currentTabId,tabs?}`；close_all: `{ok,closedCount,tabs?}` |
 | `browser_close_by_creator` | `created_by` | `{closedCount}` |
 
 `browser_locator` 的 `descriptor` 支持 `role/text/label/placeholder/testid/altText/title/selector` 和 `index`（first/last/nth）；链式调用的父级放在可选的 `scope` 数组里（从外层到直接父级），宿主逐级在父元素内查询并按元素身份去重，`index` 只作用于所在那一级。不再接受 ref/generation。
 
 `TabInfo = { index, tabId, url, title, isCurrent }`。
+
+`TabSummary = { count, limit, current, items?, warning? }`：`count/limit/current` 总是返回；`items` 在新建标签或达到软提醒阈值（6）时返回；`warning` 从 6 个标签起提示清理。
 
 ### 导航等待
 
@@ -286,5 +288,7 @@ backend 的 `BridgeClient` 保留 `code/details`，runtime 再映射为脚本错
 ### 窗口与隔离
 
 - 所有标签共用 `persist:browser_shared`；会话隔离是 `createdBy` 过滤，**不是** cookie/localStorage 隔离。
-- 当前没有窗口数量上限、空闲自动关闭或崩溃恢复；这些是后续资源治理项。
+- 每个 `createdBy`（AI 会话 / 子 Agent）最多 8 个 AI 创建的标签，第 9 个新建返回 `TAB_LIMIT`；6 个起结果附带清理提示。用户手动打开的标签不计入预算。
+- 没有空闲自动关闭或崩溃恢复；脚本结束时只提醒清理，不自动关闭标签。
+- 当前标签指针失效（例如用户关掉当前标签）时，会自动接管该会话已有的第一个标签，避免下一次 `tab.goto` 误开新窗口。
 - 子 Agent 关闭时由 `browser-script` 插件调用 `browser_close_by_creator` 清理其标签。

@@ -389,6 +389,53 @@ return { blank, page };
     });
   });
 
+  it("browser.tabs.select/close 支持 tabId", async () => {
+    const { bridge, calls } = createBridge();
+    const result = await runScript(
+      bridge,
+      `
+const selected = await browser.tabs.select("t2");
+const closed = await browser.tabs.close("t2");
+return { selected, closed };
+`,
+    );
+
+    expect(result.status).toBe("completed");
+    const tabsCalls = calls.filter((call) => call.method === "browser_tabs");
+    expect(tabsCalls[0].params).toMatchObject({
+      action: "select",
+      tab_id: "t2",
+    });
+    expect(tabsCalls[1].params).toMatchObject({
+      action: "close",
+      tab_id: "t2",
+    });
+  });
+
+  it("TAB_LIMIT 保留 code 与 details", async () => {
+    const { bridge } = createBridge();
+    const originalRequest = bridge.request;
+    bridge.request = async (method: string, params: any) => {
+      if (method === "browser_navigate") {
+        throw new BridgeRequestError("TAB_LIMIT", "Tab limit reached", {
+          limit: 8,
+          tabs: [{ index: 0, tabId: "t0" }],
+        });
+      }
+      return originalRequest(method, params);
+    };
+
+    const result = await runScript(
+      bridge,
+      `return await browser.tabs.new("https://example.com");`,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("TAB_LIMIT");
+    expect((result.error?.details as any)?.limit).toBe(8);
+    expect(result.usedBrowser).toBe(true);
+  });
+
   it("沙箱提供 setTimeout / clearTimeout / setInterval / clearInterval", async () => {
     const { bridge } = createBridge();
     const result = await runScript(

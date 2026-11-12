@@ -70,6 +70,8 @@ async function main() {
     getWebviewWebContents: async () => win.webContents,
     isWindowVisible: () => true,
     setWebviewRenderable: () => {},
+    // 真实 BrowserWebviewManager 会初始化这个字段；service 依赖 typeof 判断是否接线
+    onOpenInNewTab: null,
   };
   const service = new BrowserAutomationService();
   service.initializeWindowManager(manager);
@@ -97,6 +99,76 @@ async function main() {
     `no-tab error should not mention browser_navigate: ${noTabMessage}`,
   );
   console.log("LOCATOR_OK no-tab guidance");
+
+  // 每会话标签上限：8 个时新建返回 TAB_LIMIT；当前指针缺失时接管已有标签
+  const capWindows = Array.from({ length: 8 }, (_, i) => ({
+    windowId: `cap_${i}`,
+    title: `Cap ${i}`,
+    url: `https://cap${i}.test/`,
+    createdAt: Date.now(),
+    lastActiveAt: Date.now(),
+    isActive: false,
+    isMainApp: false,
+    isVisible: false,
+    metadata: { createdBy: "cap-test", sessionId: "cap-test" },
+  }));
+  const originalGetWindowList = manager.getWindowList;
+  manager.getWindowList = () => capWindows;
+  try {
+    const capError = await expectError(
+      () =>
+        service.handleToolCall({
+          id: "0",
+          method: "browser_navigate",
+          params: {
+            url: "https://example.com",
+            new_tab: true,
+            created_by: "cap-test",
+            session_id: "cap-test",
+          },
+        }),
+      "TAB_LIMIT",
+    );
+    assert(capError.details?.limit === 8, "TAB_LIMIT details.limit missing");
+    assert(
+      capError.details?.tabs?.length === 8,
+      `TAB_LIMIT details.tabs wrong: ${JSON.stringify(capError.details)}`,
+    );
+
+    const adopted = await service.handleToolCall({
+      id: "0",
+      method: "browser_tabs",
+      params: { action: "current", created_by: "cap-test" },
+    });
+    assert(
+      adopted && adopted.tabId === "cap_0",
+      `current tab adoption failed: ${JSON.stringify(adopted)}`,
+    );
+    console.log("LOCATOR_OK tab limit and current adoption");
+
+    // window.open 满额回退：把 URL 加载回 origin 标签
+    const originalGetWebContents = manager.getWebContents;
+    const loads = [];
+    manager.getWebContents = (windowId) =>
+      windowId === "cap_0"
+        ? {
+            isDestroyed: () => false,
+            loadURL: async (url) => {
+              loads.push(url);
+            },
+          }
+        : null;
+    manager.onOpenInNewTab("https://popup.test/", "cap_0");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    manager.getWebContents = originalGetWebContents;
+    assert(
+      loads.includes("https://popup.test/"),
+      `popup cap fallback failed: ${JSON.stringify(loads)}`,
+    );
+    console.log("LOCATOR_OK popup fallback at tab limit");
+  } finally {
+    manager.getWindowList = originalGetWindowList;
+  }
 
   const loc = (action, descriptor, extra = {}) =>
     service.handleToolCall({
@@ -274,6 +346,26 @@ async function main() {
   const dynamicState = await loc("state", { kind: "text", text: "Dynamic" });
   assert(dynamicState.found && dynamicState.visible, "dynamic state failed");
   console.log("LOCATOR_OK live re-resolution");
+
+  // 成功导航结果附带标签摘要（复用当前标签：count/current，不重复完整列表）
+  const navResult = await service.handleToolCall({
+    id: "0",
+    method: "browser_navigate",
+    params: {
+      url,
+      created_by: "loc-test",
+      wait_until: "domcontentloaded",
+    },
+  });
+  assert(
+    navResult.tabs && navResult.tabs.count === 1 && navResult.tabs.limit === 8,
+    `tabs summary missing: ${JSON.stringify(navResult.tabs)}`,
+  );
+  assert(
+    navResult.tabs.current && navResult.tabs.current.isCurrent === true,
+    "tabs summary current missing",
+  );
+  console.log("LOCATOR_OK tabs summary");
 
   win.destroy();
   server.close();

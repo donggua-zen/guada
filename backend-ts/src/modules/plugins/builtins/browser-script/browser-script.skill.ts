@@ -200,7 +200,7 @@ Rules:
 
 ## Return shapes
 
-- tab.goto / browser.open -> { ok, tabId, url, title, readyState? }
+- tab.goto / browser.open -> { ok, tabId, url, title, readyState?, tabs? }
 - locator.click / hover / press -> { ok, action, target?, url, title, ... }
 - locator.fill -> { ok, action, target, value, url, title }
 - locator.selectOption -> { ok, action, target, selected, url, title }
@@ -220,10 +220,10 @@ Rules:
 - tab.back / forward / reload -> { ok, url }
 - tab.console -> array of console log entries
 - browser.tabs.list -> TabInfo[] (array)
-- browser.tabs.new -> { ok, tabId, url, title, readyState? }
+- browser.tabs.new -> { ok, tabId, url, title, readyState?, tabs? }
 - browser.tabs.select -> TabInfo
-- browser.tabs.close -> { ok, closedTabId, currentTabId }
-- browser.tabs.closeAll -> { ok, closedCount }
+- browser.tabs.close -> { ok, closedTabId, currentTabId, tabs? }
+- browser.tabs.closeAll -> { ok, closedCount, tabs? }
 - browser.current / tab.info -> { index, tabId, url, title, isCurrent } or null
 - tab.getDialog -> { type: "alert"|"confirm"|"prompt"|"beforeunload", message, defaultPrompt? } | null
 - tab.handleDialog -> { ok: true, handled: boolean }
@@ -231,16 +231,23 @@ Rules:
 - tab.downloads -> DownloadRecord[]
 
 TabInfo = { index, tabId, url, title, isCurrent }.
+TabSummary = { count, limit, current, items?, warning? }.
 DownloadRecord = { id, filename, path, state: "completed"|"cancelled"|"interrupted"|"pending", receivedBytes, totalBytes, mime, url }.
 
 ## Tabs
 
-- tab.goto(url) reuses the session's current tab; if the session has no tab yet, it creates one.
-- tab.goto(url, { newTab: true }) always creates and selects a new tab.
+- tab.goto(url) reuses the session's current tab. If the current tab was closed but other tabs remain, it adopts one of them; only a session with zero tabs creates a tab.
+- tab.goto(url, { newTab: true }) always creates and selects a new tab. Use it only when pages must stay open in parallel.
 - browser.tabs.new(url?) explicitly creates and selects a tab (about:blank by default); it returns the same shape as tab.goto.
-- browser.tabs.list/select/close/closeAll manage tabs; select(id/index) changes the current tab used by tab.*.
+- browser.tabs.list/select/close/closeAll manage tabs. select(indexOrTabId) changes the current tab used by tab.*; close(indexOrTabId?) closes that tab, or the current tab when called without an argument.
 - Non-navigation calls do not create tabs implicitly.
-- window.open / target=_blank opens a new internal tab and selects it; the originating tab keeps its page.
+- window.open / target=_blank opens a new internal tab and selects it; the originating tab keeps its page. At the tab limit it navigates the originating tab instead.
+
+Tab budget:
+- Each AI session (createdBy) can have at most 8 AI-created tabs. User-opened tabs do not count; sub-agents have separate budgets.
+- From 6 tabs the result includes tabs.items plus tabs.warning; creating the 9th tab fails with TAB_LIMIT and details.tabs lists the current tabs.
+- tab.goto / browser.open / browser.tabs.new results include tabs: { count, limit, current, items?, warning? }. Reuse the current tab with tab.goto(url) even when the budget is full.
+- When a script ends with more than one tab open, the tool result lists them. Close tabs you no longer need with browser.tabs.close(indexOrTabId) or browser.tabs.closeAll(); leave tabs open only when the user should keep them.
 
 ## Dialogs
 
@@ -285,10 +292,12 @@ Downloads are saved automatically to the OS Downloads folder (no save dialog); f
 - AMBIGUOUS: multiple elements matched; details.candidates lists them. Narrow the locator or use first/last/nth.
 - NOT_ACTIONABLE: the element exists but failed actionability; details.reason is hidden, disabled, not-editable, not-stable, outside-viewport, or covered. Also returned when the page has an unhandled JavaScript dialog (details.dialog) — call tab.handleDialog first.
 - ACTION_FAILED: input was dispatched but the effect could not be verified, or the element disappeared mid-action.
-- UNSUPPORTED: fill on select/file/checkbox/radio, shadow-root actions, networkidle, or radio uncheck.- EVALUATE_FAILED: page JavaScript failed.
+- UNSUPPORTED: fill on select/file/checkbox/radio, shadow-root actions, networkidle, or radio uncheck.
+- EVALUATE_FAILED: page JavaScript failed.
 - NAVIGATION_FAILED: navigation failed or landed on an error page.
 - TABS_FAILED: tab operation failed.
 - TAB_NOT_FOUND: the current tab disappeared.
+- TAB_LIMIT: this session already has the maximum 8 AI-created tabs; details.tabs lists them. Reuse the current tab or close unneeded tabs before retrying.
 - SCREENSHOT_FAILED: screenshot capture or attachment persistence failed.
 - CONSOLE_FAILED: console log read failed.
 - NAVIGATION_BLOCKED: only http:, https:, and about:blank are navigable.
@@ -315,6 +324,7 @@ Failed runs include the last five trace steps and error details.
 - No filesystem, network, or Node.js APIs. tab.evaluate is the only page-side escape hatch.
 - Timers run in the script sandbox, not the page; use them for generic async patterns, and state waits for page readiness.
 - One script runs against the session's current tab; browser.tabs.select changes it, browser.tabs.new opens and selects a new one.
+- Reuse the current tab by default. Open parallel tabs only when the task needs them, and close tabs you no longer need before the script returns.
 
 ## Example: form with a failure branch
 

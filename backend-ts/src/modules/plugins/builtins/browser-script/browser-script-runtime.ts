@@ -144,6 +144,7 @@ export class BrowserScriptRuntime {
           lastUrl: state.lastUrl,
           lastTitle: state.lastTitle,
           durationMs: Date.now() - startedAt,
+          usedBrowser: state.usedBrowser === true,
         };
 
         try {
@@ -936,7 +937,8 @@ export class BrowserScriptRuntime {
       "browser_tabs",
       {
         action,
-        index: params.index,
+        ...(typeof params.index === "number" ? { index: params.index } : {}),
+        ...(typeof params.tabId === "string" ? { tab_id: params.tabId } : {}),
         created_by: run.createdBy,
       },
       signal,

@@ -41,6 +41,15 @@ export interface BrowserScriptErrorPayload {
   details?: unknown;
 }
 
+/** browser.tabs.list 的轻量标签信息，用于脚本结束后的清理提醒。 */
+export interface BrowserScriptTabInfo {
+  index: number;
+  tabId: string;
+  url: string;
+  title: string;
+  isCurrent: boolean;
+}
+
 export interface BrowserScriptRunResult {
   status: "completed" | "failed" | "cancelled";
   /** 脚本 return 值（已通过 structured clone 校验，可 JSON 序列化） */
@@ -52,4 +61,8 @@ export interface BrowserScriptRunResult {
   lastUrl?: string;
   lastTitle?: string;
   durationMs: number;
+  /** 本次脚本是否调用过浏览器；纯解析错误不需要查询标签。 */
+  usedBrowser?: boolean;
+  /** 脚本结束后该会话仍打开的标签（best-effort 查询）。 */
+  openTabs?: BrowserScriptTabInfo[];
 }
