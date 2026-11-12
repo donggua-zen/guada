@@ -624,6 +624,24 @@ const tab = Object.freeze({
 
 const tabApi = guardTab(tab);
 
+// browser.tabs.select/close 同时接受 index（number）和 tabId（string）。
+// 数字字符串按 index 处理，其余字符串按 tabId 处理。
+function tabTargetArgs(target) {
+  if (typeof target === 'number') {
+    if (!Number.isFinite(target) || target < 0) {
+      throw fatal('INVALID_ARGUMENT', 'tab index must be a non-negative number');
+    }
+    return { index: Math.floor(target) };
+  }
+  if (typeof target === 'string' && target) {
+    return /^\d+$/.test(target) ? { index: Number(target) } : { tabId: target };
+  }
+  if (target && typeof target === 'object' && typeof target.tabId === 'string') {
+    return { tabId: target.tabId };
+  }
+  return {};
+}
+
 const browser = Object.freeze({
   open: function (url, options) {
     return hostCall('goto', Object.assign({}, options || {}, {
@@ -639,8 +657,12 @@ const browser = Object.freeze({
       }
       return hostCall('goto', { url: url || 'about:blank', newTab: true });
     },
-    select: function (index) { return hostCall('tabs', { action: 'select', index: index }); },
-    close: function (index) { return hostCall('tabs', { action: 'close', index: index }); },
+    select: function (target) {
+      return hostCall('tabs', Object.assign({ action: 'select' }, tabTargetArgs(target)));
+    },
+    close: function (target) {
+      return hostCall('tabs', Object.assign({ action: 'close' }, tabTargetArgs(target)));
+    },
     closeAll: function () { return hostCall('tabs', { action: 'close_all' }); },
   }),
   snapshot: function (options) { return tab.snapshot(options); },

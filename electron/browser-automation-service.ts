@@ -11,6 +11,12 @@ import {
 import { BrowserBridgeError } from "./browser-errors";
 import { assertNavigableUrl } from "./browser-url";
 import {
+  buildTabSummary,
+  listCreatorTabs,
+  MAX_TABS_PER_SESSION,
+  tabLimitMessage,
+} from "./browser-tab-policy";
+import {
   BrowserLocatorEngine,
   LocatorDescriptor,
   LocatorWaitState,
@@ -95,6 +101,8 @@ export class BrowserAutomationService {
   private readonly locatorEngine = new BrowserLocatorEngine();
   // 每个 session (createdBy) 的当前标签映射
   private currentTabs = new Map<string, string>();
+  // 正在创建、尚未 attach 的标签数：上限判断必须把并发创建算进去
+  private pendingTabCreations = new Map<string, number>();
   // 同一 webContents 的 CDP 快照必须串行，避免 debugger attach/command 冲突
   private snapshotLocks = new Map<number, Promise<void>>();
 
@@ -118,9 +126,8 @@ export class BrowserAutomationService {
     if (typeof (windowManager as any).onOpenInNewTab !== "undefined") {
       (windowManager as any).onOpenInNewTab = (url: string, originWindowId: string) => {
         void this.openInNewTab(url, originWindowId).catch((error: any) => {
-          // manager 侧捕获后降级为当前页导航；这里只记录
+          // openInNewTab 内部已尝试降级到 origin 标签；这里只记录最终失败。
           log.warn(`Open-in-new-tab failed: ${error?.message || error}`);
-          throw error;
         });
       };
     }
@@ -170,42 +177,78 @@ export class BrowserAutomationService {
       );
     }
 
-    const windowInfo = await this.windowManager.createWindow(url, metadata);
+    const createdBy =
+      typeof metadata?.createdBy === "string" ? metadata.createdBy : "";
 
-    // 等待初始导航完成：waitUntil=none 时完全跳过，由脚本自行决定何时观察。
-    if (url && windowInfo.windowId && waitUntil !== "none") {
-      try {
-        const wc = await this.windowManager.getWebviewWebContents(
-          windowInfo.windowId,
-        );
-        if (wc) {
-          if (waitUntil === "domcontentloaded") {
-            await this.waitForDomReady(wc);
-          } else {
-            await this.waitForPageLoad(wc);
-          }
-          // 页面可能落在 chrome-error 错误页
-          const currentUrl = wc.getURL();
-          if (currentUrl.startsWith("chrome-error://")) {
-            throw new BrowserBridgeError(
-              "NAVIGATION_FAILED",
-              `Initial navigation failed: page loaded chrome-error for ${url}`,
-              { url, currentUrl },
-            );
-          }
-        }
-      } catch (error: any) {
-        // 导航失败/超时，不关闭窗口——页面可能仍有内容或稍后可用
-        log.warn(
-          `Browser window navigation warning: ${windowInfo.windowId} - ${error.message}`,
-          metadata,
-        );
-        throw error;
+    // 每会话预算：用户手动打开的标签没有 createdBy，不占额度。
+    if (createdBy) {
+      const windows = this.getWindowList();
+      const existing = windows.filter(
+        (window) => window.metadata?.createdBy === createdBy,
+      ).length;
+      const pending = this.pendingTabCreations.get(createdBy) ?? 0;
+      if (existing + pending >= MAX_TABS_PER_SESSION) {
+        const count = existing + pending;
+        throw new BrowserBridgeError("TAB_LIMIT", tabLimitMessage(count), {
+          limit: MAX_TABS_PER_SESSION,
+          count,
+          tabs: listCreatorTabs(
+            windows,
+            createdBy,
+            this.getCurrentTabId(createdBy),
+          ),
+        });
       }
+      this.pendingTabCreations.set(createdBy, pending + 1);
     }
 
-    log.info(`Browser window created: ${windowInfo.windowId}`, metadata);
-    return windowInfo.windowId;
+    try {
+      const windowInfo = await this.windowManager.createWindow(url, metadata);
+
+      // 等待初始导航完成：waitUntil=none 时完全跳过，由脚本自行决定何时观察。
+      if (url && windowInfo.windowId && waitUntil !== "none") {
+        try {
+          const wc = await this.windowManager.getWebviewWebContents(
+            windowInfo.windowId,
+          );
+          if (wc) {
+            if (waitUntil === "domcontentloaded") {
+              await this.waitForDomReady(wc);
+            } else {
+              await this.waitForPageLoad(wc);
+            }
+            // 页面可能落在 chrome-error 错误页
+            const currentUrl = wc.getURL();
+            if (currentUrl.startsWith("chrome-error://")) {
+              throw new BrowserBridgeError(
+                "NAVIGATION_FAILED",
+                `Initial navigation failed: page loaded chrome-error for ${url}`,
+                { url, currentUrl },
+              );
+            }
+          }
+        } catch (error: any) {
+          // 导航失败/超时，不关闭窗口——页面可能仍有内容或稍后可用
+          log.warn(
+            `Browser window navigation warning: ${windowInfo.windowId} - ${error.message}`,
+            metadata,
+          );
+          throw error;
+        }
+      }
+
+      log.info(`Browser window created: ${windowInfo.windowId}`, metadata);
+      return windowInfo.windowId;
+    } finally {
+      if (createdBy) {
+        const next = (this.pendingTabCreations.get(createdBy) ?? 1) - 1;
+        if (next > 0) {
+          this.pendingTabCreations.set(createdBy, next);
+        } else {
+          this.pendingTabCreations.delete(createdBy);
+        }
+      }
+    }
   }
 
   /**
@@ -219,16 +262,25 @@ export class BrowserAutomationService {
    * 获取当前标签 ID
    */
   private getCurrentTabId(createdBy: string): string | undefined {
-    const wid = this.currentTabs.get(createdBy);
-    if (!wid) return undefined;
-    // 验证窗口仍然存在
     if (!this.windowManager) return undefined;
-    const windows = this.windowManager.getWindowList();
-    if (!windows.find((w) => w.windowId === wid)) {
-      this.currentTabs.delete(createdBy);
-      return undefined;
+    const windows = this.getWindowList();
+    const sessionWindows = windows.filter(
+      (window) => window.metadata?.createdBy === createdBy,
+    );
+    const wid = this.currentTabs.get(createdBy);
+    if (wid && sessionWindows.some((window) => window.windowId === wid)) {
+      return wid;
     }
-    return wid;
+
+    // 当前标签被用户关掉后指针会失效。此时优先接管该会话已有的标签，
+    // 避免下一次 tab.goto 误判“没有标签”又创建一个新窗口。
+    if (wid) this.currentTabs.delete(createdBy);
+    if (sessionWindows.length > 0) {
+      const adopted = sessionWindows[0].windowId;
+      this.currentTabs.set(createdBy, adopted);
+      return adopted;
+    }
+    return undefined;
   }
 
   /**
@@ -236,6 +288,18 @@ export class BrowserAutomationService {
    */
   private clearCurrentTab(createdBy: string): void {
     this.currentTabs.delete(createdBy);
+  }
+
+  /** 生成返回给模型的标签摘要；没有 createdBy 时保持旧返回形状。 */
+  private getTabSummary(
+    createdBy: string | undefined,
+    currentTabId: string | undefined,
+    includeItems: boolean = false,
+  ) {
+    if (!createdBy) return undefined;
+    return buildTabSummary(this.getWindowList(), createdBy, currentTabId, {
+      includeItems,
+    });
   }
 
   /**
@@ -324,6 +388,7 @@ export class BrowserAutomationService {
 
       log.info("All windows destroyed");
       this.currentTabs.clear();
+      this.pendingTabCreations.clear();
     } catch (error) {
       log.error("Error during window destruction:", error);
     }
@@ -366,6 +431,7 @@ export class BrowserAutomationService {
       if (createdBy) this.setCurrentTab(createdBy, wid);
 
       const wc = this.windowManager.getWebContents(wid);
+      const tabs = this.getTabSummary(createdBy, wid, true);
       return {
         ok: true,
         tabId: wid,
@@ -373,6 +439,7 @@ export class BrowserAutomationService {
         url: waitUntil === "none" ? url : wc?.getURL() || url,
         title: wc?.getTitle() || "",
         readyState: await this.readReadyState(wc),
+        ...(tabs ? { tabs } : {}),
       };
     }
 
@@ -422,12 +489,14 @@ export class BrowserAutomationService {
           log.warn(`Navigation (no-wait) failed for ${url}: ${navError.message}`);
         }
       });
+      const tabs = this.getTabSummary(createdBy, wid);
       return {
         ok: true,
         tabId: wid,
         url,
         title: webContents.getTitle(),
         readyState: "loading",
+        ...(tabs ? { tabs } : {}),
       };
     }
 
@@ -465,12 +534,14 @@ export class BrowserAutomationService {
         );
       }
 
+      const tabs = this.getTabSummary(createdBy, wid);
       return {
         ok: true,
         tabId: wid,
         url: currentUrl,
         title: webContents.getTitle(),
         readyState: await this.readReadyState(webContents),
+        ...(tabs ? { tabs } : {}),
       };
     } catch (error: any) {
       if (error instanceof BrowserBridgeError) throw error;
@@ -2088,10 +2159,15 @@ export class BrowserAutomationService {
           }
         }
 
+        const tabs = this.getTabSummary(
+          createdBy,
+          nextCurrentTabId ?? undefined,
+        );
         return {
           ok: true,
           closedTabId: targetWid,
           currentTabId: nextCurrentTabId,
+          ...(tabs ? { tabs } : {}),
         };
       }
 
@@ -2102,7 +2178,12 @@ export class BrowserAutomationService {
           count++;
         }
         if (createdBy) this.clearCurrentTab(createdBy);
-        return { ok: true, closedCount: count };
+        const tabs = this.getTabSummary(createdBy, undefined);
+        return {
+          ok: true,
+          closedCount: count,
+          ...(tabs ? { tabs } : {}),
+        };
       }
 
       default:
@@ -2131,6 +2212,7 @@ export class BrowserAutomationService {
       await this.windowManager.closeWindow(w.windowId);
     }
     this.clearCurrentTab(createdBy);
+    this.pendingTabCreations.delete(createdBy);
     return { closedCount: windows.length };
   }
 
@@ -2249,7 +2331,7 @@ export class BrowserAutomationService {
 
   /**
    * window.open / target=_blank 的开新标签路由（由 manager 的 setWindowOpenHandler 调用）。
-   * 失败时抛错，manager 会降级为当前页导航。
+   * 创建失败（含 TAB_LIMIT）时回退到 origin 标签导航；回退也失败才抛错。
    */
   private async openInNewTab(url: string, originWindowId: string): Promise<void> {
     if (!this.windowManager) {
@@ -2259,17 +2341,57 @@ export class BrowserAutomationService {
       .getWindowList()
       .find((w) => w.windowId === originWindowId);
     const createdBy = originInfo?.metadata?.createdBy as string | undefined;
+
+    assertNavigableUrl(url, "window.open");
+
     if (!createdBy) {
-      throw new Error("Origin tab has no createdBy; cannot attribute a new tab");
+      const loaded = await this.loadInOriginTab(
+        url,
+        originWindowId,
+        "Origin tab has no createdBy",
+      );
+      if (!loaded) {
+        throw new Error("Origin tab has no createdBy; cannot attribute a new tab");
+      }
+      return;
     }
+
     const metadata: Record<string, any> = { createdBy };
     if (originInfo?.metadata?.sessionId) metadata.sessionId = originInfo.metadata.sessionId;
     if (originInfo?.metadata?.sessionPath) metadata.sessionPath = originInfo.metadata.sessionPath;
 
-    assertNavigableUrl(url, "window.open");
-    const info = await this.createWindow(url, metadata, "domcontentloaded");
-    this.setCurrentTab(createdBy, info);
-    log.info(`Popup routed to new tab ${info} (origin ${originWindowId}): ${url}`);
+    try {
+      const info = await this.createWindow(url, metadata, "domcontentloaded");
+      this.setCurrentTab(createdBy, info);
+      log.info(`Popup routed to new tab ${info} (origin ${originWindowId}): ${url}`);
+    } catch (error: any) {
+      const loaded = await this.loadInOriginTab(
+        url,
+        originWindowId,
+        `Popup new-tab failed (${error?.message || error})`,
+      );
+      if (!loaded) throw error;
+    }
+  }
+
+  /** 新标签创建失败时的兜底：把弹窗 URL 加载回发起标签。 */
+  private async loadInOriginTab(
+    url: string,
+    originWindowId: string,
+    reason: string,
+  ): Promise<boolean> {
+    const webContents = this.windowManager?.getWebContents(originWindowId);
+    if (!webContents || webContents.isDestroyed()) return false;
+    try {
+      log.warn(`${reason}; falling back to origin tab ${originWindowId}: ${url}`);
+      await webContents.loadURL(url);
+      return true;
+    } catch (error: any) {
+      log.warn(
+        `Origin-tab fallback failed for ${url} (${error?.message || error})`,
+      );
+      return false;
+    }
   }
 
   private isAbortedNavigationError(error: any): boolean {
