@@ -157,7 +157,9 @@
             </div>
 
             <template #footer>
-                <GdButton v-if="currentPlugin?.repository" plain size="small" @click="openRepo">
+                <!-- 同一行按钮必须同 size 档位：之前「打开仓库」给了 small(28px)、
+                     「安装」用默认 medium(32px)，同一行高度不一致 -->
+                <GdButton v-if="currentPlugin?.repository" plain @click="openRepo">
                     {{ t('plugins.market.openRepo') }}
                 </GdButton>
                 <GdButton
