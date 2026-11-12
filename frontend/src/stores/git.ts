@@ -340,6 +340,7 @@ export const useGitStore = defineStore("git", () => {
         "no_model_configured",
         "model_not_found",
         "generation_failed",
+        "output_truncated",
         "aborted",
         "error",
       ] as const;
