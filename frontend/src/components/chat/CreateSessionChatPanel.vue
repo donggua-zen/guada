@@ -745,8 +745,7 @@ const sendMessage = async (payload?: { content?: string; files?: ChatFileView[];
   }
   const content = payload?.content ?? draftContent.value;
   const files = payload?.files ?? draftFiles.value ?? [];
-  // 记录提交快照：ChatInput 紧接着会自清空编辑器与附件列表，
-  // 创建失败时由 ChatPage 回填（成功则随草稿一并清空）
+  // 记录提交快照：随后要清空输入框，创建失败时由 ChatPage 回填
   draftStore.markSubmitted({ content, files });
   // 修复：传递完整的 payload，包含 knowledgeBaseIds
   // modelId / groupId 运行时可为 null（未绑定模型 / 未分组，后端创建接口接受 null），
@@ -765,6 +764,10 @@ const sendMessage = async (payload?: { content?: string; files?: ChatFileView[];
     // isWaiting 初值：ChatPage 在消费前必置 true，此处仅为满足 InputMessageState 契约
     isWaiting: false
   });
+
+  // 载荷已交给创建流程，输入框才清空（ChatInput 自身不再清空）。
+  // 校验失败的分支在上面直接 return，正文与附件原样保留。
+  draftStore.clearInput();
 }
 
 // 设置操作

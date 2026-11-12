@@ -75,6 +75,15 @@ export const useNewSessionDraftStore = defineStore('newSessionDraft', () => {
     }
 
     /**
+     * 只清输入内容（提交给创建流程后立即调用，让输入框空出来）。
+     * 保留 config 与 submitted：创建失败时仍要能 restoreSubmitted() 回填。
+     */
+    function clearInput(): void {
+        content.value = ''
+        files.value = []
+    }
+
+    /**
      * 清空草稿（会话创建成功时调用：内容已转移给新会话，
      * 再次进入新建页应为空白而不是已发出去的旧文字）。
      * 一律重新赋值而不是就地清空数组——files 可能与新会话草稿共享实例。
@@ -86,5 +95,5 @@ export const useNewSessionDraftStore = defineStore('newSessionDraft', () => {
         submitted.value = null
     }
 
-    return { content, files, config, submitted, hasDraft, saveConfig, markSubmitted, restoreSubmitted, clear }
+    return { content, files, config, submitted, hasDraft, saveConfig, markSubmitted, restoreSubmitted, clearInput, clear }
 })

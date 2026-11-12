@@ -143,15 +143,22 @@ export function useMessageOperations(
             if (ref) payloadFiles.push(ref)
         }
 
-        // 清空输入框
-        inputMessage.value = { content: "", files: [], knowledgeBaseIds: undefined, isWaiting: false };
-
+        // 不在这里清空输入框：发送失败时正文与附件必须原样保留。
+        // 清空由调用方在服务端确认接收后显式调用 clearInputMessage()（见 ChatPanel）。
         return {
             content: text,
             files: payloadFiles,
             replaceTurnId,
             knowledgeBaseIds,
         }
+    }
+
+    /**
+     * 清空输入框（发送成功后的收尾）。
+     * 编辑态下清 editMode.inputMessage，否则清当前会话草稿。
+     */
+    function clearInputMessage(): void {
+        inputMessage.value = { content: "", files: [], knowledgeBaseIds: undefined, isWaiting: false };
     }
 
     /**
@@ -188,6 +195,7 @@ export function useMessageOperations(
         inputMessage,
         exitEditMode,
         prepareNewMessage,
+        clearInputMessage,
         enterEditMode
     }
 }

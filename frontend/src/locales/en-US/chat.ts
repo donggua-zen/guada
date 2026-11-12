@@ -7,6 +7,7 @@
     stopGenerating: 'Stop Generating',
     enqueue: 'Enqueue',
     send: 'Send',
+    sending: 'Sending',
     selectModel: 'Please select a model',
     unlimited: 'Unlimited',
     custom: 'Custom',
