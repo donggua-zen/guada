@@ -17,6 +17,7 @@
  * 本模块只负责窗口生命周期与穿透，业务状态（运行中/未读/标题）由 main.ts 转发。
  */
 import { BrowserWindow, screen, type Display } from "electron";
+import { pathToFileURL } from "url";
 import * as fs from "fs";
 import * as path from "path";
 import log from "electron-log";
@@ -26,9 +27,39 @@ import log from "electron-log";
  * 宽度取 360 而不是「气泡宽 250」：宠物贴边时窗口会有一截在屏幕外，
  * 气泡要往左让，必须留出这段余量，否则贴边后气泡会被压到读不清。
  * 高度 = 宠物 216 + 气泡（多会话列表最高 ~120）+ 余量。
+ *
+ * 这两个是**基准形象（210px 高）**下的尺寸；用户改大小时走 computePetWindowSize。
  */
 export const PET_WINDOW_WIDTH = 360;
 export const PET_WINDOW_HEIGHT = 380;
+
+/** 宠物基准显示高度（CSS px） */
+export const PET_BASE_PX = 210;
+/** 缩放范围：60% ~ 200%。下限保证还看得清，上限避免占满半个屏幕 */
+export const PET_MIN_SCALE = 0.6;
+export const PET_MAX_SCALE = 2;
+
+/** 比例夹取（NaN/越界都收回合法区间） */
+export function clampPetScale(scale: number | undefined | null): number {
+  if (typeof scale !== "number" || !Number.isFinite(scale)) return 1;
+  return Math.min(PET_MAX_SCALE, Math.max(PET_MIN_SCALE, scale));
+}
+
+/**
+ * 由宠物显示高度推导窗口尺寸。
+ *
+ * 为什么不整体缩放窗口：气泡里有文字，跟着缩会糊/不可读。
+ * 所以只把「宠物那一块」加高加宽，气泡区域保持固定。
+ */
+export function computePetWindowSize(petPx: number): { width: number; height: number } {
+  const safe = Number.isFinite(petPx) && petPx > 0 ? petPx : PET_BASE_PX;
+  return {
+    // 横向：至少容纳 250 宽的气泡；宠物变大时窗口跟着变宽（贴边让路仍有余量）
+    width: Math.max(PET_WINDOW_WIDTH, Math.round(safe + 150)),
+    // 纵向：宠物 + stage padding + 气泡区（约 160）
+    height: Math.round(safe + 170),
+  };
+}
 /** 命中判定轮询间隔：40ms ≈ 25Hz，肉眼无延迟且开销可忽略 */
 export const PET_HIT_POLL_MS = 40;
 
@@ -93,64 +124,196 @@ export function resolvePetsRootDir(
     : path.join(resourcesPath, "build-resources", "pets");
 }
 
-/** 某个形象的素材目录 */
-export function resolvePetAssetDir(petsRootDir: string, avatarId: string): string {
-  return path.join(petsRootDir, isValidAvatarId(avatarId) ? avatarId : PET_AVATAR_DEFAULT);
+/**
+ * 桌宠页面（渲染层）路径。
+ *
+ * 页面是**所有形象共用**的一份：素材目录只该放素材——Codex 宠物目录里本来就只有
+ * pet.json + spritesheet.webp，没有页面。资源路径靠主进程下发的 baseUrl 解析，
+ * 所以页面放在哪里都能读到对应素材。
+ *
+ * 保留了「形象目录自带 pet.html 就优先用它」的兼容：老版本领养的形象目录里都有一份，
+ * 也方便将来给某个形象做定制页面。
+ */
+export function resolvePetUiHtmlPath(
+  isDev: boolean,
+  moduleDir: string,
+  resourcesPath: string,
+): string {
+  return isDev
+    ? path.join(moduleDir, "..", "..", "build-resources", "pet-ui", "pet.html")
+    : path.join(resourcesPath, "build-resources", "pet-ui", "pet.html");
+}
+
+/** 一个素材根：用户导入的目录优先于内置目录 */
+export interface PetRoot {
+  dir: string;
+  /**
+   * 来源：
+   * - user     我们自己导入的（`<userData>/pets`，可写）
+   * - petdex   用户在外面用 `npx petdex install` 装的（`~/.petdex/pets`，只读扫描）
+   * - codex    Codex 桌面端自己的宠物目录（`~/.codex/pets`，只读扫描）
+   * - bundled  随安装包内置
+   */
+  source: "user" | "petdex" | "codex" | "bundled";
+}
+
+/** 形象素材格式：frames=我们的逐帧格式；atlas=Codex 图集 */
+export type PetAvatarFormat = "frames" | "atlas";
+
+/**
+ * 在多个根里按顺序找形象目录（用户目录在前，先命中者胜出）。
+ *
+ * 只认「有 pet.json 或 manifest.json 的目录」，空目录/坏目录跳过——
+ * 设置页和主进程都不该因为一个坏文件夹崩掉。
+ */
+export function findPetAvatarDir(
+  roots: readonly PetRoot[],
+  avatarId: string,
+): string | null {
+  if (!isValidAvatarId(avatarId)) return null;
+  for (const root of roots) {
+    const dir = path.join(root.dir, avatarId);
+    if (
+      fs.existsSync(path.join(dir, "pet.json")) ||
+      fs.existsSync(path.join(dir, "manifest.json"))
+    ) {
+      return dir;
+    }
+  }
+  return null;
+}
+
+/** 兜底：第一个可用形象 id（找不到返回 null） */
+export function firstPetAvatarId(roots: readonly PetRoot[]): string | null {
+  const list = listPetAvatars(roots);
+  return list.length > 0 ? list[0].id : null;
 }
 
 /** 设置页形象选择器需要的条目 */
 export interface PetAvatarInfo {
   id: string;
   name: string;
-  /** 预览图 data URL（dev 走 http、prod 走 file://，只有 data URL 两边都通用） */
+  description?: string;
+  format: PetAvatarFormat;
+  /** 来自哪一类根（设置页用它区分「内置」「我导入的」「Petdex/Codex 里的」） */
+  source: PetRoot["source"];
+  /** 预览图 data URL：frames 素材直接给 avatar.webp */
   previewDataUrl: string | null;
+  /**
+   * atlas 素材的图集（WebP data URL）。
+   * 主进程解不了 WebP（nativeImage 不支持），只能把整张图交给渲染层用 canvas 裁一格；
+   * 超过 3MB 的图集不传，退回占位卡（避免几 MB 的 IPC 载荷）。
+   */
+  sheetDataUrl?: string | null;
+  /** sheetDataUrl 存在时，要裁的格子（像素） */
+  previewCell?: { x: number; y: number; w: number; h: number };
 }
 
+/** 图集预览：超过这个尺寸就不传整图（base64 会膨胀 1.33 倍） */
+const PREVIEW_SHEET_MAX_BYTES = 3 * 1024 * 1024;
+
 /**
- * 扫描形象目录，供设置页展示可选形象。
- * 只认「有 sprites.json 的子目录」，坏目录直接跳过，不让设置页崩掉。
+ * 生成预览数据。
+ * - frames：目录里的 avatar.webp
+ * - atlas：整张图集（渲染层裁第一格）
  */
-export function listPetAvatars(petsRootDir: string): PetAvatarInfo[] {
-  let entries: fs.Dirent[];
+function buildPreview(dir: string, format: PetAvatarFormat): Pick<
+  PetAvatarInfo,
+  "previewDataUrl" | "sheetDataUrl" | "previewCell"
+> {
   try {
-    entries = fs.readdirSync(petsRootDir, { withFileTypes: true });
-  } catch (error) {
-    log.warn("[pet] 读取形象目录失败:", error);
-    return [];
-  }
-
-  const list: PetAvatarInfo[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !isValidAvatarId(entry.name)) continue;
-    const dir = path.join(petsRootDir, entry.name);
-    const configPath = path.join(dir, "manifest.json");
-    if (!fs.existsSync(configPath)) continue;
-
-    let name = entry.name;
-    try {
-      const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
-        name?: unknown;
+    if (format === "frames") {
+      const avatarPath = path.join(dir, "avatar.webp");
+      if (!fs.existsSync(avatarPath)) return { previewDataUrl: null };
+      return {
+        previewDataUrl: `data:image/webp;base64,${fs.readFileSync(avatarPath).toString("base64")}`,
       };
-      if (typeof config.name === "string" && config.name.trim()) {
-        name = config.name.trim();
-      }
-    } catch (error) {
-      log.warn(`[pet] 形象 ${entry.name} 的 manifest.json 解析失败:`, error);
     }
 
-    let previewDataUrl: string | null = null;
-    const avatarPath = path.join(dir, "avatar.webp");
-    if (fs.existsSync(avatarPath)) {
+    const config = JSON.parse(fs.readFileSync(path.join(dir, "pet.json"), "utf8")) as {
+      spritesheetPath?: unknown;
+    };
+    const sheetName =
+      typeof config.spritesheetPath === "string" && config.spritesheetPath.trim()
+        ? config.spritesheetPath.trim()
+        : "spritesheet.webp";
+    const sheetPath = path.join(dir, sheetName);
+    if (!fs.existsSync(sheetPath)) return { previewDataUrl: null };
+    if (fs.statSync(sheetPath).size > PREVIEW_SHEET_MAX_BYTES) {
+      return { previewDataUrl: null };
+    }
+    return {
+      previewDataUrl: null,
+      sheetDataUrl: `data:image/webp;base64,${fs.readFileSync(sheetPath).toString("base64")}`,
+      previewCell: { x: 0, y: 0, w: ATLAS_CELL_W, h: ATLAS_CELL_H },
+    };
+  } catch (error) {
+    log.warn(`[pet] 预览图生成失败 ${dir}:`, error);
+    return { previewDataUrl: null };
+  }
+}
+
+/** Codex 图集单格尺寸（预览裁切与渲染共用；完整契约见 docs/pet-format-codex.md） */
+export const ATLAS_CELL_W = 192;
+export const ATLAS_CELL_H = 208;
+
+/**
+ * 扫描所有素材根，供设置页展示可选形象。
+ * 同一 id 出现在多个根时以**靠前的根**为准（用户目录覆盖内置目录）。
+ */
+export function listPetAvatars(roots: readonly PetRoot[]): PetAvatarInfo[] {
+  const seen = new Set<string>();
+  const list: PetAvatarInfo[] = [];
+
+  for (const root of roots) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(root.dir, { withFileTypes: true });
+    } catch {
+      // 目录还不存在（首次启动的用户目录）不是错误
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !isValidAvatarId(entry.name)) continue;
+      if (seen.has(entry.name)) continue;
+
+      const dir = path.join(root.dir, entry.name);
+      const atlasConfigPath = path.join(dir, "pet.json");
+      const framesConfigPath = path.join(dir, "manifest.json");
+      const isAtlas = fs.existsSync(atlasConfigPath);
+      if (!isAtlas && !fs.existsSync(framesConfigPath)) continue;
+
+      const format: PetAvatarFormat = isAtlas ? "atlas" : "frames";
+      const configPath = isAtlas ? atlasConfigPath : framesConfigPath;
+
+      let name = entry.name;
+      let description: string | undefined;
       try {
-        previewDataUrl = `data:image/webp;base64,${fs
-          .readFileSync(avatarPath)
-          .toString("base64")}`;
+        const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
+          name?: unknown;
+          displayName?: unknown;
+          description?: unknown;
+        };
+        const label = isAtlas ? config.displayName : config.name;
+        if (typeof label === "string" && label.trim()) name = label.trim();
+        if (typeof config.description === "string" && config.description.trim()) {
+          description = config.description.trim();
+        }
       } catch (error) {
-        log.warn(`[pet] 形象 ${entry.name} 的预览图读取失败:`, error);
+        log.warn(`[pet] 形象 ${entry.name} 的配置解析失败:`, error);
       }
-    }
 
-    list.push({ id: entry.name, name, previewDataUrl });
+      seen.add(entry.name);
+      list.push({
+        id: entry.name,
+        name,
+        description,
+        format,
+        source: root.source,
+        ...buildPreview(dir, format),
+      });
+    }
   }
 
   // 默认形象排最前，其余按 id 稳定排序
@@ -303,8 +466,10 @@ export function writePetPositionFile(file: string, position: PetPositionFile): v
 }
 
 export interface PetWindowOptions {
-  /** 形象根目录（内含多个 <id>/ 形象目录） */
-  petsRootDir: string;
+  /** 素材根列表（用户目录在前、内置目录在后，先命中者胜出） */
+  petsRoots: PetRoot[];
+  /** 共用的桌宠页面（pet-ui/pet.html）绝对路径 */
+  uiHtmlPath: string;
   /** 初始形象 id */
   avatarId?: string;
   /** pet-preload.js 绝对路径 */
@@ -323,6 +488,11 @@ export interface PetSessionBrief {
 
 /** 主进程 → 桌宠的状态载荷 */
 export interface PetStatePayload {
+  /**
+   * 语义状态（前端派生，渲染层按素材能力映射成具体动作）。
+   * 兼容期同时带 mode（4 段素材的动作名）；晚些时候删。
+   */
+  mood?: string;
   mode: "idle" | "walk" | "run" | "yawn";
   running: number;
   unread: number;
@@ -340,6 +510,11 @@ export class PetWindowController {
 
   /** 渲染层上报的可交互几何（窗口内坐标） */
   private geometry: PetHitGeometry | null = null;
+  /** 宠物显示比例（0.6–2）与其换算出的像素高度 */
+  private scale = 1;
+  private petPx = PET_BASE_PX;
+  /** 播放倍速（0.25–4，1 = 官方节奏） */
+  private animationSpeed = 1;
   /** 当前是否已置为穿透（避免每 40ms 重复调用 setIgnoreMouseEvents） */
   private appliedIgnore: boolean | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
@@ -352,22 +527,100 @@ export class PetWindowController {
   private configJson: string | null = null;
   /** 当前形象 id（切换形象会重建窗口，因为素材目录整体换了） */
   private avatarId: string;
+  /** 当前形象解析出的素材目录；null = 找不到（窗口不建，避免黑框） */
+  private assetDirPath: string | null;
+  /** 当前素材格式（决定下发的是 manifest 还是 pet.json） */
+  private format: PetAvatarFormat = "frames";
 
   constructor(options: PetWindowOptions) {
     this.options = options;
-    this.avatarId = isValidAvatarId(options.avatarId ?? "")
+    const wanted = isValidAvatarId(options.avatarId ?? "")
       ? (options.avatarId as string)
       : PET_AVATAR_DEFAULT;
+    // 找不到就把 avatarId 回落到一个真实存在的形象，避免「设置里选了个不存在的 id」
+    this.assetDirPath = findPetAvatarDir(options.petsRoots, wanted);
+    if (!this.assetDirPath) {
+      const fallbackId = firstPetAvatarId(options.petsRoots);
+      this.assetDirPath = fallbackId
+        ? findPetAvatarDir(options.petsRoots, fallbackId)
+        : null;
+      this.avatarId = fallbackId ?? wanted;
+    } else {
+      this.avatarId = wanted;
+    }
+    this.format = this.detectFormat();
   }
 
   /** 当前形象的素材目录 */
-  private get assetDir(): string {
-    return resolvePetAssetDir(this.options.petsRootDir, this.avatarId);
+  private get assetDir(): string | null {
+    return this.assetDirPath;
+  }
+
+  /** 素材格式：有 pet.json 即 Codex 图集，否则我们的逐帧格式 */
+  private detectFormat(): PetAvatarFormat {
+    if (!this.assetDirPath) return "frames";
+    return fs.existsSync(path.join(this.assetDirPath, "pet.json")) ? "atlas" : "frames";
   }
 
   /** 当前形象 id（设置页回显用） */
   getAvatarId(): string {
     return this.avatarId;
+  }
+
+  /** 当前形象格式（测试与调试用） */
+  getFormat(): PetAvatarFormat {
+    return this.format;
+  }
+
+  /** 宠物显示高度（CSS px）：基准 210 × 用户比例 */
+  getPetPx(): number {
+    return this.petPx;
+  }
+
+  /** 当前比例（设置页回显用） */
+  getScale(): number {
+    return this.scale;
+  }
+
+  /** 当前窗口尺寸（随宠物大小变化） */
+  private windowSize(): { width: number; height: number } {
+    return computePetWindowSize(this.petPx);
+  }
+
+  /**
+   * 调整宠物大小。
+   *
+   * 只改「宠物那一块」：气泡和字不缩放，否则文字会糊。
+   * 尺寸变化后要重新夹一次位置——原来贴边的形象变大了可能越过屏幕。
+   */
+  setScale(scale: number): void {
+    const next = clampPetScale(scale);
+    const nextPx = Math.round(PET_BASE_PX * next);
+    if (nextPx === this.petPx) {
+      this.scale = next;
+      this.pushSettings();
+      return;
+    }
+    this.scale = next;
+    this.petPx = nextPx;
+    if (!this.isAlive()) return;
+
+    const size = this.windowSize();
+    // 尺寸变了，旧的命中几何作废（渲染层收到 settings 后会重报）。
+    // 不清掉的话夹取会按旧尺寸算，放大的窗口就会有一截跑到屏幕外。
+    this.geometry = null;
+    // 用 setBounds 而不是 setSize：resizable:false 的窗口在 Windows 上
+    // setSize 只能变大、变小会被忽略（实测），setBounds 两个方向都生效。
+    const bounds = this.win!.getBounds();
+    this.win!.setBounds({
+      x: bounds.x,
+      y: bounds.y,
+      width: size.width,
+      height: size.height,
+    });
+    this.pushSettings();
+    this.clampIntoView({ includeBubble: false });
+    this.pushClip();
   }
 
   /**
@@ -377,7 +630,14 @@ export class PetWindowController {
   setAvatar(avatarId: string): void {
     const next = isValidAvatarId(avatarId) ? avatarId : PET_AVATAR_DEFAULT;
     if (next === this.avatarId) return;
+    const dir = findPetAvatarDir(this.options.petsRoots, next);
+    if (!dir) {
+      log.warn(`[pet] 形象 ${next} 不存在，保持当前形象 ${this.avatarId}`);
+      return;
+    }
     this.avatarId = next;
+    this.assetDirPath = dir;
+    this.format = this.detectFormat();
     // 配置随素材变，必须失效重读
     this.configJson = null;
     this.geometry = null;
@@ -410,16 +670,24 @@ export class PetWindowController {
   ensureWindow(): BrowserWindow | null {
     if (this.isAlive()) return this.win;
 
-    const htmlPath = path.join(this.assetDir, "pet.html");
+    if (!this.assetDir) {
+      log.warn("[pet] 没有可用的形象目录，跳过创建");
+      return null;
+    }
+    // 页面：形象目录自带就用它（老形象/定制），否则退回共用页面。
+    // 导入的 Codex 宠物目录里只有 pet.json + spritesheet.webp，没有页面。
+    const ownHtml = path.join(this.assetDir, "pet.html");
+    const htmlPath = fs.existsSync(ownHtml) ? ownHtml : this.options.uiHtmlPath;
     if (!fs.existsSync(htmlPath)) {
-      log.warn(`[pet] 素材缺失，跳过创建: ${htmlPath}`);
+      log.warn(`[pet] 桌宠页面缺失，跳过创建: ${htmlPath}`);
       return null;
     }
 
     const position = this.resolveInitialPosition();
+    const size = this.windowSize();
     const win = new BrowserWindow({
-      width: PET_WINDOW_WIDTH,
-      height: PET_WINDOW_HEIGHT,
+      width: size.width,
+      height: size.height,
       x: position.x,
       y: position.y,
       transparent: true,
@@ -469,14 +737,14 @@ export class PetWindowController {
     this.win = win;
     this.startPoll();
     log.info(
-      `[pet] 桌宠窗口已创建 pos=(${position.x},${position.y}) size=${PET_WINDOW_WIDTH}x${PET_WINDOW_HEIGHT}`,
+      `[pet] 桌宠窗口已创建 pos=(${position.x},${position.y}) size=${size.width}x${size.height} pet=${this.petPx}px`,
     );
     return win;
   }
 
   /** 依据位置文件 + 显示器工作区决定初始坐标 */
   private resolveInitialPosition(): PetPoint {
-    const size = { width: PET_WINDOW_WIDTH, height: PET_WINDOW_HEIGHT };
+    const size = this.windowSize();
     const saved = readPetPositionFile(this.options.positionFile);
     if (saved) {
       const display = findDisplayForPoint(saved, screen.getAllDisplays());
@@ -548,23 +816,55 @@ export class PetWindowController {
     this.send("pet:state", state);
   }
 
-  /** 主进程 → 渲染层：透明度 */
+  /** 主进程 → 渲染层：透明度 + 宠物显示高度 + 播放倍速 */
   pushSettings(): void {
-    this.send("pet:settings", { opacity: this.opacity });
+    this.send("pet:settings", {
+      opacity: this.opacity,
+      petPx: this.petPx,
+      animationSpeed: this.animationSpeed,
+    });
   }
 
-  /** 主进程 → 渲染层：动画清单（file:// 下渲染层 fetch 会被拦，统一由主进程读盘下发） */
+  /**
+   * 播放倍速（0.25–4）：1 = Codex 官方节奏。
+   *
+   * 官方契约的 idle 是 6 帧 1100ms（闭眼只有 110ms），有人会觉得眨眼太密；
+   * dsh-desktop-pet 也留了这个配置项。改完立即生效，不重启窗口。
+   */
+  setAnimationSpeed(speed: number): void {
+    const next = Number.isFinite(speed) ? Math.min(4, Math.max(0.25, speed)) : 1;
+    if (next === this.animationSpeed) return;
+    this.animationSpeed = next;
+    this.pushSettings();
+  }
+
+  /** 当前播放倍速（设置页回显） */
+  getAnimationSpeed(): number {
+    return this.animationSpeed;
+  }
+
+  /**
+   * 主进程 → 渲染层：素材配置。
+   *
+   * 统一成 `{ format, config }`：renders 层据此选 FrameSetProvider 或 AtlasProvider。
+   * file:// 下渲染层 fetch 会被拦，所以由主进程读盘下发。
+   */
   pushConfig(): void {
+    if (!this.assetDir) return;
     if (this.configJson === null) {
-      const configPath = path.join(this.assetDir, "manifest.json");
+      const fileName = this.format === "atlas" ? "pet.json" : "manifest.json";
+      const configPath = path.join(this.assetDir, fileName);
       try {
         this.configJson = fs.readFileSync(configPath, "utf8");
       } catch (error) {
-        log.warn("[pet] 读取 manifest.json 失败:", error);
+        log.warn(`[pet] 读取 ${fileName} 失败:`, error);
         return;
       }
     }
-    this.sendRaw("pet:config", this.configJson);
+    // baseUrl 让渲染层按「素材目录」解析相对路径：导入的 Codex 宠物目录里
+    // 未必带 pet.html（页面可能来自别处），不能依赖页面自身的相对位置。
+    const baseUrl = `${pathToFileURL(this.assetDir).href}/`;
+    this.sendRaw("pet:config", this.configJson, this.format, baseUrl);
   }
 
   /** 渲染层首帧就绪：补发全部缓存状态 */
@@ -660,9 +960,10 @@ export class PetWindowController {
     const win = this.win!;
     const [x] = win.getPosition();
     const area = this.currentWorkArea();
-    const left = Math.max(0, Math.min(PET_WINDOW_WIDTH, area.x - x));
+    const winWidth = this.windowSize().width;
+    const left = Math.max(0, Math.min(winWidth, area.x - x));
     const right = Math.min(
-      PET_WINDOW_WIDTH,
+      winWidth,
       Math.max(0, area.x + area.width - x),
     );
     this.send("pet:clip", { left, right });
@@ -690,7 +991,7 @@ export class PetWindowController {
       const clamped = clampPetPosition(
         { x, y },
         area,
-        { width: PET_WINDOW_WIDTH, height: PET_WINDOW_HEIGHT },
+        this.windowSize(),
       );
       nextX = clamped.x;
       nextY = clamped.y;
@@ -723,8 +1024,9 @@ export class PetWindowController {
   private currentWorkArea(): PetWorkArea {
     const win = this.win!;
     const [x, y] = win.getPosition();
+    const size = this.windowSize();
     const display = findDisplayForPoint(
-      { x: x + PET_WINDOW_WIDTH / 2, y: y + PET_WINDOW_HEIGHT / 2 },
+      { x: x + size.width / 2, y: y + size.height / 2 },
       screen.getAllDisplays(),
     );
     return (display ?? screen.getPrimaryDisplay()).workArea;
@@ -787,8 +1089,13 @@ export class PetWindowController {
     this.win!.webContents.send(channel, payload);
   }
 
-  private sendRaw(channel: string, json: string): void {
+  private sendRaw(
+    channel: string,
+    json: string,
+    format?: PetAvatarFormat,
+    baseUrl?: string,
+  ): void {
     if (!this.isAlive()) return;
-    this.win!.webContents.send(channel, json);
+    this.win!.webContents.send(channel, json, format, baseUrl);
   }
 }

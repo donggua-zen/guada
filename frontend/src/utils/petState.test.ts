@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildPetBubble,
   derivePetMode,
+  derivePetMood,
   pickPetSessions,
+  resolveClip,
   PET_SESSION_LIST_LIMIT,
+  PET_TRANSIENT_MS,
   PET_YAWN_IDLE_MS,
   type PetSessionBrief,
 } from "./petState";
@@ -203,5 +206,129 @@ describe("buildPetBubble", () => {
   it("awaiting 为负数/NaN 按 0 处理", () => {
     expect(buildPetBubble({ running: 0, unread: 0, awaiting: -1 })).toBeNull();
     expect(buildPetBubble({ running: 0, unread: 0, awaiting: Number.NaN })).toBeNull();
+  });
+});
+
+describe("derivePetMood", () => {
+  const base = { running: 0, unread: 0, awaiting: 0, idleMs: 0, now: 1_000_000 };
+
+  it("无任务无未读 → idle", () => {
+    expect(derivePetMood(base)).toBe("idle");
+  });
+
+  it("有任务 → working", () => {
+    expect(derivePetMood({ ...base, running: 2 })).toBe("working");
+  });
+
+  it("有待答 → waiting（优先级高于运行中）", () => {
+    expect(derivePetMood({ ...base, running: 3, awaiting: 1 })).toBe("waiting");
+  });
+
+  it("失败瞬态优先级高于运行中", () => {
+    expect(
+      derivePetMood({
+        ...base,
+        running: 1,
+        lastOutcome: { kind: "error", at: base.now - 500 },
+      }),
+    ).toBe("error");
+  });
+
+  it("成功瞬态优先级低于运行中", () => {
+    expect(
+      derivePetMood({
+        ...base,
+        running: 1,
+        lastOutcome: { kind: "success", at: base.now - 500 },
+      }),
+    ).toBe("working");
+  });
+
+  it("瞬态超过 2s 自动过期", () => {
+    expect(
+      derivePetMood({
+        ...base,
+        lastOutcome: { kind: "success", at: base.now - PET_TRANSIENT_MS - 1 },
+      }),
+    ).toBe("idle");
+  });
+
+  it("启动问候优先于空闲、低于运行中", () => {
+    expect(derivePetMood({ ...base, starting: true })).toBe("starting");
+    expect(derivePetMood({ ...base, starting: true, running: 1 })).toBe("working");
+  });
+
+  it("长空闲 → sleeping；有未读时不装睡", () => {
+    expect(derivePetMood({ ...base, idleMs: PET_YAWN_IDLE_MS })).toBe("sleeping");
+    expect(derivePetMood({ ...base, idleMs: PET_YAWN_IDLE_MS * 2, unread: 2 })).toBe("idle");
+  });
+
+  it("拖动方向最优先", () => {
+    expect(
+      derivePetMood({ ...base, running: 5, awaiting: 2, dragging: "right" }),
+    ).toBe("dragging-right");
+    expect(derivePetMood({ ...base, dragging: "left" })).toBe("dragging-left");
+  });
+});
+
+describe("resolveClip（素材能力回退）", () => {
+  /** 我们逐帧素材的四段 */
+  const framesCaps = ["idle", "walk", "run", "yawn"];
+  /** Codex 图集的九段 */
+  const atlasCaps = [
+    "idle",
+    "running-right",
+    "running-left",
+    "waving",
+    "jumping",
+    "failed",
+    "waiting",
+    "running",
+    "review",
+  ];
+
+  it("idle 两边都是 idle", () => {
+    expect(resolveClip("idle", framesCaps)).toBe("idle");
+    expect(resolveClip("idle", atlasCaps)).toBe("idle");
+  });
+
+  it("working：逐帧按任务数选 walk/run，图集统一 running", () => {
+    expect(resolveClip("working", framesCaps, { running: 1 })).toBe("walk");
+    expect(resolveClip("working", framesCaps, { running: 2 })).toBe("run");
+    expect(resolveClip("working", atlasCaps, { running: 1 })).toBe("running");
+    expect(resolveClip("working", atlasCaps, { running: 9 })).toBe("running");
+  });
+
+  it("waiting / success / error / starting：图集有对应行", () => {
+    expect(resolveClip("waiting", atlasCaps)).toBe("waiting");
+    expect(resolveClip("success", atlasCaps)).toBe("review");
+    expect(resolveClip("error", atlasCaps)).toBe("failed");
+    expect(resolveClip("starting", atlasCaps)).toBe("waving");
+  });
+
+  it("逐帧素材缺这些行 → 回退 idle", () => {
+    expect(resolveClip("waiting", framesCaps)).toBe("idle");
+    expect(resolveClip("success", framesCaps)).toBe("idle");
+    expect(resolveClip("error", framesCaps)).toBe("idle");
+    expect(resolveClip("starting", framesCaps)).toBe("idle");
+  });
+
+  it("sleeping：逐帧有 yawn，图集没有 → idle", () => {
+    expect(resolveClip("sleeping", framesCaps)).toBe("yawn");
+    expect(resolveClip("sleeping", atlasCaps)).toBe("idle");
+  });
+
+  it("拖动方向只有图集支持", () => {
+    expect(resolveClip("dragging-left", atlasCaps)).toBe("running-left");
+    expect(resolveClip("dragging-right", atlasCaps)).toBe("running-right");
+    expect(resolveClip("dragging-left", framesCaps)).toBe("idle");
+  });
+
+  it("完全没有 idle 的素材也不会返回空", () => {
+    expect(resolveClip("working", [])).toBe("idle");
+  });
+
+  it("支持 Set 形式的能力集合", () => {
+    expect(resolveClip("working", new Set(atlasCaps))).toBe("running");
   });
 });

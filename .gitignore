@@ -94,3 +94,6 @@ tmp/**
 # electron-builder 打包产物：更新元数据（指向 Setup exe，每次打包都会变）
 /latest.yml
 /latest-mac.yml
+
+# 宠物市场索引（生成物，上传官网，不入库）
+pet-market/

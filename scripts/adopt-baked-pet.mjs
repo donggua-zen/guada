@@ -161,12 +161,8 @@ async function main() {
     .webp({ quality: 88, alphaQuality: 95 })
     .toFile(path.join(outDir, "avatar.webp"));
 
-  // ── 6. 运行时页面（与 silver-haired 同款） ──
-  fs.copyFileSync(
-    path.resolve("build-resources/pets/silver-haired/pet.html"),
-    path.join(outDir, "pet.html"),
-  );
-
+  // 运行时页面不复制：所有形象共用 build-resources/pet-ui/pet.html，
+  // 素材路径由主进程下发的 baseUrl 解析（素材目录只放素材）。
   console.log(`[adopt] 完成 → ${outDir}`);
 }
 

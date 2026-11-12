@@ -162,12 +162,8 @@ async function main() {
     .toFile(path.join(outDir, "avatar.webp"));
   console.log(`[adopt] avatar ← idle frame_01`);
 
-  // ── 7. pet.html 运行时直接复用（与 silver-haired 同一份） ──
-  fs.copyFileSync(
-    path.resolve("build-resources/pets/silver-haired/pet.html"),
-    path.join(outDir, "pet.html"),
-  );
-
+  // 运行时页面不复制：所有形象共用 build-resources/pet-ui/pet.html，
+  // 素材路径由主进程下发的 baseUrl 解析（素材目录只放素材）。
   console.log(`[adopt] 完成 → ${outDir}`);
 }
 

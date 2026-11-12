@@ -80,6 +80,140 @@ export interface PetBubbleInput {
   sessions?: PetSessionBrief[];
 }
 
+// ──────────────────────────────────────────────────────────────
+// 语义状态（mood）与素材能力映射
+//
+// 为什么要多这一层：同一批事件要喂给两种素材格式——
+// 我们自己的逐帧素材只有 4 段（idle/walk/run/yawn），
+// Codex 图集有 9 段（idle/running/waving/waiting/failed/review/…）。
+// 前端只产「语义」状态，渲染层按素材实际支持的动作名做回退，
+// 这样加新素材（包括将来用 hatch-pet 生成的）不用改前端。
+// ──────────────────────────────────────────────────────────────
+
+export type PetMood =
+  | "starting"
+  | "idle"
+  | "working"
+  | "waiting"
+  | "success"
+  | "error"
+  | "sleeping"
+  | "dragging-left"
+  | "dragging-right";
+
+/** 瞬态状态（启动问候 / 回合成功 / 回合失败）的展示时长 */
+export const PET_TRANSIENT_MS = 2000;
+
+export interface PetMoodInput {
+  /** 运行中的会话数 */
+  running: number;
+  /** 有未读的会话数 */
+  unread: number;
+  /** 有待答（等待用户回复/批准）的会话数 */
+  awaiting?: number;
+  /** 距离上次活动过去了多久（ms） */
+  idleMs: number;
+  /** 最近一次回合终态（瞬态，带时间戳；超时由 derivePetMood 自己判断） */
+  lastOutcome?: { kind: "success" | "error"; at: number } | null;
+  /** 应用启动后的问候瞬态 */
+  starting?: boolean;
+  /** 拖动方向（渲染层知道，回传上来） */
+  dragging?: "left" | "right" | null;
+  /** 当前时间（测试可注入） */
+  now?: number;
+}
+
+/**
+ * 语义状态派生。
+ *
+ * 优先级（对齐 Codex 的状态折叠思路）：
+ *   拖动 > 待答 > 失败 > 运行中 > 成功 > 启动 > 长空闲 > 空闲
+ * 待答排得很高是因为它是**唯一需要用户动作**的状态——
+ * 桌宠在这里换成 waiting，等于替用户喊一声「轮到你了」。
+ */
+export function derivePetMood(input: PetMoodInput): PetMood {
+  const running = Math.max(0, Math.floor(input.running || 0));
+  const unread = Math.max(0, Math.floor(input.unread || 0));
+  const awaiting = Math.max(0, Math.floor(input.awaiting || 0));
+  const now = input.now ?? Date.now();
+
+  if (input.dragging === "left") return "dragging-left";
+  if (input.dragging === "right") return "dragging-right";
+  if (awaiting > 0) return "waiting";
+
+  const outcome = input.lastOutcome;
+  const outcomeFresh = Boolean(outcome) && now - (outcome?.at ?? 0) < PET_TRANSIENT_MS;
+  if (outcomeFresh && outcome?.kind === "error") return "error";
+
+  if (running > 0) return "working";
+  if (outcomeFresh && outcome?.kind === "success") return "success";
+  if (input.starting) return "starting";
+  if (unread > 0) return "idle";
+  if (input.idleMs >= PET_YAWN_IDLE_MS) return "sleeping";
+  return "idle";
+}
+
+/** 素材能力：支持哪些动作名（由渲染层按素材实测） */
+export type PetCapabilities = readonly string[] | ReadonlySet<string>;
+
+function supports(caps: PetCapabilities, name: string): boolean {
+  if (Array.isArray(caps)) return (caps as readonly string[]).includes(name);
+  return (caps as ReadonlySet<string>).has(name);
+}
+
+/**
+ * 语义状态 → 素材动作名（能力回退）。
+ *
+ * 逐帧素材：working 会按任务数选 walk/run，长空闲走 yawn（我们独有的哈欠）；
+ * Codex 图集：working 统一 running（契约只有一个 running 行），
+ * waiting/success/error 才有对应行，缺行一律回退 idle。
+ */
+export function resolveClip(
+  mood: PetMood,
+  caps: PetCapabilities,
+  options: { running?: number } = {},
+): string {
+  const candidates: string[] = [];
+
+  switch (mood) {
+    case "starting":
+      candidates.push("waving");
+      break;
+    case "working":
+      // 图集只有 running；逐帧素材用 walk/run 表达「1 个 / 多个任务」
+      candidates.push("running");
+      if ((options.running ?? 0) >= 2) candidates.push("run");
+      candidates.push("walk");
+      break;
+    case "waiting":
+      candidates.push("waiting");
+      break;
+    case "success":
+      candidates.push("review");
+      break;
+    case "error":
+      candidates.push("failed");
+      break;
+    case "sleeping":
+      candidates.push("yawn");
+      break;
+    case "dragging-left":
+      candidates.push("running-left");
+      break;
+    case "dragging-right":
+      candidates.push("running-right");
+      break;
+    case "idle":
+      break;
+  }
+
+  candidates.push("idle");
+  for (const name of candidates) {
+    if (supports(caps, name)) return name;
+  }
+  return "idle";
+}
+
 /** 状态优先级：待答最需要用户介入，排最前（对齐 Qoder 的择优策略） */
 const STATUS_PRIORITY: Record<PetSessionStatus, number> = {
   awaiting: 0,

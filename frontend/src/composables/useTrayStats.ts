@@ -1,10 +1,13 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useSessionStore } from '@/stores/session'
+import { apiService } from '@/services/ApiService'
 import {
   buildPetBubble,
   derivePetMode,
+  derivePetMood,
   pickPetSessions,
   type PetMode,
+  type PetMood,
   type PetSessionBrief,
 } from '@/utils/petState'
 import type { ToolCallEntry } from '@/types/message'
@@ -29,6 +32,17 @@ export function useTrayStats() {
 
   /** 上次「有活动」（有任务运行或有未读）的时间戳，用于长空闲打哈欠判定 */
   let lastActiveAt = Date.now()
+
+  /** 应用启动后的问候窗口（桌宠先挥个手再进入常态） */
+  const startingUntil = Date.now() + 2500
+
+  /**
+   * 最近一次回合终态。
+   * 从 stream_status_changed 的 completed/error 取——它已经是全局唯一订阅点，
+   * 不需要解析 turn_end 的 finishReason。只用于瞬态展示（2s 后自然过期）。
+   */
+  let lastOutcome: { kind: "success" | "error"; at: number } | null = null
+  let unsubscribeOutcome: (() => void) | null = null
 
   /**
    * 从会话末回合里取「仍在执行」的工具名。
@@ -131,9 +145,20 @@ export function useTrayStats() {
     if (running > 0 || unread > 0 || awaiting > 0) {
       lastActiveAt = Date.now()
     }
-    const idleMs = Date.now() - lastActiveAt
+    const now = Date.now()
+    const idleMs = now - lastActiveAt
 
     const mode: PetMode = derivePetMode({ running, unread, awaiting, idleMs })
+    // 语义状态：渲染层按素材能力映射成具体动作（逐帧 4 段 / 图集 9 段）
+    const mood: PetMood = derivePetMood({
+      running,
+      unread,
+      awaiting,
+      idleMs,
+      lastOutcome,
+      starting: now < startingUntil,
+      now,
+    })
     const title = activeSessionId
       ? sessionStore.getSession(activeSessionId)?.title ?? ''
       : ''
@@ -167,6 +192,7 @@ export function useTrayStats() {
       unread,
       awaiting,
       mode,
+      mood,
       title: bubble?.text ?? '',
       toolLabel: bubble?.tone === 'busy' ? toolLabel : '',
       sessionId: bubble ? bubbleSessionId : null,
@@ -205,6 +231,17 @@ export function useTrayStats() {
 
     // 每 2 秒轮询推送（SSE 事件会同步到 store，轮询开销极小）
     intervalId = setInterval(pushStats, 2000)
+
+    // 回合终态 → 桌宠瞬态（成功/失败各展示 2s）
+    // 用 stream_status_changed 而不是 turn_end：前者已经是全局唯一订阅点，
+    // 且对「连接中断丢了 turn_end」也有兜底；子代理/bot 的流不参与（不是用户视角的回合）。
+    unsubscribeOutcome = apiService.onSessionEvent('stream_status_changed', (event) => {
+      const status = event.payload?.status
+      if (status !== 'completed' && status !== 'error') return
+      const sessionType = event.payload?.sessionType ?? event.payload?.session?.sessionType
+      if (sessionType === 'sub_agent' || sessionType === 'bot') return
+      lastOutcome = { kind: status === 'error' ? 'error' : 'success', at: Date.now() }
+    })
   })
 
   onUnmounted(() => {
@@ -212,5 +249,7 @@ export function useTrayStats() {
       clearInterval(intervalId)
       intervalId = null
     }
+    unsubscribeOutcome?.()
+    unsubscribeOutcome = null
   })
 }

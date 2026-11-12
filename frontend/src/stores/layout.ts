@@ -146,6 +146,24 @@ export const useLayoutStore = defineStore('layout', () => {
   const petEnabled = useStorage<boolean>('petEnabled', false)
   const petOpacity = useStorage<number>('petOpacity', 95)
   const petAvatarId = useStorage<string>('petAvatarId', 'silver-haired')
+  /**
+   * 每个形象的显示比例（0.6–2）。
+   * 按形象记而不是全局：不同素材的「视觉大小」天然差很多
+   * （柒只占画布中间一条，Codex 图集里的宠物常常撑满格子），
+   * 调一次就一直记得，切回来还是那个大小。
+   */
+  const petScales = useStorage<Record<string, number>>('petScales', {})
+  /**
+   * 播放倍速（0.25–4，1 = Codex 官方节奏）。
+   * 全局而不是按形象：这是「看着累不累」的个人偏好，不随素材变。
+   */
+  const petAnimationSpeed = useStorage<number>('petAnimationSpeed', 1)
+
+  /** 当前形象的显示比例（缺省 1） */
+  const petScale = computed<number>(() => {
+    const value = petScales.value[petAvatarId.value]
+    return typeof value === 'number' && Number.isFinite(value) ? value : 1
+  })
 
   // 对话列宽模式（全局用户偏好）：narrow=744px / wide=1138px。
   // 仅抬高 max-width 上限，窗口不够宽时列自然收缩（ChatPanel/.chat-column、
@@ -280,13 +298,33 @@ export const useLayoutStore = defineStore('layout', () => {
     petAvatarId.value = avatarId
   }
 
+  /** 设置当前形象的显示比例（0.6–2），按形象记忆 */
+  const setPetScale = (scale: number): void => {
+    const safe = Math.min(2, Math.max(0.6, Number.isFinite(scale) ? scale : 1))
+    petScales.value = { ...petScales.value, [petAvatarId.value]: safe }
+  }
+
+  /** 取某个形象记忆的比例（设置页切形象时回显用） */
+  const getPetScaleOf = (avatarId: string): number => {
+    const value = petScales.value[avatarId]
+    return typeof value === 'number' && Number.isFinite(value) ? value : 1
+  }
+
   /** 把当前桌宠设置推给 Electron 主进程（浏览器环境下空转） */
   const applyPetSettings = (): void => {
     window.electronAPI?.updatePetSettings?.({
       enabled: petEnabled.value,
       opacity: petOpacity.value,
       avatarId: petAvatarId.value,
+      scale: petScale.value,
+      animationSpeed: petAnimationSpeed.value,
     })
+  }
+
+  /** 设置播放倍速（0.25–4），立刻生效 */
+  const setPetAnimationSpeed = (speed: number): void => {
+    const safe = Math.min(4, Math.max(0.25, Number.isFinite(speed) ? speed : 1))
+    petAnimationSpeed.value = safe
   }
 
   /**
@@ -300,8 +338,21 @@ export const useLayoutStore = defineStore('layout', () => {
       const saved = await apiService.fetchGroupSettings<Record<string, unknown>>('pet')
       if (typeof saved?.enabled === 'boolean') petEnabled.value = saved.enabled
       if (typeof saved?.opacity === 'number') petOpacity.value = saved.opacity
+      if (typeof saved?.animationSpeed === 'number' && Number.isFinite(saved.animationSpeed)) {
+        petAnimationSpeed.value = Math.min(4, Math.max(0.25, saved.animationSpeed))
+      }
       if (typeof saved?.avatarId === 'string' && saved.avatarId) {
         petAvatarId.value = saved.avatarId
+      }
+      // 每形象的大小记忆：只接受合法数字，坏值忽略（保持本地的）
+      if (saved?.scales && typeof saved.scales === 'object') {
+        const clean: Record<string, number> = {}
+        for (const [id, value] of Object.entries(saved.scales as Record<string, unknown>)) {
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            clean[id] = Math.min(2, Math.max(0.6, value))
+          }
+        }
+        petScales.value = clean
       }
 
       // 迁移：新分组还没写过任何值 → 读老键
@@ -480,11 +531,17 @@ export const useLayoutStore = defineStore('layout', () => {
     petEnabled,
     petOpacity,
     petAvatarId,
+    petScales,
+    petScale,
+    petAnimationSpeed,
     loadPetSettings,
     applyPetSettings,
     setPetEnabled,
     setPetOpacity,
     setPetAvatarId,
+    setPetScale,
+    setPetAnimationSpeed,
+    getPetScaleOf,
     toggleSidebar,
     setSidebarVisible,
     setSidebarWidth,

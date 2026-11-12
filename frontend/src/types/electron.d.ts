@@ -220,6 +220,8 @@ export interface ElectronAPI {
     unread: number
     awaiting?: number
     mode?: 'idle' | 'walk' | 'run' | 'yawn'
+    /** 语义状态：渲染层按素材能力（4 段的逐帧 / 9 段的图集）映射成具体动作 */
+    mood?: string
     title?: string
     toolLabel?: string
     sessionId?: string | null
@@ -237,12 +239,62 @@ export interface ElectronAPI {
     enabled: boolean
     opacity: number
     avatarId?: string
+    /** 宠物显示比例（0.6–2）；不同素材视觉大小差异很大，按形象记忆 */
+    scale?: number
+    /** 播放倍速（0.25–4）；1 = Codex 官方节奏 */
+    animationSpeed?: number
   }) => void
 
   /** 桌宠可用形象列表（预览图为 data URL，dev/prod 通用） */
   listPetAvatars: () => Promise<
-    Array<{ id: string; name: string; previewDataUrl: string | null }>
+    Array<{
+      id: string
+      name: string
+      description?: string
+      format: 'frames' | 'atlas'
+      source: 'user' | 'petdex' | 'codex' | 'bundled'
+      previewDataUrl: string | null
+      /** atlas 素材的整张图集（渲染层用 canvas 裁预览格） */
+      sheetDataUrl?: string | null
+      previewCell?: { x: number; y: number; w: number; h: number }
+    }>
   >
+
+  /** 桌宠：从本地文件夹导入形象 */
+  importPetAvatar: () => Promise<{ ok: boolean; id?: string; error?: string }>
+
+  /** 桌宠：从 Petdex 社区安装（主进程先弹确认，再执行 npx） */
+  installPetdex: (slug: string) => Promise<{ ok: boolean; id?: string; error?: string }>
+
+  /** 桌宠：外部宠物目录有变化（终端 petdex install / Codex 装了新宠物） */
+  onPetAvatarsChanged: (callback: () => void) => () => void
+
+  /** 桌宠市场：索引拉取在渲染层做（见 utils/petMarket.ts），不走 IPC */
+
+  /** 桌宠市场：安装（下载精灵图并写文件；spriteUrl 来自索引，省一次抓取） */
+  installFromMarket: (
+    slug: string,
+    spriteUrl?: string
+  ) => Promise<{ ok: boolean; id?: string; error?: string }>
+
+  /** 桌宠市场：按需抓单只宠物详情（含真精灵图直链，供弹窗播放真身） */
+  fetchPetDetail: (slug: string) => Promise<{
+    ok: boolean
+    error?: string
+    detail?: {
+      slug: string
+      name: string
+      description: string
+      spriteUrl: string
+      genre?: string
+      keywords?: string[]
+      publishedAt?: string
+      page: string
+    }
+  }>
+
+  /** 桌宠：打开用户形象目录 */
+  openPetsFolder: () => void
 
   /** 桌宠发起、需在主窗口渲染层完成的操作（主进程 → 渲染层） */
   onPetAction: (
