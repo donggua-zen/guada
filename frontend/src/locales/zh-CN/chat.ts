@@ -7,6 +7,7 @@ export default {
     stopGenerating: '停止生成',
     enqueue: '加入队列',
     send: '发送',
+    sending: '发送中',
     selectModel: '请选择模型',
     unlimited: '不限',
     custom: '自定义',

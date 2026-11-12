@@ -126,10 +126,19 @@
               <Stop24Filled class="w-4.5 h-4.5" />
             </button>
           </GdTooltip>
-          <GdTooltip v-else :content="streaming ? t('chat.input.enqueue') : t('chat.input.send')" placement="top">
-            <button class="send-btn" :class="{ 'queue-btn': streaming }" @click="sendMessage"
-              :disabled="props.readonly || (!inputContent.trim() && uploadFiles.length === 0) || !props.config?.modelId || sending">
-              <Send24Filled class="w-4.5 h-4.5" />
+          <GdTooltip v-else
+            :content="sendBusy ? t('chat.input.sending') : streaming ? t('chat.input.enqueue') : t('chat.input.send')"
+            placement="top">
+            <button class="send-btn" :class="{ 'queue-btn': streaming, 'send-btn--pending': sendBusy }"
+              :aria-busy="sendBusy || undefined" @click="sendMessage"
+              :disabled="props.readonly || (!inputContent.trim() && uploadFiles.length === 0) || !props.config?.modelId || sendBusy">
+              <!-- 发送中：转圈 loading（与 GdButton 的 loading 同款视觉），
+                   避免"文本不清空 = 点击没生效"的错觉 -->
+              <svg v-if="sendBusy" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25" />
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+              </svg>
+              <Send24Filled v-else class="w-4.5 h-4.5" />
             </button>
           </GdTooltip>
         </div>
@@ -354,6 +363,12 @@ const props = defineProps({
   value: { type: String, default: '' },
   files: { type: Array as PropType<ChatFileView[]>, default: () => [] },
   streaming: { type: Boolean, default: false },
+  /**
+   * 父组件发送中（附件上传完、等服务端确认接收）。
+   * 本组件不再自行清空输入：只有父组件在服务端确认后清空 v-model 值；
+   * 此 prop 期间发送按钮转 loading 且禁止重复发送。
+   */
+  sendPending: { type: Boolean, default: false },
   readonly: { type: Boolean, default: false },
   /** Bot 会话：模型/思考强度/知识库由 Bot 配置统一决定，输入区只展示不可改 */
   configLocked: { type: Boolean, default: false },
@@ -1240,8 +1255,11 @@ const pendingUploadFiles = computed(() =>
 
 const sending = ref(false);
 
+/** 发送进行中（附件上传 + 等服务端确认）：按钮转 loading、Enter 不再触发发送 */
+const sendBusy = computed(() => sending.value || props.sendPending);
+
 const sendMessage = async () => {
-  if (sending.value) return;
+  if (sendBusy.value) return;
 
   const content = editor.value ? editor.value.getText() : inputContent.value;
   if (!content.trim() && localFiles.value.length === 0) {
@@ -1258,16 +1276,15 @@ const sendMessage = async () => {
       return;
     }
 
-    // 用上传前捕获的正文：上传期间用户可能继续敲字，不该混进这一条消息
+    // 用上传前捕获的正文：上传期间用户可能继续敲字，不该混进这一条消息。
+    // 发送后的清空不在这里做：父组件只有在服务端确认接收后才清空 v-model 值
+    //（再由 props.value/files watcher 灌回编辑器与附件区）。失败时输入原样保留，
+    // 用户不需要重新填写；等待期间由 sendPending 驱动按钮 loading 与防重发。
     emit('send', {
       content,
       files: localFiles.value,
       knowledgeBaseIds: props.config?.knowledgeBaseIds || []
     });
-
-    // 清空编辑器和文件列表
-    editor.value?.chain().clearContent().focus().run();
-    commitFiles([]);
   } finally {
     sending.value = false;
   }
@@ -1536,7 +1553,7 @@ onMounted(() => {
               props.readonly ||
               (!inputContent.value.trim() && localFiles.value.length === 0) ||
               !props.config?.modelId ||
-              sending.value
+              sendBusy.value
             ) {
               event.preventDefault();
               return true;
@@ -1675,7 +1692,12 @@ function insertBadge(data: {
   editorContent.value = editor.value.getText();
 }
 
-defineExpose({ insertText, insertBadge });
+/** 聚焦编辑器（父组件在发送成功清空后调用，保持"发完接着写"的手感） */
+function focusEditor() {
+  editor.value?.commands.focus();
+}
+
+defineExpose({ insertText, insertBadge, focus: focusEditor });
 </script>
 <style scoped>
 /* 思考按钮激活状态 - 灯泡亮起 */
@@ -1907,6 +1929,20 @@ defineExpose({ insertText, insertBadge });
      任何主题下都能一眼区分 */
   opacity: 0.45;
   filter: saturate(0.4);
+}
+
+/* 发送中（上传附件 / 等服务端确认）：保持主色 + loading 转圈，
+   不能落进上面的 disabled 灰态——否则转圈图标也一起变灰，看不出"在发" */
+.send-btn.send-btn--pending:disabled {
+  background-color: var(--gd-color-primary);
+  color: var(--gd-color-primary-text);
+  cursor: progress;
+  opacity: 1;
+  filter: none;
+}
+
+.send-btn.send-btn--pending.queue-btn:disabled {
+  background-color: var(--gd-color-primary);
 }
 
 .send-btn.stop-btn {

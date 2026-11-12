@@ -70,9 +70,8 @@ describe('newSessionDraftStore', () => {
     store.content = '要问的问题'
     store.markSubmitted({ content: store.content, files })
 
-    // ChatInput 发送后自清空编辑器与附件列表
-    store.content = ''
-    store.files = []
+    // 提交后调用方显式清空输入框（ChatInput 不再自清空）
+    store.clearInput()
     expect(store.hasDraft).toBe(false)
     expect(store.submitted).not.toBeNull()
 
@@ -102,6 +101,25 @@ describe('newSessionDraftStore', () => {
     expect(store.submitted).toBeNull()
     // 关键:原数组实例(新会话 setInputMessage 持有的那份)不受影响
     expect(files).toEqual([makeFile('a.png')])
+  })
+
+  it('clearInput 只清正文与附件，保留配置与提交快照', () => {
+    const store = useNewSessionDraftStore()
+    store.content = 'hello'
+    store.files = [makeFile('a.png')]
+    store.saveConfig(makeConfig())
+    store.markSubmitted({ content: 'hello', files: store.files })
+
+    store.clearInput()
+
+    expect(store.content).toBe('')
+    expect(store.files).toEqual([])
+    // 工具栏配置跨提交保留
+    expect(store.config?.agentId).toBe('agent-1')
+    // 提交快照保留：创建失败时仍要能回填
+    expect(store.submitted?.content).toBe('hello')
+    expect(store.restoreSubmitted()).toBe(true)
+    expect(store.content).toBe('hello')
   })
 
   it('markSubmitted 未传 files 时按空列表记录', () => {

@@ -139,7 +139,7 @@
                   :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly" mode="chat"
                   :config-locked="configLocked"
                   :readonly-placeholder="readonlyPlaceholder"
-                  :uploader="chatAttachmentUploader"
+                  :uploader="chatAttachmentUploader" :send-pending="sendPending"
                   :backdrop="hasWallpaper" @config-change="handleConfigChange" @send="handleSendMessage"
                   @abort="abortResponse">
                   <template #right-actions-before>
@@ -225,7 +225,7 @@ import {
   foldEvents,
   takeStash as takeProjectorStash,
 } from "@/services/modules/streamProjector"
-import type { InputMessageState, Session, QueuedMessage, QueuePauseReason } from '@/types/session';
+import type { InputMessageState, Session, QueuedMessage, QueuePauseReason, ChatFileView } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { Turn, TurnContent, MessageBundle } from '@/types/message';
 
@@ -246,6 +246,7 @@ import { useSessionSettingsSync } from '@/composables/useSessionSettingsSync'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 import { getErrorMessage, getApiErrorStatus } from '@/utils/errorMessage'
+import { shouldClearComposerAfterSend } from '@/utils/sendResult'
 import { perfStart, perfCount, traceSessionOpen, endSessionOpenTrace } from '@/utils/perf'
 import { themeOwnsBackground } from '@/services/theme-runtime'
 import { isResizeActivityActive } from '@/composables/useResizeActivity'
@@ -299,6 +300,9 @@ const inFloatingPanel = computed(() => layoutStore.workspaceFullscreen);
 // 新发送消息动画追踪：只有通过 handleSendMessage 发送的消息才播放入场动画
 const animateIds = ref<string[]>([]);
 let expectingNewMessage = false;
+
+/** 发送进行中（等服务端确认）：驱动 ChatInput 的按钮 loading 与防重发 */
+const sendPending = ref(false);
 
 
 // 记忆管理弹窗显隐（非模态 popover，锚定上下文圆环按钮）
@@ -509,6 +513,7 @@ const {
   editMode,
   exitEditMode,
   prepareNewMessage,
+  clearInputMessage,
   enterEditMode
 } = useMessageOperations(sessionStore, apiService, currentSessionId)
 
@@ -1787,18 +1792,6 @@ async function copyMessage(block: MessageActionTarget) {
   }
 }
 
-/**
- * 命令被拒绝时把文本放回输入框（ChatInput.sendMessage 会在 emit 后同步清空编辑器）。
- * nextTick 确保恢复发生在清空之后，否则会被紧随其后的 clearContent 覆盖。
- */
-function restoreRejectedInput(originalContent: string): void {
-  void nextTick(() => {
-    if (!inputMessage.value.content) {
-      inputMessage.value.content = originalContent;
-    }
-  });
-}
-
 /** 按命令名（及 /goal 子动作）选择成功文案；执行逻辑仍在后端，这里只管提示。 */
 function localCommandSuccessKey(command: LocalSlashCommand): string {
   if (command.name !== 'goal') return 'chat.memo.compressStarted';
@@ -1813,25 +1806,26 @@ function localCommandSuccessKey(command: LocalSlashCommand): string {
  * 发送本地斜杠命令（/compact、/compress、/goal 及其子命令）。
  *
  * 执行逻辑只留在后端：这里仍走统一的 `/chat/stream` 入口，由后端在落库/建流前识别
- * 本地命令并转手动压缩或目标变更。前端只负责前置门控（流式中/附件）、输入恢复与结果提示，
+ * 本地命令并转手动压缩或目标变更。前端只负责前置门控（流式中/附件）与结果提示，
  * 保证"命令文本不落库、不进 LLM"的定义只有后端一处（也便于未来命令插件化）。
+ *
+ * @returns 服务端是否已接受（命令执行成功 / fallthrough 正常建流）。
+ *   失败返回 false，调用方据此决定是否清空输入（失败时输入原样保留）。
  */
 async function sendLocalSlashCommand(
   command: LocalSlashCommand,
   fileCount: number,
   originalContent: string,
-) {
+): Promise<boolean> {
   const sessionId = currentSessionId.value;
-  if (!sessionId) return;
+  if (!sessionId) return false;
   if (fileCount > 0) {
     toast.warning(t('chat.command.attachmentsNotSupported'));
-    restoreRejectedInput(originalContent);
-    return;
+    return false;
   }
   if (isStreaming.value || sessionStore.sessionIsCompressing(sessionId)) {
     toast.warning(t('chat.memo.streamingWarning'));
-    restoreRejectedInput(originalContent);
-    return;
+    return false;
   }
   try {
     // 统一入口：后端 ChatController 在写用户消息前识别并执行本地命令。
@@ -1842,13 +1836,14 @@ async function sendLocalSlashCommand(
     });
     if (res?.localCommand) {
       toast.success(t(localCommandSuccessKey(command)));
-      return;
+      return true;
     }
     // 理论上不会走到：后端词表未同步（前端识别为命令、后端按普通消息处理）。
     // 此时已正常建流，交给 SSE 驱动，不额外提示。
     console.warn(
       `[local-command] backend did not intercept /${command.name}`,
     );
+    return true;
   } catch (error) {
     const msg = getErrorMessage(error);
     if (
@@ -1863,7 +1858,7 @@ async function sendLocalSlashCommand(
         : t('chat.memo.compressFailed');
       toast.error(msg || fallback);
     }
-    restoreRejectedInput(originalContent);
+    return false;
   }
 }
 
@@ -1898,9 +1893,44 @@ function buildSettingsOverride(sid: string): ChatSettingsOverride {
   };
 }
 
+/** 发送那一刻的正文/附件快照（成功清空与"等待期间是否续写"的判定基准） */
+interface SentComposerSnapshot {
+  content: string;
+  files: ChatFileView[];
+}
+
+/**
+ * 服务端确认接收后的收尾：清空输入框。
+ * - 会话已切走：不动（草稿留在原会话）
+ * - 等待期间用户续写正文/增删附件：保留当前内容（不能吞掉新输入）
+ * - 编辑态发送：先退出编辑模式再清空
+ */
+function finishAcceptedSend(
+  sent: SentComposerSnapshot,
+  sessionIdAtSend: string | null,
+  editTurnId: string | undefined,
+): void {
+  if (currentSessionId.value !== sessionIdAtSend) return;
+  const shouldClear = shouldClearComposerAfterSend({
+    currentContent: inputMessage.value.content,
+    sentContent: sent.content,
+    currentFiles: inputMessage.value.files,
+    sentFiles: sent.files,
+  });
+  if (!shouldClear) return;
+  if (editTurnId) exitEditMode();
+  clearInputMessage();
+  // 与旧的"发送即清空 + focus"手感对齐：成功后把焦点还给编辑器
+  void nextTick(() => chatInputRef.value?.focus());
+}
+
 /**
  * 处理发送消息
- * 合并消息创建和流式启动为一个原子操作
+ * 合并消息创建和流式启动为一个原子操作。
+ *
+ * 输入框不再由 ChatInput 自行清空：只有服务端确认接收（started / queued /
+ * 本地命令执行成功）后才在这里清空。任何失败（网络、校验、命令被拒、附件上传失败）
+ * 都原样保留正文与附件，用户可直接重试；等待期间 sendPending 驱动按钮 loading。
  */
 async function handleSendMessage(payload?: InputMessageState) {
   // 只读模式（子代理会话）防御性拦截：发送按钮已禁用、Enter 已拦，
@@ -1909,9 +1939,16 @@ async function handleSendMessage(payload?: InputMessageState) {
   const data = payload;
   if (!data || (!data.content?.trim() && !data.files.length)) return;
 
-  try {
-    const { content, files, knowledgeBaseIds } = data;
+  const { content, files, knowledgeBaseIds } = data;
+  const sessionIdAtSend = currentSessionId.value;
+  const sentSnapshot: SentComposerSnapshot = { content, files: [...files] };
+  // 编辑态先不退出：发送失败时用户需要留在编辑态重试；成功后再由收尾逻辑退出
+  const editTurnId = editMode.value?.turnId;
+  // 本次是否把会话置为 pending（失败时需复位，避免流式指示卡住）
+  let pendingSid: string | null = null;
 
+  sendPending.value = true;
+  try {
     // 本地斜杠命令（/compact、/goal）：控制指令，直接执行，不进消息队列、不发模型。
     // 必须在"流式入队"之前拦截——否则命令会被当成普通文本排队，流结束后再发给模型。
     const localCommand = parseLocalSlashCommand(content);
@@ -1921,17 +1958,18 @@ async function handleSendMessage(payload?: InputMessageState) {
         // 计划模式与目标循环互斥：两者都会改写回合编排，交给后端之前先拦下
         if (sid && sessionStore.sessionPlanEnabled(sid)) {
           toast.warning(t('chat.command.goalPlanConflict'));
-          restoreRejectedInput(content);
           return;
         }
         // /goal 无参数 = 空目标：后端不接收，提示用户补齐后重发
         if (!localCommand.objective) {
           toast.warning(t('chat.command.goalRequiresObjective'));
-          restoreRejectedInput(content);
           return;
         }
       }
-      await sendLocalSlashCommand(localCommand, files.length, content);
+      const accepted = await sendLocalSlashCommand(localCommand, files.length, content);
+      if (accepted) {
+        finishAcceptedSend(sentSnapshot, sessionIdAtSend, editTurnId);
+      }
       return;
     }
 
@@ -1943,7 +1981,7 @@ async function handleSendMessage(payload?: InputMessageState) {
       return;
     }
 
-    // 准备消息数据（上传文件等）
+    // 准备消息数据（上传文件等）。这里不再清空输入——失败时要原样保留。
     const prepared = await prepareNewMessage(content, files, null, knowledgeBaseIds);
 
     // 如果是编辑模式，需要处理替换逻辑
@@ -1951,11 +1989,7 @@ async function handleSendMessage(payload?: InputMessageState) {
     // 整轮删除完全由 replaceTurnId 触发后端 turn/delete + 新建回合——旧版在这里
     // 前端删除「该回合的扁平消息」(getMessages+deleteMessage),回合制后该数组恒空,
     // 循环从未执行过,已按死代码清除。
-    let replaceTurnId: string | undefined = undefined;
-    if (editMode.value && editMode.value.turnId && currentSessionId.value) {
-      replaceTurnId = editMode.value.turnId;
-      exitEditMode();
-    }
+    const replaceTurnId = editTurnId && currentSessionId.value ? editTurnId : undefined;
 
     // 发起流式请求（后端会自动创建消息并启动流）
     // 发送链路独立:只调 apiService.chat 发起,不订阅、不处理事件;
@@ -1974,6 +2008,7 @@ async function handleSendMessage(payload?: InputMessageState) {
       expectingNewMessage = !alreadyStreaming;
       if (!alreadyStreaming) {
         sessionStore.setStreamStatus(sid, "pending");
+        pendingSid = sid;
       }
       const payload: ChatStreamParams = {
         sessionId: sid,
@@ -2001,12 +2036,24 @@ async function handleSendMessage(payload?: InputMessageState) {
         ) {
           sessionStore.setStreamStatus(sid, "idle");
         }
+        pendingSid = null;
         void refreshQueue(sid);
       }
+
+      // 服务端已确认接收：此时才清空输入（成功即清，失败保留）
+      finishAcceptedSend(sentSnapshot, sessionIdAtSend, editTurnId);
     }
   } catch (error) {
+    // 发送失败：输入框从未清空，正文/附件原样保留，用户可直接重试。
+    // 这里只撤销发送中的瞬态（isWaiting / pending / 入场动画）。
+    if (data.isWaiting) data.isWaiting = false;
+    if (pendingSid && sessionStore.peekStreamStatus(pendingSid) === "pending") {
+      sessionStore.setStreamStatus(pendingSid, "idle");
+    }
+    expectingNewMessage = false;
     notify.error(t('chat.panel.sendMessageFailed'), getErrorMessage(error));
-    // 发送失败时由 SSE 事件驱动恢复检测
+  } finally {
+    sendPending.value = false;
   }
 }
 
