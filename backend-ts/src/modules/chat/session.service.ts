@@ -1403,7 +1403,9 @@ ${diffText}
           },
         ],
         temperature: 0.3,
-        maxTokens: 300,
+        // 不传 maxTokens：思考模型的思维链也计入 completion_tokens，固定预算容易在
+        // 正文开始前被思考吃光（finish_reason=length 且零 text_delta → 误报空）。
+        // 交给协议/模型默认输出上限（Anthropic 适配器无值时的兜底为 8192）。
         thinkingEffort: resolveThinkingEffort(model, "none"),
         stream: true,
         abortSignal,
@@ -1430,7 +1432,12 @@ ${diffText}
         this.logger.warn(
           `生成提交信息：模型未返回文本内容（model=${model.modelName}, finishReason=${finishReason ?? "unknown"}）`,
         );
-        yield { type: "skipped", reason: "generation_failed" };
+        // length 且零正文 = 思考/前缀把输出预算吃光，与"模型真的没输出"区分开，
+        // 前端按不同文案提示（前者重试或换模型可解，后者多为供应商异常）
+        yield {
+          type: "skipped",
+          reason: finishReason === "length" ? "output_truncated" : "generation_failed",
+        };
         return;
       }
       yield {
