@@ -4,12 +4,15 @@ const fs = require("node:fs");
 const os = require("node:os");
 const {
   resolvePetsRootDir,
-  resolvePetAssetDir,
+  findPetAvatarDir,
+  firstPetAvatarId,
   isValidAvatarId,
   listPetAvatars,
   pointInRect,
   resolvePetHit,
   clampNumber,
+  clampPetScale,
+  computePetWindowSize,
   clampPetPosition,
   defaultPetPosition,
   findDisplayForPoint,
@@ -36,16 +39,37 @@ function main() {
   );
   console.log("PET_OK resolvePetsRootDir:prod");
 
-  assert.ok(
-    resolvePetAssetDir("/pets", "silver-haired").replace(/\\/g, "/").endsWith("pets/silver-haired"),
-    "形象目录应拼在根目录下",
+  // ── 形象目录解析（多根，用户优先） ──────────────────────
+  const bundledRoot = path.join(__dirname, "..", "build-resources", "pets");
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "pet-roots-"));
+  const userRoot = path.join(scratch, "user");
+  fs.mkdirSync(userRoot, { recursive: true });
+
+  // 用户目录里放一个同名形象，应当覆盖内置的同 id
+  const shadow = path.join(userRoot, PET_AVATAR_DEFAULT);
+  fs.mkdirSync(shadow, { recursive: true });
+  fs.writeFileSync(path.join(shadow, "manifest.json"), JSON.stringify({ name: "用户版" }));
+
+  const roots = [
+    { dir: userRoot, source: "user" },
+    { dir: bundledRoot, source: "bundled" },
+  ];
+  const resolved = findPetAvatarDir(roots, PET_AVATAR_DEFAULT);
+  assert.ok(resolved && resolved.includes("user"), `应优先命中用户目录，实际 ${resolved}`);
+  assert.strictEqual(
+    findPetAvatarDir(roots, "../../etc"),
+    null,
+    "非法 id 不解析（不做路径穿越）",
   );
-  // 路径穿越必须被挡掉，回落到默认形象
-  assert.ok(
-    resolvePetAssetDir("/pets", "../../etc").replace(/\\/g, "/").endsWith(`pets/${PET_AVATAR_DEFAULT}`),
-    "非法形象 id 应回落到默认形象",
-  );
-  console.log("PET_OK resolvePetAssetDir");
+  assert.strictEqual(firstPetAvatarId([]), null, "没有素材根时返回 null");
+
+  // 同名 id 去重：用户目录胜出
+  const listed = listPetAvatars(roots);
+  const defaultEntry = listed.find((a) => a.id === PET_AVATAR_DEFAULT);
+  assert.strictEqual(defaultEntry.source, "user", "同名形象应以用户目录为准");
+  assert.strictEqual(listed.filter((a) => a.id === PET_AVATAR_DEFAULT).length, 1, "不应重复列出");
+  fs.rmSync(scratch, { recursive: true, force: true });
+  console.log("PET_OK findPetAvatarDir:multi-root");
 
   // ── 形象 id 校验 ──────────────────────────────────────────
   assert.strictEqual(isValidAvatarId("silver-haired"), true);
@@ -58,17 +82,23 @@ function main() {
 
   // ── 形象扫描（真实素材目录） ──────────────────────────────
   const realRoot = path.join(__dirname, "..", "build-resources", "pets");
-  const avatars = listPetAvatars(realRoot);
+  const avatars = listPetAvatars([{ dir: realRoot, source: "bundled" }]);
   assert.ok(avatars.length >= 1, `至少应扫描到一个形象，实际 ${avatars.length}`);
   assert.strictEqual(avatars[0].id, PET_AVATAR_DEFAULT, "默认形象应排在最前");
   assert.ok(avatars[0].name.length > 0, "形象应有名称（取自 manifest.json）");
+  assert.strictEqual(avatars[0].format, "frames", "我们自己的素材是 frames 格式");
+  assert.strictEqual(avatars[0].source, "bundled", "来自内置目录");
   assert.ok(
     avatars[0].previewDataUrl?.startsWith("data:image/webp;base64,"),
     "预览图应是 webp data URL",
   );
   // 空目录 → 空数组（不抛错）；不存在的目录也会走同一兜底分支
   const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pet-empty-"));
-  assert.deepStrictEqual(listPetAvatars(emptyRoot), [], "空目录返回空数组");
+  assert.deepStrictEqual(
+    listPetAvatars([{ dir: emptyRoot, source: "user" }]),
+    [],
+    "空目录返回空数组",
+  );
   fs.rmSync(emptyRoot, { recursive: true, force: true });
   console.log("PET_OK listPetAvatars", JSON.stringify(avatars.map((a) => a.id)));
 
@@ -136,6 +166,27 @@ function main() {
     "气泡收起后该区域应穿透",
   );
   console.log("PET_OK resolvePetHit");
+
+  // ── 宠物大小 → 窗口尺寸 ──────────────────────────────────
+  assert.strictEqual(clampPetScale(1), 1);
+  assert.strictEqual(clampPetScale(0.1), 0.6, "低于下限收到 0.6");
+  assert.strictEqual(clampPetScale(9), 2, "高于上限收到 2");
+  assert.strictEqual(clampPetScale(Number.NaN), 1, "NaN 回落到 1");
+  assert.strictEqual(clampPetScale(undefined), 1);
+
+  const base = computePetWindowSize(210);
+  assert.deepStrictEqual(
+    base,
+    { width: PET_WINDOW_WIDTH, height: PET_WINDOW_HEIGHT },
+    "基准尺寸应与常量一致（向后兼容）",
+  );
+  const big = computePetWindowSize(420);
+  assert.ok(big.width > base.width, "宠物变大窗口应变宽");
+  assert.ok(big.height > base.height, "宠物变大窗口应变高");
+  assert.strictEqual(big.height, 420 + 170, "高度 = 宠物 + 气泡区");
+  const small = computePetWindowSize(126);
+  assert.strictEqual(small.width, PET_WINDOW_WIDTH, "小宠物时宽度不小于气泡所需");
+  console.log("PET_OK pet-scale", JSON.stringify({ base, big, small }));
 
   // ── 数值夹取 ──────────────────────────────────────────────
   assert.strictEqual(clampNumber(5, 0, 10), 5);

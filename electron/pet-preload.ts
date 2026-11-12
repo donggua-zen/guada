@@ -29,9 +29,24 @@ interface PetStatePayload {
 }
 
 const petAPI = {
-  /** 动画清单（JSON 字符串，主进程读盘下发；file:// 下渲染层不能 fetch） */
-  onConfig: (callback: (configJson: string) => void) => {
-    const listener = (_event: unknown, json: string) => callback(json);
+  /**
+   * 素材配置（JSON 字符串 + 格式）。
+   * file:// 下渲染层不能 fetch，统一由主进程读盘下发；
+   * format 决定渲染层用逐帧播放器还是图集播放器。
+   */
+  onConfig: (
+    callback: (
+      configJson: string,
+      format: "frames" | "atlas",
+      baseUrl: string,
+    ) => void,
+  ) => {
+    const listener = (
+      _event: unknown,
+      json: string,
+      format: "frames" | "atlas",
+      baseUrl: string,
+    ) => callback(json, format, baseUrl);
     ipcRenderer.on("pet:config", listener);
     return () => ipcRenderer.removeListener("pet:config", listener);
   },
@@ -43,9 +58,18 @@ const petAPI = {
     return () => ipcRenderer.removeListener("pet:state", listener);
   },
 
-  /** 透明度设置 */
-  onSettings: (callback: (settings: { opacity: number }) => void) => {
-    const listener = (_event: unknown, settings: { opacity: number }) => callback(settings);
+  /** 透明度 + 宠物显示尺寸 + 播放倍速 */
+  onSettings: (
+    callback: (settings: {
+      opacity: number;
+      petPx?: number;
+      animationSpeed?: number;
+    }) => void,
+  ) => {
+    const listener = (
+      _event: unknown,
+      settings: { opacity: number; petPx?: number; animationSpeed?: number },
+    ) => callback(settings);
     ipcRenderer.on("pet:settings", listener);
     return () => ipcRenderer.removeListener("pet:settings", listener);
   },

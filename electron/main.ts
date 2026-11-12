@@ -41,10 +41,19 @@ import {
 } from "./taskbar-badge";
 import {
   PetWindowController,
+  clampPetScale,
   listPetAvatars,
   resolvePetsRootDir,
+  resolvePetUiHtmlPath,
+  type PetRoot,
   type PetStatePayload,
 } from "./pet-window";
+import {
+  importPetFromDialog,
+  installPetFromPetdex,
+  openPetsFolder,
+} from "./pet-import";
+import { getPetMarketDetail, installPetFromMarket } from "./pet-market";
 let backendProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 let windowManager: BrowserWebviewManager | null = null; // 窗口管理器
@@ -114,6 +123,10 @@ let petSettings = {
   enabled: false,
   opacity: 95,
   avatarId: "silver-haired",
+  /** 宠物显示比例（0.6–2）：不同素材的「视觉大小」差很多，允许按形象调 */
+  scale: 1,
+  /** 播放倍速（0.25–4）：1 = Codex 官方节奏（idle 6 帧 1100ms） */
+  animationSpeed: 1,
 };
 let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
 /** 最近一次检查更新的原始响应，供下载/安装流程复用（不接受渲染层传入 URL）。 */
@@ -1579,6 +1592,75 @@ function updateTrayMenu() {
 }
 
 /**
+ * 用户形象目录（导入的形象落这里，不随安装包升级被覆盖）
+ */
+function userPetsDir(): string {
+  const dir = path.join(app.getPath("userData"), "pets");
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (error) {
+    log.warn("[pet] 创建用户形象目录失败:", error);
+  }
+  return dir;
+}
+
+/**
+ * 桌宠素材根（顺序即优先级，先命中者胜出）。
+ *
+ * - user    ：我们导入的，可写，放在 userData 下（不随升级丢失）
+ * - petdex  ：用户自己在终端跑 `npx petdex install <slug>` 装的目录，只读扫描
+ * - codex   ：Codex 桌面端自己的宠物目录，只读扫描
+ * - bundled ：随安装包内置（柒）
+ *
+ * 之所以把 petdex/codex 也扫进来：用户在外部装完宠物后不该再回来手动导入一遍。
+ */
+function resolvePetRoots(): PetRoot[] {
+  const home = app.getPath("home");
+  return [
+    { dir: userPetsDir(), source: "user" },
+    { dir: path.join(home, ".petdex", "pets"), source: "petdex" },
+    { dir: path.join(home, ".codex", "pets"), source: "codex" },
+    {
+      dir: resolvePetsRootDir(isDev, __dirname, process.resourcesPath),
+      source: "bundled",
+    },
+  ];
+}
+
+/**
+ * 监听外部宠物目录，变化时通知设置页刷新。
+ *
+ * 覆盖的场景：用户在终端里 `npx petdex install boba`、或者在 Codex 里装了新宠物，
+ * 设置页开着就能自动出现，不用关掉重开。
+ * 只监听这三个「可能出现新目录」的根；bundled 是安装包内的，不会变。
+ */
+function watchPetRootDirs(): void {
+  const dirs = resolvePetRoots()
+    .filter((root) => root.source !== "bundled")
+    .map((root) => root.dir);
+
+  let timer: NodeJS.Timeout | null = null;
+  const notify = () => {
+    if (timer) clearTimeout(timer);
+    // 防抖：petdex 安装会连续创建多个文件，逐个事件都刷新会闪
+    timer = setTimeout(() => {
+      timer = null;
+      mainWindow?.webContents.send("pet:avatars-changed");
+    }, 400);
+  };
+
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      const watcher = fs.watch(dir, { persistent: false }, notify);
+      watcher.on("error", (error) => log.warn(`[pet] 监听目录失败 ${dir}:`, error));
+    } catch (error) {
+      log.warn(`[pet] 无法监听目录 ${dir}:`, error);
+    }
+  }
+}
+
+/**
  * 应用桌宠设置（形象 + 显隐 + 透明度）
  *
  * 与旧的「悬浮任务状态卡」不同：桌宠**常驻桌面**，不再跟随主窗口的最小化/隐藏状态。
@@ -1586,8 +1668,10 @@ function updateTrayMenu() {
  */
 function applyPetSettings() {
   if (!petWindow) return;
-  // 先切形象（会重建窗口），再套用显隐/透明度
+  // 先切形象（会重建窗口），再套用大小/速度/显隐/透明度
   petWindow.setAvatar(petSettings.avatarId);
+  petWindow.setScale(petSettings.scale);
+  petWindow.setAnimationSpeed(petSettings.animationSpeed);
   petWindow.setEnabled(petSettings.enabled);
   petWindow.setOpacity(petSettings.opacity);
 }
@@ -2166,7 +2250,13 @@ function setupIpcHandlers() {
     "pet:update-settings",
     (
       _,
-      settings: { enabled?: boolean; opacity?: number; avatarId?: string },
+      settings: {
+        enabled?: boolean;
+        opacity?: number;
+        avatarId?: string;
+        scale?: number;
+        animationSpeed?: number;
+      },
     ) => {
       if (!settings || typeof settings !== "object") return;
       petSettings = {
@@ -2179,6 +2269,17 @@ function setupIpcHandlers() {
           typeof settings.avatarId === "string" && settings.avatarId
             ? settings.avatarId
             : petSettings.avatarId,
+        // 越界/NaN 统一收回 0.6–2（clampPetScale），不让它把窗口撑爆
+        scale:
+          typeof settings.scale === "number"
+            ? clampPetScale(settings.scale)
+            : petSettings.scale,
+        // 0.25–4，1 = Codex 官方节奏
+        animationSpeed:
+          typeof settings.animationSpeed === "number" &&
+          Number.isFinite(settings.animationSpeed)
+            ? Math.min(4, Math.max(0.25, settings.animationSpeed))
+            : petSettings.animationSpeed,
       };
       applyPetSettings();
       updateTrayMenu();
@@ -2188,7 +2289,65 @@ function setupIpcHandlers() {
   // 设置页形象选择器：扫描 build-resources/pets/ 下的可用形象
   ipcMain.handle("pet:list-avatars", () => {
     if (!petWindow) return [];
-    return listPetAvatars(resolvePetsRootDir(isDev, __dirname, process.resourcesPath));
+    return listPetAvatars(resolvePetRoots());
+  });
+
+  // 桌宠：从本地文件夹导入形象（复制进用户目录，不覆盖已有）
+  ipcMain.handle("pet:import-avatar", async () => {
+    const result = await importPetFromDialog(userPetsDir());
+    if (result.ok) log.info(`[pet] 导入完成: ${result.id}`);
+    return result;
+  });
+
+  // 桌宠市场：从 Petdex 安装
+  // 走「抓详情 → 直接下载精灵图」，不需要 Node/npx（客户端大概率没装）。
+  // pet:install-petdex 仅保留给手动输入 slug 的高级路径（走 CLI）。
+  ipcMain.handle(
+    "pet:install-from-market",
+    async (_e, slug: unknown, spriteUrl?: unknown) => {
+      if (typeof slug !== "string" || !slug.trim()) {
+        return { ok: false, error: "缺少宠物标识" };
+      }
+      // spriteUrl 由渲染层从索引带过来，省掉一次详情页抓取
+      const result = await installPetFromMarket(
+        slug,
+        userPetsDir(),
+        typeof spriteUrl === "string" ? spriteUrl : undefined,
+      );
+      if (!result.ok) log.warn("[pet] 市场安装失败:", result.error);
+      return result;
+    },
+  );
+
+  // 桌宠：从 Petdex 安装（CLI 兜底路径：手动输入 slug 且直连失败时用）
+  ipcMain.handle("pet:install-petdex", async (_e, slug: unknown) => {
+    if (typeof slug !== "string" || !slug.trim()) {
+      return { ok: false, error: "请输入 Petdex 宠物名称" };
+    }
+    // 先试直连（不需要 Node）；失败再退回 CLI —— 但 CLI 需要 npx，客户端常常没有
+    const direct = await installPetFromMarket(slug, userPetsDir());
+    if (direct.ok) return direct;
+    const result = await installPetFromPetdex(slug, userPetsDir());
+    if (result.ok) log.info(`[pet] Petdex 安装完成: ${result.id}`);
+    else if (!result.error?.includes("未找到 npx")) {
+      // CLI 有明确失败原因就透出它；否则把直连的错误给用户更贴切
+      return result;
+    }
+    return { ok: false, error: direct.error || result.error };
+  });
+
+  // 桌宠：在资源管理器里打开用户形象目录
+  ipcMain.on("pet:open-pets-folder", () => {
+    openPetsFolder(userPetsDir());
+  });
+
+  // 桌宠市场：索引拉取在渲染层做（索引站已开 CORS，HTTP 缓存负责去重，见
+  // frontend/src/utils/petMarket.ts）。主进程只留「详情兜底」与「安装」。
+
+  // 兜底：老索引没有详情时，按需抓单只宠物（含真精灵图直链）
+  ipcMain.handle("pet:market-detail", async (_e, slug: unknown) => {
+    if (typeof slug !== "string") return { ok: false, error: "缺少宠物标识" };
+    return getPetMarketDetail(slug);
   });
 
   // 防休眠模式：设置页「通用 → 桌面行为」变更时推送（落盘由后端负责，这里只管 blocker）
@@ -3034,7 +3193,8 @@ app.whenReady().then(async () => {
     // 必须在 createWindow 之前：渲染层挂载即推 tray:update-settings，
     // 控制器晚于主窗口创建会让这次推送被空指针丢掉、桌宠要等下一次设置变更才出现。
     petWindow = new PetWindowController({
-      petsRootDir: resolvePetsRootDir(isDev, __dirname, process.resourcesPath),
+      petsRoots: resolvePetRoots(),
+      uiHtmlPath: resolvePetUiHtmlPath(isDev, __dirname, process.resourcesPath),
       avatarId: petSettings.avatarId,
       preloadPath: path.join(__dirname, "pet-preload.js"),
       positionFile: path.join(app.getPath("userData"), "pet-window.json"),
@@ -3045,6 +3205,9 @@ app.whenReady().then(async () => {
 
     // 创建系统托盘图标
     createTray();
+
+    // 外部宠物目录（Petdex / Codex / 用户导入）变化时通知设置页刷新
+    watchPetRootDirs();
 
     if (mobileAccessAutoDisabled && Notification.isSupported()) {
       new Notification({

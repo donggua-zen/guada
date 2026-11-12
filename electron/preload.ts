@@ -164,6 +164,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     unread: number
     awaiting?: number
     mode?: 'idle' | 'walk' | 'run' | 'yawn'
+    /** 语义状态：渲染层按素材能力（4 段的逐帧 / 9 段的图集）映射成具体动作 */
+    mood?: string
     title?: string
     toolLabel?: string
     sessionId?: string | null
@@ -181,13 +183,79 @@ contextBridge.exposeInMainWorld('electronAPI', {
     enabled: boolean
     opacity: number
     avatarId?: string
+    /** 宠物显示比例（0.6–2）；不同素材视觉大小差异很大，按形象记忆 */
+    scale?: number
+    /** 播放倍速（0.25–4）；1 = Codex 官方节奏 */
+    animationSpeed?: number
   }) => ipcRenderer.send('pet:update-settings', settings),
 
   /** 桌宠：可用形象列表（设置页形象选择器；预览图为 data URL） */
   listPetAvatars: () =>
     ipcRenderer.invoke('pet:list-avatars') as Promise<
-      Array<{ id: string; name: string; previewDataUrl: string | null }>
+      Array<{
+        id: string
+        name: string
+        description?: string
+        format: 'frames' | 'atlas'
+        source: 'user' | 'petdex' | 'codex' | 'bundled'
+        previewDataUrl: string | null
+        sheetDataUrl?: string | null
+        previewCell?: { x: number; y: number; w: number; h: number }
+      }>
     >,
+
+  /** 桌宠：从本地文件夹导入形象（复制进用户目录，不覆盖同名） */
+  importPetAvatar: () =>
+    ipcRenderer.invoke('pet:import-avatar') as Promise<{
+      ok: boolean
+      id?: string
+      error?: string
+    }>,
+
+  /** 桌宠：从 Petdex 社区安装（主进程会先弹确认，再执行 npx） */
+  installPetdex: (slug: string) =>
+    ipcRenderer.invoke('pet:install-petdex', slug) as Promise<{
+      ok: boolean
+      id?: string
+      error?: string
+    }>,
+
+  /** 桌宠：外部宠物目录有变化（终端里 petdex install / Codex 装了新宠物） */
+  onPetAvatarsChanged: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('pet:avatars-changed', listener)
+    return () => ipcRenderer.removeListener('pet:avatars-changed', listener)
+  },
+
+  /** 桌宠市场：索引拉取在渲染层做（见 utils/petMarket.ts），这里不代理 */
+
+  /** 桌宠市场：安装（下载精灵图并写文件；spriteUrl 来自索引，省一次抓取） */
+  installFromMarket: (slug: string, spriteUrl?: string) =>
+    ipcRenderer.invoke('pet:install-from-market', slug, spriteUrl) as Promise<{
+      ok: boolean
+      id?: string
+      error?: string
+    }>,
+
+  /** 桌宠市场：按需抓单只宠物详情（含真精灵图直链） */
+  fetchPetDetail: (slug: string) =>
+    ipcRenderer.invoke('pet:market-detail', slug) as Promise<{
+      ok: boolean
+      error?: string
+      detail?: {
+        slug: string
+        name: string
+        description: string
+        spriteUrl: string
+        genre?: string
+        keywords?: string[]
+        publishedAt?: string
+        page: string
+      }
+    }>,
+
+  /** 桌宠：打开用户形象目录 */
+  openPetsFolder: () => ipcRenderer.send('pet:open-pets-folder'),
 
   /**
    * 桌宠发起的操作回传主窗口渲染层（主进程 → 渲染层）

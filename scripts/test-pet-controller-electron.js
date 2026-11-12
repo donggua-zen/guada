@@ -45,7 +45,8 @@ app.whenReady().then(async () => {
 
   const positionFile = path.join(OUT_DIR, "pet-window.json");
   const controller = new PetWindowController({
-    petsRootDir: petsRoot,
+    petsRoots: [{ dir: petsRoot, source: "user" }],
+    uiHtmlPath: path.join(ROOT, "build-resources", "pet-ui", "pet.html"),
     avatarId: PET_AVATAR_DEFAULT,
     preloadPath: path.join(ROOT, "electron", "dist", "pet-preload.js"),
     positionFile,
@@ -201,7 +202,8 @@ app.whenReady().then(async () => {
 
   // 重启恢复：新控制器必须按落盘位置还原贴边，而不是被整窗夹回屏幕内
   const restarted = new PetWindowController({
-    petsRootDir: petsRoot,
+    petsRoots: [{ dir: petsRoot, source: "user" }],
+    uiHtmlPath: path.join(ROOT, "build-resources", "pet-ui", "pet.html"),
     avatarId: PET_AVATAR_DEFAULT,
     preloadPath: path.join(ROOT, "electron", "dist", "pet-preload.js"),
     positionFile,
@@ -255,6 +257,41 @@ app.whenReady().then(async () => {
     "非法形象 id 应回落默认形象",
   );
   console.log("PET_CTRL_OK avatar-invalid-fallback");
+
+  // ── 调整大小：窗口跟着宠物尺寸变，且不跑出屏幕 ──
+  // 注意：切换形象会重建窗口，前面捕获的 win 已销毁，这里必须重新取
+  controller.setScale(1.5);
+  await sleep(300);
+  let liveWin = controller.window;
+  let [w, h] = liveWin.getSize();
+  const { computePetWindowSize } = require(path.join(ROOT, "electron", "dist", "pet-window.js"));
+  const expected = computePetWindowSize(Math.round(210 * 1.5));
+  assert.strictEqual(w, expected.width, `放大后窗口宽度应为 ${expected.width}，实际 ${w}`);
+  assert.strictEqual(h, expected.height, `放大后窗口高度应为 ${expected.height}，实际 ${h}`);
+  const [px, py] = liveWin.getPosition();
+  const scaleArea = screen.getPrimaryDisplay().workArea;
+  assert.ok(
+    px >= scaleArea.x - 1 && px + w <= scaleArea.x + scaleArea.width + 1,
+    `放大后应仍在屏幕内：x=${px} w=${w}`,
+  );
+  assert.ok(
+    py >= scaleArea.y - 1 && py + h <= scaleArea.y + scaleArea.height + 1,
+    `放大后应仍在屏幕内：y=${py} h=${h}`,
+  );
+  console.log("PET_CTRL_OK scale-up", `${w}x${h}`);
+
+  controller.setScale(0.6);
+  await sleep(300);
+  liveWin = controller.window;
+  [w, h] = liveWin.getSize();
+  const small = computePetWindowSize(Math.round(210 * 0.6));
+  assert.strictEqual(w, small.width, "缩小后宽度应回落");
+  assert.strictEqual(h, small.height, "缩小后高度应回落");
+  // 越界比例被夹取
+  controller.setScale(99);
+  await sleep(200);
+  assert.strictEqual(controller.getScale(), 2, "超过上限应夹到 2");
+  console.log("PET_CTRL_OK scale-clamped");
 
   controller.destroy();
   console.log("PET_CONTROLLER_TEST_OK");

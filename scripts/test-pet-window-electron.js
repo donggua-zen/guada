@@ -14,9 +14,12 @@ const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
 const assert = require("node:assert");
+const { pathToFileURL } = require("node:url");
 
 const ROOT = path.join(__dirname, "..");
 const ASSET_DIR = path.join(ROOT, "build-resources", "pets", "silver-haired");
+/** 页面是所有形象共用的一份（素材目录只放素材） */
+const UI_HTML = path.join(ROOT, "build-resources", "pet-ui", "pet.html");
 const PRELOAD = path.join(ROOT, "electron", "dist", "pet-preload.js");
 const { PET_WINDOW_WIDTH, PET_WINDOW_HEIGHT } = require(
   path.join(ROOT, "electron", "dist", "pet-window.js"),
@@ -60,7 +63,12 @@ app.whenReady().then(async () => {
 
   ipcMain.on("pet:ready", () => {
     rendererReady = true;
-    win.webContents.send("pet:config", fs.readFileSync(path.join(ASSET_DIR, "manifest.json"), "utf8"));
+    win.webContents.send(
+      "pet:config",
+      fs.readFileSync(path.join(ASSET_DIR, "manifest.json"), "utf8"),
+      "frames",
+      `${pathToFileURL(ASSET_DIR).href}/`,
+    );
     win.webContents.send("pet:settings", { opacity: 100 });
     win.webContents.send("pet:state", {
       mode: "walk",
@@ -83,7 +91,7 @@ app.whenReady().then(async () => {
     DRAG_EVENTS.push({ type: "end" });
   });
 
-  await win.loadFile(path.join(ASSET_DIR, "pet.html"));
+  await win.loadFile(UI_HTML);
   win.showInactive();
   win.setIgnoreMouseEvents(true, { forward: true });
 
@@ -214,25 +222,19 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 150));
 
   // ── 拖拽链路：必须是「移动窗口」，不是原生拖图片 ──────────
-  // 回归点：<img> 默认 draggable=true，拖动会走 HTML5 DnD 拖出「图片幽灵」，
-  // 窗口纹丝不动。这里断言三件事：img 不可拖、dragstart 被拦、指针拖动发 IPC。
+  // 回归点：图片元素默认 draggable=true，拖动会走 HTML5 DnD 拖出「图片幽灵」，
+  // 窗口纹丝不动。现在改成 canvas（本身不可拖），仍断言全局 dragstart 被拦。
   const dragProbe = await win.webContents.executeJavaScript(`(function () {
-    var img = document.getElementById('pet');
+    var el = document.getElementById('pet');
     var dragStart = new DragEvent('dragstart', { bubbles: true, cancelable: true });
-    img.dispatchEvent(dragStart);
-    var style = getComputedStyle(img);
+    el.dispatchEvent(dragStart);
     return {
-      draggable: img.draggable,
-      userDrag: style.webkitUserDrag || style.userDrag || '',
+      tag: el.tagName,
       dragStartPrevented: dragStart.defaultPrevented,
     };
   })()`);
-  assert.strictEqual(dragProbe.draggable, false, "<img> 必须 draggable=false");
+  assert.strictEqual(dragProbe.tag, "CANVAS", "宠物本体应是 canvas（图集/逐帧统一渲染）");
   assert.strictEqual(dragProbe.dragStartPrevented, true, "dragstart 必须被 preventDefault");
-  assert.ok(
-    dragProbe.userDrag === "none" || dragProbe.userDrag === "",
-    `图片应禁用 user-drag，实际 ${dragProbe.userDrag}`,
-  );
   console.log("PET_E2E_OK native-drag-disabled", JSON.stringify(dragProbe));
 
   // 合成一次指针拖动：down → move(+30,+20) → up

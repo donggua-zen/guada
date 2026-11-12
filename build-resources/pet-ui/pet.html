@@ -149,9 +149,10 @@
   }
 
   /* ── 宠物本体 ─────────────────────────────────────────── */
+  /* --pet-px 由 pet:settings 下发（按形象可调大小），气泡不跟着缩放 */
   .stage {
     position: relative;
-    height: 216px;
+    height: calc(var(--pet-px, 210px) + 6px);
     width: 100%;
     padding-bottom: 6px;
     display: flex;
@@ -161,22 +162,19 @@
     /* 可交互区域统一指点手（拖动中另见 body.is-dragging） */
     cursor: pointer;
   }
-  .stage img {
-    height: 210px; width: 210px;
+  .stage canvas {
+    height: var(--pet-px, 210px);
+    width: var(--pet-px, 210px);
     display: block;
     image-rendering: auto;
     transform-origin: 50% 100%;
     will-change: transform;
-    /* 关键：img 默认是 HTML5 可拖拽对象，不关掉的话拖动会走原生 DnD，
-       拖出的是「图片幽灵」而不是移动窗口 */
-    -webkit-user-drag: none;
-    user-drag: none;
-    user-select: none;
-    -webkit-user-select: none;
+    /* canvas 本身不吃鼠标事件：拖动/点击统一由 document 上的 pointer 事件处理，
+       命中判定另由主进程按 alpha 包围盒做（见 reportGeometry） */
     pointer-events: none;
   }
-  .stage img[data-mode="run"] { animation: bob-run 0.5s ease-in-out infinite; }
-  .stage img[data-mode="walk"] { animation: bob-walk 0.9s ease-in-out infinite; }
+  .stage canvas[data-mode="run"] { animation: bob-run 0.5s ease-in-out infinite; }
+  .stage canvas[data-mode="walk"] { animation: bob-walk 0.9s ease-in-out infinite; }
   @keyframes bob-run {
     0%, 100% { transform: translateY(0) }
     50%      { transform: translateY(-3px) }
@@ -218,15 +216,13 @@
   </div>
 
   <div class="stage" id="stage">
-    <img id="pet" alt="" draggable="false">
+    <canvas id="pet" width="210" height="210"></canvas>
   </div>
 </div>
 
 <script>
 (function () {
   var api = window.petAPI;
-  /** 画布边长（manifest.frameSize；烘焙缩图后自动跟随） */
-  var CANVAS = 384;
 
   var root = document.getElementById('root');
   var bubble = document.getElementById('bubble');
@@ -236,15 +232,77 @@
   var dotEl = document.getElementById('dot');
   var actionsEl = document.getElementById('actions');
   var listEl = document.getElementById('pet-list');
-  var img = document.getElementById('pet');
 
-  // ── 动画配置（由主进程读盘下发；file:// 下 fetch 会被 CORS 拦，故不走 fetch） ──
+  // ── 播放器（两种素材格式共用一套渲染循环） ──
+  //
+  // frames：我们的逐帧格式（manifest.json + <anim>/frame_001.webp，每段一个 fps）
+  // atlas ：Codex 图集（pet.json + 1536×1872，8×9 格，逐帧毫秒）
+  // 两者都实现同一组方法，外层只关心「当前 clip 的第几帧、下一帧何时」。
+  var canvasEl = document.getElementById('pet');
+  var ctx = canvasEl.getContext('2d');
+  /** 宠物显示边长（CSS px）：由主进程按「形象 + 用户比例」下发 */
+  var petPx = 210;
+  /** 播放倍速（1 = 官方节奏；>1 更快，<1 更慢） */
+  var animationSpeed = 1;
+  /** 画布逻辑尺寸（= petPx；两者分开写是为了读代码时更明确） */
+  var DISPLAY_H = 210;
+  var DISPLAY_W = 210;
+
+  /**
+   * 按当前 CSS 尺寸重建画布后备存储。
+   * 必须在 petPx / 窗口尺寸变化后调用，否则会拉伸发虚。
+   */
+  function resizeCanvasBackingStore() {
+    var dpr = window.devicePixelRatio || 1;
+    DISPLAY_W = canvasEl.clientWidth || petPx;
+    DISPLAY_H = canvasEl.clientHeight || petPx;
+    canvasEl.width = Math.round(DISPLAY_W * dpr);
+    canvasEl.height = Math.round(DISPLAY_H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  /** 应用新的宠物尺寸（来自 pet:settings） */
+  function applyPetPx(px) {
+    if (typeof px !== 'number' || !isFinite(px) || px <= 0) return;
+    if (Math.round(px) === Math.round(petPx)) return;
+    petPx = Math.round(px);
+    document.documentElement.style.setProperty('--pet-px', petPx + 'px');
+    resizeCanvasBackingStore();
+    drawCurrent();
+    reportGeometry();
+  }
+
+  resizeCanvasBackingStore();
+
+  /** Codex 图集的行契约（与 scripts/validate-pet-atlas.mjs 保持一致） */
+  var ATLAS_ROWS = [
+    { state: 'idle', frames: 6, durations: [280, 110, 110, 140, 140, 320] },
+    { state: 'running-right', frames: 8, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
+    { state: 'running-left', frames: 8, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
+    { state: 'waving', frames: 4, durations: [140, 140, 140, 280] },
+    { state: 'jumping', frames: 5, durations: [140, 140, 140, 140, 280] },
+    { state: 'failed', frames: 8, durations: [140, 140, 140, 140, 140, 140, 140, 240] },
+    { state: 'waiting', frames: 6, durations: [150, 150, 150, 150, 150, 260] },
+    { state: 'running', frames: 6, durations: [120, 120, 120, 120, 120, 220] },
+    { state: 'review', frames: 6, durations: [150, 150, 150, 150, 150, 280] },
+  ];
+  var ATLAS_COLS = 8;
+  /** 单格尺寸：按整图宽高现算（官方 1536×1872→192×208；ChatGPT 导出 1536×2288→192×254.2） */
+  var atlasCell = { w: 192, h: 208 };
+  /** 图集行数（9 = v1，11 = v2；只用于日志与诊断） */
+  var atlasRowCount = 9;
+
+  // 调试出口：端到端测试要断言切格尺寸（线上无副作用）
+  window.__petDebug = function () {
+    return { atlasCell: atlasCell, atlasRowCount: atlasRowCount, mode: mode };
+  };
+
   var config = null;
-  var frames = {};        // key -> [Image]
-  var loaded = {};        // key -> bool
+  var provider = null;
   var mode = 'idle';
   var frameIndex = 0;
-  var timer = null;
+  var frameStartedAt = 0;
+  var rafId = null;
   /**
    * 本轮空闲是否已经打过哈欠。
    * 状态每 2s 会重复推 mode='yawn'，若不记住「已播」就会每 2 秒重打一次；
@@ -256,66 +314,251 @@
   /** 上次状态载荷的 JSON（2s 轮询去重用） */
   var lastStateJson = '';
 
-  function frameSrc(key, i) {
-    // 美术侧序列帧规范：<anim 目录>/frame_001.webp（三位补零，数字即播放顺序）
-    var a = config && config.animations && config.animations[key];
-    var dir = (a && a.dir) || key;
-    return dir + '/frame_' + String(i).padStart(3, '0') + '.webp';
+  /** 按高度 fit、水平居中、底部对齐地画一帧 */
+  function drawFitted(src, sx, sy, sw, sh) {
+    var scale = DISPLAY_H / sh;
+    var dw = sw * scale;
+    var dh = DISPLAY_H;
+    var dx = (DISPLAY_W - dw) / 2;
+    ctx.clearRect(0, 0, DISPLAY_W, DISPLAY_H);
+    ctx.drawImage(src, sx, sy, sw, sh, dx, 0, dw, dh);
   }
 
-  function load(key) {
-    if (loaded[key] || !config) return;
-    var a = config.animations[key];
-    if (!a) return;
-    loaded[key] = true;
-    var list = [];
-    for (var i = 1; i <= a.count; i++) {
-      var im = new Image();
-      im.src = frameSrc(key, i);
-      list.push(im);
+  /** 逐帧格式的 Provider（base：素材目录的 file:// 前缀） */
+  function createFramesProvider(cfg, base) {
+    var images = {};
+    var size = (cfg.frameSize && cfg.frameSize.w) || 384;
+    return {
+      kind: 'frames',
+      srcSize: { w: size, h: size },
+      caps: function () { return Object.keys(cfg.animations || {}); },
+      spec: function (c) {
+        var a = cfg.animations && cfg.animations[c];
+        if (!a) return null;
+        return {
+          count: a.count,
+          loop: a.loop !== false,
+          duration: function () { return 1000 / (a.fps || 8); },
+        };
+      },
+      ensure: function (c) {
+        if (images[c]) return;
+        var a = cfg.animations && cfg.animations[c];
+        if (!a) return;
+        var dir = a.dir || c;
+        var list = [];
+        for (var i = 1; i <= a.count; i++) {
+          var im = new Image();
+          // 美术侧序列帧规范：<anim 目录>/frame_001.webp（三位补零）
+          im.src = base + dir + '/frame_' + String(i).padStart(3, '0') + '.webp';
+          list.push(im);
+        }
+        images[c] = list;
+      },
+      draw: function (c, i) {
+        var list = images[c];
+        var im = list && list[i];
+        if (!im || !im.complete || !im.naturalWidth) return;
+        drawFitted(im, 0, 0, im.naturalWidth, im.naturalHeight);
+      },
+      bbox: function (c) {
+        var a = cfg.animations && cfg.animations[c];
+        return a && a.bbox ? a.bbox : null;
+      },
+    };
+  }
+
+  /** Codex 图集的 Provider（base：素材目录的 file:// 前缀） */
+  function createAtlasProvider(cfg, base) {
+    var atlas = new Image();
+    var ready = false;
+    var rowIndex = {};
+    var bboxes = {};
+    ATLAS_ROWS.forEach(function (r, i) { rowIndex[r.state] = i; });
+
+    atlas.onload = function () {
+      ready = true;
+      // 单格尺寸按整图现算：不锁死 192×208，ChatGPT 导出的 1536×2288 也能直接用
+      // 单格尺寸：**按格宽推格高**，不要用 naturalHeight/行数——
+      // ATLAS_ROWS 是硬编码的 9 个状态，遇到 11 行的图集（Codex v2 / ChatGPT 导出）
+      // 会把格高算成 2288/9=254，取帧时跨到下一行，表现为「看到下一帧的半拉」。
+      // 两种图集的单格其实都是 192×208，比例固定。
+      var cellW = atlas.naturalWidth / ATLAS_COLS;
+      atlasCell = { w: cellW, h: cellW * (208 / 192) };
+      // 行数只用于日志（9 = v1，11 = v2）
+      atlasRowCount = Math.round(atlas.naturalHeight / atlasCell.h);
+      computeAtlasBBoxes();
+      drawCurrent();
+    };
+    atlas.src = base + (cfg.spritesheetPath || 'spritesheet.webp');
+
+    /**
+     * 逐行扫 alpha 算包围盒（命中判定用）。
+     * 只做一次：1536×1872 的 getImageData 约 11MB，扫完即可释放。
+     */
+    function computeAtlasBBoxes() {
+      var off = document.createElement('canvas');
+      off.width = atlas.naturalWidth;
+      off.height = atlas.naturalHeight;
+      var octx = off.getContext('2d');
+      octx.drawImage(atlas, 0, 0);
+      var data;
+      try {
+        data = octx.getImageData(0, 0, off.width, off.height).data;
+      } catch (err) {
+        return; // 拿不到像素就退化为「整格可点」，不影响播放
+      }
+      ATLAS_ROWS.forEach(function (row, r) {
+        var minX = 1e9, minY = 1e9, maxX = -1, maxY = -1;
+        var cw = Math.round(atlasCell.w);
+        var ch = Math.round(atlasCell.h);
+        for (var col = 0; col < row.frames; col++) {
+          var ox = Math.round(col * atlasCell.w);
+          var oy = Math.round(r * atlasCell.h);
+          for (var y = 0; y < ch; y++) {
+            for (var x = 0; x < cw; x++) {
+              var a = data[((oy + y) * off.width + (ox + x)) * 4 + 3];
+              if (a <= 16) continue;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (maxX >= 0) {
+          bboxes[row.state] = {
+            x: minX,
+            y: minY,
+            w: maxX - minX + 1,
+            h: maxY - minY + 1,
+          };
+        }
+      });
     }
-    frames[key] = list;
+
+    return {
+      kind: 'atlas',
+      srcSize: { get w() { return atlasCell.w }, get h() { return atlasCell.h } },
+      caps: function () { return ATLAS_ROWS.map(function (r) { return r.state; }); },
+      spec: function (c) {
+        var r = rowIndex[c];
+        if (r === undefined) return null;
+        var row = ATLAS_ROWS[r];
+        return {
+          count: row.frames,
+          loop: true,
+          duration: function (i) { return row.durations[i] || 150; },
+        };
+      },
+      ensure: function () {},
+      draw: function (c, i) {
+        var r = rowIndex[c];
+        if (r === undefined || !ready) return;
+        drawFitted(atlas, i * atlasCell.w, r * atlasCell.h, atlasCell.w, atlasCell.h);
+      },
+      bbox: function (c) {
+        return bboxes[c] || { x: 0, y: 0, w: atlasCell.w, h: atlasCell.h };
+      },
+    };
   }
 
-  function play(key) {
-    load(key);
-    var a = config.animations[key];
-    if (!a || !frames[key]) return;
-    if (timer) { clearInterval(timer); timer = null; }
-    frameIndex = 0;
-    img.dataset.mode = key;
-    img.src = frames[key][0].src;
-    timer = setInterval(function () {
-      var list = frames[key];
-      if (!list) return;
-      frameIndex++;
-      if (frameIndex >= list.length) {
-        if (a.loop) {
+  /** 渲染一帧（按当前 mode/frameIndex） */
+  function drawCurrent() {
+    if (!provider) return;
+    provider.draw(mode, frameIndex);
+  }
+
+  /** 最近一次语义状态（拖动结束后要回到它） */
+  var lastMood = 'idle';
+
+  /**
+   * 语义状态 → 动作名（能力回退）。
+   * 与 frontend/src/utils/petState.ts 的 resolveClip 必须保持一致；
+   * 那边有单测，这边靠图集/逐帧两条端到端覆盖。
+   */
+  function resolveClipJs(mood) {
+    var caps = provider ? provider.caps() : [];
+    var list = [];
+    switch (mood) {
+      case 'starting': list.push('waving'); break;
+      case 'working':
+        list.push('running');
+        if ((state.running || 0) >= 2) list.push('run');
+        list.push('walk');
+        break;
+      case 'waiting': list.push('waiting'); break;
+      case 'success': list.push('review'); break;
+      case 'error': list.push('failed'); break;
+      case 'sleeping': list.push('yawn'); break;
+      case 'dragging-left': list.push('running-left'); break;
+      case 'dragging-right': list.push('running-right'); break;
+      default: break;
+    }
+    list.push('idle');
+    for (var i = 0; i < list.length; i++) {
+      if (caps.indexOf(list[i]) >= 0) return list[i];
+    }
+    return 'idle';
+  }
+
+  function applyMood(mood) {
+    lastMood = mood || 'idle';
+    if (!provider) return;
+    setMode(resolveClipJs(lastMood));
+  }
+
+  /** 播放循环：按 Provider 给的逐帧时长推进 */
+  function tick(ts) {
+    rafId = window.requestAnimationFrame(tick);
+    if (!provider) return;
+    var spec = provider.spec(mode);
+    if (!spec || spec.count <= 0) return;
+
+    if (!frameStartedAt) frameStartedAt = ts;
+    // 播放倍速：>1 更快，<1 更慢（0.25–4，由设置页下发）
+    var duration = spec.duration(frameIndex) / animationSpeed;
+    var elapsed = ts - frameStartedAt;
+    if (elapsed >= duration) {
+      // 用 += 累加而不是 = ts：后者会把「不足一格的余量」吞掉，
+      // 实测会让 idle 从 1100ms 变成 1150ms、running 慢 10%。
+      frameStartedAt += duration;
+      // 窗口隐藏/系统休眠后 rAF 会跳很大一步：别追帧，直接对齐到当前时刻
+      if (ts - frameStartedAt > 1000) frameStartedAt = ts;
+      frameIndex += 1;
+      if (frameIndex >= spec.count) {
+        if (spec.loop) {
           frameIndex = 0;
         } else {
-          clearInterval(timer); timer = null;
           // 单次动画（打哈欠）播完回待机，并标记本轮已播，
           // 避免状态仍是 yawn 时每 2s 重播一次
-          if (key === 'yawn') { yawnPlayed = true; }
+          frameIndex = spec.count - 1;
+          if (mode === 'yawn') yawnPlayed = true;
           setMode('idle', true);
           return;
         }
       }
-      var im = list[frameIndex];
-      if (im && im.complete) img.src = im.src;
-    }, 1000 / a.fps);
+    }
+    drawCurrent();
   }
 
   function setMode(next, force) {
-    if (!config) return;
+    if (!config || !provider) return;
     if (!force && next === mode) return;
+    // 素材不支持该动作 → 回落到 idle（能力回退的第一层）
+    if (!provider.spec(next)) next = 'idle';
+    if (!provider.spec(next)) return;
     // 来了任务 → 复位「本轮已打哈欠」，下次长空闲可以再打一次
     if (next === 'walk' || next === 'run') yawnPlayed = false;
     // 长空闲只打一次哈欠，播完就待在 idle（状态仍会推 yawn，这里挡掉）
     if (next === 'yawn' && yawnPlayed) next = 'idle';
     if (!force && next === mode) return;
     mode = next;
-    play(next);
+    provider.ensure(mode);
+    frameIndex = 0;
+    frameStartedAt = 0;
+    canvasEl.dataset.mode = mode;
+    drawCurrent();
     reportGeometry();
   }
 
@@ -437,16 +680,16 @@
   }
 
   // ── 命中几何上报 ──
-  // 主进程按「当前动画的紧包围盒 + 气泡矩形」判定穿透。
-  // 用紧包围盒而不是整张 384² 画布：立绘只占画布中间一条，
-  // 四周（以及 idle 时相对 run 多出来的那圈）全是透明，用画布矩形会挡住桌面点击。
+  // 主进程按「当前动作的紧包围盒 + 气泡矩形」判定穿透。
+  // 包围盒来源由 Provider 给：逐帧素材用 manifest 里烘焙好的 bbox，
+  // 图集素材在加载时扫 alpha 现算。两者都只覆盖立绘本体，
+  // 四角透明区不吞桌面点击。
   var lastGeomJson = '';
   function reportGeometry() {
     if (!api) return;
-    var ir = img.getBoundingClientRect();
     var br = bubble.classList.contains('show') ? bubble.getBoundingClientRect() : null;
     var geom = {
-      image: bboxRect(ir),
+      image: bboxRect(),
       bubble: br
         ? { x: Math.round(br.left), y: Math.round(br.top), w: Math.round(br.width), h: Math.round(br.height) }
         : null,
@@ -457,20 +700,26 @@
     api.reportHitGeometry(geom);
   }
 
-  /** 当前动画包围盒 → 窗口内矩形；配置缺失时退化为图片矩形 */
-  function bboxRect(imgRect) {
-    var a = config && config.animations && config.animations[mode];
-    var bbox = a && a.bbox;
-    if (!bbox) {
+  /**
+   * 当前动作的包围盒 → 窗口内矩形。
+   * Provider 的 bbox 是「源帧坐标系」，这里按缩放/居中换算到窗口坐标；
+   * 拿不到 bbox 时退化为整块画布（宁可多挡一点，也不能点不到）。
+   */
+  function bboxRect() {
+    var cr = canvasEl.getBoundingClientRect();
+    var bbox = provider && provider.bbox ? provider.bbox(mode) : null;
+    if (!bbox || !provider) {
       return {
-        x: Math.round(imgRect.left), y: Math.round(imgRect.top),
-        w: Math.round(imgRect.width), h: Math.round(imgRect.height),
+        x: Math.round(cr.left), y: Math.round(cr.top),
+        w: Math.round(cr.width), h: Math.round(cr.height),
       };
     }
-    var scale = imgRect.width / CANVAS;
+    var src = provider.srcSize;
+    var scale = DISPLAY_H / src.h;
+    var offsetX = (DISPLAY_W - src.w * scale) / 2;
     return {
-      x: Math.round(imgRect.left + bbox.x * scale),
-      y: Math.round(imgRect.top + bbox.y * scale),
+      x: Math.round(cr.left + offsetX + bbox.x * scale),
+      y: Math.round(cr.top + bbox.y * scale),
       w: Math.round(bbox.w * scale),
       h: Math.round(bbox.h * scale),
     };
@@ -492,17 +741,67 @@
     e.preventDefault();
   });
 
-  var drag = { active: false, moved: false, sx: 0, sy: 0, lastX: 0, lastY: 0, pointerId: null };
+  var drag = {
+    active: false, moved: false, sx: 0, sy: 0, lastX: 0, lastY: 0, pointerId: null,
+    dirName: null,
+    /** 与当前朝向相反的累计位移（px）：换向要先攒够阈值，吸收慢拖时的手抖 */
+    dirAccum: 0,
+  };
+
+  /** 换向阈值：慢拖时鼠标每帧只动 0~1px，没有迟滞就会左右来回闪 */
+  var DRAG_DIR_SWITCH_PX = 6;
+
+  /**
+   * 拖动方向动画。
+   *
+   * 为什么不能直接用每帧 dx 判方向：窗口跟着鼠标走，慢拖时大量事件 dx === 0，
+   * 「dx >= 0 就算向右」会把刚判定的向左立刻翻回向右 —— 表现为来回抖动。
+   * 这里：0 位移忽略；朝当前方向动就清零反向累计；反向累计够了才换向。
+   */
+  function updateDragDirection(dx) {
+    if (!provider || dx === 0) return;
+    var right = 'running-right';
+    var left = 'running-left';
+    // 素材没有方向行（我们自己的 4 段素材）就不切，保持当前动作
+    if (!provider.spec(right) || !provider.spec(left)) return;
+
+    var movingRight = dx > 0;
+    if (!drag.dirName) {
+      drag.dirName = movingRight ? right : left;
+      drag.dirAccum = 0;
+      setMode(drag.dirName);
+      return;
+    }
+
+    var sameDirection = (drag.dirName === right) === movingRight;
+    if (sameDirection) {
+      drag.dirAccum = 0;
+      return;
+    }
+
+    drag.dirAccum += dx;
+    if (Math.abs(drag.dirAccum) >= DRAG_DIR_SWITCH_PX) {
+      drag.dirName = movingRight ? right : left;
+      drag.dirAccum = 0;
+      setMode(drag.dirName);
+    }
+  }
 
   function endDrag() {
     if (!drag.active) return;
     drag.active = false;
     drag.pointerId = null;
     document.body.classList.remove('is-dragging');
+    drag.dirName = null;
+    drag.dirAccum = 0;
     // 松手恢复气泡（位置由主进程在 drag-end 后推新的可见区间）
     if (bubbleHidden) {
       bubbleHidden = false;
       updateBubble();
+    }
+    // 拖动结束回到语义状态对应的动作
+    if (drag.moved) {
+      applyMood(lastMood);
     }
     if (drag.moved) {
       // 结束拖动：让主进程退出交互态（恢复穿透判定）并把位置落盘
@@ -545,6 +844,8 @@
     }
     if (drag.moved) {
       api.dragMove({ dx: dx, dy: dy });
+      // 方向动画：带迟滞判定（慢拖时来回抖动的问题见 updateDragDirection 注释）
+      updateDragDirection(dx);
       drag.lastX = e.screenX;
       drag.lastY = e.screenY;
     }
@@ -585,19 +886,35 @@
 
   // ── IPC 接入 ──
   if (api) {
-    api.onConfig(function (cfgJson) {
+    api.onConfig(function (cfgJson, format, baseUrl) {
       try {
         config = typeof cfgJson === 'string' ? JSON.parse(cfgJson) : cfgJson;
       } catch (err) {
-        console.error('manifest.json 解析失败', err);
+        console.error('素材配置解析失败', err);
         return;
       }
-      var frameSize = config && config.frameSize;
-      if (frameSize && frameSize.w) CANVAS = frameSize.w;
-      // 配置可能晚于状态到达（状态里带了 walk/run）：以状态为准重放一次，
-      // 否则会卡在 idle 直到下一次状态推送
-      play('idle');
-      if (state && state.mode && state.mode !== 'idle') setMode(state.mode, true);
+      if (!config) return;
+
+      // 素材目录的 file:// 前缀：导入的 Codex 宠物目录里未必带 pet.html，
+      // 相对路径不能按页面自身位置解析。
+      var base = baseUrl || '';
+
+      // 格式以主进程下发的为准；缺失时按字段推断（兼容旧测试/旧主进程）
+      var kind = format;
+      if (kind !== 'atlas' && kind !== 'frames') {
+        kind = config.spritesheetPath && !config.animations ? 'atlas' : 'frames';
+      }
+      provider = kind === 'atlas'
+        ? createAtlasProvider(config, base)
+        : createFramesProvider(config, base);
+
+      // 配置可能晚于状态到达：窗口创建后、页面 ready 前推的状态会被浏览器
+      // 排在 config 之前送达，那时 provider 还不存在（applyMood 会直接返回）。
+      // 这里用已记录的语义状态重放一次，否则会先按老字段退回 idle。
+      mode = 'idle';
+      if (lastMood && lastMood !== 'idle') applyMood(lastMood);
+      else setMode((state && state.mode) || 'idle', true);
+      if (!rafId) rafId = window.requestAnimationFrame(tick);
       renderBubble();
     });
 
@@ -609,13 +926,21 @@
       lastStateJson = json;
       state = next;
       currentSessionId = next && next.sessionId ? next.sessionId : null;
-      if (next && next.mode) setMode(next.mode);
+      // 优先用语义状态（渲染层按素材能力映射）；老载荷只有 mode 时直接当动作名用
+      if (next && next.mood) applyMood(next.mood);
+      else if (next && next.mode) setMode(next.mode);
       renderBubble();
     });
 
     api.onSettings(function (s) {
       if (s && typeof s.opacity === 'number') {
         root.style.opacity = String(Math.max(0, Math.min(100, s.opacity)) / 100);
+      }
+      // 宠物大小：只缩放宠物本体，气泡与文字保持原样（缩了会糊）
+      if (s && typeof s.petPx === 'number') applyPetPx(s.petPx);
+      // 播放倍速：改完立刻生效；下一帧起按新时长推进（不重置当前帧，避免跳帧）
+      if (s && typeof s.animationSpeed === 'number' && isFinite(s.animationSpeed) && s.animationSpeed > 0) {
+        animationSpeed = Math.min(4, Math.max(0.25, s.animationSpeed));
       }
     });
 
