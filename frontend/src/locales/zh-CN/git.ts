@@ -74,6 +74,7 @@ export default {
     no_model_configured: '未配置模型（请先设置标题总结模型或当前对话模型）',
     model_not_found: '配置的模型不存在',
     generation_failed: '模型未返回有效内容',
+    output_truncated: '模型输出达到长度上限（思考内容占用了配额），请重试或换用不支持思考的模型',
     error: '后端处理出错',
   },
   constraintTitle: '项目提交约束',

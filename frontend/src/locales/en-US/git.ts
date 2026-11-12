@@ -74,6 +74,7 @@ export default {
     no_model_configured: 'No model configured (set title summary model or current chat model first)',
     model_not_found: 'Configured model does not exist',
     generation_failed: 'Model returned no valid content',
+    output_truncated: 'Model output hit the length limit (reasoning used up the token budget). Retry or switch to a non-reasoning model.',
     error: 'Backend processing error',
   },
   constraintTitle: 'Commit constraints',
