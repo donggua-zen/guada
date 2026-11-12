@@ -1007,10 +1007,12 @@ export class ProcessManagerService
       process.platform === "win32"
         ? () => {
             try {
+              // 打包版后端是 GUI 子系统、无控制台：缺 windowsHide 会新建控制台窗口
+              // （MEMORY.md「打包版子进程 = 黑色控制台窗口」同类事故，勿回退）。
               execFileSync(
                 "taskkill",
                 ["/F", "/T", "/PID", String(pid)],
-                { stdio: "ignore", timeout: 1_000 },
+                { stdio: "ignore", timeout: 1_000, windowsHide: true },
               );
             } catch {
               // 已退出
