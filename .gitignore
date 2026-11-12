@@ -97,3 +97,6 @@ tmp/**
 
 # 宠物市场索引（生成物，上传官网，不入库）
 pet-market/
+
+# qi-dusk-skin 独立仓库工作区（dev 加载用 junction，见 ../guada_plugins）
+plugins/qi-dusk-skin/
