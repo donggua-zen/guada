@@ -31,19 +31,26 @@ app.whenReady().then(async () => {
   // 造一个「光标不在任何可交互区」的几何
   c.setHitGeometry({ image: { x: -9999, y: -9999, w: 1, h: 1 }, bubble: null });
   await sleep(100);
-  assert.strictEqual(c.getAppliedIgnore(), true, "无命中时应穿透");
 
-  c.noteHitHeartbeat();
-  assert.strictEqual(c.getAppliedIgnore(), false, "心跳应立刻放开");
-  console.log("PET_IGNORE_OK heartbeat-opens");
-
-  c.clearHitHeartbeat();
-  assert.strictEqual(
-    c.getAppliedIgnore(),
-    true,
-    "hitLeave 必须立刻回穿透（否则透明区会挡住桌面点击）",
-  );
-  console.log("PET_IGNORE_OK leave-closes-immediately");
+  if (process.platform === "win32") {
+    // win32 走 setShape（窗口 region）：区域外不属于该窗口，
+    // 不再使用 setIgnoreMouseEvents，appliedIgnore 恒为 false。
+    // 穿透由 test-pet-shape-pass.js 用 WindowFromPoint 验证。
+    assert.strictEqual(
+      c.getAppliedIgnore(),
+      false,
+      "win32 使用 setShape，不应依赖 setIgnoreMouseEvents",
+    );
+    console.log("PET_IGNORE_OK win32-uses-setshape");
+  } else {
+    assert.strictEqual(c.getAppliedIgnore(), true, "无命中时应穿透");
+    c.noteHitHeartbeat();
+    assert.strictEqual(c.getAppliedIgnore(), false, "心跳应立刻放开");
+    console.log("PET_IGNORE_OK heartbeat-opens");
+    c.clearHitHeartbeat();
+    assert.strictEqual(c.getAppliedIgnore(), true, "hitLeave 必须立刻回穿透");
+    console.log("PET_IGNORE_OK leave-closes-immediately");
+  }
 
   c.destroy();
   console.log("PET_IGNORE_TEST_OK");

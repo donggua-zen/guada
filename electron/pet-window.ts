@@ -515,9 +515,11 @@ export class PetWindowController {
   private petPx = PET_BASE_PX;
   /** 播放倍速（0.25–4，1 = 官方节奏） */
   private animationSpeed = 1;
-  /** 当前是否已置为穿透（避免每 40ms 重复调用 setIgnoreMouseEvents） */
+  /** 当前是否已置为穿透（仅 macOS 回退路径用；win32 走 setShape） */
   private appliedIgnore: boolean | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
+  /** 最近一次下发的窗口形状（JSON），避免动画每帧重复调用 setShape */
+  private lastShapeKey: string | null = null;
   /** 拖动/按钮交互中：暂停命中判定，保持可交互 */
   private interacting = false;
   /**
@@ -624,18 +626,16 @@ export class PetWindowController {
   }
 
   /**
-   * 重新武装鼠标穿透转发（Petdex/dsh-pet 生态桌宠的已知修复）。
+   * 解锁 / 重新显示后的恢复。
    *
-   * Windows 的 hide→show / 锁屏会话切换会让 forward:true 的 mousemove 转发
-   * 悄悄失效，必须重新调用一次 setIgnoreMouseEvents(true,{forward:true})，
-   * 并通知渲染层复位它自己的 hover 缓存。
+   * 现在穿透靠窗口 region（setShape），它不会被锁屏重置，
+   * 所以这里只需清掉形状缓存、让形状重新下发一次，并复位渲染层的 hover 缓存。
    */
   private rearmInput(win: BrowserWindow): void {
     this.interacting = false;
     this.interactingSince = 0;
     this.hitHeartbeatAt = 0;
-    win.setIgnoreMouseEvents(true, { forward: true });
-    this.appliedIgnore = true;
+    this.lastShapeKey = null;
     win.webContents.send("pet:reset-hover");
     this.startPoll();
     this.tick();
@@ -816,16 +816,34 @@ export class PetWindowController {
       this.stopPoll();
     });
 
-    // 显示 / 重新获得焦点时自愈（锁屏、托盘隐藏再显示都会走到这里）。
-    // 详细原因见 rearmInput()。
-    win.on("show", () => this.rearmInput(win));
+    // 显示时重算窗口形状。窗口 region（setShape）不会被锁屏重置，
+    // 所以这里只是清缓存让形状重新下发一次（Windows 上 setShape 是幂等的）。
+    win.on("show", () => {
+      this.interacting = false;
+      this.interactingSince = 0;
+      this.hitHeartbeatAt = 0;
+      this.lastShapeKey = null;
+      win.webContents.send("pet:reset-hover");
+      this.startPoll();
+      this.tick();
+    });
     win.on("focus", () => {
       this.appliedIgnore = null;
     });
 
-    // 首帧就绪前保持穿透，避免加载期挡住桌面点击
-    win.setIgnoreMouseEvents(true, { forward: true });
-    this.appliedIgnore = true;
+    // 首帧就绪前：几何未知，形状先给「空」（整窗不命中），
+    // 避免加载期挡桌面；渲染层上报几何后立刻按 bbox 裁剪。
+    if (typeof win.setShape === "function") {
+      try {
+        win.setShape([]);
+        this.lastShapeKey = "[]";
+      } catch {
+        /* 形状 API 不可用就走 macOS 回退路径 */
+      }
+    } else {
+      win.setIgnoreMouseEvents(true, { forward: true });
+      this.appliedIgnore = true;
+    }
 
     void win.loadFile(htmlPath).catch((error) => {
       log.warn("[pet] 加载页面失败:", error);
@@ -1023,7 +1041,8 @@ export class PetWindowController {
   setInteracting(interacting: boolean): void {
     this.interacting = interacting;
     this.interactingSince = interacting ? Date.now() : 0;
-    if (interacting) this.applyIgnore(false);
+    // 拖动/按按钮时形状退化为整窗（光标会移出 bbox），松手后恢复裁剪
+    this.tick();
   }
 
   /** 当前交互态（测试/诊断用） */
@@ -1077,14 +1096,9 @@ export class PetWindowController {
     this.interacting = false;
     this.interactingSince = 0;
     this.appliedIgnore = null;
-    if (!this.isAlive() || !this.win!.isVisible() || !this.enabled) return;
-    // 先无条件放到不穿透，再让 tick 按光标位置重新判定。
-    // 这样即使系统把它重置成了穿透/不穿透中的任一种，都能收敛到正确状态。
-    try {
-      this.win!.setIgnoreMouseEvents(false, { forward: true });
-    } catch {
-      /* 窗口可能正在销毁 */
-    }
+    this.lastShapeKey = null;
+    if (!this.isAlive() || !this.enabled) return;
+    // 窗口 region 不会被睡眠/锁屏重置，这里只需重新下发一次形状
     this.tick();
     this.pushClip();
   }
@@ -1235,13 +1249,9 @@ export class PetWindowController {
 
   private tick(): void {
     const win = this.win;
-    // 只用「是否销毁」把关，**不要用 isVisible()**：
-    // 显示器省电熄屏时 Windows/DWM 会把窗口判为 occluded，isVisible() 可能
-    // 返回 false 并持续一段时间；tick 提前 return 就再也不下发穿透状态，
-    // 唤醒后窗口一直停在穿透 → pointerdown 被吞 → 拖不动（用户看到的必现）。
     if (!win || win.isDestroyed()) return;
     const now = Date.now();
-    // 交互态超时兜底（极端场景，主流程已不依赖它）
+    // 交互态超时兜底（锁屏吞事件时避免永远停在整窗形状）
     if (
       this.interacting &&
       now - this.interactingSince > PetWindowController.INTERACT_TIMEOUT_MS
@@ -1249,32 +1259,95 @@ export class PetWindowController {
       this.interacting = false;
       this.interactingSince = 0;
     }
-    if (this.interacting) {
-      this.applyIgnore(false);
+    this.applyShape();
+  }
+
+  /**
+   * 用窗口形状（Windows `SetWindowRgn`）实现穿透，**不再用 setIgnoreMouseEvents**。
+   *
+   * 为什么换掉：`setIgnoreMouseEvents(true,{forward:true})` 靠转发的 mousemove
+   * 才能翻回可交互；而 hide→show（WIN+L 锁屏）会让这个转发失效，
+   * 窗口永远卡在穿透（用户实测必现，多轮修补均无效）。
+   *
+   * `setShape` 是窗口 region：区域之外**根本不属于该窗口**，鼠标事件由系统
+   * 直接投递给下层，不需要任何转发，也不会被锁屏重置。
+   * 实测（WindowFromPoint）：调用后形状外命中的是其它窗口，形状内仍是本窗。
+   *
+   * 形状 = 宠物 bbox ∪ 气泡矩形（都可点击）；交互中（拖动/按按钮）退化为整窗，
+   * 保证拖出包围盒时光标仍属于本窗口。
+   */
+  private applyShape(): void {
+    const win = this.win;
+    if (!win || win.isDestroyed()) return;
+    if (typeof win.setShape !== "function") {
+      // 非 win32/linux 或旧版本：回退到旧的穿透开关（macOS 没有该 API）
+      this.applyIgnoreFallback();
       return;
     }
 
-    // 心跳只表达「渲染层确认光标在可交互区」。透明区由渲染层发 hitLeave，
-    // 所以心跳存在时放开、不存在时按 bbox 判定，两者都不把整窗当命中区。
+    const rects: Array<{ x: number; y: number; width: number; height: number }> = [];
+    if (this.interacting || !this.geometry) {
+      // 交互中或几何未知：整窗可交互（宁可短暂挡桌面，也不能拖不动/点不到）
+      const size = this.windowSize();
+      rects.push({ x: 0, y: 0, width: size.width, height: size.height });
+    } else {
+      const { image, bubble } = this.geometry;
+      const push = (r: PetRect | null | undefined) => {
+        if (!r || r.w <= 0 || r.h <= 0) return;
+        // 略放大 2px：bbox 是动画帧的紧包围盒，边缘像素容易抖
+        const pad = 2;
+        rects.push({
+          x: Math.max(0, Math.round(r.x) - pad),
+          y: Math.max(0, Math.round(r.y) - pad),
+          width: Math.round(r.w) + pad * 2,
+          height: Math.round(r.h) + pad * 2,
+        });
+      };
+      push(image);
+      push(bubble);
+      if (rects.length === 0) {
+        const size = this.windowSize();
+        rects.push({ x: 0, y: 0, width: size.width, height: size.height });
+      }
+    }
+
+    // 形状没变就不重复调用（动画每帧都会导致 bbox 抖动）
+    const key = JSON.stringify(rects);
+    if (key === this.lastShapeKey) return;
+    this.lastShapeKey = key;
+    try {
+      win.setShape(rects);
+      // 形状生效后窗口不应再忽略鼠标，否则点击仍会被吞
+      if (this.appliedIgnore !== false) {
+        win.setIgnoreMouseEvents(false);
+        this.appliedIgnore = false;
+      }
+    } catch (error) {
+      log.warn("[pet] setShape 失败，回退到穿透开关:", error);
+      this.applyIgnoreFallback();
+    }
+  }
+
+  /** 非 win32 平台（macOS）回退：仍用 setIgnoreMouseEvents + 轮询 */
+  private applyIgnoreFallback(): void {
+    const win = this.win;
+    if (!win || win.isDestroyed()) return;
+    const now = Date.now();
+    if (this.interacting) {
+      this.setIgnoreRaw(false);
+      return;
+    }
     if (now - this.hitHeartbeatAt < PetWindowController.HIT_HEARTBEAT_TTL_MS) {
-      this.applyIgnore(false);
+      this.setIgnoreRaw(false);
       return;
     }
     const cursor = screen.getCursorScreenPoint();
-    const hit = resolvePetHit(cursor, win.getBounds(), this.geometry);
-    this.applyIgnore(!hit);
+    this.setIgnoreRaw(!resolvePetHit(cursor, win.getBounds(), this.geometry));
   }
 
-  private applyIgnore(ignore: boolean): void {
+  private setIgnoreRaw(ignore: boolean): void {
     const win = this.win;
     if (!win || win.isDestroyed()) return;
-    // 不按 appliedIgnore 短路。
-    //
-    // 显示器省电熄屏（SC_MONITORPOWER）/锁屏会重置窗口的鼠标过滤状态，
-    // 且**不会**触发 powerMonitor.resume —— 但我们的缓存还以为状态没变，
-    // 于是再也不下发，宠物唤醒后彻底收不到鼠标事件（必现，非偶发）。
-    // setIgnoreMouseEvents 是幂等的，40ms 一次开销可忽略；
-    // 无条件重下发相当于一个 1 拍收敛的看门狗，覆盖所有「系统偷偷重置」场景。
     this.appliedIgnore = ignore;
     win.setIgnoreMouseEvents(ignore, { forward: true });
   }

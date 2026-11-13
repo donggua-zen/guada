@@ -40,6 +40,15 @@ app.whenReady().then(async () => {
   // 让主进程认为光标 miss（模拟熄屏后坐标失真）：伪造一个明显命不中的几何
   c.setHitGeometry({ image: { x: -9999, y: -9999, w: 1, h: 1 }, bubble: null });
   await sleep(100);
+  if (process.platform === "win32") {
+    // win32 走 setShape：穿透由窗口 region 决定，不再依赖心跳开关。
+    // 形状外的穿透由 test-pet-shape-pass.js（WindowFromPoint）验证。
+    console.log("PET_HEARTBEAT_OK win32-uses-setshape（跳过旧语义断言）");
+    c.destroy();
+    console.log("PET_HEARTBEAT_TEST_OK");
+    app.exit(0);
+    return;
+  }
   // 此时没有心跳 → 应保持穿透
   assert.strictEqual(c.getAppliedIgnore(), true, "无心跳且 bbox miss 时应穿透");
   console.log("PET_HEARTBEAT_OK miss-keeps-ignore");
