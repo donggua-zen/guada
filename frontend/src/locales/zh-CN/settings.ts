@@ -13,7 +13,7 @@ export default {
   pet: {
     avatarTitle: '宠物形象',
     avatarHint: '选择桌面上显示的形象。更多形象可在宠物市场里安装。',
-    marketHint: '来源 Petdex；安装会执行第三方命令，请确认后再继续。',
+    marketHint: '来源 Petdex，卡片显示宠物本体；点「安装」直接下载素材。',
     emptyAvatars: '未找到可用形象（缺少 build-resources/pets 素材）。',
     noPreview: '暂无预览',
     behaviorTitle: '显示与外观',
@@ -42,7 +42,7 @@ export default {
     marketSearch: '搜索名称 / 作者 / slug',
     marketRefresh: '刷新',
     marketLoading: '正在获取宠物列表…',
-    marketFailed: '市场数据暂不可用（可用下面的「从文件夹导入」或手动输入 slug）',
+    marketFailed: '市场数据暂不可用，请点「重试」或稍后再试。',
     marketRetry: '重试',
     marketEmpty: '没有匹配的宠物',
     marketMore: '加载更多',
@@ -66,6 +66,11 @@ export default {
     marketDetailSource:
       '宠物为用户投稿的同人作品，版权归原作者所有。预览来自 Petdex 的官方精灵图。',
     marketAttribution: '宠物为用户投稿的同人作品，版权归原作者所有。',
+    uninstall: '卸载',
+    uninstallConfirmTitle: '卸载桌宠',
+    uninstallConfirmContent: '确定要卸载「{name}」吗？这会删除它的素材文件。',
+    uninstallSuccess: '已卸载',
+    uninstallFailed: '卸载失败',
   },
 
   general: {
