@@ -13,7 +13,7 @@ export default {
   pet: {
     avatarTitle: 'Pet avatar',
     avatarHint: 'Choose the avatar on your desktop. Install more from the pet market.',
-    marketHint: 'From Petdex; installing runs a third-party command — please review before continuing.',
+    marketHint: 'From Petdex — cards show the pet itself; Install downloads the sprite directly.',
     emptyAvatars: 'No avatar found (missing build-resources/pets assets).',
     noPreview: 'No preview',
     behaviorTitle: 'Visibility & appearance',
@@ -42,7 +42,7 @@ export default {
     marketSearch: 'Search name / author / slug',
     marketRefresh: 'Refresh',
     marketLoading: 'Loading pets…',
-    marketFailed: 'Market data unavailable (use "Import from folder" or a slug below)',
+    marketFailed: 'Market data unavailable — tap Retry or try again later.',
     marketRetry: 'Retry',
     marketEmpty: 'No matching pets',
     marketMore: 'Load more',
@@ -66,6 +66,11 @@ export default {
     marketDetailSource:
       'Pets are user-submitted fan art; rights belong to their authors. Preview uses Petdex’s official sprite sheet.',
     marketAttribution: 'Pets are user-submitted fan art; rights belong to their authors.',
+    uninstall: 'Uninstall',
+    uninstallConfirmTitle: 'Uninstall pet',
+    uninstallConfirmContent: 'Remove "{name}"? Its assets will be deleted.',
+    uninstallSuccess: 'Pet uninstalled',
+    uninstallFailed: 'Failed to uninstall',
   },
 
   general: {

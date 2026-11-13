@@ -220,13 +220,13 @@ const filtered = computed<MarketPet[]>(() => {
 
 const visiblePets = computed(() => filtered.value.slice(0, visibleCount.value))
 
-const load = async (_force = false) => {
+const load = async (force = false) => {
   loading.value = true
   banner.value = ''
   errorText.value = ''
   try {
-    // 渲染层直接拉：HTTP 缓存（no-cache + ETag）负责去重，未变时只传几十字节
-    const result = await fetchPetMarketIndex()
+    // force（重试）时打散 URL，避免复用浏览器缓存里的坏响应
+    const result = await fetchPetMarketIndex(force)
     if (!result.ok || !result.index) {
       index.value = null
       errorText.value = result.error || t('settings.pet.marketUnknownError')

@@ -144,14 +144,18 @@ export interface MarketFetchResult {
 /**
  * 拉索引。
  *
- * 不自己做缓存：服务端 `no-cache` + ETag 让浏览器每次校验，
- * 未变时只传几十字节（304），比自建缓存更简单也更不会看到旧数据。
+ * 重试时带一个时间戳 query：失败响应（尤其是 COS 图床偶发无 CORS 头时的
+ * opaque response）会被浏览器缓存住，不打散 URL 会一直拿到同一个坏响应。
+ * 正常请求不带参数，服务端 no-cache + ETag 负责校验（未变返 304）。
  */
-export async function fetchPetMarketIndex(): Promise<MarketFetchResult> {
+export async function fetchPetMarketIndex(retry = false): Promise<MarketFetchResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
-    const response = await fetch(PET_MARKET_URL, {
+    const url = retry
+      ? `${PET_MARKET_URL}${PET_MARKET_URL.includes('?') ? '&' : '?'}r=${Date.now()}`
+      : PET_MARKET_URL
+    const response = await fetch(url, {
       signal: controller.signal,
       headers: { accept: 'application/json' },
     })
