@@ -1006,6 +1006,15 @@
       }
     });
 
+    // WIN+L 解锁 / hide→show：主进程重新武装了 forward 转发，
+    // 这里必须复位 hover 缓存，否则「状态没变就不发」会拦掉恢复后的第一次判定
+    api.onResetHover(function () {
+      lastHeartbeat = 0;
+      lastHeartbeatState = null;
+      window.__petResetCount = (window.__petResetCount || 0) + 1;
+      reportGeometry();
+    });
+
     // WIN+L 解锁：主进程探活后不重建窗口（避免闪一下），只通知重报几何
     api.onUnlock(function () {
       // 若上次拖拽被锁屏吞了 pointerup，这里清干净（无视觉变化地重置）

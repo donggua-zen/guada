@@ -596,17 +596,10 @@ export class PetWindowController {
     }
 
     if (rendererAlive) {
-      // 无视觉变化地恢复：清状态 + 无条件下发 + 重新推配置让渲染层重报几何
-      this.interacting = false;
-      this.interactingSince = 0;
-      this.hitHeartbeatAt = 0;
-      this.appliedIgnore = null;
-      win.setIgnoreMouseEvents(false, { forward: true });
-      this.appliedIgnore = false;
-      this.startPoll();
-      // 只通知渲染层「重新上报几何」，不重推 config/state（会重播动画造成视觉跳变）
+      // 原地恢复：重新武装 forward 转发（不重建窗口，无视觉变化）。
+      // 这是锁屏后能拖动的关键 —— 不是清状态，是重新下发穿透转发。
+      this.rearmInput(win);
       this.send("pet:unlock", { at: Date.now() });
-      this.tick();
       log.info("[pet] screen unlocked, recovered in place (no rebuild)");
       return;
     }
@@ -628,6 +621,24 @@ export class PetWindowController {
     }
     const fresh = this.ensureWindow();
     if (fresh) fresh.showInactive();
+  }
+
+  /**
+   * 重新武装鼠标穿透转发（Petdex/dsh-pet 生态桌宠的已知修复）。
+   *
+   * Windows 的 hide→show / 锁屏会话切换会让 forward:true 的 mousemove 转发
+   * 悄悄失效，必须重新调用一次 setIgnoreMouseEvents(true,{forward:true})，
+   * 并通知渲染层复位它自己的 hover 缓存。
+   */
+  private rearmInput(win: BrowserWindow): void {
+    this.interacting = false;
+    this.interactingSince = 0;
+    this.hitHeartbeatAt = 0;
+    win.setIgnoreMouseEvents(true, { forward: true });
+    this.appliedIgnore = true;
+    win.webContents.send("pet:reset-hover");
+    this.startPoll();
+    this.tick();
   }
 
   /** 当前形象的素材目录 */
@@ -805,14 +816,9 @@ export class PetWindowController {
       this.stopPoll();
     });
 
-    // 显示/重新获得焦点时自愈：显示器省电熄屏（SC_MONITORPOWER）不会触发
-    // powerMonitor.resume，但窗口会经历 hide/show；清掉可能卡住的交互态。
-    win.on("show", () => {
-      this.interacting = false;
-      this.interactingSince = 0;
-      this.appliedIgnore = null;
-      this.startPoll();
-    });
+    // 显示 / 重新获得焦点时自愈（锁屏、托盘隐藏再显示都会走到这里）。
+    // 详细原因见 rearmInput()。
+    win.on("show", () => this.rearmInput(win));
     win.on("focus", () => {
       this.appliedIgnore = null;
     });

@@ -58,6 +58,13 @@ const petAPI = {
     return () => ipcRenderer.removeListener("pet:state", listener);
   },
 
+  /** show 后主进程重新武装了穿透转发，渲染层要复位自己的 hover 缓存 */
+  onResetHover: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("pet:reset-hover", listener);
+    return () => ipcRenderer.removeListener("pet:reset-hover", listener);
+  },
+
   /** 解锁唤醒：渲染层重新上报命中几何（主进程不重建窗口，避免闪一下） */
   onUnlock: (callback: () => void) => {
     const listener = () => callback();
