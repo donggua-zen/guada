@@ -58,6 +58,13 @@ const petAPI = {
     return () => ipcRenderer.removeListener("pet:state", listener);
   },
 
+  /** 解锁唤醒：渲染层重新上报命中几何（主进程不重建窗口，避免闪一下） */
+  onUnlock: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("pet:unlock", listener);
+    return () => ipcRenderer.removeListener("pet:unlock", listener);
+  },
+
   /** 透明度 + 宠物显示尺寸 + 播放倍速 */
   onSettings: (
     callback: (settings: {

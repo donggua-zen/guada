@@ -298,6 +298,9 @@ export interface ElectronAPI {
   /** 桌宠：卸载已安装的形象（内置形象与只读目录不可删） */
   uninstallPetAvatar: (id: string) => Promise<{ ok: boolean; error?: string }>
 
+  /** 桌宠：诊断快照（排查锁屏后拖不动时读一次） */
+  getPetDebugState: () => Promise<Record<string, unknown> | null>
+
   /** 桌宠：用户形象目录的绝对路径（导入说明用） */
   getPetsDir: () => Promise<string>
 

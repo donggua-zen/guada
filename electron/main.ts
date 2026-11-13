@@ -3351,8 +3351,8 @@ app.whenReady().then(async () => {
       petWindow?.onSystemResume();
     });
     powerMonitor.on("unlock-screen", () => {
-      log.info("[pet] screen unlocked, rebuilding pet window");
-      petWindow?.rebuildAfterUnlock();
+      log.info("[pet] screen unlocked, recovering in place");
+      void petWindow?.rebuildAfterUnlock();
     });
 
     // 显示器数量/分辨率变化（息屏常伴随）→ 重新夹位置 + 重算穿透

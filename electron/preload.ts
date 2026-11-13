@@ -264,6 +264,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       error?: string
     }>,
 
+  /** 桌宠：诊断快照（排查锁屏后拖不动时读一次） */
+  getPetDebugState: () => ipcRenderer.invoke('pet:debug-state') as Promise<Record<string, unknown> | null>,
+
   /** 桌宠：用户形象目录的绝对路径（导入说明用） */
   getPetsDir: () => ipcRenderer.invoke('pet:pets-dir') as Promise<string>,
 

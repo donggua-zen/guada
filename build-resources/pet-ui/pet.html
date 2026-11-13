@@ -993,6 +993,22 @@
       }
     });
 
+    // WIN+L 解锁：主进程探活后不重建窗口（避免闪一下），只通知重报几何
+    api.onUnlock(function () {
+      // 若上次拖拽被锁屏吞了 pointerup，这里清干净（无视觉变化地重置）
+      drag.active = false;
+      drag.moved = false;
+      drag.pointerId = null;
+      drag.dirName = null;
+      drag.dirAccum = 0;
+      document.body.classList.remove('is-dragging');
+      if (bubbleHidden) {
+        bubbleHidden = false;
+        updateBubble();
+      }
+      reportGeometry();
+    });
+
     // 屏幕可见区间变化（拖动落点后主进程下发）→ 气泡重新让路
     api.onClip(function (c) {
       clip = c && typeof c.left === 'number' && typeof c.right === 'number' ? c : null;

@@ -564,18 +564,55 @@ export class PetWindowController {
   }
 
   /**
-   * WIN+L 解锁后重建窗口。
+   * WIN+L 解锁后的恢复。
    *
-   * 锁屏是会话切换到安全桌面，Windows 不触发 powerMonitor.resume；
-   * 锁屏期间 Chromium/DWM 会重置窗口的鼠标过滤/渲染状态，且不会自愈，
-   * 修补 interacting / appliedIgnore 都不够（用户实测必现）。
-   * 直接重建窗口是唯一确定的解法：位置、开关、大小、速度全部沿用。
+   * 不用「无条件重建窗口」——重建必然有一帧空白，用户看到的就是「闪一下」。
+   * Qoder 的做法也佐证了这点：它给宠物根节点加 opacity 过渡做淡出，
+   * 并不销毁窗口。
+   *
+   * 正确流程：先探活渲染层，活着就只重置鼠标/交互状态（无视觉变化）；
+   * 只有渲染层真的死了才重建（极少见，此时闪一下是可接受的代价）。
    */
-  rebuildAfterUnlock(): void {
-    // enabled 是唯一判据：锁屏期间 isVisible() 可能失真，不能拿它决定是否重建
+  async rebuildAfterUnlock(): Promise<void> {
     if (!this.enabled) return;
-    const wasAlive = this.isAlive();
-    // 先停轮询并销毁旧窗（身份判断见 closed 回调）
+    const win = this.win;
+    if (!win || win.isDestroyed()) {
+      this.ensureWindow();
+      return;
+    }
+
+    // 探活：executeJavaScript 能返回就说明 renderer 还活着
+    let rendererAlive = false;
+    try {
+      const v = await Promise.race([
+        win.webContents.executeJavaScript("1", true),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("probe timeout")), 1500),
+        ),
+      ]);
+      rendererAlive = v === 1;
+    } catch (error) {
+      log.warn("[pet] unlock: renderer 探活失败，准备重建", error);
+    }
+
+    if (rendererAlive) {
+      // 无视觉变化地恢复：清状态 + 无条件下发 + 重新推配置让渲染层重报几何
+      this.interacting = false;
+      this.interactingSince = 0;
+      this.hitHeartbeatAt = 0;
+      this.appliedIgnore = null;
+      win.setIgnoreMouseEvents(false, { forward: true });
+      this.appliedIgnore = false;
+      this.startPoll();
+      // 只通知渲染层「重新上报几何」，不重推 config/state（会重播动画造成视觉跳变）
+      this.send("pet:unlock", { at: Date.now() });
+      this.tick();
+      log.info("[pet] screen unlocked, recovered in place (no rebuild)");
+      return;
+    }
+
+    // 渲染层已死，只能重建
+    log.info("[pet] screen unlocked, renderer dead → rebuilding window");
     this.stopPoll();
     const old = this.win;
     this.win = null;
@@ -585,13 +622,10 @@ export class PetWindowController {
     this.hitHeartbeatAt = 0;
     this.appliedIgnore = null;
     if (old && !old.isDestroyed()) {
-      // 延后销毁：同一 tick 内 destroy 会打断新窗口对同一个 file:// 的 loadFile
-      // （实测 ERR_FAILED -2）。先让新窗开始加载，再在下一 tick 清掉旧窗。
       setTimeout(() => {
         if (!old.isDestroyed()) old.destroy();
       }, 0);
     }
-    if (!wasAlive) return;
     const fresh = this.ensureWindow();
     if (fresh) fresh.showInactive();
   }
