@@ -1,27 +1,25 @@
 <template>
+  <!-- 子代理行：身份色头像 + 同色代理名 + 弱化任务描述。
+       对齐参考项目的三段式层级——不再用「灰色图标 + 灰标签 + 灰名称 + 灰摘要」把整行压平，
+       也不加卡片外框：辨识度来自头像与身份色，行本身保持轻量、可融入消息流。
+       名称与任务摘要仍是**两个各自独立**的可点链接（都打开同一个子代理面板），
+       hover 只作用于被指向的那一段，身份色不被通用 hover 前景色冲掉。 -->
   <div class="subagent-block">
-    <!-- 子智能体行：图标 + 「子智能体」+ 名称 + · + 任务摘要。
-         名称与任务摘要是**两个各自独立**的可点链接（都打开同一个子代理面板）：视觉上它们
-         颜色不同、本就是两段，hover 只提亮被指向的那一段；中间分隔符 · 不可点也不变色。
-         整行不给背景色、不加整行提示——行内交互只留这两段文字（列表入口在输入框状态栏与侧栏）。 -->
-    <div class="flex items-center text-sm min-w-0">
-      
-        <Bot20Regular class="shrink-0 text-gray-500 w-4 h-4" :class="{ 'is-failed': failed }"  />
-      
-      <span class="shrink-0 ml-1.5 text-gray-600 dark:text-gray-400">{{ t('chat.toolCalls.subAgentLabel') }}</span>
-      <span v-if="displayName" class="sa-link shrink-0 ml-1.5 font-medium text-gray-600 dark:text-gray-400"
-        :class="{ 'is-clickable': clickable }" @click.stop="onClick">{{ displayName }}</span>
-      <span v-if="displayName && task" class="shrink-0 mx-1 text-gray-400 dark:text-gray-500">·</span>
-      <span v-if="task" class="sa-link truncate min-w-0 text-gray-400 dark:text-gray-500"
-        :class="{ 'is-clickable': clickable, 'is-shimmer': executing && !failed }"
-        @click.stop="onClick">{{ task }}</span>
+    <div class="sa-row" role="group" :aria-label="rowLabel">
+      <SubAgentFace :done="done" :failed="isFailed" :running="running" />
+
+      <span v-if="identityName" class="sa-link sa-identity" :class="{ 'is-clickable': clickable }"
+        :title="identityName" @click.stop="onClick">{{ identityName }}</span>
+      <span v-if="task" class="sa-link sa-task"
+        :class="{ 'is-clickable': clickable, 'is-shimmer': running }"
+        :title="taskFull" @click.stop="onClick">{{ task }}</span>
     </div>
 
     <!-- 失败原因：子代理是独立渲染行（standaloneRows），既不套通用失败横幅、也走不到
          「输入/输出」区（见 MessageToolCalls 的互斥分支），原因没有别的 DOM 承载。
          且校验类失败时 link 为空（子会话都没建起来）→ 文字不可点、面板无从打开，
          这里就是唯一能看到原因的入口。原因文本本身即说明，不再加标题行。 -->
-    <pre v-if="failed && failureReason" class="sa-error-pre">{{ failureReason }}</pre>
+    <pre v-if="isFailed && failureReason" class="sa-error-pre">{{ failureReason }}</pre>
   </div>
 </template>
 
@@ -29,12 +27,12 @@
 import { computed } from 'vue';
 
 import { useI18n } from 'vue-i18n';
-import { Bot20Regular } from '@vicons/fluent';
 import { parse as partialParse } from 'partial-json';
 import { getToolArgs, type ToolCall } from '@/utils/toolDisplay';
 import { resolveSubAgentFailure } from '@/utils/subAgentFailure';
 import type { SubAgentLink } from '@/utils/subAgentLink';
 import type { ToolCallResponseEntry } from '@/types/message';
+import SubAgentFace from './SubAgentFace.vue';
 
 const props = defineProps<{
   /** 工具调用（取 args.name / args.task；流式期间为半截 JSON） */
@@ -45,7 +43,7 @@ const props = defineProps<{
   response?: ToolCallResponseEntry;
   /** 工具执行中（流式 / 等待子代理跑完）：任务摘要走 shimmer */
   executing?: boolean;
-  /** 失败（error / rejected）：图标转红 + 展示原因块 */
+  /** 失败（error / rejected）：头像转红 + 展示原因块 */
   failed?: boolean;
   /** 有面板入口且已解析出唯一目标会话才可点 */
   clickable?: boolean;
@@ -70,13 +68,16 @@ const args = computed<Record<string, unknown>>(() => {
   return raw;
 });
 
-/** 名称：link.name（后端 meta/流事件，权威）优先，回落 args.name（流式早期即可用） */
+/** 名称：link.name（后端 meta/流事件，权威）优先，回落 args.name（流式早期即可用）。
+    两者都还没有时（流刚开始）用「子智能体」占位，避免只画一张脸的空行。 */
 const displayName = computed(() => {
   const fromLink = props.link?.name;
   if (fromLink) return fromLink;
   const name = args.value.name;
   return typeof name === 'string' ? name : '';
 });
+
+const identityName = computed(() => displayName.value || t('chat.toolCalls.subAgentLabel'));
 
 /** 任务摘要：取 task 首个非空行（多行任务只展示首行，CSS 截断超长） */
 const task = computed(() => {
@@ -85,10 +86,43 @@ const task = computed(() => {
   return value.split('\n').map((l) => l.trim()).find(Boolean) ?? '';
 });
 
-/** 失败原因（从工具结果正文剥出「人话」）；取不到则整块不渲染 */
-const failureReason = computed(() =>
-  props.failed ? resolveSubAgentFailure(props.response) : undefined,
+/** 完整任务文本：截断后靠 title 看全（多行也保留换行） */
+const taskFull = computed(() => {
+  const value = args.value.task;
+  return typeof value === 'string' ? value.trim() : '';
+});
+
+/** 后端 settle() 即时下发的终态；早于整批 tool_calls_response 到达 */
+const streamedStatus = computed(() => props.tool.subAgentStatus);
+
+/** 失败：工具结果失败，或结算事件先到 */
+const isFailed = computed(
+  () => props.failed || streamedStatus.value === 'error',
 );
+
+/** 完成徽标：结算事件优先；否则沿用「有结果且不是后台 job」的旧判定。 */
+const done = computed(() => {
+  if (isFailed.value) return false;
+  if (streamedStatus.value === 'completed') return true;
+  if (props.executing || props.tool.outcome === 'aborted') return false;
+  if (props.response?.meta?.jobId) return false;
+  return props.tool.outcome === 'success' || !!props.response;
+});
+
+/** 运行中：等整批结果期间，先完成的子代理立即停止动画 */
+const running = computed(
+  () => !!props.executing && !isFailed.value && streamedStatus.value !== 'completed',
+);
+
+const rowLabel = computed(() =>
+  [t('chat.toolCalls.subAgentLabel'), displayName.value, task.value].filter(Boolean).join(' · '),
+);
+
+/** 失败原因：优先解析工具结果正文；结果还没到时用结算事件里的错误摘要兜底 */
+const failureReason = computed(() => {
+  if (!isFailed.value) return undefined;
+  return resolveSubAgentFailure(props.response) ?? props.tool.subAgentError;
+});
 
 /** 点击名称/任务摘要 → 打开该子代理会话面板（无唯一目标会话时不可点） */
 const onClick = (): void => {
@@ -97,39 +131,86 @@ const onClick = (): void => {
 </script>
 
 <style scoped>
+/* 身份色：跟随主题主色（粉色）。头像用原色；名称在亮色下用主题自带的深粉档
+   （primary-950，彩度比混黑更高，不会发灰发黑），暗色直接用原色。
+   任务描述从正文色派生，比名称更低一档，形成「脸/名 → 描述」两级层级。 */
+.subagent-block {
+  --sa-identity-face: var(--gd-color-primary);
+  --sa-identity: var(--gd-color-primary-950);
+  --sa-task: color-mix(in srgb, var(--gd-color-text) 55%, transparent);
+  min-width: 0;
+}
+
+html.dark .subagent-block {
+  --sa-identity: var(--gd-color-primary);
+  --sa-task: color-mix(in srgb, var(--gd-color-text) 42%, transparent);
+}
+
+.sa-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+/* 名称是身份段：固定不收缩、超长省略，避免长任务名把描述挤出可视区 */
+.sa-identity {
+  flex-shrink: 0;
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--sa-identity);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sa-task {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sa-task);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 名称 / 任务摘要各自是可点链接（都打开同一个子代理面板）：
-   hover 只提亮被指向的那一段，不加背景色、不影响整行。
-   两段颜色本就不同、视觉上各自独立，统一变色会让人以为它们是一个整体。 */
+   hover 只作用于被指向的那一段，不加背景色、不影响整行。
+   身份段只提亮并加细下划线，保留原色相，避免被通用前景色冲成灰字。 */
 .sa-link.is-clickable {
   cursor: pointer;
 }
 
-.sa-link.is-clickable:hover {
+.sa-identity.is-clickable:hover {
+  filter: brightness(1.15);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 3px;
+}
+
+.sa-task.is-clickable:hover {
   color: var(--gd-color-text);
 }
 
 /* 失败原因块：红色微底等宽正文，视觉对齐工作流卡的 .wf-card-error；
-   缩进 22px = 图标 16px + 间距 6px，与工具卡详情区缩进规则一致。 */
+   缩进 24px = 头像 16px + 行间距 8px，与工具卡详情区缩进规则一致。 */
 .sa-error-pre {
-  margin: 4px 0 0 22px;
+  margin: 4px 0 0 24px;
   padding: 6px 8px;
   max-height: 120px;
   overflow-y: auto;
   border-radius: 5px;
   background: color-mix(in srgb, var(--gd-color-danger) 8%, transparent);
   color: var(--gd-color-danger);
-  font-family: var(--font-mono, "SF Mono", Consolas, monospace);
+  font-family: var(--gd-font-mono, "SF Mono", Consolas, monospace);
   font-size: 12px;
   line-height: 18px;
   /* 原因可选中复制（用户常要拿去搜索/贴给模型）；长行折行 + 限高内滚，不撑爆对话流 */
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-/* 失败态：图标转红（标签/名称/任务摘要保持中性灰——它们是子代理身份与上下文，
-   不随状态变色；原因由下方 .sa-error-pre 承载） */
-.is-failed {
-  color: var(--gd-color-danger);
 }
 
 /* 运行中波纹（与 TurnItem/MessageThinkingSection 的 shimmer-text 同款视觉；
@@ -155,6 +236,12 @@ const onClick = (): void => {
 
   100% {
     background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-shimmer {
+    animation: none;
   }
 }
 </style>

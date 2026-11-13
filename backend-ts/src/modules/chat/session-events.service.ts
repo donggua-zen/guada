@@ -530,6 +530,8 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       case "workflow_event": return EVENT_METHOD.STREAM_WORKFLOW_EVENT;
       // 子代理创建（工具调用 ↔ 子会话关联键，供工具行打开面板）
       case "subagent_link": return EVENT_METHOD.STREAM_SUBAGENT_LINK;
+      // 子代理完成/失败（settle 即时下发，不等整批工具结果）
+      case "subagent_status": return EVENT_METHOD.STREAM_SUBAGENT_STATUS;
       // 计划模式变更（协作状态；事实源 session.settings，本帧驱动指示器与多窗口同步）
       case "plan_mode_changed": return EVENT_METHOD.STREAM_PLAN_MODE_CHANGED;
       // 工具截图裁剪完成（维护操作事件卡）

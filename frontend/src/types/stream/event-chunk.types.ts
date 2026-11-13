@@ -406,6 +406,24 @@ export interface SubAgentLinkEvent {
 }
 
 /**
+ * 子代理状态变更（与后端 event-chunk.types.ts 同构）：完成/失败即时通知。
+ *
+ * 同批 subagent_spawn 由后端 executeBatch 并发执行，但 tool_calls_response 要等整批
+ * 工具全部返回后才发；本事件在 settle() 时按 toolCallId 单条下发，前端收到即转态。
+ */
+export interface SubAgentStatusEvent {
+  type: "subagent_status";
+  /** 派生子代理的那次工具调用 id */
+  toolCallId: string;
+  subSessionId: string;
+  status: "completed" | "error";
+  /** 结构化停止原因（completed/aborted/error/max_tokens/refusal/closed） */
+  stopReason?: string;
+  /** 错误摘要（status=error 时可能有值） */
+  error?: string;
+}
+
+/**
  * 计划模式变更（协作状态，正交于安全档位）。
  * 事实源是会话设置；本帧驱动指示器与多窗口同步。模型经 ExitPlanMode 审批通过后
  * 关闭计划模式时，本帧是前端的唯一知情渠道。
@@ -453,6 +471,7 @@ export type SessionStreamEvent =
   | AskResolvedEvent
   | WorkflowEvent
   | SubAgentLinkEvent
+  | SubAgentStatusEvent
   | PlanModeChangedEvent
   | ToolImagePruneEvent
   | MessageChunkEvent;

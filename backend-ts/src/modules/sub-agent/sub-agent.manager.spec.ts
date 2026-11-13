@@ -174,4 +174,68 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     // 名额随解冻→再冻结恢复正常
     expect(await store.countByParentId(PARENT)).toBe(0);
   });
+
+  it("spawn 前台完成时按 toolCallId 即时发 subagent_status（不等整批工具结果）", async () => {
+    stubStream(workflowResult());
+    const streams: any[] = [];
+    const ctx = parentContext();
+    ctx.publishStream = async (chunk: any) => {
+      streams.push(chunk);
+    };
+
+    const result = await manager.spawn(
+      {
+        parentContext: ctx,
+        name: "member-status",
+        task: "do status",
+        toolCallId: "tc-status-1",
+      },
+      "foreground",
+    );
+
+    expect(result.status).toBe("completed");
+    expect(streams.find((s) => s.type === "subagent_link")).toMatchObject({
+      toolCallId: "tc-status-1",
+      subSessionId: result.subSessionId,
+    });
+    expect(streams.find((s) => s.type === "subagent_status")).toMatchObject({
+      type: "subagent_status",
+      toolCallId: "tc-status-1",
+      subSessionId: result.subSessionId,
+      status: "completed",
+    });
+  });
+
+  it("spawn 前台失败时即时发 error 状态", async () => {
+    stubStream(
+      workflowResult({
+        status: "error",
+        stopReason: "error",
+        content: "",
+        error: "boom",
+      }),
+    );
+    const streams: any[] = [];
+    const ctx = parentContext();
+    ctx.publishStream = async (chunk: any) => {
+      streams.push(chunk);
+    };
+
+    await manager.spawn(
+      {
+        parentContext: ctx,
+        name: "member-status-error",
+        task: "do status error",
+        toolCallId: "tc-status-2",
+      },
+      "foreground",
+    );
+
+    expect(streams.find((s) => s.type === "subagent_status")).toMatchObject({
+      toolCallId: "tc-status-2",
+      status: "error",
+      stopReason: "error",
+      error: "boom",
+    });
+  });
 });

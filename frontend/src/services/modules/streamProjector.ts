@@ -1310,6 +1310,23 @@ export function applyChunkToStore(
     }
     return;
   }
+  if (chunk.type === "subagent_status") {
+    // 子代理结算 → 按 toolCallId 即时转完成/失败态。同批工具的结果要等整批
+    // tool_calls_response 才到，这条事件让先完成的子代理行不必陪跑到最后。
+    const turns = sessionStore.getTurns(sessionId) || [];
+    const target = findBlockByToolCallId(turns, chunk.toolCallId);
+    const tc = ((target?.metadata?.toolCalls || []) as ToolCallEntry[]).find(
+      (c) => c.id === chunk.toolCallId,
+    );
+    if (tc) {
+      tc.subAgentStatus = chunk.status;
+      if (chunk.stopReason) tc.subAgentStopReason = chunk.stopReason;
+      else delete tc.subAgentStopReason;
+      if (chunk.error) tc.subAgentError = chunk.error;
+      else delete tc.subAgentError;
+    }
+    return;
+  }
   if (chunk.type === "tool_calls_response") {
     // 工具执行结果下发 → 对应交互已消费，关闭**它的**卡（与 ask_resolved 幂等双保险）。
     // 注意按 toolCallId 逐个摘：同会话可能还有别的工具在等审批，不能整队清空。

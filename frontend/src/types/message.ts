@@ -108,6 +108,12 @@ export interface ToolCallEntry {
     outcome?: 'success' | 'error' | 'rejected'
     /** 子代理关联（subagent_link 事件写入） */
     subAgentLink?: { subSessionId: string; name?: string }
+    /** 子代理终态（subagent_status 事件写入）：早于整批 tool_calls_response 到达 */
+    subAgentStatus?: 'completed' | 'error'
+    /** 子代理停止原因（subagent_status 事件写入） */
+    subAgentStopReason?: string
+    /** 子代理错误摘要（subagent_status 事件写入） */
+    subAgentError?: string
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
     metadata?: Record<string, any>
 }

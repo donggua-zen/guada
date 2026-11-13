@@ -280,6 +280,26 @@ export interface SubAgentLinkEvent {
 }
 
 /**
+ * 子代理状态变更：完成/失败即时通知（按 toolCallId 定位工具行）。
+ *
+ * 为什么不能只靠 tool_calls_response：同一 assistant 消息里的多个 subagent_spawn 由
+ * executeBatch 并发执行，但结果事件要等整批工具全部返回后才发布一条；先完成的子代理
+ * 会一直显示运行中，直到最慢的那个结束。本事件在 settle() 结算点单独发出，前端收到
+ * 即转完成/失败态，工具结果随后到达时照常补全正文与失败原因。
+ */
+export interface SubAgentStatusEvent {
+  type: "subagent_status";
+  /** 派生子代理的那次工具调用 id */
+  toolCallId: string;
+  subSessionId: string;
+  status: "completed" | "error";
+  /** 结构化停止原因（completed/aborted/error/max_tokens/refusal/closed） */
+  stopReason?: string;
+  /** 错误摘要（status=error 时可能有值） */
+  error?: string;
+}
+
+/**
  * 消息级流事件 = 规范 StreamChunk 直通 + 消息关联字段。
  * block_start/text_delta/reasoning_delta/tool_call_delta/block_end/usage/finish
  * 全部按 messageId 归属到同一条 assistant 消息（消息 id = messageId，与落库一致）。
@@ -340,6 +360,7 @@ export type SessionStreamEvent =
   | AskResolvedEvent
   | WorkflowEvent
   | SubAgentLinkEvent
+  | SubAgentStatusEvent
   | PlanModeChangedEvent
   | ToolImagePruneEvent
   | MessageChunkEvent;

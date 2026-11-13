@@ -90,11 +90,17 @@ export function mapFinishReason(reason?: string): SubAgentStopReason {
   }
 }
 
+/** 子 Agent 结果是否失败（与 finalizeSubAgent / toJobOutcome 同口径） */
+function isSubAgentError(result: SubAgentResult): boolean {
+  return (
+    result.status === "error" ||
+    (result.stopReason !== undefined && result.stopReason !== "completed")
+  );
+}
+
 /** 子 Agent 结果 → 通用 job 终态（与 finalizeSubAgent 的 isError 口径一致） */
 function toJobOutcome(result: SubAgentResult): JobOutcome {
-  const isError =
-    result.status === "error" ||
-    (result.stopReason !== undefined && result.stopReason !== "completed");
+  const isError = isSubAgentError(result);
   const output = result.content || undefined;
   if (result.stopReason === "aborted" || result.stopReason === "closed") {
     return {
@@ -175,6 +181,11 @@ export class SubAgentManager implements OnModuleInit {
   private readonly states = new Map<string, ParentSessionState>();
   /** 子会话 → 通用后台作业 id（仅后台/超时路径） */
   private readonly jobIds = new Map<string, JobId>();
+  /** 子会话 → 派生它的工具调用（settle/close 时按 toolCallId 即时通知前端） */
+  private readonly toolLinks = new Map<
+    string,
+    { parentContext: ISessionContext; toolCallId: string }
+  >();
 
   constructor(
     @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
@@ -345,6 +356,11 @@ export class SubAgentManager implements OnModuleInit {
         toolCallId: params.toolCallId,
         subSessionId: subSession.id,
         name: params.name,
+      });
+      // 结算时不再依赖整批 tool_calls_response：按 toolCallId 即时回传终态
+      this.toolLinks.set(subSession.id, {
+        parentContext,
+        toolCallId: params.toolCallId,
       });
     }
 
@@ -630,6 +646,15 @@ export class SubAgentManager implements OnModuleInit {
         // abort 时 runSubAgentStream 的监听器已 cancelStream + resolve error result
         state.running.delete(subSessionId);
         this.cleanupParentStateIfEmpty(parentSessionId);
+        // 前台不经过 settle：在这里即时回传终态，先完成的子代理行不必等整批结果
+        await this.publishToolStatus(
+          subSessionId,
+          isSubAgentError(raceResult.result) ? "error" : "completed",
+          {
+            stopReason: raceResult.result.stopReason,
+            error: raceResult.result.error,
+          },
+        );
         // 结果已作为工具结果交付，自动冻结子会话（fire-and-forget，失败仅告警）
         this.maybeAutoDispose(
           subSessionId,
@@ -643,6 +668,10 @@ export class SubAgentManager implements OnModuleInit {
         // startStream 本身失败（如会话不存在）
         state.running.delete(subSessionId);
         this.cleanupParentStateIfEmpty(parentSessionId);
+        await this.publishToolStatus(subSessionId, "error", {
+          stopReason: "error",
+          error: raceResult.error,
+        });
         const errorResult: SubAgentResult = {
           subSessionId,
           status: "error",
@@ -902,6 +931,11 @@ export class SubAgentManager implements OnModuleInit {
     // 主动关闭不产生完成通知；同时触发 completed/jobIds 清理。
     this.suppressSubAgentJob(subSessionId);
 
+    // 主动关闭也是终态：若该子代理还没结算，立即让工具行转失败/关闭态
+    await this.publishToolStatus(subSessionId, "error", {
+      stopReason: "closed",
+    });
+
     // 如果子 Agent 正在运行，取消流并从运行中集合移除
     // 后续 finalizeSubAgent 会因 running.has() === false 直接跳过，避免脏消息入队
     if (this.isSubAgentRunning(subSessionId)) {
@@ -1091,6 +1125,8 @@ export class SubAgentManager implements OnModuleInit {
     parentSessionId: string,
   ): void {
     this.jobIds.delete(subSessionId);
+    // 结算没走到（如被主动关闭）时兜底清理，避免 toolLinks 泄漏
+    this.toolLinks.delete(subSessionId);
     const state = this.states.get(parentSessionId);
     const entry = state?.completed.find(
       (c) => c.subSessionId === subSessionId,
@@ -1119,6 +1155,37 @@ export class SubAgentManager implements OnModuleInit {
   }
 
   /**
+   * 子代理终态即时回传前端。
+   *
+   * 同批工具由 executeBatch 并发执行，但 tool_calls_response 只在整批结束后发布；
+   * 本事件让每个子代理在 settle/close 时独立转态。发送失败只告警，不影响结算。
+   */
+  private async publishToolStatus(
+    subSessionId: string,
+    status: "completed" | "error",
+    extra?: { stopReason?: string; error?: string },
+  ): Promise<void> {
+    const link = this.toolLinks.get(subSessionId);
+    if (!link) return;
+    this.toolLinks.delete(subSessionId);
+    try {
+      await link.parentContext.publishStream({
+        type: "subagent_status",
+        toolCallId: link.toolCallId,
+        subSessionId,
+        status,
+        ...(extra?.stopReason ? { stopReason: extra.stopReason } : {}),
+        ...(extra?.error ? { error: extra.error } : {}),
+      });
+    } catch (error) {
+      this.logger.warn(
+        `子代理状态事件发送失败: ${subSessionId}`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  /**
    * 子 Agent 结算单通道（对齐 DSH run-settlement）
    *
    * 完成与失败统一为一条 SubAgentResult（含结构化 stopReason），
@@ -1137,6 +1204,15 @@ export class SubAgentManager implements OnModuleInit {
     const name = await this.getSubAgentName(subSessionId);
     const jobId = this.jobIds.get(subSessionId);
     if (jobId) result.jobId = jobId;
+
+    // 即时转态：同批其它子代理可能还在跑，不能等整批 tool_calls_response
+    const isError = isSubAgentError(result);
+    await this.publishToolStatus(
+      subSessionId,
+      isError ? "error" : "completed",
+      { stopReason: result.stopReason, error: result.error },
+    );
+
     state.completed.push({ subSessionId, name, result, jobId });
 
     await this.finalizeSubAgent(subSessionId, parentSessionId, state, name, {

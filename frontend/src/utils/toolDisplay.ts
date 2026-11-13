@@ -32,6 +32,10 @@ export interface ToolCall {
   /** 子代理关联（由流事件 subagent_link 折叠写入）：工具结果落库前即可用，
    *  供工具行提供"打开子代理面板"入口 */
   subAgentLink?: { subSessionId: string; name?: string };
+  /** 子代理终态（由流事件 subagent_status 折叠写入）：早于整批 tool_calls_response 到达 */
+  subAgentStatus?: "completed" | "error";
+  subAgentStopReason?: string;
+  subAgentError?: string;
 }
 
 /** 定制渲染器配置（kind → 前端 tool-renderers 通用组件） */

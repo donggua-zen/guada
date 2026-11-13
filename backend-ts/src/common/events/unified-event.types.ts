@@ -39,6 +39,7 @@ export const EVENT_METHOD = {
   STREAM_ASK_RESOLVED: "stream/ask_resolved",
   STREAM_WORKFLOW_EVENT: "stream/workflow_event",
   STREAM_SUBAGENT_LINK: "stream/subagent_link",
+  STREAM_SUBAGENT_STATUS: "stream/subagent_status",
   STREAM_PLAN_MODE_CHANGED: "stream/plan_mode_changed",
   STREAM_TOOL_IMAGE_PRUNE: "stream/tool_image_prune",
 

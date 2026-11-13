@@ -379,6 +379,45 @@ describe("StreamProjector 折叠器", () => {
     expect(() => foldEvents(store as any, "s1", events)).not.toThrow();
   });
 
+  it("subagent_status 按 toolCallId 即时写入终态（工具结果未到）", () => {
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 0, blockType: "tool-call" } as any,
+      { type: "tool_call_delta", messageId: "T1_a", turnId: "T1", index: 0, toolCallId: "tc1", name: "subagent_spawn", argumentsDelta: '{"name":"分析架构"}' } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 0, block: { type: "tool-call", contentId: "tc_c1", toolCallId: "tc1", name: "subagent_spawn", arguments: '{"name":"分析架构"}' } } as any,
+      // 同批其它工具还没返回：终态只能来自这条流事件
+      { type: "subagent_status", toolCallId: "tc1", subSessionId: "sub-9", status: "completed", stopReason: "completed" } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    const block = blocksOf(store.state.turns[0]).find((b: any) => b.role === "assistant");
+    expect(block.metadata.toolCalls[0].subAgentStatus).toBe("completed");
+    expect(block.metadata.toolCalls[0].subAgentStopReason).toBe("completed");
+    // 工具结果还没到：不应误建 toolCallsResponse
+    expect(block.metadata.toolCallsResponse).toBeUndefined();
+  });
+
+  it("subagent_link + subagent_status 共存，重复下发幂等且互不覆盖", () => {
+    const events: WireStreamEvent[] = [
+      { type: "turn_start", turnId: "T1" } as any,
+      { type: "block_start", messageId: "T1_a", turnId: "T1", index: 0, blockType: "tool-call" } as any,
+      { type: "tool_call_delta", messageId: "T1_a", turnId: "T1", index: 0, toolCallId: "tc1", name: "subagent_spawn", argumentsDelta: '{"name":"分析架构"}' } as any,
+      { type: "block_end", messageId: "T1_a", turnId: "T1", index: 0, block: { type: "tool-call", contentId: "tc_c1", toolCallId: "tc1", name: "subagent_spawn", arguments: '{"name":"分析架构"}' } } as any,
+      { type: "subagent_link", toolCallId: "tc1", subSessionId: "sub-9", name: "分析架构" } as any,
+      // 同一终态重复到达（SSE 重放/事件重投）不应累加或覆盖关联
+      { type: "subagent_status", toolCallId: "tc1", subSessionId: "sub-9", status: "completed", stopReason: "completed" } as any,
+      { type: "subagent_status", toolCallId: "tc1", subSessionId: "sub-9", status: "completed", stopReason: "completed" } as any,
+    ];
+    foldEvents(store as any, "s1", events);
+    const block = blocksOf(store.state.turns[0]).find((b: any) => b.role === "assistant");
+    expect(block.metadata.toolCalls[0].subAgentLink).toEqual({
+      subSessionId: "sub-9",
+      name: "分析架构",
+    });
+    expect(block.metadata.toolCalls[0].subAgentStatus).toBe("completed");
+    expect(block.metadata.toolCalls[0].subAgentStopReason).toBe("completed");
+    expect(block.metadata.toolCallsResponse).toBeUndefined();
+  });
+
   it("compaction_summary in-turn：标记遮蔽 + 回合内 event 消息束", () => {
     const events: WireStreamEvent[] = [
       { type: "turn_start", turnId: "T1", modelName: "m1" } as any,
