@@ -747,17 +747,30 @@
   // 熄屏/亮屏后主进程取的 cursor/bounds 可能短暂失真，会连续判 miss 形成死锁。
   // 但 forward 的 mousemove 是 Chromium 按真实命中投递的 —— 用它告诉主进程
   // 「光标确实在我身上」，主进程据此放开穿透，pointerdown 就能进来了。
+  //
+  // 关键：**只在真正可交互区域（宠物 bbox / 气泡）里才发命中**。
+  // 透明区必须发 hitLeave，否则主进程会把整窗放开、吞掉桌面点击
+  // （用户反馈「透明的地方依然会被拦截，点不到下面」就是这个回归）。
   var lastHeartbeat = 0;
-  function reportHit() {
-    var now = Date.now();
-    if (now - lastHeartbeat < 120) return;   // 节流，避免每个 mousemove 都发 IPC
-    lastHeartbeat = now;
-    api.hitHeartbeat();
+  var lastHeartbeatState = null;   // true=命中 / false=离开
+  function inRect(x, y, r) {
+    return Boolean(r && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
   }
-  document.addEventListener('mousemove', function (e) {
-    reportHit();
-  });
+  function reportHitAt(e) {
+    var hit = false;
+    var br = bubble.classList.contains('show') ? bubble.getBoundingClientRect() : null;
+    hit = inRect(e.clientX, e.clientY, bboxRect()) || inRect(e.clientX, e.clientY, br);
+    // 只在状态翻转或心跳续期时发 IPC
+    var now = Date.now();
+    if (hit === lastHeartbeatState && now - lastHeartbeat < 120) return;
+    lastHeartbeat = now;
+    lastHeartbeatState = hit;
+    if (hit) api.hitHeartbeat();
+    else api.hitLeave();
+  }
+  document.addEventListener('mousemove', reportHitAt);
   document.addEventListener('mouseleave', function () {
+    lastHeartbeatState = false;
     api.hitLeave();
   });
 

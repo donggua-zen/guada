@@ -1248,21 +1248,14 @@ export class PetWindowController {
       return;
     }
 
-    // 渲染层心跳优先：forward:true 会转发 mousemove，渲染层据此上报
-    // 「光标确实在我身上」。这比 screen.getCursorScreenPoint() 可靠 ——
-    // 熄屏/亮屏后主进程拿到的光标坐标或窗口 bounds 可能短暂失真，
-    // 但渲染层的 mousemove 是 Chromium 按真实命中投递的。
-    // 心跳在 600ms 内有效；超时才回退到主进程自己算的 bbox 判定。
+    // 心跳只表达「渲染层确认光标在可交互区」。透明区由渲染层发 hitLeave，
+    // 所以心跳存在时放开、不存在时按 bbox 判定，两者都不把整窗当命中区。
     if (now - this.hitHeartbeatAt < PetWindowController.HIT_HEARTBEAT_TTL_MS) {
       this.applyIgnore(false);
       return;
     }
     const cursor = screen.getCursorScreenPoint();
-    // 几何丢失（渲染层被冻结/尚未重报）时用整窗矩形兜底，别保持穿透
-    const hit = this.geometry
-      ? resolvePetHit(cursor, win.getBounds(), this.geometry)
-      : (cursor.x >= win.getBounds().x && cursor.x < win.getBounds().x + win.getBounds().width &&
-         cursor.y >= win.getBounds().y && cursor.y < win.getBounds().y + win.getBounds().height);
+    const hit = resolvePetHit(cursor, win.getBounds(), this.geometry);
     this.applyIgnore(!hit);
   }
 
