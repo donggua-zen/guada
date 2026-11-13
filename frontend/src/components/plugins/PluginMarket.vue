@@ -61,20 +61,27 @@
                 @click="handleShowDialog(plugin)"
             >
                 <template #badges>
-                    <GdTag v-if="plugin.verified" type="success" size="small" effect="light">
-                        {{ t('plugins.market.verified') }}
-                    </GdTag>
                     <GdTag v-if="installedIds.has(plugin.id)" type="primary" size="small" effect="plain">
                         {{ t('plugins.market.installed') }}
-                    </GdTag>
-                    <GdTag v-for="tag in plugin.tags.slice(0, 2)" :key="tag" size="small" effect="light">
-                        {{ tag }}
                     </GdTag>
                 </template>
                 <template #meta>
                     <div class="market-row-meta">
                         <span v-if="plugin.latest?.version" class="market-row-meta__item">v{{ plugin.latest.version }}</span>
                         <span v-if="plugin.author" class="market-row-meta__item">{{ plugin.author }}</span>
+                    </div>
+                    <!-- 胶囊统一排在卡片底部独立一行：标题行只保留「已安装」；
+                         标签最多露 2 个，其余折成 +N，避免底部也挤成一排 -->
+                    <div v-if="plugin.verified || plugin.tags.length > 0" class="market-row-tags">
+                        <GdTag v-if="plugin.verified" type="success" size="small" effect="light">
+                            {{ t('plugins.market.verified') }}
+                        </GdTag>
+                        <GdTag v-for="tag in plugin.tags.slice(0, 2)" :key="tag" size="small" effect="light">
+                            {{ tag }}
+                        </GdTag>
+                        <GdTag v-if="plugin.tags.length > 2" size="small" effect="light">
+                            +{{ plugin.tags.length - 2 }}
+                        </GdTag>
                     </div>
                 </template>
                 <template #actions>
@@ -444,6 +451,15 @@ function formatCount(n: number): string {
     gap: 10px;
     font-size: 12px;
     color: var(--gd-color-text-gray, #8b8d95);
+}
+
+/* 卡片底部独立一行：只放胶囊，与上方版本/作者信息分开 */
+.market-row-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
 }
 
 .market-pagination {
