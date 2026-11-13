@@ -177,6 +177,16 @@ describe('SessionReplayService 事件页', () => {
 describe('SessionReplayService 压缩历史聚合（getCompactionHistory）', () => {
   const service = (events: BaseEvent[]) => new SessionReplayService({ getAllEvents: async () => events } as any);
 
+  it('compaction/error 不进入压缩历史（历史只统计成功的压缩运行）', async () => {
+    const events: BaseEvent[] = [
+      { type: 'turn/finish', seq: 1, time: 1000, data: { turnId: 'T1', usedTokens: 900 } },
+      { type: 'compaction/error', seq: 2, time: 2000, data: { errorKind: 'rate_limited', error: '429 inference exceeds tpm/rpm limit', trigger: 'manual', tier: 'llm', status: 429 } },
+    ];
+    const { items, total } = await service(events).getCompactionHistory('s1');
+    expect(total).toBe(0);
+    expect(items).toEqual([]);
+  });
+
   it('摘要括号 → summarized 条目（beforeTokens 实测优先）；纯裁剪孤立 end → pruned_only 条目', async () => {
     const events: BaseEvent[] = [
       { type: 'turn/finish', seq: 1, time: 1000, data: { turnId: 'T1', usedTokens: 900 } },

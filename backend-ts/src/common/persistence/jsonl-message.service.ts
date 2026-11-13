@@ -28,6 +28,7 @@ import {
   SessionModeChangedData,
   ContextStatsData,
   CompactionDegradationData,
+  CompactionErrorData,
   ImportCompactionPoint,
   ToolImagePruneData,
 } from './types';
@@ -1270,6 +1271,31 @@ export class JsonlMessageService implements IMessageStore {
           imageCount: data.imageCount,
           prunedBytes: data.prunedBytes,
           prunedTokens: data.prunedTokens,
+        },
+      });
+      return finalized.seq;
+    });
+  }
+
+  /** 压缩失败：一次操作写一条独立事件（仅审计/UI，不改消息视图）。 */
+  async appendCompactionError(
+    sessionId: string,
+    data: CompactionErrorData,
+  ): Promise<number> {
+    return this.runExclusive(sessionId, async () => {
+      await this.ensureReplayReady(sessionId);
+      const finalized = await this.append(sessionId, {
+        type: 'compaction/error',
+        time: Date.now(),
+        data: {
+          errorKind: data.errorKind,
+          error: data.error,
+          trigger: data.trigger,
+          tier: data.tier,
+          ...(data.status === undefined ? {} : { status: data.status }),
+          ...(data.retryAfterMs === undefined
+            ? {}
+            : { retryAfterMs: data.retryAfterMs }),
         },
       });
       return finalized.seq;

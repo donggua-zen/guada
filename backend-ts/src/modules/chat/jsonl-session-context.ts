@@ -40,7 +40,11 @@ import {
   PruneWrite,
   TokenDiagnostics,
 } from './compaction/types';
-import type { OccupancyAnchor, ToolImagePruneData } from '../../common/persistence/types';
+import type {
+  CompactionErrorData,
+  OccupancyAnchor,
+  ToolImagePruneData,
+} from '../../common/persistence/types';
 import {
   COMPRESSION_TIER_PRESETS,
   resolveCompressionTier,
@@ -1047,6 +1051,11 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
    */
   async appendToolImagePrune(data: ToolImagePruneData): Promise<number> {
     return this.messageStore.appendToolImagePrune(this.sessionId, data);
+  }
+
+  /** 压缩失败：写一条独立 compaction/error（仅审计/UI，不改消息视图）。 */
+  async appendCompactionError(data: CompactionErrorData): Promise<number> {
+    return this.messageStore.appendCompactionError(this.sessionId, data);
   }
 
   /**

@@ -6,7 +6,12 @@
  * （块级增量协议）为两种独立输入形态，折叠器同时支持。
  */
 import type { ContentBlock, FileRef } from "./content-block.types";
-import type { SummaryDegradation } from "./event-chunk.types";
+import type {
+  CompactionErrorKind,
+  CompactionErrorTier,
+  CompactionErrorTrigger,
+  SummaryDegradation,
+} from "./event-chunk.types";
 import type { RequestMetrics } from "./request-metrics.types";
 
 /**
@@ -148,6 +153,18 @@ export type DomainEvent =
     }
   | { type: "command/run"; seq: number; data: Record<string, unknown> }
   | { type: "command/done"; seq: number; data: Record<string, unknown> }
+  | {
+      type: "compaction/error";
+      seq: number;
+      data: {
+        errorKind: CompactionErrorKind;
+        error: string;
+        trigger: CompactionErrorTrigger;
+        tier: CompactionErrorTier;
+        status?: number;
+        retryAfterMs?: number;
+      };
+    }
   | { type: "compaction/start"; seq: number; data: Record<string, unknown> }
   | {
       type: "compaction/end";

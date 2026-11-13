@@ -75,6 +75,7 @@ function createHarness(overrides: any = {}) {
     getPerMessageTokens: jest.fn(async () => []),
     getModelConfig: jest.fn(() => ({ modelName: 'deepseek-v4' })),
     appendPrune: jest.fn(async () => {}),
+    appendCompactionError: jest.fn(async () => 42),
     recordContextAnchor: jest.fn(async () => {}),
     getContextStats: jest.fn(async () => ({
       usedTokens: 50000,
@@ -206,7 +207,7 @@ describe('MicrocompactService', () => {
     expect(published[1].contextStats).toBeDefined();
   });
 
-  it('写入失败 fail-open：发 compression_error、不抛出', async () => {
+  it('写入失败 fail-open：落库失败记录、发带 seq 的 compression_error、不抛出', async () => {
     const { service, ds, published } = createHarness({
       appendPrune: jest.fn(async () => {
         throw new Error('disk full');
@@ -216,6 +217,16 @@ describe('MicrocompactService', () => {
     expect(outcome.applied).toBe(false);
     expect(outcome.reason).toBe('failed');
     expect(published.map((e) => e.type)).toEqual(['compression_start', 'compression_error']);
-    expect(published[1]).toMatchObject({ type: 'compression_error', error: 'disk full' });
+    expect(published[1]).toMatchObject({
+      type: 'compression_error',
+      error: 'disk full',
+      seq: 42,
+      errorKind: 'unknown',
+      trigger: 'auto',
+      tier: 'micro',
+    });
+    expect(ds.appendCompactionError).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'disk full', tier: 'micro' }),
+    );
   });
 });

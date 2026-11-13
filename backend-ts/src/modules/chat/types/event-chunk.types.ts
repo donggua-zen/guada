@@ -143,6 +143,17 @@ export interface CompressionErrorEvent {
   message?: string;
   /** true = 用户中止（维护流 abort）；false/缺省 = 真失败。前端据此决定提示形态 */
   cancelled?: boolean;
+  /** 已落库 compaction/error 的 seq（真实失败才有；live 与 replay 卡片按它去重） */
+  seq?: number;
+  /** 稳定错误分类（前端 i18n 白名单；未知分类降级为原文展示） */
+  errorKind?: "rate_limited" | "network_error" | "timeout" | "request_error" | "unknown";
+  /** 触发来源（自动压力 / 手动 / 溢出恢复） */
+  trigger?: "auto" | "manual" | "overflow";
+  /** 压缩层级（本地微压缩 / LLM 摘要压缩） */
+  tier?: "micro" | "llm";
+  /** 上游 HTTP 状态 / 建议重试等待（详情展示备用，与持久化事件同字段） */
+  status?: number;
+  retryAfterMs?: number;
 }
 
 /** 上下文压缩结束（引擎级：任何一次压缩运行成功后广播；compacted 与纯裁剪都发）。

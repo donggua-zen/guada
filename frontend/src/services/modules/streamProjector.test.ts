@@ -437,11 +437,74 @@ describe("StreamProjector 折叠器", () => {
     expect(evtTurns[0].messages[0].metadata.compactInfo.summary).toBe("已优化对话历史");
   });
 
-  it("compression_error：移除'压缩中'占位", () => {
+  it("compression_error：移除'压缩中'占位（无 seq 的取消帧不插卡）", () => {
     foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
     applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);
-    applyLiveChunk(store as any, "s1", { type: "compression_error", error: "llm failed" } as any);
+    applyLiveChunk(store as any, "s1", { type: "compression_error", error: "llm failed", cancelled: true } as any);
     expect(store.state.turns.some((t: any) => t.kind === "event")).toBe(false);
+  });
+
+  it("compression_error 带 seq：生成持久失败卡且同 seq 去重", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    const chunk = {
+      type: "compression_error",
+      seq: 9,
+      errorKind: "rate_limited",
+      error: "429 inference exceeds tpm/rpm limit",
+      trigger: "manual",
+      tier: "llm",
+    } as any;
+    applyLiveChunk(store as any, "s1", chunk);
+    applyLiveChunk(store as any, "s1", chunk);
+    const cards = store.state.turns.flatMap((t: any) =>
+      (t.messages ?? []).filter((m: any) => m.metadata?.eventType === "compaction-error"),
+    );
+    expect(cards).toHaveLength(1);
+    expect(cards[0].metadata.compactionError).toMatchObject({
+      seq: 9,
+      errorKind: "rate_limited",
+      error: "429 inference exceeds tpm/rpm limit",
+    });
+  });
+
+  it("compaction/error 事件页回放：生成失败卡；连续失败只保留最近一张", () => {
+    const errorEvent = (seq: number, error: string): any => ({
+      type: "compaction/error",
+      seq,
+      data: {
+        errorKind: "rate_limited",
+        error,
+        trigger: "manual",
+        tier: "llm",
+        status: 429,
+      },
+    });
+    foldEvents(store as any, "s1", [
+      ...turnPage("T1", "你好", "回答"),
+      errorEvent(10, "429 first"),
+      errorEvent(11, "429 second"),
+    ]);
+    const cards = store.state.turns.flatMap((t: any) =>
+      (t.messages ?? []).filter((m: any) => m.metadata?.eventType === "compaction-error"),
+    );
+    expect(cards).toHaveLength(1);
+    expect(cards[0].messageId).toBe("__compaction_error_11");
+    expect(cards[0].metadata.compactionError.error).toBe("429 second");
+  });
+
+  it("下一次压缩开始不误删失败卡（独立 eventType）", () => {
+    foldEvents(store as any, "s1", turnPage("T1", "你好", "回答"));
+    applyLiveChunk(store as any, "s1", {
+      type: "compression_error",
+      seq: 12,
+      errorKind: "network_error",
+      error: "Connection error.",
+    } as any);
+    applyLiveChunk(store as any, "s1", { type: "compression_start" } as any);
+    const cards = store.state.turns.flatMap((t: any) =>
+      (t.messages ?? []).filter((m: any) => m.metadata?.eventType === "compaction-error"),
+    );
+    expect(cards).toHaveLength(1);
   });
 
   it("context_window_changed：生成上下文窗口提示卡，重复事件只保留最近一条", () => {

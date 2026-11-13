@@ -26,6 +26,7 @@ import {
   MICROCOMPACT_MIN_TOKEN_SAVINGS,
   type MicrocompactMessage,
 } from './microcompact';
+import { buildCompactionErrorRecord } from './compaction-error.util';
 
 export type MicrocompactSkipReason =
   | 'tier-disabled'
@@ -113,9 +114,29 @@ export class MicrocompactService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`[micro] failed (fail-open): ${message}`);
+      // 真实失败落一条 compaction/error（live 卡片与 replay 按 seq 去重）；
+      // 本地存储写入失败时二次写入可能同样失败，落库失败仍要 fail-open。
+      const record = buildCompactionErrorRecord(error, {
+        trigger: 'auto',
+        tier: 'micro',
+      });
+      let errorSeq: number | undefined;
+      try {
+        errorSeq = await ds.appendCompactionError?.(record);
+      } catch (persistError) {
+        this.logger.warn(
+          `[micro] failed to persist error event: ${persistError instanceof Error ? persistError.message : String(persistError)}`,
+        );
+      }
       await context.publishStream({
         type: 'compression_error',
         error: message,
+        ...(errorSeq === undefined ? {} : { seq: errorSeq }),
+        errorKind: record.errorKind,
+        trigger: 'auto',
+        tier: 'micro',
+        ...(record.status === undefined ? {} : { status: record.status }),
+        ...(record.retryAfterMs === undefined ? {} : { retryAfterMs: record.retryAfterMs }),
       } as CompressionErrorEvent);
       return { applied: false, reason: 'failed' };
     }

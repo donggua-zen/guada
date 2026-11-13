@@ -191,6 +191,11 @@ export interface IMessageStore {
     sessionId: string,
     data: ToolImagePruneData,
   ): Promise<number>;
+  /** 压缩失败（单条独立事件；@returns 写入后事件 seq，供 live 事件卡去重） */
+  appendCompactionError(
+    sessionId: string,
+    data: import('./types').CompactionErrorData,
+  ): Promise<number>;
   /** 二级压缩（摘要）：遮蔽头部连续前缀 + 写摘要（compaction 括号事件）。
    *  @returns 摘要消息 id + 写入后版本号 + 折叠后的摘要节点（供快照播种） */
   appendCompact(

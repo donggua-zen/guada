@@ -29,6 +29,7 @@ import { CompactionService } from "./compaction.service";
 import { MicrocompactService } from "./microcompact.service";
 import type { CompactionDataSource } from "./types";
 import { CompactionCancelledError } from "./compaction-cancelled.error";
+import { buildCompactionErrorRecord } from "./compaction-error.util";
 import type { ISessionContext } from "../session-context";
 import type { Message } from "../../../common/types/conversation.types";
 import {
@@ -50,6 +51,8 @@ export interface CompactionOutcome {
   didRun: boolean;
   /** 是否真正替换了会话 surface（溢出恢复据此决定能否 retry；失败/跳过时为 false） */
   replaced: boolean;
+  /** 真实压缩失败的原始 message（手动维护流据此把状态判为 error，而非 completed） */
+  errorMessage?: string;
 }
 
 export interface MaybeCompressOptions {
@@ -396,8 +399,8 @@ export class CompactionCoordinatorService {
   /**
    * 执行压缩（自动/手动/溢出路径共用）。
    * 编排委托 CompactionService；会话经 CompactionDataSource 窄接口操作（内部窄化）。
-   * 自动/溢出路径由钩子调用；手动路径（HTTP 端点，不在流内）由 session.service 直接调用——
-   * 手动路径无活跃流，publishStream 静默丢弃（publish 的 isRunning 守卫）。
+   * 自动/溢出路径由钩子调用；手动路径（HTTP 端点，不在对话流内）由 session.service 直接调用——
+   * 手动路径先开 kind='maintenance' 伪流，因此 publishStream 的事件可正常下发。
    */
   async maybeCompress(
     context: ISessionContext,
@@ -492,17 +495,51 @@ export class CompactionCoordinatorService {
         e instanceof CompactionCancelledError ||
         e?.name === "CompactionCancelledError" ||
         e?.name === "AbortError";
+      const message = e?.message ?? String(e);
       if (cancelled) {
-        this.logger.log(`[compaction] cancelled by user: ${e?.message ?? e}`);
+        this.logger.log(`[compaction] cancelled by user: ${message}`);
       } else {
-        this.logger.error(`[compaction] failed: ${e?.message ?? e}`);
+        this.logger.error(`[compaction] failed: ${message}`);
+      }
+      // 真实失败先落一条 compaction/error，再发带 seq 的瞬态帧：
+      // 前端 live 卡片与刷新后的事件页按同一 seq 去重；取消不落库，不污染时间线。
+      // 落库本身失败也不覆盖原始错误、不改变 fail-open 语义。
+      let errorSeq: number | undefined;
+      let errorKind: CompressionErrorEvent["errorKind"];
+      let errorStatus: number | undefined;
+      let retryAfterMs: number | undefined;
+      if (!cancelled) {
+        const record = buildCompactionErrorRecord(e, {
+          trigger: opts.reason ?? "auto",
+          tier: "llm",
+        });
+        errorKind = record.errorKind;
+        errorStatus = record.status;
+        retryAfterMs = record.retryAfterMs;
+        try {
+          errorSeq = await ds.appendCompactionError?.(record);
+        } catch (persistError: any) {
+          this.logger.warn(
+            `[compaction] failed to persist error event: ${persistError?.message ?? persistError}`,
+          );
+        }
       }
       await context.publishStream({
         type: "compression_error",
-        error: e?.message ?? String(e),
+        error: message,
         ...(cancelled ? { cancelled: true } : {}),
+        ...(errorSeq === undefined ? {} : { seq: errorSeq }),
+        ...(errorKind === undefined ? {} : { errorKind }),
+        ...(cancelled ? {} : { trigger: opts.reason ?? "auto", tier: "llm" as const }),
+        ...(errorStatus === undefined ? {} : { status: errorStatus }),
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
       } as CompressionErrorEvent);
-      return { messages: null, didRun: true, replaced: false };
+      return {
+        messages: null,
+        didRun: true,
+        replaced: false,
+        ...(cancelled ? {} : { errorMessage: message }),
+      };
     }
   }
 }

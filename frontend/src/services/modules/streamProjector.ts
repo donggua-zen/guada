@@ -25,7 +25,12 @@ import { perfStart, perfStartScoped } from "@/utils/perf";
 import type { WireStreamEvent } from "@/types/stream";
 import type { DomainEvent } from "@/types/stream/domain-event.types";
 import type { ContentBlock } from "@/types/stream/content-block.types";
-import type { WireMessage } from "@/types/stream/event-chunk.types";
+import type {
+  CompactionErrorKind,
+  CompactionErrorTier,
+  CompactionErrorTrigger,
+  WireMessage,
+} from "@/types/stream/event-chunk.types";
 import type { PendingAsk, SessionState } from "@/types/session";
 import type { Turn, TurnContent, MessageBundle, ToolCallEntry, ToolCallResponseEntry } from "@/types/message";
 
@@ -398,6 +403,13 @@ function applyDomainEvent(
       }, mode);
       return;
     }
+    case "compaction/error": {
+      upsertCompactionErrorCard(sessionStore, sessionId, {
+        seq: ev.seq,
+        ...ev.data,
+      });
+      return;
+    }
     case "tool_image/prune": {
       upsertToolImagePruneCard(sessionStore, sessionId, {
         seq: ev.seq,
@@ -678,6 +690,101 @@ function upsertCompressResultPlaceholder(
 
 
 /**
+ * 压缩失败 → 时间线事件卡。
+ *
+ * persisted domain event（compaction/error）与 live wire event（compression_error）
+ * 共用本 helper；messageId 用落库 seq 去重。对话流内只保留最近一张失败卡
+ * （每次失败仍各自落库，审计不丢），避免连续限流时刷屏。
+ */
+function upsertCompactionErrorCard(
+  sessionStore: ProjectorSessionStore,
+  sessionId: string,
+  payload: {
+    seq: number;
+    errorKind: CompactionErrorKind;
+    error: string;
+    trigger: CompactionErrorTrigger;
+    tier: CompactionErrorTier;
+    status?: number;
+    retryAfterMs?: number;
+  },
+): void {
+  const turns = sessionStore.getTurns(sessionId) || [];
+  const messageId = `__compaction_error_${payload.seq}`;
+  // 同 seq 已存在（SSE 补发 / replay 与 live 重合）→ 直接返回
+  for (const turn of turns) {
+    if (Array.isArray(turn.messages) && turn.messages.some((m) => m.messageId === messageId)) {
+      return;
+    }
+  }
+  // 只保留最近一张：独立 event 回合整体移除，回合内束逐条摘除
+  for (let ti = turns.length - 1; ti >= 0; ti--) {
+    const turn = turns[ti];
+    if (turn.kind === "event" && turn.metadata?.eventType === "compaction-error") {
+      turns.splice(ti, 1);
+      continue;
+    }
+    if (!Array.isArray(turn.messages)) continue;
+    for (let i = turn.messages.length - 1; i >= 0; i--) {
+      if (turn.messages[i].metadata?.eventType === "compaction-error") {
+        turn.messages.splice(i, 1);
+      }
+    }
+  }
+
+  const now = new Date().toISOString();
+  const metadata = {
+    eventType: "compaction-error",
+    compactionError: {
+      seq: payload.seq,
+      errorKind: payload.errorKind,
+      error: payload.error,
+      trigger: payload.trigger,
+      tier: payload.tier,
+      ...(payload.status !== undefined ? { status: payload.status } : {}),
+      ...(payload.retryAfterMs !== undefined ? { retryAfterMs: payload.retryAfterMs } : {}),
+    },
+  };
+  const eventBundle: MessageBundle = {
+    messageId,
+    role: "event",
+    metadata,
+    blocks: [
+      {
+        id: messageId,
+        role: "event",
+        messageId,
+        content: payload.error,
+        reasoningContent: null,
+        additionalKwargs: [],
+        metadata,
+        createdAt: now,
+        updatedAt: now,
+        thinkingStartedAt: null,
+        thinkingDurationMs: null,
+        state: { isStreaming: false, isThinking: false },
+      },
+    ],
+  };
+  const currentTurnId = getCurrentTurn(sessionId);
+  const hostTurn = currentTurnId
+    ? turns.find((t) => t.id === currentTurnId)
+    : undefined;
+  if (hostTurn) {
+    if (!Array.isArray(hostTurn.messages)) hostTurn.messages = [];
+    hostTurn.messages.push(eventBundle);
+  } else {
+    turns.push({
+      id: eventBundle.messageId,
+      kind: "event",
+      metadata,
+      visible: true,
+      messages: [eventBundle],
+    });
+  }
+}
+
+/**
  * 工具截图裁剪完成 → 时间线事件卡。
  *
  * persisted domain event（tool_image/prune）与 live wire event（tool_image_prune）
@@ -893,6 +1000,20 @@ export function applyChunkToStore(
   if (chunk.type === "compression_error") {
     sessionStore.setSessionIsCompressing(sessionId, false);
     removeCompactionPlaceholders(sessionStore, sessionId, "compressing");
+    // 真实失败带已落库 seq → 生成持久卡片；取消/旧后端无 seq，只保留瞬态 toast。
+    if (typeof chunk.seq === "number") {
+      upsertCompactionErrorCard(sessionStore, sessionId, {
+        seq: chunk.seq,
+        errorKind: chunk.errorKind ?? "unknown",
+        error: chunk.error || chunk.message || "",
+        trigger: chunk.trigger ?? "auto",
+        tier: chunk.tier ?? "llm",
+        ...(chunk.status !== undefined ? { status: chunk.status } : {}),
+        ...(chunk.retryAfterMs !== undefined
+          ? { retryAfterMs: chunk.retryAfterMs }
+          : {}),
+      });
+    }
     return;
   }
   if (chunk.type === "compression_end") {

@@ -243,6 +243,30 @@ describe('replayer 折叠 - 视图占用锚点（OccupancyAnchor）', () => {
     expect(state.occupancyAnchor).toEqual({ kind: 'usage' });
   });
 
+  it('compaction/error 只推进游标，不改消息视图与占用锚点', () => {
+    const before = foldEvents([
+      turnStart('t1', 1),
+      assistantWithUsage('a1', 2, 1000),
+    ]);
+    const after = foldEvents([
+      turnStart('t1', 1),
+      assistantWithUsage('a1', 2, 1000),
+      ev({
+        type: 'compaction/error',
+        seq: 3,
+        data: {
+          errorKind: 'rate_limited',
+          error: '429 inference exceeds tpm/rpm limit',
+          trigger: 'manual',
+          tier: 'llm',
+        },
+      }),
+    ]);
+    expect(after.messages).toEqual(before.messages);
+    expect(after.occupancyAnchor).toEqual(before.occupancyAnchor);
+    expect(after.lastProcessedSeq).toBe(3);
+  });
+
   it('context/stats 带 heuristicTokens（anchor-stats）→ 设置占用锚点', () => {
     const state = foldEvents([
       turnStart('t1', 1),
