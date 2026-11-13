@@ -44,6 +44,7 @@ function createContext(overrides: Partial<CompactionDataSource> = {}): any {
     getEffectiveContextWindow: jest.fn(() => 1000),
     getPrelude: jest.fn(async () => []),
     getTools: jest.fn(() => []),
+    appendCompactionError: jest.fn(async () => 42),
     ...overrides,
   };
 }
@@ -106,7 +107,7 @@ describe('CompactionCoordinatorService', () => {
       expect((coordinator as any).overflowRetries.has('s1')).toBe(false);
     });
 
-    it('压缩失败 → 直发 compression_error 并放行（fail-open）', async () => {
+    it('压缩失败 → 落库 compaction/error、直发带 seq 的 compression_error 并放行（fail-open）', async () => {
       const ctx = createContext();
       const coordinator = createCoordinator({
         shouldCompress: jest.fn(async () => true),
@@ -118,7 +119,60 @@ describe('CompactionCoordinatorService', () => {
       expect(result).toBeUndefined();
       const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
       expect(events[0].type).toBe('compression_start');
-      expect(events[1].type).toBe('compression_error');
+      expect(events[1]).toMatchObject({
+        type: 'compression_error',
+        error: 'boom',
+        seq: 42,
+        errorKind: 'unknown',
+        trigger: 'auto',
+        tier: 'llm',
+      });
+      expect(ctx.appendCompactionError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'boom',
+          errorKind: 'unknown',
+          trigger: 'auto',
+          tier: 'llm',
+        }),
+      );
+    });
+
+    it('压缩被用户取消 → 不落库、不回传 seq', async () => {
+      const ctx = createContext();
+      const coordinator = createCoordinator({
+        shouldCompress: jest.fn(async () => true),
+        compress: jest.fn(async () => {
+          throw new Error('aborted');
+        }),
+      });
+      await coordinator.maybeCompress(ctx as any, {
+        force: true,
+        reason: 'manual',
+        abortSignal: { aborted: true } as AbortSignal,
+      });
+      expect(ctx.appendCompactionError).not.toHaveBeenCalled();
+      const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(events[1]).toMatchObject({ type: 'compression_error', cancelled: true });
+      expect(events[1].seq).toBeUndefined();
+    });
+
+    it('失败事件落库本身写失败 → 仍 fail-open，compression_error 无 seq', async () => {
+      const ctx = createContext({
+        appendCompactionError: jest.fn(async () => {
+          throw new Error('disk full');
+        }),
+      });
+      const coordinator = createCoordinator({
+        shouldCompress: jest.fn(async () => true),
+        compress: jest.fn(async () => {
+          throw new Error('boom');
+        }),
+      });
+      const outcome = await coordinator.maybeCompress(ctx as any, { force: true, reason: 'manual' });
+      expect(outcome).toMatchObject({ didRun: true, replaced: false, errorMessage: 'boom' });
+      const events = (ctx.publishStream as jest.Mock).mock.calls.map((c) => c[0]);
+      expect(events[1]).toMatchObject({ type: 'compression_error', error: 'boom' });
+      expect(events[1].seq).toBeUndefined();
     });
 
     it('微压缩先于 LLM 压缩执行（同一订阅者内显式串行，对齐 zcode）', async () => {

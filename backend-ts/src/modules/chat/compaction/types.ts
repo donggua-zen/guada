@@ -15,7 +15,10 @@ import type { Message } from '../../../common/types/conversation.types';
 import type { ToolDefinition } from '../../tools/interfaces/tool-provider.interface';
 import type { ModelConfig } from '../session-context';
 import type { SummaryDegradation, SummaryMode } from './compression-engine';
-import type { ToolImagePruneData } from '../../../common/persistence/types';
+import type {
+  CompactionErrorData,
+  ToolImagePruneData,
+} from '../../../common/persistence/types';
 
 /** 合并后的压缩配置（档位折算产物；对齐 DSH thresholdRatio + retainRatio） */
 export interface CompactionConfig {
@@ -138,6 +141,9 @@ export interface CompactionDataSource {
    *  后端实现为 JsonlSessionContext；不支持该能力的测试数据源可缺省。
    *  @returns 写入后事件 seq（live 事件卡去重键） */
   appendToolImagePrune?(data: ToolImagePruneData): Promise<number>;
+  /** 压缩失败记录：写一条独立 compaction/error（真实失败才调用，取消不落库）。
+   *  @returns 写入后事件 seq（live 事件卡去重键）；不支持的测试数据源可缺省。 */
+  appendCompactionError?(data: CompactionErrorData): Promise<number>;
   /** 二级遮蔽写入：落库 + 快照增量播种（splice view 前 shadowedCount 条为摘要节点）。
    *  @returns 摘要消息 id + 写入后版本号 */
   appendCompact(

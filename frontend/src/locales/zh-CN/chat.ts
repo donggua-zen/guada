@@ -267,6 +267,15 @@ export default {
     contextCompactedCount: '上下文已压缩 · 折叠 {count} 条消息',
     contextCompacting: '正在压缩上下文...',
     collapseSummary: '收起摘要',
+    // EventCard.vue 压缩失败卡（持久化：刷新后仍在）
+    compressionFailedHint: '本次压缩未生效，历史消息保持不变。原因详情：',
+    compressionFailedReason: {
+      rateLimited: '上下文压缩失败 · 模型服务限流（TPM/RPM 配额）',
+      networkError: '上下文压缩失败 · 网络连接失败',
+      timeout: '上下文压缩失败 · 请求超时',
+      requestError: '上下文压缩失败 · 模型服务请求被拒绝',
+      unknown: '上下文压缩失败',
+    },
     // EventCard.vue 压缩结果卡（微压缩/空跑：说明本次做了什么）
     contextPruned: '已裁剪 {count} 处超长工具结果',
     contextThinkingStripped: '已剥离 {count} 条历史思考',

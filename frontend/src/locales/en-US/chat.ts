@@ -267,6 +267,15 @@
     contextCompactedCount: 'Context compacted · {count} messages folded',
     contextCompacting: 'Compacting context...',
     collapseSummary: 'Collapse summary',
+    // EventCard.vue compression failure card (persisted across refreshes)
+    compressionFailedHint: 'Compaction did not take effect; the conversation history is unchanged. Details:',
+    compressionFailedReason: {
+      rateLimited: 'Context compaction failed · Model rate limit (TPM/RPM quota)',
+      networkError: 'Context compaction failed · Network connection error',
+      timeout: 'Context compaction failed · Request timed out',
+      requestError: 'Context compaction failed · Model request rejected',
+      unknown: 'Context compaction failed',
+    },
     // EventCard.vue compression result card (micro-compaction / no-op runs)
     contextPruned: 'Pruned {count} oversized tool results',
     contextThinkingStripped: 'Stripped {count} historical reasoning blocks',

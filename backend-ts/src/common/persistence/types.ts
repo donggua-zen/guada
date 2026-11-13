@@ -4,7 +4,7 @@
  *   turn/start + turn/finish（回合：一次输入 = 用户 + 助手，一对一轮回）
  *   user/message + assistant/message + tool/result（消息级三事件，对齐 DSH，内容平铺内嵌）
  *   turn/delete（删除本轮对话 = 按回合 id 遮蔽整个轮次；整轮次重答 = turn/delete 旧轮次 + 正常回答流程）
- *   message/prune（内容裁剪）、compaction/start + summary + end（压缩括号）
+ *   message/prune（内容裁剪）、compaction/start + summary + end（压缩括号）、compaction/error（压缩失败）
  * 回放产出扁平消息 surface（MessageNode IS-A Message，带 seq/turnId 归属标签）。
  */
 
@@ -34,6 +34,7 @@ export type EventType =
   | 'compaction/start'
   | 'compaction/summary'
   | 'compaction/end'
+  | 'compaction/error'
   | 'command/run'
   | 'command/done'
   | 'message/meta'
@@ -325,6 +326,27 @@ export interface CompactionSummaryData {
 
 export interface CompactionEndData {
   sourceCommandId?: string;
+}
+
+/**
+ * 压缩失败（独立单条事件，无 start/summary 括号）。
+ *
+ * 真实失败才落库；用户主动取消只走瞬态流事件。仅审计/UI 消费，
+ * 不参与 LLM 视图折叠，也不计入压缩历史（历史只统计成功的压缩运行）。
+ */
+export interface CompactionErrorData {
+  /** 稳定错误分类（前端据此映射 i18n；未知分类降级为原文展示） */
+  errorKind: 'rate_limited' | 'network_error' | 'timeout' | 'request_error' | 'unknown';
+  /** 上游错误原文（截断，避免整页 HTML 撑大事件日志） */
+  error: string;
+  /** 触发来源：自动压力 / 用户手动 / 溢出恢复 */
+  trigger: 'auto' | 'manual' | 'overflow';
+  /** 压缩层级：本地微压缩 / LLM 摘要压缩 */
+  tier: 'micro' | 'llm';
+  /** 上游 HTTP 状态（若有） */
+  status?: number;
+  /** 上游建议的重试等待毫秒（若有） */
+  retryAfterMs?: number;
 }
 
 /**

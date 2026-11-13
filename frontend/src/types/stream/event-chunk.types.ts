@@ -175,7 +175,28 @@ export interface CompressionErrorEvent {
   message?: string;
   /** true = 用户中止（维护流 abort）；false/缺省 = 真失败。据此决定提示形态 */
   cancelled?: boolean;
+  /** 已落库 compaction/error 的 seq（真实失败才有；live 与 replay 卡片按它去重） */
+  seq?: number;
+  /** 稳定错误分类（i18n 白名单；未知分类降级为原文展示） */
+  errorKind?: CompactionErrorKind;
+  /** 触发来源（自动压力 / 手动 / 溢出恢复） */
+  trigger?: CompactionErrorTrigger;
+  /** 压缩层级（本地微压缩 / LLM 摘要压缩） */
+  tier?: CompactionErrorTier;
+  /** 上游 HTTP 状态 / 建议重试等待（与持久化事件同字段） */
+  status?: number;
+  retryAfterMs?: number;
 }
+
+/** 压缩失败分类（与后端 CompactionErrorData 同构） */
+export type CompactionErrorKind =
+  | "rate_limited"
+  | "network_error"
+  | "timeout"
+  | "request_error"
+  | "unknown";
+export type CompactionErrorTrigger = "auto" | "manual" | "overflow";
+export type CompactionErrorTier = "micro" | "llm";
 
 /** 摘要输入降级统计（与后端 SummaryDegradation 逐字段同构） */
 export interface SummaryDegradation {

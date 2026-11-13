@@ -1511,7 +1511,15 @@ ${diffText}
           ? {}
           : { instructions: opts.instructions }),
       })
-      .then(() => {
+      .then((outcome) => {
+        if (outcome?.errorMessage) {
+          this.streamManager.stopStream(sessionId, "error");
+          this.emitMaintenanceStatus(sessionId, "error", {
+            reason: "error",
+            error: outcome.errorMessage,
+          });
+          return;
+        }
         this.streamManager.stopStream(sessionId, "completed");
         this.emitMaintenanceStatus(sessionId, "completed");
       })

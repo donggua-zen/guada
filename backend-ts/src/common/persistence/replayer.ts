@@ -442,6 +442,11 @@ export function foldEvent(
       }
       break;
 
+    case 'compaction/error':
+      // 压缩失败：仅审计/UI 消费（前端事件页重建失败卡），不改消息视图、
+      // 不进 LLM 上下文，也不计入压缩历史。lastProcessedSeq 由 switch 后统一推进。
+      break;
+
     // ─── 统一交互事件（ask/asked|answered 事件溯源；审批/询问共用）───
     // 无状态透传（纯审计源；交互为执行内瞬态，不承载恢复状态）
     case 'ask/asked':

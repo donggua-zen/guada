@@ -67,6 +67,24 @@
       </div>
     </div>
 
+    <!-- 压缩失败：持久化事件卡（默认展开原始错误，便于定位限流/网络等原因） -->
+    <div v-else-if="eventType === 'compaction-error'" class="event-card__compaction">
+      <div class="event-card__divider">
+        <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
+        <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
+          <Warning16Regular class="w-3.5 h-3.5" />
+          <span class="event-card__compaction-text">{{ compressionFailedTitle }}</span>
+        </span>
+        <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
+      </div>
+      <div class="event-card__result event-card__error-detail">
+        <div>{{ t('chat.turn.compressionFailedHint') }}</div>
+        <div v-if="compactionError?.error" class="mt-1 font-mono whitespace-pre-wrap break-words">
+          {{ compactionError.error }}
+        </div>
+      </div>
+    </div>
+
     <!-- 后台作业完成通知（job-notice）：数据仍是 role='user' 消息（source.kind 命中即此分支），
          仅渲染形态对齐压缩卡分隔线样式；将来注入事件有更好的形态时，本分支独立增删。 -->
     <div v-else-if="eventType === 'job-notice'" class="event-card__compaction">
@@ -210,6 +228,9 @@ const noticeText = computed(() => {
 
 const compressing = computed(() => !!props.event?.metadata?.compressing);
 const compressResult = computed(() => props.event?.metadata?.compressResult ?? null);
+const compactionError = computed(
+  () => props.event?.metadata?.compactionError ?? null,
+);
 const commandName = computed(() => props.event?.metadata?.commandName ?? "");
 const outcome = computed(() => props.event?.metadata?.commandOutcome ?? null);
 const compactInfo = computed(() => props.event?.metadata?.compactInfo ?? null);
@@ -240,6 +261,21 @@ const shadowedCount = computed(
 const summaryText = computed(
   () => compactInfo.value?.summary ?? props.event?.metadata?.summary ?? "",
 );
+/** 压缩失败原因 → i18n key（未知分类降级为通用标题） */
+const COMPRESSION_ERROR_KEYS: Record<string, string> = {
+  rate_limited: "chat.turn.compressionFailedReason.rateLimited",
+  network_error: "chat.turn.compressionFailedReason.networkError",
+  timeout: "chat.turn.compressionFailedReason.timeout",
+  request_error: "chat.turn.compressionFailedReason.requestError",
+  unknown: "chat.turn.compressionFailedReason.unknown",
+};
+
+const compressionFailedTitle = computed(() => {
+  const kind = compactionError.value?.errorKind;
+  const key = typeof kind === "string" ? COMPRESSION_ERROR_KEYS[kind] : undefined;
+  return t(key ?? "chat.turn.compressionFailedReason.unknown");
+});
+
 const contextNotice = computed(
   () => props.event?.metadata?.contextNotice ?? null,
 );
@@ -396,6 +432,12 @@ const outcomeClass = computed(() => {
 .event-card__notice-detail {
   @apply bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300
     border-amber-200/70 dark:border-amber-700/50;
+}
+
+/* 压缩失败：红色底突出未生效，原始错误全文常驻 */
+.event-card__error-detail {
+  @apply bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300
+    border-red-200/70 dark:border-red-700/50;
 }
 
 .event-card__divider {
