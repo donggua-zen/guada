@@ -83,7 +83,8 @@
     "build:electron:mac": "pnpm run build:electron:pre && concurrently --names BACKEND,FRONTEND \"pnpm run build:electron:backend\" \"pnpm run build:electron:frontend\" && pnpm run build:electron:package:mac",
     "build:electron:dir": "pnpm run build:electron-ts && concurrently --names BACKEND,FRONTEND \"pnpm run build:electron:backend\" \"pnpm run build:electron:frontend\" && pnpm run build:electron:package:dir",
     "postinstall": "pnpm --dir backend-ts install && pnpm --dir frontend install && node scripts/ensure-pty-spawn-helper.js --warn-only",
-    "test:pet-unlock-drag:electron": "node scripts/run-electron.cjs scripts/test-pet-unlock-drag.js"
+    "test:pet-unlock-drag:electron": "node scripts/run-electron.cjs scripts/test-pet-unlock-drag.js",
+    "test:pet-real-drag:electron": "node scripts/run-electron.cjs scripts/test-pet-real-drag.js"
   },
   "keywords": [
     "ai",
