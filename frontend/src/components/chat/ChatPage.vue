@@ -260,6 +260,7 @@ import { useWorkflowRunsStore } from "@/stores/workflowRuns";
 import { useTitle } from '@/composables/useTitle';
 import { isMobileDevice } from '@/composables/useDevice';
 import { writeTextToClipboard } from '@/utils/clipboard';
+import { previewFile } from '@/utils/workspacePreview';
 import { beginSessionOpenTrace, traceSessionOpen, perfStart } from '@/utils/perf';
 import type { Session, CreateSessionRequest, InputMessageState } from '@/types/session';
 import type { Agent } from '@/types/agent';
@@ -560,6 +561,17 @@ function openSubagentListById(sessionId?: string) {
   nextTick(() => tabStore.openSubagentListTab(sid));
 }
 provide('workspace:openSubagentList', openSubagentListById);
+
+/**
+ * 打开工作区文件预览（对话流文件类工具行的文件名消费）。
+ *
+ * previewFile 内部负责「展开侧栏 → nextTick 等 WorkspaceSidebar 挂载 → 开预览标签」，
+ * 与文件变更条 / 编辑记录面板同一个入口；Bot 会话面板没有本 provide，不会出现死点击。
+ */
+function openFileInWorkspace(filePath: string): void {
+  void previewFile(filePath);
+}
+provide('workspace:openFile', openFileInWorkspace);
 
 // 组合式函数
 const { confirm } = usePopup();

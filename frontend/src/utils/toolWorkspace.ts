@@ -1,5 +1,10 @@
 import { parse as partialParse } from "partial-json";
-import { getToolArgs, type ToolCall } from "./toolDisplay";
+import {
+  getArgsDisplay,
+  getToolArgs,
+  resolveToolName,
+  type ToolCall,
+} from "./toolDisplay";
 
 /**
  * 工具调用的远程工作区标识。
@@ -53,4 +58,43 @@ export function formatArgsTextWithRemote(
 ): string | undefined {
   if (!remoteWorkspace) return argsText;
   return argsText ? `${remoteLabel}·${argsText}` : remoteLabel;
+}
+
+/** 文件类工具行可打开到侧边栏预览的目标 */
+export interface ToolFileOpenTarget {
+  /** 归一化后的路径（反斜杠统一为 /，去掉开头 ./） */
+  path: string;
+  /** basename，供调用方展示/调试 */
+  fileName: string;
+}
+
+/**
+ * 解析文件类工具的可预览目标。
+ *
+ * 返回 null 的情况：
+ * - 非文件类工具（没有 `argsKey = file_path` 的展示配置）；
+ * - 远程工作区（`workspace` 参数为连接名，或历史 `remote_*` 工具）；
+ * - 工具仍在执行（流式 `file_path` 可能是半截路径，等结束再允许打开）；
+ * - `file_path` 为空。
+ *
+ * 路径只做分隔符与 `./` 前缀归一化；绝对路径原样保留，由后端按工作目录解析。
+ */
+export function getToolFileOpenTarget(
+  tool: ToolCall | undefined,
+  options?: { executing?: boolean; remoteName?: string },
+): ToolFileOpenTarget | null {
+  if (!tool || options?.executing) return null;
+
+  const remoteName = options?.remoteName ?? getRemoteWorkspaceName(tool);
+  if (remoteName) return null;
+  // 历史 remote_* 工具没有 workspace 参数，但 file_path 相对远端 basePath，
+  // 不能当成本地工作区路径打开（可能误开同名本地文件）。
+  if (resolveToolName(tool).startsWith("remote_")) return null;
+
+  const file = getArgsDisplay(tool)?.file;
+  if (!file?.fullPath) return null;
+
+  const path = file.fullPath.replace(/\\/g, "/").replace(/^(\.\/)+/, "");
+  if (!path) return null;
+  return { path, fileName: file.fileName };
 }

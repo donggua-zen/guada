@@ -1,12 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 // toolWorkspace 依赖 toolDisplay，后者会间接加载 locales / 图标组件；node 测试环境按既有约定 mock。
 vi.mock("@/locales", () => ({ t: vi.fn((k: string) => k) }));
 vi.mock("@/components/icons/Terminal.vue", () => ({ default: {} }));
 import {
   formatArgsTextWithRemote,
   getRemoteWorkspaceName,
+  getToolFileOpenTarget,
 } from "./toolWorkspace";
-import type { ToolCall } from "./toolDisplay";
+import { setPluginToolDisplays, type ToolCall } from "./toolDisplay";
 
 describe("getRemoteWorkspaceName", () => {
   it("workspace 为连接名 → 返回连接名", () => {
@@ -82,5 +83,82 @@ describe("formatArgsTextWithRemote", () => {
 
   it("本地 + 无摘要 → undefined", () => {
     expect(formatArgsTextWithRemote(undefined, undefined, "远程")).toBeUndefined();
+  });
+});
+
+describe("getToolFileOpenTarget", () => {
+  beforeEach(() => {
+    setPluginToolDisplays({
+      read: { text: { executing: "", completed: "" }, argsKey: "file_path" },
+    });
+  });
+
+  it("本地 read 相对路径 → 返回可打开目标", () => {
+    expect(
+      getToolFileOpenTarget({
+        name: "read",
+        arguments: { file_path: "src/components/chat/TurnItem.vue" },
+      }),
+    ).toEqual({
+      path: "src/components/chat/TurnItem.vue",
+      fileName: "TurnItem.vue",
+    });
+  });
+
+  it("Windows 反斜杠与 ./ 前缀归一化", () => {
+    expect(
+      getToolFileOpenTarget({
+        name: "read",
+        arguments: { file_path: ".\\src\\utils\\a.ts" },
+      }),
+    ).toEqual({ path: "src/utils/a.ts", fileName: "a.ts" });
+  });
+
+  it("远程 workspace 参数 → null", () => {
+    expect(
+      getToolFileOpenTarget({
+        name: "read",
+        arguments: { workspace: "dev-server", file_path: "src/a.ts" },
+      }),
+    ).toBeNull();
+  });
+
+  it("历史 remote_* 工具 → null", () => {
+    expect(
+      getToolFileOpenTarget({
+        name: "remote_read",
+        arguments: { file_path: "src/a.ts" },
+      }),
+    ).toBeNull();
+  });
+
+  it("执行中（流式半截路径）→ null", () => {
+    expect(
+      getToolFileOpenTarget(
+        { name: "read", arguments: { file_path: "src/a.ts" } },
+        { executing: true },
+      ),
+    ).toBeNull();
+  });
+
+  it("空 file_path / 非文件工具 → null", () => {
+    expect(
+      getToolFileOpenTarget({ name: "read", arguments: { file_path: "" } }),
+    ).toBeNull();
+    expect(
+      getToolFileOpenTarget({
+        name: "glob",
+        arguments: { pattern: "src/**/*.ts" },
+      }),
+    ).toBeNull();
+  });
+
+  it("tool_use 嵌套内层 read 参数 → 可解析", () => {
+    expect(
+      getToolFileOpenTarget({
+        name: "tool_use",
+        arguments: { tool_name: "read", arguments: { file_path: "src/a.ts" } },
+      })?.path,
+    ).toBe("src/a.ts");
   });
 });

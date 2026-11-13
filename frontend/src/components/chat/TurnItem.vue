@@ -107,10 +107,11 @@
                   <span class="shrink-0 font-medium ml-1.5">{{ parts.action }}</span>
                   <!-- 文件类工具：文件名 chip（扩展名图标 + basename，hover 全路径）+ 目录串（次要色，优先截断） -->
                   <template v-if="parts.file">
-                    <span class="inline-flex min-w-0 max-w-full items-center gap-1 ml-1.5"
-                      :title="parts.file.fullPath">
+                    <span class="group-file-chip inline-flex min-w-0 max-w-full items-center gap-1 ml-1.5"
+                      :class="{ 'is-openable': canOpenGroupFile(parts) }"
+                      :title="parts.file.fullPath" @click="onGroupFileClick(parts, $event)">
                       <img :src="getFileIcon(parts.file.fileName)" class="w-4 h-4 shrink-0" alt="" />
-                      <span class="min-w-0 truncate text-gray-600 dark:text-gray-300">{{ parts.file.fileName }}</span>
+                      <span class="group-file-chip__name min-w-0 truncate text-gray-600 dark:text-gray-300">{{ parts.file.fileName }}</span>
                     </span>
                     <span v-if="parts.file.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-gray-400 dark:text-gray-500"
                       :title="parts.file.fullPath">{{ parts.file.dirPath }}</span>
@@ -218,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, onBeforeUnmount, type Component } from "vue";
+import { computed, ref, nextTick, onBeforeUnmount, inject, type Component } from "vue";
 import { useI18n } from "vue-i18n";
 import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, BookOpen16Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
@@ -242,6 +243,8 @@ import { useLayoutStore } from '@/stores/layout';
 import { isHiddenBlock, getThinkingPreview, formatDuration as formatThinkingDuration } from '@/utils/messageUtils';
 import { isJobNoticeSource } from '@/utils/jobNotice';
 import { previewFile } from '@/utils/workspacePreview';
+import { getToolFileOpenTarget } from '@/utils/toolWorkspace';
+import type { FilePathDisplay } from '@/utils/pathDisplay';
 import { resolveGroupExpanded, nextGroupExpandOverride, hasUnfinishedSteps, isToolCallExecuting, resolveGroupTitlePhase, estimateGroupLines } from './groupExpansion';
 import { getFileIcon } from '@/composables/useFileIcon';
 import { perfCount } from '@/utils/perf';
@@ -439,6 +442,12 @@ const { fileChanges } = useFileChanges(activeContents);
 const layoutStore = useLayoutStore();
 const tabStore = useTabStore();
 
+/** ChatPage provide；无工作区侧边栏的宿主（Bot 会话面板等）下为 null → 文件名不可点 */
+const openWorkspaceFile = inject<((filePath: string) => void) | null>(
+  'workspace:openFile',
+  null,
+);
+
 // 点击 diff：改为在侧边栏以「编辑记录」标签展示（不再弹窗）
 const openDiffDialog = (entry: FileChangeEntry) => {
   layoutStore.setWorkspaceVisible(true);
@@ -524,9 +533,19 @@ const thinkingDurationText = (group: DisplayGroup): string => {
   return totalMs > 0 ? formatThinkingDuration(totalMs) : '';
 };
 
+/** 分组标题展示片段；fileTool/fileOpenable 供收起态文件名打开工作区文件 */
+interface GroupTitleParts {
+  icon: Component;
+  action: string;
+  args: string;
+  file?: FilePathDisplay | null;
+  fileTool?: ToolCall;
+  fileOpenable?: boolean;
+}
+
 // 统一的分组标题生成：busy=存在未完成步骤，expanded 由调用方传入。
 // 展开态只显示「已执行 x 个步骤（有完成项时）+ 当前状态」，不再重复正文摘要（思考预览/工具参数）
-const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolean) => {
+const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolean): GroupTitleParts => {
   const toolSteps = countToolSteps(group.items);
   const allToolCalls = group.items.flatMap(i => i.type === 'tool' ? i.toolCalls || [] : []);
   const phase = resolveGroupTitlePhase(group.items, streamingState.value.isStreaming);
@@ -577,6 +596,8 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
         action: config.text.executing || t('chat.turn.executingSteps', { n: 1 }),
         args: getArgsText(refTool) || '',
         file: getArgsDisplay(refTool)?.file ?? null,
+        fileTool: refTool,
+        fileOpenable: false,
       };
     }
     return { icon: Wrench24Filled, action: t('chat.turn.executingSteps', { n: executing.length }), args: '' };
@@ -616,11 +637,28 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
       action: config.text.completed || t('chat.turn.executedSteps', { n: 1 }),
       args: getArgsText(refTool) || '',
       file: getArgsDisplay(refTool)?.file ?? null,
+      fileTool: refTool,
+      fileOpenable: true,
     };
   }
 
   // 混合工具 — 通用图标
   return { icon: Wrench24Filled, action: t('chat.turn.executedSteps', { n: toolSteps }), args: '' };
+};
+
+/** 收起态分组标题文件名：可打开时阻止冒泡开预览，否则让点击展开分组 */
+const canOpenGroupFile = (parts: GroupTitleParts): boolean =>
+  !!parts.fileOpenable &&
+  !!parts.fileTool &&
+  !!openWorkspaceFile &&
+  !!getToolFileOpenTarget(parts.fileTool);
+
+const onGroupFileClick = (parts: GroupTitleParts, event: MouseEvent): void => {
+  if (!parts.fileOpenable || !parts.fileTool || !openWorkspaceFile) return;
+  const target = getToolFileOpenTarget(parts.fileTool);
+  if (!target) return;
+  event.stopPropagation();
+  openWorkspaceFile(target.path);
 };
 // ============================================
 const userContent = computed(() => {
@@ -1146,4 +1184,15 @@ html.gd-resizing-moved .turn-wrapper:not(.turn-wrapper--no-cv) {
 .max-iterations-notice {
   margin-top: 12px;
 }
+/* 收起态分组标题：仅本地、已完成工具的文件名可点；hover 用主题色 + 下划线提示 */
+.group-file-chip.is-openable {
+  cursor: pointer;
+}
+
+.group-file-chip.is-openable:hover .group-file-chip__name {
+  color: var(--gd-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 </style>

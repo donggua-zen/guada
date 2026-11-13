@@ -20,10 +20,12 @@
                优先显示、hover 看全路径）+ 目录串（带尾斜杠，次要色，优先被截断） -->
           <template v-if="rowDisplays[toolIndex].file">
             <span v-if="rowDisplays[toolIndex].remoteName" class="shrink-0 ml-2 text-sm">{{ t('chat.toolCalls.remote') }}·</span>
-            <span class="inline-flex min-w-0 max-w-full items-center gap-1 ml-2"
-              :title="rowDisplays[toolIndex].file!.fullPath">
+            <span class="tool-file-chip inline-flex min-w-0 max-w-full items-center gap-1 ml-2"
+              :class="{ 'is-openable': canOpenToolFile(toolIndex) }"
+              :title="rowDisplays[toolIndex].file!.fullPath"
+              @click="openToolFile(toolIndex, $event)">
               <img :src="rowDisplays[toolIndex].fileIcon" class="w-4 h-4 shrink-0" alt="" />
-              <span class="min-w-0 truncate text-gray-600 dark:text-gray-300">{{ rowDisplays[toolIndex].file!.fileName }}</span>
+              <span class="tool-file-chip__name min-w-0 truncate text-gray-600 dark:text-gray-300">{{ rowDisplays[toolIndex].file!.fileName }}</span>
             </span>
             <span v-if="rowDisplays[toolIndex].file!.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-gray-400 dark:text-gray-500"
               :title="rowDisplays[toolIndex].file!.fullPath">{{ rowDisplays[toolIndex].file!.dirPath }}</span>
@@ -141,7 +143,7 @@ import { SUB_AGENT_SPAWN_TOOL } from '@/utils/subAgentTools';
 import { WORKFLOW_RUN_TOOL } from '@/utils/workflowTools';
 import { countDiffLines } from '@/utils/diff';
 import { extractResultContent } from '@/utils/toolResult';
-import { formatArgsTextWithRemote, getRemoteWorkspaceName } from '@/utils/toolWorkspace';
+import { formatArgsTextWithRemote, getRemoteWorkspaceName, getToolFileOpenTarget } from '@/utils/toolWorkspace';
 import { getFileIcon } from '@/composables/useFileIcon';
 import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
 import type { ToolCallResponseEntry } from '@/types/message';
@@ -189,6 +191,12 @@ const openSubAgentSession = inject<((subSessionId: string) => void) | null>(
 
 /** 宿主是否提供子代理面板入口（无入口时子代理行仍渲染，只是不可点） */
 const canOpenSubAgentPanel = openSubAgentSession !== null;
+
+/** ChatPage provide；无工作区侧边栏的宿主（Bot 会话面板等）下为 null → 文件名不可点 */
+const openWorkspaceFile = inject<((filePath: string) => void) | null>(
+  'workspace:openFile',
+  null,
+);
 
 /** 每行可跳转的子代理会话（null = 该行无唯一目标，不显示入口/不可点）。
  *  与面板入口可用性解耦：行组件需要 link.name 渲染名称，宿主无入口时也要解析。 */
@@ -327,6 +335,27 @@ const rowDisplays = computed(() => {
   span?.end({ calls: props.toolCalls.length });
   return rows;
 });
+
+/** 文件类工具：本地且已结束调用的可打开目标；远程/执行中为 null（点击仍展开行） */
+const fileOpenTargets = computed(() =>
+  props.toolCalls.map((tool, index) =>
+    getToolFileOpenTarget(tool, {
+      executing: isToolExecuting(tool, index),
+      remoteName: rowDisplays.value[index]?.remoteName,
+    }),
+  ),
+);
+
+const canOpenToolFile = (index: number): boolean =>
+  !!openWorkspaceFile && !!fileOpenTargets.value[index];
+
+/** 点击文件名：可打开时阻止冒泡并开预览；不可打开时让点击继续触发行展开 */
+const openToolFile = (index: number, event: MouseEvent): void => {
+  const target = fileOpenTargets.value[index];
+  if (!target || !openWorkspaceFile) return;
+  event.stopPropagation();
+  openWorkspaceFile(target.path);
+};
 
 // ── 定制渲染（renderer 声明：后端 display.renderer 优先，内置映射兜底） ──
 
@@ -540,4 +569,15 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   font-size: 12px;
   color: var(--gd-color-text-gray);
 }
+/* 文件类工具行：仅本地、已结束调用的文件名可点；hover 用主题色 + 下划线提示打开 */
+.tool-file-chip.is-openable {
+  cursor: pointer;
+}
+
+.tool-file-chip.is-openable:hover .tool-file-chip__name {
+  color: var(--gd-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 </style>
