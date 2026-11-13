@@ -521,9 +521,9 @@ export class PetWindowController {
   /** 拖动/按钮交互中：暂停命中判定，保持可交互 */
   private interacting = false;
   /**
-   * 进入交互态的时刻。系统睡眠/锁屏会吞掉 pointerup，渲染层收不到松手事件，
-   * 这个标志就永远不复位 —— 表现为「息屏后再打开就拖不动」。
-   * 超过 15 秒强制解除（正常拖拽不会这么久；窗口隐藏/失焦时也会主动清）。
+   * 进入交互态的时刻。系统睡眠/锁屏/熄屏会吞掉 pointerup，渲染层收不到松手事件，
+   * 这个标志就永远不复位。超时只作为**极端兜底**：主因（穿透状态被系统重置）
+   * 已由 applyIgnore 不缓存解决，这里给足够长的时间，避免误伤「按住不放」。
    */
   private interactingSince = 0;
   /** 交互态自动超时（ms） */
@@ -732,6 +732,18 @@ export class PetWindowController {
       if (this.win !== win) return;
       this.win = null;
       this.stopPoll();
+    });
+
+    // 显示/重新获得焦点时自愈：显示器省电熄屏（SC_MONITORPOWER）不会触发
+    // powerMonitor.resume，但窗口会经历 hide/show；清掉可能卡住的交互态。
+    win.on("show", () => {
+      this.interacting = false;
+      this.interactingSince = 0;
+      this.appliedIgnore = null;
+      this.startPoll();
+    });
+    win.on("focus", () => {
+      this.appliedIgnore = null;
     });
 
     // 首帧就绪前保持穿透，避免加载期挡住桌面点击
@@ -1105,11 +1117,12 @@ export class PetWindowController {
   private tick(): void {
     const win = this.win;
     if (!win || win.isDestroyed() || !win.isVisible()) return;
+    const now = Date.now();
     // 交互态超时兜底：系统睡眠/锁屏吞掉 pointerup 时，渲染层发不出 drag-end，
     // 不清掉就永远跳过命中判定（宠物再也点不到）。
     if (
       this.interacting &&
-      Date.now() - this.interactingSince > PetWindowController.INTERACT_TIMEOUT_MS
+      now - this.interactingSince > PetWindowController.INTERACT_TIMEOUT_MS
     ) {
       this.interacting = false;
       this.interactingSince = 0;
@@ -1119,9 +1132,16 @@ export class PetWindowController {
       this.applyIgnore(false);
       return;
     }
-    // 还没收到几何（首帧未就绪）→ 保持穿透，避免整窗挡住桌面
+    // 还没收到几何（首帧未就绪 / 渲染层被系统冻结后尚未恢复）→
+    // 不能保持穿透，否则宠物整块都点不到。改用整窗矩形兜底：
+    // 宁可透明区暂时挡一下桌面，也要保证唤醒后能重新拖动。
     if (!this.geometry) {
-      this.applyIgnore(true);
+      const b = win.getBounds();
+      const cursor = screen.getCursorScreenPoint();
+      const inWindow =
+        cursor.x >= b.x && cursor.x < b.x + b.width &&
+        cursor.y >= b.y && cursor.y < b.y + b.height;
+      this.applyIgnore(!inWindow);
       return;
     }
     const cursor = screen.getCursorScreenPoint();
@@ -1130,9 +1150,15 @@ export class PetWindowController {
   }
 
   private applyIgnore(ignore: boolean): void {
-    if (this.appliedIgnore === ignore) return;
     const win = this.win;
     if (!win || win.isDestroyed()) return;
+    // 不按 appliedIgnore 短路。
+    //
+    // 显示器省电熄屏（SC_MONITORPOWER）/锁屏会重置窗口的鼠标过滤状态，
+    // 且**不会**触发 powerMonitor.resume —— 但我们的缓存还以为状态没变，
+    // 于是再也不下发，宠物唤醒后彻底收不到鼠标事件（必现，非偶发）。
+    // setIgnoreMouseEvents 是幂等的，40ms 一次开销可忽略；
+    // 无条件重下发相当于一个 1 拍收敛的看门狗，覆盖所有「系统偷偷重置」场景。
     this.appliedIgnore = ignore;
     win.setIgnoreMouseEvents(ignore, { forward: true });
   }

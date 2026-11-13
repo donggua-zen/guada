@@ -813,6 +813,26 @@
     if (e.button !== 0) return;
     if (e.target.closest && e.target.closest('.act')) return; // 按钮自己处理
     if (e.target.closest && e.target.closest('.pet-row')) return; // 列表行自己处理（点行=打开）
+    // 上一次拖拽的 pointerup 被系统吞掉了（熄屏/锁屏），drag.active 还卡着。
+    // 旧的 pointerId 可能仍被 setPointerCapture 占着，不先释放会让新的按下
+    // 收不到后续事件 —— 表现为「唤醒后完全拖不动」。这里强制收尾再重新开始。
+    if (drag.active) {
+      try {
+        if (drag.pointerId !== null) document.body.releasePointerCapture(drag.pointerId);
+      } catch (err) { /* 已自动释放 */ }
+      drag.active = false;
+      drag.moved = false;
+      drag.pointerId = null;
+      document.body.classList.remove('is-dragging');
+      if (bubbleHidden) {
+        bubbleHidden = false;
+        updateBubble();
+      }
+      // 主进程可能还停在 interacting=true，让它退出并按新拖拽重新进入
+      api.dragEnd();
+    }
+    // 诊断计数：主进程/测试可读，用来区分「事件没进渲染层」与「主进程穿透没放开」
+    window.__petPointerDownCount = (window.__petPointerDownCount || 0) + 1;
     drag.active = true;
     drag.moved = false;
     drag.pointerId = e.pointerId;
