@@ -128,6 +128,10 @@ const petAPI = {
   reportHitGeometry: (geometry: PetHitGeometry) =>
     ipcRenderer.send("pet:hit-geometry", geometry),
 
+  /** 诊断：pointerdown 到达渲染层（主进程据此打日志，区分「事件没进来」与「没放开」） */
+  debugPointer: (x: number, y: number) =>
+    ipcRenderer.send("pet:debug-pointer", { x, y }),
+
   /** 命中心跳：forward 的 mousemove 到达渲染层时通知主进程放开穿透 */
   hitHeartbeat: () => ipcRenderer.send("pet:hit-heartbeat"),
   hitLeave: () => ipcRenderer.send("pet:hit-leave"),

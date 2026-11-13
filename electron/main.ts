@@ -2178,6 +2178,11 @@ function setupIpcHandlers() {
   // 这是「息屏唤醒后拖不动」的关键恢复通道（不依赖 cursor 坐标或系统事件）。
   ipcMain.on("pet:hit-heartbeat", () => petWindow?.noteHitHeartbeat());
   ipcMain.on("pet:hit-leave", () => petWindow?.clearHitHeartbeat());
+  // 诊断：确认 pointerdown 是否真的到达渲染层（排查「拖不动」时分界点）
+  ipcMain.on("pet:debug-pointer", (_e, pos: unknown) => {
+    const p = pos as { x?: number; y?: number } | undefined;
+    log.info(`[pet] pointerdown at ${p?.x ?? "?"},${p?.y ?? "?"}`);
+  });
 
   // 桌宠拖动：按下即进入交互态（暂停命中判定），移动按屏幕增量走
   ipcMain.on("pet:drag-move", (_, delta: { dx: number; dy: number }) => {
@@ -3397,6 +3402,13 @@ app.whenReady().then(async () => {
     }
 
     log.info("Application initialized");
+    // 构建标记：排查「改动没生效」时一眼看出跑的是哪一份代码
+    try {
+      const st = fs.statSync(__filename);
+      log.info(`[build] main.js mtime=${st.mtime.toISOString()}`);
+    } catch {
+      /* 忽略 */
+    }
   } catch (error: any) {
     log.error("Application initialization failed:", error);
     app.quit();

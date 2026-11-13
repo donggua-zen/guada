@@ -520,6 +520,11 @@ export class PetWindowController {
   private pollTimer: NodeJS.Timeout | null = null;
   /** 最近一次下发的窗口形状（JSON），避免动画每帧重复调用 setShape */
   private lastShapeKey: string | null = null;
+  /**
+   * 新窗口的首次 show 由我们主动触发（showInactive），
+   * 这一跳不该再触发「重建」，否则会无限递归。
+   */
+  private skipNextShowRebuild = false;
   /** 拖动/按钮交互中：暂停命中判定，保持可交互 */
   private interacting = false;
   /**
@@ -568,61 +573,17 @@ export class PetWindowController {
   /**
    * WIN+L 解锁后的恢复。
    *
-   * 不用「无条件重建窗口」——重建必然有一帧空白，用户看到的就是「闪一下」。
-   * Qoder 的做法也佐证了这点：它给宠物根节点加 opacity 过渡做淡出，
-   * 并不销毁窗口。
+   * 实测结论（网格点击验证）：hide→show 之后窗口表面会失效 ——
+   * 所有像素 alpha 归零，点击全部穿透，命中数 5/15 → 0/15；
+   * setShape / setAlwaysOnTop / setFocusable / setIgnoreMouseEvents 都救不回，
+   * 只有「重建窗口」能恢复（重建后 6/15）。
    *
-   * 正确流程：先探活渲染层，活着就只重置鼠标/交互状态（无视觉变化）；
-   * 只有渲染层真的死了才重建（极少见，此时闪一下是可接受的代价）。
+   * 所以这里直接走无缝重建（新旧窗重叠，用户看不到白帧），
+   * 不再尝试原地修补 —— 那条路已经证明无效。
    */
   async rebuildAfterUnlock(): Promise<void> {
     if (!this.enabled) return;
-    const win = this.win;
-    if (!win || win.isDestroyed()) {
-      this.ensureWindow();
-      return;
-    }
-
-    // 探活：executeJavaScript 能返回就说明 renderer 还活着
-    let rendererAlive = false;
-    try {
-      const v = await Promise.race([
-        win.webContents.executeJavaScript("1", true),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("probe timeout")), 1500),
-        ),
-      ]);
-      rendererAlive = v === 1;
-    } catch (error) {
-      log.warn("[pet] unlock: renderer 探活失败，准备重建", error);
-    }
-
-    if (rendererAlive) {
-      // 原地恢复：重新武装 forward 转发（不重建窗口，无视觉变化）。
-      // 这是锁屏后能拖动的关键 —— 不是清状态，是重新下发穿透转发。
-      this.rearmInput(win);
-      this.send("pet:unlock", { at: Date.now() });
-      log.info("[pet] screen unlocked, recovered in place (no rebuild)");
-      return;
-    }
-
-    // 渲染层已死，只能重建
-    log.info("[pet] screen unlocked, renderer dead → rebuilding window");
-    this.stopPoll();
-    const old = this.win;
-    this.win = null;
-    this.geometry = null;
-    this.interacting = false;
-    this.interactingSince = 0;
-    this.hitHeartbeatAt = 0;
-    this.appliedIgnore = null;
-    if (old && !old.isDestroyed()) {
-      setTimeout(() => {
-        if (!old.isDestroyed()) old.destroy();
-      }, 0);
-    }
-    const fresh = this.ensureWindow();
-    if (fresh) fresh.showInactive();
+    await this.seamlessRebuild("unlock");
   }
 
   /**
@@ -639,6 +600,70 @@ export class PetWindowController {
     win.webContents.send("pet:reset-hover");
     this.startPoll();
     this.tick();
+  }
+
+  /**
+   * 无缝重建窗口：新窗先在后台加载，就绪后显示并销毁旧窗。
+   *
+   * 为什么必须重建：实测 hide→show（WIN+L 锁屏正是这类）之后，
+   * 窗口表面会失效 —— 所有像素 alpha 归零，鼠标点击全部穿透，
+   * setShape / setAlwaysOnTop / setFocusable / setIgnoreMouseEvents 都救不回
+   * （网格点击命中数 5/15 → 0/15 → 重建后 6/15）。
+   *
+   * 为什么要「无缝」：直接销毁再建会有一段空白（用户看到的「闪一下」）。
+   * 这里让新旧窗口在**同一位置重叠**：新窗 show 的瞬间内容已就绪，
+   * 再延迟一帧销毁旧窗，视觉上连续。
+   */
+  async seamlessRebuild(reason = "unlock"): Promise<void> {
+    if (!this.enabled) return;
+    const old = this.win;
+    if (!old || old.isDestroyed()) {
+      this.ensureWindow();
+      return;
+    }
+
+    // 位置先落盘，新窗按同一坐标创建（保证重叠，不闪）
+    this.persistPosition();
+    this.stopPoll();
+    // 摘掉引用：旧窗的 closed 回调会因 this.win !== win 而跳过
+    this.win = null;
+    this.geometry = null;
+    this.lastShapeKey = null;
+    this.interacting = false;
+    this.interactingSince = 0;
+    this.hitHeartbeatAt = 0;
+
+    const fresh = this.ensureWindow();
+    if (!fresh) {
+      if (!old.isDestroyed()) old.destroy();
+      return;
+    }
+
+    // 等新窗首帧画好再显示（did-finish-load + 一帧），避免露出空白
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      fresh.webContents.once("did-finish-load", () => setTimeout(finish, 120));
+      // 兜底：页面异常时也别把旧窗留着
+      setTimeout(finish, 2000);
+    });
+
+    if (fresh.isDestroyed()) {
+      if (!old.isDestroyed()) old.destroy();
+      return;
+    }
+    // 新窗的首次 show 是「装载显示」，不该再触发重建
+    this.skipNextShowRebuild = true;
+    fresh.showInactive();
+    // 新窗已经开始绘制后再移除旧窗，避免中间出现空帧
+    setTimeout(() => {
+      if (!old.isDestroyed()) old.destroy();
+    }, 150);
+    log.info(`[pet] 窗口已无缝重建（${reason}）`);
   }
 
   /** 当前形象的素材目录 */
@@ -816,16 +841,22 @@ export class PetWindowController {
       this.stopPoll();
     });
 
-    // 显示时重算窗口形状。窗口 region（setShape）不会被锁屏重置，
-    // 所以这里只是清缓存让形状重新下发一次（Windows 上 setShape 是幂等的）。
+    // 显示时：hide→show 之后窗口表面会失效（点击全部穿透，实测命中 0/15），
+    // 只能重建；用 seamlessRebuild 让新旧窗重叠，避免闪一下。
     win.on("show", () => {
-      this.interacting = false;
-      this.interactingSince = 0;
-      this.hitHeartbeatAt = 0;
-      this.lastShapeKey = null;
-      win.webContents.send("pet:reset-hover");
-      this.startPoll();
-      this.tick();
+      // 新建窗口的首次 show 不需要重建（内容刚加载，表面是新的）
+      if (this.skipNextShowRebuild) {
+        this.skipNextShowRebuild = false;
+        this.interacting = false;
+        this.interactingSince = 0;
+        this.hitHeartbeatAt = 0;
+        this.lastShapeKey = null;
+        win.webContents.send("pet:reset-hover");
+        this.startPoll();
+        this.tick();
+        return;
+      }
+      void this.seamlessRebuild("show");
     });
     win.on("focus", () => {
       this.appliedIgnore = null;
@@ -891,6 +922,7 @@ export class PetWindowController {
     const win = this.ensureWindow();
     if (!win) return;
     if (!win.isVisible()) {
+      this.skipNextShowRebuild = true;
       win.showInactive();
       // 重新显示后强制重新判定一次穿透
       this.appliedIgnore = null;
@@ -1317,6 +1349,10 @@ export class PetWindowController {
     this.lastShapeKey = key;
     try {
       win.setShape(rects);
+      // 诊断：只在形状真的变化时打，便于定位「锁屏后形状/点击」问题
+      log.info(
+        `[pet] setShape ${rects.map((r) => `${r.x},${r.y} ${r.width}x${r.height}`).join(" | ") || "(空)"} interacting=${this.interacting}`,
+      );
       // 形状生效后窗口不应再忽略鼠标，否则点击仍会被吞
       if (this.appliedIgnore !== false) {
         win.setIgnoreMouseEvents(false);

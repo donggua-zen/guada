@@ -864,8 +864,9 @@
       // 主进程可能还停在 interacting=true，让它退出并按新拖拽重新进入
       api.dragEnd();
     }
-    // 诊断计数：主进程/测试可读，用来区分「事件没进渲染层」与「主进程穿透没放开」
+    // 诊断计数：主进程/测试可读，用来区分「事件没进渲染层」与「主进程没放开」
     window.__petPointerDownCount = (window.__petPointerDownCount || 0) + 1;
+    if (api.debugPointer) api.debugPointer(e.clientX, e.clientY);
     drag.active = true;
     drag.moved = false;
     drag.pointerId = e.pointerId;
