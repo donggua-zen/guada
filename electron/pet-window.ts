@@ -520,6 +520,14 @@ export class PetWindowController {
   private pollTimer: NodeJS.Timeout | null = null;
   /** 拖动/按钮交互中：暂停命中判定，保持可交互 */
   private interacting = false;
+  /**
+   * 进入交互态的时刻。系统睡眠/锁屏会吞掉 pointerup，渲染层收不到松手事件，
+   * 这个标志就永远不复位 —— 表现为「息屏后再打开就拖不动」。
+   * 超过 15 秒强制解除（正常拖拽不会这么久；窗口隐藏/失焦时也会主动清）。
+   */
+  private interactingSince = 0;
+  /** 交互态自动超时（ms） */
+  private static readonly INTERACT_TIMEOUT_MS = 15_000;
   /** 当前是否应当显示（由设置开关驱动） */
   private enabled = false;
   private opacity = 95;
@@ -808,6 +816,9 @@ export class PetWindowController {
     this.win?.hide();
     this.stopPoll();
     this.appliedIgnore = null;
+    // 隐藏时清掉交互态，避免下次显示时还以为在拖拽
+    this.interacting = false;
+    this.interactingSince = 0;
   }
 
   /** 主进程 → 渲染层：状态（模式/计数/标题/工具名） */
@@ -907,7 +918,44 @@ export class PetWindowController {
 
   setInteracting(interacting: boolean): void {
     this.interacting = interacting;
+    this.interactingSince = interacting ? Date.now() : 0;
     if (interacting) this.applyIgnore(false);
+  }
+
+  /** 当前交互态（测试/诊断用） */
+  isInteracting(): boolean {
+    return this.interacting;
+  }
+
+  /** 当前穿透状态（测试/诊断用；null = 尚未下发） */
+  getAppliedIgnore(): boolean | null {
+    return this.appliedIgnore;
+  }
+
+  /**
+   * 系统从睡眠/锁屏唤醒。
+   *
+   * 两件事必须做：
+   * 1. 强制清掉 interacting —— 睡眠时系统吞掉了 pointerup，渲染层
+   *    永远发不出 pet:drag-end，卡在这个状态会导致命中判定一直被跳过；
+   * 2. 作废 appliedIgnore 缓存并**重新下发** setIgnoreMouseEvents ——
+   *    Chromium / DWM 在显示器关闭又恢复后可能重置窗口的鼠标过滤状态，
+   *    但我们的缓存还以为没变，于是再也不会调用，宠物就收不到任何点击。
+   */
+  onSystemResume(): void {
+    this.interacting = false;
+    this.interactingSince = 0;
+    this.appliedIgnore = null;
+    if (!this.isAlive() || !this.win!.isVisible() || !this.enabled) return;
+    // 先无条件放到不穿透，再让 tick 按光标位置重新判定。
+    // 这样即使系统把它重置成了穿透/不穿透中的任一种，都能收敛到正确状态。
+    try {
+      this.win!.setIgnoreMouseEvents(false, { forward: true });
+    } catch {
+      /* 窗口可能正在销毁 */
+    }
+    this.tick();
+    this.pushClip();
   }
 
   /** 按屏幕增量移动窗口（渲染层拖拽） */
@@ -1057,6 +1105,16 @@ export class PetWindowController {
   private tick(): void {
     const win = this.win;
     if (!win || win.isDestroyed() || !win.isVisible()) return;
+    // 交互态超时兜底：系统睡眠/锁屏吞掉 pointerup 时，渲染层发不出 drag-end，
+    // 不清掉就永远跳过命中判定（宠物再也点不到）。
+    if (
+      this.interacting &&
+      Date.now() - this.interactingSince > PetWindowController.INTERACT_TIMEOUT_MS
+    ) {
+      this.interacting = false;
+      this.interactingSince = 0;
+      this.appliedIgnore = null;
+    }
     if (this.interacting) {
       this.applyIgnore(false);
       return;

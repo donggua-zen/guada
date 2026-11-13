@@ -13,6 +13,7 @@ import {
   powerSaveBlocker,
   powerMonitor,
   Notification,
+  screen,
 } from "electron";
 import * as path from "path";
 import * as os from "os";
@@ -3318,6 +3319,9 @@ app.whenReady().then(async () => {
     // 比等 bind 失败再退避重试更快，也覆盖了「旧连接僵死但未报错」的情况。
     powerMonitor.on("resume", () => {
       log.info("System resumed from sleep, kicking bridge to rebuild mobile tunnel");
+      // 桌宠：睡眠会吞掉 pointerup 且系统可能重置窗口的鼠标过滤状态，
+      // 必须强制清交互态并重新下发穿透设置，否则唤醒后宠物拖不动。
+      petWindow?.onSystemResume();
       // 等 3s 让网络栈就绪（Wi-Fi 重关联），再断开 bridge；后端会在 1s 内重连
       setTimeout(() => {
         try {
@@ -3326,6 +3330,19 @@ app.whenReady().then(async () => {
           log.warn("kick bridge connections failed:", err);
         }
       }, 3000);
+      // 显示器热插拔/分辨率变化会在 resume 后稍晚到达，补一次自愈
+      setTimeout(() => petWindow?.onSystemResume(), 1500);
+    });
+
+    // 锁屏解锁同样可能吞掉指针事件
+    powerMonitor.on("unlock-screen", () => {
+      petWindow?.onSystemResume();
+    });
+
+    // 显示器数量/分辨率变化（息屏常伴随）→ 重新夹位置 + 重算穿透
+    screen.on("display-metrics-changed", () => {
+      petWindow?.onSystemResume();
+      petWindow?.persistPosition();
     });
 
     // 将 Bridge 路径和 token 通过环境变量传递给后端

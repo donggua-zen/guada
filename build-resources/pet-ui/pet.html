@@ -870,6 +870,15 @@
     if (drag.active) endDrag();
   });
 
+  // 系统睡眠/锁屏会吞掉 pointerup，drag.active 可能永远卡住 → 唤醒后拖不动。
+  // 页面重新可见时强制收尾（visibilitychange 在 Electron 唤醒时可靠触发）。
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') return;
+    if (drag.active) endDrag();
+    // 渲染层的命中几何可能与系统恢复后的窗口位置不同步，重报一次
+    reportGeometry();
+  });
+
   document.addEventListener('contextmenu', function (e) {
     e.preventDefault();
     api.contextMenu({ x: e.screenX, y: e.screenY });
