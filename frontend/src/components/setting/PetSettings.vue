@@ -4,13 +4,20 @@
     <div class="mb-4 flex items-center gap-2">
       <PluginViewSwitch v-model="view" :items="viewItems" />
       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
-        {{ view === 'market' ? t('settings.pet.marketHint') : t('settings.pet.avatarHint') }}
+        {{ view === 'market'
+          ? t('settings.pet.marketHint')
+          : view === 'import'
+            ? t('settings.pet.importHint')
+            : t('settings.pet.avatarHint') }}
       </span>
     </div>
 
-    <!-- 市场视图常驻（切走不销毁，搜索词/滚动位置保留） -->
+    <!-- 市场 / 导入视图常驻（切走不销毁） -->
     <div v-show="view === 'market'" class="min-h-0 flex-1">
       <PetMarketView @installed="(id) => { void afterImport(id) }" />
+    </div>
+    <div v-show="view === 'import'" class="min-h-0 flex-1 overflow-y-auto pr-1">
+      <PetImportView @imported="(id) => { void afterImport(id) }" />
     </div>
 
     <div v-show="view === 'avatars'" class="min-h-0 flex-1 space-y-8 overflow-y-auto pr-1">
@@ -21,15 +28,18 @@
         </h3>
         <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-(--gd-color-surface) p-4">
           <div v-if="avatars.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            <button
+            <div
               v-for="avatar in avatars"
               :key="avatar.id"
-              type="button"
-              class="group relative flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all duration-150"
+              role="button"
+              tabindex="0"
+              class="group relative flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all duration-150"
               :class="avatar.id === selectedAvatarId
                 ? 'border-[#409eff] bg-[#409eff]/5'
                 : 'border-gray-200 dark:border-[#2e3035] hover:border-[#409eff]/50'"
               @click="selectAvatar(avatar.id)"
+              @keyup.enter="selectAvatar(avatar.id)"
+              @keyup.space.prevent="selectAvatar(avatar.id)"
             >
               <img
                 v-if="avatar.previewDataUrl || atlasPreviews[avatar.id]"
@@ -56,35 +66,21 @@
                 v-if="avatar.id === selectedAvatarId"
                 class="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-[#409eff] text-[10px] text-white"
               >✓</span>
-            </button>
+              <!-- 卸载：只有用户安装的形象可删，内置的柒不可删 -->
+              <button
+                v-if="canUninstall(avatar)"
+                type="button"
+                class="absolute bottom-1.5 right-1.5 rounded px-1.5 py-0.5 text-[10px] leading-none text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 dark:hover:bg-red-950/40"
+                :title="t('settings.pet.uninstall')"
+                :disabled="uninstalling === avatar.id"
+                @click.stop="handleUninstall(avatar)"
+              >
+                {{ uninstalling === avatar.id ? '…' : t('settings.pet.uninstall') }}
+              </button>
+            </div>
           </div>
           <div v-else class="text-xs text-gray-500 dark:text-[#8b8d95]">
             {{ t('settings.pet.emptyAvatars') }}
-          </div>
-
-          <!-- 导入入口：切到市场 tab / 本地文件夹 / Petdex 命令行 -->
-          <div class="mt-4 flex flex-wrap items-center gap-2">
-            <GdButton size="small" type="primary" @click="view = 'market'">
-              {{ t('settings.pet.browseMarket') }}
-            </GdButton>
-            <GdButton size="small" :loading="importing" @click="handleImportFolder">
-              {{ t('settings.pet.importFolder') }}
-            </GdButton>
-            <div class="flex items-center gap-2">
-              <GdInput
-                v-model="petdexSlug"
-                size="small"
-                :placeholder="t('settings.pet.petdexPlaceholder')"
-                style="width: 160px;"
-                @keyup.enter="handleInstallPetdex"
-              />
-              <GdButton size="small" :loading="installing" @click="handleInstallPetdex">
-                {{ t('settings.pet.installPetdex') }}
-              </GdButton>
-            </div>
-            <GdButton size="small" text @click="handleOpenFolder">
-              {{ t('settings.pet.openFolder') }}
-            </GdButton>
           </div>
 
           <p class="mt-3 text-xs text-gray-500 dark:text-[#8b8d95]">
@@ -168,14 +164,13 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GdSwitch from '@/components/ui/GdSwitch.vue'
 import GdSlider from '@/components/ui/GdSlider.vue'
-import GdButton from '@/components/ui/GdButton.vue'
-import GdInput from '@/components/ui/GdInput.vue'
 import PluginViewSwitch from '@/components/plugins/PluginViewSwitch.vue'
 import PetMarketView from './PetMarketView.vue'
-import { confirmPetInstall } from '@/utils/petInstall'
+import PetImportView from './PetImportView.vue'
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
 import { toast } from '@/components/ui/toastService'
+import { usePopup } from '@/composables/usePopup'
 
 interface PetAvatarOption {
   id: string
@@ -205,11 +200,12 @@ const sourceBadgeClass = (avatar: PetAvatarOption): string =>
     ? 'bg-[#409eff]/15 text-[#2b7cd3]'
     : 'bg-gray-500/15 text-gray-600 dark:text-[#b9bbc1]'
 
-/** 二级视图：形象 / 市场（常驻，不销毁） */
-const view = ref<'avatars' | 'market'>('avatars')
+/** 二级视图：形象 / 市场 / 导入（常驻，不销毁） */
+const view = ref<'avatars' | 'market' | 'import'>('avatars')
 const viewItems = computed(() => [
   { value: 'avatars' as const, label: t('settings.pet.avatarTitle') },
   { value: 'market' as const, label: t('settings.pet.marketTitle') },
+  { value: 'import' as const, label: t('settings.pet.importTab') },
 ])
 
 const avatars = ref<PetAvatarOption[]>([])
@@ -222,14 +218,11 @@ const opacity = ref(layoutStore.petOpacity)
 const scalePercent = ref(Math.round(layoutStore.getPetScaleOf(layoutStore.petAvatarId) * 100))
 /** 播放速度（百分比，25–200；100 = Codex 官方节奏） */
 const speedPercent = ref(Math.round(layoutStore.petAnimationSpeed * 100))
-/** Petdex 安装输入框 / 两个导入按钮的忙闲态 */
-const petdexSlug = ref('')
-const importing = ref(false)
-const installing = ref(false)
+/** 正在卸载的形象 id */
+const uninstalling = ref<string | null>(null)
 
 /**
- * 导入成功后统一收尾：刷新列表、选中新形象、落盘设置。
- * 主进程已经校验过素材，这里只负责让 UI 立刻跟上。
+ * 市场安装成功后统一收尾：刷新列表、选中新形象、落盘设置。
  */
 const afterImport = async (id: string) => {
   await loadAvatars()
@@ -240,51 +233,46 @@ const afterImport = async (id: string) => {
   }
 }
 
-const handleImportFolder = async () => {
-  if (!window.electronAPI?.importPetAvatar) return
-  importing.value = true
-  try {
-    const result = await window.electronAPI.importPetAvatar()
-    if (!result.ok) {
-      // 用户主动取消不算错误，不弹提示
-      if (result.error !== '已取消') toast.error(result.error || t('settings.pet.importFailed'))
-      return
-    }
-    await afterImport(result.id as string)
-    toast.success(t('settings.pet.importSuccess'))
-  } catch (error) {
-    console.error('导入桌宠失败:', error)
-    toast.error(t('settings.pet.importFailed'))
-  } finally {
-    importing.value = false
-  }
-}
+/**
+ * 卸载（只有 `source === 'user'` 且非内置柒可卸载）。
+ * 外部只读目录（Petdex/Codex）和安装包内的柒都不能动。
+ */
+const canUninstall = (avatar: PetAvatarOption): boolean =>
+  avatar.source === 'user' && avatar.id !== 'silver-haired'
 
-const handleInstallPetdex = async () => {
-  const slug = petdexSlug.value.trim()
-  if (!slug || !window.electronAPI?.installPetdex || installing.value) return
-  // 与市场卡片共用同一个 UI 确认弹窗
-  const ok = await confirmPetInstall(slug)
+const handleUninstall = async (avatar: PetAvatarOption) => {
+  if (!canUninstall(avatar) || uninstalling.value || !window.electronAPI?.uninstallPetAvatar) return
+  const { confirm } = usePopup()
+  const ok = await confirm(
+    t('settings.pet.uninstallConfirmTitle'),
+    t('settings.pet.uninstallConfirmContent', { name: avatar.name }),
+    { type: 'warning', size: 'sm', danger: true, confirmText: t('settings.pet.uninstall') },
+  )
   if (!ok) return
-  installing.value = true
+  uninstalling.value = avatar.id
   try {
-    const result = await window.electronAPI.installPetdex(slug)
-    if (!result.ok) {
-      toast.error(result.error || t('settings.pet.importFailed'))
+    const result = await window.electronAPI.uninstallPetAvatar(avatar.id)
+    // 删完刷新列表；若该 id 已经不在了，说明删除其实成功，
+    // 别让收尾阶段的 IPC 异常反过来弹「卸载失败」（主进程也已做对应兜底）
+    await loadAvatars()
+    const stillThere = avatars.value.some((a) => a.id === avatar.id && a.source === 'user')
+    if (!result.ok && stillThere) {
+      toast.error(result.error || t('settings.pet.uninstallFailed'))
       return
     }
-    petdexSlug.value = ''
-    await afterImport(result.id as string)
-    toast.success(t('settings.pet.importSuccess'))
+    // 删的若是当前形象，主进程已把它切回柒；这里同步回显
+    const current = avatars.value.find((a) => a.id === selectedAvatarId.value)
+    if (!current) selectedAvatarId.value = 'silver-haired'
+    scalePercent.value = Math.round(layoutStore.getPetScaleOf(selectedAvatarId.value) * 100)
+    await handleSave()
+    toast.success(t('settings.pet.uninstallSuccess'))
   } catch (error) {
-    console.error('Petdex 安装失败:', error)
-    toast.error(t('settings.pet.importFailed'))
+    console.error('卸载桌宠失败:', error)
+    toast.error(t('settings.pet.uninstallFailed'))
   } finally {
-    installing.value = false
+    uninstalling.value = null
   }
 }
-
-const handleOpenFolder = () => window.electronAPI?.openPetsFolder?.()
 
 /**
  * 从图集裁出一格当预览。
@@ -327,7 +315,7 @@ async function buildAtlasPreviews() {
 }
 
 /** 形象列表来自主进程扫盘（build-resources/pets/*），浏览器环境没有该能力 */
-const loadAvatars = async () => {
+const loadAvatars = async (): Promise<void> => {
   if (!window.electronAPI?.listPetAvatars) {
     avatars.value = []
     return
