@@ -2173,6 +2173,12 @@ function setupIpcHandlers() {
     );
   });
 
+  // 命中心跳：窗口穿透时 forward 只转发 mousemove，渲染层收到就上报，
+  // 主进程据此放开穿透，让后续的 pointerdown 能进入渲染层。
+  // 这是「息屏唤醒后拖不动」的关键恢复通道（不依赖 cursor 坐标或系统事件）。
+  ipcMain.on("pet:hit-heartbeat", () => petWindow?.noteHitHeartbeat());
+  ipcMain.on("pet:hit-leave", () => petWindow?.clearHitHeartbeat());
+
   // 桌宠拖动：按下即进入交互态（暂停命中判定），移动按屏幕增量走
   ipcMain.on("pet:drag-move", (_, delta: { dx: number; dy: number }) => {
     if (!delta) return;
@@ -2360,6 +2366,9 @@ function setupIpcHandlers() {
     }
     return { ok: false, error: direct.error || result.error };
   });
+
+  // 桌宠：诊断快照（排查「唤醒后拖不动」时读一次即可定位是哪一环）
+  ipcMain.handle("pet:debug-state", () => petWindow?.debugState() ?? null);
 
   // 桌宠：用户形象目录路径（设置页「导入」tab 展示/复制用）
   ipcMain.handle("pet:pets-dir", () => userPetsDir());
@@ -3334,9 +3343,16 @@ app.whenReady().then(async () => {
       setTimeout(() => petWindow?.onSystemResume(), 1500);
     });
 
-    // 锁屏解锁同样可能吞掉指针事件
-    powerMonitor.on("unlock-screen", () => {
+    // 锁屏 / 解锁（WIN+L）：Windows 不触发 resume，这是会话切换到安全桌面。
+    // 锁屏后 Chromium/DWM 的窗口鼠标状态会失同步且不会自愈，
+    // 所以解锁时直接重建桌宠窗口（比修补状态可靠）。
+    powerMonitor.on("lock-screen", () => {
+      log.info("[pet] screen locked");
       petWindow?.onSystemResume();
+    });
+    powerMonitor.on("unlock-screen", () => {
+      log.info("[pet] screen unlocked, rebuilding pet window");
+      petWindow?.rebuildAfterUnlock();
     });
 
     // 显示器数量/分辨率变化（息屏常伴随）→ 重新夹位置 + 重算穿透

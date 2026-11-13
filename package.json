@@ -57,6 +57,8 @@
     "test:pet-uninstall": "pnpm run build:electron-ts && node scripts/test-pet-uninstall.js",
     "test:pet-resume:electron": "pnpm run build:electron-ts && node scripts/run-electron.cjs scripts/test-pet-resume-electron.js",
     "test:pet-stale-drag:electron": "pnpm run build:electron-ts && node scripts/run-electron.cjs scripts/test-pet-stale-drag-electron.js",
+    "test:pet-heartbeat:electron": "pnpm run build:electron-ts && node scripts/run-electron.cjs scripts/test-pet-heartbeat-electron.js",
+    "test:pet-unlock:electron": "pnpm run build:electron-ts && node scripts/run-electron.cjs scripts/test-pet-unlock-electron.js",
     "bake:pet-assets": "node scripts/bake-pet-assets.mjs",
     "pet:validate": "node scripts/validate-pet-atlas.mjs",
     "pet:adopt": "node scripts/adopt-codex-pet.mjs",

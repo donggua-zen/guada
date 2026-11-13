@@ -113,6 +113,10 @@ const petAPI = {
    */
   reportHitGeometry: (geometry: PetHitGeometry) =>
     ipcRenderer.send("pet:hit-geometry", geometry),
+
+  /** 命中心跳：forward 的 mousemove 到达渲染层时通知主进程放开穿透 */
+  hitHeartbeat: () => ipcRenderer.send("pet:hit-heartbeat"),
+  hitLeave: () => ipcRenderer.send("pet:hit-leave"),
 };
 
 contextBridge.exposeInMainWorld("petAPI", petAPI);

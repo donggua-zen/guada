@@ -528,6 +528,10 @@ export class PetWindowController {
   private interactingSince = 0;
   /** 交互态自动超时（ms） */
   private static readonly INTERACT_TIMEOUT_MS = 15_000;
+  /** 渲染层命中心跳的有效期（ms） */
+  private static readonly HIT_HEARTBEAT_TTL_MS = 600;
+  /** 最近一次「光标在宠物上」心跳的时刻 */
+  private hitHeartbeatAt = 0;
   /** 当前是否应当显示（由设置开关驱动） */
   private enabled = false;
   private opacity = 95;
@@ -557,6 +561,39 @@ export class PetWindowController {
       this.avatarId = wanted;
     }
     this.format = this.detectFormat();
+  }
+
+  /**
+   * WIN+L 解锁后重建窗口。
+   *
+   * 锁屏是会话切换到安全桌面，Windows 不触发 powerMonitor.resume；
+   * 锁屏期间 Chromium/DWM 会重置窗口的鼠标过滤/渲染状态，且不会自愈，
+   * 修补 interacting / appliedIgnore 都不够（用户实测必现）。
+   * 直接重建窗口是唯一确定的解法：位置、开关、大小、速度全部沿用。
+   */
+  rebuildAfterUnlock(): void {
+    // enabled 是唯一判据：锁屏期间 isVisible() 可能失真，不能拿它决定是否重建
+    if (!this.enabled) return;
+    const wasAlive = this.isAlive();
+    // 先停轮询并销毁旧窗（身份判断见 closed 回调）
+    this.stopPoll();
+    const old = this.win;
+    this.win = null;
+    this.geometry = null;
+    this.interacting = false;
+    this.interactingSince = 0;
+    this.hitHeartbeatAt = 0;
+    this.appliedIgnore = null;
+    if (old && !old.isDestroyed()) {
+      // 延后销毁：同一 tick 内 destroy 会打断新窗口对同一个 file:// 的 loadFile
+      // （实测 ERR_FAILED -2）。先让新窗开始加载，再在下一 tick 清掉旧窗。
+      setTimeout(() => {
+        if (!old.isDestroyed()) old.destroy();
+      }, 0);
+    }
+    if (!wasAlive) return;
+    const fresh = this.ensureWindow();
+    if (fresh) fresh.showInactive();
   }
 
   /** 当前形象的素材目录 */
@@ -837,6 +874,9 @@ export class PetWindowController {
   pushState(state: PetStatePayload): void {
     this.lastState = state;
     this.send("pet:state", state);
+    // 前端每 2s 推一次状态，正好当作「进程还活着」的心跳：唤醒后强制重算穿透，
+    // 不依赖 powerMonitor / isVisible() / 光标坐标。
+    this.tick();
   }
 
   /** 主进程 → 渲染层：透明度 + 宠物显示高度 + 播放倍速 */
@@ -900,6 +940,18 @@ export class PetWindowController {
     if (this.lastState) this.pushState(this.lastState);
   }
 
+  /** 渲染层上报「光标在宠物上」（forward 的 mousemove 触发，比主进程取坐标可靠） */
+  noteHitHeartbeat(): void {
+    this.hitHeartbeatAt = Date.now();
+    this.tick();
+  }
+
+  /** 渲染层上报「光标离开宠物」 */
+  clearHitHeartbeat(): void {
+    this.hitHeartbeatAt = 0;
+    this.tick();
+  }
+
   /** 渲染层上报命中几何（图片矩形 + 气泡矩形） */
   setHitGeometry(geometry: PetHitGeometry | null): void {
     const valid = (r: PetRect | null | undefined): r is PetRect =>
@@ -942,6 +994,33 @@ export class PetWindowController {
   /** 当前穿透状态（测试/诊断用；null = 尚未下发） */
   getAppliedIgnore(): boolean | null {
     return this.appliedIgnore;
+  }
+
+  /** 诊断快照：唤醒后从主进程日志或 IPC 读，定位「到底哪一环死了」 */
+  debugState(): Record<string, unknown> {
+    const win = this.win;
+    let cursor: { x: number; y: number } | null = null;
+    try {
+      cursor = screen.getCursorScreenPoint();
+    } catch {
+      /* 显示器拓扑变化时可能抛 */
+    }
+    return {
+      alive: this.isAlive(),
+      visible: win ? win.isVisible() : false,
+      enabled: this.enabled,
+      interacting: this.interacting,
+      appliedIgnore: this.appliedIgnore,
+      pollRunning: Boolean(this.pollTimer),
+      hasGeometry: Boolean(this.geometry),
+      heartbeatAgeMs: this.hitHeartbeatAt ? Date.now() - this.hitHeartbeatAt : -1,
+      bounds: win && !win.isDestroyed() ? win.getBounds() : null,
+      cursor,
+      hitByBBox:
+        cursor && this.geometry && win && !win.isDestroyed()
+          ? resolvePetHit(cursor, win.getBounds(), this.geometry)
+          : null,
+    };
   }
 
   /**
@@ -1116,36 +1195,40 @@ export class PetWindowController {
 
   private tick(): void {
     const win = this.win;
-    if (!win || win.isDestroyed() || !win.isVisible()) return;
+    // 只用「是否销毁」把关，**不要用 isVisible()**：
+    // 显示器省电熄屏时 Windows/DWM 会把窗口判为 occluded，isVisible() 可能
+    // 返回 false 并持续一段时间；tick 提前 return 就再也不下发穿透状态，
+    // 唤醒后窗口一直停在穿透 → pointerdown 被吞 → 拖不动（用户看到的必现）。
+    if (!win || win.isDestroyed()) return;
     const now = Date.now();
-    // 交互态超时兜底：系统睡眠/锁屏吞掉 pointerup 时，渲染层发不出 drag-end，
-    // 不清掉就永远跳过命中判定（宠物再也点不到）。
+    // 交互态超时兜底（极端场景，主流程已不依赖它）
     if (
       this.interacting &&
       now - this.interactingSince > PetWindowController.INTERACT_TIMEOUT_MS
     ) {
       this.interacting = false;
       this.interactingSince = 0;
-      this.appliedIgnore = null;
     }
     if (this.interacting) {
       this.applyIgnore(false);
       return;
     }
-    // 还没收到几何（首帧未就绪 / 渲染层被系统冻结后尚未恢复）→
-    // 不能保持穿透，否则宠物整块都点不到。改用整窗矩形兜底：
-    // 宁可透明区暂时挡一下桌面，也要保证唤醒后能重新拖动。
-    if (!this.geometry) {
-      const b = win.getBounds();
-      const cursor = screen.getCursorScreenPoint();
-      const inWindow =
-        cursor.x >= b.x && cursor.x < b.x + b.width &&
-        cursor.y >= b.y && cursor.y < b.y + b.height;
-      this.applyIgnore(!inWindow);
+
+    // 渲染层心跳优先：forward:true 会转发 mousemove，渲染层据此上报
+    // 「光标确实在我身上」。这比 screen.getCursorScreenPoint() 可靠 ——
+    // 熄屏/亮屏后主进程拿到的光标坐标或窗口 bounds 可能短暂失真，
+    // 但渲染层的 mousemove 是 Chromium 按真实命中投递的。
+    // 心跳在 600ms 内有效；超时才回退到主进程自己算的 bbox 判定。
+    if (now - this.hitHeartbeatAt < PetWindowController.HIT_HEARTBEAT_TTL_MS) {
+      this.applyIgnore(false);
       return;
     }
     const cursor = screen.getCursorScreenPoint();
-    const hit = resolvePetHit(cursor, win.getBounds(), this.geometry);
+    // 几何丢失（渲染层被冻结/尚未重报）时用整窗矩形兜底，别保持穿透
+    const hit = this.geometry
+      ? resolvePetHit(cursor, win.getBounds(), this.geometry)
+      : (cursor.x >= win.getBounds().x && cursor.x < win.getBounds().x + win.getBounds().width &&
+         cursor.y >= win.getBounds().y && cursor.y < win.getBounds().y + win.getBounds().height);
     this.applyIgnore(!hit);
   }
 
