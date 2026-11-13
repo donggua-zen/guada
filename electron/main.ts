@@ -54,6 +54,7 @@ import {
   openPetsFolder,
 } from "./pet-import";
 import { getPetMarketDetail, installPetFromMarket } from "./pet-market";
+import { uninstallPetAvatar } from "./pet-uninstall";
 let backendProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 let windowManager: BrowserWebviewManager | null = null; // 窗口管理器
@@ -2341,9 +2342,35 @@ function setupIpcHandlers() {
     return { ok: false, error: direct.error || result.error };
   });
 
+  // 桌宠：用户形象目录路径（设置页「导入」tab 展示/复制用）
+  ipcMain.handle("pet:pets-dir", () => userPetsDir());
+
   // 桌宠：在资源管理器里打开用户形象目录
   ipcMain.on("pet:open-pets-folder", () => {
     openPetsFolder(userPetsDir());
+  });
+
+  // 桌宠：卸载形象（只删 <userData>/pets 下的，内置/外部只读目录不许动）
+  ipcMain.handle("pet:uninstall-avatar", async (_e, id: unknown) => {
+    if (typeof id !== "string") return { ok: false, error: "缺少形象标识" };
+    const result = uninstallPetAvatar(resolvePetRoots(), id);
+    if (!result.ok) return result;
+
+    // 删除已经成功了，下面的收尾（切形象/通知 UI）**绝不能反过来把结果改成失败**：
+    // 之前 applyPetSettings() 在窗口重建期间抛异常会让整个 handle reject，
+    // 渲染层 catch 到就弹「卸载失败」，但目录其实已经删掉（用户看到的那个假失败）。
+    try {
+      // 正在使用这个形象 → 先切回内置柒，避免窗口引用已删除的素材目录
+      if (petSettings.avatarId === id) {
+        petSettings = { ...petSettings, avatarId: "silver-haired" };
+        applyPetSettings();
+      }
+      log.info(`[pet] 已卸载形象 ${id}`);
+      mainWindow?.webContents.send("pet:avatars-changed");
+    } catch (error) {
+      log.warn("[pet] 卸载后的收尾失败（不影响卸载结果）:", error);
+    }
+    return { ok: true };
   });
 
   // 桌宠市场：索引拉取在渲染层做（索引站已开 CORS，HTTP 缓存负责去重，见

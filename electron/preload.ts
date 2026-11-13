@@ -254,6 +254,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
     }>,
 
+  /** 桌宠：卸载已安装的形象（内置形象与只读目录不可删） */
+  uninstallPetAvatar: (id: string) =>
+    ipcRenderer.invoke('pet:uninstall-avatar', id) as Promise<{
+      ok: boolean
+      error?: string
+    }>,
+
+  /** 桌宠：用户形象目录的绝对路径（导入说明用） */
+  getPetsDir: () => ipcRenderer.invoke('pet:pets-dir') as Promise<string>,
+
   /** 桌宠：打开用户形象目录 */
   openPetsFolder: () => ipcRenderer.send('pet:open-pets-folder'),
 
