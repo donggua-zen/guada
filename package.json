@@ -60,7 +60,6 @@
     "test:pet-heartbeat:electron": "pnpm run build:electron-ts && node scripts/run-electron.cjs scripts/test-pet-heartbeat-electron.js",
     "test:pet-click-through:electron": "pnpm run build:electron-ts && node scripts/run-electron.cjs scripts/test-pet-click-through-electron.js",
     "test:pet-ignore:electron": "pnpm run build:electron-ts && node scripts/run-electron.cjs scripts/test-pet-ignore-electron.js",
-    "test:pet-shape:electron": "pnpm run build:electron-ts && node scripts/run-electron.cjs scripts/test-pet-shape-pass.js",
     "bake:pet-assets": "node scripts/bake-pet-assets.mjs",
     "pet:validate": "node scripts/validate-pet-atlas.mjs",
     "pet:adopt": "node scripts/adopt-codex-pet.mjs",

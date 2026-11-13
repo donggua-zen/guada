@@ -518,8 +518,6 @@ export class PetWindowController {
   /** 当前是否已置为穿透（仅 macOS 回退路径用；win32 走 setShape） */
   private appliedIgnore: boolean | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
-  /** 最近一次下发的窗口形状（JSON），避免动画每帧重复调用 setShape */
-  private lastShapeKey: string | null = null;
   /**
    * 新窗口的首次 show 由我们主动触发（showInactive），
    * 这一跳不该再触发「重建」，否则会无限递归。
@@ -596,7 +594,6 @@ export class PetWindowController {
     this.interacting = false;
     this.interactingSince = 0;
     this.hitHeartbeatAt = 0;
-    this.lastShapeKey = null;
     win.webContents.send("pet:reset-hover");
     this.startPoll();
     this.tick();
@@ -628,7 +625,6 @@ export class PetWindowController {
     // 摘掉引用：旧窗的 closed 回调会因 this.win !== win 而跳过
     this.win = null;
     this.geometry = null;
-    this.lastShapeKey = null;
     this.interacting = false;
     this.interactingSince = 0;
     this.hitHeartbeatAt = 0;
@@ -850,7 +846,6 @@ export class PetWindowController {
         this.interacting = false;
         this.interactingSince = 0;
         this.hitHeartbeatAt = 0;
-        this.lastShapeKey = null;
         win.webContents.send("pet:reset-hover");
         this.startPoll();
         this.tick();
@@ -862,19 +857,11 @@ export class PetWindowController {
       this.appliedIgnore = null;
     });
 
-    // 首帧就绪前：几何未知，形状先给「空」（整窗不命中），
-    // 避免加载期挡桌面；渲染层上报几何后立刻按 bbox 裁剪。
-    if (typeof win.setShape === "function") {
-      try {
-        win.setShape([]);
-        this.lastShapeKey = "[]";
-      } catch {
-        /* 形状 API 不可用就走 macOS 回退路径 */
-      }
-    } else {
-      win.setIgnoreMouseEvents(true, { forward: true });
-      this.appliedIgnore = true;
-    }
+    // 首帧就绪前保持穿透，避免加载期挡住桌面点击。
+    // 注意：不要用 setShape —— 它会破坏 transparent 窗口的 alpha，
+    // region 内的非宠物像素会被填成不透明背景（工作状态 bbox 较大时尤其明显）。
+    win.setIgnoreMouseEvents(true, { forward: true });
+    this.appliedIgnore = true;
 
     void win.loadFile(htmlPath).catch((error) => {
       log.warn("[pet] 加载页面失败:", error);
@@ -1128,7 +1115,6 @@ export class PetWindowController {
     this.interacting = false;
     this.interactingSince = 0;
     this.appliedIgnore = null;
-    this.lastShapeKey = null;
     if (!this.isAlive() || !this.enabled) return;
     // 窗口 region 不会被睡眠/锁屏重置，这里只需重新下发一次形状
     this.tick();
@@ -1295,92 +1281,42 @@ export class PetWindowController {
   }
 
   /**
-   * 用窗口形状（Windows `SetWindowRgn`）实现穿透，**不再用 setIgnoreMouseEvents**。
+   * 穿透判定：用 setIgnoreMouseEvents（不用 setShape）。
    *
-   * 为什么换掉：`setIgnoreMouseEvents(true,{forward:true})` 靠转发的 mousemove
-   * 才能翻回可交互；而 hide→show（WIN+L 锁屏）会让这个转发失效，
-   * 窗口永远卡在穿透（用户实测必现，多轮修补均无效）。
+   * 为什么放弃 setShape：它把窗口裁成 region 后，**region 内的非宠物像素
+   * 会被填成不透明背景**（Electron 在 transparent 窗口上的副作用）。
+   * 平时看不出来（idle 的 bbox 紧贴立绘），但工作状态用的是整行所有帧的
+   * **并集 bbox**（跑步腿在动，矩形很宽），于是露出浅灰底、还把气泡切掉一角。
    *
-   * `setShape` 是窗口 region：区域之外**根本不属于该窗口**，鼠标事件由系统
-   * 直接投递给下层，不需要任何转发，也不会被锁屏重置。
-   * 实测（WindowFromPoint）：调用后形状外命中的是其它窗口，形状内仍是本窗。
+   * 而 setIgnoreMouseEvents 那条路的唯一硬伤（锁屏 hide→show 后窗口表面失效）
+   * 已经由 seamlessRebuild 解决 —— 重建后是新窗口，穿透状态重新下发即可。
    *
-   * 形状 = 宠物 bbox ∪ 气泡矩形（都可点击）；交互中（拖动/按按钮）退化为整窗，
-   * 保证拖出包围盒时光标仍属于本窗口。
+   * 判定方式：交互中/心跳命中 → 不穿透；否则按 bbox 精确判定（透明区穿透）。
    */
   private applyShape(): void {
     const win = this.win;
     if (!win || win.isDestroyed()) return;
-    if (typeof win.setShape !== "function") {
-      // 非 win32/linux 或旧版本：回退到旧的穿透开关（macOS 没有该 API）
-      this.applyIgnoreFallback();
-      return;
-    }
 
-    const rects: Array<{ x: number; y: number; width: number; height: number }> = [];
-    if (this.interacting || !this.geometry) {
-      // 交互中或几何未知：整窗可交互（宁可短暂挡桌面，也不能拖不动/点不到）
-      const size = this.windowSize();
-      rects.push({ x: 0, y: 0, width: size.width, height: size.height });
-    } else {
-      const { image, bubble } = this.geometry;
-      const push = (r: PetRect | null | undefined) => {
-        if (!r || r.w <= 0 || r.h <= 0) return;
-        // 略放大 2px：bbox 是动画帧的紧包围盒，边缘像素容易抖
-        const pad = 2;
-        rects.push({
-          x: Math.max(0, Math.round(r.x) - pad),
-          y: Math.max(0, Math.round(r.y) - pad),
-          width: Math.round(r.w) + pad * 2,
-          height: Math.round(r.h) + pad * 2,
-        });
-      };
-      push(image);
-      push(bubble);
-      if (rects.length === 0) {
-        const size = this.windowSize();
-        rects.push({ x: 0, y: 0, width: size.width, height: size.height });
-      }
-    }
-
-    // 形状没变就不重复调用（动画每帧都会导致 bbox 抖动）
-    const key = JSON.stringify(rects);
-    if (key === this.lastShapeKey) return;
-    this.lastShapeKey = key;
-    try {
-      win.setShape(rects);
-      // 诊断：只在形状真的变化时打，便于定位「锁屏后形状/点击」问题
-      log.info(
-        `[pet] setShape ${rects.map((r) => `${r.x},${r.y} ${r.width}x${r.height}`).join(" | ") || "(空)"} interacting=${this.interacting}`,
-      );
-      // 形状生效后窗口不应再忽略鼠标，否则点击仍会被吞
-      if (this.appliedIgnore !== false) {
-        win.setIgnoreMouseEvents(false);
-        this.appliedIgnore = false;
-      }
-    } catch (error) {
-      log.warn("[pet] setShape 失败，回退到穿透开关:", error);
-      this.applyIgnoreFallback();
-    }
-  }
-
-  /** 非 win32 平台（macOS）回退：仍用 setIgnoreMouseEvents + 轮询 */
-  private applyIgnoreFallback(): void {
-    const win = this.win;
-    if (!win || win.isDestroyed()) return;
-    const now = Date.now();
+    // 交互中（拖动/按按钮）：整窗可交互，保证拖出包围盒仍收得到事件
     if (this.interacting) {
       this.setIgnoreRaw(false);
       return;
     }
-    if (now - this.hitHeartbeatAt < PetWindowController.HIT_HEARTBEAT_TTL_MS) {
+    // 渲染层心跳：Cursor 在 bbox/气泡内才会发，透明区发 hitLeave
+    if (Date.now() - this.hitHeartbeatAt < PetWindowController.HIT_HEARTBEAT_TTL_MS) {
       this.setIgnoreRaw(false);
+      return;
+    }
+    if (!this.geometry) {
+      // 几何未知（首帧未就绪）：保持穿透，避免加载期挡住桌面
+      this.setIgnoreRaw(true);
       return;
     }
     const cursor = screen.getCursorScreenPoint();
     this.setIgnoreRaw(!resolvePetHit(cursor, win.getBounds(), this.geometry));
   }
 
+  /** 非 win32 平台（macOS）回退：仍用 setIgnoreMouseEvents + 轮询 */
   private setIgnoreRaw(ignore: boolean): void {
     const win = this.win;
     if (!win || win.isDestroyed()) return;
