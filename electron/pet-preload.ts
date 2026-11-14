@@ -102,12 +102,25 @@ const petAPI = {
   /** 首帧就绪：主进程据此补发配置/状态缓存 */
   ready: () => ipcRenderer.send("pet:ready"),
 
+  /**
+   * 按下：立即让主进程进入交互态（暂停穿透判定）。
+   *
+   * 不能等第一个 drag-move 才进入 —— 按下到首帧 move 之间有一段空窗，
+   * 主进程仍可能按 bbox 把窗口设回穿透（光标略微移出 bbox 时），
+   * 一旦穿透，pointermove/pointerup 就永久丢失，drag.active 卡死。
+   */
+  pointerDown: () => ipcRenderer.send("pet:pointer-down"),
+
+  /** 按住期间的心跳：让主进程保持交互态（不被超时误伤） */
+  pointerHold: () => ipcRenderer.send("pet:pointer-hold"),
+
   /** 拖动（屏幕坐标增量） */
   dragMove: (delta: { dx: number; dy: number }) =>
     ipcRenderer.send("pet:drag-move", delta),
 
-  /** 拖动结束：让主进程落盘位置并夹回可视区 */
-  dragEnd: () => ipcRenderer.send("pet:drag-end"),
+  /** 拖动结束：让主进程落盘位置并夹回可视区（moved=false 表示只是单击） */
+  dragEnd: (payload?: { moved?: boolean }) =>
+    ipcRenderer.send("pet:drag-end", payload),
 
   /** 单击宠物：唤起主窗口（可带会话 id 直接跳转） */
   click: (payload: { sessionId?: string | null }) =>

@@ -822,8 +822,13 @@
 
   function endDrag() {
     if (!drag.active) return;
+    const hadPointerDown = drag.pointerId !== null;
     drag.active = false;
     drag.pointerId = null;
+    if (drag.holdTimer) {
+      clearInterval(drag.holdTimer);
+      drag.holdTimer = null;
+    }
     document.body.classList.remove('is-dragging');
     drag.dirName = null;
     drag.dirAccum = 0;
@@ -836,9 +841,12 @@
     if (drag.moved) {
       applyMood(lastMood);
     }
-    if (drag.moved) {
-      // 结束拖动：让主进程退出交互态（恢复穿透判定）并把位置落盘
-      api.dragEnd();
+    // 只要曾按下过就要通知主进程退出交互态。
+    // 注意：不能只在 drag.moved 时发 —— 若按下后一次 pointermove 都没收到
+    // （穿透/捕获异常），主进程 interacting 会永久停在 true，
+    // 表现为「窗口可点但拖不动 / 一直钉在某个状态」。
+    if (hadPointerDown || drag.moved) {
+      api.dragEnd({ moved: drag.moved });
     }
   }
 
@@ -867,6 +875,20 @@
     // 诊断计数：主进程/测试可读，用来区分「事件没进渲染层」与「主进程没放开」
     window.__petPointerDownCount = (window.__petPointerDownCount || 0) + 1;
     if (api.debugPointer) api.debugPointer(e.clientX, e.clientY);
+    // 按下即进入交互态：否则按下到首帧 pointermove 之间主进程仍可能设回穿透，
+    // 一穿透 pointermove/pointerup 就彻底丢失（表现为「按着但拖不动」）。
+    if (api.pointerDown) api.pointerDown();
+    // 按住期间定期心跳：主进程的交互态有超时保护（4s），
+    // 用户按住不动时不会刷新时间戳，必须靠这个保住交互态。
+    if (drag.holdTimer) clearInterval(drag.holdTimer);
+    drag.holdTimer = setInterval(function () {
+      if (!drag.active) {
+        clearInterval(drag.holdTimer);
+        drag.holdTimer = null;
+        return;
+      }
+      if (api.pointerHold) api.pointerHold();
+    }, 1000);
     drag.active = true;
     drag.moved = false;
     drag.pointerId = e.pointerId;
@@ -881,6 +903,7 @@
 
   document.addEventListener('pointermove', function (e) {
     if (!drag.active) return;
+    window.__petMoveCount = (window.__petMoveCount || 0) + 1;
     // 兜底：指针已不是按下态（捕获失败/系统抢走指针）→ 立即收尾
     if (e.buttons === 0) { endDrag(); return; }
     if (e.pointerId !== drag.pointerId) return;

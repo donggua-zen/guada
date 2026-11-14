@@ -532,7 +532,12 @@ export class PetWindowController {
    */
   private interactingSince = 0;
   /** 交互态自动超时（ms） */
-  private static readonly INTERACT_TIMEOUT_MS = 15_000;
+  /**
+   * 交互态兜底超时（ms）。
+   * 正常拖动时每次 drag-move 都会刷新时间戳，所以这个值只影响「pointerup 丢失」
+   * 之后多久自动恢复：太长会一直挡住桌面点击，太短会误伤按住不动。
+   */
+  private static readonly INTERACT_TIMEOUT_MS = 4_000;
   /** 渲染层命中心跳的有效期（ms） */
   private static readonly HIT_HEARTBEAT_TTL_MS = 600;
   /** 最近一次「光标在宠物上」心跳的时刻 */
@@ -1060,8 +1065,12 @@ export class PetWindowController {
   setInteracting(interacting: boolean): void {
     this.interacting = interacting;
     this.interactingSince = interacting ? Date.now() : 0;
-    // 拖动/按按钮时形状退化为整窗（光标会移出 bbox），松手后恢复裁剪
     this.tick();
+  }
+
+  /** 刷新交互态时间戳（渲染层按住期间的心跳，避免超时误伤） */
+  refreshInteracting(): void {
+    if (this.interacting) this.interactingSince = Date.now();
   }
 
   /** 当前交互态（测试/诊断用） */

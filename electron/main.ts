@@ -2184,19 +2184,38 @@ function setupIpcHandlers() {
     log.info(`[pet] pointerdown at ${p?.x ?? "?"},${p?.y ?? "?"}`);
   });
 
+  // 按下即进入交互态：避免「按下→首帧 move」之间窗口被设回穿透而丢事件
+  ipcMain.on("pet:pointer-down", () => petWindow?.setInteracting(true));
+  // 按住期间心跳：刷新时间戳，避免 4s 超时误伤「按住不动」
+  ipcMain.on("pet:pointer-hold", () => petWindow?.refreshInteracting());
+
   // 桌宠拖动：按下即进入交互态（暂停命中判定），移动按屏幕增量走
   ipcMain.on("pet:drag-move", (_, delta: { dx: number; dy: number }) => {
     if (!delta) return;
-    petWindow?.setInteracting(true);
-    petWindow?.moveBy(Number(delta.dx) || 0, Number(delta.dy) || 0);
+    const dx = Number(delta.dx) || 0;
+    const dy = Number(delta.dy) || 0;
+    if (!petWindow) {
+      log.warn("[pet] drag-move 但 petWindow 为空");
+      return;
+    }
+    // 拖动期间持续刷新交互态时间戳（setInteracting 会重置起始时间）
+    petWindow.setInteracting(true);
+    if (dx === 0 && dy === 0) return;
+    const before = petWindow.window?.getPosition() ?? null;
+    petWindow.moveBy(dx, dy);
+    const after = petWindow.window?.getPosition() ?? null;
+    // 诊断：只在「调了 moveBy 但位置没变」时告警，正常拖动不刷日志
+    if (before && after && before[0] === after[0] && before[1] === after[1]) {
+      log.warn(`[pet] moveBy(${dx},${dy}) 未生效，位置仍为 ${before.join(",")}`);
+    }
   });
 
   // 拖动结束：退出交互态 + 落盘位置
-  ipcMain.on("pet:drag-end", () => {
+  ipcMain.on("pet:drag-end", (_, payload?: { moved?: boolean }) => {
     petWindow?.setInteracting(false);
-    petWindow?.persistPosition();
+    // 只有真的拖动过才落盘位置（单击也会走 drag-end，避免每次点击都写文件）
+    if (payload?.moved !== false) petWindow?.persistPosition();
   });
-
   // 单击桌宠：唤起主窗口（带 sessionId 时由渲染层跳转）
   ipcMain.on("pet:click", (_, payload: { sessionId?: string | null }) => {
     if (mainWindow) {
