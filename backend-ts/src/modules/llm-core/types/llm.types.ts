@@ -55,7 +55,7 @@ export interface LLMUsageContext {
 export interface LLMCompletionParams {
   model: string;
   /**
-   * 系统提示词文本（envelope，与对话历史分离——对齐 DSH LlmCallConfig.system）。
+   * 系统提示词文本（envelope，与对话历史分离）。
    * 协议槽位由 adapter 映射：OpenAI 数组首条 / Anthropic 独立字段 / Gemini systemInstruction。
    */
   system?: string;
@@ -78,7 +78,7 @@ export interface LLMCompletionParams {
    * 字段写入（thinkingFormat / 协议固定形状），思考字段完全由表达式输出决定。
    */
   thinkingPatchReplacesFormat?: boolean;
-  /** 请求用途（对齐 DSH purpose）：adapter 可映射为传输元数据（如摘要调用标记） */
+  /** 请求用途：adapter 可映射为传输元数据（如摘要调用标记） */
   purpose?: string;
   /** 用量统计上下文（不参与 wire 请求；缺省由 RequestContext / purpose 推导） */
   usageContext?: LLMUsageContext;

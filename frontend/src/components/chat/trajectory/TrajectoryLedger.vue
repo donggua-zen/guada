@@ -12,7 +12,7 @@
   </div>
 
   <!-- 大台账（>100 行）：@tanstack/vue-virtual 动态计量虚拟化
-       （dsh trajectory-virtual-rows 思路：行高动态测量；虚拟模式下分组头不做 sticky） -->
+       （行高动态测量；虚拟模式下分组头不做 sticky） -->
   <div v-else ref="scrollEl" class="h-full w-full overflow-y-auto text-xs">
     <div class="relative" :style="{ height: `${totalSize}px` }">
       <div
@@ -36,8 +36,8 @@
 
 <script setup lang="ts">
 /**
- * 轨迹台账（dsh TrajectoryTable 的精简版）：回合分界 + SYSTEM 快照 + 消息行。
- * 双模式：小台账普通渲染（sticky 分组头），大台账虚拟化（>100 行，dsh 同阈值思路）；
+ * 轨迹台账：回合分界 + SYSTEM 快照 + 消息行。
+ * 双模式：小台账普通渲染（sticky 分组头），大台账虚拟化（>100 行）；
  * 行组件统一由 TrajectoryRow 承载，展开状态由 Panel 层 Set 管理。
  */
 import { computed, ref } from 'vue';
@@ -45,7 +45,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual';
 import type { LedgerRow } from '@/composables/useTrajectory';
 import TrajectoryRow from './TrajectoryRow.vue';
 
-/** 虚拟化阈值（对齐 dsh VIRTUALIZATION_THRESHOLD 的行数量级） */
+/** 超过该行数切换虚拟化渲染 */
 const VIRTUALIZATION_THRESHOLD = 100;
 
 const props = defineProps<{

@@ -7,7 +7,7 @@
  *   `[...prelude, ...被压缩区域消息, 指令]` + 相同的工具定义，命中 warm prefix cache；
  *   模型刚切换 / 使用专用压缩模型时前缀缓存已失效，改走"序列化单 user 消息"分支
  *   （跳过思考、截断工具结果、图片/文件只留标记），显著缩小摘要请求。
- * - 流式传输 + BlockAssembler 累积（对齐 DSH ctx.llm.stream()），拿 usage/finishReason
+ * - 流式传输 + BlockAssembler 累积，拿 usage/finishReason
  * - 增量合并旧 <compacted-summary> 检查点（从历史 compaction 事件提取）
  */
 import { Logger } from '@nestjs/common';
@@ -45,7 +45,7 @@ export interface LLMSummaryProviderOptions {
   maxSummaryTokens?: number;
   abortSignal?: AbortSignal;
   /**
-   * KV 缓存友好前缀（对齐 DSH SummarizationInput：system/tools 独立字段）：
+   * KV 缓存友好前缀（system/tools 独立字段）：
    * 与会话真实请求一致的 system 提示词与工具定义。提供后摘要调用复用主请求的前缀缓存。
    * shadowed 消息由引擎直接传入（即请求消息列表前缀，与主请求逐字节一致）。
    */
@@ -68,7 +68,7 @@ export interface LLMSummaryProviderOptions {
    * 轨迹 step 括号写入面（会话上下文；缺省 = 不记录）。
    * 摘要调用以 source='compaction' 的 step 括号留痕（usage/finishReason/耗时）；
    * 不记 fullInput——摘要输入 = 主请求前缀 + 日志中已有的遮蔽区消息 + 常量指令，
-   * 全部可由日志派生（对齐 dsh：compaction/summary 也不重复携带输入消息）。
+   * 全部可由日志派生（compaction/summary 不重复携带输入消息）。
    */
   stepWriter?: StepBracketWriter;
 }
@@ -78,7 +78,7 @@ const EMPTY_REGION_PLACEHOLDER =
   '[compacted region empty — see previous checkpoint]';
 
 /**
- * 结构化压缩检查点指令（对齐 DSH COMPACTION_INSTRUCTION：英文 + Markdown 分节 + 规则）。
+ * 结构化压缩检查点指令（英文 + Markdown 分节 + 规则）。
  *
  * 作为摘要调用的最后一条 user 消息，外层用 `<system_reminder>` 标签包裹
  * （GuaDa 系统级注入惯例，同 agent-engine:615 / process-manager:167）。
@@ -219,12 +219,12 @@ export class LLMSummaryProvider implements SummaryProvider {
         stream: true,
         providerConfig: this.model.provider,
         abortSignal: this.options.abortSignal,
-        // 请求用途标记（对齐 DSH purpose：adapter 可映射传输元数据）
+        // 请求用途标记（adapter 可映射传输元数据）
         purpose: 'compaction',
       };
     }
 
-    // 流式调用（对齐 DSH ctx.llm.stream() 单次调用语义）。仅对"空文本"做一次重试：
+    // 流式调用（单次调用语义）。仅对"空文本"做一次重试：
     // 实测同一请求曾返回 2000 token / finish_reason=length 但无文本（21:39），
     // 同参数下一次请求成功（21:53）——属于瞬时失败，直接抛错会把原始 400 暴露给用户。
     // 轨迹：一个 step 括号覆盖整个重试序列（attemptIndex = 成功尝试序号，0 起）。
@@ -322,7 +322,7 @@ export class LLMSummaryProvider implements SummaryProvider {
       `<system_reminder>\n${COMPACTION_INSTRUCTION}${additionalBlock}\n\n${checkpointBlock}Compression checkpoint:\n</system_reminder>`;
 
     if (this.options.prefix) {
-      // KV 前缀模式：system 走 envelope 独立字段（对齐 DSH SummarizationInput），
+      // KV 前缀模式：system 走 envelope 独立字段，
       // 区域消息 = 引擎传入的遮蔽消息**原样**（含 compact 检查点 user 消息，无过滤）——
       // 与主请求前缀逐字节一致 → 命中 provider warm prefix cache（缓存只认前缀一致，后缀可不同）
       return {

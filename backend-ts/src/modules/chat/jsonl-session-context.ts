@@ -4,7 +4,7 @@
  * 实现 ISessionContext 接口，消息持久化经 MESSAGE_STORE_TOKEN 注入的 IMessageStore 驱动。
  * 能力与 persistent-session-context.ts（DB 版）对齐：
  * - 设置合并（会话 > 智能体）、模型解析、插件决议、提示词拼接（system/插件/tools）
- * - 细粒度 Token 统计 + provider 真值锚点（dsh 式）
+ * - 细粒度 Token 统计 + provider 真值锚点
  * - 运行模式切换检测（system 注入块）、reasoning content 策略、KIMI 兼容
  * - 压缩接入统一 CompressionEngine（一级裁剪 prune）
  */
@@ -103,7 +103,7 @@ interface EffectiveSettings {
 }
 
 /**
- * envelope 内容等价比较（对齐 DSH headerEquals，request-header.ts:44-54）：
+ * envelope 内容等价比较（headerEquals 结构比较）：
  * 忽略 reason，逐字段比较 system/model/provider + tools 逐项。
  * parameters 优先对象引用短路（插件 schema 对象稳定），不等再 JSON 比较——
  * 常规路径引用必相等，字符串化只在罕见兜底时发生。
@@ -134,7 +134,7 @@ function envelopeContentEqual(
  * 上下文快照：以 store 版本号（lastProcessedSeq）为失效键的不可变视图缓存。
  * 消除一轮 agent 循环内的重复投影/变换/token 统计；append 走增量 O(Δ)。
  *
- * 单一数据源（对齐 DSH）：快照只持有 view（对话历史）。完整请求列表（prelude + view）
+ * 单一数据源：快照只持有 view（对话历史）。完整请求列表（prelude + view）
  * 是 getMessages() 组装时刻的派生表达式，不作为状态存储——两份同构列表的手动同步
  * 即双数据源，是必须消除的冗余。
  *
@@ -175,7 +175,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   // 初始化后构建完成的 DTO
   private modelConfig!: ModelConfig;
-  /** system 提示词文本（envelope，与对话历史 surface 分离——对齐 DSH LlmCallConfig.system） */
+  /** system 提示词文本（envelope，与对话历史 surface 分离） */
   private systemText = '';
   private thinkingEffortValue!: string | undefined;
   /** 当前（最后一轮）回合 id：beginTurn 时记录，供 reasoning 策略判定「最后一轮」 */
@@ -575,7 +575,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   // ═══ 消息写入 ═══
 
   /**
-   * 开回合:写 turn/start(先于 user/message,对齐 DSH 回合定界)。
+   * 开回合:写 turn/start(先于 user/message,回合定界)。
    * 整轮次重答(replaceTurnId):先 turn/delete 遮蔽旧轮次,再开新回合。
    * 返回回合 turnId,作为后续 appendMessages / finalizeTurn 的归属游标。
    */
@@ -682,7 +682,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     };
 
     // 注入块（消息伴随信息）：追加在用户 blocks 尾部（novel 区 → KV 前缀零损失）。
-    // 顺序即 DSH 注入瀑布语义：背景在前（模式叙事 → 绑定变更 → KB 引用），材料在后（命令解析产物
+    // 注入瀑布顺序：背景在前（模式叙事 → 绑定变更 → KB 引用），材料在后（命令解析产物
     // ——用户要求做的事的上下文最贴近模型作答位置）
     const injectedBlocks: ContentBlock[] = [];
     if (modeNarration) {
@@ -991,7 +991,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     });
   }
 
-  // ═══ 轨迹（envelope + step 括号，对齐 DSH request-header / step 语义；log-only）═══
+  // ═══ 轨迹（envelope + step 括号；log-only）═══
 
   /**
    * envelope 去重缓存：
@@ -1018,7 +1018,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /**
    * envelope 请求侧快照（system/tools/model/provider）：与上次写入比对，变更才落盘。
    *
-   * 对齐 DSH request/header 的写入纪律（agent.ts:507-518）：每 step 前调用一次，
+   * request/header 的写入纪律：每 step 前调用一次，
    * headerEquals 结构去重（request-header.ts:44-54），未变化不写事件。
    * 对比成本三级：引用短路（插件数组 + systemText 字符串 + 模型名，亚微秒）→
    * 字段级比较（仅在身份变化时，parameters 对象引用相等短路）→ 落盘（真变更才发生）。
@@ -1354,14 +1354,14 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     return this._workspacePath;
   }
 
-  // ═══ Token 统计（dsh 式：provider 真值锚点 + 启发式增量）═══
+  // ═══ Token 统计（provider 真值锚点 + 启发式增量）═══
 
   private currentModelName(): string {
     return this.modelConfig?.modelName || this.modelConfig?.name || 'gpt4';
   }
 
   /**
-   * 当前完整请求 token（全量：prelude + 可见视图），provider 真值锚点 + 启发式增量（dsh 式）。
+   * 当前完整请求 token（全量：prelude + 可见视图），provider 真值锚点 + 启发式增量。
    *
    * O(1)：基于快照的前缀和（preludeTokens + prefixTokens 末项）与锚点前缀和，
    * 不再逐次遍历视图。
@@ -1726,7 +1726,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   }
 
   /**
-   * 构建系统提示词文本（envelope，与对话历史 surface 分离——对齐 DSH LlmCallConfig.system）。
+   * 构建系统提示词文本（envelope，与对话历史 surface 分离）。
    * 含：智能体 systemPrompt + 插件 eager 提示词。
    */
   private async buildSystemText(): Promise<string> {

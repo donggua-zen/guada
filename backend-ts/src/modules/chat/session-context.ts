@@ -36,7 +36,7 @@ export interface ModelConfig {
    */
   thinkingEfforts: string[];
   /**
-   * 全量思考回传声明（对齐 DSH requiresReasoningContentOnAssistantMessages）：
+   * 全量思考回传声明（requiresReasoningContentOnAssistantMessages）：
    * true = 思考模式下历史轮次 reasoning 也回传；false = 仅最后一轮；
    * undefined = 未声明，回退 DeepSeek V4/V4.1 系名字启发式（含改名后的
    * deepseek-flash / deepseek-pro）。
@@ -61,7 +61,7 @@ export interface ModelConfig {
 // ============================================================================
 
 /**
- * 会话安全模式（三档词表，与 DSH SandboxMode 同构，对 shell 与文件工具同时生效）
+ * 会话安全模式（三档词表，对 shell 与文件工具同时生效）
  *
  * - read-only: 只读——文件写入被拒绝，run_command 经沙盒 --read-only 执行（全盘只读）
  * - workspace-write: 工作区可写（默认）——文件工具限工作区内，shell 命令经沙盒
@@ -73,7 +73,7 @@ export interface ModelConfig {
  * 无人可应答时 fail-closed 拒绝；档位切换只由用户在界面上完成。
  *
  * 计划模式（原 plan）已从安全词表移除，列入后续待办——计划协作本质是只读执行的
- * 软引导，后续以独立协作状态回归，不与安全词表混同（对齐 DSH plan-mode 正交设计）。
+ * 软引导，后续以独立协作状态回归，不与安全词表混同（与 plan-mode 正交）。
  */
 export type SessionSandboxMode = import("../../common/services/sandbox-policy").SandboxMode;
 
@@ -197,7 +197,7 @@ export interface ISessionContext {
     data: import("../../common/persistence/types").SessionModeChangedData,
   ): Promise<void>;
 
-  // === 流事件发布（唯一发布面，对齐 DSH session.append 直发） ===
+  // === 流事件发布（唯一发布面，深层直发） ===
   /**
    * 发布流式事件到会话活跃流（deep 层模块直发入口：引擎、钩子订阅者、审批服务等）。
    *
@@ -217,10 +217,10 @@ export interface ISessionContext {
     stats: import("./types/event-chunk.types").ContextStatsPayload,
   ): Promise<void>;
 
-  // === 轨迹（envelope + step 括号，对齐 DSH request-header / step 语义；log-only） ===
+  // === 轨迹（envelope + step 括号；log-only） ===
   /**
    * envelope 请求侧快照（system/tools/model/provider）：与上次写入比对，变更才落盘。
-   * 对齐 DSH request/header 的 headerEquals 结构去重（reason: initial | change）。
+   * request/header 的 headerEquals 结构去重（reason: initial | change）。
    * 每 step 前调用一次；对比成本有引用短路 + 缓存 systemText，亚毫秒级。
    */
   appendEnvelopeIfNeeded(): Promise<void>;
@@ -250,7 +250,7 @@ export interface ISessionContext {
   initialize(): Promise<void>;
   /**
    * 获取对话历史消息列表（surface，不含 system 提示词）。
-   * 系统提示词走 getSystemText()（envelope，与历史分离——对齐 DSH）。
+   * 系统提示词走 getSystemText()（envelope，与历史分离）。
    *
    * 返回的数组是共享快照引用（只读契约），消费方禁止就地修改。
    */
@@ -272,7 +272,7 @@ export interface ISessionContext {
   finalizeTurn(turnId: string, durationMs: number, finish: TurnFinish): Promise<void>;
 
   /**
-   * agent 开始消费该回合时开回合:写 turn/start(先于 user/message,对齐 DSH 回合定界)。
+   * agent 开始消费该回合时开回合:写 turn/start(先于 user/message,回合定界)。
    * 返回回合 turnId,作为后续 appendMessages / finalizeTurn 的归属游标。
    * @param options.replaceTurnId 整轮次重答:先写 turn/delete 遮蔽旧轮次,再开新回合
    */

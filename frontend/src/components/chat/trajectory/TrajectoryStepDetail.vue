@@ -1,5 +1,5 @@
 <template>
-  <!-- 选中 request 的内嵌详情（对齐 dsh inspector REQUEST 页签的精简版） -->
+  <!-- 选中 request 的内嵌详情 -->
   <div class="px-2 py-2 bg-(--gd-color-sidebar-bg-active)/60 border-b border-(--gd-color-border) space-y-1.5 text-(11px)">
     <!-- 元信息栅格 -->
     <div class="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
@@ -118,7 +118,7 @@ const outputToLabel = computed(() =>
 );
 
 /**
- * 计时（对齐 dsh AssistantTimingPanel：TTFT / 生成时长 / 吞吐）。
+ * 计时（TTFT / 生成时长 / 吞吐）。
  * 来源 = OUT 区 assistant 块的 BlockTiming（首块 startedAt 为首 token，末块 finishedAt 收口）。
  */
 const timing = computed(() => {

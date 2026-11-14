@@ -8,7 +8,7 @@
  *
  * 子智能体会话跳过影子轮次（短任务，记忆产出无人再读）。
  *
- * 依赖 LLMService（单次请求不重试——失败容忍的辅助调用，重试退避会拖慢压缩，对齐 DSH 辅助调用单次）
+ * 依赖 LLMService（单次请求不重试——失败容忍的辅助调用，重试退避会拖慢压缩）
  * + ToolExecutor。
  */
 import { Injectable, Logger } from "@nestjs/common";
@@ -171,7 +171,7 @@ Scan history. ONLY trigger an update if:
           this.logger.log(`[memory-sync] shadow turns aborted at round ${round}`);
           break;
         }
-        // 轨迹：每轮影子调用一个 step 括号（含其工具执行，对齐 DSH step 语义）。
+        // 轨迹：每轮影子调用一个 step 括号（含其工具执行）。
         // fullInput 只记影子指令与已产出内容（delta）——历史部分与日志 surface 一致，不重复记录。
         const stepHandle = await beginStep(sessionContext, {
           turnId: null,

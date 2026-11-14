@@ -1,10 +1,10 @@
 /**
  * JSONL 持久化 — 事件类型与基础接口
- * 对齐 DSH 语义的分层事件模型（回合制）：
+ * 分层事件模型（回合制）：
  *   turn/start + turn/finish（回合：一次输入 = 用户 + 助手，一对一轮回）
- *   step/start + step/end（调用括号：一次模型调用 + 其工具执行，对齐 DSH step 语义；
+ *   step/start + step/end（调用括号：一次模型调用 + 其工具执行；
  *                         log-only，让辅助调用与失败尝试在日志留痕、给调用级元数据锚点）
- *   user/message + assistant/message + tool/result（消息级三事件，对齐 DSH，内容平铺内嵌）
+ *   user/message + assistant/message + tool/result（消息级三事件，内容平铺内嵌）
  *   turn/delete（删除本轮对话 = 按回合 id 遮蔽整个轮次；整轮次重答 = turn/delete 旧轮次 + 正常回答流程）
  *   message/prune（内容裁剪）、compaction/start + summary + end（压缩括号）、compaction/error（压缩失败）
  * 回放产出扁平消息 surface（MessageNode IS-A Message，带 seq/turnId 归属标签）。
@@ -80,7 +80,7 @@ export interface TurnResumeData {
 
 /**
  * 回合完成：回合级事实收口（finishReason / 耗时 / 模型 / 异常）。
- * Token 字段收敛（见 docs/dsh-trajectory-migration.md §9，对齐 dsh turn/end 裸载荷）：
+ * Token 字段收敛（usage 聚合只落一次）：
  * - usage 聚合不落盘——读侧从回合内 assistant/message.metadata.usage 累加
  *   （前端 TurnItem 早已读侧聚合；turn.metadata.usage 此前为死写）；
  * - 占用快照唯一载体是 context/stats（本事件不携带 usedTokens/effectiveContextWindow——
@@ -138,7 +138,7 @@ export interface ContextStatsData {
   beforeTokens?: number;
 }
 
-// ─── 调用级括号（step/start + step/end，对齐 DSH step 语义：一次模型调用 + 其工具执行）───
+// ─── 调用级括号（step/start + step/end：一次模型调用 + 其工具执行）───
 
 /**
  * LLM 调用来源（step 事件的 source）。
@@ -199,16 +199,16 @@ export interface StepStartData {
 /**
  * step/end：收调用括号（log-only）。
  * 必须与 step/start 配对闭合（记录器 finally 兜底）；失败也要落 end（error 语义），
- * 与 DSH step/end 的收口纪律一致（agent-loop 在 finally 里收口）。
+ * step/end 的收口纪律：agent-loop 在 finally 里收口。
  */
 export interface StepEndData {
   requestId: string;
   /** 最终成功尝试的序号（streamWithRetry 内部重试计数；无重试 = 0） */
   attemptIndex: number;
   /**
-   * 该次调用的 token 用量（上游 usage 聚糖）。仅辅助调用写——辅助调用不产生
+   * 该次调用的 token 用量（上游 usage 聚合）。仅辅助调用写——辅助调用不产生
    * assistant/message，无其它载体；主循环的 usage 由 assistant/message.metadata.usage
-   * 承载（事实单载体，对齐 dsh），投影端从 OUT 区合成，本字段缺省即主循环路径。
+   * 承载（事实单载体），投影端从 OUT 区合成，本字段缺省即主循环路径。
    */
   usage?: TokenUsage;
   /** 上游 finishReason（stop / tool-calls / error / user_cancel 等，与 turn/finish 同源） */
@@ -223,7 +223,7 @@ export interface StepEndData {
   mediaOverlay?: StepMediaOverlayEntry[];
 }
 
-// ─── 消息级三事件（对齐 DSH：user/message、assistant/message、tool/result）───
+// ─── 消息级三事件（user/message、assistant/message、tool/result）───
 
 /**
  * user/message：用户消息（一次写入）。
@@ -338,7 +338,7 @@ export interface MessagePruneData {
   newContent: string;         // 改写后内容（thinking_strip 为空串：reasoning 块保留、summary 置空）
   prunedBytes: number;        // 裁剪掉的字节数
   strategy: string;           // 策略，见 PRUNE_STRATEGY_*
-  /** 影子价格：被裁剪内容的估算 token 数（供 token 计量消费方减去被遮蔽价格，对齐 DSH compaction/prune） */
+  /** 影子价格：被裁剪内容的估算 token 数（供 token 计量消费方减去被遮蔽价格，同 compaction/prune） */
   prunedTokens?: number;
 }
 
@@ -364,7 +364,7 @@ export interface ToolImagePruneData {
   prunedTokens: number;
 }
 
-// ─── 压缩（括号式，对齐 DSH compaction/*）───
+// ─── 压缩（括号式 compaction/*）───
 
 export interface CompactionStartData {
   sourceCommandId?: string;
@@ -398,7 +398,7 @@ export interface CompactionSummaryData {
   summaryMessageId: string;       // 摘要作为一条消息
   /** 摘要输入降级统计（为适配窗口剥离工具结果/思考或丢弃最旧轮次时写入） */
   degraded?: CompactionDegradationData;
-  /** 摘要调用 usage（流式累积，对齐 DSH SummaryResult 记录调用 envelope） */
+  /** 摘要调用 usage（流式累积，记录调用 envelope） */
   usage?: {
     promptTokens?: number;
     completionTokens?: number;
@@ -455,7 +455,7 @@ export interface ImportCompactionPoint {
   time?: number;
 }
 
-// ─── 命令执行(事件类消息,对齐 DSH command/run + command/done)───
+// ─── 命令执行(事件类消息,command/run + command/done)───
 // 由 command/run 开启、command/done 收尾。S0 起不再折叠进 ReplayState.messages
 // （command 事件对 LLM 视图无意义），仅落盘供事件页读盘独立折叠展示。
 // 注:当前项目尚无命令执行来源(MCP 的 command 仅是 stdio 配置),此类型为预留机制。
@@ -480,7 +480,7 @@ export interface CommandDoneData {
   metadata?: Record<string, unknown> | null;
 }
 
-// ─── 统一交互（审批/询问共用，对齐 DSH user-questions；无超时）───
+// ─── 统一交互（审批/询问共用；无超时）───
 
 /** 交互请求事件：工具/引擎发起 ask（挂起等待用户应答） */
 export interface AskAskedData {
@@ -593,7 +593,7 @@ export interface GoalFoldState {
   failure: string | null;
 }
 
-// ─── 回放产物（扁平消息 surface，对齐 DSH）───
+// ─── 回放产物（扁平消息 surface）───
 
 /**
  * 回合级元数据（展示链路从事件流即时收集 collectTurnMeta 的产物，不进入折叠态；
@@ -619,7 +619,7 @@ export interface TurnMeta {
 
 /** 扁平 surface 节点：Message + 归属/排序标签（IS-A Message，可直接当 Message 用） */
 export interface MessageNode extends Message {
-  /** 节点 seq（对齐 DSH surface 节点；增量回扫/排序用） */
+  /** 节点 seq（增量回扫/排序用） */
   seq: number;
   /** 归属回合（turn/delete 定位用；无宿主事件的独立节点 = null） */
   turnId: string | null;
@@ -653,7 +653,7 @@ export interface ReplayState {
   envelope: Envelope | null;
   lastProcessedSeq: number;
   /**
-   * 未闭合 compaction/start 的 seq（锁语义审计，对齐 DSH 日志锁）。
+   * 未闭合 compaction/start 的 seq（日志锁语义审计）。
    * 本项目 compaction 括号事件为原子批量写入 + torn-tail 修复，正常不会出现孤儿括号；
    * 此字段仅用于诊断检测（不改变折叠行为）。
    */

@@ -3,8 +3,8 @@
  *
  * 收敛主循环 / 影子轮次 / 摘要的 LLM 参数组装（modelConfig/tools/thinkingEffort 一次提取）。
  * 返回 LLMCompletionParams，调用方直接交给 LLMService.completions（唯一 LLM seam）：
- * - 主循环：组装后交给 agent-engine 私有重试执行器（对齐 DSH retryPolicy 在 agent 层）
- * - 影子轮次 / 摘要：组装后单次 completions（无重试，对齐 DSH 辅助调用单次）
+ * - 主循环：组装后交给 agent-engine 私有重试执行器
+ * - 影子轮次 / 摘要：组装后单次 completions（无重试）
  */
 import type {
   LLMCompletionParams,
@@ -25,7 +25,7 @@ export interface BuildCompletionParamsOptions {
   abortSignal?: AbortSignal;
   /** 覆盖 maxOutputTokens（辅助调用：摘要 2000） */
   maxTokens?: number;
-  /** 请求用途（对齐 DSH purpose）：adapter 可映射为传输元数据 */
+  /** 请求用途：adapter 可映射为传输元数据 */
   purpose?: string;
   /**
    * 是否把 tool-result.images 派生为 wire 图片消息（默认 true）。
@@ -70,7 +70,7 @@ export function buildSessionLlmParams(
   });
   return {
     model: modelConfig.modelName,
-    // envelope：system 提示词独立字段（协议槽位由 adapter 映射，对齐 DSH LlmCallConfig.system）
+    // envelope：system 提示词独立字段（协议槽位由 adapter 映射）
     system: ctx.getSystemText(),
     // surface：纯对话历史（调用方传 getHistory()，不含 system/插件提示）。
     messages: mediaProjection.messages,

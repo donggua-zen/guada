@@ -108,7 +108,7 @@ function relativeToSessionDir(sessionDir: string, absolutePath: string): string 
  * - 支持对话再生模式（overwrite / resume）
  *
  * 设计原则：
- * - 直发模式：流式事件经 sessionContext.publishStream 直发（对齐 DSH session.append 深层直发），
+ * - 直发模式：流式事件经 sessionContext.publishStream 深层直发，
  *   不经生成器 yield 冒泡——主循环与深层模块（钩子订阅者/审批服务）共用同一发布面
  * - 容错降级：完善的错误捕获和分类处理机制，确保异常不会导致会话崩溃
  * - 防御性编程：多重安全检查（JSON 解析容错、空值保护）
@@ -145,10 +145,10 @@ export class AgentEngine {
   private readonly sessionImages = new SessionImageStore(this.fileNaming);
 
   /**
-   * 主循环 LLM 流式请求：纯传输 + 重试壳（agent 循环局部语义，对齐 DSH retryPolicy 在 agent 层）。
+   * 主循环 LLM 流式请求：纯传输 + 重试壳（重试策略归 agent 循环局部语义）。
    *
    * 仅主对话循环使用——影子轮次/压缩摘要是失败容忍的辅助调用，单次请求不重试
-   * （重试退避会拖慢压缩，且 DSH 辅助调用同样单次）。
+   * （重试退避会拖慢压缩，辅助调用统一单次）。
    * 不做任何累积——累积由调用方持有的 BlockAssembler 完成；
    * 收到 retry 信号时调用方应 assembler.reset()（重试不保留半截内容）。
    *
@@ -446,7 +446,7 @@ export class AgentEngine {
     let finalFinishReason = "stop";
     let loopError: unknown;
     /**
-     * 当前迭代未收口的轨迹 step 括号（对齐 DSH step/start~step/end；跨迭代存活，
+     * 当前迭代未收口的轨迹 step 括号（step/start~step/end；跨迭代存活，
      * 外层 finally 兜底收口——工具执行抛出等未预期异常路径也不能留孤儿括号）。
      */
     let stepHandle: StepHandle | null = null;
@@ -532,7 +532,7 @@ export class AgentEngine {
 
       // 通过 agent 钩子（PRE_STEP，副作用管线）让能力订阅者（压缩等）检查/执行——
       // 订阅者原地改写会话存储（store 写即更新）后放行；agent-engine 不感知压缩细节，
-      // 并在钩子后重读消息（对齐 DSH：请求消息派生自会话 surface）。
+      // 并在钩子后重读消息（请求消息派生自会话 surface）。
       // 钩子产生的流内事件（compression_start/error）由订阅者经 sessionContext.publishStream 直发。
       {
         await this.eventBus.serial<void>(
@@ -624,12 +624,12 @@ export class AgentEngine {
         }
       }
 
-      // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义，对齐 DSH retryPolicy）
+      // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义）
       {
         let streamAborted = false;
 
         try {
-          // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义，对齐 DSH retryPolicy）
+          // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义）
           const completionParams = SessionLlmRequestBuilder.buildCompletionParams(
             sessionContext,
             {
@@ -649,11 +649,11 @@ export class AgentEngine {
           );
           lastRequestMedia = completionParams.requestMedia;
 
-          // 轨迹 step 开括号（对齐 DSH agent-loop step/start）：
+          // 轨迹 step 开括号：
           // 括号 = 本迭代（一次模型调用 + 其工具执行）；IN 区 = 日志 surface（既有）+
           // transient verbatim（不落 surface 的请求尾部注入）；OUT 区 = 括号 seq 区间内
           // 的 assistant/message + tool/result（零新增，按区间归属）。
-          // beginStep 内先经 appendEnvelopeIfNeeded（DSH request/header 语义，变更才写）。
+          // beginStep 内先经 appendEnvelopeIfNeeded（request/header 语义，变更才写）。
           stepHandle = await beginStep(sessionContext, {
             turnId,
             step: iterationCount,
@@ -713,7 +713,7 @@ export class AgentEngine {
           const streamError =
             error instanceof Error ? error : new Error(String(error));
 
-          // 上下文溢出恢复（对齐 DSH overflow recovery，经 agent/request-error 钩子）：
+          // 上下文溢出恢复（overflow recovery，经 agent/request-error 钩子）：
           // 能力订阅者（压缩插件）识别溢出错误并强制压缩，返回 { kind: 'retry' } 时重试该请求
           const action = await this.eventBus.serial<RequestErrorAction>(
             HOOKS.REQUEST_ERROR,
@@ -770,7 +770,7 @@ export class AgentEngine {
         // 组装三层 assistant Message（消息 id = messageId）。
         // 工具参数 JSON 修复在 assembler 内统一完成（中止截断与正常完成同规则），
         // 不再需要流后单独修复。块级计时由 assembler 打点，随块持久化/广播。
-        // 【DSH 对齐（agent.ts:392）】assembler 自判内容：toMessage 在累加任何有效 chunk
+        // assembler 自判内容：toMessage 在累加任何有效 chunk
         // 时返回 null（立即报错/中止无任何产出）→ 表示本轮无有效消息，跳过落库与一切消息后处理；
         // 业务错误归拢 turn 级（finalizeTurn → turn.metadata）。
         assistantMessage = assembler.toMessage({
@@ -880,10 +880,10 @@ export class AgentEngine {
         }
       }
 
-      // 轨迹 step 收口（对齐 DSH step/end finally 纪律）：
+      // 轨迹 step 收口（finally 纪律）：
       // 正常完成 / 空消息 / 流异常三条路径在此汇聚统一收口（abort 与溢出重试已各自提前收口）。
       // Token 收敛：主循环 step/end 不写 usage——usage 由 assistant/message.metadata.usage
-      // 承载（事实单载体，对齐 dsh），轨迹投影端从 OUT 区合成。
+      // 事实单载体在 assistant/message 上，轨迹投影端从 OUT 区合成。
       // error 只在业务错误（finalError 已设置）时携带——user_cancel 不算 error，
       // 由 turn/finish 的 finishReason 承载。
       if (stepHandle) {
@@ -960,7 +960,7 @@ export class AgentEngine {
       // 未设置且无异常 → 模型正常结束 → "stop"
       finalFinishReason = businessReason || (loopError ? "error" : "stop");
 
-      // 轨迹兜底收口（对齐 DSH step/end finally 纪律）：正常路径已在迭代内收口（幂等 no-op），
+      // 轨迹兜底收口（finally 纪律）：正常路径已在迭代内收口（幂等 no-op），
       // 这里只覆盖「工具执行抛出等未预期异常直接跳出循环」的孤儿括号。
       if (stepHandle) {
         await stepHandle.end(
@@ -1098,7 +1098,7 @@ export class AgentEngine {
    *
    * 在 do...while 循环正常退出后（AI 认为对话可以结束）、回合关闭前执行。
    * 订阅者（如 shell 插件检测后台进程）返回 { kind: 'continue', messages } 时，
-   * 合并为一条 hidden user 消息追加，触发新一轮 LLM 调用（对齐 DSH turn-stopping + steer）。
+   * 合并为一条 hidden user 消息追加，触发新一轮 LLM 调用（turn 停止后 steering）。
    *
    * @param sessionContext 会话上下文
    * @returns 是否注入了续跑消息（true → 触发新一轮 LLM 调用）
@@ -1334,7 +1334,7 @@ export class AgentEngine {
     }
 
     // 构建 parts（tool 结果消息，三层 Message[]）——
-    // 每个工具结果是独立消息（独立 id），与含调用的 assistant 消息 id 无关（对齐 DSH：独立节点 + callId 关联）。
+    // 每个工具结果是独立消息（独立 id），与含调用的 assistant 消息 id 无关（独立节点 + callId 关联）。
     // 工具产出图片不拆消息：物化后的 FileRef 内嵌在 tool-result.images，与 name/toolCallId 同块，
     // 图片归属可直接追溯；请求组装边界再派生为隐藏 user 消息（多模态模型）。
     const toolParts: Message[] = [];
@@ -1354,7 +1354,7 @@ export class AgentEngine {
       const toolResultId = sessionContext.generateMessageId();
 
       // 图片物化：统一进会话 images 目录，FileRef 只落路径指针——
-      // 持久化契约：快照/事件日志不存 base64（jsonl-persistence-design §3.3，dsh 明确禁止）。
+      // 持久化契约：快照/事件日志不存 base64（jsonl-persistence-design §3.3 明确禁止）。
       // 物化结果直接内嵌到 tool-result，不再单独生成隐藏 user 消息。
       let content = res.content ?? "";
       let images: FileRef[] | undefined;

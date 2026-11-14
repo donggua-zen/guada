@@ -272,7 +272,7 @@ export const useTabStore = defineStore('tab', () => {
 
     /**
      * 打开调用轨迹标签（每会话唯一）：该会话 JSONL 日志的调用级投影
-     * （step 括号 + envelope 快照，对齐 dsh trajectory 台账）。
+     * （step 括号 + envelope 快照，轨迹台账）。
      * @param targetSessionId 缺省 = 侧边栏当前会话；子代理跳转时传子会话 id
      */
     function openTrajectoryTab(sessionId: string, targetSessionId?: string): void {

@@ -135,7 +135,7 @@ const subAgentSessionId = computed<string | null>(() => {
 
 /** 内容列文本：正文 text 块拼接 + markdown 转纯文本（reasoning 放详情），换行压空格，单行省略交给 CSS */
 const rawText = computed(() => {
-  // 工具行：取 tool-result 的内容文本（dsh 同款：名称 + 结果预览）
+  // 工具行：取 tool-result 的内容文本（名称 + 结果预览）
   for (const block of node.value.content) {
     if (block.type === 'tool-result') {
       return stripMarkdown(block.content ?? '') || '—';

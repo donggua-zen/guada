@@ -87,7 +87,7 @@ export interface TrajectoryEnvelope {
   provider?: string;
 }
 
-/** envelope 快照 + 落盘位置（SYSTEM 行按 seq 插进台账流，对齐 dsh request/header 行） */
+/** envelope 快照 + 落盘位置（SYSTEM 行按 seq 插进台账流） */
 export interface TrajectoryEnvelopeSnapshot extends TrajectoryEnvelope {
   seq: number;
   time: number;

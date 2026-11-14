@@ -133,7 +133,7 @@ describe("torn-tail 修复（坏行截断 + 合成 interrupted）", () => {
   });
 });
 
-describe("torn-tail 修复补未配对 tool-call 错误结果（对齐 DSH interruptedTurnClosers）", () => {
+describe("torn-tail 修复补未配对 tool-call 错误结果", () => {
   it("未闭合回合含未配对 tool-call → 合成错误 tool/result + interrupted turn/finish", async () => {
     const sid = "torn-tool-repair";
     const backend = new JsonlBackend();

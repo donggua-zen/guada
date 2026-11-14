@@ -32,10 +32,10 @@ export class EventBusService {
   }
 
   /**
-   * parallel 调度：并发 await 全部监听器，收集各监听器返回值（保持注册顺序）。
+   * 并发 await 全部监听器，收集各监听器返回值（保持注册顺序）。
    * 单个监听器抛错只记录日志并继续（fail-open，返回 undefined 不贡献结果）。
    *
-   * 语义对齐 DSH parallel：所有订阅者都会执行（如回合关闭前收集全部续跑消息）。
+   * parallel 语义：所有订阅者都会执行（如回合关闭前收集全部续跑消息）。
    *
    * @param event 事件名（钩子事件，见 hooks.contract.ts）
    * @param payload 事件负载
@@ -63,7 +63,7 @@ export class EventBusService {
    * serial 调度：串行 await 监听器，首个返回"非 undefined"者接管（短路）。
    * 全部监听器旁路（返回 undefined 或被 fail-open）时返回 fallback()。
    *
-   * 语义对齐 DSH serial（bail）：决策型钩子返回非 undefined = 接管
+   * serial（bail）语义：决策型钩子返回非 undefined = 接管
    * （如压缩插件返回 { kind: 'enter' } 让循环用压缩后消息）；undefined = 旁路走默认。
    *
    * @param event 事件名（钩子事件，见 hooks.contract.ts）

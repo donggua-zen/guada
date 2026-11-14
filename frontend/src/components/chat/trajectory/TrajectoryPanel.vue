@@ -1,6 +1,6 @@
 <template>
   <div class="h-full w-full flex flex-col overflow-hidden">
-    <!-- 头部：汇总 + 搜索 + 操作（对齐 dsh TrajectoryToolbar 的精简版） -->
+    <!-- 头部：汇总 + 搜索 + 操作 -->
     <div class="shrink-0 flex flex-col gap-1.5 px-2 pt-2 pb-1.5 border-b border-(--gd-color-border)">
       <div class="flex items-center gap-1.5 flex-wrap text-xs text-(--gd-color-text-gray)">
         <span class="font-medium text-(--gd-color-text)">{{ t('trajectory.title') }}</span>

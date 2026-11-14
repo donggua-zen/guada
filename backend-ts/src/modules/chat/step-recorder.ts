@@ -1,5 +1,5 @@
 /**
- * 轨迹 step 括号记录器（对齐 DSH agent-loop 的 step/start :288 / step/end :301 收口纪律）
+ * 轨迹 step 括号记录器
  *
  * 一次 begin/end 对 = 一次模型调用（主循环时含它请求的工具执行）。括号是 log-only 事件：
  * 不参与消息 surface 折叠（replayer default: break 直接跳过），作用：
@@ -8,12 +8,12 @@
  * 3. 给调用级 usage/finishReason/耗时/attemptIndex 一个挂载锚点
  * 4. 投影端按 [stepStart, stepEnd] 的 seq 区间切片 OUT 区（assistant 块 + tool 结果）
  *
- * 纪律（全部对齐 DSH finally 收口）：
+ * 纪律（finally 收口）：
  * - 每个括号必须闭合：handle.end() 幂等；begin 时发现同会话存在未闭合括号 →
  *   先以 {name:'StepUnclosed'} 兜底收口再开新括号（seq 有序保持）
  * - 观测性功能：任何 append 失败只告警，绝不阻断对话主链路
  *
- * envelope：beginStep 内先经 ctx.appendEnvelopeIfNeeded()（DSH request/header 语义：
+ * envelope：beginStep 内先经 ctx.appendEnvelopeIfNeeded()（request/header 语义：
  * 每 step 一次对比，变更才写）。主循环与辅助调用统一覆盖。
  */
 import { Logger } from '@nestjs/common';

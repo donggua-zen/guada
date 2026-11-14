@@ -1,6 +1,6 @@
 /**
  * 轨迹台账格式化辅助（耗时 / token / 时间）。
- * dsh duration formatters 的精简版：短台账空间下的紧凑表示。
+ * 面向短台账空间的紧凑表示。
  */
 
 /** token 数紧凑表示：1234 → 1.2k；12345 → 12.3k；1234567 → 1.2M */
@@ -29,7 +29,7 @@ export function formatTrajectoryTime(ts: number | null | undefined): string | nu
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-// ─── SYSTEM 提示词行级 diff（LCS；对齐 dsh SYSTEM 页签的 diff 形态） ───
+// ─── SYSTEM 提示词行级 diff（LCS diff 形态） ───
 
 export interface TrajectoryDiffLine {
   type: 'same' | 'added' | 'removed';
@@ -86,7 +86,7 @@ export function diffTrajectoryLines(prev: string, next: string): TrajectoryDiffL
 /**
  * diff 显示折叠：长段未变行压缩为一条省略标记，只保留变化点 ±context 行上下文。
  * 修复「变更行把整段提示词摊开 + 下方全文 = 看起来显示两次」的重复观感
- * （对齐 dsh：变更行只看差异，全文按需展开）。
+ * （变更行只看差异，全文按需展开）。
  */
 export function compactTrajectoryDiff(
   lines: TrajectoryDiffLine[],

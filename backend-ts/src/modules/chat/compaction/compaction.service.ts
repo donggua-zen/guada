@@ -64,7 +64,7 @@ export interface CompressOutcome {
   compacted: boolean;
   /**
    * 是否真正替换了会话 surface（compacted 且遮蔽数 > 0）。
-   * 溢出恢复据此决定能否 retry（对齐 DSH：只有 surface 真被替换才重试原请求）；
+   * 溢出恢复据此决定能否 retry（只有 surface 真被替换才重试原请求）；
    * 未替换（跳过/失败）时调用方必须保留原始 provider 错误。
    */
   replaced: boolean;
@@ -133,7 +133,7 @@ export class CompactionService {
     const currentTokens = await ds.getTokenCount();
     this.throwIfCancelled(opts.abortSignal);
     const window = ds.getEffectiveContextWindow();
-    // 触发 = 验收线（对齐 DSH thresholdRatio；force 绕过）
+    // 触发 = 验收线（thresholdRatio；force 绕过）
     const thresholdTokens = Math.floor(
       window * (config.compressionTriggerRatio ?? 0.8),
     );
@@ -188,7 +188,7 @@ export class CompactionService {
       // S3：逐消息 token（快照同序），预算循环 O(1) 取值，免逐条估算
       perMessageTokens: await ds.getPerMessageTokens(),
       // 全量请求 token（prelude + 视图，provider 锚点）：引擎据此把"history-only"测量
-      // 补足为完整请求占用（对齐 DSH measure = envelope + surface，避免门控少算系统提示/工具）
+      // 补足为完整请求占用（measure = envelope + surface，避免门控少算系统提示/工具）
       requestTokens: currentTokens,
       contextWindow: window,
       triggerRatio: config.compressionTriggerRatio ?? 0.8,

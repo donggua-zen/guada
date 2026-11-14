@@ -226,7 +226,7 @@ function readContextStatsAnchor(event: unknown): ContextStatsAnchor | null {
  * 兼容两种形状（eventLog 是领域事件与 live chunk 的混合数组）：
  * - live chunk（turn_end / context_stats / compaction_summary / compression_end）：`e.contextStats`
  * - 领域事件（**仅 context/stats / compaction/end**）：`e.data.usedTokens + e.data.effectiveContextWindow`
- *   （Token 收敛：turn/finish 不再携带 token 字段，也不再作为锚点源——见 docs/dsh-trajectory-migration.md §9）
+ *   （Token 收敛：turn/finish 不再携带 token 字段，也不再作为锚点源）
  *
  * 后端在「占用稳定点」（每次小轮次请求、每次压缩后）把权威 usedTokens/
  * effectiveContextWindow（含 messageCount/breakdown）落进 context/stats →

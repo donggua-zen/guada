@@ -43,7 +43,7 @@ export interface TokenBreakdown {
 
 /**
  * 轮次完成信息（耗时/finishReason/error/模型）。
- * Token 字段收敛（docs/dsh-trajectory-migration.md §9）：usage 聚合与占用快照不再经
+ * Token 字段收敛：usage 聚合与占用快照不再经
  * turn/finish 落盘——usage 读侧从 assistant/message.metadata.usage 累加（前端 TurnItem
  * 已是此实现）；占用快照唯一载体是 context/stats。
  */
@@ -84,7 +84,7 @@ export interface IMessageStore {
   // "事后查询的 revision"假领先于消费方持有的视图（静默丢消息）。
 
   /**
-   * 开回合:写 turn/start(先于 user/message,对齐 DSH 回合定界)。
+   * 开回合:写 turn/start(先于 user/message,回合定界)。
    * @param options.replaceTurnId 整轮次重答:先遮蔽旧轮次,再开新回合
    * @param options.modelName 回合模型名（随 turn/start 落库，使在途回合被历史页重建时
    *   即携带模型名——否则流式中打开会话只能等 turn/finish 才能显示模型）
@@ -202,7 +202,7 @@ export interface IMessageStore {
       mode?: string;
       /** 摘要输入降级统计（剥离/丢弃过内容时写入 compaction/summary） */
       degraded?: import('./types').CompactionDegradationData;
-      /** 摘要调用 usage（流式累积，对齐 DSH SummaryResult） */
+      /** 摘要调用 usage（流式累积，含调用 envelope） */
       usage?: import('../types/stream-chunk.types').StreamUsage;
       /** 压缩后完整请求 token（compaction/end 携带，前端上下文占用锚点） */
       usedTokens?: number;
@@ -256,7 +256,7 @@ export interface IMessageStore {
     data: ContextStatsData,
   ): Promise<number>;
 
-  // ─── 轨迹（envelope + step 括号，对齐 DSH request-header / step 语义；log-only）───
+  // ─── 轨迹（envelope + step 括号；log-only）───
   /** 当前生效 envelope（回放态折叠；无 envelope 事件返回 null）。会话层去重缓存播种用。 */
   getEnvelope(sessionId: string): Promise<import('./types').Envelope | null>;
   /** envelope 事件：请求侧快照（system/tools/model/provider）。去重由调用方负责，变更才调用。 */

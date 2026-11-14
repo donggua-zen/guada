@@ -93,7 +93,7 @@ export class GoalVerifierService {
     const goal = state.goal;
     if (!goal || goal.phase !== 'active') return;
     if (state.failure) return;
-    // 进程内激活态：重启后一律 disarmed，必须显式 resume（DSH 语义）
+    // 进程内激活态：重启后一律 disarmed，必须显式 resume
     if (!this.goalService.isArmed(sessionId)) return;
     if (this.inFlight.has(sessionId)) return;
 

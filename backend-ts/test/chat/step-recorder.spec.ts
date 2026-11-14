@@ -3,7 +3,7 @@
 /**
  * 轨迹 step 括号记录器单测
  *
- * 覆盖（对齐 DSH step/start~step/end 收口纪律）：
+ * 覆盖（step/start~step/end 收口纪律）：
  * - 正常路径：envelope（可选）→ step/start → step/end 配对，durationMs/attemptIndex 语义
  * - noteAttempt：流式重试信号透出 → end 的 attemptIndex 取最大值
  * - 防御收口：上一括号未闭合就 begin 新括号 → 先补 StepUnclosed end 再开新括号（seq 有序）
@@ -112,7 +112,7 @@ describe('step-recorder 正常路径', () => {
   });
 });
 
-describe('step-recorder 防御收口（对齐 DSH finally 纪律）', () => {
+describe('step-recorder 防御收口（finally 纪律）', () => {
   it('未闭合括号 + 新 begin → 先补 StepUnclosed end 再开新括号', async () => {
     const { writer, calls } = makeWriter();
     await beginStep(writer, META);

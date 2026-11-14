@@ -227,7 +227,7 @@
   --gd-color-error-text-disabled: var(--gd-color-danger-text-disabled);
 
   /* ====================
-     调用轨迹（trajectory）五色系（对齐 zcode/dsh 台账角色配色）：
+     调用轨迹（trajectory）五色系（台账角色配色）：
      user / assistant / reasoning / tool-call / tool-result；明暗双套。
      组件里以 bg-(--gd-trajectory-*)/15 形态做徽标底，text 直接用本色。
      ==================== */
@@ -237,7 +237,7 @@
   --gd-trajectory-tool-call: #d97706;
   --gd-trajectory-tool-result: #0284c7;
   --gd-trajectory-error: #dc2626;
-  /* dsh 对齐：回合轨蓝accent / diff 新增绿 */
+  /* 回合轨蓝 accent / diff 新增绿 */
   --gd-trajectory-turn-rail: color-mix(in srgb, #3b82f6 22%, var(--gd-color-sidebar-bg));
   --gd-trajectory-added: #15803d;
   --gd-trajectory-neutral-bg: color-mix(in srgb, var(--gd-color-text-gray) 14%, var(--gd-color-sidebar-bg));

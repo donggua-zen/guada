@@ -250,7 +250,7 @@ export class ClaudeImportService {
 
     for (const point of sorted) {
       const index = Math.max(0, Math.min(point.beforeTurnIndex, turns.length));
-      // DSH 的 shadowedSeqs 能精确给出「压缩点之前已导入的消息条数」；
+      // DSH 会话日志的 shadowedSeqs 能精确给出「压缩点之前已导入的消息条数」；
       // ZCode 只有回合边界，按已建回合的消息数求和
       let rawBefore =
         "rawBeforeMessages" in point && typeof point.rawBeforeMessages === "number"

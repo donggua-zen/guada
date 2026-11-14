@@ -1,16 +1,16 @@
 /**
- * 轨迹投影服务（对齐 dsh trajectory-snapshot-builder 的配对思路，REST 拉式）
+ * 轨迹投影服务（REST 拉式）
  *
  * 单遍重放（复用 replayer fold 产出共享时间线）+ 一次 step 括号扫描：
  * - 时间线 = foldEvents 的 MessageNode[]（与 getHistory()/前端 streamProjector 同源）
  * - step 配对 = 按事件顺序：step/start 开卡，遇到 step/end 收卡（requestId 一致性由
  *   写入侧保证，投影只按顺序配对并防御「新 start 未收上一卡」的孤儿括号）——
- *   对齐 dsh trajectory 按 (turn, step) 配对 request/header 与 assistant 请求的思路
+ *   按 (turn, step) 把 request/header 与 assistant 请求配成调用卡片
  * - IN 区 = 上一 step/end 之后到本 step/start 之间的 surface 消息切片 + transient/fullInput
  * - OUT 区 = [stepStart, stepEnd] 区间内 assistant 块 + tool/result（区间切片，零复制）
  *
  * log-only 纪律的重放镜像：step 事件不进时间线；旧日志（无 step 事件）→
- * steps: [] + available: false，不伪造（对齐「不伪造」的空态语义）。
+ * steps: [] + available: false，不伪造（空态语义）。
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
@@ -47,7 +47,7 @@ interface OpenStepCard {
   data: StepStartData;
   /**
    * 括号内 assistant/message 携带的 usage（Token 收敛：主循环 step/end 不写 usage，
-   * 投影端从 OUT 区 assistant 消息合成——事实单载体在 assistant/message 上，对齐 dsh）。
+   * 投影端从 OUT 区 assistant 消息合成——事实单载体在 assistant/message 上）。
    */
   assistantUsage?: TokenUsage;
 }

@@ -1,11 +1,11 @@
 /**
- * 统一事件信封(参考 DSH 的 method+payload 分层)
+ * 统一事件信封(method+payload 分层)
  *
  * 设计要点:
  * - sessionId 不在信封上,下放到 payload 帧内:会话级帧带、全局帧不带
  * - method 作事件域判别器(命名空间前缀),前端按前缀路由
  * - payload 宽槽 + 业务层按 method 二次解析,扩展不改信封
- * - id 参考 DSH rpcId:会话级事件作续传/去重游标;应答类事件可 echo
+ * - id:会话级事件作续传/去重游标;应答类事件可 echo
  */
 
 import { randomUUID } from "crypto";
@@ -71,7 +71,7 @@ export type EventMethod = (typeof EVENT_METHOD)[keyof typeof EVENT_METHOD];
  * @template P payload 具体类型(默认宽槽,业务层按 method 二次解析)
  */
 export interface UnifiedEvent<P = Record<string, any>> {
-  /** 事件 ID(参考 DSH rpcId):会话级事件作续传/去重游标;全局事件为一次性 token */
+  /** 事件 ID:会话级事件作续传/去重游标;全局事件为一次性 token */
   id: string;
   /** 事件域判别器 */
   method: EventMethod;

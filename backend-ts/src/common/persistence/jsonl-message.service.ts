@@ -307,7 +307,7 @@ export class JsonlMessageService implements IMessageStore {
   /**
    * 收口未闭合回合（torn 尾修复与冷加载收口共用）。
    *
-   * 对齐 DSH interruptedTurnClosers：为未配对的 tool-call 合成显式错误结果，使恢复后的
+   * 为未配对的 tool-call 合成显式错误结果，使恢复后的
    * transcript 配对平衡（模型看到「被中断的工具 = 错误结果」，自行决定是否只读/幂等重试），
    * 再写 turn/finish(interrupted) 闭合回合。
    *
@@ -649,7 +649,7 @@ export class JsonlMessageService implements IMessageStore {
   // ─── 写入 ───
 
   /**
-   * 开回合:写 turn/start(先于 user/message,对齐 DSH 回合定界)。
+   * 开回合:写 turn/start(先于 user/message,回合定界)。
    * 整轮次重答(replaceTurnId):先 turn/delete 遮蔽旧轮次,再开新回合。
    * 事件实时落盘(append)。
    * @returns 回合 turnId + 写入后版本号（写入时确定，见接口版本号契约）
@@ -1403,7 +1403,7 @@ export class JsonlMessageService implements IMessageStore {
     });
   }
 
-  // ─── 轨迹（envelope + step 括号，对齐 DSH request-header / step 语义；log-only）───
+  // ─── 轨迹（envelope + step 括号；log-only）───
 
   /** 当前生效 envelope（回放态折叠；无 envelope 事件返回 null）。会话层去重缓存播种用。 */
   async getEnvelope(sessionId: string): Promise<Envelope | null> {
@@ -1413,7 +1413,7 @@ export class JsonlMessageService implements IMessageStore {
 
   /**
    * envelope 事件：请求侧快照（system + tools + model/provider）。
-   * 去重由调用方负责（写入方比对缓存，变更才调用本方法——与 DSH request/header 的
+   * 去重由调用方负责（写入方比对缓存，变更才调用本方法——与 request/header 的
    * headerEquals 结构去重同语义）；本方法只负责落盘。
    */
   async appendEnvelope(sessionId: string, data: Envelope): Promise<number> {

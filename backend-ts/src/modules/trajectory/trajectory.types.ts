@@ -1,9 +1,9 @@
 /**
- * 轨迹视图 DTO（对齐 dsh RequestView 语义，REST 拉式投影）
+ * 轨迹视图 DTO（REST 拉式投影）
  *
  * 台账 = 共享时间线（timeline，日志折叠 surface）+ step 卡片（steps，调用级记录）。
  * IN 区不重建 wire 视图：input 区间切片引用时间线 + transient/fullInput 补充
- * （媒体预算占位由 mediaOverlay 标注——日志即轨迹，见 docs/dsh-trajectory-migration.md）。
+ * （媒体预算占位由 mediaOverlay 标注——日志即轨迹）。
  */
 import type { MessageNode } from '../../common/persistence/types';
 import type { Envelope, StepMediaOverlayEntry } from '../../common/persistence/types';
@@ -64,7 +64,7 @@ export interface TrajectoryStepView {
   output: TrajectoryStepOutput;
 }
 
-/** envelope 快照 + 落盘位置（前端把 SYSTEM 行按 seq 插进台账流，对齐 dsh request/header 行） */
+/** envelope 快照 + 落盘位置（前端把 SYSTEM 行按 seq 插进台账流） */
 export interface TrajectoryEnvelopeSnapshot extends Envelope {
   /** envelope 事件 seq（台账行排序锚点） */
   seq: number;

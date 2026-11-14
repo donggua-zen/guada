@@ -57,7 +57,7 @@ import { MobileAccessModule } from './modules/mobile-access/mobile-access.module
     // 必须先于 UsageModule：UsageModule 的 UsageService 依赖 USAGE_PORT 与 SESSION_META_PORT。
     StoreModule,
     UsageModule, // Token 用量统计（@Global；LLMService 经全局导出注入 UsageService）
-    TrajectoryModule, // 模型调用轨迹（JSONL 即轨迹 + 拉式投影，对齐 dsh）
+    TrajectoryModule, // 模型调用轨迹（JSONL 即轨迹 + 拉式投影）
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     WorkspaceModule, // 全局 WorkspaceProvider 抽象层
     UploadModule, // 全局上传路径模块

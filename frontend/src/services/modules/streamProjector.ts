@@ -132,7 +132,7 @@ function getCurrentTurn(sessionId: string): string | undefined {
 /**
  * 按 toolCallId 定位包含该调用的 tool-call 块（跨回合扫描）。
  * 关联键是 provider 发出的 callId（一次调用唯一），不依赖 messageId——工具结果是独立消息。
- * 对齐 DSH 展示折叠：结果按 callId 挂回调用块，而非按消息 id。
+ * 展示折叠：结果按 callId 挂回调用块，而非按消息 id。
  */
 function findBlockByToolCallId(turns: Turn[], toolCallId: string): TurnContent | undefined {
   for (const t of turns) {
@@ -460,7 +460,7 @@ function applyDomainEvent(
     }
     case "tool/result": {
       // 工具结果 → 挂 toolCallsResponse 到对应 tool-call 块。
-      // 关联键是 toolCallId（provider 发出、唯一标识一次调用；对齐 DSH：结果按 callId 聚类）。
+      // 关联键是 toolCallId（provider 发出、唯一标识一次调用；结果按 callId 聚类）。
       // 工具结果是独立消息（独立 messageId），messageId 语义是"消息唯一 id"，不做关联键——
       // 回放/重建数据的 tool/result.messageId ≠ 含调用的 assistant 消息 id，按 messageId 必然丢结果。
       const data = ev.data;
@@ -1257,7 +1257,7 @@ export function applyChunkToStore(
   }
   if (chunk.type === "ask_requested") {
     // 统一交互请求（审批/询问共用）：执行内原地阻塞（无 turn_end、流保持 running）。
-    // 会话级交互卡**队列**（对齐 DSH：sessionId 唯一锚点，不挂回合），输入区上方展示队首。
+    // 会话级交互卡**队列**（sessionId 唯一锚点，不挂回合），输入区上方展示队首。
     // 只在实时路径写：卡片的权威来源是 live 流（含 SSE 建连时对活跃流 eventBuffer 的补发，
     // ask_requested 正在其中）；历史重放无从判断该 ask 是否仍在等待，写它只会覆盖实时真相。
     // 并发工具调用会连发多个（各自 requestId）→ 入队而不是覆盖。

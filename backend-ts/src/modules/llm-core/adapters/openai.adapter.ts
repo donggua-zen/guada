@@ -7,7 +7,7 @@
  * 2. usage 兼容 `prompt_cache_hit_tokens`（DeepSeek 缓存命中计费口径）。
  * 3. 流式 usage 需显式 `stream_options.include_usage`（OpenAI/Azure 严格遵循标准）。
  * 4. 思考强度映射 `reasoning_effort`；'none' 时需显式 thinking disabled。
- *    → 已收敛为 thinkingFormat 分发（见 applyThinkingFormat，对齐 DSH/pi-ai
+ *    → 已收敛为 thinkingFormat 分发（见 applyThinkingFormat
  *    的 11 种 wire 拼法），新增兼容拼法在此登记枚举。
  *
  * 职责边界：内容归一化（图片投影/reasoning 策略）在 L1 管线完成；本文件只做
@@ -61,7 +61,7 @@ import {
 } from "../thinking/thinking-vocabulary";
 
 /**
- * 思考档位 → wire 请求体拼法（对齐 DSH/pi-ai 的 thinkingFormat 分派）。
+ * 思考档位 → wire 请求体拼法（thinkingFormat 分派）。
  *
  * format/supportsReasoningEffort 由 store 的 resolveThinkingCompat 解析
  * （模型条目 compat > 实例 compat > 类型卡 > format 默认），随 providerConfig
@@ -229,7 +229,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
     }
 
     // 处理思考强度：按 thinkingFormat 将中立档位翻译为各家 wire 拼法
-    // （逐行对齐 DSH/pi-ai 的 openai-completions 分派；format/开关由 store 解析）
+    // （thinkingFormat 分派；format/开关由 store 解析）
     // 映射值向能力服务查（档位→vendor 词汇映射）；未映射时各分支自行回退档位名
     const mappedEffort = this.capability.resolveThinkingWireValue(
       params.providerConfig?.id,

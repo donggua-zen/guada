@@ -1,8 +1,8 @@
 /**
  * JSONL 持久化 — 回放引擎
- * 对齐 DSH 语义的扁平消息 surface 模型：
+ * 扁平消息 surface 模型：
  *   turn/start + turn/finish（回合：一次输入 = 用户 + 助手，一对一轮回——仅簿记，不建外壳）
- *   user/message + assistant/message + tool/result（消息级三事件，对齐 DSH）
+ *   user/message + assistant/message + tool/result（消息级三事件）
  *   turn/delete（删除本轮对话：按回合 id 移除该回合全部消息节点）
  *   message/prune（内容裁剪）、compaction/*（压缩括号：前缀范围删除 + 头部摘要，消息级）
  * 回放产出**扁平消息 surface**：`MessageNode[]`（IS-A Message，带 seq/turnId 归属标签），
@@ -225,7 +225,7 @@ export function foldEvent(
       break;
     }
 
-    // ─── 消息级三事件（对齐 DSH；归入 currentTurnId 游标回合，节点带归属标签）───
+    // ─── 消息级三事件（归入 currentTurnId 游标回合，节点带归属标签）───
 
     // user/message：用户消息（kind 区分真实用户/注入）
     case 'user/message': {
@@ -349,7 +349,7 @@ export function foldEvent(
       break;
     }
 
-    // ─── 压缩括号（对齐 DSH compaction/*）───
+    // ─── 压缩括号（compaction/*）───
     case 'compaction/start':
       // 搜索等全量内容链路：整段忽略压缩括号（被压缩消息保留参与检索）
       if (opts?.ignoreCompaction) break;
@@ -398,7 +398,7 @@ export function foldEvent(
         break;
       }
 
-      // 检查点消息（role='user' + source.plugin='compact'，DSH 式可见检查点：
+      // 检查点消息（role='user' + source.plugin='compact'，可见检查点：
       // 二次压缩时旧检查点位于消息头、必然落在新删除范围内 → 自然被替换，不会重复）
       const summaryMsg = eventMessageFromData({
         messageId: summaryMsgId,
@@ -660,7 +660,7 @@ export function toolResultFromData(data: ToolResultData, time: number): ThreeTie
 
 /**
  * compaction 摘要 → 三层 Message（role='user'，kind='model'，source.plugin='compact'）。
- * 对齐 DSH：LLM 消息角色只有 system/user/assistant，无 event——检查点是可见 user 消息
+ * LLM 消息角色只有 system/user/assistant，无 event——检查点是可见 user 消息
  * （source.plugin 标记来源；metadata.compactInfo 承载遮蔽范围/摘要）。
  */
 function eventMessageFromData(data: {

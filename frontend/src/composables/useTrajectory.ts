@@ -45,7 +45,7 @@ export interface LedgerTurnRow {
   deletedTurn: boolean;
 }
 
-/** SYSTEM 快照行（envelope 事件，按 seq 插进台账流；对齐 dsh request/header 行） */
+/** SYSTEM 快照行（envelope 事件，按 seq 插进台账流） */
 export interface LedgerSystemRow {
   key: string;
   kind: 'system';
@@ -211,7 +211,7 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
     const turnNumbers = new Map<string, number>();
 
     /**
-     * dsh layoutEntryOrder 规则：初始系统提示词（envelope.reason='initial'）钉在全表
+     * 行序规则：初始系统提示词（envelope.reason='initial'）钉在全表
      * 最顶；其余快照（含 change）留在原始 seq 位置（用户消息之后）。
      */
     let sysCounter = 0;
