@@ -1,20 +1,22 @@
 /**
- * useTrajectory — 轨迹台账数据 + 台账行派生（对齐 dsh layout.ts 的 turn→group→cell 折叠思路，精简版）
+ * useTrajectory — 轨迹台账数据 + 台账行派生（审计视图：日志全量事件，一事件一行）
  *
  * 台账行模型（kind 判别联合）：
- * - 'turn-header'  回合分组头（按 turnId 首现顺序编号）
- * - 'group-header' 独立分组头（辅助调用：turnId=null 的 step 集合）
- * - 'request'      Request N 边界行（状态/模型/IN-OUT token/耗时/finishReason）
- * - 'message'      消息行（region: prefix=首卡之前的历史 / in=请求输入 / transient=瞬态注入 /
- *                  out=调用产出）
+ * - 'turn-header'  回合分界线（turn/start 事件；编号按首现顺序，含已删除回合）
+ * - 'system'       SYSTEM 快照行（envelope 事件，按 seq 插进台账流）
+ * - 'message'      消息行（用户/助手/工具表面事件 + step/start 携带的瞬态注入）
+ * - 'event'        通用事件行（step/start|end、context/stats、turn/finish、compaction、
+ *                  turn/delete、未知事件——每条日志事件都必须出现在台账里）
  *
- * IN 区不重建 wire 视图（dsh 同款）：请求输入 = 时间线 seq 区间切片 + transient verbatim；
- * 媒体占位由 step.mediaOverlay 标注。展开状态存 Panel 层 Set（跨卸载存活）。
+ * 审计纪律：turn/delete 只标记不回溯删除——被删回合的消息照常列出并置灰；
+ * 消息行一律来自原始事件（不做 IN/OUT 区间重复切片），每条消息只出现一次。
+ * 展开状态存 Panel 层 Set（跨卸载存活）。
  */
 import { ref, computed, type Ref } from 'vue';
 import { apiService } from '@/services/ApiService';
 import type {
   TrajectoryEnvelopeSnapshot,
+  TrajectoryEventView,
   TrajectoryMessageNode,
   TrajectoryStepView,
   TrajectoryView,
@@ -23,27 +25,24 @@ import type { ContentBlock } from '@/types/stream/content-block.types';
 
 // ─── 台账行模型 ───
 
-export interface LedgerRequestRow {
-  key: string;
-  kind: 'request';
-  step: TrajectoryStepView;
-  /** 会话级请求序号（1..N，按 startSeq 排序） */
-  number: number;
-}
-
 export interface LedgerMessageRow {
   key: string;
   kind: 'message';
   node: TrajectoryMessageNode;
-  region: 'prefix' | 'in' | 'transient' | 'out';
-  /** 宿主 step（prefix 行为 null） */
+  /** 瞬态注入（step/start 携带的 transient/fullInput；徽章用「注入」） */
+  transient: boolean;
+  /** 所属回合已被 turn/delete 删除 → 置灰（审计仍可见） */
+  deletedTurn: boolean;
+  /** 宿主 step（媒体占位标注用；旧步或缺页时为 null） */
   step: TrajectoryStepView | null;
 }
 
-export interface LedgerGroupRow {
+export interface LedgerTurnRow {
   key: string;
-  kind: 'turn-header' | 'group-header';
+  kind: 'turn-header';
+  /** 回合编号（turnId 首现顺序，含已删除回合） */
   label: string;
+  deletedTurn: boolean;
 }
 
 /** SYSTEM 快照行（envelope 事件，按 seq 插进台账流；对齐 dsh request/header 行） */
@@ -57,11 +56,22 @@ export interface LedgerSystemRow {
   previous: TrajectoryEnvelopeSnapshot | null;
 }
 
+/** 通用事件行：日志里除信封/表面消息外的一切事件（原样可展开审计） */
+export interface LedgerEventRow {
+  key: string;
+  kind: 'event';
+  event: TrajectoryEventView;
+  /** turn/delete 行：被删除回合的编号（摘要文案用） */
+  deletedTurnNumber?: number;
+  /** 位于已删除回合区间内 → 置灰（审计仍可见） */
+  deletedTurn?: boolean;
+}
+
 export type LedgerRow =
-  | LedgerRequestRow
   | LedgerMessageRow
-  | LedgerGroupRow
-  | LedgerSystemRow;
+  | LedgerTurnRow
+  | LedgerSystemRow
+  | LedgerEventRow;
 
 // ─── 内容块文本化（单行摘要 + 展开全文共用） ───
 
@@ -82,6 +92,21 @@ export function blockToText(block: ContentBlock): string {
     default:
       return `[${(block as { type: string }).type}]`;
   }
+}
+
+/** markdown → 纯文本（行内展示用）：剥粗体/斜体/行内码/标题/列表符/表格分隔 */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, (m) => m.replace(/```\w*\n?/g, '').trim())
+    .replace(/^\s*\|.*\|\s*$/gm, (line) => (line.match(/^\s*\|?[\s:|-]+\|?\s*$/) ? '' : line.replace(/\|/g, ' ')))
+    .replace(/^\s*#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\n+/g, ' ')
+    .replace(/\s{2,}/g, ' ');
 }
 
 export function nodeToText(node: TrajectoryMessageNode): string {
@@ -113,8 +138,6 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
   const search = ref('');
   /** 展开状态（Panel 层 Set，跨卸载存活；key = row.key） */
   const expanded = ref(new Set<string>());
-  /** 详情选中的 step（requestId；null = 未选） */
-  const selectedRequestId = ref<string | null>(null);
 
   async function refresh(limit = 200): Promise<void> {
     const sid = sessionId.value;
@@ -153,120 +176,155 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
     expanded.value = next;
   }
 
-  /** 会话级请求编号（1..N） */
-  const numberedSteps = computed<Array<{ step: TrajectoryStepView; number: number }>>(() => {
-    const steps = [...(view.value?.steps ?? [])].sort((a, b) => a.startSeq - b.startSeq);
-    return steps.map((step, i) => ({ step, number: i + 1 }));
-  });
-
   /** 全部 envelope 快照（事件序；SYSTEM 变更历史） */
   const envelopes = computed(() => view.value?.envelopes ?? []);
 
-  /** 首卡 startSeq 之前的历史消息（prefix 区） */
-  const prefixNodes = computed<TrajectoryMessageNode[]>(() => {
-    const steps = view.value?.steps ?? [];
-    if (steps.length === 0) return [];
-    const first = steps.reduce((m, s) => Math.min(m, s.startSeq), Number.MAX_SAFE_INTEGER);
-    return (view.value?.timeline ?? []).filter((n) => n.seq < first);
-  });
-
-  /** seq 区间切片（timeline 有序，二分可省——数量级 ≤ 数千，线性足够） */
-  function sliceTimeline(fromSeq: number, toSeq: number): TrajectoryMessageNode[] {
-    return (view.value?.timeline ?? []).filter(
-      (n) => n.seq >= fromSeq && n.seq <= toSeq,
-    );
+  /** 消息所属 step（媒体占位标注用）：seq 落在 [startSeq, endSeq] 区间 */
+  function stepForSeq(
+    seq: number,
+    steps: TrajectoryStepView[],
+  ): TrajectoryStepView | null {
+    for (const s of steps) {
+      const end = s.endSeq ?? Number.MAX_SAFE_INTEGER;
+      if (seq >= s.startSeq && seq <= end) return s;
+    }
+    return null;
   }
 
-  /** 台账行派生（对齐 dsh：turn 分组 + Request 边界 + kind 单元格） */
+  /** 台账行派生：原始事件流逐条成行（审计视图，含已删除轮次） */
   const rows = computed<LedgerRow[]>(() => {
     const out: LedgerRow[] = [];
-    const steps = numberedSteps.value;
-    if (steps.length === 0) return out;
+    const evs = view.value?.events ?? [];
+    if (evs.length === 0) return out;
 
-    // 回合编号（turnId 首现顺序）
-    const turnOrder = new Map<string, number>();
-    let turnCounter = 0;
-    let standaloneHeaderWritten = false;
-    let lastTurnId: string | null | undefined = undefined;
-
-    // SYSTEM 行按 seq 插进台账流：每步前 flush seq 更早的 envelope（对齐 dsh
-    // 把 request/header 行排在它服务的请求之前；初始行钉在最前，变更行挂 diff）
-    const allEnvelopes = envelopes.value;
-    let envIdx = 0;
-    let sysCounter = 0;
-    let lastSys: TrajectoryEnvelopeSnapshot | null = null;
-    const flushSystemRows = (beforeSeq: number): void => {
-      while (envIdx < allEnvelopes.length && allEnvelopes[envIdx]!.seq < beforeSeq) {
-        sysCounter += 1;
-        const env = allEnvelopes[envIdx]!;
-        out.push({ key: `sys:${env.seq}`, kind: 'system', envelope: env, number: sysCounter, previous: lastSys });
-        lastSys = env;
-        envIdx += 1;
-      }
-    };
-
-    for (const { step, number } of steps) {
-      const turnId = step.turnId;
-      flushSystemRows(step.startSeq);
-      // 分组头（回合切换 / 首个辅助调用组）
-      if (turnId !== null && turnId !== lastTurnId) {
-        if (!turnOrder.has(turnId)) {
-          turnCounter += 1;
-          turnOrder.set(turnId, turnCounter);
-        }
-        out.push({
-          key: `turn:${turnId}`,
-          kind: 'turn-header',
-          label: `${turnOrder.get(turnId)}`,
-        });
-        lastTurnId = turnId;
-      } else if (turnId === null && !standaloneHeaderWritten) {
-        out.push({ key: 'group:aux', kind: 'group-header', label: 'aux' });
-        standaloneHeaderWritten = true;
-        lastTurnId = null;
-      }
-
-      out.push({ key: `req:${step.requestId}:${number}`, kind: 'request', step, number });
-
-      // IN 区（首卡之前的 prefix 消息单独归组在第一个 request 前输出）
-      for (const node of sliceTimeline(step.input.fromSeq, step.input.toSeq)) {
-        out.push({ key: `m:${node.seq}:in`, kind: 'message', node, region: 'in', step });
-      }
-      for (const node of step.input.transient ?? []) {
-        out.push({
-          key: `m:${node.id}:transient`,
-          kind: 'message',
-          node,
-          region: 'transient',
-          step,
-        });
-      }
-      for (const node of step.input.fullInput ?? []) {
-        out.push({
-          key: `m:${node.id}:fullinput`,
-          kind: 'message',
-          node,
-          region: 'transient',
-          step,
-        });
-      }
-      // OUT 区（unclosed 卡的 toSeq = MAX_SAFE_INTEGER → 剩余全部消息，切片自然收敛）
-      const outTo = step.output.toSeq === Number.MAX_SAFE_INTEGER
-        ? Number.MAX_SAFE_INTEGER
-        : step.output.toSeq;
-      for (const node of sliceTimeline(step.output.fromSeq, outTo)) {
-        out.push({ key: `m:${node.seq}:out`, kind: 'message', node, region: 'out', step });
+    const envelopesBySeq = new Map(envelopes.value.map((e) => [e.seq, e]));
+    const steps = view.value?.steps ?? [];
+    // 先收集删除标记：被删回合的消息行与回合头统一置灰
+    const deletedTurns = new Set<string>();
+    for (const ev of evs) {
+      if (ev.type === 'turn/delete') {
+        const tid = (ev.data as { turnId?: string } | undefined)?.turnId;
+        if (tid) deletedTurns.add(tid);
       }
     }
-    flushSystemRows(Number.MAX_SAFE_INTEGER);
+
+    const turnNumbers = new Map<string, number>();
+
+    /**
+     * dsh layoutEntryOrder 规则：初始系统提示词（envelope.reason='initial'）钉在全表
+     * 最顶；其余快照（含 change）留在原始 seq 位置（用户消息之后）。
+     */
+    let sysCounter = 0;
+    let lastSys: TrajectoryEnvelopeSnapshot | null = null;
+    const initialEnvelope = envelopes.value.find((e) => e.reason === 'initial') ?? null;
+    if (initialEnvelope) {
+      sysCounter += 1;
+      out.push({
+        key: `sys:${initialEnvelope.seq}`,
+        kind: 'system',
+        envelope: initialEnvelope,
+        number: sysCounter,
+        previous: null,
+      });
+      lastSys = initialEnvelope;
+    }
+
+    for (const ev of evs) {
+      switch (ev.type) {
+        case 'turn/start': {
+          const tid = (ev.data as { turnId?: string } | undefined)?.turnId ?? '';
+          if (!turnNumbers.has(tid)) turnNumbers.set(tid, turnNumbers.size + 1);
+          out.push({
+            key: `turn:${tid}`,
+            kind: 'turn-header',
+            label: `${turnNumbers.get(tid)}`,
+            deletedTurn: deletedTurns.has(tid),
+          });
+          break;
+        }
+        case 'turn/delete': {
+          const tid = (ev.data as { turnId?: string } | undefined)?.turnId ?? '';
+          out.push({
+            key: `ev:${ev.seq}`,
+            kind: 'event',
+            event: ev,
+            ...(turnNumbers.has(tid) ? { deletedTurnNumber: turnNumbers.get(tid) } : {}),
+          });
+          break;
+        }
+        case 'envelope': {
+          if (ev.seq === initialEnvelope?.seq) break; // 已钉在全表最顶
+          const env = envelopesBySeq.get(ev.seq);
+          if (env) {
+            sysCounter += 1;
+            out.push({
+              key: `sys:${ev.seq}`,
+              kind: 'system',
+              envelope: env,
+              number: sysCounter,
+              previous: lastSys,
+            });
+            lastSys = env;
+          }
+          break;
+        }
+        case 'user/message':
+        case 'assistant/message':
+        case 'tool/result': {
+          if (!ev.node) break;
+          const node = ev.node;
+          out.push({
+            key: `m:${ev.seq}`,
+            kind: 'message',
+            node,
+            transient: false,
+            deletedTurn: node.turnId ? deletedTurns.has(node.turnId) : false,
+            step: stepForSeq(ev.seq, steps),
+          });
+          break;
+        }
+        case 'step/start': {
+          // 请求侧注入（transient/fullInput）：注入内容才是台账内容，调用开始本身是流水
+          const data = ev.data as
+            | { transient?: TrajectoryMessageNode[]; fullInput?: TrajectoryMessageNode[] }
+            | undefined;
+          const host = stepForSeq(ev.seq, steps);
+          for (const node of data?.transient ?? []) {
+            out.push({
+              key: `m:${node.id}:inject`,
+              kind: 'message',
+              node,
+              transient: true,
+              deletedTurn: false,
+              step: host,
+            });
+          }
+          for (const node of data?.fullInput ?? []) {
+            out.push({
+              key: `m:${node.id}:fullinput`,
+              kind: 'message',
+              node,
+              transient: true,
+              deletedTurn: false,
+              step: host,
+            });
+          }
+          break;
+        }
+        default:
+          // 流水事件（session/init、context/stats、step/end、turn/finish、compaction、
+          // 未知事件…）不属于台账内容——审计价值在于消息与快照本身
+          break;
+      }
+    }
     return out;
   });
 
-  /** 搜索过滤（dsh TrajectorySearchIndex 语义：空白分词 + AND 子串匹配；命中行保留宿主 request 行） */
+  /** 搜索过滤（空白分词 + AND 子串匹配；回合/信封/删除锚点行始终保留） */
   const filteredRows = computed<LedgerRow[]>(() => {
     const all = rows.value;
     const terms = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (terms.length === 0) return withPrefixRows(all);
+    if (terms.length === 0) return all;
 
     const rowText = (row: LedgerRow): string => {
       if (row.kind === 'message') return nodeToText(row.node).toLowerCase();
@@ -281,62 +339,20 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
           .join(' ')
           .toLowerCase();
       }
-      if (row.kind === 'request') {
-        const s = row.step;
-        return [
-          s.source, s.model, s.provider, s.finishReason, s.status,
-          s.error?.message, s.requestId,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
+      if (row.kind === 'event') {
+        return `${row.event.type} ${JSON.stringify(row.event.data ?? {})}`.toLowerCase();
       }
       return '';
     };
 
     const matches = (text: string) => terms.every((term) => text.includes(term));
-
-    // 命中的消息行 + 命中的 request 行；request 行在其任一消息命中时也保留
-    const hitMessage = new Set<string>();
-    const hitRequest = new Set<string>();
-    for (const row of all) {
-      if (row.kind === 'message' && matches(rowText(row))) hitMessage.add(row.key);
-      if (row.kind === 'request' && matches(rowText(row))) hitRequest.add(row.key);
-    }
-    // 分组头始终保留（结构锚）；request 行在其任一消息命中或自身命中时保留
-    const visible = all.filter((row) => {
-      if (row.kind === 'turn-header' || row.kind === 'group-header') return true;
-      if (row.kind === 'system') return true;
-      if (row.kind === 'request') {
-        return (
-          hitRequest.has(row.key) ||
-          all.some(
-            (m) =>
-              m.kind === 'message' &&
-              m.step?.requestId === row.step.requestId &&
-              hitMessage.has(m.key),
-          )
-        );
-      }
-      return hitMessage.has(row.key);
+    return all.filter((row) => {
+      // 结构锚行（回合分界 / 信封 / turn/delete）始终保留
+      if (row.kind === 'turn-header' || row.kind === 'system') return true;
+      if (row.kind === 'event' && row.event.type === 'turn/delete') return true;
+      return matches(rowText(row));
     });
-    return withPrefixRows(visible);
   });
-
-  /** prefix 行（首卡之前历史）挂在第一条 request 行之前 */
-  function withPrefixRows(rowsIn: LedgerRow[]): LedgerRow[] {
-    const firstReqIdx = rowsIn.findIndex((r) => r.kind === 'request');
-    if (firstReqIdx < 0) return rowsIn;
-    const prefix: LedgerRow[] = prefixNodes.value.map((node) => ({
-      key: `m:${node.seq}:prefix`,
-      kind: 'message' as const,
-      node,
-      region: 'prefix' as const,
-      step: null,
-    }));
-    if (prefix.length === 0) return rowsIn;
-    return [...rowsIn.slice(0, firstReqIdx), ...prefix, ...rowsIn.slice(firstReqIdx)];
-  }
 
   /** 汇总：调用数 / 累计 token / 模型集合 */
   const summary = computed(() => {
@@ -364,16 +380,6 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
     };
   });
 
-  /** 详情面板选中的 step */
-  const selectedStep = computed<TrajectoryStepView | null>(() => {
-    if (!selectedRequestId.value) return null;
-    return view.value?.steps.find((s) => s.requestId === selectedRequestId.value) ?? null;
-  });
-
-  function selectStep(requestId: string | null): void {
-    selectedRequestId.value = requestId;
-  }
-
   return {
     loading,
     error,
@@ -383,11 +389,8 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
     rows: filteredRows,
     summary,
     envelopes,
-    selectedRequestId,
-    selectedStep,
     refresh,
     toggleExpand,
     expandAll,
-    selectStep,
   };
 }

@@ -93,12 +93,26 @@ export interface TrajectoryEnvelopeSnapshot extends TrajectoryEnvelope {
   time: number;
 }
 
+/**
+ * 审计事件（日志全量一事件一行）：surface 消息带归一化节点（含已删除轮次），
+ * envelope 载荷走 envelopes，step/start 的 transient/fullInput 走 steps[].input。
+ */
+export interface TrajectoryEventView {
+  seq: number;
+  time: number;
+  type: string;
+  node?: TrajectoryMessageNode;
+  data?: Record<string, unknown>;
+}
+
 export interface TrajectoryView {
   envelope: TrajectoryEnvelope | null;
   /** 全部 envelope 快照（事件序；SYSTEM 行按 seq 插进台账流，变更行带 diff） */
   envelopes: TrajectoryEnvelopeSnapshot[];
   timeline: TrajectoryMessageNode[];
   steps: TrajectoryStepView[];
+  /** 审计事件流：日志全量事件（含已删除轮次的 surface 消息与 turn/delete 标记） */
+  events: TrajectoryEventView[];
   /** false = 会话创建于轨迹功能上线前（无 step 事件），不伪造空卡 */
   available: boolean;
   totalSteps: number;

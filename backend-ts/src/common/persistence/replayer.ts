@@ -567,7 +567,7 @@ function appendFileBlocks(blocks: ContentBlock[], cid: string, files?: MessageFi
  * 历史数据中的旧版工具图片注入消息也走此形态）。
  * 归属由节点 turnId 承载，Message 本身不再带 turnId。
  */
-function userMessageFromData(data: UserMessageData, time: number): ThreeTierMessage {
+export function userMessageFromData(data: UserMessageData, time: number): ThreeTierMessage {
   const cid = data.messageId;
   const meta = data.metadata ?? {};
   // P6：事件格式统一为 blocks——旧 content/files 平铺格式 fail-fast
@@ -606,7 +606,7 @@ function userMessageFromData(data: UserMessageData, time: number): ThreeTierMess
  * 检测到即 fail-fast 明确报错（旧数据可从 DB 重新导入）。
  * 归属由节点 turnId 承载，Message 本身不再带 turnId。
  */
-function assistantMessageFromData(data: AssistantMessageData, time: number): ThreeTierMessage {
+export function assistantMessageFromData(data: AssistantMessageData, time: number): ThreeTierMessage {
   const cid = data.messageId;
   const meta = data.metadata ?? {};
 
@@ -634,7 +634,7 @@ function assistantMessageFromData(data: AssistantMessageData, time: number): Thr
  * tool/result → 三层 Message（role='tool'，kind='model'，source.tool + tool-result 块）。
  * 归属由节点 turnId 承载，Message 本身不再带 turnId。
  */
-function toolResultFromData(data: ToolResultData, time: number): ThreeTierMessage {
+export function toolResultFromData(data: ToolResultData, time: number): ThreeTierMessage {
   const cid = data.messageId;
   const meta = data.metadata ?? {};
   return {

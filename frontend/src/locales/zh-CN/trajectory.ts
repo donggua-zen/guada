@@ -24,6 +24,9 @@ export default {
       change: '系统提示词已更新',
     },
   },
+  event: {
+    deletedTurn: '回合 {n} 已删除（内容保留，仅对话视图隐藏）',
+  },
   openSubTrajectory: '查看轨迹',
 
   role: {

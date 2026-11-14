@@ -80,6 +80,9 @@ export default {
       change: 'System Prompt Updated',
     },
   },
+  event: {
+    deletedTurn: 'Turn {n} deleted (content kept here; hidden from the chat view only)',
+  },
   openSubTrajectory: 'View trajectory',
   diff: {
     added: 'Added',

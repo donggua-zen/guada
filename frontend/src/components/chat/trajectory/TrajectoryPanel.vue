@@ -54,23 +54,9 @@
         v-else
         :rows="rows"
         :expanded="expanded"
-        :selected-request-id="selectedRequestId"
         @toggle="toggleExpand"
-        @select="selectStep"
         @open-sub-trajectory="emit('open-sub-trajectory', $event)"
       />
-    </div>
-
-    <!-- 底部会话级统计条 -->
-    <div
-      v-if="view?.available"
-      class="shrink-0 flex items-center gap-2 px-8px py-6px border-t border-(--gd-color-border) text-(10px) text-(--gd-color-text-gray) tabular-nums"
-    >
-      <span>{{ t('trajectory.footer.turns', { n: view?.totalSteps ?? 0 }) }}</span>
-      <span>·</span>
-      <span>{{ t('trajectory.footer.input', { n: formatTokens(summary.promptTokens) }) }}</span>
-      <span>·</span>
-      <span>{{ t('trajectory.footer.output', { n: formatTokens(summary.completionTokens) }) }}</span>
     </div>
   </div>
 </template>
@@ -102,7 +88,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const {
   loading, error, view, search, expanded, rows, summary,
-  selectedRequestId, refresh, toggleExpand, expandAll, selectStep,
+  refresh, toggleExpand, expandAll,
 } = useTrajectory(computed(() => props.sessionId));
 
 function formatTokens(n: number): string {

@@ -1,27 +1,30 @@
 <template>
   <!--
-    消息行：事件列 kind 徽章（19px 单字符）+ 内容列单行省略；整行点击展开/收起。
-    展开区：逐块卡片（mono 12px/19px，媒体占位标注，复制）。
+    消息行：事件列（回合轨 + 徽章右贴内容列）+ 内容列原文单行省略。
+    整行点击展开/收起；展开区逐块卡片（mono 12px/19px、媒体占位标注、复制）。
   -->
   <div
-    class="cv-row grid grid-cols-[44px_1fr] border-b-[0.5px] border-(--gd-color-border)/40 cursor-pointer hover:bg-(--gd-color-sidebar-bg-hover)/60"
+    class="cv-row grid grid-cols-[50px_1fr] border-b-[0.5px] border-(--gd-color-border)/40 hover:bg-(--gd-color-sidebar-bg-hover) cursor-pointer"
+    :class="row.deletedTurn ? 'opacity-50' : ''"
     @click="emit('toggle', row.key)"
   >
     <div class="relative h-[30px]">
+      <span class="absolute left-0 top-0 bottom-0 w-[2px] bg-(--gd-trajectory-turn-rail)"></span>
       <span
-        class="absolute top-1/2 left-1/2 -translate-1/2 inline-flex items-center justify-center h-[19px] px-[5px] whitespace-nowrap rounded-[4px] text-[10px] font-[650] leading-[16px]"
+        class="absolute right-[4px] top-1/2 -translate-y-1/2 inline-flex h-[19px] px-[5px] whitespace-nowrap rounded-[4px] text-[10px] leading-[16px] font-[650] tracking-[0.035em]"
         :class="roleBadgeClass"
         :data-trajectory-role="node.role"
       >
         {{ roleLabel }}
       </span>
     </div>
-    <div class="flex items-center gap-1.5 min-w-0 pr-[8px]">
-      <span v-if="toolName" class="shrink-0 max-w-24 truncate text-[10px] text-(--gd-trajectory-tool-call)">
+    <div class="flex items-center min-w-0 pl-[4px] pr-[8px]">
+      <!-- 工具行：mono 工具名 + 载荷（分离字重） -->
+      <span v-if="toolName" class="shrink-0 font-mono text-[12px] leading-[18px] text-(--gd-color-text)">
         {{ toolName }}
       </span>
-      <span class="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis text-(--gd-color-text)">
-        {{ summary }}
+      <span class="block min-w-0 ml-[7px] whitespace-nowrap overflow-hidden text-ellipsis text-(--gd-color-text-gray)">
+        {{ rawText }}
       </span>
       <!-- 子代理会话跳转（meta.link = sub_agent） -->
       <button
@@ -32,29 +35,26 @@
       >
         {{ t('trajectory.openSubTrajectory') }}
       </button>
-      <span class="shrink-0 w-5 h-5 inline-flex items-center justify-center rounded text-(--gd-color-text-gray)">
-        <ChevronDown16Regular v-if="expanded" class="w-3 h-3" />
-        <ChevronRight16Regular v-else class="w-3 h-3" />
-      </span>
     </div>
 
-    <!-- 展开全文：点击展开区不收起 -->
-    <div v-if="expanded" class="col-start-2 px-[8px] pb-[8px] space-y-1" @click.stop>
+    <!-- 展开全文：点击展开区不收起；文本块不重复标注类型，复制按钮悬停浮现 -->
+    <div v-if="expanded" class="col-start-2 px-[12px] pb-[8px] space-y-1" @click.stop>
       <div
         v-for="(block, bi) in node.content"
         :key="bi"
-        class="rounded-md bg-(--gd-color-sidebar-bg-hover) px-[12px] py-[8px] max-h-48 overflow-y-auto"
+        class="group relative rounded-[6px] bg-(--gd-color-sidebar-bg-hover) px-[10px] py-[6px] max-h-48 overflow-y-auto"
       >
-        <div class="flex items-center gap-1 mb-1">
-          <span class="text-[10px] font-medium text-(--gd-color-text-gray)">{{ blockKindLabel(block) }}</span>
-          <button
-            type="button"
-            class="ml-auto w-5 h-5 inline-flex items-center justify-center rounded text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-active)"
-            @click="copyBlock(block)"
-          >
-            <Copy16Regular class="w-3 h-3" />
-          </button>
-        </div>
+        <span
+          v-if="block.type !== 'text'"
+          class="mb-1 block text-[10px] font-medium text-(--gd-color-text-gray)"
+        >{{ blockKindLabel(block) }}</span>
+        <button
+          type="button"
+          class="absolute top-[4px] right-[4px] w-5 h-5 inline-flex items-center justify-center rounded text-(--gd-color-text-gray) opacity-0 group-hover:opacity-100 hover:bg-(--gd-color-sidebar-bg-active)"
+          @click="copyBlock(block)"
+        >
+          <Copy16Regular class="w-3 h-3" />
+        </button>
         <!-- 媒体占位标注（媒体预算替换：模型该次看到的是占位文本） -->
         <div
           v-if="overlayNote(bi)"
@@ -64,27 +64,20 @@
         </div>
         <pre class="whitespace-pre-wrap break-words font-mono text-[12px]/[19px] text-(--gd-color-text)">{{ blockToText(block) }}</pre>
       </div>
-      <div class="text-[10px] text-(--gd-color-text-gray)">
-        seq {{ node.seq }} · {{ regionLabel }}
-      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 /**
- * 台账消息行：kind 徽章事件列 + 单行摘要 + 整行点击展开 + 复制。
+ * 台账消息行：kind 徽章事件列（右贴内容列）+ 内容原文单行省略 + 整行点击展开。
  */
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import {
-  ChevronDown16Regular,
-  ChevronRight16Regular,
-  Copy16Regular,
-} from '@vicons/fluent';
+import { Copy16Regular } from '@vicons/fluent';
 import type { ContentBlock } from '@/types/stream/content-block.types';
 import type { LedgerMessageRow } from '@/composables/useTrajectory';
-import { blockToText, nodeToText, overlayFor } from '@/composables/useTrajectory';
+import { blockToText, overlayFor, stripMarkdown } from '@/composables/useTrajectory';
 import { writeTextToClipboard } from '@/utils/clipboard';
 import { toast } from '@/components/ui/toastService';
 
@@ -100,12 +93,12 @@ const { t } = useI18n();
 const node = computed(() => props.row.node);
 
 const roleLabel = computed(() => {
-  if (props.row.region === 'transient') return t('trajectory.role.inject');
+  if (props.row.transient) return t('trajectory.role.inject');
   return t(`trajectory.role.${node.value.role}`);
 });
 
 const roleBadgeClass = computed(() => {
-  if (props.row.region === 'transient') {
+  if (props.row.transient) {
     return 'bg-violet-500/15 text-violet-500';
   }
   switch (node.value.role) {
@@ -114,7 +107,7 @@ const roleBadgeClass = computed(() => {
     case 'assistant':
       return 'bg-(--gd-trajectory-reasoning)/15 text-(--gd-trajectory-reasoning)';
     case 'tool':
-      return 'bg-(--gd-trajectory-tool-result)/15 text-(--gd-trajectory-tool-result)';
+      return 'bg-(--gd-trajectory-tool-call)/15 text-(--gd-trajectory-tool-call)';
     default:
       return 'bg-(--gd-trajectory-neutral-bg) text-(--gd-color-text-gray)';
   }
@@ -140,10 +133,21 @@ const subAgentSessionId = computed<string | null>(() => {
   return null;
 });
 
-const fullText = computed(() => nodeToText(node.value));
-const summary = computed(() => fullText.value.replace(/\s+/g, ' ').slice(0, 300) || '—');
-
-const regionLabel = computed(() => t(`trajectory.region.${props.row.region}`));
+/** 内容列文本：正文 text 块拼接 + markdown 转纯文本（reasoning 放详情），换行压空格，单行省略交给 CSS */
+const rawText = computed(() => {
+  // 工具行：取 tool-result 的内容文本（dsh 同款：名称 + 结果预览）
+  for (const block of node.value.content) {
+    if (block.type === 'tool-result') {
+      return stripMarkdown(block.content ?? '') || '—';
+    }
+  }
+  const t = (node.value.content ?? [])
+    .filter((b) => b.type === 'text')
+    .map((b) => stripMarkdown((b as { text: string }).text))
+    .join(' ')
+    .trim();
+  return t || '—';
+});
 
 function blockKindLabel(block: ContentBlock): string {
   return t(`trajectory.block.${block.type}`);

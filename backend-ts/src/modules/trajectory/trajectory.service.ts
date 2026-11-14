@@ -20,12 +20,22 @@ import {
 import {
   foldEvents,
   createInitialState,
+  userMessageFromData,
+  assistantMessageFromData,
+  toolResultFromData,
 } from '../../common/persistence/replayer';
 import type { BaseEvent, Envelope } from '../../common/persistence/types';
-import type { StepEndData, StepStartData } from '../../common/persistence/types';
+import type {
+  AssistantMessageData,
+  StepEndData,
+  StepStartData,
+  ToolResultData,
+  UserMessageData,
+} from '../../common/persistence/types';
 import type { TokenUsage } from '../../common/types/conversation.types';
 import type {
   TrajectoryEnvelopeSnapshot,
+  TrajectoryEventView,
   TrajectoryStepStatus,
   TrajectoryStepView,
   TrajectoryView,
@@ -68,12 +78,89 @@ export class TrajectoryService {
     let open: OpenStepCard | null = null;
     /** 上一张已收卡的事件 seq（IN 区下界来源） */
     let prevEndSeq = 0;
+    /**
+     * 审计事件流（日志全量，一事件一行）：surface 消息节点按原始事件归一化，
+     * turn/delete 只做标记不回溯删除——轨迹是审计视图，已删除轮次必须可见。
+     */
+    const eventsView: TrajectoryEventView[] = [];
+    /** 审计侧回合归属（与重放器同构：turn/start 开、turn/delete 清） */
+    let auditTurnId: string | null = null;
 
     for (const event of events) {
       switch (event.type) {
+        case 'turn/start': {
+          const data = event.data as { turnId?: string } | undefined;
+          if (data?.turnId) auditTurnId = data.turnId;
+          eventsView.push({
+            seq: event.seq,
+            time: event.time,
+            type: event.type,
+            data: event.data as unknown as Record<string, unknown>,
+          });
+          break;
+        }
+        case 'turn/delete': {
+          const data = event.data as { turnId?: string } | undefined;
+          eventsView.push({
+            seq: event.seq,
+            time: event.time,
+            type: event.type,
+            data: event.data as unknown as Record<string, unknown>,
+          });
+          if (auditTurnId === data?.turnId) auditTurnId = null;
+          break;
+        }
+        case 'user/message': {
+          const node = userMessageFromData(
+            event.data as unknown as UserMessageData,
+            event.time,
+          );
+          eventsView.push({
+            seq: event.seq,
+            time: event.time,
+            type: event.type,
+            node: { ...node, seq: event.seq, turnId: auditTurnId ?? '' },
+          });
+          break;
+        }
+        case 'assistant/message': {
+          const data = event.data as unknown as AssistantMessageData;
+          const node = assistantMessageFromData(data, event.time);
+          eventsView.push({
+            seq: event.seq,
+            time: event.time,
+            type: event.type,
+            node: { ...node, seq: event.seq, turnId: auditTurnId ?? '' },
+          });
+          // OUT 区 usage 合成来源：括号内的 assistant 消息携带 metadata.usage
+          // （Token 收敛后主循环 step/end 不写 usage——事实单载体在 assistant/message 上）
+          if (open) {
+            const meta = data?.metadata as { usage?: unknown } | undefined;
+            const usage = meta?.usage as TokenUsage | undefined;
+            if (usage && typeof usage.promptTokens === 'number') {
+              open.assistantUsage = usage;
+            }
+          }
+          break;
+        }
+        case 'tool/result': {
+          const node = toolResultFromData(
+            event.data as unknown as ToolResultData,
+            event.time,
+          );
+          eventsView.push({
+            seq: event.seq,
+            time: event.time,
+            type: event.type,
+            node: { ...node, seq: event.seq, turnId: auditTurnId ?? '' },
+          });
+          break;
+        }
         case 'envelope': {
           lastEnvelope = event.data as unknown as Envelope;
           envelopes.push({ ...lastEnvelope, seq: event.seq, time: event.time });
+          // 载荷走 envelopes 数组，事件行只记位置事实
+          eventsView.push({ seq: event.seq, time: event.time, type: event.type });
           break;
         }
         case 'step/start': {
@@ -88,30 +175,38 @@ export class TrajectoryService {
             startEvent: event,
             data: event.data as unknown as StepStartData,
           };
+          // 审计：请求侧载荷（transient/fullInput）原样随事件行携带（不限步、不缺页）
+          eventsView.push({
+            seq: event.seq,
+            time: event.time,
+            type: event.type,
+            data: event.data as unknown as Record<string, unknown>,
+          });
           break;
         }
         case 'step/end': {
           hasStepEvents = true;
+          eventsView.push({
+            seq: event.seq,
+            time: event.time,
+            type: event.type,
+            data: event.data as unknown as Record<string, unknown>,
+          });
           if (!open) break; // 孤儿 end（无 start）——理论不可达，忽略
           cards.push(this.closeCard(open, event, events, prevEndSeq, timeline.length));
           prevEndSeq = event.seq;
           open = null;
           break;
         }
-        case 'assistant/message': {
-          // OUT 区 usage 合成来源：括号内的 assistant 消息携带 metadata.usage
-          // （Token 收敛后主循环 step/end 不写 usage——事实单载体在 assistant/message 上）
-          if (open) {
-            const meta = (event.data as { metadata?: { usage?: unknown } })?.metadata;
-            const usage = meta?.usage as TokenUsage | undefined;
-            if (usage && typeof usage.promptTokens === 'number') {
-              open.assistantUsage = usage;
-            }
-          }
+        default: {
+          eventsView.push({
+            seq: event.seq,
+            time: event.time,
+            type: event.type,
+            data: event.data as unknown as Record<string, unknown>,
+          });
           break;
         }
-        default:
-          break;
       }
     }
     // 尾部孤儿卡（会话中断/进程退出）：unclosed，OUT 区到日志末尾
@@ -132,6 +227,7 @@ export class TrajectoryService {
       envelopes,
       timeline,
       steps: limited,
+      events: eventsView,
       available: hasStepEvents,
       totalSteps,
     };

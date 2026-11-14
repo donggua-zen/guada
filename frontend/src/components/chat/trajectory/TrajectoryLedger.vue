@@ -5,10 +5,7 @@
       <TrajectoryRow
         :row="row"
         :expanded="expanded.has(row.key)"
-        :selected-request-id="selectedRequestId"
-        :output-nodes="outNodesFor(row)"
         @toggle="emit('toggle', $event)"
-        @select="emit('select', $event)"
         @open-sub-trajectory="emit('open-sub-trajectory', $event)"
       />
     </template>
@@ -29,10 +26,7 @@
         <TrajectoryRow
           :row="rows[vRow.index]!"
           :expanded="expanded.has(rows[vRow.index]!.key)"
-          :selected-request-id="selectedRequestId"
-          :output-nodes="outNodesFor(rows[vRow.index]!)"
           @toggle="emit('toggle', $event)"
-          @select="emit('select', $event)"
           @open-sub-trajectory="emit('open-sub-trajectory', $event)"
         />
       </div>
@@ -42,14 +36,13 @@
 
 <script setup lang="ts">
 /**
- * 轨迹台账（dsh TrajectoryTable 的精简版）：分组头 + Request 边界行 + 消息行。
+ * 轨迹台账（dsh TrajectoryTable 的精简版）：回合分界 + SYSTEM 快照 + 消息行。
  * 双模式：小台账普通渲染（sticky 分组头），大台账虚拟化（>100 行，dsh 同阈值思路）；
  * 行组件统一由 TrajectoryRow 承载，展开状态由 Panel 层 Set 管理。
  */
 import { computed, ref } from 'vue';
 import { useVirtualizer } from '@tanstack/vue-virtual';
-import type { LedgerRow, LedgerMessageRow } from '@/composables/useTrajectory';
-import type { TrajectoryMessageNode } from '@/services/modules/trajectory.api';
+import type { LedgerRow } from '@/composables/useTrajectory';
 import TrajectoryRow from './TrajectoryRow.vue';
 
 /** 虚拟化阈值（对齐 dsh VIRTUALIZATION_THRESHOLD 的行数量级） */
@@ -58,12 +51,10 @@ const VIRTUALIZATION_THRESHOLD = 100;
 const props = defineProps<{
   rows: LedgerRow[];
   expanded: Set<string>;
-  selectedRequestId: string | null;
 }>();
 
 const emit = defineEmits<{
   toggle: [key: string];
-  select: [requestId: string | null];
   'open-sub-trajectory': [subSessionId: string];
 }>();
 
@@ -84,14 +75,4 @@ const virtualRows = computed(() => virtualizer.value.getVirtualItems());
 const totalSize = computed(() => virtualizer.value.getTotalSize());
 const measureElement = (el: any) => virtualizer.value.measureElement(el);
 
-/** request 行详情所需的 OUT 区消息节点（其余行返回 undefined） */
-function outNodesFor(row: LedgerRow): TrajectoryMessageNode[] | undefined {
-  if (row.kind !== 'request') return undefined;
-  return props.rows
-    .filter(
-      (r): r is LedgerMessageRow =>
-        r.kind === 'message' && r.region === 'out' && r.step?.requestId === row.step.requestId,
-    )
-    .map((r) => r.node);
-}
 </script>

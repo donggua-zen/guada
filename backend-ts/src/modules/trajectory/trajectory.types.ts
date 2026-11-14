@@ -72,6 +72,25 @@ export interface TrajectoryEnvelopeSnapshot extends Envelope {
   time: number;
 }
 
+/**
+ * 原始事件视图（审计台账：日志里每条事件都出现，含已删除轮次——turn/delete 只是
+ * 对话视图的遮蔽语义，轨迹必须能看到全部历史）。
+ * - surface 消息事件：携带归一化消息节点（不过滤 turn/delete）
+ * - envelope：载荷走 envelopes 数组（避免重复传全文）
+ * - step/start：transient/fullInput 走 steps[].input（避免重复传请求侧载荷）
+ * - 其余事件：data 原样（紧凑小载荷）
+ */
+export interface TrajectoryEventView {
+  seq: number;
+  /** 事件时间（Unix ms） */
+  time: number;
+  type: string;
+  /** surface 消息事件的归一化消息节点（user/message、assistant/message、tool/result） */
+  node?: MessageNode;
+  /** 非 surface 事件的原始载荷（紧凑） */
+  data?: Record<string, unknown>;
+}
+
 /** GET trajectory 响应体 */
 export interface TrajectoryView {
   /** 当前生效 envelope（最后一次 envelope 事件；无 = null） */
@@ -82,6 +101,8 @@ export interface TrajectoryView {
   timeline: MessageNode[];
   /** 调用卡（事件序）；limit 截取最近 N 个 */
   steps: TrajectoryStepView[];
+  /** 审计事件流：日志全量事件（含已删除轮次的 surface 消息与 turn/delete 标记） */
+  events: TrajectoryEventView[];
   /** 会话日志里是否出现过 step 事件（false = 会话创建于轨迹功能上线前） */
   available: boolean;
   /** 全部 step 总数（limit 截断前的值，前端展示「最近 N / 共 M」） */
