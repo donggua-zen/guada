@@ -145,6 +145,19 @@ export interface MediaBudgetProjectionResult {
   projectedMediaBytes: number;
   /** 生效的预算 */
   maxMediaBytes: number;
+  /**
+   * 被替换为占位的图片清单（下标 + 占位文本；omittedImageCount 的明细版）。
+   * builder 把 messageIndex 映射到消息 id 后作为 mediaOverlay 随参数带出，
+   * 供轨迹 step 事件落盘（标注「模型该次请求看到的是占位而非图片」）。
+   */
+  omittedRefs: MediaBudgetOmittedRef[];
+}
+
+/** 一条被占位替换的图片（messageIndex 相对投影输入数组；placeholder 为替换文本） */
+export interface MediaBudgetOmittedRef {
+  messageIndex: number;
+  blockIndex: number;
+  placeholder: string;
 }
 
 interface ImageBlockRef {
@@ -294,6 +307,7 @@ export function projectMessagesForMediaBudget(
       totalMediaBytes: 0,
       projectedMediaBytes: 0,
       maxMediaBytes,
+      omittedRefs: [],
     };
   }
 
@@ -316,6 +330,7 @@ export function projectMessagesForMediaBudget(
       totalMediaBytes,
       projectedMediaBytes: totalMediaBytes,
       maxMediaBytes,
+      omittedRefs: [],
     };
   }
 
@@ -341,14 +356,17 @@ export function projectMessagesForMediaBudget(
   }
 
   const workspaceDir = opts.workspaceDir ?? null;
+  const omittedRefs: MediaBudgetOmittedRef[] = [];
   const messagesWithBudget = messages.map((message, messageIndex) => {
     if (!messagesWithImages.has(messageIndex)) return message;
     const content: ContentBlock[] = message.content.map((block, blockIndex) => {
       if (block.type !== 'image') return block;
       if (retained.has(`${messageIndex}:${blockIndex}`)) return block;
+      const placeholder = imageOmittedText(block, workspaceDir);
+      omittedRefs.push({ messageIndex, blockIndex, placeholder });
       return {
         type: 'text',
-        text: imageOmittedText(block, workspaceDir),
+        text: placeholder,
       };
     });
     return { ...message, content };
@@ -372,5 +390,6 @@ export function projectMessagesForMediaBudget(
     totalMediaBytes,
     projectedMediaBytes,
     maxMediaBytes,
+    omittedRefs,
   };
 }

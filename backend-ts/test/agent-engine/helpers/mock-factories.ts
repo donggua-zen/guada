@@ -182,6 +182,10 @@ export function createMockSessionContext(options?: {
       breakdown: { systemPrompt: 0, history: 0, tools: 0 },
     })),
     appendContextStats: jest.fn().mockResolvedValue(undefined),
+    // 轨迹（ISessionContext v2）：step 括号 + envelope；返回值模拟递增 seq
+    appendEnvelopeIfNeeded: jest.fn().mockResolvedValue(undefined),
+    appendStepStart: jest.fn().mockImplementation(async () => 9000),
+    appendStepEnd: jest.fn().mockImplementation(async () => 9001),
     shouldCompress: jest.fn().mockResolvedValue(false),
     compress: jest.fn().mockResolvedValue([]),
   };

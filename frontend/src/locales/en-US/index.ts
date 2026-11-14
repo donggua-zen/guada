@@ -9,6 +9,7 @@ import agents from './agents'
 import session from './session'
 import ui from './ui'
 import git from './git'
+import trajectory from './trajectory'
 
 export default {
   common,
@@ -22,4 +23,5 @@ export default {
   session,
   ui,
   git,
+  trajectory,
 }

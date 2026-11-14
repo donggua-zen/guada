@@ -226,6 +226,18 @@
   --gd-color-error-text: var(--gd-color-danger-text);
   --gd-color-error-text-disabled: var(--gd-color-danger-text-disabled);
 
+  /* ====================
+     调用轨迹（trajectory）五色系（对齐 zcode/dsh 台账角色配色）：
+     user / assistant / reasoning / tool-call / tool-result；明暗双套。
+     组件里以 bg-(--gd-trajectory-*)/15 形态做徽标底，text 直接用本色。
+     ==================== */
+  --gd-trajectory-user: #2563eb;
+  --gd-trajectory-assistant: #0f766e;
+  --gd-trajectory-reasoning: #7c3aed;
+  --gd-trajectory-tool-call: #d97706;
+  --gd-trajectory-tool-result: #0284c7;
+  --gd-trajectory-error: var(--gd-color-danger-text, #dc2626);
+
   --gd-size-text-base: 14px;
   --gd-size-text-sm: 14px;
   /* 小标签档（区标题、角标）。区标题不要用 base：主题预设会把 base 抬到 15px
@@ -503,6 +515,14 @@ html.dark {
   /* 布局卡片（暗色）：同几何，暗底加深投影 */
   --gd-layout-card-border: var(--gd-color-border);
   --gd-layout-card-shadow: -4px 0 12px -8px rgba(0, 0, 0, 0.35);
+
+  /* 调用轨迹五色系（暗色） */
+  --gd-trajectory-user: #60a5fa;
+  --gd-trajectory-assistant: #2dd4bf;
+  --gd-trajectory-reasoning: #a78bfa;
+  --gd-trajectory-tool-call: #f59e0b;
+  --gd-trajectory-tool-result: #38bdf8;
+  --gd-trajectory-error: #f87171;
 }
 
 :root {

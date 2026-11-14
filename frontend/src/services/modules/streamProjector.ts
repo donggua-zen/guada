@@ -363,7 +363,10 @@ function applyDomainEvent(
       }, mode);
       return;
     case "turn/finish": {
-      // 回合收尾：finishReason/modelName/error/usage/整轮耗时 直接来自事件数据（后端零预扫）
+      // 回合收尾：finishReason/modelName/error/整轮耗时 直接来自事件数据（后端零预扫）。
+      // Token 收敛：turn/finish 不再携带 usage——读侧从 assistant 消息 metadata.usage 聚合
+      // （TurnItem 已是此实现）；旧日志事件仍可能带 usage 字段，此处刻意不透传，
+      // 避免为废弃字段保留双读路径。
       const data = ev.data;
       applyChunkToStore(sessionStore, sessionId, {
         type: "turn_end",
@@ -372,15 +375,6 @@ function applyDomainEvent(
         finishReason: data.finishReason,
         error: data.errorDetail,
         totalDurationMs: data.totalDurationMs,
-        usage:
-          data.promptTokens != null
-            ? {
-                promptTokens: data.promptTokens ?? 0,
-                completionTokens: data.completionTokens ?? 0,
-                totalTokens: data.totalTokens ?? 0,
-                ...(data.cachedTokens != null ? { cachedTokens: data.cachedTokens } : {}),
-              }
-            : undefined,
       }, mode);
       return;
     }

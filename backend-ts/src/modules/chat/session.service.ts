@@ -1,6 +1,7 @@
 import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
+import { randomUUID } from "crypto";
 import { getSessionDir } from "../../common/utils/session-path.util";
 import { qualifiesForProjectGroup } from "../../common/utils/workspace-key.util";
 import type { BaseEvent } from "../../common/persistence/types";
@@ -18,6 +19,10 @@ import { toRuntimeProviderConfig } from "../llm-core/utils/provider-runtime.util
 import { assertResolvableModelRef } from "../llm-core/utils/model-reference.util";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { LLMService } from "../llm-core/llm.service";
+import {
+  withStepBracket,
+  type StepBracketWriter,
+} from "./step-recorder";
 import type {
   LLMCompletionResult,
   StreamChunk,
@@ -1237,28 +1242,56 @@ export class SessionService {
       // 构建提示词
       const prompt = `${titlePrompt}\n\n对话内容：\n${messagesText}\n\n生成的标题：`;
 
-      // 调用 LLM 生成标题
+      // 调用 LLM 生成标题（轨迹：step 括号留痕 source='session_title'，
+      // 标题输入为轻量序列化文本 → fullInput 全量记录；标题模型与会话 envelope 无关 → 不记 envelope）
       // 注意：使用 model.id 或 model.code 作为 API 请求的模型标识，而非 name
-      const response = (await this.llmService.completions({
-        model: model.modelName,
-        messages: [
-          {
-            id: "title",
-            role: "user",
-            kind: "user",
-            source: { kind: "user" },
-            metadata: {},
-            content: [{ type: "text", text: prompt }],
-          },
-        ],
-        temperature: 0.3, // 较低的温度使输出更稳定
-        maxTokens: 50, // 限制输出长度
-        thinkingEffort: resolveThinkingEffort(model, "none"), // 禁用思考功能
-        stream: false,
-        providerConfig: toRuntimeProviderConfig(model.provider),
-        purpose: "session_title",
-        usageContext: { sessionId },
-      })) as LLMCompletionResult;
+      const titleMessages = [
+        {
+          id: "title",
+          role: "user",
+          kind: "user",
+          source: { kind: "user" },
+          metadata: {},
+          content: [{ type: "text", text: prompt }],
+        } as import("../../common/types/conversation.types").Message,
+      ];
+      const titleStepWriter: StepBracketWriter = {
+        sessionId,
+        appendStepStart: (data) => this.contextManager.appendStepStart(sessionId, data),
+        appendStepEnd: (data) => this.contextManager.appendStepEnd(sessionId, data),
+      };
+      const response = await withStepBracket(
+        titleStepWriter,
+        {
+          turnId: null,
+          step: 1,
+          source: "session_title",
+          model: model.modelName,
+          provider: model.provider?.id,
+          requestId: randomUUID(),
+          fullInput: titleMessages,
+        },
+        async () => {
+          const r = (await this.llmService.completions({
+            model: model.modelName,
+            messages: titleMessages,
+            temperature: 0.3, // 较低的温度使输出更稳定
+            maxTokens: 50, // 限制输出长度
+            thinkingEffort: resolveThinkingEffort(model, "none"), // 禁用思考功能
+            stream: false,
+            providerConfig: toRuntimeProviderConfig(model.provider),
+            purpose: "session_title",
+            usageContext: { sessionId },
+          })) as LLMCompletionResult;
+          return {
+            value: r,
+            end: {
+              ...(r.usage === undefined ? {} : { usage: r.usage }),
+              ...(r.finishReason === undefined ? {} : { finishReason: r.finishReason }),
+            },
+          };
+        },
+      );
 
       this.logger.log(
         `Title generation response for session ${sessionId}:`,

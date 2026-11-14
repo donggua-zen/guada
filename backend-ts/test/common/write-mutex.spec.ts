@@ -131,7 +131,6 @@ describe("每会话写互斥：并发写入 seq 连续性", () => {
     await Promise.all([
       store.finalizeTurn(sid, turnId, 10, {
         finishReason: "stop",
-        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
       }),
       store.appendAskAnswered(sid, {
         requestId: "ask_1",

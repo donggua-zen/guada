@@ -31,6 +31,9 @@ import {
   CompactionErrorData,
   ImportCompactionPoint,
   ToolImagePruneData,
+  Envelope,
+  StepStartData,
+  StepEndData,
 } from './types';
 import { MESSAGE_EVENT_LOG, PendingEvent } from './event-log.port';
 import type { MessageEventLog } from './event-log.port';
@@ -931,34 +934,15 @@ export class JsonlMessageService implements IMessageStore {
     finish: TurnFinish,
   ): Promise<number> {
     await this.ensureReplayReady(sessionId);
-    const usage = (finish.usage || {}) as Record<string, any>;
-    const cached = usage.cachedTokens;
     const finalized = await this.append(sessionId, {
       type: 'turn/finish',
       time: Date.now(),
       data: {
         turnId,
-        promptTokens: usage.promptTokens ?? 0,
-        completionTokens: usage.completionTokens ?? 0,
-        cachedTokens: cached?.read ?? 0,
-        totalTokens: usage.totalTokens ?? 0,
         finishReason: finish.finishReason,
         totalDurationMs: durationMs,
         ...(finish.errorDetail !== undefined ? { errorDetail: finish.errorDetail } : {}),
         ...(finish.modelName !== undefined ? { modelName: finish.modelName } : {}),
-        // 上下文占用锚点（回合后完整请求 token + 消息数 + 细分；前端逆向扫描取最后一个）
-        ...(finish.usedTokens !== undefined ? { usedTokens: finish.usedTokens } : {}),
-        ...(finish.effectiveContextWindow !== undefined
-          ? { effectiveContextWindow: finish.effectiveContextWindow }
-          : {}),
-        ...(finish.totalContextWindow !== undefined
-          ? { totalContextWindow: finish.totalContextWindow }
-          : {}),
-        ...(finish.outputReserveTokens !== undefined
-          ? { outputReserveTokens: finish.outputReserveTokens }
-          : {}),
-        ...(finish.messageCount !== undefined ? { messageCount: finish.messageCount } : {}),
-        ...(finish.breakdown !== undefined ? { breakdown: finish.breakdown } : {}),
       },
     });
 
@@ -1020,6 +1004,8 @@ export class JsonlMessageService implements IMessageStore {
     let count = 0;
     // 累计 surface 启发式（字符/4，与 TokenMeter 文本估算同口径）——无 provider usage 时的回退锚点
     let surfaceTokens = 0;
+    /** 最后一个回合的占用值（provider 真值优先，回退 surface 启发式）——循环结束后写统一 context/stats */
+    let lastImportUsedTokens: number | undefined;
     // 建壳查重走完整事件流（读盘）：收集全部 turn/start 的 turnId（含空回合）
     const events = await this.backend.getAllEvents(sessionId);
     const existingTurnIds = new Set<string>();
@@ -1133,17 +1119,17 @@ export class JsonlMessageService implements IMessageStore {
         }
         count++;
       }
-      // 完成信息（usage/耗时/finishReason）——每回合必写（对齐运行时 finalizeTurn）
-      // usage 来源：回合最后一条 assistant 消息的 metadata.usage（运行时落库位置），
-      // 回退 turn.metadata.usage（导入方可直接放回合级）
+      // 完成信息（耗时/finishReason/modelName）——每回合必写（对齐运行时 finalizeTurn）。
+      // Token 字段收敛：usage 聚合/占用快照不再落 turn/finish；provider usage 仍在
+      // assistant 消息 metadata 上（占用锚点的 usage 路径可用）。
+      // 占用锚点改由循环结束后的统一 context/stats 承载（usedTokens 仍按原口径计算，
+      // 仅为锚点保留：provider 报告值优先，缺省回退累计 surface 启发式）。
       const usage = (
         [...turn.messages].reverse().find((m) => m.role === 'assistant')?.metadata
           ?.usage ?? turn.metadata?.usage
       ) as
         | { promptTokens?: number; completionTokens?: number; totalTokens?: number }
         | undefined;
-      // 上下文占用锚点（重建/导入路径）：provider 报告的该请求完整 prompt + 本轮输出
-      // （含 envelope，权威）优先；缺省回退累计 surface 启发式（缺 prelude，近似值）
       const usedTokens = usage &&
         (usage.promptTokens || usage.completionTokens || usage.totalTokens)
         ? Math.max(
@@ -1157,24 +1143,36 @@ export class JsonlMessageService implements IMessageStore {
         time: (turn.metadata?.finishedAt as number | undefined) ?? Date.now(),
         data: {
           turnId,
-          promptTokens: usage?.promptTokens ?? 0,
-          completionTokens: usage?.completionTokens ?? 0,
-          totalTokens: usage?.totalTokens ?? 0,
           finishReason: turn.metadata?.finishReason as string | undefined,
           totalDurationMs: turn.metadata?.totalDurationMs as number | undefined,
           modelName: turn.metadata?.modelName as string | undefined,
-          usedTokens,
-          ...(opts?.effectiveContextWindow !== undefined
-            ? { effectiveContextWindow: opts.effectiveContextWindow }
-            : {}),
         },
       });
       await this.appendBatch(sessionId, turnEvents);
+      lastImportUsedTokens = usedTokens;
     }
     // 末尾压缩点（beforeTurnIndex >= turns.length，如"压缩后没有再说话"）：全部回合之后落括号
     const trailingCompactions = takeCompactionsUpTo(Number.MAX_SAFE_INTEGER);
     if (trailingCompactions.length > 0) {
       await this.appendBatch(sessionId, trailingCompactions);
+    }
+    // 导入路径占用锚点：导入无逐请求 context/stats，回合级 usedTokens（provider 真值优先，
+    // 回退 surface 启发式）收敛为一条 context/stats——环形指示器冷启动的唯一锚点载体。
+    // 不带 heuristicTokens（不构成后端计算锚点；导入消息自带 metadata.usage，usage 锚点路径可用）。
+    if (lastImportUsedTokens !== undefined) {
+      await this.appendBatch(sessionId, [
+        {
+          type: 'context/stats',
+          time: Date.now(),
+          data: {
+            turnId: 'import',
+            usedTokens: lastImportUsedTokens,
+            ...(opts?.effectiveContextWindow !== undefined
+              ? { effectiveContextWindow: opts.effectiveContextWindow }
+              : {}),
+          },
+        },
+      ]);
     }
     return { imported: count };
   }
@@ -1402,6 +1400,54 @@ export class JsonlMessageService implements IMessageStore {
         source: data.source,
         ...(data.toolCallId === undefined ? {} : { toolCallId: data.toolCallId }),
       },
+    });
+  }
+
+  // ─── 轨迹（envelope + step 括号，对齐 DSH request-header / step 语义；log-only）───
+
+  /** 当前生效 envelope（回放态折叠；无 envelope 事件返回 null）。会话层去重缓存播种用。 */
+  async getEnvelope(sessionId: string): Promise<Envelope | null> {
+    const state = await this.getState(sessionId);
+    return state.envelope ?? null;
+  }
+
+  /**
+   * envelope 事件：请求侧快照（system + tools + model/provider）。
+   * 去重由调用方负责（写入方比对缓存，变更才调用本方法——与 DSH request/header 的
+   * headerEquals 结构去重同语义）；本方法只负责落盘。
+   */
+  async appendEnvelope(sessionId: string, data: Envelope): Promise<number> {
+    return this.runExclusive(sessionId, async () => {
+      const finalized = await this.append(sessionId, {
+        type: 'envelope',
+        time: Date.now(),
+        data: { ...data } as Record<string, unknown>,
+      });
+      return finalized.seq;
+    });
+  }
+
+  /** step/start：开一次模型调用括号（log-only，不参与消息 surface 折叠）。 */
+  async appendStepStart(sessionId: string, data: StepStartData): Promise<number> {
+    return this.runExclusive(sessionId, async () => {
+      const finalized = await this.append(sessionId, {
+        type: 'step/start',
+        time: Date.now(),
+        data: { ...data } as Record<string, unknown>,
+      });
+      return finalized.seq;
+    });
+  }
+
+  /** step/end：收调用括号（log-only；与 step/start 配对，失败/中止也必须落 error 语义收口）。 */
+  async appendStepEnd(sessionId: string, data: StepEndData): Promise<number> {
+    return this.runExclusive(sessionId, async () => {
+      const finalized = await this.append(sessionId, {
+        type: 'step/end',
+        time: Date.now(),
+        data: { ...data } as Record<string, unknown>,
+      });
+      return finalized.seq;
     });
   }
 

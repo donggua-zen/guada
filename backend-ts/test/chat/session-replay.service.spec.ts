@@ -228,7 +228,9 @@ describe('SessionReplayService 压缩历史聚合（getCompactionHistory）', ()
 
   it('旧事件无 beforeTokens → before 回退上一占用锚点；DISABLED 空摘要 → discarded；limit 截断', async () => {
     const events: BaseEvent[] = [
-      { type: 'turn/finish', seq: 1, time: 1000, data: { turnId: 'T1', usedTokens: 900 } },
+      // Token 收敛：turn/finish 不带 token 字段（且不再是回退锚点源），锚点源 = context/stats
+      { type: 'turn/finish', seq: 1, time: 1000, data: { turnId: 'T1', finishReason: 'stop' } },
+      { type: 'context/stats', seq: 2, time: 1500, data: { turnId: 'T1', usedTokens: 900, effectiveContextWindow: 8000 } },
       { type: 'compaction/start', seq: 2, time: 2000, data: {} },
       { type: 'compaction/summary', seq: 3, time: 3000, data: { shadowedEndId: 'm1', shadowedCount: 2, summary: 'sum1', summaryMessageId: 'sum_1' } },
       { type: 'compaction/end', seq: 4, time: 4000, data: { usedTokens: 500 } }, // 无 beforeTokens → 回退锚点 900

@@ -2,6 +2,8 @@
  * JSONL 持久化 — 事件类型与基础接口
  * 对齐 DSH 语义的分层事件模型（回合制）：
  *   turn/start + turn/finish（回合：一次输入 = 用户 + 助手，一对一轮回）
+ *   step/start + step/end（调用括号：一次模型调用 + 其工具执行，对齐 DSH step 语义；
+ *                         log-only，让辅助调用与失败尝试在日志留痕、给调用级元数据锚点）
  *   user/message + assistant/message + tool/result（消息级三事件，对齐 DSH，内容平铺内嵌）
  *   turn/delete（删除本轮对话 = 按回合 id 遮蔽整个轮次；整轮次重答 = turn/delete 旧轮次 + 正常回答流程）
  *   message/prune（内容裁剪）、compaction/start + summary + end（压缩括号）、compaction/error（压缩失败）
@@ -25,6 +27,8 @@ export type EventType =
   | 'turn/start'
   | 'turn/resume'
   | 'turn/finish'
+  | 'step/start'
+  | 'step/end'
   | 'user/message'
   | 'assistant/message'
   | 'tool/result'
@@ -75,19 +79,17 @@ export interface TurnResumeData {
 }
 
 /**
- * 回合完成：usage / finishReason / 耗时 / 模型 / 异常。
- * 由 finalizeTurn 写入。消费方：
- * - 后端 LLM 视图（replayer）：折叠态为纯扁平 surface，不维护 Turn 外壳，
- *   本事件仅作回合边界（清游标），不消费 data 字段。
- * - 前端展示（事件页 + streamProjector 自折叠）：turn/finish → turn_end chunk，
- *   totalDurationMs 写入前端 turn.metadata 用于耗时展示；刷新重放同源。
+ * 回合完成：回合级事实收口（finishReason / 耗时 / 模型 / 异常）。
+ * Token 字段收敛（见 docs/dsh-trajectory-migration.md §9，对齐 dsh turn/end 裸载荷）：
+ * - usage 聚合不落盘——读侧从回合内 assistant/message.metadata.usage 累加
+ *   （前端 TurnItem 早已读侧聚合；turn.metadata.usage 此前为死写）；
+ * - 占用快照唯一载体是 context/stats（本事件不携带 usedTokens/effectiveContextWindow——
+ *   与最后一次 context/stats 同值，属冗余双写）。
+ * 消费方：replayer 只作回合边界（清游标，不消费 data）；
+ * 前端 streamProjector 取 finishReason/modelName/errorDetail/totalDurationMs 写 turn.metadata。
  */
 export interface TurnFinishData {
   turnId: string;
-  promptTokens: number;
-  completionTokens: number;
-  cachedTokens?: number;
-  totalTokens: number;
   /** 模型结束原因（stop / tool-calls / error / timeout / user_cancel 等） */
   finishReason?: string;
   /** 整轮耗时 ms */
@@ -96,10 +98,6 @@ export interface TurnFinishData {
   errorDetail?: unknown;
   /** 所用模型 */
   modelName?: string;
-  /** 回合结束后当前完整请求 token（envelope + 可见视图；前端上下文占用的持久化锚点） */
-  usedTokens?: number;
-  /** 有效上下文窗口（与 usedTokens 配套） */
-  effectiveContextWindow?: number;
 }
 
 /**
@@ -138,6 +136,91 @@ export interface ContextStatsData {
   heuristicTokens?: number;
   /** 可选：裁剪前实测占用（压缩历史 before/after 对比） */
   beforeTokens?: number;
+}
+
+// ─── 调用级括号（step/start + step/end，对齐 DSH step 语义：一次模型调用 + 其工具执行）───
+
+/**
+ * LLM 调用来源（step 事件的 source）。
+ * 与 llm-core 的 UsageSource 同构（持久化层不反向依赖模块层，两边同步维护），
+ * 另扩展插件 LLM seam 的 `plugin:<id>` 形态。
+ */
+export type StepSource =
+  | 'main_turn'
+  | 'subagent'
+  | 'compaction'
+  | 'session_title'
+  | 'commit_message'
+  | 'memory_sync'
+  | 'image_recognition'
+  | 'goal_verification'
+  | 'other'
+  | `plugin:${string}`;
+
+/**
+ * 请求侧媒体占位清单条目：本次请求被媒体预算替换为文本占位的图片。
+ * 由 builder 把 media-budget 投影的 omittedRefs 映射到消息 id 后带出，
+ * 供轨迹查看器标注「模型在该次请求里看到的是占位文本而非图片」。
+ */
+export interface StepMediaOverlayEntry {
+  /** 被替换的消息 id（与事件日志消息 id 同一命名空间） */
+  messageId: string;
+  /** 消息内 image 块下标 */
+  blockIndex: number;
+  /** 替换后的占位文本 */
+  placeholder: string;
+}
+
+/**
+ * step/start：开一次模型调用括号（log-only，不参与消息 surface 折叠）。
+ *
+ * 主循环：turnId 归属当前回合，transient 携带本次请求尾部注入的瞬态消息
+ * （verbatim——它们只存在于 wire 请求尾部，不落日志 surface，不记录就不可追溯）。
+ * 辅助调用：turnId=null，fullInput 携带全量请求输入（预算有界，体积小）。
+ */
+export interface StepStartData {
+  /** 归属回合（主循环）；辅助调用为 null */
+  turnId: string | null;
+  /** 回合内第几次调用（agent-engine iterationCount）；辅助调用为其自身轮次/次数序号 */
+  step: number;
+  /** 调用来源（与 usageContext.source / purpose 对齐） */
+  source: StepSource;
+  /** 本次请求模型（来自会话 modelConfig） */
+  model?: string;
+  provider?: string;
+  /** 同一次逻辑请求的 id（主循环 = 预分配的 assistant messageId；重试/attempt 归组依据） */
+  requestId: string;
+  /** 主循环专用：本次请求尾部注入的瞬态消息（不落 surface，verbatim 记录） */
+  transient?: Message[];
+  /** 辅助调用专用：全量请求输入（预算有界） */
+  fullInput?: Message[];
+}
+
+/**
+ * step/end：收调用括号（log-only）。
+ * 必须与 step/start 配对闭合（记录器 finally 兜底）；失败也要落 end（error 语义），
+ * 与 DSH step/end 的收口纪律一致（agent-loop 在 finally 里收口）。
+ */
+export interface StepEndData {
+  requestId: string;
+  /** 最终成功尝试的序号（streamWithRetry 内部重试计数；无重试 = 0） */
+  attemptIndex: number;
+  /**
+   * 该次调用的 token 用量（上游 usage 聚糖）。仅辅助调用写——辅助调用不产生
+   * assistant/message，无其它载体；主循环的 usage 由 assistant/message.metadata.usage
+   * 承载（事实单载体，对齐 dsh），投影端从 OUT 区合成，本字段缺省即主循环路径。
+   */
+  usage?: TokenUsage;
+  /** 上游 finishReason（stop / tool-calls / error / user_cancel 等，与 turn/finish 同源） */
+  finishReason?: string;
+  /** 从 step/start 到收口的耗时 ms */
+  durationMs: number;
+  /** 失败/中止时的错误（收口纪律：异常路径也要闭合） */
+  error?: { name: string; message: string };
+  /** 主循环：本次调用产出的 assistant 消息 id（OUT 区锚点；空消息/失败路径缺省） */
+  assistantMessageId?: string;
+  /** 媒体预算占位清单（本次请求被替换为文本占位的图片） */
+  mediaOverlay?: StepMediaOverlayEntry[];
 }
 
 // ─── 消息级三事件（对齐 DSH：user/message、assistant/message、tool/result）───

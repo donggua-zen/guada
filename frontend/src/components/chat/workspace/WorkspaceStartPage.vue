@@ -70,6 +70,16 @@
             <span class="start-item-desc">{{ t('chat.workspace.startPagePlanDesc') }}</span>
           </span>
         </button>
+        <!-- 调用轨迹：面板常驻入口（该会话 JSONL 日志的调用级投影） -->
+        <button class="start-item" @click="emit('open-trajectory')">
+          <span class="start-item-icon">
+            <DataUsage20Regular class="w-4.5 h-4.5"  />
+          </span>
+          <span class="start-item-text">
+            <span class="start-item-title">{{ t('chat.workspace.trajectoryTab') }}</span>
+            <span class="start-item-desc">{{ t('chat.workspace.startPageTrajectoryDesc') }}</span>
+          </span>
+        </button>
       </div>
     </div>
   </div>
@@ -77,7 +87,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { Folder16Regular, WindowConsole20Regular, Globe16Regular, Branch20Regular, Bot20Regular, Flowchart20Regular, Notepad20Regular } from "@vicons/fluent";
+import { Folder16Regular, WindowConsole20Regular, Globe16Regular, Branch20Regular, Bot20Regular, Flowchart20Regular, Notepad20Regular, DataUsage20Regular } from "@vicons/fluent";
 
 const { t } = useI18n();
 
@@ -89,6 +99,7 @@ const emit = defineEmits<{
   "open-subagents": [];
   "open-workflow": [];
   "open-plan": [];
+  "open-trajectory": [];
 }>();
 </script>
 

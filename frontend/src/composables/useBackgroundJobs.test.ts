@@ -1,8 +1,8 @@
 /**
- * useRunningProcesses 测试（输入区运行时胶囊的「进程」段数据）
+ * useBackgroundJobs 测试（输入区运行时胶囊的「后台任务」段数据）
  *
  * 覆盖：jobs REST 基线、会话切换、迟到响应不污染新会话、
- * jobs_snapshot 快照应用、kill 成功/失败、时长格式化。
+ * jobs_snapshot 快照应用、kind 分类过滤（进程/子代理）、kill 成功/失败、时长格式化。
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { effectScope, ref } from "vue";
@@ -27,7 +27,7 @@ vi.mock("@/stores/layout", () => ({ useLayoutStore: () => layoutMocks }));
 const tabMocks = vi.hoisted(() => ({ openProcessLogTab: vi.fn() }));
 vi.mock("@/stores/tab", () => ({ useTabStore: () => tabMocks }));
 
-import { useRunningProcesses } from "./useRunningProcesses";
+import { useBackgroundJobs } from "./useBackgroundJobs";
 import type { UiJobInfo } from "@/services/ApiService";
 
 const job = (
@@ -51,7 +51,7 @@ const snapshot = (sessionId: string, revision: number, jobs: UiJobInfo[]) => ({
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
-describe("useRunningProcesses", () => {
+describe("useBackgroundJobs", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     apiMocks.getSessionJobs.mockReset();
@@ -82,11 +82,11 @@ describe("useRunningProcesses", () => {
     });
     const sid = ref<string | undefined>("s1");
     const scope = effectScope();
-    const api = scope.run(() => useRunningProcesses(sid))!;
+    const api = scope.run(() => useBackgroundJobs(sid))!;
     await flush();
 
     expect(apiMocks.getSessionJobs).toHaveBeenCalledWith("s1");
-    expect(api.processes.value.map((p) => p.id)).toEqual(["job-1"]);
+    expect(api.processJobs.value.map((p) => p.id)).toEqual(["job-1"]);
 
     apiMocks.getSessionJobs.mockResolvedValue({
       revision: 1,
@@ -95,7 +95,7 @@ describe("useRunningProcesses", () => {
     sid.value = "s2";
     await flush();
     expect(apiMocks.getSessionJobs).toHaveBeenLastCalledWith("s2");
-    expect(api.processes.value.map((p) => p.id)).toEqual(["job-2"]);
+    expect(api.processJobs.value.map((p) => p.id)).toEqual(["job-2"]);
 
     scope.stop();
     expect(apiMocks.unsubscribe).toHaveBeenCalled();
@@ -112,15 +112,15 @@ describe("useRunningProcesses", () => {
     );
     const sid = ref<string | undefined>("s1");
     const scope = effectScope();
-    const api = scope.run(() => useRunningProcesses(sid))!;
+    const api = scope.run(() => useBackgroundJobs(sid))!;
 
     sid.value = "s2";
     await flush();
-    expect(api.processes.value.map((p) => p.id)).toEqual(["job-2"]);
+    expect(api.processJobs.value.map((p) => p.id)).toEqual(["job-2"]);
 
     resolveS1({ revision: 1, jobs: [job("job-1", "npm run dev")] });
     await flush();
-    expect(api.processes.value.map((p) => p.id)).toEqual(["job-2"]);
+    expect(api.processJobs.value.map((p) => p.id)).toEqual(["job-2"]);
 
     scope.stop();
   });
@@ -133,10 +133,10 @@ describe("useRunningProcesses", () => {
     });
     const sid = ref<string | undefined>("s1");
     const scope = effectScope();
-    const api = scope.run(() => useRunningProcesses(sid))!;
+    const api = scope.run(() => useBackgroundJobs(sid))!;
     await flush();
     expect(apiMocks.getSessionJobs).toHaveBeenCalledTimes(1);
-    expect(api.processes.value.map((p) => p.id)).toEqual(["job-1"]);
+    expect(api.processJobs.value.map((p) => p.id)).toEqual(["job-1"]);
 
     // 切走期间作业在后台结束：后端 1s ticker 已停，不会再有快照推下来
     apiMocks.getSessionJobs.mockResolvedValue({
@@ -151,7 +151,7 @@ describe("useRunningProcesses", () => {
 
     // 已有桶也必须重新拉基线，否则胶囊会一直显示已结束的进程
     expect(apiMocks.getSessionJobs).toHaveBeenCalledTimes(3);
-    expect(api.processes.value).toEqual([]);
+    expect(api.processJobs.value).toEqual([]);
 
     scope.stop();
   });
@@ -160,37 +160,58 @@ describe("useRunningProcesses", () => {
     apiMocks.getSessionJobs.mockResolvedValue({ revision: 1, jobs: [] });
     const sid = ref<string | undefined>("s1");
     const scope = effectScope();
-    const api = scope.run(() => useRunningProcesses(sid))!;
+    const api = scope.run(() => useBackgroundJobs(sid))!;
     await flush();
     expect(apiMocks.getSessionJobs).toHaveBeenCalledTimes(1);
 
     apiMocks.capturedSnapshot!(snapshot("s1", 2, [job("job-1", "npm run dev")]));
     await flush();
-    expect(api.processes.value.map((p) => p.id)).toEqual(["job-1"]);
+    expect(api.processJobs.value.map((p) => p.id)).toEqual(["job-1"]);
 
     // 旧 revision 不能回退列表
     apiMocks.capturedSnapshot!(snapshot("s1", 1, []));
     await flush();
-    expect(api.processes.value.map((p) => p.id)).toEqual(["job-1"]);
+    expect(api.processJobs.value.map((p) => p.id)).toEqual(["job-1"]);
     expect(apiMocks.getSessionJobs).toHaveBeenCalledTimes(1);
 
     scope.stop();
   });
 
-  it("非进程类 job（subagent/workflow）不进入进程胶囊", async () => {
+  it("kind 分类过滤：进程类进 processJobs，subagent 进 subagentJobs，workflow 都不进", async () => {
     apiMocks.getSessionJobs.mockResolvedValue({
       revision: 1,
       jobs: [
         job("job-shell", "npm run dev", Date.now(), "shell"),
+        job("job-remote", "ls -la", Date.now(), "remote-shell"),
         job("job-sub", "researcher", Date.now(), "subagent"),
+        job("job-wf", "pipeline", Date.now(), "workflow"),
       ],
     });
     const sid = ref<string | undefined>("s1");
     const scope = effectScope();
-    const api = scope.run(() => useRunningProcesses(sid))!;
+    const api = scope.run(() => useBackgroundJobs(sid))!;
     await flush();
 
-    expect(api.processes.value.map((p) => p.kind)).toEqual(["shell"]);
+    expect(api.processJobs.value.map((p) => p.kind)).toEqual(["shell", "remote-shell"]);
+    expect(api.subagentJobs.value.map((p) => p.kind)).toEqual(["subagent"]);
+    expect(api.subagentJobs.value[0]!.handle).toBeUndefined();
+    scope.stop();
+  });
+
+  it("后台子代理 job 同样可 kill（同一 kill 协议）", async () => {
+    apiMocks.getSessionJobs.mockResolvedValue({
+      revision: 1,
+      jobs: [job("job-sub", "researcher", Date.now(), "subagent")],
+    });
+    const sid = ref<string | undefined>("s1");
+    const scope = effectScope();
+    const api = scope.run(() => useBackgroundJobs(sid))!;
+    await flush();
+
+    apiMocks.killSessionJob.mockResolvedValue({ success: true, status: "killed" });
+    await api.killJob(api.subagentJobs.value[0]!);
+    expect(apiMocks.killSessionJob).toHaveBeenCalledWith("s1", "job-sub");
+    expect(messageMocks.success).toHaveBeenCalledTimes(1);
     scope.stop();
   });
 
@@ -201,17 +222,17 @@ describe("useRunningProcesses", () => {
     });
     const sid = ref<string | undefined>("s1");
     const scope = effectScope();
-    const api = scope.run(() => useRunningProcesses(sid))!;
+    const api = scope.run(() => useBackgroundJobs(sid))!;
     await flush();
 
     apiMocks.killSessionJob.mockResolvedValue({ success: true, status: "killed" });
-    await api.killProcess(api.processes.value[0]!);
+    await api.killJob(api.processJobs.value[0]!);
     expect(apiMocks.killSessionJob).toHaveBeenCalledWith("s1", "job-1");
     expect(messageMocks.success).toHaveBeenCalledTimes(1);
     expect(apiMocks.getSessionJobs).toHaveBeenCalledTimes(2);
 
     apiMocks.killSessionJob.mockRejectedValue(new Error("boom"));
-    await expect(api.killProcess(api.processes.value[0]!)).resolves.toBeUndefined();
+    await expect(api.killJob(api.processJobs.value[0]!)).resolves.toBeUndefined();
     expect(messageMocks.error).toHaveBeenCalledTimes(1);
 
     scope.stop();
@@ -221,7 +242,7 @@ describe("useRunningProcesses", () => {
     apiMocks.getSessionJobs.mockResolvedValue({ revision: 1, jobs: [] });
     const sid = ref<string | undefined>("s1");
     const scope = effectScope();
-    scope.run(() => useRunningProcesses(sid))!;
+    scope.run(() => useBackgroundJobs(sid))!;
     await flush();
     expect(apiMocks.getSessionJobs).toHaveBeenCalledTimes(1);
 
@@ -240,7 +261,7 @@ describe("useRunningProcesses", () => {
     });
     const sid = ref<string | undefined>("s1");
     const scope = effectScope();
-    const api = scope.run(() => useRunningProcesses(sid))!;
+    const api = scope.run(() => useBackgroundJobs(sid))!;
     await flush();
 
     expect(api.elapsedText(startedAt)).toBe("1m 05s");

@@ -147,6 +147,7 @@ interface ContextStatsAnchor {
 function readContextStatsAnchor(event: unknown): ContextStatsAnchor | null {
   const e = event as
     | {
+        type?: unknown
         turnId?: unknown
         contextStats?: Record<string, unknown>
         data?: Record<string, unknown>
@@ -187,6 +188,9 @@ function readContextStatsAnchor(event: unknown): ContextStatsAnchor | null {
   const domain = e.data
   if (
     domain &&
+    // Token 收敛：占用快照锚点源收敛为 context/stats（主）+ compaction/end（压缩后）。
+    // turn/finish 不再携带 token 字段（旧日志带也刻意不读——避免为废弃字段保留双读路径）。
+    (e.type === 'context/stats' || e.type === 'compaction/end') &&
     typeof domain.usedTokens === 'number' &&
     typeof domain.effectiveContextWindow === 'number' &&
     domain.effectiveContextWindow > 0
@@ -221,13 +225,15 @@ function readContextStatsAnchor(event: unknown): ContextStatsAnchor | null {
  *
  * 兼容两种形状（eventLog 是领域事件与 live chunk 的混合数组）：
  * - live chunk（turn_end / context_stats / compaction_summary / compression_end）：`e.contextStats`
- * - 领域事件（context/stats / turn/finish / compaction/end）：`e.data.usedTokens + e.data.effectiveContextWindow`
+ * - 领域事件（**仅 context/stats / compaction/end**）：`e.data.usedTokens + e.data.effectiveContextWindow`
+ *   （Token 收敛：turn/finish 不再携带 token 字段，也不再作为锚点源——见 docs/dsh-trajectory-migration.md §9）
  *
- * 后端在「占用稳定点」（每次小轮次请求、每轮结束、每次压缩后）把权威 usedTokens/
- * effectiveContextWindow（含 messageCount/breakdown）落进事件 → 打开/切换会话时直接取最后一个锚点。
+ * 后端在「占用稳定点」（每次小轮次请求、每次压缩后）把权威 usedTokens/
+ * effectiveContextWindow（含 messageCount/breakdown）落进 context/stats →
+ * 打开/切换会话时直接取最后一个锚点；导入路径由 importTurns 末尾统一补一条。
  *
  * request（最近一次请求的媒体负载）只有 context/stats / turn_end 才有；若最新锚点是
- * turn/finish 或 compaction/end，继续向前找最近一条带 request 的锚点，避免刷新后丢失。
+ * compaction/end，继续向前找最近一条带 request 的锚点，避免刷新后丢失。
  *
  * 被 turn/delete 删除的回合（重答/删除）不参与恢复：否则会显示旧回合的占用。
  * @returns 是否找到锚点（false → 显示空状态）

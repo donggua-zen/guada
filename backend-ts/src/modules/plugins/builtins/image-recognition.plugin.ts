@@ -12,6 +12,12 @@ import { SK_MOD_VISUAL } from "../../../constants/settings.constants";
 import { resolveThinkingEffort } from "../../llm-core/utils/model-config.helper";
 import { toRuntimeProviderConfig } from "../../llm-core/utils/provider-runtime.util";
 import { PluginApi, ImageContent } from "../api/plugin-api";
+import {
+  beginStep,
+  toStepErrorInfo,
+  type StepBracketWriter,
+  type StepHandle,
+} from "../../chat/step-recorder";
 import { z } from "zod";
 import {
   supportsMultimodal,
@@ -101,6 +107,8 @@ export class ImageRecognitionPlugin extends PluginBase {
               physicalPath,
               prompt,
               abortSignal,
+              // 轨迹：识别调用 step 括号留痕（ctx.session 即会话上下文写入面）
+              ctx?.session,
             );
           },
           display: {
@@ -208,7 +216,10 @@ export class ImageRecognitionPlugin extends PluginBase {
     physicalPath: string,
     prompt?: string,
     abortSignal?: AbortSignal,
+    /** 轨迹 step 括号写入面（ctx.session；缺省 = 不记录） */
+    stepWriter?: StepBracketWriter,
   ): Promise<string> {
+    let stepHandle: StepHandle | null = null;
     try {
       const visualModelId = await this.settingsStorage.getSettingValue(
         "models",
@@ -259,6 +270,19 @@ export class ImageRecognitionPlugin extends PluginBase {
         },
       ];
 
+      // 轨迹：识别调用留痕（source='image_recognition'）。不记 fullInput——
+      // 输入含内联 base64 图片，重复落盘会把几百 KB 数据塞进日志。
+      if (stepWriter) {
+        stepHandle = await beginStep(stepWriter, {
+          turnId: null,
+          step: 1,
+          source: "image_recognition",
+          model,
+          provider: visualModelConfig.provider?.id,
+          requestId: `image_recognize-${physicalPath}`,
+        });
+      }
+
       let result = "";
       let finishReason: string | undefined;
       const stream = (await this.llmService.completions({
@@ -279,6 +303,9 @@ export class ImageRecognitionPlugin extends PluginBase {
           finishReason = chunk.finishReason;
         }
       }
+      await stepHandle?.end({
+        ...(finishReason === undefined ? {} : { finishReason }),
+      });
       if (!result.trim()) {
         this.logger.warn(
           `Image recognition returned no text (model=${model}, finishReason=${finishReason ?? "unknown"})`,
@@ -286,6 +313,7 @@ export class ImageRecognitionPlugin extends PluginBase {
       }
       return result || "Unable to recognize image content";
     } catch (error: any) {
+      await stepHandle?.end({ error: toStepErrorInfo(error) });
       this.logger.error(`Image recognition failed: ${error.message}`);
       throw new Error(`Image recognition failed: ${error.message}`);
     }

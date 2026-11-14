@@ -460,17 +460,16 @@ describe('JsonlSessionContext 读取层直通', () => {
 });
 
 describe('JsonlSessionContext 上下文占用锚点', () => {
-  it('finalizeTurn 注入回合后占用（usedTokens/effectiveContextWindow）', async () => {
+  it('finalizeTurn 透传回合事实（Token 收敛：不再注入 usedTokens/effectiveContextWindow）', async () => {
     const { ctx, messageStore } = createContext();
     await ctx.initialize();
     await ctx.finalizeTurn('t1', 100, {
-      usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8 },
       finishReason: 'stop',
-    } as any);
+    });
     const passed = (messageStore.finalizeTurn as jest.Mock).mock.calls[0][3];
-    expect(typeof passed.usedTokens).toBe('number');
-    // 未声明 maxOutputTokens：小窗口按 1/4 预留（8000 → 2000），有效窗口 6000
-    expect(passed.effectiveContextWindow).toBe(6000);
+    expect(passed).toEqual({ finishReason: 'stop' });
+    expect(passed.usedTokens).toBeUndefined();
+    expect(passed.effectiveContextWindow).toBeUndefined();
   });
 
   it('appendCompact：快照就绪时写前模拟压缩后占用并透传 store（compaction/end 锚点）', async () => {

@@ -217,6 +217,22 @@ export interface ISessionContext {
     stats: import("./types/event-chunk.types").ContextStatsPayload,
   ): Promise<void>;
 
+  // === 轨迹（envelope + step 括号，对齐 DSH request-header / step 语义；log-only） ===
+  /**
+   * envelope 请求侧快照（system/tools/model/provider）：与上次写入比对，变更才落盘。
+   * 对齐 DSH request/header 的 headerEquals 结构去重（reason: initial | change）。
+   * 每 step 前调用一次；对比成本有引用短路 + 缓存 systemText，亚毫秒级。
+   */
+  appendEnvelopeIfNeeded(): Promise<void>;
+  /** step/start：开一次模型调用括号（主循环含其工具执行；辅助调用为单次调用）。 */
+  appendStepStart(
+    data: import("../../common/persistence/types").StepStartData,
+  ): Promise<number>;
+  /** step/end：收调用括号（失败/中止也必须落 error 语义收口；与 step/start 配对）。 */
+  appendStepEnd(
+    data: import("../../common/persistence/types").StepEndData,
+  ): Promise<number>;
+
   // === 压缩数据源 ===
   /** 获取实际生效的上下文窗口大小（压缩决策等场景使用；总窗口 − 封顶输出预留） */
   getEffectiveContextWindow(): number;

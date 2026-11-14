@@ -74,12 +74,29 @@ export function buildSessionLlmParams(
     system: ctx.getSystemText(),
     // surface：纯对话历史（调用方传 getHistory()，不含 system/插件提示）。
     messages: mediaProjection.messages,
-    // 媒体投影结果随参数带出：adapter 不感知，agent-engine 落 context_stats 供前端展示
+    // 媒体投影结果随参数带出：adapter 不感知，agent-engine 落 context_stats 供前端展示；
+    // 占位明细（omittedRefs → 消息 id）随 step/end 落轨迹（无替换时缺省，事件体最小化）
     requestMedia: {
       attachedBytes: mediaProjection.projectedMediaBytes,
       retainedImages: mediaProjection.retainedImageCount,
       budgetBytes: mediaProjection.maxMediaBytes,
       omittedImages: mediaProjection.omittedImageCount,
+      ...(mediaProjection.omittedRefs.length > 0
+        ? {
+            mediaOverlay: mediaProjection.omittedRefs.flatMap((ref) => {
+              const messageId = expanded[ref.messageIndex]?.id;
+              return messageId
+                ? [
+                    {
+                      messageId,
+                      blockIndex: ref.blockIndex,
+                      placeholder: ref.placeholder,
+                    },
+                  ]
+                : [];
+            }),
+          }
+        : {}),
     },
     tools: ToolExecutor.toFlatToolDefs(ctx.getResolvedPlugins()),
     temperature: modelConfig.config.temperature,

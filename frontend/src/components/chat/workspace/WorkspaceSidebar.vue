@@ -65,6 +65,10 @@
                         <span v-else-if="tab.type === 'plan'" class="tab-favicon tab-git">
                             <Notepad20Regular class="w-3.5 h-3.5"  />
                         </span>
+                        <!-- 调用轨迹图标 -->
+                        <span v-else-if="tab.type === 'trajectory'" class="tab-favicon tab-git">
+                            <DataUsage20Regular class="w-3.5 h-3.5"  />
+                        </span>
                         <!-- 差异/编辑记录图标 -->
                         <span v-else-if="tab.type === 'diff'" class="tab-favicon tab-git">
                             <Code20Regular class="w-3.5 h-3.5"  />
@@ -121,7 +125,8 @@
                 <!-- 起始页：无任何标签 或 点击 + 号时显示（不占用标签栏） -->
                 <WorkspaceStartPage v-if="showStartPage" @open-file="onNewTabOpenFile" @open-terminal="onNewTabOpenTerminal"
                     @open-browser="onNewTabOpenBrowser" @open-git="onNewTabOpenGit" @open-subagents="onNewTabOpenSubagents"
-                    @open-workflow="onNewTabOpenWorkflow" @open-plan="onNewTabOpenPlan" />
+                    @open-workflow="onNewTabOpenWorkflow" @open-plan="onNewTabOpenPlan"
+                    @open-trajectory="onNewTabOpenTrajectory" />
 
                 <!-- Git 审阅标签 -->
                 <GitChangesPanel v-show="activeTab?.type === 'git' && !!props.sessionId" ref="gitPanelRef"
@@ -157,6 +162,10 @@
                 <!-- 计划面板标签（转录构建的计划列表 + Markdown 详情） -->
                 <PlanPanel v-if="activeTab?.type === 'plan' && sessionId" class="h-full"
                     :session-id="sessionId" />
+                <!-- 调用轨迹标签：该会话 JSONL 日志的调用级投影（targetSessionId 支持子代理跳转） -->
+                <TrajectoryPanel v-if="activeTab?.type === 'trajectory'" class="h-full"
+                    :session-id="activeTab.targetSessionId ?? props.sessionId ?? null"
+                    @open-sub-trajectory="onOpenSubTrajectory" />
                 <!-- 差异/编辑记录标签（文件变更历史，多次操作用 op-tabs 展示） -->
                 <FileDiffPanel v-if="activeTab?.type === 'diff'" class="h-full"
                     :entry="activeTab ? tabStore.getDiffEntry(activeTab.key) : null" />
@@ -185,7 +194,7 @@
 import { ref, reactive, computed, watch, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Branch20Regular, Pulse20Regular, Bot20Regular, PeopleTeam20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Chat16Regular, Code20Regular, Notepad20Regular, Add16Regular, Dismiss12Regular } from '@vicons/fluent';
+import { Branch20Regular, Pulse20Regular, Bot20Regular, PeopleTeam20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Chat16Regular, Code20Regular, Notepad20Regular, Add16Regular, Dismiss12Regular, DataUsage20Regular } from '@vicons/fluent';
 import { getFileIcon } from '@/composables/useFileIcon';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
@@ -193,6 +202,7 @@ import SubagentChatTab from './SubagentChatTab.vue';
 import SubagentListPanel from './SubagentListPanel.vue';
 import WorkflowHistoryPanel from './WorkflowHistoryPanel.vue';
 import PlanPanel from './PlanPanel.vue';
+import TrajectoryPanel from '../trajectory/TrajectoryPanel.vue';
 import FileDiffPanel from './FileDiffPanel.vue';
 import WorkspaceStartPage from './WorkspaceStartPage.vue';
 import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
@@ -237,6 +247,7 @@ function tabTitle(tab: UnifiedTab): string {
     if (tab.type === 'subagentlist') return t('chat.workspace.subagentListTab');
     if (tab.type === 'workflow') return t('chat.workspace.workflowTab');
     if (tab.type === 'plan') return t('chat.workspace.planTab');
+    if (tab.type === 'trajectory') return t('chat.workspace.trajectoryTab');
     if (tab.type === 'diff') return tab.name || tab.path || tab.key;
     return tab.title || t('chat.workspace.unnamedWindow');
 }
@@ -393,6 +404,17 @@ function onNewTabOpenFile(): void {
 
 function onNewTabOpenGit(): void {
     tabStore.openGitTab();
+}
+
+/** 起始页「调用轨迹」：打开轨迹标签（当前会话） */
+function onNewTabOpenTrajectory(): void {
+    if (!props.sessionId) return;
+    tabStore.openTrajectoryTab(props.sessionId);
+}
+
+/** 轨迹面板子代理跳转：打开子会话的轨迹标签（targetSessionId = 子会话） */
+function onOpenSubTrajectory(subSessionId: string): void {
+    tabStore.openTrajectoryTab(subSessionId, subSessionId);
 }
 
 function onNewTabOpenWorkflow(): void {

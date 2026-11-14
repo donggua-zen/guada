@@ -34,7 +34,7 @@ describe("stateCache TTL 超时机制（30 分钟，无 LRU）", () => {
       { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: "q" }] },
       { id: "a1", role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", text: "ans" }] },
     ]);
-    await service.finalizeTurn(sid, turnId, 10, { finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
+    await service.finalizeTurn(sid, turnId, 10, { finishReason: "stop" });
   }
 
   it("缓存命中：访问/写入即续期，未过期返回缓存折叠态（不重建）", async () => {

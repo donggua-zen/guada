@@ -33,6 +33,7 @@ import {
   toolResultCallIdOf,
 } from "../../common/utils/tool-pairing.util";
 import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
+import { beginStep, type StepHandle } from "./step-recorder";
 import { resolvePreflightMaxTokens } from "../llm-core/utils/output-budget.util";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { TurnReminderRegistry } from "../plugins/turn-reminders/turn-reminder.registry";
@@ -444,6 +445,11 @@ export class AgentEngine {
     let pendingFollowUpInput: string | undefined;
     let finalFinishReason = "stop";
     let loopError: unknown;
+    /**
+     * 当前迭代未收口的轨迹 step 括号（对齐 DSH step/start~step/end；跨迭代存活，
+     * 外层 finally 兜底收口——工具执行抛出等未预期异常路径也不能留孤儿括号）。
+     */
+    let stepHandle: StepHandle | null = null;
 
     try {
       // 回合开括号 turn_start / 用户消息 user_message 与入库(beginTurn / addUserMessage)
@@ -642,12 +648,34 @@ export class AgentEngine {
             },
           );
           lastRequestMedia = completionParams.requestMedia;
+
+          // 轨迹 step 开括号（对齐 DSH agent-loop step/start）：
+          // 括号 = 本迭代（一次模型调用 + 其工具执行）；IN 区 = 日志 surface（既有）+
+          // transient verbatim（不落 surface 的请求尾部注入）；OUT 区 = 括号 seq 区间内
+          // 的 assistant/message + tool/result（零新增，按区间归属）。
+          // beginStep 内先经 appendEnvelopeIfNeeded（DSH request/header 语义，变更才写）。
+          stepHandle = await beginStep(sessionContext, {
+            turnId,
+            step: iterationCount,
+            source:
+              sessionContext.sessionType === "sub_agent"
+                ? "subagent"
+                : "main_turn",
+            model: modelConfig.modelName,
+            provider: modelConfig.provider?.id,
+            requestId: messageId,
+            ...(reminderInjection.transient.length > 0
+              ? { transient: reminderInjection.transient }
+              : {}),
+          });
+
           const streamResult = this.streamWithRetry(completionParams);
           for await (const result of streamResult) {
             // 重试信号：清空本次尝试的半截累积（保留续传 seed 前缀），转发给前端
             // 轮次级瞬态：带 turnId，前端挂 turn.state.retry（与 isWorking 同层，不落库）
             if (result.type === "retry") {
               assembler.reset();
+              stepHandle?.noteAttempt(result.attempt);
               await sessionContext.publishStream({
                 type: "retry",
                 turnId,
@@ -697,6 +725,11 @@ export class AgentEngine {
             // 半截累积不落库，不会产生连续 assistant 消息）
             historyMessages = await sessionContext.getHistory();
             needToContinue = true;
+            // 轨迹收口：溢出重试的失败尝试留痕（error 语义），下轮迭代开新 step
+            await stepHandle?.end({
+              error: { name: "ContextOverflow", message: streamError.message },
+            });
+            stepHandle = null;
             continue;
           }
 
@@ -847,6 +880,29 @@ export class AgentEngine {
         }
       }
 
+      // 轨迹 step 收口（对齐 DSH step/end finally 纪律）：
+      // 正常完成 / 空消息 / 流异常三条路径在此汇聚统一收口（abort 与溢出重试已各自提前收口）。
+      // Token 收敛：主循环 step/end 不写 usage——usage 由 assistant/message.metadata.usage
+      // 承载（事实单载体，对齐 dsh），轨迹投影端从 OUT 区合成。
+      // error 只在业务错误（finalError 已设置）时携带——user_cancel 不算 error，
+      // 由 turn/finish 的 finishReason 承载。
+      if (stepHandle) {
+        const snapshot = assembler.snapshot();
+        await stepHandle.end({
+          finishReason:
+            (assistantMessage?.metadata.finishReason as string) ??
+            snapshot.finishReason,
+          ...(assistantMessage ? { assistantMessageId: messageId } : {}),
+          ...(finalError
+            ? { error: { name: businessReason ?? "error", message: finalError } }
+            : {}),
+          ...(lastRequestMedia?.mediaOverlay
+            ? { mediaOverlay: lastRequestMedia.mediaOverlay }
+            : {}),
+        });
+        stepHandle = null;
+      }
+
       this.logger.debug(
         `Iteration ${iterationCount} completed. reason: ${assistantMessage?.metadata.finishReason} continue=${needToContinue}`,
       );
@@ -904,13 +960,25 @@ export class AgentEngine {
       // 未设置且无异常 → 模型正常结束 → "stop"
       finalFinishReason = businessReason || (loopError ? "error" : "stop");
 
+      // 轨迹兜底收口（对齐 DSH step/end finally 纪律）：正常路径已在迭代内收口（幂等 no-op），
+      // 这里只覆盖「工具执行抛出等未预期异常直接跳出循环」的孤儿括号。
+      if (stepHandle) {
+        await stepHandle.end(
+          loopError
+            ? { error: { name: businessReason ?? "error", message: finalError ?? String(loopError).slice(0, 2000) } }
+            : undefined,
+        );
+        stepHandle = null;
+      }
+
       if (turnId) {
-        // 保存结束信息到 Turn 级别 metadata
+        // 保存结束信息到 Turn 级别 metadata。
+        // Token 收敛：usage 聚合不再随 turn/finish 落盘（读侧从 assistant 消息 metadata.usage
+        // 累加——前端 TurnItem 已是此实现）；finalUsage 仍随 turn_end SSE 直发（运行时通道）。
         const loopDuration = Date.now() - loopStartTime;
         const finishMeta: Record<string, any> = {
           finishReason: finalFinishReason,
           ...(finalError ? { errorDetail: finalError } : {}),
-          ...(finalUsage ? { usage: finalUsage } : {}),
           ...(sessionContext.getModelConfig().modelName
             ? { modelName: sessionContext.getModelConfig().modelName }
             : {}),

@@ -163,9 +163,6 @@ describe('JsonlMessageService goal 持久化（事实源 = JSONL）', () => {
     await service.appendGoalChange(SID, { operation: 'create', goal: created } as GoalChangeData);
     await service.beginTurn(SID, { preGenTurnId: 't1' });
     await service.finalizeTurn(SID, 't1', 10, {
-      promptTokens: 1,
-      completionTokens: 1,
-      totalTokens: 2,
       finishReason: 'stop',
     } as any);
     // 快照之后又发生一次目标变更（回合外），冷加载必须靠 tail 补上

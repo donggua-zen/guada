@@ -201,7 +201,7 @@ export class ClaudeImportService {
    * 导入会话的上下文占用锚点：按本机解析出的模型窗口计算压缩有效窗口。
    *
    * 来源端的 turn 用量（prompt/output tokens）已随 message.usage 导入，
-   * importTurns 会据此写 turn/finish.usedTokens；但前端显示占用还需要
+   * importTurns 据此在循环结束后写统一 context/stats 占用锚点；但前端显示占用还需要
    * effectiveContextWindow（缺失时整条锚点被忽略）。它不是来源数据，而是
    * 「当前会话模型的有效窗口」——用本机模型配置算，用户之后换模型会被新请求覆盖。
    */
@@ -491,7 +491,7 @@ export class ClaudeImportService {
     const agentId = await this.resolveAgentId(params.agentId);
     // 模型不取来源端：助手默认（可解析时）→ 任一启用模型兜底，用户之后自己改
     const modelId = await this.resolveModelId(agentId);
-    // 上下文占用锚点的有效窗口按本机模型算（turn/finish 需要它才会被前端采纳）
+    // 上下文占用锚点的有效窗口按本机模型算（导入后的统一 context/stats 锚点需要它才会被前端采纳）
     const effectiveContextWindow = this.resolveEffectiveContextWindow(modelId);
 
     // 定位源文件：扫一遍建 sessionId → path 映射（同 sessionId 多根时取 mtime 新者）

@@ -23,6 +23,10 @@ import { toRuntimeProviderConfig } from '../llm-core/utils/provider-runtime.util
 import { resolveThinkingEffort } from '../llm-core';
 import { SessionService } from '../chat/session.service';
 import { ChatRunnerService } from '../chat/chat-runner.service';
+import {
+  withStepBracket,
+  type StepBracketWriter,
+} from '../chat/step-recorder';
 import { wrapSystemReminder } from '../../common/utils/system-reminder.util';
 import { GoalService } from './goal.service';
 import {
@@ -149,28 +153,57 @@ export class GoalVerifierService {
       return { verification: null, failureReason: 'no model configured for goal verification' };
     }
     const recent = await this.recentExcerpt(sessionId);
+    // 轨迹：校验调用 step 括号留痕（source='goal_verification'；输入轻量 → fullInput 全量；
+    // 校验用会话模型但属独立调用，与会话 envelope 无关 → 不记 envelope）
+    const verifyMessages = [
+      {
+        id: `goal-verifier-${randomUUID()}`,
+        role: 'user',
+        kind: 'user',
+        source: { kind: 'user' },
+        metadata: {},
+        content: [{ type: 'text', text: buildGoalVerificationPrompt(objective, recent) }],
+      } as import('../../common/types/conversation.types').Message,
+    ];
+    const verifyStepWriter: StepBracketWriter = {
+      sessionId,
+      appendStepStart: (data) => this.messageStore.appendStepStart(sessionId, data),
+      appendStepEnd: (data) => this.messageStore.appendStepEnd(sessionId, data),
+    };
     try {
-      const response = (await this.llmService.completions({
-        model: model.modelName,
-        messages: [
-          {
-            id: `goal-verifier-${randomUUID()}`,
-            role: 'user',
-            kind: 'user',
-            source: { kind: 'user' },
-            metadata: {},
-            content: [{ type: 'text', text: buildGoalVerificationPrompt(objective, recent) }],
-          },
-        ],
-        temperature: 0.1,
-        maxTokens: 400,
-        thinkingEffort: resolveThinkingEffort(model, 'none'),
-        stream: false,
-        providerConfig: toRuntimeProviderConfig(model.provider),
-        purpose: 'goal_verification',
-        usageContext: { sessionId },
-        abortSignal: AbortSignal.timeout(60_000),
-      } as any)) as LLMCompletionResult;
+      const response = await withStepBracket(
+        verifyStepWriter,
+        {
+          turnId: null,
+          step: 1,
+          source: 'goal_verification',
+          model: model.modelName,
+          provider: model.provider?.id,
+          requestId: verifyMessages[0]!.id,
+          fullInput: verifyMessages,
+        },
+        async () => {
+          const r = (await this.llmService.completions({
+            model: model.modelName,
+            messages: verifyMessages,
+            temperature: 0.1,
+            maxTokens: 400,
+            thinkingEffort: resolveThinkingEffort(model, 'none'),
+            stream: false,
+            providerConfig: toRuntimeProviderConfig(model.provider),
+            purpose: 'goal_verification',
+            usageContext: { sessionId },
+            abortSignal: AbortSignal.timeout(60_000),
+          } as any)) as LLMCompletionResult;
+          return {
+            value: r,
+            end: {
+              ...(r.usage === undefined ? {} : { usage: r.usage }),
+              ...(r.finishReason === undefined ? {} : { finishReason: r.finishReason }),
+            },
+          };
+        },
+      );
       const content = typeof response?.content === 'string' ? response.content : '';
       const parsed = parseGoalVerification(content);
       if (!parsed) {

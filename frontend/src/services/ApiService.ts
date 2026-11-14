@@ -42,6 +42,7 @@ import {
 } from "./modules/session-queue.api";
 import { workspaceApi, type WorkspaceApi } from "./modules/workspace.api";
 import { messageApi, type MessageApi } from "./modules/message.api";
+import { trajectoryApi, type TrajectoryApi } from "./modules/trajectory.api";
 import { fileUploadApi, type FileUploadApi } from "./modules/file-upload.api";
 import { authApi, type AuthApi } from "./modules/auth.api";
 import { settingsApi, type SettingsApi } from "./modules/settings.api";
@@ -76,6 +77,7 @@ interface ApiService
     SessionQueueApi,
     WorkspaceApi,
     MessageApi,
+    TrajectoryApi,
     FileUploadApi,
     AuthApi,
     SettingsApi,
@@ -414,6 +416,7 @@ Object.assign(
   sessionQueueApi,
   workspaceApi,
   messageApi,
+  trajectoryApi,
   fileUploadApi,
   authApi,
   settingsApi,

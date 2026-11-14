@@ -108,6 +108,12 @@ export interface LLMRequestMediaStats {
   budgetBytes: number;
   /** 被替换为路径占位的图片张数 */
   omittedImages: number;
+  /**
+   * 被占位替换的图片明细（消息 id + 块下标 + 占位文本；无替换时缺省）。
+   * 由 builder 从 media-budget 的 omittedRefs 映射而来，agent-engine 随 step/end
+   * 落轨迹（标注「模型该次请求看到的是占位而非图片」），不参与 wire。
+   */
+  mediaOverlay?: import("../../../common/persistence/types").StepMediaOverlayEntry[];
 }
 
 /**

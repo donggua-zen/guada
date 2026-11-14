@@ -24,6 +24,11 @@ import type {
 import type { LLMCompletionParams } from '../../llm-core/types/llm.types';
 import type { SummaryInput, SummaryProvider, SummaryResult } from './compression-engine';
 import { serializeSummaryMessages } from './summary-serializer';
+import {
+  beginStep,
+  toStepErrorInfo,
+  type StepBracketWriter,
+} from '../step-recorder';
 
 /** 摘要模型引用（模型名 + provider 运行时配置 + 能力配置 + 档位菜单） */
 export interface SummaryModelRef {
@@ -59,6 +64,13 @@ export interface LLMSummaryProviderOptions {
    * 必须用摘要模型自身覆盖 model/provider/thinkingEffort/能力，否则摘要请求会发错端点。
    */
   overrideModel?: boolean;
+  /**
+   * 轨迹 step 括号写入面（会话上下文；缺省 = 不记录）。
+   * 摘要调用以 source='compaction' 的 step 括号留痕（usage/finishReason/耗时）；
+   * 不记 fullInput——摘要输入 = 主请求前缀 + 日志中已有的遮蔽区消息 + 常量指令，
+   * 全部可由日志派生（对齐 dsh：compaction/summary 也不重复携带输入消息）。
+   */
+  stepWriter?: StepBracketWriter;
 }
 
 /** KV 前缀模式下 shadowed 消息为空时的占位兜底 */
@@ -215,48 +227,75 @@ export class LLMSummaryProvider implements SummaryProvider {
     // 流式调用（对齐 DSH ctx.llm.stream() 单次调用语义）。仅对"空文本"做一次重试：
     // 实测同一请求曾返回 2000 token / finish_reason=length 但无文本（21:39），
     // 同参数下一次请求成功（21:53）——属于瞬时失败，直接抛错会把原始 400 暴露给用户。
+    // 轨迹：一个 step 括号覆盖整个重试序列（attemptIndex = 成功尝试序号，0 起）。
+    const stepHandle = this.options.stepWriter
+      ? await beginStep(this.options.stepWriter, {
+          turnId: null,
+          step: 1,
+          source: 'compaction',
+          model: params.model,
+          provider: params.providerConfig?.id,
+          requestId: randomUUID(),
+        })
+      : null;
     const MAX_EMPTY_SUMMARY_ATTEMPTS = 2;
     let summary = '';
     let usage: SummaryResult['usage'] | undefined;
-    for (let attempt = 1; attempt <= MAX_EMPTY_SUMMARY_ATTEMPTS; attempt += 1) {
-      const stream = (await this.llmService.completions(
-        params,
-      )) as AsyncGenerator<StreamChunk>;
-      const assembler = new BlockAssembler();
-      for await (const chunk of stream) {
-        assembler.push(chunk);
+    let finishReason: string | undefined;
+    let successAttempt = 0;
+    try {
+      for (let attempt = 1; attempt <= MAX_EMPTY_SUMMARY_ATTEMPTS; attempt += 1) {
+        const stream = (await this.llmService.completions(
+          params,
+        )) as AsyncGenerator<StreamChunk>;
+        const assembler = new BlockAssembler();
+        for await (const chunk of stream) {
+          assembler.push(chunk);
+        }
+        const snapshot = assembler.snapshot();
+        usage = snapshot.usage;
+        finishReason = snapshot.finishReason;
+        summary = snapshot.blocks
+          .filter(
+            (b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text',
+          )
+          .map((b) => b.text)
+          .join('')
+          .trim();
+        if (summary) {
+          successAttempt = attempt - 1;
+          break;
+        }
+        this.logger.warn(
+          `[summary] empty content (attempt ${attempt}/${MAX_EMPTY_SUMMARY_ATTEMPTS})` +
+            `, finishReason=${(snapshot as any).finishReason ?? 'unknown'}; retrying`,
+        );
       }
-      const snapshot = assembler.snapshot();
-      usage = snapshot.usage;
-      summary = snapshot.blocks
-        .filter(
-          (b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text',
-        )
-        .map((b) => b.text)
-        .join('')
-        .trim();
-      if (summary) break;
-      this.logger.warn(
-        `[summary] empty content (attempt ${attempt}/${MAX_EMPTY_SUMMARY_ATTEMPTS})` +
-          `, finishReason=${(snapshot as any).finishReason ?? 'unknown'}; retrying`,
+      if (!summary) {
+        throw new Error('LLM summary provider returned empty content');
+      }
+      // 摘要调用成功：记录 provider 侧 usage（口径对照的地面真值；缺失即代表 provider 不返回）
+      this.logger.log(
+        `[compact.diag.summary.result] summaryChars=${summary.length} usage=${
+          usage === undefined
+            ? 'none'
+            : JSON.stringify({
+                promptTokens: (usage as any).promptTokens,
+                completionTokens: (usage as any).completionTokens,
+                cachedTokens: (usage as any).cachedTokens,
+              })
+        }`,
       );
+      await stepHandle?.end({
+        attemptIndex: successAttempt,
+        ...(usage === undefined ? {} : { usage }),
+        ...(finishReason === undefined ? {} : { finishReason }),
+      });
+      return { summary, ...(usage === undefined ? {} : { usage }) };
+    } catch (error) {
+      await stepHandle?.end({ error: toStepErrorInfo(error) });
+      throw error;
     }
-    if (!summary) {
-      throw new Error('LLM summary provider returned empty content');
-    }
-    // 摘要调用成功：记录 provider 侧 usage（口径对照的地面真值；缺失即代表 provider 不返回）
-    this.logger.log(
-      `[compact.diag.summary.result] summaryChars=${summary.length} usage=${
-        usage === undefined
-          ? 'none'
-          : JSON.stringify({
-              promptTokens: (usage as any).promptTokens,
-              completionTokens: (usage as any).completionTokens,
-              cachedTokens: (usage as any).cachedTokens,
-            })
-      }`,
-    );
-    return { summary, ...(usage === undefined ? {} : { usage }) };
   }
 
   /**

@@ -89,7 +89,7 @@ describe("快照恢复链路（finalizeTurn 每轮快照 + 跨卷增量）", () 
         { id: `u${i}`, role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: `q${i}` }] },
         { id: `a${i}`, role: "assistant", kind: "model", source: { kind: "model", provider: "p", model: "m" }, metadata: {}, content: [{ type: "text", text: `ans${i}` }] },
       ]);
-      await service.finalizeTurn(sid, turnId, 10, { finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
+      await service.finalizeTurn(sid, turnId, 10, { finishReason: "stop" });
       seq = await service.getLastProcessedSeq(sid);
     }
     return seq;
@@ -214,7 +214,7 @@ describe("importTurns 上下文占用锚点（重建路径）", () => {
     };
   }
 
-  it("turn/finish 携带 usedTokens（回合 usage）+ effectiveContextWindow（opts）", async () => {
+  it("导入占用锚点收敛为末尾统一 context/stats（provider 真值优先；turn/finish 不再携带 token 字段）", async () => {
     const store = new JsonlMessageService(backend);
     const { imported } = await store.importTurns(sid, [turnWithUsage({
       promptTokens: 100,
@@ -223,37 +223,45 @@ describe("importTurns 上下文占用锚点（重建路径）", () => {
     })], { effectiveContextWindow: 1000000 });
     expect(imported).toBe(2);
     const events = await backend.getAllEvents(sid);
+    // turn/finish 只落回合事实
     const finish = events.find((e) => e.type === "turn/finish");
-    expect(finish?.data).toMatchObject({
-      promptTokens: 100,
-      completionTokens: 50,
-      totalTokens: 150,
+    expect((finish?.data as any)?.turnId).toBe("t1");
+    expect((finish?.data as any)?.usedTokens).toBeUndefined();
+    expect((finish?.data as any)?.promptTokens).toBeUndefined();
+    // 占用锚点 = 末尾一条 context/stats（provider 真值口径 + opts 窗口）
+    const stats = events.filter((e) => e.type === "context/stats");
+    expect(stats).toHaveLength(1);
+    expect(stats[0]!.data).toMatchObject({
+      turnId: "import",
       usedTokens: 150,
       effectiveContextWindow: 1000000,
     });
   });
 
-  it("无窗口 opts → 不写 effectiveContextWindow（usedTokens 仍写）", async () => {
+  it("无窗口 opts → 锚点不写 effectiveContextWindow（usedTokens 仍写）", async () => {
     const store = new JsonlMessageService(backend);
     await store.importTurns(sid, [turnWithUsage({
       promptTokens: 60,
       completionTokens: 20,
     })]);
     const events = await backend.getAllEvents(sid);
-    const finish = events.find((e) => e.type === "turn/finish");
-    expect((finish?.data as any)?.usedTokens).toBe(80); // 60 + 20
-    expect((finish?.data as any)?.effectiveContextWindow).toBeUndefined();
+    const stats = events.find((e) => e.type === "context/stats");
+    expect((stats?.data as any)?.usedTokens).toBe(80); // 60 + 20
+    expect((stats?.data as any)?.effectiveContextWindow).toBeUndefined();
   });
 
-  it("无 provider usage → turn/finish 用累计 surface 启发式锚点", async () => {
+  it("无 provider usage → 锚点用累计 surface 启发式（usedTokens 口径不变）", async () => {
     const store = new JsonlMessageService(backend);
     // user 'q'(1字符) + assistant 'a'(1字符) → ceil(1/4)+ceil(1/4) = 2
     await store.importTurns(sid, [turnWithUsage(undefined)]);
     const events = await backend.getAllEvents(sid);
+    const stats = events.find((e) => e.type === "context/stats");
+    expect(stats).toBeDefined();
+    expect((stats?.data as any)?.usedTokens).toBe(2);
+    // turn/finish 只有回合事实
     const finish = events.find((e) => e.type === "turn/finish");
-    expect(finish).toBeDefined();
-    expect((finish?.data as any)?.usedTokens).toBe(2);
-    expect((finish?.data as any)?.promptTokens).toBe(0);
+    expect((finish?.data as any)?.usedTokens).toBeUndefined();
+    expect((finish?.data as any)?.promptTokens).toBeUndefined();
   });
 
   it("原始时间戳保留：turn.createdAt / message.createdAt / metadata.finishedAt 覆盖事件 time", async () => {

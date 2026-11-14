@@ -168,11 +168,19 @@ describe("buildSessionLlmParams 媒体预算集成", () => {
       .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
       .map((b) => b.text);
     expect(texts.some((t) => t.includes("media budget"))).toBe(true);
+    // mediaOverlay：被占位替换的图片明细（messageId = wire 派生消息 id，占位文本随 step 事件落轨迹）
     expect(params.requestMedia).toEqual({
       attachedBytes: base64Bytes(150 * 1024),
       retainedImages: 1,
       budgetBytes: 210 * 1024,
       omittedImages: 1,
+      mediaOverlay: [
+        {
+          messageId: "t1:tool-images",
+          blockIndex: 1,
+          placeholder: expect.stringContaining("media budget"),
+        },
+      ],
     });
   });
 

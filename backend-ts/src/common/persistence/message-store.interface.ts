@@ -41,25 +41,17 @@ export interface TokenBreakdown {
   tools: number;
 }
 
-/** 轮次完成信息（usage/耗时/finishReason/error） */
+/**
+ * 轮次完成信息（耗时/finishReason/error/模型）。
+ * Token 字段收敛（docs/dsh-trajectory-migration.md §9）：usage 聚合与占用快照不再经
+ * turn/finish 落盘——usage 读侧从 assistant/message.metadata.usage 累加（前端 TurnItem
+ * 已是此实现）；占用快照唯一载体是 context/stats。
+ */
 export interface TurnFinish {
-  usage: TokenUsage;
   /** 模型结束原因（stop / tool-calls / error / timeout / user_cancel 等，原样保留） */
   finishReason?: string;
   errorDetail?: unknown;
   modelName?: string;
-  /** 回合结束后当前完整请求 token（envelope + 可见视图；前端上下文占用的持久化锚点） */
-  usedTokens?: number;
-  /** 有效上下文窗口（压缩有效窗口；与 usedTokens 配套） */
-  effectiveContextWindow?: number;
-  /** 输入 + 输出共享总窗口（与 usedTokens 配套；旧数据缺省） */
-  totalContextWindow?: number;
-  /** 压缩决策扣掉的输出预留（0..21K；旧数据缺省） */
-  outputReserveTokens?: number;
-  /** 可见视图消息数（与 usedTokens 配套） */
-  messageCount?: number;
-  /** 细分 token（与 usedTokens 配套；旧数据缺省） */
-  breakdown?: TokenBreakdown;
 }
 
 /** 单块懒加载详情（工具调用参数+结果） */
@@ -263,6 +255,16 @@ export interface IMessageStore {
     sessionId: string,
     data: ContextStatsData,
   ): Promise<number>;
+
+  // ─── 轨迹（envelope + step 括号，对齐 DSH request-header / step 语义；log-only）───
+  /** 当前生效 envelope（回放态折叠；无 envelope 事件返回 null）。会话层去重缓存播种用。 */
+  getEnvelope(sessionId: string): Promise<import('./types').Envelope | null>;
+  /** envelope 事件：请求侧快照（system/tools/model/provider）。去重由调用方负责，变更才调用。 */
+  appendEnvelope(sessionId: string, data: import('./types').Envelope): Promise<number>;
+  /** step/start：开一次模型调用括号（主循环含其工具执行；辅助调用为单次调用）。 */
+  appendStepStart(sessionId: string, data: import('./types').StepStartData): Promise<number>;
+  /** step/end：收调用括号（失败/中止也必须落 error 语义收口；与 step/start 配对）。 */
+  appendStepEnd(sessionId: string, data: import('./types').StepEndData): Promise<number>;
 
   // ─── 统一交互（审批/询问共用 ask/* 事件溯源；无超时）───
   /** 交互请求事件（发起 ask 时写日志，审计源） */

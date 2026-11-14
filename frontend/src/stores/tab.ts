@@ -270,6 +270,25 @@ export const useTabStore = defineStore('tab', () => {
         selectTab(id)
     }
 
+    /**
+     * 打开调用轨迹标签（每会话唯一）：该会话 JSONL 日志的调用级投影
+     * （step 括号 + envelope 快照，对齐 dsh trajectory 台账）。
+     * @param targetSessionId 缺省 = 侧边栏当前会话；子代理跳转时传子会话 id
+     */
+    function openTrajectoryTab(sessionId: string, targetSessionId?: string): void {
+        const id = `trajectory:${sessionId}`
+        if (!tabs.value.some(t => t.key === id)) {
+            tabs.value.push({
+                type: 'trajectory',
+                key: id,
+                ...(targetSessionId && targetSessionId !== sessionId
+                    ? { targetSessionId }
+                    : {}),
+            })
+        }
+        selectTab(id)
+    }
+
     // ── 标签选中（幂等，不加载内容） ──
 
     function selectTab(key: string | null): void {
@@ -446,6 +465,7 @@ export const useTabStore = defineStore('tab', () => {
         openSubagentListTab,
         openWorkflowTab,
         openPlanTab,
+        openTrajectoryTab,
         openDiffTab,
         getDiffEntry,
         selectTab,

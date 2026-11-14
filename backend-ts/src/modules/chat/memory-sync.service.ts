@@ -19,6 +19,7 @@ import { ToolExecutor } from "../tools/tool-executor.service";
 import { LLMService } from "../llm-core/llm.service";
 import { BlockAssembler } from "./block-assembler";
 import { SessionLlmRequestBuilder } from "./session-llm-request.builder";
+import { beginStep, toStepErrorInfo } from "./step-recorder";
 import { SummaryMode } from "./compaction/compression-engine";
 import { resolveMemoryDir } from "../../common/utils/memory-path.util";
 import {
@@ -170,6 +171,17 @@ Scan history. ONLY trigger an update if:
           this.logger.log(`[memory-sync] shadow turns aborted at round ${round}`);
           break;
         }
+        // 轨迹：每轮影子调用一个 step 括号（含其工具执行，对齐 DSH step 语义）。
+        // fullInput 只记影子指令与已产出内容（delta）——历史部分与日志 surface 一致，不重复记录。
+        const stepHandle = await beginStep(sessionContext, {
+          turnId: null,
+          step: round,
+          source: "memory_sync",
+          model: modelConfig.modelName,
+          provider: modelConfig.provider?.id,
+          requestId: shadowUserMessageId,
+          fullInput: shadowMessages,
+        });
         try {
           const streamResult = (await this.llmService.completions(
             SessionLlmRequestBuilder.buildCompletionParams(sessionContext, {
@@ -184,6 +196,7 @@ Scan history. ONLY trigger an update if:
             shadowAssembler.push(item);
           }
           const shadowBlocks = shadowAssembler.blocks();
+          const shadowSnapshot = shadowAssembler.snapshot();
 
           const shadowAssistantId = sessionContext.generateMessageId();
           shadowMessages.push({
@@ -198,7 +211,18 @@ Scan history. ONLY trigger an update if:
             (b): b is Extract<ContentBlock, { type: "tool-call" }> =>
               b.type === "tool-call",
           );
-          if (shadowToolCalls.length === 0) break;
+          if (shadowToolCalls.length === 0) {
+            await stepHandle.end({
+              attemptIndex: round - 1,
+              ...(shadowSnapshot.usage === undefined
+                ? {}
+                : { usage: shadowSnapshot.usage }),
+              ...(shadowSnapshot.finishReason === undefined
+                ? {}
+                : { finishReason: shadowSnapshot.finishReason }),
+            });
+            break;
+          }
 
           const responses = await this.toolExecutor.executeBatch(
             shadowToolCalls.map((tc) => ({
@@ -234,7 +258,18 @@ Scan history. ONLY trigger an update if:
               ],
             });
           }
+          // 括号在本轮工具执行完成后闭合（step = 调用 + 其工具执行）
+          await stepHandle.end({
+            attemptIndex: round - 1,
+            ...(shadowSnapshot.usage === undefined
+              ? {}
+              : { usage: shadowSnapshot.usage }),
+            ...(shadowSnapshot.finishReason === undefined
+              ? {}
+              : { finishReason: shadowSnapshot.finishReason }),
+          });
         } catch (error: any) {
+          await stepHandle.end({ error: toStepErrorInfo(error) });
           this.logger.error(`记忆保存第${round}轮失败: ${error.message}`);
           break;
         }

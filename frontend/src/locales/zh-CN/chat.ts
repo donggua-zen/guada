@@ -490,6 +490,8 @@ export default {
     newBrowser: '新建浏览器',
     newFile: '文件',
     planTab: '计划',
+    trajectoryTab: '调用轨迹',
+    startPageTrajectoryDesc: '查看当前会话每次模型调用的完整轨迹（含辅助调用）',
     gitTab: 'Git 审阅',
     newTabHint: '从右侧目录树选择文件开始预览',
     saveSuccess: '保存成功',

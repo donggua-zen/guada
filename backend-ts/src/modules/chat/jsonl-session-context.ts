@@ -42,7 +42,10 @@ import {
 } from './compaction/types';
 import type {
   CompactionErrorData,
+  Envelope,
   OccupancyAnchor,
+  StepEndData,
+  StepStartData,
   ToolImagePruneData,
 } from '../../common/persistence/types';
 import {
@@ -97,6 +100,34 @@ interface EffectiveSettings {
   planModeEpoch?: string | null;
   referencedKbs?: string[];
   modelName?: string | null;
+}
+
+/**
+ * envelope 内容等价比较（对齐 DSH headerEquals，request-header.ts:44-54）：
+ * 忽略 reason，逐字段比较 system/model/provider + tools 逐项。
+ * parameters 优先对象引用短路（插件 schema 对象稳定），不等再 JSON 比较——
+ * 常规路径引用必相等，字符串化只在罕见兜底时发生。
+ */
+function envelopeContentEqual(
+  a: Omit<Envelope, 'reason'>,
+  b: Omit<Envelope, 'reason'>,
+): boolean {
+  if ((a.system ?? '') !== (b.system ?? '')) return false;
+  if ((a.model ?? '') !== (b.model ?? '')) return false;
+  if ((a.provider ?? '') !== (b.provider ?? '')) return false;
+  const at = a.tools ?? [];
+  const bt = b.tools ?? [];
+  if (at.length !== bt.length) return false;
+  for (let i = 0; i < at.length; i++) {
+    if (at[i]!.name !== bt[i]!.name) return false;
+    if (at[i]!.description !== bt[i]!.description) return false;
+    const ap = at[i]!.parameters;
+    const bp = bt[i]!.parameters;
+    if (ap !== bp && JSON.stringify(ap ?? null) !== JSON.stringify(bp ?? null)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -743,25 +774,14 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
     durationMs: number,
     finish: TurnFinish,
   ): Promise<void> {
-    // 上下文占用锚点：回合全部消息已 append（finalizeTurn 时序在流结束后）→ 统计即回合后占用
-    // （含视图消息数与细分，供前端重开会话时逆向扫描免 REST）。
-    // 统计失败不能阻止 turn/finish 落盘：锚点字段可选，缺失时前端回退到
-    // 最后一次 context/stats 事件。
-    let anchor:
-      | Awaited<ReturnType<JsonlSessionContext["getContextStats"]>>
-      | undefined;
-    try {
-      anchor = await this.getContextStats();
-    } catch (error: any) {
-      this.logger.warn(
-        `getContextStats failed before finalizeTurn (${turnId}): ${error?.message ?? error}`,
-      );
-    }
+    // Token 字段收敛：turn/finish 只落回合事实（finishReason/modelName/errorDetail/耗时）。
+    // 占用快照不再随 finalizeTurn 写入（与最后一次 context/stats 同值的冗余双写）——
+    // 运行时路径每次请求落库后已有 context/stats 锚点，前端冷启动取最后一条即可。
     const revision = await this.messageStore.finalizeTurn(
       this.sessionId,
       turnId,
       durationMs,
-      { ...finish, ...(anchor ?? {}) },
+      finish,
     );
     // turn/finish 不改变消息视图，仅版本号前进 → 续期快照 revision（写入方提供）
     this.refreshSnapshotRevision(revision);
@@ -969,6 +989,95 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
         : { breakdown: stats.breakdown }),
       ...(stats.request === undefined ? {} : { request: stats.request }),
     });
+  }
+
+  // ═══ 轨迹（envelope + step 括号，对齐 DSH request-header / step 语义；log-only）═══
+
+  /**
+   * envelope 去重缓存：
+   * - undefined：尚未播种（首次调用从回放态取）
+   * - null：播种过但回放态无 envelope（本会话从未写过）
+   * - {envelope, pluginsRef}：上次写入/播种的 envelope；pluginsRef 是写入时的插件数组引用
+   *   （快速指纹——三者未变则 envelope 必然未变，工具 schema 对象随插件定义稳定）
+   */
+  private envelopeCache:
+    | undefined
+    | null
+    | { envelope: Envelope; pluginsRef: ResolvedPluginInfo[] | null };
+
+  /** step/start：开一次模型调用括号（log-only）。 */
+  async appendStepStart(data: StepStartData): Promise<number> {
+    return this.messageStore.appendStepStart(this.sessionId, data);
+  }
+
+  /** step/end：收调用括号（log-only；失败/中止也必须落 error 语义收口）。 */
+  async appendStepEnd(data: StepEndData): Promise<number> {
+    return this.messageStore.appendStepEnd(this.sessionId, data);
+  }
+
+  /**
+   * envelope 请求侧快照（system/tools/model/provider）：与上次写入比对，变更才落盘。
+   *
+   * 对齐 DSH request/header 的写入纪律（agent.ts:507-518）：每 step 前调用一次，
+   * headerEquals 结构去重（request-header.ts:44-54），未变化不写事件。
+   * 对比成本三级：引用短路（插件数组 + systemText 字符串 + 模型名，亚微秒）→
+   * 字段级比较（仅在身份变化时，parameters 对象引用相等短路）→ 落盘（真变更才发生）。
+   * systemText 用缓存值（ensureConversationStateLoaded 重建，见 buildSystemText），不重算。
+   */
+  async appendEnvelopeIfNeeded(): Promise<void> {
+    try {
+      if (this.envelopeCache === undefined) {
+        const seeded = await this.messageStore.getEnvelope(this.sessionId);
+        this.envelopeCache = seeded ? { envelope: seeded, pluginsRef: null } : null;
+      }
+      const cached = this.envelopeCache;
+      const system = this.systemText || undefined;
+      const model = this.modelConfig?.modelName || undefined;
+      // 快速短路：systemText / 模型 / 插件数组引用都未变 → envelope 必然未变
+      if (
+        cached &&
+        cached.pluginsRef === this.resolvedPlugins &&
+        cached.envelope.system === system &&
+        cached.envelope.model === model
+      ) {
+        return;
+      }
+      const candidate = this.buildEnvelopeSnapshot();
+      if (cached && envelopeContentEqual(cached.envelope, candidate)) {
+        // 身份变了但内容没变（如插件数组重建但 schema 相同）：只更新指纹，不写事件
+        this.envelopeCache = { envelope: cached.envelope, pluginsRef: this.resolvedPlugins };
+        return;
+      }
+      const envelope: Envelope = { ...candidate, reason: cached ? 'change' : 'initial' };
+      await this.messageStore.appendEnvelope(this.sessionId, envelope);
+      this.envelopeCache = { envelope, pluginsRef: this.resolvedPlugins };
+    } catch (error: any) {
+      // 轨迹是观测性功能：失败只告警，绝不阻断对话主链路
+      this.logger.warn(
+        `[trajectory] appendEnvelopeIfNeeded failed: ${error?.message ?? error}`,
+      );
+    }
+  }
+
+  /** 组装当前请求侧快照（不含 reason；缺省字段不写，事件体最小化） */
+  private buildEnvelopeSnapshot(): Omit<Envelope, 'reason'> {
+    const toolDefs = this.getTools();
+    return {
+      ...(this.systemText ? { system: this.systemText } : {}),
+      ...(toolDefs.length > 0
+        ? {
+            tools: toolDefs.map((t) => ({
+              name: t.name,
+              description: t.description,
+              parameters: (t.parameters ?? {}) as Record<string, unknown>,
+            })),
+          }
+        : {}),
+      ...(this.modelConfig?.modelName ? { model: this.modelConfig.modelName } : {}),
+      ...(this.modelConfig?.provider?.id
+        ? { provider: this.modelConfig.provider.id }
+        : {}),
+    };
   }
 
   getEffectiveContextWindow(): number {

@@ -8,8 +8,8 @@ export interface UnifiedTab {
      * 'newtab' 仅作遗留兼容：起始页不占用标签栏（openNewTab 只清空 activeTabKey），
      * 此处保留类型以便缓存恢复时过滤旧数据。
      */
-    type: 'file' | 'browser' | 'git' | 'terminal' | 'processlog' | 'subagent' | 'subagentlist' | 'workflow' | 'diff' | 'plan' | 'newtab';
-    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'processlog:<sessionId>:<jobId>' / 'subagent:<subSessionId>' / 'subagentlist:<sessionId>' / 'workflow:<sessionId>' / 'diff:<turnId>:<path>' / 'plan:<sessionId>' / 'newtab:<id>'
+    type: 'file' | 'browser' | 'git' | 'terminal' | 'processlog' | 'subagent' | 'subagentlist' | 'workflow' | 'diff' | 'plan' | 'trajectory' | 'newtab';
+    key: string;       // 'file:<path>' / 'browser:<windowId>' / 'git' / 'terminal:<sessionId>:<id>' / 'processlog:<sessionId>:<jobId>' / 'subagent:<subSessionId>' / 'subagentlist:<sessionId>' / 'workflow:<sessionId>' / 'diff:<turnId>:<path>' / 'plan:<sessionId>' / 'trajectory:<sessionId>' / 'newtab:<id>'
     // file
     path?: string;
     name?: string;
@@ -34,6 +34,9 @@ export interface UnifiedTab {
     // processlog（后台作业日志）
     jobId?: string;       // 稳定 job id（job-...）
     command?: string;     // 执行器 label/命令（标签标题与日志面板头部展示）
+    // trajectory（调用轨迹标签）：展示哪个会话的轨迹；缺省 = 侧边栏当前会话，
+    // 子代理跳转时携带子会话 id（面板数据随该会话的日志投影）
+    targetSessionId?: string;
     // diff（编辑记录标签：仅存骨架，FileChangeEntry 由 tabStore 运行时 Map 持有，不持久化）
     turnId?: string;      // 所属回合 ID（标签 key 的一部分）
 }

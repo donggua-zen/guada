@@ -29,7 +29,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
     tokenStats = useSessionTokenStats(ref("s1")).tokenStats;
   });
 
-  it("取最后一个有效锚点（领域 turn/finish、live turn_end、compaction/end 混合，逆序）", () => {
+  it("取最后一个有效锚点（领域 compaction/end、live turn_end 混合，逆序；turn/finish 不再是锚点源）", () => {
     const events = [
       { type: "turn/finish", data: { usedTokens: 100, effectiveContextWindow: 1000 } },
       { type: "turn_end", contextStats: { usedTokens: 300, effectiveContextWindow: 1000 } },
@@ -59,7 +59,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
       breakdown: { systemPrompt: 10, history: 40, tools: 50 },
     });
     const events = [
-      { type: "turn/finish", data: { usedTokens: 250, effectiveContextWindow: 1000 } },
+      { type: "context/stats", data: { turnId: "t1", usedTokens: 250, effectiveContextWindow: 1000 } },
     ];
     expect(applyContextStatsFromEvents("s1", events as any)).toBe(true);
     expect(tokenStats.value?.breakdown).toEqual({
@@ -193,7 +193,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
     const subStats = useSessionTokenStats(ref("sub")).tokenStats;
 
     applyContextStatsFromEvents("main", [
-      { type: "turn/finish", data: { usedTokens: 100, effectiveContextWindow: 1000 } },
+      { type: "context/stats", data: { turnId: "t1", usedTokens: 100, effectiveContextWindow: 1000 } },
     ]);
     // 后台子代理回合结束（真实互染路径：projector 对所有会话喂 updateTokenStatsFromSSE）
     updateTokenStatsFromSSE("sub", {
@@ -233,7 +233,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
     });
   });
 
-  it("request：最新锚点（turn/finish）无 request 时回退到最近一条 context/stats", () => {
+  it("request：最新锚点（compaction/end）无 request 时回退到最近一条 context/stats", () => {
     const events = [
       {
         type: "context/stats",
@@ -250,7 +250,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
         },
       },
       {
-        type: "turn/finish",
+        type: "compaction/end",
         data: { turnId: "t1", usedTokens: 120, effectiveContextWindow: 1000 },
       },
     ];
@@ -278,7 +278,7 @@ describe("applyContextStatsFromEvents（上下文占用锚点逆向扫描）", (
       },
       { type: "turn/delete", data: { turnId: "t_deleted" } },
       {
-        type: "turn/finish",
+        type: "context/stats",
         data: { turnId: "t_ok", usedTokens: 100, effectiveContextWindow: 1000 },
       },
     ];

@@ -71,7 +71,7 @@ describe("torn-tail 修复（坏行截断 + 合成 interrupted）", () => {
     await s1.appendMessages(sid, [
       { id: "u1", role: "user", kind: "user", source: { kind: "user" }, metadata: {}, content: [{ type: "text", text: "q" }] },
     ]);
-    await s1.finalizeTurn(sid, turnId, 10, { finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } });
+    await s1.finalizeTurn(sid, turnId, 10, { finishReason: "stop" });
 
     // 坏行（模拟损坏残留）
     const file = await activeSegmentPath(backend, sid);

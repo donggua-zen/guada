@@ -74,10 +74,7 @@ describe("活跃段 manifest 懒恢复（重启安全）", () => {
     const s1 = new JsonlMessageService(backend1);
     const { turnId } = await s1.beginTurn(sid);
     await s1.appendMessages(sid, [userMessage("u1")]);
-    await s1.finalizeTurn(sid, turnId, 1, {
-      finishReason: "stop",
-      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-    });
+    await s1.finalizeTurn(sid, turnId, 1, { finishReason: "stop" });
     await backend1.splitSegment(sid);
 
     const seg0LinesBefore = lineCount(sid, "seg-0000.jsonl");
@@ -89,10 +86,7 @@ describe("活跃段 manifest 懒恢复（重启安全）", () => {
     const s2 = new JsonlMessageService(backend2);
     const { turnId: turnId2 } = await s2.beginTurn(sid);
     await s2.appendMessages(sid, [userMessage("u2")]);
-    await s2.finalizeTurn(sid, turnId2, 1, {
-      finishReason: "stop",
-      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-    });
+    await s2.finalizeTurn(sid, turnId2, 1, { finishReason: "stop" });
 
     // seg-0000（归档段）未被追加；seg-0001（活跃段）追加了 turn/start + user/message + turn/finish
     expect(lineCount(sid, "seg-0000.jsonl")).toBe(seg0LinesBefore);
@@ -106,10 +100,7 @@ describe("活跃段 manifest 懒恢复（重启安全）", () => {
     const s1 = new JsonlMessageService(backend1);
     const { turnId } = await s1.beginTurn(sid);
     await s1.appendMessages(sid, [userMessage("u1")]);
-    await s1.finalizeTurn(sid, turnId, 1, {
-      finishReason: "stop",
-      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-    });
+    await s1.finalizeTurn(sid, turnId, 1, { finishReason: "stop" });
     await backend1.splitSegment(sid);
 
     const backend2 = new JsonlBackend();
@@ -124,10 +115,7 @@ describe("活跃段 manifest 懒恢复（重启安全）", () => {
     const s1 = new JsonlMessageService(backend1);
     const { turnId } = await s1.beginTurn(sid);
     await s1.appendMessages(sid, [userMessage("u1")]);
-    await s1.finalizeTurn(sid, turnId, 1, {
-      finishReason: "stop",
-      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-    });
+    await s1.finalizeTurn(sid, turnId, 1, { finishReason: "stop" });
     await backend1.splitSegment(sid);
 
     // 重启后直接分卷（endSeq 由段尾扫描补齐）
@@ -158,10 +146,7 @@ describe("活跃段 manifest 懒恢复（重启安全）", () => {
     const s1 = new JsonlMessageService(backend1);
     const { turnId } = await s1.beginTurn(sid);
     await s1.appendMessages(sid, [userMessage("u1")]);
-    await s1.finalizeTurn(sid, turnId, 1, {
-      finishReason: "stop",
-      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-    });
+    await s1.finalizeTurn(sid, turnId, 1, { finishReason: "stop" });
     await backend1.splitSegment(sid);
     const seg0Lines = lineCount(sid, "seg-0000.jsonl");
 

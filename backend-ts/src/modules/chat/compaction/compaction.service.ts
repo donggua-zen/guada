@@ -19,6 +19,7 @@ import { ProviderFileStore } from "../../llm-core/provider-file.store";
 import { toRuntimeProviderConfig } from "../../llm-core/utils/provider-runtime.util";
 import { EventBusService } from "../../../common/events/event-bus.service";
 import { buildSessionLlmParams } from "../session-llm-request.builder";
+import type { StepBracketWriter } from "../step-recorder";
 import type { ContextStatsPayload } from "../types/event-chunk.types";
 import {
   SG_MODELS,
@@ -384,6 +385,10 @@ export class CompactionService {
             // 避免图片 token 挤占摘要预算（图片以 [image ...] 文本标记保留语义）
             deriveToolResultImages: false,
           }),
+        // 轨迹：摘要调用留痕（ds 运行时为 JsonlSessionContext，具备 step 写入面）
+        stepWriter: typeof (ds as Partial<StepBracketWriter>).appendStepStart === 'function'
+          ? (ds as unknown as StepBracketWriter)
+          : undefined,
       },
     );
     return { provider, summaryInputBudgetTokens, summaryInputFormat };

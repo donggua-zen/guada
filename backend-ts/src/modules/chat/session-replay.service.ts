@@ -123,8 +123,8 @@ export class SessionReplayService {
    * - 摘要括号（compaction/start → summary → end）→ summarized（有摘要文本）/ discarded（空摘要）
    * - 孤立 compaction/end（无 start，旧纯裁剪路径锚点）→ pruned_only 条目
    * - 带 heuristicTokens 的 context/stats（新纯裁剪路径锚点）→ pruned_only 条目
-   * - before/after：end.beforeTokens 实测优先；旧事件无此字段时回退"上一占用锚点"
-   *   （context/stats.usedTokens、turn/finish.usedTokens 或上一 compaction/end.usedTokens）近似
+ * - before/after：end.beforeTokens 实测优先；旧事件无此字段时回退"上一占用锚点"
+ *   （context/stats.usedTokens 或上一 compaction/end.usedTokens）近似
    * - 未闭合括号（进行中的压缩）不产出条目
    *
    * @param limit 返回最近 N 条（缺省全量）；total 恒为全部条目数
@@ -145,8 +145,9 @@ export class SessionReplayService {
     } | null = null;
 
     for (const e of events) {
-      // 占用锚点：小轮次 context/stats（异常终止也有）与回合收尾 turn/finish 同口径。
-      // 带 heuristicTokens 的 anchor-stats 是“裁剪后修正占用”的锚点，同时产出一条 pruned_only 历史。
+      // 占用锚点：小轮次 context/stats（异常终止也有）——Token 收敛后是唯一的
+      // 占用快照载体（turn/finish 不再携带 token 字段）。
+      // 带 heuristicTokens 的 anchor-stats 是"裁剪后修正占用"的锚点，同时产出一条 pruned_only 历史。
       if (e.type === "context/stats") {
         const d = e.data as {
           usedTokens?: number;
@@ -174,11 +175,6 @@ export class SessionReplayService {
             },
           });
         }
-        continue;
-      }
-      if (e.type === "turn/finish") {
-        const used = (e.data as { usedTokens?: number })?.usedTokens;
-        if (typeof used === "number") lastAnchorTokens = used;
         continue;
       }
       if (e.type === "compaction/start") {

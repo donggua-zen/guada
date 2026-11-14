@@ -490,6 +490,8 @@
     newBrowser: 'New Browser',
     newFile: 'File',
     planTab: 'Plans',
+    trajectoryTab: 'Trajectory',
+    startPageTrajectoryDesc: 'Inspect every model call in this session, including auxiliary calls',
     gitTab: 'Git Review',
     newTabHint: 'Pick a file from the right tree to start previewing',
     saveSuccess: 'Saved',
