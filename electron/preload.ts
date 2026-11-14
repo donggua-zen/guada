@@ -156,6 +156,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 桌面 Computer Use：状态查询与设置页测试
   getComputerUseStatus: () => ipcRenderer.invoke('computer-use:status'),
   testComputerUse: () => ipcRenderer.invoke('computer-use:test'),
+  // macOS：打开「系统设置 → 隐私与安全性」授权面板
+  openComputerUsePrivacySettings: () =>
+    ipcRenderer.invoke('computer-use:open-privacy-settings'),
 
   // 桌宠/托盘：推送聚合统计数据（fire-and-forget）
   // 托盘提示、任务栏角标与桌宠状态同源，故一次推送携带全部字段

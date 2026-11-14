@@ -189,6 +189,16 @@ function signMacApp(context) {
 
     sh(['codesign', '--force', '--deep', '--sign', sha1, appPath]);
     sh(['codesign', '--verify', '--deep', '--strict', appPath]);
+    // Self-signed ad-hoc style signing does not carry the AX / Screen Recording
+    // TCC attributions by itself; the sidecar binary must also be signed so the
+    // host app bundle passes codesign --verify --deep (a foreign unsigned
+    // Mach-O inside Resources fails strict verification).
+    const sidecarDir = path.join(appPath, 'Contents', 'Resources', 'computer-sidecar');
+    if (fs.existsSync(sidecarDir)) {
+      for (const name of fs.readdirSync(sidecarDir)) {
+        sh(['codesign', '--force', '--sign', sha1, path.join(sidecarDir, name)]);
+      }
+    }
     const authority = execSync(`codesign -dv --verbose=2 "${appPath}" 2>&1 || true`).toString();
     const name = (authority.match(/Authority=(.+)/) || [])[1] || sha1;
     console.log(`[sign] ✓ 已签名并通过严格校验（Authority=${name.trim()}）`);

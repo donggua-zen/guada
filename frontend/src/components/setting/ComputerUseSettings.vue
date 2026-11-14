@@ -35,11 +35,19 @@
           <div class="px-4 py-3.5 flex items-center justify-between gap-4">
             <div class="flex flex-col gap-1 min-w-0">
               <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.computerUse.systemPermission') }}</span>
-              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.computerUse.systemPermissionDesc') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ systemPermissionDesc }}</span>
             </div>
-            <GdTag :type="isWindows ? 'success' : 'info'" size="small">
-              {{ isWindows ? t('settings.computerUse.permissionNone') : t('settings.computerUse.permissionUnsupported') }}
-            </GdTag>
+            <div class="flex items-center gap-2 shrink-0">
+              <GdTag
+                :type="permissionTagType"
+                size="small"
+              >
+                {{ permissionTagText }}
+              </GdTag>
+              <GdButton v-if="isMac" size="small" @click="openMacPrivacySettings">
+                {{ t('settings.computerUse.openSystemSettings') }}
+              </GdButton>
+            </div>
           </div>
         </div>
       </div>
@@ -121,6 +129,7 @@ import {
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const isWindows = typeof window !== 'undefined' && window.electronAPI?.platform === 'win32'
+const isMac = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin'
 const { t } = useI18n()
 
 const enabled = ref(false)
@@ -159,6 +168,45 @@ const testSummary = computed(() => {
   if (result.screenshotPath) parts.push(result.screenshotPath)
   return parts.join(' · ')
 })
+
+// macOS needs Screen Recording + Accessibility TCC grants; the sidecar's
+// ping reports which ones are missing via a11y_error.
+const macPermissionMissing = computed(() => {
+  const error = String(status.value?.error ?? '')
+  return /Screen Recording|Accessibility|TCC/.test(error)
+})
+
+const systemPermissionDesc = computed(() => {
+  if (isMac) return t('settings.computerUse.systemPermissionMac')
+  return t('settings.computerUse.systemPermissionDesc')
+})
+
+const permissionTagType = computed<'success' | 'warning' | 'info'>(() => {
+  if (isMac) return macPermissionMissing.value ? 'warning' : 'success'
+  if (isWindows) return 'success'
+  return 'info'
+})
+
+const permissionTagText = computed(() => {
+  if (isMac) {
+    return macPermissionMissing.value
+      ? t('settings.computerUse.permissionMacMissing')
+      : t('settings.computerUse.permissionMacGranted')
+  }
+  if (isWindows) return t('settings.computerUse.permissionNone')
+  return t('settings.computerUse.permissionUnsupported')
+})
+
+async function openMacPrivacySettings(): Promise<void> {
+  // The renderer cannot spawn `open` and open-external only allows http(s);
+  // use the dedicated Electron channel for the Privacy & Security pane.
+  if (window.electronAPI?.openComputerUsePrivacySettings) {
+    const result = await window.electronAPI.openComputerUsePrivacySettings()
+    if (!result?.success) {
+      toast.error(result?.error || t('settings.computerUse.openSystemSettingsFailed'))
+    }
+  }
+}
 
 async function load(): Promise<void> {
   let groupEnabled: boolean | undefined

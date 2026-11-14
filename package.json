@@ -251,7 +251,8 @@
       "icon": "build-resources/icon.icns",
       "category": "public.app-category.productivity",
       "extendInfo": {
-        "NSLocalNetworkUsageDescription": "用于访问局域网内的设备：终端里的 ping / ssh / curl 等命令需要本地网络权限，否则只能访问外网、连不上 NAS 或开发板。"
+        "NSLocalNetworkUsageDescription": "用于访问局域网内的设备：终端里的 ping / ssh / curl 等命令需要本地网络权限，否则只能访问外网、连不上 NAS 或开发板。",
+        "NSAppleEventsUsageDescription": "用于在 Computer Use 中控制本机应用窗口（聚焦、启动），不会读取应用内容。"
       },
       "extraResources": [
         {
@@ -261,6 +262,13 @@
         {
           "from": "sandbox/sandbox-macos-x64",
           "to": "sandbox/sandbox-macos-x64"
+        },
+        {
+          "from": "build-resources/computer-sidecar",
+          "to": "computer-sidecar",
+          "filter": [
+            "guada-computer-darwin-*"
+          ]
         }
       ]
     },

@@ -15,11 +15,19 @@ const readline = require("node:readline");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
-const binary = path.join(root, "build-resources", "computer-sidecar", "guada-computer.exe");
+const binary =
+  process.platform === "win32"
+    ? path.join(root, "build-resources", "computer-sidecar", "guada-computer.exe")
+    : path.join(
+        root,
+        "build-resources",
+        "computer-sidecar",
+        `guada-computer-${process.platform}-${process.arch}`
+      );
 
 test("computer sidecar responds to ping and shutdown", { timeout: 20000 }, async () => {
-  if (process.platform !== "win32") {
-    return; // Windows-only in this release.
+  if (process.platform !== "win32" && process.platform !== "darwin") {
+    return; // Windows and macOS only in this release.
   }
   assert.ok(fs.existsSync(binary), `sidecar binary is missing: ${binary}`);
 
@@ -119,7 +127,9 @@ test("computer sidecar responds to ping and shutdown", { timeout: 20000 }, async
     );
     assert.equal(await requestError("launch_app", { path: "" }), "UNSUPPORTED");
     assert.equal(
-      await requestError("launch_app", { path: "C:/guada-sidecar-smoke-missing.exe" }),
+      await requestError("launch_app", {
+      path: process.platform === "win32" ? "C:/guada-sidecar-smoke-missing.exe" : "/tmp/guada-sidecar-smoke-missing",
+    }),
       "NOT_FOUND"
     );
 

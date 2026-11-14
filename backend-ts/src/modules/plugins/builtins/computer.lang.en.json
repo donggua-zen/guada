@@ -2,7 +2,7 @@
   "computer.name": "Computer Use",
   "computer.description": "Observe and operate local desktop windows",
   "computer.toolkitName": "Computer Use",
-  "computer.toolkitDescription": "Screenshots, Windows UI Automation trees, clicks, typing, key presses, scrolling and window focus",
+  "computer.toolkitDescription": "Screenshots, OS accessibility trees (Windows UIA / macOS AX), clicks, typing, key presses, scrolling and window focus",
   "computer_observe.executing": "Observing the desktop",
   "computer_observe.completed": "Desktop observation completed",
   "computer_observe.aggregate.executing": "Observing the desktop",

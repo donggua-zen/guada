@@ -27,8 +27,9 @@ const MAX_CONSECUTIVE_FAILURES = 3;
 
 /**
  * Resolve the sidecar binary. Packaged builds read the extraResources copy;
- * development builds prefer the build-resources copy, then the local Rust
- * output directory.
+ * development builds prefer the build-resources copy, then the output
+ * directory of the sidecar repository (Rust target/release, SwiftPM
+ * .build/release) placed next to the main project.
  */
 export function resolveComputerSidecarBinary(): string | null {
   const binaryNames =
@@ -36,13 +37,16 @@ export function resolveComputerSidecarBinary(): string | null {
       ? ["guada-computer.exe"]
       : [`guada-computer-${process.platform}-${process.arch}`, "guada-computer"];
 
+  // The sidecar is an independent repository (Rust workspace at the root,
+  // Swift package under macos/) cloned next to the main project.
+  const sidecarRepo = path.join(path.dirname(app.getAppPath()), "guada-computer");
   const directories = app.isPackaged
     ? [path.join(process.resourcesPath, "computer-sidecar")]
     : [
         path.join(__dirname, "..", "..", "build-resources", "computer-sidecar"),
         path.join(app.getAppPath(), "build-resources", "computer-sidecar"),
-        path.join(__dirname, "..", "..", "guada-computer", "dist"),
-        path.join(__dirname, "..", "..", "guada-computer", "target", "release"),
+        path.join(sidecarRepo, "macos", ".build", "release"),
+        path.join(sidecarRepo, "target", "release"),
       ];
 
   for (const directory of directories) {

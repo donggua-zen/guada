@@ -1,17 +1,17 @@
 # Computer Use
 
-Windows desktop automation for GuaDa. The capability is implemented as a
-separate local sidecar process, not inside the Electron renderer or the NestJS
-backend process.
+Desktop automation for GuaDa on Windows and macOS. The capability is
+implemented as a separate local sidecar process, not inside the Electron
+renderer or the NestJS backend process.
 
 ## Scope
 
-- Platform: Windows x64 (first release)
+- Platform: Windows x64 (win32-x64), macOS arm64 (darwin-arm64)
 - Observe: screenshot, cursor position, window list, per-application window
-  groups, UI Automation tree
+  groups, accessibility tree (UI Automation on Windows, AX on macOS)
 - Act: element click (by ref or accessible name), element value set, pixel
   click, type, key, scroll, drag, focus window, app launch by absolute path
-- Out of scope for this release: macOS, Linux, Set-of-Marks overlays, OCR
+- Out of scope for this release: Linux, Set-of-Marks overlays, OCR
 
 The capability is opt-in. The plugin is registered as an `extended` plugin, so
 it is disabled by default on a fresh install and stays disabled until the user
@@ -28,8 +28,9 @@ LLM tool call
   -> BridgeClient.request("computer_*")
   -> Electron BridgeServer exact handler
   -> ComputerSidecarClient (spawn + NDJSON JSON-RPC)
-  -> guada-computer.exe --stdio
-  -> UI Automation / SendInput / GDI capture
+  -> guada-computer[.exe|-darwin-arm64] --stdio
+  -> Windows: UI Automation / SendInput / GDI capture
+     macOS: AX API / CGEvent / CoreGraphics capture
 ```
 
 The Electron main process owns the sidecar lifecycle. The NestJS backend never
@@ -38,17 +39,26 @@ listens on stdio only: no TCP port, no token, no network surface.
 
 ## Repository and version lock
 
-The sidecar source is maintained as an independent repository next to the main
-project:
+The sidecar source is maintained as an independent repository placed next to
+the main project (never inside it). It carries both toolchains:
+
+One repository carries both toolchains — Rust workspace at the root, Swift
+package under `macos/`:
 
 ```
-guada-computer/
-  Cargo.toml
-  crates/core/        # capture, coordinates, input, keys, windows
-  crates/a11y/        # Windows UI Automation engine
-  crates/sidecar/     # stdio JSON-RPC binary
-  build.bat           # locates Visual Studio C++ tools via vswhere
-  smoke-rpc.cjs
+Cargo.toml
+crates/core/          # Windows: capture, coordinates, input, keys, windows
+crates/a11y/          # Windows: UI Automation engine
+crates/sidecar/       # Windows: stdio JSON-RPC binary
+build.bat             # Windows: locates Visual Studio C++ tools via vswhere
+smoke-rpc.cjs         # protocol smoke test (both platforms)
+macos/                # macOS: Swift package (same NDJSON protocol)
+  Sources/guada-computer/
+    main.swift          # stdio JSON-RPC loop, generation registry, routing
+    ScreenCapture.swift # CoreGraphics display capture + cursor
+    WindowList.swift    # CGWindowList enumeration
+    AXBridge.swift      # AX tree snapshot / press / set_value / ref resolution
+    InputEngine.swift   # CGEvent clicks, typing, key combos, scroll, drag
 ```
 
 The main repository does not track the sidecar checkout. `.gitignore` excludes
@@ -62,6 +72,10 @@ the exact binary hash:
   "binaries": {
     "win32-x64": {
       "path": "build-resources/computer-sidecar/guada-computer.exe",
+      "sha256": "..."
+    },
+    "darwin-arm64": {
+      "path": "build-resources/computer-sidecar/guada-computer-darwin-arm64",
       "sha256": "..."
     }
   }
@@ -85,6 +99,10 @@ MSVC environment, and then forwards arguments to cargo:
 build.bat build --release
 ```
 
+On macOS, the sidecar is the Swift package under `macos/`; `swift build -c
+release` produces `macos/.build/release/guada-computer` with the Command Line
+Tools alone (no Xcode, no Rust toolchain needed).
+
 From the main repository:
 
 ```bash
@@ -93,8 +111,11 @@ pnpm run verify:sidecar  # existence + sha256 + --version
 ```
 
 `build:sidecar` expects `guada-computer/` to be cloned next to the main
-project. It copies `target/release/guada-computer.exe` into
-`build-resources/computer-sidecar/`.
+project. On Windows it copies `target/release/guada-computer.exe` into
+`build-resources/computer-sidecar/`; on macOS it copies
+`macos/.build/release/guada-computer` to
+`build-resources/computer-sidecar/guada-computer-darwin-arm64` (the name the
+Electron client resolves for `process.platform-process.arch`).
 
 ## Protocol
 
@@ -157,6 +178,25 @@ Any input clears the lease and the sidecar's native caches. The next input must
 observe again. Reusing an old ref or coordinate is rejected with
 `STALE_REFERENCE`.
 
+## macOS platform notes
+
+- Coordinates: screenshots are captured per display in pixels; CGEvent input
+  and CGWindowList bounds are in global points. On the common Retina case
+  (scale factor 2) the sidecar reports the pixel `width`/`height` of the PNG
+  while `x`/`y` inputs are interpreted in the display's point space; the
+  client is expected to use coordinates taken from the screenshot scaled into
+  point space exactly like the Windows sidecar's DPI handling.
+- Key names: `key` combos accept `cmd`/`ctrl` (both map to Command on macOS),
+  `alt`/`option`, `shift`, `fn` plus key names such as `a-z`, `0-9`, `enter`,
+  `tab`, `esc`, `delete`, `up/down/left/right`, `home`, `end`, `pageup`,
+  `pagedown`, `f1-f12`.
+- `focus_window` activates the owning process (`NSRunningApplication.activate`)
+  and raises it via the AX `AXRaise` action.
+- `click_element`/`set_value` resolve refs by re-walking the AX tree at action
+  time; a ref that no longer resolves reports `STALE_REFERENCE`. An AX press
+  that reports `UNSUPPORTED` authorizes the same validated pixel fallback as
+  Windows.
+
 ## Stale-reference validation
 
 Before a `[ref]` action the sidecar validates:
@@ -217,6 +257,15 @@ actions. Read-only tools are allowed in plan mode; `computer_input` is not.
   GuaDa process.
 - Windows normally needs no additional system permission. Elevated (UIPI)
   windows cannot be controlled; the error is reported instead of bypassed.
+- macOS needs two TCC grants attributed to the host app: **Screen Recording**
+  (screenshots) and **Accessibility** (AX tree + input synthesis). Without
+  them the sidecar answers `ping` with `capabilities.screenshot=false` /
+  `a11y=false` and fails tool calls with `PERMISSION_REQUIRED`. The Settings
+  → Computer Use page detects the missing grants from `a11y_error` and offers
+  a button that opens the Privacy & Security pane
+  (`computer-use:open-privacy-settings` IPC). Users must re-launch the app
+  after granting. The packaged sidecar binary is codesigned together with the
+  app so the TCC attribution sticks.
 - The sidecar does not open a network listener.
 - Screenshots are written to the session workspace under
   `computer-screenshots/` and are not uploaded automatically.
@@ -240,7 +289,7 @@ Main repository:
 ```bash
 pnpm run verify:sidecar
 pnpm run test:computer-sidecar
-pnpm run test:computer-sidecar:electron   # Electron client + real sidecar + screenshot/UIA
+pnpm run test:computer-sidecar:electron   # Electron client + real sidecar + screenshot/a11y
 pnpm --dir backend-ts exec jest test/computer test/plugins/computer.plugin.spec.ts --runInBand
 pnpm --dir frontend exec vitest run src/utils/computerUse.test.ts
 ```
@@ -260,20 +309,27 @@ Manual acceptance:
 
 - `build-resources/computer-sidecar/guada-computer.exe` is copied by
   electron-builder to `resources/computer-sidecar/` **only for the Windows
-  target** (`build.win.extraResources`). macOS builds must not carry the
-  Windows PE binary, otherwise `codesign --deep` can fail.
+  target** (`build.win.extraResources`). macOS builds copy only the Mach-O
+  binaries matching `guada-computer-darwin-*`
+  (`build.mac.extraResources` filter) so the Windows PE binary never ships in
+  a mac bundle and `codesign --deep` cannot trip over it.
+- On macOS the after-pack handler chmods the sidecar executable (extraResources
+  copies do not preserve the Unix exec bit) and the signing step signs each
+  sidecar binary with the app identity before strict verification; an unsigned
+  foreign Mach-O inside Resources would fail `codesign --verify --deep`.
 - The sidecar is spawned with the bundled `resources/vc-runtime` on `PATH`, the
   same as the backend, so a clean Windows machine does not need a system-wide
   VC++ runtime.
 - `scripts/after-pack-handler.js` fixes executable permissions before macOS
-  signing (Windows does not need chmod).
-- `scripts/verify-asar-layout.js` checks the packaged Windows binary and runs
-  `--version`.
+  signing (Windows does not need chmod) and signs the sidecar binaries.
+- `scripts/verify-asar-layout.js` checks the packaged binary for the running
+  platform (`guada-computer.exe` on Windows,
+  `guada-computer-darwin-arm64` on Apple silicon) and runs `--version`.
 - The sidecar is version-locked to the app. It is never downloaded at runtime.
 
 ## Roadmap
 
-- macOS AX backend, TCC permission attribution and notarization
+- Notarized builds + hardened-runtime entitlements for the mac sidecar
 - Screenshot retention controls
 - Optional Set-of-Marks overlay and OCR
 - Batched multi-step actions with automatic re-verification (a `run_steps`

@@ -13,28 +13,45 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const sidecarRoot = path.join(root, "guada-computer");
+// The sidecar is an independent repository (Rust on Windows, Swift on macOS)
+// cloned/placed next to the main project, not inside it.
+const sidecarRoot = path.join(path.dirname(root), "guada-computer");
+// The repo keeps both toolchains: Rust workspace at the root, Swift package
+// under macos/.
+const sidecarToolchainRoot =
+  process.platform === "darwin" ? path.join(sidecarRoot, "macos") : sidecarRoot;
 const outputDir = path.join(root, "build-resources", "computer-sidecar");
 const lockPath = path.join(root, "sidecar.lock.json");
 
-if (!fs.existsSync(sidecarRoot)) {
+if (!fs.existsSync(sidecarToolchainRoot)) {
   console.error(
-    `[build:sidecar] ${sidecarRoot} does not exist. Clone the guada-computer repository first.`
+    `[build:sidecar] ${sidecarToolchainRoot} does not exist. Clone the guada-computer repository next to the main project first.`
   );
   process.exit(1);
 }
 
-const binaryName = process.platform === "win32" ? "guada-computer.exe" : "guada-computer";
-const releasePath = path.join(sidecarRoot, "target", "release", binaryName);
+const binaryName = process.platform === "win32" ? "guada-computer.exe" : `guada-computer-${process.platform}-${process.arch}`;
+
+// Release binary location differs per toolchain: Windows/Rust uses
+// target/release, macOS/SwiftPM uses .build/release.
+const releasePath =
+  process.platform === "darwin"
+    ? path.join(sidecarToolchainRoot, ".build", "release", "guada-computer")
+    : path.join(sidecarRoot, "target", "release", binaryName);
 
 if (process.platform === "win32") {
   execFileSync("cmd.exe", ["/d", "/s", "/c", "build.bat", "build", "--release"], {
     cwd: sidecarRoot,
     stdio: "inherit",
   });
+} else if (process.platform === "darwin") {
+  execFileSync("swift", ["build", "-c", "release"], {
+    cwd: sidecarToolchainRoot,
+    stdio: "inherit",
+  });
 } else {
   execFileSync("cargo", ["build", "--release"], {
-    cwd: sidecarRoot,
+    cwd: sidecarToolchainRoot,
     stdio: "inherit",
   });
 }

@@ -384,15 +384,26 @@ db.close();
 }
 
 /**
- * Computer Use sidecar 随包分发（Windows 首期）。
+ * Computer Use sidecar 随包分发（Windows + macOS）。
  * 校验存在性与可执行性；协议细节由 verify-sidecar.js 的 --version 覆盖。
  */
 function checkComputerSidecar(layout) {
-  if (process.platform !== 'win32') return;
-  const binary = path.join(layout.resourcesDir, 'computer-sidecar', 'guada-computer.exe');
+  const binaryName =
+    process.platform === 'win32'
+      ? 'guada-computer.exe'
+      : `guada-computer-${process.platform}-${process.arch}`;
+  const binary = path.join(layout.resourcesDir, 'computer-sidecar', binaryName);
   if (!fs.existsSync(binary)) {
-    fail(`resources/computer-sidecar/guada-computer.exe 不存在（${binary}）`);
+    fail(`resources/computer-sidecar/${binaryName} 不存在（${binary}）`);
     return;
+  }
+  if (process.platform !== 'win32') {
+    try {
+      fs.accessSync(binary, fs.constants.X_OK);
+    } catch {
+      fail(`computer sidecar 缺少可执行位：${binaryName}`);
+      return;
+    }
   }
   const result = spawnSync(binary, ['--version'], { encoding: 'utf8', timeout: 10000 });
   if (result.status !== 0) {

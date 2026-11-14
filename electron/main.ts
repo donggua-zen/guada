@@ -2033,6 +2033,24 @@ function setupIpcHandlers() {
     return computerSidecar.test();
   });
 
+  // macOS：打开「系统设置 → 隐私与安全性」具体面板。Computer Use 需要
+  // 屏幕录制 + 辅助功能两项 TCC 授权；渲染进程不能直接 spawn open，
+  // 也不允许走 open-external（它只放行 http/https）。
+  ipcMain.handle("computer-use:open-privacy-settings", async () => {
+    if (process.platform !== "darwin") {
+      return { success: false, error: "only supported on macOS" };
+    }
+    try {
+      await shell.openExternal(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+      );
+      return { success: true };
+    } catch (error) {
+      log.error("打开 macOS 隐私设置失败:", error);
+      return { success: false, error: String(error) };
+    }
+  });
+
   // 同步查询后端就绪状态（用于刷新场景，在 Vue 挂载前阻塞式确定初始值）
   // 附带端口：刷新场景下前端无需再走异步 IPC 获取端口，避免竞态
   ipcMain.on("get-backend-status-sync", (event) => {

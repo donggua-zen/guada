@@ -67,7 +67,7 @@ export class ComputerPlugin extends PluginBase {
       description: "%computer.toolkitDescription%",
       loadMode: "lazy",
       activator:
-        "Use this toolkit to observe and operate the local Windows desktop: screenshots, window lists, UI Automation element trees, clicks, typing, key presses, scrolling and window focus. Always observe first and pass the returned generation to the next input.",
+        "Use this toolkit to observe and operate the local desktop (Windows or macOS): screenshots, window lists, accessibility element trees (UI Automation on Windows, AX on macOS), clicks, typing, key presses, scrolling and window focus. Always observe first and pass the returned generation to the next input.",
       onLoad: (toolkit) => {
         toolkit.registerTool({
           name: "computer_observe",
@@ -141,7 +141,7 @@ export class ComputerPlugin extends PluginBase {
         toolkit.registerTool({
           name: "computer_a11y_observe",
           description:
-            "Read the Windows UI Automation tree for the foreground window (or a specific process id) and return numbered [ref] elements with roles, names, values, states and bounds. Refs are valid only until the next input; after any action, observe again. If an element action reports STALE_REFERENCE, observe again before retrying.",
+            "Read the OS accessibility tree (Windows UI Automation / macOS AX) for the foreground window (or a specific process id) and return numbered [ref] elements with roles, names, values, states and bounds. Refs are valid only until the next input; after any action, observe again. If an element action reports STALE_REFERENCE, observe again before retrying.",
           inputSchema: z.object({
             pid: z
               .number()
@@ -226,7 +226,7 @@ export class ComputerPlugin extends PluginBase {
                 .min(1)
                 .max(256)
                 .optional()
-                .describe("Key combo for action='key', e.g. ctrl+shift+t"),
+                .describe("Key combo for action='key', e.g. ctrl+shift+t. On macOS ctrl/cmd map to Command; alt maps to Option."),
               direction: z
                 .enum(["up", "down", "left", "right"])
                 .optional()
@@ -367,7 +367,7 @@ export class ComputerPlugin extends PluginBase {
         toolkit.registerTool({
           name: "computer_launch",
           description:
-            "Launch a desktop application by absolute executable path (for example C:/Windows/System32/notepad.exe). Arguments are not supported. Launching changes the desktop; observe again afterwards. Requires the launch_app action policy.",
+            "Launch a desktop application by absolute executable path (for example C:/Windows/System32/notepad.exe on Windows or /System/Applications/Calculator.app/Contents/MacOS/Calculator on macOS). Arguments are not supported. Launching changes the desktop; observe again afterwards. Requires the launch_app action policy.",
           inputSchema: z.object({
             path: z
               .string()

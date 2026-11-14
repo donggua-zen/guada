@@ -213,6 +213,8 @@ export interface ElectronAPI {
     version?: string
     error?: string
   }>
+  /** macOS：打开「系统设置 → 隐私与安全性」授权面板（屏幕录制/辅助功能） */
+  openComputerUsePrivacySettings: () => Promise<{ success: boolean; error?: string }>
 
   // 桌宠/托盘统计推送（托盘提示、任务栏角标、桌宠状态同源）
   updateTrayStats: (stats: {
