@@ -19,6 +19,10 @@ export default {
       initial: '初始快照',
       change: '快照变更',
     },
+    title: {
+      initial: '初始系统提示词',
+      change: '系统提示词已更新',
+    },
   },
   openSubTrajectory: '查看轨迹',
 
@@ -83,5 +87,10 @@ export default {
     unchanged: '⋯ {n} 行未变',
     blank: '（空行）',
     tooLarge: '提示词改动较大（+{added} / −{removed} 行）——展开下方「系统提示词」查看全文',
+  },
+  footer: {
+    turns: '{n} 次调用',
+    input: '输入 {n} tok',
+    output: '输出 {n} tok',
   },
 }

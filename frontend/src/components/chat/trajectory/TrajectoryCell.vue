@@ -1,29 +1,33 @@
 <template>
-  <!-- 消息行：角色标签 + 单行摘要 + 展开/复制（对齐 dsh TrajectoryCell 的精简版） -->
-  <!-- 消息行：整行可点展开/收起（箭头仅作指示器）；对齐 dsh 台账行交互 -->
+  <!--
+    消息行：事件列 kind 徽章（19px 单字符）+ 内容列单行省略；整行点击展开/收起。
+    展开区：逐块卡片（mono 12px/19px，媒体占位标注，复制）。
+  -->
   <div
-    class="cv-row border-b border-(--gd-color-border)/40 cursor-pointer hover:bg-(--gd-color-sidebar-bg-hover)/60"
+    class="cv-row grid grid-cols-[44px_1fr] border-b-[0.5px] border-(--gd-color-border)/40 cursor-pointer hover:bg-(--gd-color-sidebar-bg-hover)/60"
     @click="emit('toggle', row.key)"
   >
-    <div class="px-2 py-1 flex items-start gap-1.5">
+    <div class="relative h-[30px]">
       <span
-        class="shrink-0 mt-0.5 inline-flex px-1 rounded text-(10px) font-medium"
+        class="absolute top-1/2 left-1/2 -translate-1/2 inline-flex items-center justify-center h-[19px] px-[5px] whitespace-nowrap rounded-[4px] text-[10px] font-[650] leading-[16px]"
         :class="roleBadgeClass"
         :data-trajectory-role="node.role"
       >
         {{ roleLabel }}
       </span>
-      <span v-if="toolName" class="shrink-0 max-w-24 truncate text-(10px) text-(--gd-trajectory-tool-call)">
+    </div>
+    <div class="flex items-center gap-1.5 min-w-0 pr-[8px]">
+      <span v-if="toolName" class="shrink-0 max-w-24 truncate text-[10px] text-(--gd-trajectory-tool-call)">
         {{ toolName }}
       </span>
       <span class="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis text-(--gd-color-text)">
         {{ summary }}
       </span>
-      <!-- 子代理会话跳转（meta.link = sub_agent；对齐 SubAgentToolRow 的跳转语义） -->
+      <!-- 子代理会话跳转（meta.link = sub_agent） -->
       <button
         v-if="subAgentSessionId"
         type="button"
-        class="shrink-0 px-1 rounded text-(10px) bg-(--gd-trajectory-user)/15 text-(--gd-trajectory-user) hover:bg-(--gd-trajectory-user)/25"
+        class="shrink-0 px-1 rounded text-[10px] bg-(--gd-trajectory-user)/15 text-(--gd-trajectory-user) hover:bg-(--gd-trajectory-user)/25"
         @click.stop="emit('open-sub-trajectory', subAgentSessionId!)"
       >
         {{ t('trajectory.openSubTrajectory') }}
@@ -34,15 +38,15 @@
       </span>
     </div>
 
-    <!-- 展开全文（pre-wrap + 滚动上限）；点击展开区不收起 -->
-    <div v-if="expanded" class="px-2 pb-2 space-y-1" @click.stop>
+    <!-- 展开全文：点击展开区不收起 -->
+    <div v-if="expanded" class="col-start-2 px-[8px] pb-[8px] space-y-1" @click.stop>
       <div
         v-for="(block, bi) in node.content"
         :key="bi"
-        class="rounded-md bg-(--gd-color-sidebar-bg-hover) px-2 py-1.5 max-h-48 overflow-y-auto"
+        class="rounded-md bg-(--gd-color-sidebar-bg-hover) px-[12px] py-[8px] max-h-48 overflow-y-auto"
       >
         <div class="flex items-center gap-1 mb-1">
-          <span class="text-(10px) font-medium text-(--gd-color-text-gray)">{{ blockKindLabel(block) }}</span>
+          <span class="text-[10px] font-medium text-(--gd-color-text-gray)">{{ blockKindLabel(block) }}</span>
           <button
             type="button"
             class="ml-auto w-5 h-5 inline-flex items-center justify-center rounded text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-active)"
@@ -54,13 +58,13 @@
         <!-- 媒体占位标注（媒体预算替换：模型该次看到的是占位文本） -->
         <div
           v-if="overlayNote(bi)"
-          class="mb-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 text-(10px)"
+          class="mb-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[10px]"
         >
           {{ t('trajectory.mediaOverlay') }}
         </div>
-        <pre class="whitespace-pre-wrap break-words text-(11px) leading-snug text-(--gd-color-text) font-mono">{{ blockToText(block) }}</pre>
+        <pre class="whitespace-pre-wrap break-words font-mono text-[12px]/[19px] text-(--gd-color-text)">{{ blockToText(block) }}</pre>
       </div>
-      <div class="text-(10px) text-(--gd-color-text-gray)">
+      <div class="text-[10px] text-(--gd-color-text-gray)">
         seq {{ node.seq }} · {{ regionLabel }}
       </div>
     </div>
@@ -69,8 +73,7 @@
 
 <script setup lang="ts">
 /**
- * 台账消息行：角色配色徽标 + 单行摘要 + Chevron 展开全文 + 复制。
- * region 区分 prefix/in/transient/out（徽标注释了行在请求中的角色）。
+ * 台账消息行：kind 徽章事件列 + 单行摘要 + 整行点击展开 + 复制。
  */
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -97,14 +100,8 @@ const { t } = useI18n();
 const node = computed(() => props.row.node);
 
 const roleLabel = computed(() => {
-  switch (props.row.region) {
-    case 'transient':
-      return t('trajectory.role.inject');
-    case 'out':
-      return t(`trajectory.role.${node.value.role}`);
-    default:
-      return t(`trajectory.role.${node.value.role}`);
-  }
+  if (props.row.region === 'transient') return t('trajectory.role.inject');
+  return t(`trajectory.role.${node.value.role}`);
 });
 
 const roleBadgeClass = computed(() => {
@@ -115,15 +112,15 @@ const roleBadgeClass = computed(() => {
     case 'user':
       return 'bg-(--gd-trajectory-user)/15 text-(--gd-trajectory-user)';
     case 'assistant':
-      return 'bg-(--gd-trajectory-assistant)/15 text-(--gd-trajectory-assistant)';
+      return 'bg-(--gd-trajectory-reasoning)/15 text-(--gd-trajectory-reasoning)';
     case 'tool':
       return 'bg-(--gd-trajectory-tool-result)/15 text-(--gd-trajectory-tool-result)';
     default:
-      return 'bg-(--gd-color-sidebar-bg-hover) text-(--gd-color-text-gray)';
+      return 'bg-(--gd-trajectory-neutral-bg) text-(--gd-color-text-gray)';
   }
 });
 
-/** 工具行取工具名（tool-call / tool-result 块；call_ 前缀剥离展示） */
+/** 工具行取工具名（tool-call / tool-result 块） */
 const toolName = computed(() => {
   for (const block of node.value.content) {
     if (block.type === 'tool-call' || block.type === 'tool-result') return block.name;
@@ -131,7 +128,7 @@ const toolName = computed(() => {
   return null;
 });
 
-/** 子代理关联（tool-result meta.link.type='sub_agent' → subSessionId；对齐 resolveSubAgentLink 的落库链路） */
+/** 子代理关联（tool-result meta.link.type='sub_agent' → subSessionId） */
 const subAgentSessionId = computed<string | null>(() => {
   for (const block of node.value.content) {
     if (block.type !== 'tool-result') continue;
@@ -161,10 +158,3 @@ async function copyBlock(block: ContentBlock): Promise<void> {
   if (ok) toast.success(t('common.copySuccess'));
 }
 </script>
-
-<style scoped>
-.cv-row {
-  content-visibility: auto;
-  contain-intrinsic-height: auto 28px;
-}
-</style>

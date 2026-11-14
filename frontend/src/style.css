@@ -237,6 +237,10 @@
   --gd-trajectory-tool-call: #d97706;
   --gd-trajectory-tool-result: #0284c7;
   --gd-trajectory-error: #dc2626;
+  /* dsh 对齐：回合轨蓝accent / diff 新增绿 */
+  --gd-trajectory-turn-rail: color-mix(in srgb, #3b82f6 22%, var(--gd-color-sidebar-bg));
+  --gd-trajectory-added: #15803d;
+  --gd-trajectory-neutral-bg: color-mix(in srgb, var(--gd-color-text-gray) 14%, var(--gd-color-sidebar-bg));
 
   --gd-size-text-base: 14px;
   --gd-size-text-sm: 14px;
@@ -523,6 +527,9 @@ html.dark {
   --gd-trajectory-tool-call: #f59e0b;
   --gd-trajectory-tool-result: #38bdf8;
   --gd-trajectory-error: #f87171;
+  --gd-trajectory-turn-rail: color-mix(in srgb, #3b82f6 30%, var(--gd-color-sidebar-bg));
+  --gd-trajectory-added: #4ade80;
+  --gd-trajectory-neutral-bg: color-mix(in srgb, var(--gd-color-text-gray) 18%, var(--gd-color-sidebar-bg));
 }
 
 :root {

@@ -75,6 +75,10 @@ export default {
       initial: 'Initial snapshot',
       change: 'Snapshot changed',
     },
+    title: {
+      initial: 'Initial System Prompt',
+      change: 'System Prompt Updated',
+    },
   },
   openSubTrajectory: 'View trajectory',
   diff: {
@@ -83,5 +87,10 @@ export default {
     unchanged: '⋯ {n} unchanged',
     blank: '(blank line)',
     tooLarge: 'Large prompt rewrite (+{added} / −{removed} lines) — expand System prompt below for the full text',
+  },
+  footer: {
+    turns: '{n} calls',
+    input: 'Input {n} tok',
+    output: 'Output {n} tok',
   },
 }
