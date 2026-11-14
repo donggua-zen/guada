@@ -40,7 +40,10 @@ listens on stdio only: no TCP port, no token, no network surface.
 ## Repository and version lock
 
 The sidecar source is maintained as an independent repository placed next to
-the main project (never inside it). It carries both toolchains:
+the main project (never inside it). The recommended checkout path is
+`../guada-computer` (a sibling of the main repository); `scripts/build-sidecar.js`
+also accepts the legacy in-tree `guada-computer/` path and the
+`GUADA_COMPUTER_ROOT` environment variable.
 
 One repository carries both toolchains — Rust workspace at the root, Swift
 package under `macos/`:
@@ -61,13 +64,16 @@ macos/                # macOS: Swift package (same NDJSON protocol)
     InputEngine.swift   # CGEvent clicks, typing, key combos, scroll, drag
 ```
 
-The main repository does not track the sidecar checkout. `.gitignore` excludes
-`/guada-computer/`. Instead, `sidecar.lock.json` pins the released version and
-the exact binary hash:
+The main repository does not track the sidecar checkout. `.gitignore` still
+excludes `/guada-computer/` for legacy in-tree checkouts. Instead,
+`sidecar.lock.json` pins the repository URL, commit, released version and the
+exact binary hash:
 
 ```json
 {
+  "repo": "https://github.com/donggua-zen/guada-computer.git",
   "tag": "v0.1.0",
+  "commit": "<full commit sha of the sidecar checkout>",
   "protocol": "1",
   "binaries": {
     "win32-x64": {
@@ -83,8 +89,10 @@ the exact binary hash:
 ```
 
 The prebuilt binary is committed under `build-resources/computer-sidecar/` so
-normal application builds and CI do not need a Rust toolchain. After creating
-the independent repository, fill `repo` and `commit` in the lockfile.
+normal application builds and CI do not need a Rust toolchain. The sidecar
+repository is private (`https://github.com/donggua-zen/guada-computer`) and
+`sidecar.lock.json` records the exact commit the bundled binary was built
+from; update `commit` whenever the binary is re-baked.
 
 Naming rule: product code, comments, documentation, tests, commit messages and
 release notes must not mention the reference project used during design

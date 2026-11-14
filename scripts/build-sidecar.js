@@ -3,8 +3,9 @@
 
 /**
  * Build the local computer sidecar and copy the release binary into
- * build-resources/computer-sidecar. The sidecar source lives in the
- * guada-computer repository next to the main project.
+ * build-resources/computer-sidecar. The sidecar source lives in its own
+ * repository next to the main project (../guada-computer). Set
+ * GUADA_COMPUTER_ROOT to override the checkout location.
  */
 
 const { execFileSync } = require("child_process");
@@ -15,7 +16,13 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 // The sidecar is an independent repository (Rust on Windows, Swift on macOS)
 // cloned/placed next to the main project, not inside it.
-const sidecarRoot = path.join(path.dirname(root), "guada-computer");
+// 优先 GUADA_COMPUTER_ROOT，其次同级目录，最后兼容仓库内旧路径。
+const sidecarRoot =
+  process.env.GUADA_COMPUTER_ROOT ||
+  [path.join(root, "..", "guada-computer"), path.join(root, "guada-computer")].find(
+    (candidate) => fs.existsSync(candidate)
+  ) ||
+  path.join(root, "..", "guada-computer");
 // The repo keeps both toolchains: Rust workspace at the root, Swift package
 // under macos/.
 const sidecarToolchainRoot =
@@ -25,7 +32,7 @@ const lockPath = path.join(root, "sidecar.lock.json");
 
 if (!fs.existsSync(sidecarToolchainRoot)) {
   console.error(
-    `[build:sidecar] ${sidecarToolchainRoot} does not exist. Clone the guada-computer repository next to the main project first.`
+    `[build:sidecar] ${sidecarRoot} does not exist. Clone the guada-computer repository next to the main project or set GUADA_COMPUTER_ROOT.`
   );
   process.exit(1);
 }

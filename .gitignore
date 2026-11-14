@@ -79,7 +79,8 @@ TOOLS.md
 /guada-agent/
 
 # guada-computer sidecar 是独立仓库（Windows: Rust，macOS: Swift），
-# 克隆/放置在本项目旁边，根仓库只消费其预编译二进制
+# 克隆/放置在本项目旁边（../guada-computer），根仓库只消费其预编译二进制；
+# 保留此忽略项以兼容放在仓库内的旧检出方式
 /guada-computer/
 
 # 评测（eval/）：本地配置与运行产物不入库
