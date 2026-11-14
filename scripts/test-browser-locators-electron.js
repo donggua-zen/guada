@@ -316,6 +316,37 @@ async function main() {
   assert((await pageRun("window.__dbl")) >= 1, "dblclick did not fire");
   console.log("LOCATOR_OK basic readers and actions");
 
+  // 焦点零接触：自动化输入绝不调用 webContents.focus()——那会顶掉用户
+  // 正在输入的宿主输入框（对齐 zcode：trusted 输入投递不依赖窗口焦点）。
+  const originalGuestFocus = win.webContents.focus.bind(win.webContents);
+  let guestFocusCalls = 0;
+  win.webContents.focus = () => {
+    guestFocusCalls += 1;
+    return originalGuestFocus();
+  };
+  try {
+    await loc("click", { kind: "role", role: "button", name: "Submit" });
+    await loc("dblclick", { kind: "role", role: "button", name: "Submit" });
+    await loc("hover", { kind: "role", role: "button", name: "Submit" });
+    await loc("fill", { kind: "label", text: "Email" }, { value: "focus-free@example.com" });
+    await loc("press", { kind: "label", text: "Email" }, { key: "End" });
+    // 无 target 的裸 press：此前会在派发前抢 guest 焦点
+    await service.handleToolCall({
+      id: "0",
+      method: "browser_press",
+      params: { key: "End", created_by: "loc-test" },
+    });
+    await loc("scroll", { kind: "role", role: "button", name: "Submit" }, { deltaY: 120 });
+    assert(
+      (await pageRun("document.getElementById('email').value")) === "focus-free@example.com",
+      "focus-free fill failed",
+    );
+  } finally {
+    win.webContents.focus = originalGuestFocus;
+  }
+  assert(guestFocusCalls === 0, `automation focused the guest ${guestFocusCalls} times`);
+  console.log("LOCATOR_OK zero focus contact");
+
   // wait states
   const delayed = await loc("wait", { kind: "text", text: "Delayed" }, { state: "visible", timeout: 2000 });
   assert(delayed.ok === true && delayed.state === "visible", "visible wait failed");

@@ -173,8 +173,6 @@ export class BrowserActionEngine {
         covered: true,
       });
       await this.focusElement(webContents, selector);
-    } else {
-      webContents.focus();
     }
 
     if (options.trusted === false) {
@@ -183,8 +181,14 @@ export class BrowserActionEngine {
       try {
         this.dispatchKeyElectron(webContents, parsed, modifiers);
       } catch (error: any) {
-        log.warn(`sendInputEvent key failed, falling back to CDP: ${error?.message || error}`);
-        await this.dispatchKeyCdp(webContents, windowId, parsed, modifiers);
+        // sendInputEvent 不依赖窗口焦点，失败时也没有安全的 CDP 兜底：
+        // guest 主 frame 的 CDP dispatchKeyEvent 按整个窗口焦点路由，
+        // guest 无焦点时按键会漏进宿主（对齐 zcode runtime-semantics spec）。
+        throw new BrowserBridgeError(
+          "ACTION_FAILED",
+          `sendInputEvent key failed: ${error?.message || error}`,
+          { key },
+        );
       }
     }
 
@@ -457,27 +461,17 @@ export class BrowserActionEngine {
     await this.focusElement(webContents, selector);
     await this.selectAll(webContents, selector);
 
-    let filled = false;
-    if (options.trusted !== false && value.length > 0) {
-      try {
-        await this.withCdp(webContents, windowId, async (send) => {
-          await send("Input.insertText", { text: value });
-        });
-        filled = true;
-      } catch (error: any) {
-        log.warn(`CDP insertText failed, falling back to native setter: ${error?.message || error}`);
-      }
-    }
-
-    if (!filled) {
-      filled = await this.setValueScript(webContents, selector, value);
-    }
+    // 页面内写入（原生 setter + input/change 事件，等价 Playwright fill /
+    // zcode 的虚拟粘贴）。刻意不走 guest 主 frame 的 CDP Input.insertText：
+    // 它按整个窗口焦点路由，用户正在宿主输入框打字时文本会漏进宿主
+    // （对齐 zcode 2026-07-10 spec 的禁令）。
+    const filled = await this.setValueScript(webContents, selector, value);
 
     await sleep(DISPATCH_SETTLE_MS);
     let after = await this.probe(webContents, selector, "center");
     if (!this.fillMatches(after, value, tag, type) && filled) {
-      // CDP insertText 在 date/number 等输入上可能“成功”但没有写入目标值；
-      // 再用 native setter 兜底一次，避免把可修复的场景判死。
+      // 个别受控组件对首次写入无响应（异步重置等）：再写一次并回读，
+      // 避免把可修复的场景判死。
       const scriptFilled = await this.setValueScript(webContents, selector, value);
       if (scriptFilled) {
         await sleep(DISPATCH_SETTLE_MS);
@@ -684,7 +678,9 @@ export class BrowserActionEngine {
     modifiers: string[],
   ): Promise<void> {
     const electronModifiers = toElectronModifiers(modifiers);
-    webContents.focus();
+    // sendInputEvent 直投 guest 自己的 RenderWidgetHost，不依赖窗口焦点。
+    // 这里刻意不调用 webContents.focus()：它会把用户正在输入的宿主输入框
+    // 顶掉（对齐 zcode——自动化全程不抢 guest 焦点，也就无需还原）。
     webContents.sendInputEvent({
       type: "mouseMove",
       x: point.x,
@@ -795,7 +791,6 @@ export class BrowserActionEngine {
       });
     } catch (error: any) {
       log.warn(`CDP mousemove failed, falling back to sendInputEvent: ${error?.message || error}`);
-      webContents.focus();
       webContents.sendInputEvent({ type: "mouseMove", x, y } as any);
     }
   }
@@ -813,7 +808,8 @@ export class BrowserActionEngine {
       keyCode: parsed.electronKeyCode,
       modifiers: electronModifiers,
     };
-    webContents.focus();
+    // 不抢 guest 焦点：sendInputEvent 直投 RenderWidgetHost，页面内
+    // activeElement 收键；抢焦点会顶掉用户正在输入的宿主输入框。
     webContents.sendInputEvent({ type: "keyDown", ...base } as any);
     if (parsed.printable && !hasCommandModifier) {
       webContents.sendInputEvent({
@@ -825,38 +821,8 @@ export class BrowserActionEngine {
     webContents.sendInputEvent({ type: "keyUp", ...base } as any);
   }
 
-  private async dispatchKeyCdp(
-    webContents: Electron.WebContents,
-    windowId: string,
-    parsed: ParsedKey,
-    modifiers: string[],
-  ): Promise<void> {
-    const hasCommandModifier = modifiers.some((m) =>
-      ["control", "ctrl", "meta", "cmd", "command", "alt"].includes(m.toLowerCase()),
-    );
-    const mask = cdpModifierMask(modifiers);
-    const text = parsed.printable && !hasCommandModifier ? parsed.printable : undefined;
-
-    await this.withCdp(webContents, windowId, async (send) => {
-      await send("Input.dispatchKeyEvent", {
-        type: "keyDown",
-        key: parsed.key,
-        code: parsed.code,
-        windowsVirtualKeyCode: parsed.vk,
-        nativeVirtualKeyCode: parsed.vk,
-        modifiers: mask,
-        ...(text ? { text } : {}),
-      });
-      await send("Input.dispatchKeyEvent", {
-        type: "keyUp",
-        key: parsed.key,
-        code: parsed.code,
-        windowsVirtualKeyCode: parsed.vk,
-        nativeVirtualKeyCode: parsed.vk,
-        modifiers: mask,
-      });
-    });
-  }
+  // 键盘没有 CDP 兜底：guest 主 frame 的 CDP dispatchKeyEvent 按整个窗口焦点
+  // 路由，guest 无焦点时按键会落进宿主应用（zcode runtime-semantics spec 禁止）。
 
   private async dispatchKeyScript(
     webContents: Electron.WebContents,

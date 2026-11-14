@@ -252,7 +252,7 @@ type TabInfo = {
 
 - 动作前探测：存在、可见、启用、可编辑（fill）、稳定（两次采样）、视口内、未被遮挡。
 - 默认动作超时 3000ms（最大 30000ms），每 75ms 重新探测并按 `center → end → start → nearest` 轮换滚动对齐。
-- 默认 trusted 输入：`webContents.sendInputEvent` 优先，CDP `Input.*` 兜底；`trusted:false` 才使用 JS 合成事件。
+- 默认 trusted 输入：鼠标/滚轮走 `webContents.sendInputEvent`（CDP mouse 兜底），键盘只走 `sendInputEvent`；fill 为页面内写入（原生 setter + `input`/`change` 事件）并回读校验。投递不依赖、也不抢占宿主窗口焦点——AI 点击/输入不会顶掉用户正在输入的输入框；`trusted:false` 才使用 JS 合成事件。
 - `force:true` 跳过可见性/稳定性/遮挡检查，但仍要求元素存在。
 - `fill` 对 select/file/checkbox/radio 返回 `UNSUPPORTED`，文本类控件写入后会回读值。
 - 动作结果带 `url`/`title`。
@@ -303,6 +303,7 @@ type TabInfo = {
 - 超时/取消会通过内部 `AbortController` 停止本地等待并 reject 在途 Promise；Bridge 没有 cancel 协议，已写入管道的 Electron 动作可能继续执行到结束。
 - ivya 注入在 isolated world，页面脚本不能替换查询引擎；查询结果通过临时 `data-guada-loc` 属性交给动作引擎，动作结束后清理。
 - 导航白名单只允许 `http:`、`https:`、`about:blank`。
+- 自动化输入不调用 `webContents.focus()`，也不使用按窗口焦点路由的通道（guest 主 frame CDP 按键 / `Input.insertText`）；guest 无焦点时输入仍只进目标页面，不会漏进宿主应用。
 - 截图不再写工作区：字节回传后端转码后只落一份会话副本（`sessions/<id>/images|previews/`）；`saveTo` 是唯一显式导出通道，目标必须落在工作区内，`read-only` 沙箱拒绝。
 
 ## 已知限制

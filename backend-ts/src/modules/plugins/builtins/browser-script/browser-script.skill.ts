@@ -169,7 +169,7 @@ Actions wait for the element to be present and actionable before dispatching:
 - inside the viewport after scrolling;
 - not covered by another element.
 
-Default action timeout is 3000ms, max 30000ms. Input is trusted by default (webContents.sendInputEvent with CDP fallback). Use force: true only for intentionally custom widgets; use trusted: false only for debugging.
+Default action timeout is 3000ms, max 30000ms. Input is trusted by default (webContents.sendInputEvent for mouse and keyboard; fill writes via page script and verifies the value). Delivery does not need and never steals window focus, so AI clicks/typing will not interrupt the user typing elsewhere. Use force: true only for intentionally custom widgets; use trusted: false only for debugging.
 
 fill:
 
