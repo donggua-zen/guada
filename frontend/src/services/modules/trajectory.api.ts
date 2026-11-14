@@ -78,7 +78,7 @@ export interface TrajectoryStepView {
   output: TrajectoryStepOutput;
 }
 
-/** 当前生效 envelope（最后一次 envelope 事件） */
+/** envelope 载荷（请求侧快照） */
 export interface TrajectoryEnvelope {
   reason: string;
   system?: string;
@@ -87,10 +87,16 @@ export interface TrajectoryEnvelope {
   provider?: string;
 }
 
+/** envelope 快照 + 落盘位置（SYSTEM 行按 seq 插进台账流，对齐 dsh request/header 行） */
+export interface TrajectoryEnvelopeSnapshot extends TrajectoryEnvelope {
+  seq: number;
+  time: number;
+}
+
 export interface TrajectoryView {
   envelope: TrajectoryEnvelope | null;
-  /** 全部 envelope 快照（事件序；SYSTEM 变更历史 / diff 展示用） */
-  envelopes: TrajectoryEnvelope[];
+  /** 全部 envelope 快照（事件序；SYSTEM 行按 seq 插进台账流，变更行带 diff） */
+  envelopes: TrajectoryEnvelopeSnapshot[];
   timeline: TrajectoryMessageNode[];
   steps: TrajectoryStepView[];
   /** false = 会话创建于轨迹功能上线前（无 step 事件），不伪造空卡 */

@@ -34,6 +34,8 @@ export function formatTrajectoryTime(ts: number | null | undefined): string | nu
 export interface TrajectoryDiffLine {
   type: 'same' | 'added' | 'removed';
   text: string;
+  /** 折叠省略标记：被压缩的未变行数（组件侧渲染为「N 行未变」） */
+  omitted?: number;
 }
 
 /**
@@ -78,5 +80,41 @@ export function diffTrajectoryLines(prev: string, next: string): TrajectoryDiffL
   }
   for (; i < n; i++) out.push({ type: 'removed', text: a[i]! });
   for (; j < m; j++) out.push({ type: 'added', text: b[j]! });
+  return out;
+}
+
+/**
+ * diff 显示折叠：长段未变行压缩为一条省略标记，只保留变化点 ±context 行上下文。
+ * 修复「变更行把整段提示词摊开 + 下方全文 = 看起来显示两次」的重复观感
+ * （对齐 dsh：变更行只看差异，全文按需展开）。
+ */
+export function compactTrajectoryDiff(
+  lines: TrajectoryDiffLine[],
+  context = 2,
+): TrajectoryDiffLine[] {
+  // 标记每行是否处于「变化点邻域」：任一 added/removed 行的 ±context 范围内
+  const keep = new Array<number>(lines.length).fill(0);
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.type === 'same') continue;
+    for (let j = Math.max(0, i - context); j <= Math.min(lines.length - 1, i + context); j++) {
+      keep[j] = 1;
+    }
+  }
+  const out: TrajectoryDiffLine[] = [];
+  let runStart = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (keep[i]) {
+      if (runStart >= 0) {
+        out.push({ type: 'same', text: '', omitted: i - runStart });
+        runStart = -1;
+      }
+      out.push(lines[i]!);
+    } else if (runStart < 0) {
+      runStart = i;
+    }
+  }
+  if (runStart >= 0) {
+    out.push({ type: 'same', text: '', omitted: lines.length - runStart });
+  }
   return out;
 }

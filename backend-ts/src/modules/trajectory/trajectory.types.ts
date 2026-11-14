@@ -64,12 +64,20 @@ export interface TrajectoryStepView {
   output: TrajectoryStepOutput;
 }
 
+/** envelope 快照 + 落盘位置（前端把 SYSTEM 行按 seq 插进台账流，对齐 dsh request/header 行） */
+export interface TrajectoryEnvelopeSnapshot extends Envelope {
+  /** envelope 事件 seq（台账行排序锚点） */
+  seq: number;
+  /** envelope 事件时间（Unix ms） */
+  time: number;
+}
+
 /** GET trajectory 响应体 */
 export interface TrajectoryView {
   /** 当前生效 envelope（最后一次 envelope 事件；无 = null） */
   envelope: Envelope | null;
-  /** 全部 envelope 快照（事件序；前端 SYSTEM 变更历史 / diff 展示用） */
-  envelopes: Envelope[];
+  /** 全部 envelope 快照（事件序；SYSTEM 行按 seq 插进台账流，变更行带 diff） */
+  envelopes: TrajectoryEnvelopeSnapshot[];
   /** 共享时间线（日志折叠 surface，MessageNode IS-A Message + seq/turnId） */
   timeline: MessageNode[];
   /** 调用卡（事件序）；limit 截取最近 N 个 */

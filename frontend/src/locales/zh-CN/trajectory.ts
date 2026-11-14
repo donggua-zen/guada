@@ -14,7 +14,12 @@ export default {
   turnLabel: '回合 {n}',
   auxLabel: '辅助调用',
   mediaOverlay: '本次请求被媒体预算替换为路径占位（模型看到的是占位文本而非图片）',
-  systemHeader: 'SYSTEM 快照（{n}）',
+  envelope: {
+    reason: {
+      initial: '初始快照',
+      change: '快照变更',
+    },
+  },
   openSubTrajectory: '查看轨迹',
 
   role: {
@@ -75,5 +80,8 @@ export default {
   diff: {
     added: '新增',
     removed: '移除',
+    unchanged: '⋯ {n} 行未变',
+    blank: '（空行）',
+    tooLarge: '提示词改动较大（+{added} / −{removed} 行）——展开下方「系统提示词」查看全文',
   },
 }

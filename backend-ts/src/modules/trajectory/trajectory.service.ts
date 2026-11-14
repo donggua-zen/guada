@@ -25,6 +25,7 @@ import type { BaseEvent, Envelope } from '../../common/persistence/types';
 import type { StepEndData, StepStartData } from '../../common/persistence/types';
 import type { TokenUsage } from '../../common/types/conversation.types';
 import type {
+  TrajectoryEnvelopeSnapshot,
   TrajectoryStepStatus,
   TrajectoryStepView,
   TrajectoryView,
@@ -61,7 +62,7 @@ export class TrajectoryService {
     const envelope: Envelope | null = null;
     let lastEnvelope: Envelope | null = null;
     /** 全部 envelope 快照（SYSTEM 变更历史；通常 1~3 条，变更才写） */
-    const envelopes: Envelope[] = [];
+    const envelopes: TrajectoryEnvelopeSnapshot[] = [];
     let hasStepEvents = false;
     const cards: TrajectoryStepView[] = [];
     let open: OpenStepCard | null = null;
@@ -72,7 +73,7 @@ export class TrajectoryService {
       switch (event.type) {
         case 'envelope': {
           lastEnvelope = event.data as unknown as Envelope;
-          envelopes.push(lastEnvelope);
+          envelopes.push({ ...lastEnvelope, seq: event.seq, time: event.time });
           break;
         }
         case 'step/start': {

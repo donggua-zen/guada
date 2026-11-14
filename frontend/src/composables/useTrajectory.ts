@@ -14,6 +14,7 @@
 import { ref, computed, type Ref } from 'vue';
 import { apiService } from '@/services/ApiService';
 import type {
+  TrajectoryEnvelopeSnapshot,
   TrajectoryMessageNode,
   TrajectoryStepView,
   TrajectoryView,
@@ -45,7 +46,22 @@ export interface LedgerGroupRow {
   label: string;
 }
 
-export type LedgerRow = LedgerRequestRow | LedgerMessageRow | LedgerGroupRow;
+/** SYSTEM 快照行（envelope 事件，按 seq 插进台账流；对齐 dsh request/header 行） */
+export interface LedgerSystemRow {
+  key: string;
+  kind: 'system';
+  envelope: TrajectoryEnvelopeSnapshot;
+  /** 序号（1..N，事件序） */
+  number: number;
+  /** 上一条快照（展开态 diff 用；首条为 null） */
+  previous: TrajectoryEnvelopeSnapshot | null;
+}
+
+export type LedgerRow =
+  | LedgerRequestRow
+  | LedgerMessageRow
+  | LedgerGroupRow
+  | LedgerSystemRow;
 
 // ─── 内容块文本化（单行摘要 + 展开全文共用） ───
 
@@ -173,8 +189,25 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
     let standaloneHeaderWritten = false;
     let lastTurnId: string | null | undefined = undefined;
 
+    // SYSTEM 行按 seq 插进台账流：每步前 flush seq 更早的 envelope（对齐 dsh
+    // 把 request/header 行排在它服务的请求之前；初始行钉在最前，变更行挂 diff）
+    const allEnvelopes = envelopes.value;
+    let envIdx = 0;
+    let sysCounter = 0;
+    let lastSys: TrajectoryEnvelopeSnapshot | null = null;
+    const flushSystemRows = (beforeSeq: number): void => {
+      while (envIdx < allEnvelopes.length && allEnvelopes[envIdx]!.seq < beforeSeq) {
+        sysCounter += 1;
+        const env = allEnvelopes[envIdx]!;
+        out.push({ key: `sys:${env.seq}`, kind: 'system', envelope: env, number: sysCounter, previous: lastSys });
+        lastSys = env;
+        envIdx += 1;
+      }
+    };
+
     for (const { step, number } of steps) {
       const turnId = step.turnId;
+      flushSystemRows(step.startSeq);
       // 分组头（回合切换 / 首个辅助调用组）
       if (turnId !== null && turnId !== lastTurnId) {
         if (!turnOrder.has(turnId)) {
@@ -225,6 +258,7 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
         out.push({ key: `m:${node.seq}:out`, kind: 'message', node, region: 'out', step });
       }
     }
+    flushSystemRows(Number.MAX_SAFE_INTEGER);
     return out;
   });
 
@@ -236,6 +270,17 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
 
     const rowText = (row: LedgerRow): string => {
       if (row.kind === 'message') return nodeToText(row.node).toLowerCase();
+      if (row.kind === 'system') {
+        const e = row.envelope;
+        return [
+          e.reason, e.model, e.provider,
+          ...(e.tools ?? []).map((x) => x.name),
+          e.system,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+      }
       if (row.kind === 'request') {
         const s = row.step;
         return [
@@ -261,6 +306,7 @@ export function useTrajectory(sessionId: Ref<string | null | undefined>) {
     // 分组头始终保留（结构锚）；request 行在其任一消息命中或自身命中时保留
     const visible = all.filter((row) => {
       if (row.kind === 'turn-header' || row.kind === 'group-header') return true;
+      if (row.kind === 'system') return true;
       if (row.kind === 'request') {
         return (
           hitRequest.has(row.key) ||

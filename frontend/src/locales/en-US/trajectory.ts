@@ -70,10 +70,18 @@ export default {
     tools: 'Tools ({n})',
     unchanged: 'Same as previous',
   },
-  systemHeader: 'SYSTEM snapshots ({n})',
+  envelope: {
+    reason: {
+      initial: 'Initial snapshot',
+      change: 'Snapshot changed',
+    },
+  },
   openSubTrajectory: 'View trajectory',
   diff: {
     added: 'Added',
     removed: 'Removed',
+    unchanged: '⋯ {n} unchanged',
+    blank: '(blank line)',
+    tooLarge: 'Large prompt rewrite (+{added} / −{removed} lines) — expand System prompt below for the full text',
   },
 }

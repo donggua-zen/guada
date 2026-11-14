@@ -236,7 +236,7 @@
   --gd-trajectory-reasoning: #7c3aed;
   --gd-trajectory-tool-call: #d97706;
   --gd-trajectory-tool-result: #0284c7;
-  --gd-trajectory-error: var(--gd-color-danger-text, #dc2626);
+  --gd-trajectory-error: #dc2626;
 
   --gd-size-text-base: 14px;
   --gd-size-text-sm: 14px;

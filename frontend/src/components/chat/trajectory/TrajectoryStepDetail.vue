@@ -8,7 +8,7 @@
 
       <template v-if="step.model">
         <span class="text-(--gd-color-text-gray)">{{ t('trajectory.detail.model') }}</span>
-        <span class="truncate" :title="step.model">{{ step.model }}</span>
+        <span class="truncate">{{ step.model }}</span>
       </template>
       <template v-if="step.provider">
         <span class="text-(--gd-color-text-gray)">{{ t('trajectory.detail.provider') }}</span>
@@ -69,7 +69,7 @@
       <div class="font-medium text-amber-500">
         {{ t('trajectory.detail.mediaOverlay', { n: step.mediaOverlay.length }) }}
       </div>
-      <div v-for="(o, i) in step.mediaOverlay" :key="i" class="truncate text-(10px) text-(--gd-color-text-gray)" :title="o.placeholder">
+      <div v-for="(o, i) in step.mediaOverlay" :key="i" class="truncate text-(10px) text-(--gd-color-text-gray)">
         {{ o.messageId }}#{{ o.blockIndex }}
       </div>
     </div>

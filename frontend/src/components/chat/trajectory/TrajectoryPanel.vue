@@ -9,7 +9,7 @@
           {{ summary.errorCount }} {{ t('trajectory.errors') }}
         </span>
         <span class="tabular-nums">{{ formatTokens(summary.totalTokens) }} tok</span>
-        <span v-if="summary.models.length" class="truncate max-w-28" :title="summary.models.join(', ')">
+        <span v-if="summary.models.length" class="truncate max-w-28">
           {{ summary.models.join(', ') }}
         </span>
         <div class="ml-auto flex items-center gap-0.5">
@@ -30,30 +30,13 @@
           </GdTooltip>
         </div>
       </div>
-      <div class="flex items-center gap-1.5">
-        <input
-          v-model="search"
-          type="search"
-          class="flex-1 min-w-0 h-7 px-2 rounded-md text-xs bg-(--gd-color-sidebar-bg-hover) outline-none border border-transparent focus:border-(--gd-color-border)"
-          :placeholder="t('trajectory.searchPlaceholder')"
-        />
-        <!-- SYSTEM 快照开关（envelope 历史 + diff，对齐 dsh SYSTEM 页签） -->
-        <button
-          v-if="(view?.envelopes?.length ?? 0) > 0"
-          type="button"
-          class="shrink-0 h-7 px-2 rounded-md text-xs transition-colors"
-          :class="systemOpen
-            ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active) font-medium'
-            : 'bg-(--gd-color-sidebar-bg-hover) text-(--gd-color-text-gray)'"
-          @click="systemOpen = !systemOpen"
-        >
-          SYSTEM
-        </button>
-      </div>
+      <input
+        v-model="search"
+        type="search"
+        class="w-full h-7 px-2 rounded-md text-xs bg-(--gd-color-sidebar-bg-hover) outline-none border border-transparent focus:border-(--gd-color-border)"
+        :placeholder="t('trajectory.searchPlaceholder')"
+      />
     </div>
-
-    <!-- SYSTEM 快照区（展开时） -->
-    <TrajectorySystemSection v-if="systemOpen" :envelopes="view?.envelopes ?? []" class="max-h-56 overflow-y-auto shrink-0" />
 
     <!-- 台账主体 -->
     <div class="flex-1 min-h-0 overflow-y-auto">
@@ -85,7 +68,7 @@
  * 调用轨迹面板（aside 页签）：头部汇总 + SYSTEM 快照区 + 台账。
  * 数据经 useTrajectory（REST 拉式投影）；展开状态存 Panel 层（跨卸载存活）。
  */
-import { computed, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   ArrowClockwise16Regular,
@@ -94,7 +77,6 @@ import {
 } from '@vicons/fluent';
 import GdTooltip from '@/components/ui/GdTooltip.vue';
 import TrajectoryLedger from './TrajectoryLedger.vue';
-import TrajectorySystemSection from './TrajectorySystemSection.vue';
 import { useTrajectory } from '@/composables/useTrajectory';
 import { formatTrajectoryTokens } from './format';
 
@@ -110,8 +92,6 @@ const {
   loading, error, view, search, expanded, rows, summary,
   selectedRequestId, refresh, toggleExpand, expandAll, selectStep,
 } = useTrajectory(computed(() => props.sessionId));
-
-const systemOpen = ref(false);
 
 function formatTokens(n: number): string {
   return formatTrajectoryTokens(n);

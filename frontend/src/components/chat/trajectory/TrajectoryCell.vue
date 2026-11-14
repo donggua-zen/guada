@@ -1,6 +1,10 @@
 <template>
   <!-- 消息行：角色标签 + 单行摘要 + 展开/复制（对齐 dsh TrajectoryCell 的精简版） -->
-  <div class="cv-row border-b border-(--gd-color-border)/40">
+  <!-- 消息行：整行可点展开/收起（箭头仅作指示器）；对齐 dsh 台账行交互 -->
+  <div
+    class="cv-row border-b border-(--gd-color-border)/40 cursor-pointer hover:bg-(--gd-color-sidebar-bg-hover)/60"
+    @click="emit('toggle', row.key)"
+  >
     <div class="px-2 py-1 flex items-start gap-1.5">
       <span
         class="shrink-0 mt-0.5 inline-flex px-1 rounded text-(10px) font-medium"
@@ -9,10 +13,10 @@
       >
         {{ roleLabel }}
       </span>
-      <span v-if="toolName" class="shrink-0 max-w-24 truncate text-(10px) text-(--gd-trajectory-tool-call)" :title="toolName">
+      <span v-if="toolName" class="shrink-0 max-w-24 truncate text-(10px) text-(--gd-trajectory-tool-call)">
         {{ toolName }}
       </span>
-      <span class="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis text-(--gd-color-text)" :title="fullText">
+      <span class="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis text-(--gd-color-text)">
         {{ summary }}
       </span>
       <!-- 子代理会话跳转（meta.link = sub_agent；对齐 SubAgentToolRow 的跳转语义） -->
@@ -20,23 +24,18 @@
         v-if="subAgentSessionId"
         type="button"
         class="shrink-0 px-1 rounded text-(10px) bg-(--gd-trajectory-user)/15 text-(--gd-trajectory-user) hover:bg-(--gd-trajectory-user)/25"
-        :title="t('trajectory.openSubTrajectory')"
         @click.stop="emit('open-sub-trajectory', subAgentSessionId!)"
       >
         {{ t('trajectory.openSubTrajectory') }}
       </button>
-      <button
-        type="button"
-        class="shrink-0 w-5 h-5 inline-flex items-center justify-center rounded text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover)"
-        @click="emit('toggle', row.key)"
-      >
+      <span class="shrink-0 w-5 h-5 inline-flex items-center justify-center rounded text-(--gd-color-text-gray)">
         <ChevronDown16Regular v-if="expanded" class="w-3 h-3" />
         <ChevronRight16Regular v-else class="w-3 h-3" />
-      </button>
+      </span>
     </div>
 
-    <!-- 展开全文（pre-wrap + 滚动上限） -->
-    <div v-if="expanded" class="px-2 pb-2 space-y-1">
+    <!-- 展开全文（pre-wrap + 滚动上限）；点击展开区不收起 -->
+    <div v-if="expanded" class="px-2 pb-2 space-y-1" @click.stop>
       <div
         v-for="(block, bi) in node.content"
         :key="bi"
@@ -47,7 +46,6 @@
           <button
             type="button"
             class="ml-auto w-5 h-5 inline-flex items-center justify-center rounded text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-active)"
-            :title="t('common.copy')"
             @click="copyBlock(block)"
           >
             <Copy16Regular class="w-3 h-3" />
@@ -57,7 +55,6 @@
         <div
           v-if="overlayNote(bi)"
           class="mb-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 text-(10px)"
-          :title="overlayNote(bi) ?? undefined"
         >
           {{ t('trajectory.mediaOverlay') }}
         </div>
