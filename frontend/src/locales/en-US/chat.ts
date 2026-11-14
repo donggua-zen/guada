@@ -507,6 +507,9 @@
     wfCancelled: 'Cancelled',
     wfStarting: 'Starting',
     processes: 'Background Processes',
+    // Composer capsule "Background jobs" segment: shell processes & background subagents are unified under job registry
+    backgroundJobs: 'Background Jobs',
+    jobStopping: 'Stopping',
     processLogTab: 'Process Log',
     subagentTab: 'Sub-agent',
     // Subagent list panel (active + ended replay; detail entry of the chat row and the composer capsule)

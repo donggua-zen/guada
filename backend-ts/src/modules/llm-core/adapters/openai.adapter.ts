@@ -486,6 +486,11 @@ export class OpenAIAdapter implements IProtocolAdapter {
     let pendingUsage: StreamUsage | null = null;
 
     for await (const chunk of response) {
+      // OpenAI 的 stream_options.include_usage 尾块是 choices:[]，usage 在 chunk 顶层。
+      // 先读 usage/finish 再判断 choice，避免空 choices 尾块被 continue 跳过。
+      if ((chunk as any).usage) {
+        pendingUsage = this.mapUsage((chunk as any).usage);
+      }
       const choice = chunk.choices?.[0];
       if (!choice) continue;
 
@@ -495,9 +500,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
 
       // finish_reason / usage 只暂存，收尾时统一发射
       if (choice.finish_reason) pendingFinish = choice.finish_reason;
-      if ((chunk as any).usage) {
-        pendingUsage = this.mapUsage((chunk as any).usage);
-      }
 
       if (reasoning) {
         for (const c of tracker.reasoningDelta(reasoning)) yield c;

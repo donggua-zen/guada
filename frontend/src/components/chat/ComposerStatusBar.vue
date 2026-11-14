@@ -1,10 +1,11 @@
 <template>
-  <!-- 输入区运行时状态胶囊（共享外壳）：单条 28px 药丸内分四段——目标 / 待办 / 后台进程 / 子代理，
-       任一段没有内容就整段不渲染，四段全空整根不渲染；hover 在上方弹出面板按域分段列细节。
+  <!-- 输入区运行时状态胶囊（共享外壳）：单条 28px 药丸内分三段——目标 / 待办 / 后台任务，
+       任一段没有内容就整段不渲染，三段全空整根不渲染；hover 在上方弹出面板按域分段列细节。
        数据契约：目标（REST + goal_updated + onConnected 补拉）、待办（REST + todo_updated）、
-       进程（jobs_snapshot + jobs REST 基线）、子代理（ChatPage 下传的 subSessions + sessionStore.streamStatus），
-       各域逻辑见 composables/useGoalStatus.ts、composables/useTodoStatus.ts、
-       composables/useRunningProcesses.ts、utils/subagentDisplay.ts。
+       后台任务（jobs_snapshot + jobs REST 基线；shell 后台进程与后台子代理已统一为 job 托管，
+       按 kind 拆组展示），各域逻辑见 composables/useGoalStatus.ts、composables/useTodoStatus.ts、
+       composables/useBackgroundJobs.ts。
+       前台子代理（对话流内阻塞运行的 spawn）不是 job，不进本胶囊——由消息流行内头像动画表达。
        已结束（冻结）子代理不在本胶囊表达（运行时状态专属），回放入口见子代理列表面板
        （workspace/SubagentListPanel.vue）。 -->
   <div v-if="hasAny" class="composer-status-bar" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
@@ -41,27 +42,19 @@
         <span class="csb-count csb-count--done">{{ todoDoneCount }}/{{ todoItems.length }}</span>
       </span>
 
-      <!-- ── 后台进程段：只出数量（接口只返回运行中进程）；
-           图标取终端工具同款（TOOL_ICON_MAP 的 terminal → WindowConsole20Filled，
-           与对话流里 run_command 工具行一致）——一眼可辨"这是后台命令"；
-           命令等详情在 hover 面板里看（多段可能同时出现，文案会互相挤占宽度） ── -->
-      <span v-if="processes.length" class="csb-seg">
+      <!-- ── 后台任务段：只出总数（shell 后台进程 + 后台子代理，统一 job 托管）；
+           图标随构成变化——纯进程用终端图标、纯子代理用机器人图标、混合并排，
+           一眼可辨后台任务的类型构成；分类明细在 hover 面板里看 ── -->
+      <span v-if="backgroundJobCount" class="csb-seg">
         <span class="csb-icon">
-          <WindowConsole20Filled class="w-3.5 h-3.5 csb-icon--muted" />
+          <WindowConsole20Filled v-if="!subagentJobs.length" class="w-3.5 h-3.5 csb-icon--muted" />
+          <Bot20Regular v-else-if="!processJobs.length" class="w-3.5 h-3.5 csb-icon--muted" />
+          <template v-else>
+            <WindowConsole20Filled class="w-3.5 h-3.5 csb-icon--muted" />
+            <Bot20Regular class="w-3.5 h-3.5 csb-icon--muted csb-icon--pair" />
+          </template>
         </span>
-        <span class="csb-count">{{ processes.length }}</span>
-      </span>
-
-      <!-- ── 子代理段：运行中/存活总数（分子=正在跑，分母=未关闭的活跃子代理；
-           长期（persist）子代理可重复交互、不 close，只出"运行中"会让空闲期显示成孤零的 0；
-           已结束（冻结）项不进本段，详情与回放在 hover 面板与列表面板） ── -->
-      <span v-if="activeSubagents.length" class="csb-seg">
-        <span class="csb-icon">
-          <Bot20Regular class="w-3.5 h-3.5 csb-icon--muted" />
-        </span>
-        <span class="csb-count" :class="{ 'csb-count--live': runningSubagentCount > 0 }">
-          {{ runningSubagentCount }}/{{ activeSubagents.length }}
-        </span>
+        <span class="csb-count" :class="{ 'csb-count--live': stoppingCount === 0 }">{{ backgroundJobCount }}</span>
       </span>
     </div>
 
@@ -121,49 +114,62 @@
             </div>
           </section>
 
-          <!-- 后台进程：点击行开日志标签，行尾终止按钮 -->
-          <section v-if="processes.length" class="csb-section">
+          <!-- 后台任务（统一 job 托管）：按分类分组——终端进程 / 子代理；空组不渲染。
+               进程行点击开日志标签；子代理行点击开子代理标签，行尾同样给终止按钮
+               （subagent job 的 kill 协议与进程完全同构）。 -->
+          <section v-if="backgroundJobCount" class="csb-section">
             <header class="csb-sec-head">
-              <span class="csb-sec-title">{{ t('chat.workspace.processes') }}</span>
-              <span class="csb-sec-count">{{ processes.length }}</span>
-            </header>
-            <div class="csb-list">
-              <GdTooltip v-for="p in processes" :key="p.id" :content="p.label" placement="bottom">
-                <div class="csb-row csb-row--clickable" @click="openProcessLog(p)">
-                  <span class="csb-icon"><span class="csb-spinner"></span></span>
-                  <span class="csb-row-text csb-row-text--cmd">{{ shortCommand(p.label) }}</span>
-                  <span class="csb-elapsed">{{ elapsedText(p.startedAt) }}</span>
-                  <GdTooltip :content="t('chat.workspace.killProcess')" placement="bottom">
-                    <button class="csb-kill" @click.stop="killProcess(p)">
-                      <Dismiss16Regular class="w-2.5 h-2.5" />
-                    </button>
-                  </GdTooltip>
-                </div>
-              </GdTooltip>
-            </div>
-          </section>
-
-          <!-- 子代理（仅活跃项）：点击行开子代理标签，标题行「详情」进子代理列表面板 -->
-          <section v-if="activeSubagents.length" class="csb-section">
-            <header class="csb-sec-head">
-              <span class="csb-sec-title">{{ t('chat.workspace.subagents') }}</span>
-              <!-- 与胶囊段同口径：运行中/存活总数（0 也要显示，避免"有长期子代理却无计数"） -->
-              <span class="csb-sec-count">{{ runningSubagentCount }}/{{ activeSubagents.length }}</span>
-              <GdTooltip v-if="openSubagentList" :content="t('chat.workspace.subagentListTab')" placement="bottom">
+              <span class="csb-sec-title">{{ t('chat.workspace.backgroundJobs') }}</span>
+              <span class="csb-sec-count">{{ backgroundJobCount }}</span>
+              <GdTooltip v-if="subagentJobs.length && openSubagentList" :content="t('chat.workspace.subagentListTab')" placement="bottom">
                 <button class="csb-sec-btn ml-auto" @click="openSubagentList?.(props.sessionId)">
                   <Bot20Regular class="w-3.5 h-3.5" />
                 </button>
               </GdTooltip>
             </header>
-            <div class="csb-list">
-              <div v-for="item in activeSubagents" :key="item.id" class="csb-row"
-                :class="{ 'csb-row--clickable': !!openSubAgent }" @click="openSubAgent?.(item.id)">
-                <WorkflowStatusDot :status="dotStatus(item)" size="sm" />
-                <img v-if="item.avatarUrl" :src="item.avatarUrl" class="csb-avatar" alt="" />
-                <span class="csb-row-text">{{ item.title }}</span>
-                <span class="csb-row-status">{{ statusText(item) }}</span>
+
+            <!-- 终端进程组：等宽命令摘要 + 已运行时长 + 终止 -->
+            <template v-if="processJobs.length">
+              <div class="csb-group-label">{{ t('chat.workspace.processes') }}</div>
+              <div class="csb-list">
+                <GdTooltip v-for="p in processJobs" :key="p.id" :content="p.label" placement="bottom">
+                  <div class="csb-row csb-row--clickable" @click="openProcessLog(p)">
+                    <span class="csb-icon"><span class="csb-spinner"></span></span>
+                    <span class="csb-row-text csb-row-text--cmd">{{ shortCommand(p.label) }}</span>
+                    <span class="csb-row-status">{{ jobStatusText(p) }}</span>
+                    <span class="csb-elapsed">{{ elapsedText(p.startedAt) }}</span>
+                    <GdTooltip :content="t('chat.workspace.killProcess')" placement="bottom">
+                      <button class="csb-kill" @click.stop="killJob(p)">
+                        <Dismiss16Regular class="w-2.5 h-2.5" />
+                      </button>
+                    </GdTooltip>
+                  </div>
+                </GdTooltip>
               </div>
-            </div>
+            </template>
+
+            <!-- 子代理组：头像（subSessions 按 handle 富集）+ 名称 + 已运行时长 + 终止 -->
+            <template v-if="subagentJobs.length">
+              <div class="csb-group-label">{{ t('chat.workspace.subagents') }}</div>
+              <div class="csb-list">
+                <GdTooltip v-for="s in subagentJobs" :key="s.id" :content="s.label" placement="bottom">
+                  <div class="csb-row csb-row--clickable"
+                    :class="{ 'csb-row--plain': !openSubAgent }" @click="openSubAgent?.(subSessionIdOf(s))">
+                    <span class="csb-icon"><span class="csb-spinner"></span></span>
+                    <img v-if="subagentAvatar(s)" :src="subagentAvatar(s)" class="csb-avatar" alt="" />
+                    <Bot20Regular v-else class="w-3.5 h-3.5 csb-icon--muted csb-avatar-fallback" />
+                    <span class="csb-row-text">{{ s.label }}</span>
+                    <span class="csb-row-status">{{ jobStatusText(s) }}</span>
+                    <span class="csb-elapsed">{{ elapsedText(s.startedAt) }}</span>
+                    <GdTooltip :content="t('chat.workspace.killProcess')" placement="bottom">
+                      <button class="csb-kill" @click.stop="killJob(s)">
+                        <Dismiss16Regular class="w-2.5 h-2.5" />
+                      </button>
+                    </GdTooltip>
+                  </div>
+                </GdTooltip>
+              </div>
+            </template>
           </section>
         </div>
       </div>
@@ -176,21 +182,18 @@ import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, Pause16Regular, Play16Regular, Target20Regular, WindowConsole20Filled } from "@vicons/fluent";
 import GdTooltip from "@/components/ui/GdTooltip.vue";
-import WorkflowStatusDot from "@/components/chat/workflow/WorkflowStatusDot.vue";
 import { useGoalStatus } from "@/composables/useGoalStatus";
 import { useTodoStatus } from "@/composables/useTodoStatus";
-import { useRunningProcesses } from "@/composables/useRunningProcesses";
+import { useBackgroundJobs } from "@/composables/useBackgroundJobs";
 import { apiService } from "@/services/ApiService";
 import { toast } from "@/components/ui/toastService";
-import { useSessionStore } from "@/stores/session";
 import { shortCommand } from "@/utils/processDisplay";
-import { buildSubagentItems, countRunningSubagents, splitSubagents, type SubagentItem } from "@/utils/subagentDisplay";
+import type { UiJobInfo } from "@/services/ApiService";
 import type { Session } from "@/types/session";
-import type { WorkflowMemberStatus } from "@/types/stream/workflow.types";
 
 const props = defineProps<{
   sessionId?: string;
-  /** 子会话列表（ChatPage 维护，经 ChatPanel 下传；含已冻结的，本胶囊只用活跃项） */
+  /** 子会话列表（ChatPage 维护，经 ChatPanel 下传）：仅用于按 job.handle 富集子代理头像 */
   subSessions?: Session[];
 }>();
 
@@ -204,11 +207,35 @@ const goal = computed(() => goalState.value?.goal ?? null);
 const { items: todoItems, doneCount: todoDoneCount, currentItem: currentTodo } = useTodoStatus(
   () => props.sessionId,
 );
-const { processes, elapsedText, killProcess, openProcessLog } = useRunningProcesses(
+const { processJobs, subagentJobs, elapsedText, killJob, openProcessLog } = useBackgroundJobs(
   () => props.sessionId,
 );
 
-const sessionStore = useSessionStore();
+/** 后台任务总数（统一 job 托管：终端进程 + 后台子代理） */
+const backgroundJobCount = computed(
+  () => processJobs.value.length + subagentJobs.value.length,
+);
+/** 停止中数量：>0 时胶囊计数用中性色（任务已不可再交互，等快照确认终态） */
+const stoppingCount = computed(
+  () => [...processJobs.value, ...subagentJobs.value].filter((j) => j.status === "stopping").length,
+);
+
+/** 子代理 job.handle = 子会话 id：点击打开子代理标签的入参 */
+function subSessionIdOf(job: UiJobInfo): string {
+  return typeof job.handle === "string" ? job.handle : job.id;
+}
+
+/** 按 handle（= 子会话 id）从 subSessions 查头像；查不到回落机器人图标 */
+function subagentAvatar(job: UiJobInfo): string | undefined {
+  const sid = subSessionIdOf(job);
+  const sub = props.subSessions?.find((s) => s.id === sid);
+  return sub?.avatarUrl || sub?.agent?.avatarUrl || undefined;
+}
+
+/** stopping 显示「停止中」，其余（running）不赘述——spinner 已表达 */
+function jobStatusText(job: UiJobInfo): string {
+  return job.status === "stopping" ? t("chat.workspace.jobStopping") : "";
+}
 
 /** 详情页阶段文案（胶囊在非 active/paused 阶段也复用） */
 const goalPhaseText = computed(() =>
@@ -265,15 +292,9 @@ function clearGoal(): void {
   void mutateGoal(() => apiService.clearSessionGoal(sid, g.revision));
 }
 
-const subagentItems = computed(() =>
-  buildSubagentItems(props.subSessions, (id) => sessionStore.peekStreamStatus(id), t("chat.workspace.subagentTab")),
-);
-const activeSubagents = computed(() => splitSubagents(subagentItems.value).active);
-const runningSubagentCount = computed(() => countRunningSubagents(subagentItems.value));
-
-/** 任一段有内容才有胶囊（四段全空 → 整根不渲染，回到底部按钮的 :has() 锚点依赖此行为） */
+/** 任一段有内容才有胶囊（三段全空 → 整根不渲染，回到底部按钮的 :has() 锚点依赖此行为） */
 const hasAny = computed(
-  () => !!goal.value || todoItems.value.length > 0 || processes.value.length > 0 || activeSubagents.value.length > 0,
+  () => !!goal.value || todoItems.value.length > 0 || backgroundJobCount.value > 0,
 );
 
 // ── hover 展开（时序与旧 TODO 胶囊一致：进入 120ms 防误触，离开 80ms 防抖动） ──
@@ -291,22 +312,11 @@ function onMouseLeave(): void {
   closeTimer = setTimeout(() => { hovered.value = false; }, 80);
 }
 
-// ── 子代理行动作与文案 ──
+// ── 子代理行动作：打开子代理标签（无 provide 的宿主行不可点） ──
 const openSubAgent = inject<((subSessionId: string) => void) | null>(
   "workspace:openSubAgentSession",
   null,
 );
-
-function dotStatus(item: SubagentItem): WorkflowMemberStatus {
-  if (item.status === "error") return "failed";
-  return item.status;
-}
-
-function statusText(item: SubagentItem): string {
-  if (item.status === "error") return t("chat.workspace.wfFailed");
-  if (item.status === "running") return t("chat.workspace.wfRunning");
-  return t("chat.workspace.wfCompleted");
-}
 
 /** 打开子代理列表面板（同工作流卡片的「详情」入口模式；无 provide 的宿主不渲染） */
 const openSubagentList = inject<((sessionId?: string) => void) | null>(
@@ -508,6 +518,26 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
   flex-direction: column;
   gap: 1px;
 }
+
+/* 面板内分类组标签（终端进程/子代理）：比 sec-head 更轻的次级标题 */
+.csb-group-label {
+  padding: 3px 2px 1px;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--gd-color-text-disabled);
+}
+
+/* 胶囊段内双图标并排（进程+子代理混合构成）：收紧间距避免占满宽度 */
+.csb-icon--pair {
+  margin-left: -3px;
+}
+
+/* 子代理无头像时的回落图标：与 img 头像同尺寸同对齐 */
+.csb-avatar-fallback {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
 /* GdTooltip 渲染 inline trigger 包装器：撑满整行，否则 flex 行被压成内容宽、
    hover 底色与右侧时间/终止按钮都不贴边（同 WorkflowMemberTree 的写法） */
 .csb-list > .l-tooltip__trigger {
@@ -528,6 +558,13 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
 }
 .csb-row--clickable:hover {
   background: var(--gd-color-surface-hover);
+}
+/* 无 provide 宿主（如 Bot 会话面板）：子代理行不可点，但仍展示信息 */
+.csb-row--plain {
+  cursor: default;
+}
+.csb-row--plain:hover {
+  background: transparent;
 }
 .csb-avatar {
   width: 16px;

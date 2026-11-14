@@ -507,6 +507,9 @@ export default {
     wfCancelled: '已取消',
     wfStarting: '启动中',
     processes: '后台进程',
+    // 输入区胶囊「后台任务」段：shell 后台进程与后台子代理已统一为 job 托管
+    backgroundJobs: '后台任务',
+    jobStopping: '停止中',
     processLogTab: '进程日志',
     subagentTab: '子代理',
     // 子代理列表面板（活跃 + 已结束回放；对话流子代理行与输入区胶囊的「详情」入口）

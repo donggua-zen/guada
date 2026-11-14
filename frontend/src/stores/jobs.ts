@@ -30,7 +30,7 @@ interface JobsSnapshotEventLike {
  * 快照会被当成过期快照永久丢弃，UI 就卡在一个其实已不存在的 running 作业上。
  * 故 bootId 变化时忽略 revision 直接采用。
  *
- * 与旧 useRunningProcesses 的区别：不再在收到事件后 REST 全量重拉，
+ * 与旧 useRunningProcesses（已改名 useBackgroundJobs）的区别：不再在收到事件后 REST 全量重拉，
  * 也不再依赖 process_changed。
  */
 export const useJobsStore = defineStore("jobs", () => {
