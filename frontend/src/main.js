@@ -185,6 +185,12 @@ const routes = [
     component: () => import("./components/test/SimpleTest.vue"),
   },
   {
+    path: "/wf-track-test",
+    name: "WorkflowPhaseTrackTest",
+    meta: { title: "工作流阶段站条演示" },
+    component: () => import("./components/test/workflow-phase-track.vue"),
+  },
+  {
     path: "/input-test",
     name: "InputTest",
     meta: { title: "Contenteditable 输入测试" },
