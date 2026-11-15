@@ -195,10 +195,20 @@ export const useBrowserWebviewStore = defineStore('browserWebview', () => {
     }
   }
 
-  function setPreviewRect(rect: PreviewRect | null): void {
+  /**
+   * 更新预览占位区域坐标。
+   *
+   * deferViewport=true（拖拽分割条/拖侧栏把手/缩放窗口的手势进行中）：
+   * 几何照常更新（webview 实时跟随），但跳过 lastAdaptiveSize / frozenAdaptiveSizes
+   * 的刷新——自适应视口的 guest 布局盒在整个手势期间保持不变，宿主侧逐帧
+   * 只变 left/top/transform: scale()（合成器层缩放），不触发 guest 重排；
+   * 手势结束后由 BrowserPreviewPlaceholder 的收尾补测以 deferViewport=false
+   * 调用一次，视口来源解冻、guest 按最终面板尺寸重排一次。
+   */
+  function setPreviewRect(rect: PreviewRect | null, deferViewport = false): void {
     previewRect.value = rect
     // 面板隐藏时 ResizeObserver 会报 0×0：忽略无效尺寸，保留最后一次有效值
-    if (rect && rect.width >= 1 && rect.height >= 1) {
+    if (!deferViewport && rect && rect.width >= 1 && rect.height >= 1) {
       const width = Math.round(rect.width)
       const height = Math.round(rect.height)
       const last = lastAdaptiveSize.value

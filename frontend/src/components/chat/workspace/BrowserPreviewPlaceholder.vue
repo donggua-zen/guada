@@ -253,26 +253,28 @@ function applyCustomViewport(): void {
 
 let resizeObserver: ResizeObserver | null = null
 let rafId: number | null = null
-/** 手势期间被跳过的更新：稳定后补一次 */
+/** 手势结束后的收尾补测任务（解冻自适应视口，见 updateRect 注释） */
 let trailingTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
  * 通过 ResizeObserver + requestAnimationFrame 实时报告占位区域坐标
  *
- * 拖拽分割条/缩放窗口期间**跳过**：占位区域每帧都在变，逐帧读 getBoundingClientRect
- * 再写 store，会让 BrowserWebviewLayer 每帧重算 transform: scale() 并触发 guest 层重排
- * （一个独立渲染进程的重新合成）。中间态的几何用户看不见，稳定后补一次即可。
+ * 手势（拖拽分割条/拖侧栏把手/缩放窗口）期间**照常测量**：webview 必须实时跟随，
+ * 否则面板逐帧变化而网页停在旧 rect 上——向内拖网页悬到聊天区上方、向外拖露出
+ * 占位区，松手后才跳到新尺寸。代价可控：默认固定视口下 guest 布局盒恒定，逐帧
+ * 只有 left/top/transform: scale() 变化，属合成器层缩放；自适应视口的 guest 尺寸
+ * 来源在 store.setPreviewRect 的 deferViewport 分支里手势期间冻结，同样不逐帧重排。
+ *
+ * 尾任务仍保留，但职责变了：手势结束后 rect 已稳定、ResizeObserver 不再触发，
+ * 靠它补测一次 deferViewport=false，把冻结的自适应视口解冻到最终面板尺寸。
+ * 多次触发合并成一个尾任务；到期若手势仍在进行则顺延。
  */
 function updateRect(): void {
-  if (isResizeActivityActive()) {
-    // 手势进行中：不读布局，只在稳定后补一次（多次触发合并成一个尾任务）
-    if (trailingTimer === null) {
-      trailingTimer = setTimeout(() => {
-        trailingTimer = null
-        updateRect()
-      }, RESIZE_ACTIVITY_TAIL_MS + 50)
-    }
-    return
+  if (isResizeActivityActive() && trailingTimer === null) {
+    trailingTimer = setTimeout(() => {
+      trailingTimer = null
+      updateRect()
+    }, RESIZE_ACTIVITY_TAIL_MS + 50)
   }
   if (rafId !== null) cancelAnimationFrame(rafId)
   rafId = requestAnimationFrame(() => {
@@ -280,12 +282,16 @@ function updateRect(): void {
     const el = placeholderRef.value
     if (!el) return
     const rect = el.getBoundingClientRect()
-    store.setPreviewRect({
-      x: rect.left,
-      y: rect.top,
-      width: rect.width,
-      height: rect.height,
-    })
+    // 活动态在 rAF 回调里取：从调度到执行手势可能已结束（尾延迟 150ms 远大于一帧）
+    store.setPreviewRect(
+      {
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+      isResizeActivityActive(),
+    )
   })
 }
 
