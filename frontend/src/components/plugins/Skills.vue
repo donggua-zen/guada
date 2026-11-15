@@ -275,7 +275,7 @@
 </template>
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/errorMessage'
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import GdButton from '@/components/ui/GdButton.vue';
 import GdCheckbox from '@/components/ui/GdCheckbox.vue';
@@ -761,8 +761,20 @@ function handleOpenSkillsDocs() {
     openInExternalBrowser('https://ai.dingd.cn/docs/skills')
 }
 
+// 插件注册/卸载/启停时后端广播 plugins_changed：技能列表按插件启停过滤，
+// 这里全量刷新让禁用插件的技能即时消失（与 pluginSlots store 同一事件源）
+let offPluginsChanged: (() => void) | null = null
+
 onMounted(async () => {
+    offPluginsChanged = apiService.onSessionEvent('plugins_changed', () => {
+        loadSkills()
+    })
     await loadSkills()
+})
+
+onUnmounted(() => {
+    offPluginsChanged?.()
+    offPluginsChanged = null
 })
 </script>
 

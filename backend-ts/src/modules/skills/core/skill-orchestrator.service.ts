@@ -109,9 +109,10 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
    * （如 workflow 在子代理会话返回 none）与智能体层裁剪结果，因此技能会随
    * 「智能体禁用工具包 / 无启用子代理 / 子代理会话」同步显隐。
    *
-   * 以下路径 fail-open（不因缺少会话上下文把技能藏掉）：
-   * - 无 session：Skills 管理页、插件详情、命令面板目录；
-   * - resolvedPlugins 为空：无 tools 能力的模型（skill 清单本就无意义）或上下文未初始化。
+   * 无 session（Skills 管理页、命令面板目录）只做插件启停门禁：插件禁用后其技能
+   * 不再出现在管理列表与 / 面板（kit 检查依赖 resolved 视图，无 session 时跳过）。
+   * resolvedPlugins 为空时 fail-open：无 tools 能力的模型 skill 清单本就无意义，
+   * 或上下文尚未初始化。
    */
   isSkillVisibleInSession(skill: SkillDefinition, session?: any): boolean {
     if (!this.isPluginSkillVisible(skill)) return false;
@@ -136,12 +137,15 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     return !!kit && kit.enabled !== false && kit.loadMode !== "none";
   }
 
-  /** 按会话过滤技能集合 */
+  /**
+   * 按会话过滤技能集合。
+   * 无 session（Skills 管理页 / 命令面板目录）也按插件启停过滤：
+   * 插件禁用后其技能不再出现在管理列表与 / 面板（此前为 fail-open）。
+   */
   private filterByPlugins(
     skills: SkillDefinition[],
     session?: any,
   ): SkillDefinition[] {
-    if (!session) return skills;
     return skills.filter((s) => this.isSkillVisibleInSession(s, session));
   }
 
@@ -337,7 +341,11 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   /**
    * 根据用户消息匹配相关 Skills
    */
-  async matchSkills(userMessage: string): Promise<SkillMatch[]> {    const skills = Array.from(this.registry.getAll().values());
+  async matchSkills(userMessage: string): Promise<SkillMatch[]> {
+    // 与可见性口径一致：禁用插件的技能不参与匹配
+    const skills = Array.from(this.registry.getAll().values()).filter((s) =>
+      this.isPluginSkillVisible(s),
+    );
     const matches: SkillMatch[] = [];
 
     for (const skill of skills) {
@@ -364,7 +372,10 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
    * 列出所有 Skills（元数据注入用）
    */
   getMetadataInjection(): string {
-    const skills = Array.from(this.registry.getAll().values());
+    // 与可见性口径一致：禁用插件的技能不进入注入文本
+    const skills = Array.from(this.registry.getAll().values()).filter((s) =>
+      this.isPluginSkillVisible(s),
+    );
     if (skills.length === 0) return "";
 
     const metadataList = skills

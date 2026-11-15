@@ -291,6 +291,8 @@ const commandsCache = reactive<{ slash: SkillCommand[]; mention: SkillCommand[] 
   slash: [],
   mention: [],
 });
+// 插件启停会改变技能命令目录：收到 plugins_changed 时清缓存，下次触发 / 重新拉取
+let offPluginsChanged: (() => void) | null = null;
 const commandTrigger = ref<'slash' | 'mention'>('slash');
 const editorContent = ref('');
 
@@ -1520,6 +1522,11 @@ onMounted(() => {
   void ensureModelsLoaded().catch((error) => console.error('获取模型列表失败:', error));
   initThinkingEffort(); // 初始化思考强度
 
+  offPluginsChanged = apiService.onSessionEvent('plugins_changed', () => {
+    commandsCache.slash = [];
+    commandsCache.mention = [];
+  });
+
   // 初始化 Tiptap 编辑器
   try {
     const tiptapEditor = new Editor({
@@ -1635,6 +1642,8 @@ onMounted(() => {
 
 // 清理事件监听器和预览 URL
 onUnmounted(() => {
+  offPluginsChanged?.();
+  offPluginsChanged = null;
   if (modelOpenTimer) clearTimeout(modelOpenTimer)
   if (modelCloseTimer) clearTimeout(modelCloseTimer)
 
