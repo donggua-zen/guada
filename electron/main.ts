@@ -2294,6 +2294,72 @@ function setupIpcHandlers() {
         },
         { type: "separator" },
         {
+          label: "调试：打开开发者工具",
+          click: () => {
+            const w = petWindow?.window;
+            if (!w || w.isDestroyed()) return;
+            // focusable:false 的窗口 DevTools 需要临时可聚焦，否则面板点不动
+            const wasFocusable = w.isFocusable();
+            if (!wasFocusable) w.setFocusable(true);
+            w.webContents.openDevTools({ mode: "detach" });
+            w.webContents.once("devtools-closed", () => {
+              if (!wasFocusable && !w.isDestroyed()) w.setFocusable(false);
+            });
+          },
+        },
+        {
+          label: "调试：复制诊断信息",
+          click: () => {
+            const state = petWindow?.debugState() ?? {};
+            const lines = Object.entries(state)
+              .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+              .join("\n");
+            clipboard.writeText(
+              `[桌宠诊断] ${new Date().toISOString()}\n${lines}\n\n` +
+                `platform: ${process.platform} ${process.arch}\n` +
+                `electron: ${process.versions.electron}\n`,
+            );
+            log.info(`[pet] 诊断信息已复制\n${lines}`);
+          },
+        },
+        {
+          label: "调试：抓取渲染层状态",
+          click: () => {
+            const w = petWindow?.window;
+            if (!w || w.isDestroyed()) return;
+            void w.webContents
+              .executeJavaScript(
+                `(function(){
+                  var d = window.__petDrag || {};
+                  return JSON.stringify({
+                    dragActive: d.active,
+                    dragMoved: d.moved,
+                    pointerId: d.pointerId,
+                    noButton: d.noButtonCount,
+                    downCount: window.__petPointerDownCount || 0,
+                    moveCount: window.__petMoveCount || 0,
+                    moveIgnored: window.__petMoveIgnored || 0,
+                    idMismatch: window.__petMoveIdMismatch || 0,
+                    endDrag: window.__petEndDragCount || 0,
+                    ghostUp: window.__petGhostUp || 0,
+                    realUp: window.__petRealUp || 0,
+                    mode: window.__petGetMode ? window.__petGetMode() : null,
+                  });
+                })()`,
+              )
+              .then((info) => {
+                clipboard.writeText(info);
+                log.info(`[pet] 渲染层状态: ${info}`);
+              })
+              .catch((error) => log.warn("[pet] 抓取渲染层状态失败:", error));
+          },
+        },
+        {
+          label: "调试：重建窗口",
+          click: () => void petWindow?.seamlessRebuild("debug"),
+        },
+        { type: "separator" },
+        {
           label: "退出 GuaDa",
           click: () => app.quit(),
         },

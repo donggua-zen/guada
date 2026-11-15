@@ -780,6 +780,9 @@
     /** 与当前朝向相反的累计位移（px）：换向要先攒够阈值，吸收慢拖时的手抖 */
     dirAccum: 0,
   };
+  // 调试出口：主进程右键菜单「抓取渲染层状态」读它（线上无副作用）
+  window.__petDrag = drag;
+  window.__petGetMode = function () { return mode; };
 
   /** 换向阈值：慢拖时鼠标每帧只动 0~1px，没有迟滞就会左右来回闪 */
   var DRAG_DIR_SWITCH_PX = 6;

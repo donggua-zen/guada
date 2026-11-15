@@ -84,7 +84,9 @@
     "postinstall": "pnpm --dir backend-ts install && pnpm --dir frontend install && node scripts/ensure-pty-spawn-helper.js --warn-only",
     "manual:pet-real-drag": "node scripts/run-electron.cjs scripts/manual-test-pet-real-drag.js",
     "manual:pet-unlock-drag": "node scripts/run-electron.cjs scripts/manual-test-pet-unlock-drag.js",
-    "test:pet-lifecycle:electron": "node scripts/run-electron.cjs scripts/test-pet-interacting-lifecycle.js"
+    "test:pet-lifecycle:electron": "node scripts/run-electron.cjs scripts/test-pet-interacting-lifecycle.js",
+    "test:pet-debug-state:electron": "node scripts/run-electron.cjs scripts/test-pet-debug-state.js",
+    "manual:pet-pointermove-loss": "node scripts/run-electron.cjs scripts/manual-test-pointermove-loss.js"
   },
   "keywords": [
     "ai",
