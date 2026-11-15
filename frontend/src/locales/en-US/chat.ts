@@ -525,11 +525,13 @@
     workflowError: 'Error',
     // Conversation-flow inline card log fold (count of script log() lines)
     workflowLogs: 'Logs ({count})',
-    // Workflow phase track (staged rendering): phase counter / station counts / stray station
+    // Workflow phase track: phase counter / station counts / stray station
     wfPhase: 'Phase {n}/{m}',
     wfPhaseOther: 'Other',
     wfPhaseStationCount: '{settled}/{observed}',
     wfPhaseMore: '{count} more',
+    wfPhasePrev: 'Previous phase',
+    wfPhaseNext: 'Next phase',
     processRunning: 'Running',
     processCompleted: 'Completed',
     processKilled: 'Terminated',

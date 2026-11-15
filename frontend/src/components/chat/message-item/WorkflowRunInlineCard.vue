@@ -22,7 +22,7 @@
       </GdTooltip>
     </div>
     <div v-if="!collapsed" class="wf-card-body">
-      <!-- 阶段站条（脚本声明了 phases 时接管成员展示，借鉴 zcode 分阶段渲染；
+      <!-- 阶段站条（脚本声明了 phases 时接管成员展示；
            未声明 phases → 为 null，回退下方扁平树，零风险兜底） -->
       <WorkflowPhaseTrack v-if="trackModel" :model="trackModel" @open="(subSessionId: string) => openSubAgent?.(subSessionId)" />
       <template v-else>

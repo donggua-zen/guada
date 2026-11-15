@@ -1,6 +1,5 @@
 /**
- * 阶段站条模型（借鉴 zcode workflow-timeline 的投影思路）：
- * (phases, agents, runStatus) → PhaseTrackModel，纯函数、无 Vue/无 DOM/无时间。
+ * 阶段站条模型：(phases, agents, runStatus) → PhaseTrackModel，纯函数、无 Vue/无 DOM/无时间。
  *
  * 数据已经现成：run-start 事件携带 phases 声明（WorkflowPhaseMeta[]），
  * agent-start/agent-end 事件的成员都带 phase 字符串（后端 workflow-engine.service.ts
@@ -16,7 +15,7 @@ import type {
   WorkflowRunStatus,
 } from "@/types/stream/workflow.types";
 
-/** 站状态（借鉴 zcode「灯形四态」词汇表；值即 WorkflowStatusDot 的形态类名后缀） */
+/** 站状态（灯形四态词汇表；值即 WorkflowStatusDot 的形态类名后缀） */
 export type PhaseStationStatus = "pending" | "active" | "done" | "failed";
 
 export interface PhaseStation {
@@ -82,7 +81,7 @@ export function buildPhaseTrackModel(
     if (agent.status === "completed") station.settled += 1;
   }
 
-  // 站状态推导：站内成员状态折叠（借鉴 zcode collapseStatuses）
+  // 站状态推导：站内成员状态折叠
   let activeIndex: number | undefined;
   for (let i = 0; i < stations.length; i++) {
     const s = stations[i];
