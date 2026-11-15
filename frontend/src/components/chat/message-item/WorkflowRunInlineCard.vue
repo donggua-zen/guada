@@ -22,9 +22,14 @@
       </GdTooltip>
     </div>
     <div v-if="!collapsed" class="wf-card-body">
-      <p v-if="description" class="wf-card-desc">{{ description }}</p>
-      <WorkflowMemberTree :agents="agents" :can-open="!!openSubAgent"
-        @open="(subSessionId: string) => openSubAgent?.(subSessionId)" />
+      <!-- 阶段站条（脚本声明了 phases 时接管成员展示，借鉴 zcode 分阶段渲染；
+           未声明 phases → 为 null，回退下方扁平树，零风险兜底） -->
+      <WorkflowPhaseTrack v-if="trackModel" :model="trackModel" @open="(subSessionId: string) => openSubAgent?.(subSessionId)" />
+      <template v-else>
+        <p v-if="description" class="wf-card-desc">{{ description }}</p>
+        <WorkflowMemberTree :agents="agents" :can-open="!!openSubAgent"
+          @open="(subSessionId: string) => openSubAgent?.(subSessionId)" />
+      </template>
       <!-- 日志（编排脚本 log() 播报）：默认收起，运行中是想看"在做什么"时的第二视图 -->
       <button v-if="logs.length" class="wf-card-fold" @click="logsExpanded = !logsExpanded">
         
@@ -64,10 +69,17 @@ import { parse as partialParse } from "partial-json";
 import GdTooltip from "@/components/ui/GdTooltip.vue";
 import WorkflowStatusDot from "@/components/chat/workflow/WorkflowStatusDot.vue";
 import WorkflowMemberTree from "@/components/chat/workflow/WorkflowMemberTree.vue";
+import WorkflowPhaseTrack from "@/components/chat/workflow/WorkflowPhaseTrack.vue";
+import { buildPhaseTrackModel, phaseProgress } from "@/components/chat/workflow/phaseTrack";
 import { useWorkflowRunsStore } from "@/stores/workflowRuns";
 import { getToolArgs, getToolConfig, type ToolCall } from "@/utils/toolDisplay";
 import { extractResultContent } from "@/utils/toolResult";
-import { formatWorkflowResult, workflowRunMetaText, workflowStatusText } from "@/utils/workflowDisplay";
+import {
+  formatWorkflowResult,
+  workflowPhaseMetaText,
+  workflowRunMetaText,
+  workflowStatusText,
+} from "@/utils/workflowDisplay";
 import type { ToolCallResponseEntry } from "@/types/message";
 import type { WorkflowMemberStatus, WorkflowRunState } from "@/types/stream/workflow.types";
 
@@ -154,7 +166,17 @@ function statusFromOutcome(): WorkflowMemberStatus {
 const starting = computed(() => !run.value && props.executing !== false);
 
 const metaText = computed(() => {
-  if (run.value) return workflowRunMetaText(tr, run.value);
+  if (run.value) {
+    // 分阶段 run：头行给「第 n/m 阶段 · x/y」（站条展示归组，头行给总进度）
+    if (trackModel.value) {
+      const phaseNo = trackModel.value.activeIndex !== undefined ? trackModel.value.activeIndex + 1 : undefined;
+      if (phaseNo !== undefined) {
+        const progress = phaseProgress(trackModel.value);
+        return workflowPhaseMetaText(tr, phaseNo, trackModel.value.stations.length, progress.settled, progress.observed);
+      }
+    }
+    return workflowRunMetaText(tr, run.value);
+  }
   return props.executing === false
     ? workflowStatusText(tr, statusFromOutcome())
     : tr("chat.workspace.wfStarting");
@@ -162,6 +184,13 @@ const metaText = computed(() => {
 
 const agents = computed(() => run.value?.agents ?? []);
 const logs = computed(() => run.value?.logs ?? []);
+
+/** 阶段站条模型：脚本声明了 phases 才有（null → 回退扁平成员树） */
+const trackModel = computed(() => {
+  const r = run.value;
+  if (!r) return null;
+  return buildPhaseTrackModel(r.phases, r.agents, r.status);
+});
 
 /** 返回值文本：优先快照 result（干净 JSON），回落工具结果文本 */
 const resultText = computed(() => {

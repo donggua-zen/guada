@@ -242,6 +242,15 @@
   --gd-trajectory-added: #15803d;
   --gd-trajectory-neutral-bg: color-mix(in srgb, var(--gd-color-text-gray) 14%, var(--gd-color-sidebar-bg));
 
+  /* ====================
+     工作流站条动画 token（借鉴 zcode wf-motion 作用域变量）：
+     统一缓动 + 三档时长，只动 opacity/transform。暗色无需覆盖（引用语义变量）。
+     ==================== */
+  --gd-wf-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --gd-wf-t-fast: 120ms;
+  --gd-wf-t-base: 160ms;
+  --gd-wf-t-ink: 320ms;
+
   --gd-size-text-base: 14px;
   --gd-size-text-sm: 14px;
   /* 小标签档（区标题、角标）。区标题不要用 base：主题预设会把 base 抬到 15px

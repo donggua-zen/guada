@@ -525,6 +525,11 @@ export default {
     workflowError: '错误',
     // 对话流内联卡片的日志折叠（编排脚本 log() 播报条数）
     workflowLogs: '日志 ({count})',
+    // 工作流阶段站条（借鉴 zcode 分阶段渲染）：阶段计数 / 站计数 / 隐式归组站 / 站内钉住上限
+    wfPhase: '第 {n}/{m} 阶段',
+    wfPhaseOther: '其他',
+    wfPhaseStationCount: '{settled}/{observed}',
+    wfPhaseMore: '还有 {count} 个',
     processRunning: '运行中',
     processCompleted: '已完成',
     processKilled: '已终止',

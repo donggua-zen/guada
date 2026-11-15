@@ -10,8 +10,8 @@ import type {
   WorkflowRunState,
 } from "@/types/stream/workflow.types";
 
-/** 翻译函数最小契约（组件传 tr = (key) => t(key)） */
-export type Translate = (key: string) => string;
+/** 翻译函数最小契约（组件传 t 或 tr；params 为 vue-i18n 具名插值，可选） */
+export type Translate = (key: string, params?: Record<string, unknown>) => string;
 
 const STATUS_I18N_KEY: Record<WorkflowMemberStatus, string> = {
   running: "chat.workspace.wfRunning",
@@ -45,6 +45,24 @@ export function workflowRunMetaText(tr: Translate, run: WorkflowRunState): strin
   if (run.durationMs !== undefined) return formatRunDuration(run.durationMs);
   return workflowStatusText(tr, run.status);
 }
+
+/**
+ * 阶段站条头行进度（分阶段 run 优先于通用成员进度）：
+ * 「第 n/m 阶段 · x/y」——n 为当前进行中的阶段序号，x/y 为全 run 成员完成度。
+ * tr 的第三个参数透传给 vue-i18n 具名插值。
+ */
+export function workflowPhaseMetaText(
+  tr: Translate,
+  phaseNo: number,
+  phaseCount: number,
+  settled: number,
+  observed: number,
+): string {
+  const phasePart = tr("chat.workspace.wfPhase", { n: phaseNo, m: phaseCount });
+  const countPart = tr("chat.workspace.wfPhaseStationCount", { settled, observed });
+  return `${phasePart} · ${countPart}`;
+}
+
 
 /** 成员行次行：输出摘要（截断 40 字）· 状态 */
 export function workflowAgentSubText(tr: Translate, agent: WorkflowAgentState): string {

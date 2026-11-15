@@ -1,6 +1,8 @@
 <template>
   <!-- 工作流状态点：run 行 8px / 成员行 6px；运行中自带脉冲环。
-       单一来源——对话流内联卡片、审阅面板的 run 行与成员树共用，避免各处再抄一份 scoped 样式。 -->
+       pending 为空环（未开始的站/成员）——借鉴 zcode 状态灯词汇表：空环=未到、脉冲=进行中、
+       实点=完成/失败。单一来源——对话流内联卡片、审阅面板的 run 行与成员树共用，
+       避免各处再抄一份 scoped 样式。 -->
   <span class="wf-dot" :class="[size === 'sm' ? 'wf-dot--sm' : '', `wf-dot--${status}`]">
     <span v-if="status === 'running'" class="wf-dot-pulse"></span>
   </span>
@@ -34,6 +36,11 @@ withDefaults(
 .wf-dot--sm {
   width: 6px;
   height: 6px;
+}
+/* 空环：未到/未开始（站条用；1.5px 边框空心，实点状兄弟形态对照） */
+.wf-dot--pending {
+  background: transparent;
+  border: 1.5px solid var(--gd-color-border, rgba(0, 0, 0, 0.2));
 }
 .wf-dot--running {
   background: var(--gd-color-success, #22c55e);
