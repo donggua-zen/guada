@@ -459,9 +459,11 @@ const optionClasses = (entry: FlatEntry): string => {
     const highlighted = flatEntries.value[highlightIndex.value] === entry;
     return [
         "gd-select-option relative flex min-h-[28px] w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1 text-[14px] leading-none transition-colors duration-150",
-        entry.disabled
-            ? "cursor-not-allowed text-[var(--gd-color-field-text-disabled)]"
-            : highlighted ? "bg-[var(--gd-color-field-option-bg-hover)] text-[var(--gd-color-field-text)]" : "text-[var(--gd-color-field-text)]",
+        isSelected(entry.value)
+            ? "bg-[var(--gd-color-field-option-bg-selected)] text-[var(--gd-color-field-option-text-selected,var(--gd-color-field-text))] border border-[var(--gd-color-field-option-border-selected,transparent)]"
+            : entry.disabled
+                ? "cursor-not-allowed text-[var(--gd-color-field-text-disabled)]"
+                : highlighted ? "bg-[var(--gd-color-field-option-bg-hover)] text-[var(--gd-color-field-text)]" : "text-[var(--gd-color-field-text)]",
         isSelected(entry.value) ? "font-medium" : "",
     ].filter(Boolean).join(" ");
 };

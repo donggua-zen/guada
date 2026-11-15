@@ -20,7 +20,7 @@
             :class="kindBadgeClass">
             {{ kindTitle }}
           </span>
-          <span v-if="askCtx.title" class="min-w-0 truncate text-sm font-medium text-gray-800 dark:text-[#e5e7eb]">
+          <span v-if="askCtx.title" class="min-w-0 truncate text-sm font-medium text-(--gd-color-text)">
             {{ askCtx.title }}
           </span>
           <span class="flex-1"></span>
@@ -57,7 +57,7 @@
 
         <!-- 当前问题 -->
         <div v-if="question" class="mt-2">
-          <div class="text-sm text-gray-800 dark:text-[#e5e7eb]">{{ question.question }}</div>
+          <div class="text-sm text-(--gd-color-text)">{{ question.question }}</div>
           <!-- 计划审批（ExitPlanMode）的 detail 是计划全文，刻意不在弹窗内渲染：
                计划本体在流内计划卡（随消息滚动），完整文档从那里打开工作区计划面板；
                此处仅按 isPlanApproval 门控，避免全文落进下方纯文本分支铺开 -->
@@ -393,8 +393,12 @@ async function submit() {
   background: rgba(255, 255, 255, 0.06);
 }
 .ask-option-active {
-  border-color: var(--gd-color-primary);
-  background: var(--gd-color-primary-100);
+  border-color: var(--gd-color-field-option-border-selected, var(--gd-color-primary));
+  background: var(--gd-color-field-option-bg-selected, var(--gd-color-primary-100));
+  color: var(--gd-color-field-option-text-selected, var(--gd-color-text));
+}
+.ask-option-active .ask-custom-input::placeholder {
+  color: color-mix(in srgb, currentColor 68%, transparent);
 }
 
 /* 焦点不描边（2026-10-08 用户报障：卡片出现即自动聚焦首个选项，焦点描边与"已选中"同色，

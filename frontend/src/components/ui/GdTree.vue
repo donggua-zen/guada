@@ -80,5 +80,7 @@ provide(gdTreeKey, {
 :deep(.gd-tree__node--selected),
 :deep(.gd-tree__node--selected:hover) {
     background: var(--gd-color-field-option-bg-selected);
+    color: var(--gd-color-field-option-text-selected, var(--gd-color-text));
+    box-shadow: inset 0 0 0 1px var(--gd-color-field-option-border-selected, transparent);
 }
 </style>

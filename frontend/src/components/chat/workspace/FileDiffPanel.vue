@@ -244,8 +244,13 @@ function highlightLine(line: string): string {
 }
 
 .fdp__tab.is-active {
-  background: var(--gd-color-primary-100);
-  border-color: var(--gd-color-primary-500);
+  background: var(--gd-color-field-option-bg-selected, var(--gd-color-primary-100));
+  border-color: var(--gd-color-field-option-border-selected, var(--gd-color-primary-500));
+  color: var(--gd-color-field-option-text-selected, var(--gd-color-text));
+}
+
+.fdp__tab.is-active .fdp__tab-index {
+  color: inherit;
 }
 
 .fdp__tab-index {

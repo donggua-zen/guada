@@ -4,7 +4,7 @@
     <div class="flex flex-col gap-0.5">
       <!-- 最近选择 -->
       <template v-if="recentList.length > 0">
-        <div class="text-[11px] font-medium text-[#999] dark:text-[#6b7280] px-2 py-1 select-none">{{ t('chat.input.recent') }}</div>
+        <div class="text-[11px] font-medium text-(--gd-color-text-gray) px-2 py-1 select-none">{{ t('chat.input.recent') }}</div>
         <div v-for="path in filteredRecentList" :key="path"
           class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
           :class="path === currentWorkspacePath
@@ -12,17 +12,17 @@
             : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
           @click="handleSelect(path)">
           
-            <Folder20Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+            <Folder20Regular class="shrink-0 w-4.5 h-4.5" />
           
           <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-            <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ getFolderName(path) }}</span>
-            <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ path }}</span>
+            <span class="text-sm font-medium text-(--gd-color-text) whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ getFolderName(path) }}</span>
+            <span class="text-xs text-(--gd-color-text-gray) whitespace-nowrap overflow-hidden text-ellipsis">{{ path }}</span>
           </div>
           
-            <Checkmark16Filled v-if="path === currentWorkspacePath" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+            <Checkmark16Filled v-if="path === currentWorkspacePath" class="shrink-0 text-(--gd-color-sidebar-text-active) w-3.5 h-3.5" />
           
         </div>
-        <div class="h-px bg-[#eee] dark:bg-white/8 mx-2 my-1.5"></div>
+        <div class="h-px bg-(--gd-color-border) mx-2 my-1.5"></div>
       </template>
 
       <!-- 使用公共目录 -->
@@ -33,14 +33,14 @@
           : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="handleSelect(publicPath)">
         
-          <PeopleCommunity16Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+          <PeopleCommunity16Regular class="shrink-0 text-(--gd-color-text-gray) w-4.5 h-4.5" />
         
         <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-          <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0">{{ t('chat.input.usePublicDir') }}</span>
-          <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ publicPath }}</span>
+          <span class="text-sm font-medium text-(--gd-color-text) whitespace-nowrap shrink-0">{{ t('chat.input.usePublicDir') }}</span>
+          <span class="text-xs text-(--gd-color-text-gray) whitespace-nowrap overflow-hidden text-ellipsis">{{ publicPath }}</span>
         </div>
         
-          <Checkmark16Filled v-if="publicPath === currentWorkspacePath" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+          <Checkmark16Filled v-if="publicPath === currentWorkspacePath" class="shrink-0 w-3.5 h-3.5" />
         
       </div>
 
@@ -51,14 +51,14 @@
           : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="handleSelect(null)">
         
-          <FolderAdd24Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+          <FolderAdd24Regular class="shrink-0 text-(--gd-color-text-gray) w-4.5 h-4.5" />
         
         <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-          <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb] whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ t('chat.input.autoCreate') }}</span>
-          <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ t('chat.input.autoCreateDesc') }}</span>
+          <span class="text-sm font-medium text-(--gd-color-text) whitespace-nowrap shrink-0 max-w-30 overflow-hidden text-ellipsis">{{ t('chat.input.autoCreate') }}</span>
+          <span class="text-xs text-(--gd-color-text-gray) whitespace-nowrap overflow-hidden text-ellipsis">{{ t('chat.input.autoCreateDesc') }}</span>
         </div>
         
-          <Checkmark16Filled v-if="!currentWorkspacePath" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+          <Checkmark16Filled v-if="!currentWorkspacePath" class="shrink-0 w-3.5 h-3.5" />
         
       </div>
 
@@ -66,10 +66,10 @@
       <div class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150 hover:bg-(--gd-color-sidebar-bg-hover)"
         @click="handleOpenFolder">
         
-          <Desktop16Regular class="shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled) w-4.5 h-4.5"  />
+          <Desktop16Regular class="shrink-0 text-(--gd-color-text-gray) w-4.5 h-4.5" />
         
         <div class="flex-1 flex items-baseline gap-1.5 min-w-0">
-          <span class="text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb]">{{ t('chat.input.selectLocalFolder') }}</span>
+          <span class="text-sm font-medium text-(--gd-color-text)">{{ t('chat.input.selectLocalFolder') }}</span>
         </div>
       </div>
     </div>
@@ -162,6 +162,7 @@ function handleBrowserSelect(path: string) {
    sidebar-text-active 在默认主题 = 正文色，所以原主题下没有视觉变化。 */
 .ws-item-active {
   color: var(--gd-color-sidebar-text-active);
+  box-shadow: inset 0 0 0 1px var(--gd-color-selection-border, transparent);
 }
 
 .ws-item-active :is(div, span, svg) {

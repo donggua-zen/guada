@@ -49,11 +49,9 @@
           ? 'group-option-active bg-(--gd-color-sidebar-bg-active) hover:bg-(--gd-color-sidebar-bg-active)'
           : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
         @click="selectGroup(g.value)">
-        <GroupIcon :icon="g.icon" class="w-4 h-4 shrink-0 text-(--gd-color-text-gray) dark:text-(--gd-color-text-disabled)" />
-        <span class="flex-1 text-sm font-medium text-(--gd-color-text) dark:text-[#e5e7eb]">{{ g.label }}</span>
-        
-          <Checkmark16Filled v-if="selectedGroupId === g.value" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
-        
+        <GroupIcon :icon="g.icon" class="w-4 h-4 shrink-0" />
+        <span class="flex-1 text-sm font-medium text-(--gd-color-text)">{{ g.label }}</span>
+        <Checkmark16Filled v-if="selectedGroupId === g.value" class="shrink-0 w-3.5 h-3.5" />
       </div>
     </div>
   </GdPopover>
@@ -196,6 +194,7 @@ const handleWorkspaceSelect = (workspacePath: string | null) => {
    sidebar-text-active 在默认主题 = 正文色，所以原主题下没有视觉变化。 */
 .group-option-active {
   color: var(--gd-color-sidebar-text-active);
+  box-shadow: inset 0 0 0 1px var(--gd-color-selection-border, transparent);
 }
 
 .group-option-active :is(div, span, svg) {

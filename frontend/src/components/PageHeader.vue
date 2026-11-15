@@ -21,7 +21,7 @@
     <!-- 中间：标题区域 -->
     <div v-if="title || $slots.title || $slots['title-actions']" class="flex items-center flex-1 min-w-0">
       <slot name="title">
-        <span class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed] m-0 truncate">{{ title }}</span>
+        <span class="text-sm font-semibold text-(--gd-color-text) m-0 truncate">{{ title }}</span>
       </slot>
       <!-- 标题后缀操作区（紧跟标题）：no-drag 收在组件内部，
            否则落在 .drag-region 上会被 Electron 当作窗口拖拽区、点击不生效 -->

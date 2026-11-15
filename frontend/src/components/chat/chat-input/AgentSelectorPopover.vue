@@ -4,12 +4,12 @@
     <div v-for="agent in agents" :key="agent.id"
       class="flex items-center gap-1.5 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
       :class="agent.id === currentAgentId
-        ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
+        ? 'agent-option-active bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
         : 'hover:bg-(--gd-color-sidebar-bg-hover)'"
       @click="handleSelect(agent)">
       <Avatar :src="agent.avatarUrl || undefined" :name="agent.name" type="assistant" :round="false"
         class="w-6 h-6 shrink-0" />
-      <span class="flex-1 text-sm text-(--gd-color-text) truncate">{{ agent.name }}</span>
+      <span class="flex-1 text-sm truncate">{{ agent.name }}</span>
       <!-- 插件智能体徽标 -->
       <span v-if="agent.pluginId"
         class="shrink-0 inline-flex items-center px-1 py-0.5 text-[10px] leading-none rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300"
@@ -17,7 +17,7 @@
         {{ t('agents.list.pluginAgentBadge') }}
       </span>
 
-        <Checkmark16Filled v-if="agent.id === currentAgentId" class="shrink-0 text-(--gd-color-primary) w-3.5 h-3.5"  />
+        <Checkmark16Filled v-if="agent.id === currentAgentId" class="shrink-0 w-3.5 h-3.5" />
       
     </div>
     <div v-if="agents.length === 0" class="px-2 py-3 text-xs text-(--gd-color-text-gray)">
@@ -53,3 +53,12 @@ function handleSelect(agent: Agent) {
   emit('update:show', false)
 }
 </script>
+
+<style scoped>
+.agent-option-active {
+  box-shadow: inset 0 0 0 1px var(--gd-color-selection-border, transparent);
+}
+.agent-option-active :deep(*) {
+  color: inherit;
+}
+</style>
