@@ -822,9 +822,12 @@
 
   function endDrag() {
     if (!drag.active) return;
+    window.__petEndDragCount = (window.__petEndDragCount || 0) + 1;
+    window.__petEndDragReasons = (window.__petEndDragReasons || []).concat([new Error().stack.split("\n")[2] || "?"]);
     const hadPointerDown = drag.pointerId !== null;
     drag.active = false;
     drag.pointerId = null;
+    drag.noButtonCount = 0;
     if (drag.holdTimer) {
       clearInterval(drag.holdTimer);
       drag.holdTimer = null;
@@ -891,6 +894,7 @@
     }, 1000);
     drag.active = true;
     drag.moved = false;
+    drag.noButtonCount = 0;
     drag.pointerId = e.pointerId;
     drag.sx = drag.lastX = e.screenX;
     drag.sy = drag.lastY = e.screenY;
@@ -902,11 +906,33 @@
   });
 
   document.addEventListener('pointermove', function (e) {
-    if (!drag.active) return;
+    if (!drag.active) {
+      window.__petMoveIgnored = (window.__petMoveIgnored || 0) + 1;
+      return;
+    }
     window.__petMoveCount = (window.__petMoveCount || 0) + 1;
-    // 兜底：指针已不是按下态（捕获失败/系统抢走指针）→ 立即收尾
-    if (e.buttons === 0) { endDrag(); return; }
-    if (e.pointerId !== drag.pointerId) return;
+    // 注意：不要用 e.buttons === 0 判断「已松手」。
+    // Windows 下 pointermove 的 buttons 位在某些时刻不可靠（窗口刚被
+    // setIgnoreMouseEvents(false) 激活、跨窗口边界、SendInput 注入等），
+    // 一旦误判就会 endDrag() → 主进程 setInteracting(false) → 窗口立刻穿透
+    // → 后续 pointermove 全部丢失，表现为「拖一下就断」。
+    // 收尾只认 pointerup / lostpointercapture / pointercancel。
+    if (e.pointerId !== drag.pointerId) {
+      window.__petMoveIdMismatch = (window.__petMoveIdMismatch || 0) + 1;
+      return;
+    }
+    // 松手兜底：单次 buttons===0 可能是误报（窗口刚激活 / SendInput 注入），
+    // 连续 3 次才认定真的松手（pointerup 丢失时靠它收回状态）。
+    if (e.buttons === 0) {
+      drag.noButtonCount = (drag.noButtonCount || 0) + 1;
+      if (drag.noButtonCount >= 3) {
+        drag.noButtonCount = 0;
+        endDrag();
+        return;
+      }
+    } else {
+      drag.noButtonCount = 0;
+    }
     var dx = e.screenX - drag.lastX;
     var dy = e.screenY - drag.lastY;
     if (!drag.moved && (Math.abs(e.screenX - drag.sx) > 2 || Math.abs(e.screenY - drag.sy) > 2)) {
@@ -920,9 +946,20 @@
       }
     }
     if (drag.moved) {
-      api.dragMove({ dx: dx, dy: dy });
+      // 发「按下点 + 当前点」的绝对坐标，而不是增量。
+      //
+      // 为什么不能用增量：窗口是跟着光标 1:1 移动的，移动后光标相对窗口
+      // 位置几乎不变，Chromium 就不再生成 pointermove —— 增量累加会立刻
+      // 断流（实测一次拖动只收到 1 次 move）。用绝对坐标则与事件频率无关，
+      // 主进程用「当前屏幕点 - 按下屏幕点 + 按下时窗口位置」算出目标位置。
+      api.dragMove({
+        sx: drag.sx,
+        sy: drag.sy,
+        x: e.screenX,
+        y: e.screenY,
+      });
       // 方向动画：带迟滞判定（慢拖时来回抖动的问题见 updateDragDirection 注释）
-      updateDragDirection(dx);
+      updateDragDirection(e.screenX - drag.lastX);
       drag.lastX = e.screenX;
       drag.lastY = e.screenY;
     }
@@ -930,6 +967,15 @@
 
   document.addEventListener('pointerup', function (e) {
     if (!drag.active || e.pointerId !== drag.pointerId) return;
+    // Windows 上「移动窗口」本身可能插入一个假的 pointerup
+    // （光标相对窗口位置剧变）。真实松手时按钮位已是 0，
+    // 而幽灵 up 往往还带着按下位；这里用 buttons 再确认一次。
+    if (e.buttons !== 0) {
+      window.__petGhostUp = (window.__petGhostUp || 0) + 1;
+      return;
+    }
+    window.__petRealUp = (window.__petRealUp || 0) + 1;
+    window.__petUpInfo = { buttons: e.buttons, button: e.button, id: e.pointerId, type: e.pointerType };
     var wasMoved = drag.moved;
     try {
       document.body.releasePointerCapture(e.pointerId);
@@ -945,6 +991,13 @@
   // 窗口失焦（比如点了别的应用）→ 收尾，避免卡在交互态
   window.addEventListener('blur', function () {
     if (drag.active) endDrag();
+  });
+
+  // 指针被系统取消（设备切换 / 窗口状态变化）→ 收尾。
+  // 注意不要监听 lostpointercapture：拖动中窗口移动也可能触发它，
+  // 会提前 endDrag 导致拖动中断。
+  document.addEventListener('pointercancel', function (e) {
+    if (drag.active && e.pointerId === drag.pointerId) endDrag();
   });
 
   // 系统睡眠/锁屏会吞掉 pointerup，drag.active 可能永远卡住 → 唤醒后拖不动。

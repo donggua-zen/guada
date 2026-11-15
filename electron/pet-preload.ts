@@ -114,9 +114,18 @@ const petAPI = {
   /** 按住期间的心跳：让主进程保持交互态（不被超时误伤） */
   pointerHold: () => ipcRenderer.send("pet:pointer-hold"),
 
-  /** 拖动（屏幕坐标增量） */
-  dragMove: (delta: { dx: number; dy: number }) =>
-    ipcRenderer.send("pet:drag-move", delta),
+  /**
+   * 拖动位置。优先用绝对屏幕坐标 {sx,sy,x,y}（窗口 1:1 跟随光标时增量会断流），
+   * 兼容旧的增量 {dx,dy}。
+   */
+  dragMove: (payload: {
+    dx?: number;
+    dy?: number;
+    sx?: number;
+    sy?: number;
+    x?: number;
+    y?: number;
+  }) => ipcRenderer.send("pet:drag-move", payload),
 
   /** 拖动结束：让主进程落盘位置并夹回可视区（moved=false 表示只是单击） */
   dragEnd: (payload?: { moved?: boolean }) =>

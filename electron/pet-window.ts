@@ -518,6 +518,8 @@ export class PetWindowController {
   /** 当前是否已置为穿透（仅 macOS 回退路径用；win32 走 setShape） */
   private appliedIgnore: boolean | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
+  /** 拖动基准：按下时的屏幕光标与窗口位置（绝对坐标拖动用） */
+  private dragOrigin: { sx: number; sy: number; wx: number; wy: number } | null = null;
   /**
    * 新窗口的首次 show 由我们主动触发（showInactive），
    * 这一跳不该再触发「重建」，否则会无限递归。
@@ -1130,12 +1132,41 @@ export class PetWindowController {
     this.pushClip();
   }
 
-  /** 按屏幕增量移动窗口（渲染层拖拽） */
+  /** 按屏幕增量移动窗口（渲染层拖拽，兼容旧协议） */
   moveBy(dx: number, dy: number): void {
     if (!this.isAlive()) return;
     const win = this.win!;
     const [x, y] = win.getPosition();
     win.setPosition(x + Math.round(dx), y + Math.round(dy));
+  }
+
+  /**
+   * 按绝对屏幕坐标拖动窗口。
+   *
+   * 为什么不用增量：窗口是跟着光标 1:1 移动的，移动后光标相对窗口位置
+   * 几乎不变，Chromium 就不再生成 pointermove —— 增量累加会立刻断流
+   * （实测一次拖动只收到 1 次 move）。绝对坐标与事件频率无关。
+   *
+   * @param sx/sy 按下时的屏幕坐标
+   * @param x/y   当前的屏幕坐标
+   */
+  dragTo(sx: number, sy: number, x: number, y: number): void {
+    if (!this.isAlive()) return;
+    if (!this.dragOrigin) {
+      // 第一次收到拖动：记录按下瞬间的窗口位置作为基准
+      const win = this.win!;
+      const [wx, wy] = win.getPosition();
+      this.dragOrigin = { sx, sy, wx, wy };
+    }
+    const { sx: ox, sy: oy, wx, wy } = this.dragOrigin;
+    const nx = Math.round(wx + (x - ox));
+    const ny = Math.round(wy + (y - oy));
+    this.win!.setPosition(nx, ny);
+  }
+
+  /** 结束拖动：清掉绝对坐标基准 */
+  clearDragOrigin(): void {
+    this.dragOrigin = null;
   }
 
   /** 拖动结束：落盘位置（夹回当前显示器可视区，防止拖出屏幕再也点不到） */
