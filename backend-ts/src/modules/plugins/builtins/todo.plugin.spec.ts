@@ -6,12 +6,12 @@ import type { PluginContext } from "../types/plugin.types";
 import { TODO_META_CARD } from "../../../common/utils/todo-store.util";
 
 /**
- * todo 工具结果契约：content 给模型看，meta 携带「调用后的权威持久态」。
+ * todo 工具结果契约：content 给模型看，meta 携带「调用后的完整列表」。
  *
  * meta.items 是分支会话还原锚点时刻 TODO 的唯一依据（见 todo-store.util），
  * 因此这里要钉死每个 action 的 meta.items 语义，尤其是两个易错边界：
  * - create 因多个 in_progress 被拒时文件已被清空 → items 必须是 []
- * - 全部完成时文件被删 → items 必须是 []（而 content 仍显示完成列表）
+ * - 全部完成时文件被删，但 items 仍保留完整完成列表（与 content 一致）
  */
 
 /** 用假 api 捕获插件注册的工具定义，再取 execute */
@@ -204,7 +204,7 @@ describe("TodoPlugin 工具结果 meta", () => {
     expect(readFileItems()).toEqual(result.meta.items);
   });
 
-  it("全部完成：content 仍显示完成列表，meta.items 为空且文件被删", async () => {
+  it("全部完成：content 与 meta.items 都保留完成列表，文件被删", async () => {
     await execute(
       { action: "create", contents: [{ step: "唯一步骤", status: "in_progress" }] },
       ctx(),
@@ -216,7 +216,24 @@ describe("TodoPlugin 工具结果 meta", () => {
     );
 
     expect(result.content).toBe("[x] 唯一步骤");
-    expect(result.meta.items).toEqual([]);
+    expect(result.meta.items).toEqual([
+      { content: "唯一步骤", status: "completed" },
+    ]);
+    expect(fs.existsSync(todoFilePath())).toBe(false);
+  });
+
+  it("next 完成最后一项：meta.items 仍保留完整列表，文件被删", async () => {
+    await execute(
+      { action: "create", contents: [{ step: "唯一步骤", status: "in_progress" }] },
+      ctx(),
+    );
+
+    const result = await execute({ action: "next" }, ctx());
+
+    expect(result.content).toBe("[x] 唯一步骤");
+    expect(result.meta.items).toEqual([
+      { content: "唯一步骤", status: "completed" },
+    ]);
     expect(fs.existsSync(todoFilePath())).toBe(false);
   });
 

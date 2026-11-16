@@ -98,6 +98,12 @@
           :response="getToolResponses(toolIndex)" :executing="isToolExecuting(tool, toolIndex)"
           :session-id="props.sessionId" />
 
+        <!-- TODO 工具行：独立成组（不并入过程步骤），卡片自身默认折叠，
+             显示状态图标 + 当前事项 + 完成数，点击展开完整待办列表。 -->
+        <TodoToolRow v-else-if="todoRows[toolIndex]" :tool="tool"
+          :response="getToolResponses(toolIndex)" :executing="isToolExecuting(tool, toolIndex)"
+          :failed="tool.outcome === 'error' || tool.outcome === 'rejected'" />
+
         <!-- 通用展示（无 renderer 声明）：输入 / 输出 两段式。
              工具产出图片属于输出，放在"输出"段内、文本结果之前。 -->
         <div v-else class="io-layout">
@@ -138,6 +144,7 @@ import {
   getToolRenderer, getRendererArgs,
   isStandaloneRendererKind, isStandaloneTool,
   resolvePlanCardStatus, resolveToolName,
+  TODO_TOOL_NAME,
 } from '@/utils/toolDisplay';
 import { SUB_AGENT_SPAWN_TOOL } from '@/utils/subAgentTools';
 import { WORKFLOW_RUN_TOOL } from '@/utils/workflowTools';
@@ -152,6 +159,7 @@ import GdTooltip from '@/components/ui/GdTooltip.vue';
 import ToolCustomView from './tool-renderers/ToolCustomView.vue';
 import SubAgentToolRow from './SubAgentToolRow.vue';
 import WorkflowRunInlineCard from './WorkflowRunInlineCard.vue';
+import TodoToolRow from './TodoToolRow.vue';
 import ToolImageGrid from './ToolImageGrid.vue';
 import { useSessionStore } from '@/stores/session';
 import { perfStart } from '@/utils/perf';
@@ -276,6 +284,11 @@ const workflowRunRows = computed<boolean[]>(() =>
   props.toolCalls.map((tool) => resolveToolName(tool) === WORKFLOW_RUN_TOOL),
 );
 
+/** TODO 工具行（独立成组 + 专用待办卡） */
+const todoRows = computed<boolean[]>(() =>
+  props.toolCalls.map((tool) => resolveToolName(tool) === TODO_TOOL_NAME),
+);
+
 const toggleExpand = (index: number): void => {
   const nowExpanded = isExpanded(index);
   const nextExpanded = new Set(expandedIndexes.value);
@@ -390,7 +403,8 @@ const genericIoRows = computed<boolean[]>(() =>
     (_, index) =>
       !rendererInfos.value[index] &&
       !subAgentSpawnRows.value[index] &&
-      !workflowRunRows.value[index],
+      !workflowRunRows.value[index] &&
+      !todoRows.value[index],
   ),
 );
 

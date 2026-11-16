@@ -178,6 +178,10 @@ describe("isStandaloneTool / isStandaloneRendererKind", () => {
     expect(isStandaloneTool({ name: "workflow_run" })).toBe(true);
   });
 
+  it("TODO 按工具名独立（专用待办卡，不并入过程组）", () => {
+    expect(isStandaloneTool({ name: "todo" })).toBe(true);
+  });
+
   it("子代理管理工具不独立（仍并入过程组）", () => {
     expect(isStandaloneTool({ name: "subagent_manager" })).toBe(false);
   });

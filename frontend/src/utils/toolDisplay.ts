@@ -364,16 +364,27 @@ export function getToolRenderer(tool: ToolCall): ToolRendererConfig | null {
 const STANDALONE_RENDERER_KINDS: ReadonlySet<ToolRendererConfig["kind"]> = new Set(["plan"]);
 
 /**
+ * TODO 内置工具名（`todo`）。
+ *
+ * 放在 toolDisplay 而不是 todoTools：standalone 集合需要它，而 todoTools 的
+ * 参数解析需要 toolDisplay 的 getToolArgs——反向导入会形成循环。
+ * TODO 卡片组件从 todoTools 重新导出取用。
+ */
+export const TODO_TOOL_NAME = "todo";
+
+/**
  * 按工具名独立成块：无 renderer、但要求整行独立渲染的工具。
  *
  * 与 kind 集合的分工：kind 集合给「以 renderer 定制卡面承载正文」的工具（plan）；
  * 名集合给「行内容由专用组件承担、不走走 kind → ToolCustomView 管线」的工具——
- * 子代理派生行（SubAgentToolRow）与工作流运行卡（WorkflowRunInlineCard）。
+ * 子代理派生行（SubAgentToolRow）、工作流运行卡（WorkflowRunInlineCard）与
+ * 待办卡（TodoToolRow）。
  * 同一工具不需要两处登记。
  */
 const STANDALONE_TOOL_NAMES: ReadonlySet<string> = new Set([
   SUB_AGENT_SPAWN_TOOL,
   WORKFLOW_RUN_TOOL,
+  TODO_TOOL_NAME,
 ]);
 
 /** kind 是否独立成块渲染（分组与行级默认展开共用同一集合） */

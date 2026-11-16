@@ -398,6 +398,16 @@
     },
   },
 
+  // ── Todo tool card (one per todo call in the conversation flow) ──
+  todo: {
+    label: 'Todo',
+    managing: 'Updating…',
+    allDone: 'All completed',
+    failed: 'Update failed',
+    expand: 'Expand todo',
+    collapse: 'Collapse todo',
+  },
+
   // ── Session goal (runtime capsule + hover details) ──
   goal: {
     title: 'Session Goal',

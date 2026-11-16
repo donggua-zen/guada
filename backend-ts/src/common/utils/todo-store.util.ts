@@ -26,6 +26,12 @@ export interface TodoStore {
   items: TodoItem[];
 }
 
+/** 是否有未完成项（空列表/全部完成都返回 false） */
+export function hasUnfinishedTodos(store: TodoStore | null): boolean {
+  if (!store || store.items.length === 0) return false;
+  return store.items.some((item) => item.status !== "completed");
+}
+
 /** todo 工具名（插件注册名即裸名，无命名空间前缀） */
 export const TODO_TOOL_NAME = "todo";
 

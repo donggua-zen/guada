@@ -11,6 +11,7 @@ import type { SessionStoreFacade } from "./session-store.facade";
 import type { ProjectGroupRow } from "../../common/store/ports/types";
 import {
   extractTodoStateFromEvents,
+  hasUnfinishedTodos,
   writeTodoStore,
 } from "../../common/utils/todo-store.util";
 import { AgentFileStore } from "../agents/agent-file.store";
@@ -861,11 +862,12 @@ export class SessionService {
     }
 
     // TODO 重建：TODO 不进事件流，只能从锚点前最后一个 todo 工具结果的 meta 还原
-    // （无 meta 的存量会话得到 null → 不写，分支 TODO 为空）。
+    // （无 meta 的存量会话得到 null → 不写；全部完成快照也不写，避免分支出现
+    // 已完成待办卡、后续 add 追加到完成列表）。
     // 置于回滚 try 之外：TODO 失败绝不能连带回滚已建好的分支。
     try {
       const todoState = extractTodoStateFromEvents(migrated);
-      if (todoState && todoState.items.length > 0) {
+      if (hasUnfinishedTodos(todoState)) {
         const destDir = await this.workspaceService.resolveSessionWorkspaceDir(
           created,
         );

@@ -16,10 +16,13 @@ import type { Message } from "../../../common/types/conversation.types";
 import { wrapSystemReminder } from "../../../common/utils/system-reminder.util";
 import {
   TODO_TOOL_NAME,
+  hasUnfinishedTodos,
   resolveTodoFilePath,
   type TodoItem,
   type TodoStore,
 } from "../../../common/utils/todo-store.util";
+
+export { hasUnfinishedTodos };
 import type { ISessionContext } from "../../chat/session-context";
 import type { ResolvedPluginInfo } from "../types/plugin.types";
 import type { TurnReminderProvider } from "../turn-reminders/turn-reminder.types";
@@ -65,12 +68,6 @@ export async function readTodoStore(
   } catch {
     return null;
   }
-}
-
-/** 是否有未完成项（空列表/全部完成都返回 false） */
-export function hasUnfinishedTodos(store: TodoStore | null): boolean {
-  if (!store || store.items.length === 0) return false;
-  return store.items.some((item) => item.status !== "completed");
 }
 
 /** 提醒里的待办列表格式（与 todo 工具结果一致） */

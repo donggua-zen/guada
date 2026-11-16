@@ -136,6 +136,45 @@ describe("groupContentsForDisplay：独立渲染工具分组", () => {
     expect(groups[0].items).toHaveLength(2);
   });
 
+  it("TODO 独立成组且不可折叠（不并入过程组）", () => {
+    const groups = groupContentsForDisplay([
+      { id: "th1", content: null, reasoningContent: "规划", state: { isStreaming: false } },
+      toolBlock("t1", ["todo"]),
+    ]);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toMatchObject({ type: "process", isCollapsible: true });
+    expect(groups[1]).toMatchObject({ type: "process", isCollapsible: false });
+    expect(groups[1].id).toBe("standalone-t1-tool");
+    expect(groups[1].items[0].toolCalls?.[0].name).toBe("todo");
+  });
+
+  it("TODO 切断过程分组：前后普通工具各自聚成可折叠组，顺序保持", () => {
+    const groups = groupContentsForDisplay([
+      toolBlock("t1", ["read"]),
+      toolBlock("t2", ["todo"]),
+      toolBlock("t3", ["glob"]),
+    ]);
+
+    expect(groups.map((g) => [g.isCollapsible, g.items.length])).toEqual([
+      [true, 1],
+      [false, 1],
+      [true, 1],
+    ]);
+    expect(groups[0].items[0].toolCalls?.[0].name).toBe("read");
+    expect(groups[2].items[0].toolCalls?.[0].name).toBe("glob");
+  });
+
+  it("TODO 与普通工具同块并行：整项独立、不拆行", () => {
+    const groups = groupContentsForDisplay([
+      toolBlock("t1", ["read", "todo"]),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].isCollapsible).toBe(false);
+    expect(groups[0].items[0].toolCalls).toHaveLength(2);
+  });
+
   it("普通工具（无独立渲染）仍聚成一个可折叠过程组（回归）", () => {
     const groups = groupContentsForDisplay([
       toolBlock("t1", ["read"]),

@@ -398,6 +398,16 @@ export default {
     },
   },
 
+  // ── 待办工具卡（对话流内每次 todo 调用一张） ──
+  todo: {
+    label: '待办',
+    managing: '正在整理…',
+    allDone: '全部完成',
+    failed: '更新失败',
+    expand: '展开待办',
+    collapse: '收起待办',
+  },
+
   // ── 会话目标（session goal：运行时胶囊 + hover 详情） ──
   goal: {
     title: '会话目标',

@@ -83,6 +83,26 @@ describe("todo-store.util", () => {
       });
     });
 
+    it("空 items 返回 { items: [] }（已知清空，不是 null）", () => {
+      const events = [todoResult(1, [])];
+      expect(extractTodoStateFromEvents(events)).toEqual({ items: [] });
+    });
+
+    it("全部完成列表原样返回（不因无未完成项丢弃）", () => {
+      const events = [
+        todoResult(1, [
+          { content: "第一步", status: "completed" },
+          { content: "第二步", status: "completed" },
+        ]),
+      ];
+      expect(extractTodoStateFromEvents(events)).toEqual({
+        items: [
+          { content: "第一步", status: "completed" },
+          { content: "第二步", status: "completed" },
+        ],
+      });
+    });
+
     it("忽略非 tool/result 事件", () => {
       const events: BaseEvent[] = [
         {

@@ -623,6 +623,28 @@ describe("SessionService.branchSession", () => {
     ).toBe(false);
   });
 
+  it("最后一个 todo 的 meta 为全部完成列表 → 不写 TODO 文件", async () => {
+    await seedSource({
+      todoMetaItems: [
+        { content: "第一步", status: "completed" },
+        { content: "第二步", status: "completed" },
+      ],
+    });
+
+    const branched = await service.branchSession(SOURCE_ID, {
+      turnId: "turn-a",
+    });
+
+    expect(
+      fs.existsSync(
+        todoFilePath(
+          path.join(workspaceRoot, String(branched.id)),
+          String(branched.id),
+        ),
+      ),
+    ).toBe(false);
+  });
+
   it("TODO 写盘失败不影响分支成功", async () => {
     await seedSource();
     failWorkspaceResolve = true;

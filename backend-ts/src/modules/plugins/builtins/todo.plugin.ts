@@ -27,7 +27,13 @@ import {
 import langZh from "./todo.lang.zh.json";
 import langEn from "./todo.lang.en.json";
 
-/** 一次 todo 调用的结果：content 给模型看，store 是调用后的权威持久态（写进 meta） */
+/**
+ * 一次 todo 调用的结果：content 给模型看，store 是调用后的完整列表。
+ *
+ * 全部完成时存储文件会被删除，但 store.items 仍保留完整完成列表：
+ * `toToolResult` 据此写 meta.items，保证工具返回的 content 与 meta 一致；
+ * 分支还原侧用 hasUnfinishedTodos 过滤，避免把完成列表当成活跃 TODO 落盘。
+ */
 interface TodoCallResult {
   content: string;
   store: TodoStore;
@@ -211,8 +217,8 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
 
   /**
    * 包装为工具结果对象：content 走 LLM，meta 随事件流持久化且模型不可见。
-   * meta.items 恒为调用后的权威持久态（全部完成时为 []，与已删文件语义一致），
-   * 分支会话据此从历史还原锚点时刻的 TODO，无需在别处复制 action 语义。
+   * meta.items 恒为调用后的完整列表（含全部完成），与 content 一致；
+   * 全部完成时文件已删除，是否重建活跃 TODO 由分支侧按未完成项判断。
    */
   private toToolResult(
     action: string,
@@ -322,9 +328,10 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
       store.items.every((t) => t.status === "completed");
 
     if (allCompleted) {
-      // 全部完成 → 删除存储文件（AI 仍能看到已完成的列表）
+      // 全部完成 → 删除存储文件（AI 仍能看到已完成的列表）；
+      // 返回结果仍携带完整列表，供 meta / 历史工具卡展示。
       await this.deleteStoreFile(ctx);
-      return { content, store: { items: [] } };
+      return { content, store };
     }
 
     await this.writeStore(store, ctx);
