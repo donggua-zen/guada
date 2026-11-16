@@ -386,8 +386,23 @@ db.close();
 /**
  * Computer Use sidecar 随包分发（Windows + macOS）。
  * 校验存在性与可执行性；协议细节由 verify-sidecar.js 的 --version 覆盖。
+ * 与 sidecar.lock.json 对齐：lock 未 pin 当前平台（如 Intel mac 无 darwin-x64）
+ * = 该包本就不含 sidecar，跳过而不是失败。
  */
 function checkComputerSidecar(layout) {
+  const lockPath = path.join(root, 'sidecar.lock.json');
+  const platformKey = `${process.platform}-${process.arch}`;
+  let pinned;
+  try {
+    pinned = JSON.parse(fs.readFileSync(lockPath, 'utf8')).binaries?.[platformKey];
+  } catch {
+    fail('无法读取 sidecar.lock.json');
+    return;
+  }
+  if (!pinned) {
+    ok(`computer sidecar：lock 未 pin ${platformKey}，该包不含 sidecar（跳过）`);
+    return;
+  }
   const binaryName =
     process.platform === 'win32'
       ? 'guada-computer.exe'
