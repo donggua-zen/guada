@@ -471,6 +471,7 @@ export default {
       system: '系统',
       dataManagement: '数据管理',
       account: '账户',
+      plugins: '插件',
     },
     tabs: {
       general: '通用设置',

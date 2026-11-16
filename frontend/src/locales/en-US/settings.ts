@@ -476,6 +476,7 @@ export default {
       system: 'System',
       dataManagement: 'Data Management',
       account: 'Account',
+      plugins: 'Plugins',
     },
     tabs: {
       general: 'General Settings',

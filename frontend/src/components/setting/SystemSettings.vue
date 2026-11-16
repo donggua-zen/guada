@@ -286,11 +286,6 @@ const sidebarItems = computed(() => [
         icon: ShieldCheckmark16Regular,
     },
     {
-        label: t('settings.system.tabs.about'),
-        path: 'about',
-        icon: Info24Regular,
-    },
-    {
         label: t('settings.system.tabs.community'),
         path: 'community',
         icon: Chat24Regular,
@@ -304,6 +299,12 @@ const sidebarItems = computed(() => [
         label: t('settings.system.tabs.mobileAccess'),
         path: 'mobile-access',
         icon: Phone20Regular,
+    },
+    // 「关于」按惯例放最后一项（系统组末尾 = 全侧边栏最后）
+    {
+        label: t('settings.system.tabs.about'),
+        path: 'about',
+        icon: Info24Regular,
     },
     {
         label: t('settings.system.tabs.sessionGroups'),
@@ -346,17 +347,22 @@ const filteredSidebarItems = computed(() => [
 // 按分组组织侧边栏项
 const groupedSidebarItems = computed(() => {
     const items = filteredSidebarItems.value
+    const pluginsGroupLabel = t('settings.system.groups.plugins')
     const groupOrder = [
         t('settings.system.groups.general'),
         t('settings.system.groups.personalization'),
         t('settings.system.groups.dataManagement'),
         t('settings.system.groups.account'),
+        // 插件注册的设置页（settings slot）统一归入「插件」分组，不混入系统组
+        pluginsGroupLabel,
         t('settings.system.groups.system'),
     ]
     const groups: Record<string, typeof items> = {}
     for (const g of groupOrder) groups[g] = []
     for (const item of items) {
-        const g = groupMap.value[item.path] || t('settings.system.groups.system')
+        const g = item.path.startsWith('plugin:')
+            ? pluginsGroupLabel
+            : (groupMap.value[item.path] || t('settings.system.groups.system'))
         if (!groups[g]) groups[g] = []
         groups[g].push(item)
     }

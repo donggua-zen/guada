@@ -143,7 +143,7 @@ export class FilePlugin extends PluginBase {
     fileKit.registerTool({
       name: "read",
       description:
-        "Read the content of a text file at the specified path, supports pagination by line or by character. Automatically truncates at a hard limit (20KB) and appends a plain-text continuation hint when truncated. NOTE: each output line is prefixed with a line number and a tab (N<TAB>); that prefix is NOT part of the original file content. When copying text into `edit.old_text`, strip the prefix.",
+        "Read the content of a text file at the specified path, supports pagination by line or by character. Automatically truncates at a hard limit (32KB) and appends a plain-text continuation hint when truncated. NOTE: each output line is prefixed with a line number and a tab (N<TAB>); that prefix is NOT part of the original file content. When copying text into `edit.old_text`, strip the prefix.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -175,7 +175,7 @@ export class FilePlugin extends PluginBase {
           .min(1)
           .optional()
           .describe(
-            "Number to read: when unit=line, max lines to read (default 200); when unit=char, max characters to read (default 20000)",
+            "Number to read: when unit=line, max lines to read (default 400); when unit=char, max characters to read (default 20000)",
           ),
         workspace: workspaceParamField,
       }),
@@ -792,7 +792,9 @@ export class FilePlugin extends PluginBase {
     const totalChars = raw.length;
     const lines = raw.split("\n");
     const totalLines = lines.length;
-    const MAX_BYTES = 20 * 1024;
+    // 单次 read 输出硬上限。32KB：ASCII ≈ 8-10k tokens，CJK ≈ 11-16k tokens，
+    // 仍低于 ToolExecutor 的大结果阈值（MAX_TOKENS = 20000），不会被二次 spill/截断。
+    const MAX_BYTES = 32 * 1024;
 
     if (unit === "char") {
       // 按字符读取
@@ -812,13 +814,13 @@ export class FilePlugin extends PluginBase {
       let result = formattedLines.join("\n");
 
       if (truncated) {
-        result += `\n(Text truncated at 20KB. To continue: unit=char, offset=${offset + charLimit}, limit=${charLimit})`;
+        result += `\n(Text truncated at ${MAX_BYTES / 1024}KB. To continue: unit=char, offset=${offset + charLimit}, limit=${charLimit})`;
       }
       return result;
     }
 
     // 按行读取
-    const lineLimit = limit ?? 200;
+    const lineLimit = limit ?? 400;
     const effectiveOffset =
       offset < 0 ? Math.max(0, totalLines + offset) : offset;
     const startLine = Math.min(effectiveOffset, totalLines);
@@ -869,7 +871,7 @@ export class FilePlugin extends PluginBase {
     let result = formattedLines.join("\n");
 
     if (truncatedByBytes) {
-      result += `\n(Text truncated at 20KB. To continue: unit=char, offset=${nextCharOffset}, limit=20000)`;
+      result += `\n(Text truncated at ${MAX_BYTES / 1024}KB. To continue: unit=char, offset=${nextCharOffset}, limit=20000)`;
     } else if (hasMoreLines) {
       const remaining = totalLines - endLine;
       result += `\n(${remaining} more lines remain. To continue: unit=line, offset=${endLine}, limit=${lineLimit})`;
