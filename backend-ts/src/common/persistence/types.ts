@@ -103,9 +103,9 @@ export interface TurnFinishData {
 /**
  * 小轮次上下文占用锚点（每次 LLM 请求落库后写入）。
  *
- * 与 turn/finish 的占用字段同口径，但不受回合是否正常结束影响：
+ * Token 收敛后是唯一的占用快照载体（turn/finish 不再携带 token 字段）：
  * 流式中意外退出时，冷启动扫描事件页仍能恢复到最后一个完成的小轮次，
- * 不会因为缺少 turn/finish 而显示 0。
+ * 不会因为回合未收口而显示 0。
  */
 export interface ContextStatsData {
   /** 所属回合（前端重答/删除回合过滤用） */
