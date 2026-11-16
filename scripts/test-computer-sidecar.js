@@ -29,6 +29,14 @@ test("computer sidecar responds to ping and shutdown", { timeout: 20000 }, async
   if (process.platform !== "win32" && process.platform !== "darwin") {
     return; // Windows and macOS only in this release.
   }
+  // 与 verify-sidecar.js 对齐：lock 未 pin 当前平台的二进制 = 该平台不随包分发
+  // （如 Intel mac 没有 darwin-x64 sidecar），跳过而不是失败。
+  const lockPath = path.join(root, "sidecar.lock.json");
+  const platformKey = `${process.platform}-${process.arch}`;
+  const pinned = JSON.parse(fs.readFileSync(lockPath, "utf8")).binaries?.[platformKey];
+  if (!pinned) {
+    return; // No sidecar pinned for this platform; Computer Use is unavailable there.
+  }
   assert.ok(fs.existsSync(binary), `sidecar binary is missing: ${binary}`);
 
   const child = spawn(binary, ["--stdio"], {
