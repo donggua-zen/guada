@@ -484,7 +484,7 @@ jobs:
             echo "::warning::未配置 GITCODE_TOKEN，跳过 GitCode"
             exit 0
           fi
-          api="https://api.gitcode.com/api/v5/repos/donggua_sherlock/GuaDaAI"
+          api="https://api.gitcode.com/api/v5/repos/donggua_codelab/GuaDaAI"
           auth="Authorization: Bearer $GITCODE_TOKEN"
 
           # 建或更新 release（先按 tag 查，存在就 PATCH）—— 这里只写说明，不传二进制：

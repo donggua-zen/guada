@@ -24,7 +24,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const GITCODE_REPO = 'donggua_sherlock/GuaDaAI';
+const GITCODE_REPO = 'donggua_codelab/GuaDaAI';
 const GITHUB_REPO = 'donggua-zen/guada';
 const GITCODE_API = `https://api.gitcode.com/api/v5/repos/${GITCODE_REPO}`;
 // .blockmap 是 NSIS 差量更新的元数据，必须和新版安装包放在同一个 release 目录。
