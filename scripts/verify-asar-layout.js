@@ -390,7 +390,7 @@ db.close();
  * = 该包本就不含 sidecar，跳过而不是失败。
  */
 function checkComputerSidecar(layout) {
-  const lockPath = path.join(root, 'sidecar.lock.json');
+  const lockPath = path.join(repoRoot, 'sidecar.lock.json');
   const platformKey = `${process.platform}-${process.arch}`;
   let pinned;
   try {
