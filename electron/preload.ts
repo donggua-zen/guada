@@ -90,7 +90,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 剪贴板操作（通过 IPC，更可靠）
   clipboardIPC: {
     writeText: (text: string) => ipcRenderer.invoke('clipboard-write-text', text),
-    readText: () => ipcRenderer.invoke('clipboard-read-text')
+    readText: () => ipcRenderer.invoke('clipboard-read-text'),
+    // 触发原生粘贴命令：重新派发 DOM paste 事件，让编辑器统一处理图片/文件/长文本
+    paste: () => ipcRenderer.invoke('clipboard-paste')
   },
 
   // 打开外部链接（使用系统默认浏览器）

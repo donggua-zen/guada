@@ -2891,6 +2891,18 @@ function setupIpcHandlers() {
     }
   });
 
+  // 触发原生粘贴命令：等价于应用菜单里的 role: "paste"。
+  // 会重新派发 DOM paste 事件，渲染进程的编辑器才能拿到 clipboardData.files（图片）。
+  ipcMain.handle("clipboard-paste", (event) => {
+    try {
+      event.sender.paste();
+      return { success: true };
+    } catch (error) {
+      console.error("[Main] 剪贴板粘贴失败", error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
   // 打开外部链接
   ipcMain.handle("open-external", async (_, url: string) => {
     try {

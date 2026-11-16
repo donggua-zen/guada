@@ -30,6 +30,11 @@ export interface EditorHandler {
   getSelectionText(): string;
   /** 粘贴文本到光标位置（含滚动到可视区域） */
   paste(text: string): void;
+  /**
+   * 触发原生粘贴：重新派发 DOM paste 事件，图片/文件/长文本交给编辑器自己的管线。
+   * 未实现时右键菜单退回纯文本粘贴。
+   */
+  pasteFromClipboard?(): void | Promise<void>;
   /** 删除选中内容 */
   deleteSelection(): void;
   /** 全选 */
@@ -387,6 +392,17 @@ class ContextMenuManager {
       items.push({
         label: t("session.contextMenu.paste"),
         action: async () => {
+          // contenteditable（聊天输入框）：走原生 paste 命令，重新触发 DOM paste 事件，
+          // 图片/文件/长文本都由编辑器统一的粘贴管线处理。
+          // 直接读剪贴板文本会漏掉图片——图片在剪贴板里没有文本表示。
+          if (isContentEditable) {
+            const handler = this.getEditorHandler(target);
+            if (handler?.pasteFromClipboard && window.electronAPI?.clipboardIPC?.paste) {
+              await handler.pasteFromClipboard();
+              return;
+            }
+          }
+
           const text = await this.readClipboardText();
           if (!text) return;
           if (isContentEditable) {

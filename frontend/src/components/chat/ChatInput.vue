@@ -40,7 +40,7 @@
       </div>
 
       <!-- Tiptap 编辑器（替换 textarea） -->
-      <div class="editor-container">
+      <div ref="editorContainerRef" class="editor-container">
         <component :is="EditorContent" :editor="editor" class="message-editor" />
         <!-- 命令选择弹窗 -->
         <CommandPicker v-if="commandPickerVisible" ref="commandPickerRef" :visible="commandPickerVisible"
@@ -192,6 +192,8 @@ import { getDefaultThinkingEffort, getModelThinkingEfforts, getThinkingEffortLab
 import { toResourceUrl } from '@/utils/url';
 import { isVisionImageMediaType, RASTER_IMAGE_EXTENSIONS } from '@/utils/media-type';
 import { extensionFromName, planAttachment, type AttachmentPlan } from '@/utils/attachment-classify';
+import { planClipboardPaste, type ClipboardPastePayload } from '@/utils/clipboard-paste';
+import type { EditorHandler } from '@/utils/ContextMenuManager';
 import {
 
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
@@ -267,8 +269,9 @@ const CHAT_UPLOAD_MAX_MB = 100
 // 响应式数据
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
+// 编辑器容器：右键菜单处理器按实例作用域查找挂载点，避免多实例注册到别的编辑器
+const editorContainerRef = ref<HTMLElement | null>(null);
 let fileIdCounter = 0;
-const focused = ref(false);
 const isDragOver = ref(false);
 // 模型选择器相关：复用 useModelCatalog 进程内缓存（与定时任务编辑器共享同一份「可用模型 -> 供应商」视图）
 const { models, providers, ensureLoaded: ensureModelsLoaded } = useModelCatalog();
@@ -1099,56 +1102,86 @@ const handleInputChange = (event: Event) => {
   target.value = '';
 };
 
-const handlePaste = async (event: ClipboardEvent) => {
-  // 只有输入框被聚焦时才处理粘贴事件
-  if (!focused.value) return;
+/** 从剪贴板读取统一 payload：文件 + 首选纯文本 + HTML（HTML 仅供表格判定/文本兜底） */
+const readClipboardPayload = (data: DataTransfer): ClipboardPastePayload => {
+  const files: File[] = Array.from(data.files ?? []);
 
-  const clipboardData = event.clipboardData;
-  if (!clipboardData?.items) return;
-
-  // 立即阻止默认粘贴行为，避免浏览器自动插入内容
-  event.preventDefault();
-
-  const items = Array.from(clipboardData.items);
-  let pastedText = '';
-  const filesToProcess = [];
-
-  // 提取所有文件项（包括可能的图片）
-  for (const item of items) {
-    if (item.kind === 'file') {
+  // 少数平台 files 为空，只能从 items 里取
+  if (files.length === 0) {
+    for (const item of Array.from(data.items ?? [])) {
+      if (item.kind !== 'file') continue;
       const file = item.getAsFile();
-      if (file) filesToProcess.push(file);
+      if (file) files.push(file);
     }
   }
 
-  // 提取文本内容（异步）
-  const textItem = items.find(item => item.kind === 'string' && item.type.startsWith('text/'));
-  if (textItem) {
-    pastedText = await new Promise((resolve) => {
-      textItem.getAsString(resolve);
-    });
-  }
+  let text = data.getData('text/plain') || '';
+  const html = data.getData('text/html') || '';
 
-  // Step 3: 判断文本长度并决定如何处理
-  const MAX_TEXT_LENGTH = 2000;
-  if (pastedText && pastedText.length > MAX_TEXT_LENGTH) {
-    // 超长文本 → 转为 .txt 文件
-    const blob = new Blob([pastedText], { type: 'text/plain' });
-    const file = new File([blob], `pasted_text_${Date.now()}.txt`, { type: 'text/plain' }) as FileWithContent;
-    // 在 File 对象上挂载原始文本，供 createFileObject 检测并存储
-    file._originalContent = pastedText;
-    filesToProcess.push(file);
-  } else if (pastedText) {
-    // 短文本 → 插入到 Tiptap 编辑器
-    if (editor.value) {
-      editor.value.chain().focus().insertContent(pastedText).scrollIntoView().run();
+  // 只有 HTML 表示时退化为纯文本，避免把标记当正文插进编辑器
+  if (!text && html) {
+    try {
+      text = new DOMParser().parseFromString(html, 'text/html').body.textContent || '';
+    } catch {
+      text = '';
     }
   }
 
-  // 处理文件项：逐个按真实类型分流（图片入图片通道、其余入路径通道），不再筛格式
-  if (filesToProcess.length > 0) {
-    processFiles(filesToProcess);
+  return { files, text, html };
+};
+
+/** 插入纯文本：转义 HTML 标记并按换行拆 <br>，避免粘贴的代码被 Tiptap 当富文本解析 */
+const insertPlainText = (text: string) => {
+  if (!editor.value || !text) return;
+
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\r?\n/g, '<br>');
+
+  editor.value.chain().focus().insertContent(escaped).scrollIntoView().run();
+};
+
+/** 超长纯文本转 .txt 附件（复用 createFileObject 的 isPasted/originalContent 流程） */
+const addPastedTextAttachment = (text: string) => {
+  const blob = new Blob([text], { type: 'text/plain' });
+  const file = new File([blob], `pasted_text_${Date.now()}.txt`, { type: 'text/plain' }) as FileWithContent;
+  // 在 File 对象上挂载原始文本，供 createFileObject 检测并存储
+  file._originalContent = text;
+  processFiles([file]);
+};
+
+/** 统一落地剪贴板 payload：有文件时文件优先，只有纯文本时才进正文/转附件 */
+const applyClipboardPaste = (payload: ClipboardPastePayload) => {
+  const plan = planClipboardPaste(payload);
+
+  if (plan.kind === 'files') {
+    processFiles(plan.files);
+  } else if (plan.kind === 'text-attachment') {
+    addPastedTextAttachment(plan.text);
+  } else if (plan.kind === 'text-inline') {
+    insertPlainText(plan.text);
   }
+};
+
+/**
+ * 粘贴入口（Ctrl+V 与右键菜单的原生粘贴共用）。
+ *
+ * 必须**同步**返回是否已处理：preventDefault 要在任何异步操作之前完成，
+ * 同时 editorProps.handlePaste 依赖这个布尔值阻止 Tiptap/ProseMirror
+ * 再按自己的规则插一份（否则会出现「附件有图片、正文也有文本」）。
+ * 不再用 focused 守卫——paste 事件本来就只会派发到聚焦元素。
+ */
+const handlePaste = (event: ClipboardEvent): boolean => {
+  if (props.readonly || !event.clipboardData) return false;
+
+  const payload = readClipboardPayload(event.clipboardData);
+  if (payload.files.length === 0 && !payload.text) return false;
+
+  event.preventDefault();
+  applyClipboardPaste(payload);
+  return true;
 };
 
 
@@ -1576,9 +1609,8 @@ onMounted(() => {
           return false;
         },
         handlePaste: (_view, event) => {
-          // 调用自定义粘贴处理，阻止 Tiptap 默认行为
-          handlePaste(event);
-          return true;
+          // 自定义粘贴处理：同步返回是否已处理，未处理时交回 Tiptap 默认行为
+          return handlePaste(event);
         },
       },
       onUpdate: ({ editor: ed }) => {
@@ -1596,11 +1628,9 @@ onMounted(() => {
         });
       },
       onFocus: () => {
-        focused.value = true;
         emit('focus');
       },
       onBlur: () => {
-        focused.value = false;
         emit('blur');
         setTimeout(() => {
           if (!document.querySelector('.command-picker:hover')) {
@@ -1611,8 +1641,11 @@ onMounted(() => {
     });
     editor.value = tiptapEditor;
 
-    // 将编辑器处理器挂载到 DOM 元素，供全局右键菜单使用（解耦方式）
-    const editorEl = document.querySelector('.message-editor') as (HTMLElement & { __editorHandler?: unknown }) | null;
+    // 将编辑器处理器挂载到 DOM 元素，供全局右键菜单使用（解耦方式）。
+    // 用组件内容器查找，避免多实例（多标签/子代理会话）时全局 querySelector 命中别的编辑器。
+    const editorEl = (editorContainerRef.value?.querySelector('.message-editor') ?? null) as
+      | (HTMLElement & { __editorHandler?: EditorHandler })
+      | null;
     if (editorEl) {
       editorEl.__editorHandler = {
         getSelectionText: () => {
@@ -1624,6 +1657,14 @@ onMounted(() => {
         },
         paste: (text: string) => {
           tiptapEditor.chain().focus().insertContent(text).scrollIntoView().run();
+        },
+        pasteFromClipboard: async () => {
+          if (props.readonly) return;
+          // 必须用 view.focus() 同步聚焦：Tiptap 的 focus 命令把真正的 DOM 聚焦推迟到
+          // requestAnimationFrame，若直接 await IPC，原生 paste 可能落在 body 上而不是编辑器，
+          // 表现为右键粘贴完全没反应。view.focus() 会同步 dom.focus() 并恢复选区。
+          tiptapEditor.view.focus();
+          await window.electronAPI?.clipboardIPC?.paste?.();
         },
         deleteSelection: () => {
           tiptapEditor.commands.deleteSelection();

@@ -159,6 +159,8 @@ export interface ElectronAPI {
   clipboardIPC: {
     writeText: (text: string) => Promise<{ success: boolean; error?: string }>
     readText: () => Promise<{ success: boolean; text?: string; error?: string }>
+    /** 触发原生粘贴（重新派发 DOM paste 事件，含图片/文件） */
+    paste: () => Promise<{ success: boolean; error?: string }>
   }
 
   // 窗口管理（新 API - 浏览器自动化窗口）
