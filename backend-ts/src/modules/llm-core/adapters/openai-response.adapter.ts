@@ -387,12 +387,262 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
   private async *handleStreamResponse(
     response: any,
   ): AsyncGenerator<StreamChunk> {
-    // 跟踪工具调用元信息，用于关联增量参数与具体工具（item_id → 分配的输出 index）
-    const toolCallInfoMap = new Map<string, { callId: string; name: string; index: number }>();
-    let toolCallCounter = 0;
     const tracker = new StreamBlockTracker();
     let pendingFinish: string | null = null;
     let pendingUsage: StreamUsage | null = null;
+
+    // 每工具一条 lane。并发 function_call 不能共用一个“当前工具”指针：
+    // output_index 是 Responses 流里 added/done/delta 都稳定携带的关联键
+    //（@ai-sdk/openai 亦以 output_index 建 ongoingToolCalls 表）；item.id/call_id 作别名。
+    type ToolLane = {
+      callId: string;
+      name: string;
+      index: number;
+      outputIndex?: number;
+      itemId: string;
+      /** 已从 function_call_arguments.delta 累积的参数文本 */
+      args: string;
+      /** 来自 output_item.added / done / completed 的完整参数候选 */
+      candidateArgs: string;
+      /** 已由终态事件（done/completed）定型，重复事件不再追加 */
+      finalized: boolean;
+    };
+    const lanes: ToolLane[] = [];
+    const byItemId = new Map<string, ToolLane>();
+    const byOutputIndex = new Map<number, ToolLane>();
+    const byCallId = new Map<string, ToolLane>();
+    /** added 之前到达的 delta：item_id/output_index → 片段列表（不再静默丢弃） */
+    const pendingDeltas = new Map<string, string[]>();
+    /** done 先于 added 到达时的完整参数，待 added 建 lane 后回填 */
+    const pendingFinalArgs = new Map<string, string>();
+    let toolCallCounter = 0;
+
+    const pendingKey = (itemId?: string, outputIndex?: number): string =>
+      itemId ? `id:${itemId}` : `idx:${typeof outputIndex === "number" ? outputIndex : ""}`;
+
+    const register = (lane: ToolLane): void => {
+      if (lane.itemId) byItemId.set(lane.itemId, lane);
+      if (typeof lane.outputIndex === "number") byOutputIndex.set(lane.outputIndex, lane);
+      if (lane.callId) byCallId.set(lane.callId, lane);
+    };
+
+    const findLane = (
+      itemId?: string,
+      outputIndex?: number,
+      callId?: string,
+    ): ToolLane | undefined => {
+      if (itemId) {
+        const lane = byItemId.get(itemId);
+        if (lane) return lane;
+      }
+      if (typeof outputIndex === "number") {
+        const lane = byOutputIndex.get(outputIndex);
+        if (lane) return lane;
+      }
+      if (callId) return byCallId.get(callId);
+      return undefined;
+    };
+
+    const createLane = (
+      item: any,
+      outputIndex?: number,
+    ): { lane: ToolLane; chunks: StreamChunk[] } => {
+      const itemId = typeof item?.id === "string" ? item.id : "";
+      const callId =
+        typeof item?.call_id === "string" && item.call_id
+          ? item.call_id
+          : itemId || `call_${toolCallCounter}`;
+      const lane: ToolLane = {
+        callId,
+        name: typeof item?.name === "string" ? item.name : "",
+        index: toolCallCounter++,
+        outputIndex: typeof outputIndex === "number" ? outputIndex : undefined,
+        itemId,
+        args: "",
+        candidateArgs: "",
+        finalized: false,
+      };
+      lanes.push(lane);
+      register(lane);
+      return {
+        lane,
+        // 首帧带 id/name；参数随后由 delta/终态事件补
+        chunks: tracker.toolCallDelta(lane.index, {
+          toolCallId: lane.callId,
+          name: lane.name,
+        }),
+      };
+    };
+
+    const appendArgs = (lane: ToolLane, delta: string): StreamChunk[] => {
+      if (!delta) return [];
+      lane.args += delta;
+      return tracker.toolCallDelta(lane.index, { argumentsDelta: delta });
+    };
+
+    // 完整参数回填：已有参数是完整参数前缀时只补后缀（防重复拼接）；
+    // 终态参数比已累积的短（说明 delta 已完整）则不覆盖；两者不一致也不覆盖，
+    // 避免乱序/重复事件把 JSON 拼坏。
+    const backfillArgs = (lane: ToolLane, fullArgs: string): StreamChunk[] => {
+      if (!fullArgs || lane.finalized) return [];
+      if (!lane.args) {
+        lane.args = fullArgs;
+        lane.finalized = true;
+        return tracker.toolCallDelta(lane.index, { argumentsDelta: fullArgs });
+      }
+      if (fullArgs.startsWith(lane.args)) {
+        const suffix = fullArgs.slice(lane.args.length);
+        lane.args = fullArgs;
+        lane.finalized = true;
+        return suffix
+          ? tracker.toolCallDelta(lane.index, { argumentsDelta: suffix })
+          : [];
+      }
+      if (lane.args.startsWith(fullArgs)) {
+        lane.finalized = true;
+        return [];
+      }
+      lane.finalized = true;
+      this.logger.warn(
+        `[responses.tool] ${lane.callId || "?"} final arguments mismatch accumulated prefix ` +
+          `(${lane.args.length}/${fullArgs.length} chars); keep accumulated`,
+      );
+      return [];
+    };
+
+    // delta/done 可能先按 output_index 缓存、added 到达后才有 item.id；
+    // 回放时两种键都要查，否则早到片段会丢。
+    const takePending = <T>(
+      map: Map<string, T>,
+      lane: ToolLane,
+    ): T | undefined => {
+      const keys = [
+        pendingKey(lane.itemId, lane.outputIndex),
+        pendingKey(undefined, lane.outputIndex),
+      ];
+      for (const key of keys) {
+        if (!map.has(key)) continue;
+        const value = map.get(key) as T;
+        map.delete(key);
+        return value;
+      }
+      return undefined;
+    };
+
+    const flushPending = (lane: ToolLane): StreamChunk[] => {
+      const chunks: StreamChunk[] = [];
+      const deltas = takePending(pendingDeltas, lane);
+      if (deltas) {
+        for (const delta of deltas) chunks.push(...appendArgs(lane, delta));
+      }
+      const finalArgs = takePending(pendingFinalArgs, lane);
+      if (finalArgs) {
+        chunks.push(...backfillArgs(lane, finalArgs));
+      }
+      return chunks;
+    };
+
+    const handleAdded = (item: any, outputIndex?: number): StreamChunk[] => {
+      if (!item || item.type !== "function_call") return [];
+      let lane = findLane(
+        typeof item.id === "string" ? item.id : undefined,
+        outputIndex,
+        typeof item.call_id === "string" ? item.call_id : undefined,
+      );
+      let chunks: StreamChunk[] = [];
+      if (!lane) {
+        const created = createLane(item, outputIndex);
+        lane = created.lane;
+        chunks = created.chunks;
+      } else {
+        if (!lane.itemId && typeof item.id === "string") lane.itemId = item.id;
+        if (!lane.callId && typeof item.call_id === "string") lane.callId = item.call_id;
+        if (!lane.name && typeof item.name === "string" && item.name) {
+          lane.name = item.name;
+          // added 之前已建 lane（done 先到）时，名字在这里补发给块头
+          chunks.push(...tracker.toolCallDelta(lane.index, { name: lane.name }));
+        }
+        if (typeof outputIndex === "number" && typeof lane.outputIndex !== "number") {
+          lane.outputIndex = outputIndex;
+        }
+        register(lane);
+      }
+      // 少数上游把完整参数直接放在 added.item.arguments；先存候选，终态再回填，
+      // 避免与后续 delta 重复拼接。
+      if (typeof item.arguments === "string" && item.arguments && !lane.args && !lane.candidateArgs) {
+        lane.candidateArgs = item.arguments;
+      }
+      chunks.push(...flushPending(lane));
+      return chunks;
+    };
+
+    const handleDelta = (
+      itemId: string | undefined,
+      outputIndex: number | undefined,
+      delta: string,
+    ): StreamChunk[] => {
+      if (!delta) return [];
+      const lane = findLane(itemId, outputIndex);
+      if (!lane) {
+        // delta 早于 output_item.added：按 item_id/output_index 缓存，added 到达后回放
+        const key = pendingKey(itemId, outputIndex);
+        const buffered = pendingDeltas.get(key) ?? [];
+        buffered.push(delta);
+        pendingDeltas.set(key, buffered);
+        return [];
+      }
+      return appendArgs(lane, delta);
+    };
+
+    const handleFinal = (
+      itemId: string | undefined,
+      outputIndex: number | undefined,
+      callId: string | undefined,
+      fullArgs: string,
+      item?: any,
+    ): StreamChunk[] => {
+      let lane = findLane(itemId, outputIndex, callId);
+      const chunks: StreamChunk[] = [];
+      if (!lane) {
+        if (item) {
+          const created = createLane(item, outputIndex);
+          lane = created.lane;
+          chunks.push(...created.chunks);
+        } else {
+          pendingFinalArgs.set(pendingKey(itemId, outputIndex), fullArgs);
+          return chunks;
+        }
+      }
+      // 名字可能只在终态 item 上出现（added 缺省），补发块头
+      if (item && !lane.name && typeof item.name === "string" && item.name) {
+        lane.name = item.name;
+        chunks.push(...tracker.toolCallDelta(lane.index, { name: lane.name }));
+      }
+      chunks.push(...flushPending(lane));
+      chunks.push(...backfillArgs(lane, fullArgs));
+      return chunks;
+    };
+
+    // response.completed/incomplete/failed 的 output[] 是最后兜底：只出现在这里的
+    // function_call 参数（有些中转不在流中发 done）也在此补齐。
+    const handleOutputArray = (output: any): StreamChunk[] => {
+      const chunks: StreamChunk[] = [];
+      if (!Array.isArray(output)) return chunks;
+      // 终态 response.output[] 的数组下标即 output_index（item 本身通常不再带该字段）
+      output.forEach((item, arrayIndex) => {
+        if (!item || item.type !== "function_call") return;
+        chunks.push(
+          ...handleFinal(
+            typeof item.id === "string" ? item.id : undefined,
+            typeof item.output_index === "number" ? item.output_index : arrayIndex,
+            typeof item.call_id === "string" ? item.call_id : undefined,
+            typeof item.arguments === "string" ? item.arguments : "",
+            item,
+          ),
+        );
+      });
+      return chunks;
+    };
 
     for await (const event of response) {
       switch (event.type) {
@@ -403,7 +653,6 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         case "response.output_text.done":
         case "response.reasoning_text.done":
         case "response.reasoning_summary_text.done":
-        case "response.function_call_arguments.done":
           continue;
 
         case "response.reasoning_text.delta":
@@ -412,34 +661,47 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           continue;
 
         case "response.output_item.added":
-          // 记录工具调用元信息并立即开块（id/name 首发携带）
-          if (event.item?.type === "function_call") {
-            const index = toolCallCounter++;
-            const info = { callId: event.item.call_id, name: event.item.name, index };
-            toolCallInfoMap.set(event.item.id, info);
-            for (const c of tracker.toolCallDelta(index, {
-              toolCallId: info.callId,
-              name: info.name,
-            })) {
-              yield c;
-            }
-          }
+          for (const c of handleAdded(event.item, event.output_index)) yield c;
           continue;
 
         case "response.function_call_arguments.delta":
-          {
-            const info = toolCallInfoMap.get(event.item_id);
-            if (!info) continue;
-            for (const c of tracker.toolCallDelta(info.index, {
-              argumentsDelta: event.delta,
-            })) {
+          for (const c of handleDelta(event.item_id, event.output_index, event.delta)) yield c;
+          continue;
+
+        case "response.function_call_arguments.done":
+          // 标准 Responses 事件：完整 arguments 在此；旧实现直接忽略是空参数根因之一
+          for (const c of handleFinal(
+            event.item_id,
+            event.output_index,
+            undefined,
+            typeof event.arguments === "string" ? event.arguments : "",
+          )) {
+            yield c;
+          }
+          continue;
+
+        case "response.output_item.done":
+          if (event.item?.type === "function_call") {
+            for (const c of handleFinal(
+              typeof event.item.id === "string" ? event.item.id : undefined,
+              event.output_index,
+              typeof event.item.call_id === "string" ? event.item.call_id : undefined,
+              typeof event.item.arguments === "string" ? event.item.arguments : "",
+              event.item,
+            )) {
               yield c;
             }
           }
           continue;
 
         case "response.completed":
-          pendingFinish = "stop";
+        case "response.incomplete":
+          for (const c of handleOutputArray(event.response?.output)) yield c;
+          pendingFinish =
+            event.type === "response.incomplete" &&
+            event.response?.incomplete_details?.reason === "max_output_tokens"
+              ? "length"
+              : "stop";
           if (event.response?.usage) {
             pendingUsage = {
               promptTokens: event.response.usage.input_tokens,
@@ -451,12 +713,27 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           continue;
 
         case "response.failed":
+          for (const c of handleOutputArray(event.response?.output)) yield c;
           this.logger.error(`Response failed: ${event.error?.message}`);
           pendingFinish = "error";
           continue;
 
         default:
           continue;
+      }
+    }
+
+    // 收尾前回填只出现在 added/done 候选里的参数；仍为空的打诊断日志（不改变
+    // 下游 {} 兜底语义，但下次可直接从日志看到是哪个 call 没收到参数）。
+    for (const lane of lanes) {
+      if (lane.candidateArgs) {
+        for (const c of backfillArgs(lane, lane.candidateArgs)) yield c;
+      }
+      if (!lane.args) {
+        this.logger.warn(
+          `[responses.tool] ${lane.callId || "?"} (${lane.name || "?"}, ` +
+            `output_index=${lane.outputIndex ?? "?"}) finished with empty arguments`,
+        );
       }
     }
 
