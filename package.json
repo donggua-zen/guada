@@ -86,7 +86,10 @@
     "manual:pet-unlock-drag": "node scripts/run-electron.cjs scripts/manual-test-pet-unlock-drag.js",
     "test:pet-lifecycle:electron": "node scripts/run-electron.cjs scripts/test-pet-interacting-lifecycle.js",
     "test:pet-debug-state:electron": "node scripts/run-electron.cjs scripts/test-pet-debug-state.js",
-    "manual:pet-pointermove-loss": "node scripts/run-electron.cjs scripts/manual-test-pointermove-loss.js"
+    "manual:pet-pointermove-loss": "node scripts/run-electron.cjs scripts/manual-test-pointermove-loss.js",
+    "manual:pet-forward-fixed": "node scripts/run-electron.cjs scripts/manual-test-pet-forward-fixed.js",
+    "manual:pet-noactivate": "node scripts/run-electron.cjs scripts/manual-test-noactivate.js",
+    "manual:pet-forward-mousemove": "node scripts/run-electron.cjs scripts/manual-test-forward-mousemove.js"
   },
   "keywords": [
     "ai",

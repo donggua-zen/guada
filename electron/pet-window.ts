@@ -21,6 +21,7 @@ import { pathToFileURL } from "url";
 import * as fs from "fs";
 import * as path from "path";
 import log from "electron-log";
+import { applyNoActivate } from "./pet-win32-style";
 
 /**
  * 窗口逻辑尺寸（DIP）。
@@ -817,7 +818,12 @@ export class PetWindowController {
       minimizable: false,
       fullscreenable: false,
       hasShadow: false,
-      focusable: false,
+      // 必须 true：focusable:false 会让 Electron 同时关掉 Chromium 的可激活标志，
+      // 导致 (1) setIgnoreMouseEvents({forward:true}) 的 mousemove 转发完全失效
+      //      —— 命中心跳通道死掉，光标进入宠物时无法放开穿透 → 拖不动；
+      //      (2) Windows 返回 MA_NOACTIVATEANDEAT 吃掉 mousedown。
+      // 「不抢焦点」改由建窗后给 HWND 打 WS_EX_NOACTIVATE 实现（见 applyNoActivate）。
+      focusable: true,
       show: false,
       webPreferences: {
         preload: this.options.preloadPath,
@@ -833,6 +839,12 @@ export class PetWindowController {
     win.setAlwaysOnTop(true, "screen-saver");
     if (process.platform === "darwin") {
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
+    // Windows：阻止点击抢焦点（focusable 保持 true，否则 forward 转发失效）
+    try {
+      applyNoActivate(win.getNativeWindowHandle());
+    } catch (error) {
+      log.warn("[pet] 应用 WS_EX_NOACTIVATE 失败:", error);
     }
 
     win.on("closed", () => {
@@ -1109,6 +1121,12 @@ export class PetWindowController {
         cursor && this.geometry && win && !win.isDestroyed()
           ? resolvePetHit(cursor, win.getBounds(), this.geometry)
           : null,
+      // 包围盒实际值（窗口内坐标）+ 光标换算到窗口内后的落点，
+      // 用于判断「是几何算错了，还是坐标对不上」
+      geometry: this.geometry,
+      cursorLocal: cursor && win && !win.isDestroyed()
+        ? { x: cursor.x - win.getBounds().x, y: cursor.y - win.getBounds().y }
+        : null,
     };
   }
 
