@@ -378,10 +378,10 @@ describe("无 display 文案的工具（MCP 等）降级为显示工具名", () 
 
   it("已注册且带文案的工具不受影响", () => {
     setPluginToolDisplays({
-      read: { text: { executing: "正在读取文件", completed: "已读取文件" }, icon: "read" },
+      read: { text: { executing: "正在读取", completed: "已读取" }, icon: "read" },
     });
     const tool: ToolCall = { name: "read" };
-    expect(getToolConfig(tool).text.completed).toBe("已读取文件");
+    expect(getToolConfig(tool).text.completed).toBe("已读取");
     expect(getToolConfig(tool).icon).toBe("read");
   });
 

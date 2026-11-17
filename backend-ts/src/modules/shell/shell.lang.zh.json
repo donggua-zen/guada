@@ -1,8 +1,8 @@
 {
   "shell.name": "Shell 命令行",
   "shell.description": "执行系统命令和管理后台进程",
-  "run_command.executing": "正在执行命令",
-  "run_command.completed": "已执行命令",
+  "run_command.executing": "正在执行",
+  "run_command.completed": "已执行",
   "run_command.aggregate.executing": "正在执行{n}条命令",
   "run_command.aggregate.completed": "已执行{n}条命令",
   "shell.toolkitDescription": "执行系统命令并管理后台进程"
