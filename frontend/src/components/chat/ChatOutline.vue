@@ -48,6 +48,7 @@ import dayjs from 'dayjs'
 import type { MessageBundle, Turn } from '@/types/message'
 import { stripSystemReminder, isHiddenBlock } from '@/utils/messageUtils'
 import { perfStart } from '@/utils/perf'
+import { isResizeActivityActive, useResizeActivity } from '@/composables/useResizeActivity'
 
 const { t } = useI18n()
 
@@ -301,6 +302,9 @@ let msgEls: { id: string; el: Element }[] = []
 let setupTimer: number | null = null
 let pollTimer: number | null = null
 
+/** 调整态（拖分割条/窗口缩放/侧栏开合动画）期间布局逐帧变化，扫描没有观察价值。 */
+const { isResizeActive } = useResizeActivity()
+
 // 防抖计算当前可视区第一条（100ms，滚动跟手且不频繁重排）
 const debouncedUpdateActive = useDebounceFn(updateActiveFromScroll, 100)
 
@@ -397,6 +401,7 @@ function setupObserver() {
 function startPolling() {
   if (pollTimer !== null) window.clearInterval(pollTimer)
   pollTimer = window.setInterval(() => {
+    if (isResizeActivityActive()) return
     if (msgEls.length === 0) {
       scheduleSetup()
     } else {
@@ -406,6 +411,9 @@ function startPolling() {
 }
 
 function onScroll() {
+  // 调整态期间贴底路径会逐帧写 scrollTop，这里跟着每帧扫全部消息纯属浪费；
+  // 结束时由 isResizeActive 的 watch 统一补一次。
+  if (isResizeActivityActive()) return
   debouncedUpdateActive()
 }
 
@@ -433,6 +441,14 @@ function updateActiveFromScroll() {
   }
   // 全部在可视区外（极端情况）：保持当前 active 不变
 }
+
+// 调整态结束：按最终布局补一次（动画期间跳过的扫描在这里收敛）。
+// msgEls 为空时沿用轮询的兜底逻辑，安排一次重建，避免白等 500ms。
+watch(isResizeActive, (active) => {
+  if (active) return
+  if (msgEls.length === 0) scheduleSetup()
+  else updateActiveFromScroll()
+})
 
 function handleItemClick(messageId: string) {
   setInteraction(-1)

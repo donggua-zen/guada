@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from "vue";
+import { computed, ref, watch, onUnmounted } from "vue";
 import { beginResizeActivity, markResizeMoved } from '@/composables/useResizeActivity';
 import {
   ChevronLeft16Regular as ArrowLeftTwotone,
@@ -110,6 +110,44 @@ const emit = defineEmits<{
   toggle: []
   'update:sidebarWidth': [value: number]
 }>();
+
+// ==================== 开合动画的调整态 ====================
+
+/**
+ * 侧栏开合的宽度过渡（模板上的 `duration-300`）会让整个内容区逐帧重排。
+ * 把它挂进与拖分割条同一套调整态，动画期间自动获得：
+ * - `html.gd-resizing`：暂停 shimmer / spin / pulse、关掉 backdrop-blur；
+ * - `html.gd-resizing-moved`：冻结回合高度 + 离屏回合 content-visibility。
+ *
+ * 320ms = 300ms 过渡 + 20ms 余量；常量与模板类名绑在同一文件，改动画时长要同步改这里。
+ * 连续快速开关复用同一张票据、只续期，避免动画中途解冻再重冻。
+ */
+const SIDEBAR_TOGGLE_DEGRADE_MS = 320;
+
+let sidebarToggleRelease: (() => void) | null = null;
+let sidebarToggleTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.sidebarVisible,
+  () => {
+    // 移动端是覆盖式抽屉：内容区宽度不变，冻结/cv 没有收益
+    if (isMobileDrawer.value) return;
+
+    if (!sidebarToggleRelease) {
+      // watch 默认 pre：先冻住旧宽度下的回合高度，再让宽度过渡开始，
+      // 首帧不会因为 content-visibility 首次生效而塌陷。
+      sidebarToggleRelease = beginResizeActivity();
+      markResizeMoved();
+    }
+
+    if (sidebarToggleTimer !== null) clearTimeout(sidebarToggleTimer);
+    sidebarToggleTimer = setTimeout(() => {
+      sidebarToggleTimer = null;
+      sidebarToggleRelease?.();
+      sidebarToggleRelease = null;
+    }, SIDEBAR_TOGGLE_DEGRADE_MS);
+  },
+);
 
 // ==================== 拖拽调宽 ====================
 
@@ -221,6 +259,13 @@ onUnmounted(() => {
   releaseResizeActivity = null;
   document.removeEventListener('mousemove', handleResizeMouseMove);
   document.removeEventListener('mouseup', handleResizeMouseUp);
+  // 开合动画未结束就被卸载：同样归还票据，避免 class 残留
+  if (sidebarToggleTimer !== null) {
+    clearTimeout(sidebarToggleTimer);
+    sidebarToggleTimer = null;
+  }
+  sidebarToggleRelease?.();
+  sidebarToggleRelease = null;
 });
 </script>
 
