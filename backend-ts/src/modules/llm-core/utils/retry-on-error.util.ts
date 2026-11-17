@@ -15,6 +15,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamStreamTruncatedError,
 } from "./upstream-errors";
 import { getRetryAfterFromError } from "./retry.util";
 import { createAbortError } from "./abort-error.util";
@@ -83,12 +84,16 @@ const NETWORK_MESSAGE_RE =
  */
 export function normalizeTransportError(error: any): any {
   if (!error || typeof error !== "object") return error;
-  if (error instanceof UpstreamError) return error;
 
-  // 用户中止（含 SDK 的 APIUserAbortError）不是传输故障，不能标成网络错误
-  if (error.name === "AbortError" || /abort/i.test(error.message ?? "")) {
+  // 用户中止（含 SDK 的 APIUserAbortError）不是传输故障，不能标成网络错误。
+  // 必须早于 `instanceof UpstreamError` 的早退：上游错误可能把 AbortError 包在
+  // cause 里（adapter 把 SDK 错误二次包装），若先返回 Upstream* 就会丢掉中止语义，
+  // 后续 classifyError 会把它当可重试网络错误。
+  if (isUserAbort(error)) {
     return error;
   }
+
+  if (error instanceof UpstreamError) return error;
 
   const code = error.code ?? error.cause?.code;
   if (typeof code === "string" && TIMEOUT_ERROR_CODES.has(code)) {
@@ -104,6 +109,24 @@ export function normalizeTransportError(error: any): any {
     );
   }
   return error;
+}
+
+/**
+ * 识别用户主动中止（含被包装进 cause 的情况）。
+ *
+ * 中止的判定必须在任何"可重试上游错误"判定之前：SDK 被 abort 时流会"干净"结束，
+ * 若不先认出中止，就会被当成上游断流/网络错误而自动重试，违背用户意图。
+ */
+export function isUserAbort(error: any): boolean {
+  if (!error || typeof error !== "object") return false;
+  let cur: any = error;
+  for (let depth = 0; cur && depth < 4; depth += 1) {
+    if (cur.name === "AbortError" || cur.name === "APIUserAbortError") {
+      return true;
+    }
+    cur = cur.cause;
+  }
+  return false;
 }
 
 /**
@@ -161,7 +184,18 @@ export function classifyError(
 ): RetryableErrorType | null {
   if (!error) return null;
 
+  // 0. 用户中止永远不重试，且必须早于任何 Upstream* 判定：
+  //    adapter 可能把 AbortError 包进 Upstream* 的 cause，若先判父类会把中止
+  //    当成可重试网络错误（用户点停止后反而自动重试）。
+  if (isUserAbort(error)) {
+    return null;
+  }
+
   // 1. Upstream typed exceptions — thrown by adapters
+  if (error instanceof UpstreamStreamTruncatedError) {
+    // 上游流在无终止事件的情况下结束：可丢弃半截内容后重试。
+    return error.discardable ? "network_error" : null;
+  }
   if (error instanceof UpstreamTimeoutError) {
     return "timeout";
   }
@@ -180,7 +214,7 @@ export function classifyError(
     return "timeout";
   }
 
-  // 3. User abort — never retry
+  // 3. User abort — never retry（name 兜底，覆盖非对象/字符串错误）
   if (error.name === "AbortError") {
     return null;
   }

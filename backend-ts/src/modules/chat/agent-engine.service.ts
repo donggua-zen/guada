@@ -11,6 +11,7 @@ import {
   normalizeMediaType,
   mimeFromExtension,
 } from "../../common/utils/media-type.util";
+import { logPreview } from "../../common/utils/log-preview.util";
 import { normalizeRefType } from "../llm-core/utils/attachment.util";
 import { FileNamingService } from "../../common/services/file-naming.service";
 import { SessionImageStore } from "../../common/services/session-image.store";
@@ -49,6 +50,7 @@ import {
   UpstreamTimeoutError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamStreamTruncatedError,
 } from "../llm-core/utils/upstream-errors";
 import { LLMService } from "../llm-core/llm.service";
 import type {
@@ -206,12 +208,14 @@ export class AgentEngine {
         }
 
         if (!sawFinish) {
+          // 上游断流（适配器已判明：无终止事件）。有内容时不再沿用旧的
+          // "不重试"策略——半截内容会被上层丢弃（见 executeAgentLoop 的截断分支），
+          // 因此不会产生连续 assistant 消息。这里统一抛可识别的截断错误。
           if (sawContent) {
-            // 有内容但无 finish — 不重试（避免连续 assistant 消息），抛出明确错误
             this.logger.warn(
-              `[LLM] Stream ended prematurely without finish (partial content present), not retrying`,
+              `[LLM] Stream ended prematurely without finish (partial content present)`,
             );
-            throw new Error(
+            throw new UpstreamStreamTruncatedError(
               "LLM stream ended prematurely without finish signal",
             );
           }
@@ -434,6 +438,15 @@ export class AgentEngine {
     // 回合拦截器触发次数（防止无限循环）
     let interceptorCount = 0;
     const MAX_INTERCEPTOR_ITERATIONS = 3;
+    /**
+     * 上游断流（无终止事件）的丢弃重试次数。
+     *
+     * 只统计"0 个完整工具"的整段丢弃重试——这种情况半截消息不进上下文，
+     * 重试不会产生连续 assistant 消息。有完整工具的断流不重试（避免重复副作用），
+     * 走"保留完整、跳过残缺"的分支。
+     */
+    const MAX_TRUNCATION_RETRIES = 5;
+    let truncationRetries = 0;
     let finalError: string | undefined;
     let finalUsage: any;
     /** 最近一次 LLM 请求的媒体投影统计（每轮重置；用于 context_stats 展示） */
@@ -627,6 +640,10 @@ export class AgentEngine {
       // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义）
       {
         let streamAborted = false;
+        /** 本次尝试遇到上游断流（半截内容），见下方分支 A/B */
+        let truncationError: UpstreamStreamTruncatedError | undefined;
+        /** 审计路径：工具参数保留模型原始输出（用户中止/上游截断都可能留下半截 JSON） */
+        let preserveRawArguments = false;
 
         try {
           // LLM 流式请求（参数组装经 builder；重试为 agent 循环局部语义）
@@ -713,13 +730,26 @@ export class AgentEngine {
           const streamError =
             error instanceof Error ? error : new Error(String(error));
 
+          // 用户主动中止：必须早于任何重试/截断判定。
+          // SDK 被 abort 时流会"干净"结束（不抛错），适配器已把它归一化为 AbortError；
+          // 这里再做一次兜底，保证中止永远走 user_cancel，不会被当成上游截断而重试。
+          const userAborted =
+            abortSignal?.aborted === true ||
+            streamError.name === "AbortError" ||
+            streamError.message.toLowerCase().includes("abort");
+          // 用户中止时模型可能写到一半：保留参数原文供审计/展示，
+          // 但该工具 argumentsComplete=false，不会被执行。
+          if (userAborted) preserveRawArguments = true;
+
           // 上下文溢出恢复（overflow recovery，经 agent/request-error 钩子）：
           // 能力订阅者（压缩插件）识别溢出错误并强制压缩，返回 { kind: 'retry' } 时重试该请求
-          const action = await this.eventBus.serial<RequestErrorAction>(
-            HOOKS.REQUEST_ERROR,
-            { sessionContext, error: streamError, abortSignal },
-            () => undefined,
-          );
+          const action = userAborted
+            ? undefined
+            : await this.eventBus.serial<RequestErrorAction>(
+                HOOKS.REQUEST_ERROR,
+                { sessionContext, error: streamError, abortSignal },
+                () => undefined,
+              );
           if (action?.kind === "retry") {
             // 压缩改变存储：重载历史并重试本步（messageId/assembler 在循环头部重建，
             // 半截累积不落库，不会产生连续 assistant 消息）
@@ -733,6 +763,14 @@ export class AgentEngine {
             continue;
           }
 
+          // 上游断流：半截内容分两种处理（见下方 truncation 分支）。
+          if (
+            !userAborted &&
+            streamError instanceof UpstreamStreamTruncatedError
+          ) {
+            truncationError = streamError;
+          }
+
           this.logger.error(
             `Stream error in agent loop:${streamError.message}`,
             streamError.stack,
@@ -740,12 +778,11 @@ export class AgentEngine {
           // 业务层：异常终止（区分用户取消和真实错误）
           // 注意：executeLLMStream 已保证 abort 场景抛出 name=AbortError，
           // 这里额外检查 abortSignal 作为兜底（防第三方 adapter 抛非标准错误）
-          if (
-            streamError.name === "AbortError" ||
-            streamError.message.toLowerCase().includes("abort") ||
-            abortSignal?.aborted
-          ) {
+          if (userAborted) {
             businessReason = "user_cancel";
+          } else if (streamError instanceof UpstreamStreamTruncatedError) {
+            businessReason = "network_error";
+            finalError = streamError.message;
           } else if (streamError instanceof UpstreamTimeoutError) {
             businessReason = "timeout";
             finalError = streamError.message;
@@ -773,13 +810,102 @@ export class AgentEngine {
         // assembler 自判内容：toMessage 在累加任何有效 chunk
         // 时返回 null（立即报错/中止无任何产出）→ 表示本轮无有效消息，跳过落库与一切消息后处理；
         // 业务错误归拢 turn 级（finalizeTurn → turn.metadata）。
+        //
+        // 断流丢弃分支（B）：本次尝试的整条消息都不进上下文，参数保留原文供审计，
+        // 因此用 preserveRawArguments（不把半截 JSON 修成 {}）。
         assistantMessage = assembler.toMessage({
           id: messageId,
           model: modelConfig.modelName,
           extraMetadata: {
             modelName: modelConfig.modelName,
           },
+          preserveRawArguments:
+            preserveRawArguments || truncationError !== undefined,
         });
+
+        // 上游断流分叉（2026-11-17 write 空参数事故）：
+        //   A. 存在至少一个参数完整的工具 → 保留消息进上下文，完整工具照常执行，
+        //      不完整工具配一条"已跳过"错误结果；不重试（已执行工具不能重复触发副作用）。
+        //   B. 没有任何完整工具 → 整条消息标记 excludedFromContext（仅审计可见），
+        //      不执行工具、不补桩，重试本步（新 messageId）。
+        const completeToolCalls =
+          assistantMessage?.content.filter(
+            (b) => b.type === "tool-call" && b.argumentsComplete !== false,
+          ).length ?? 0;
+        const truncatedToolCalls =
+          assistantMessage?.content.filter(
+            (b) => b.type === "tool-call" && b.argumentsComplete === false,
+          ).length ?? 0;
+
+        if (truncationError && assistantMessage) {
+          if (completeToolCalls === 0) {
+            // 分支 B：全部丢弃 + 重试
+            assistantMessage.metadata.excludedFromContext = true;
+            assistantMessage.metadata.discardReason = "stream_truncated";
+            assistantMessage.metadata.error = {
+              name: truncationError.name,
+              message: truncationError.message,
+              discardedChars: assistantMessage.content.reduce(
+                (n, b) => n + (b.type === "tool-call" ? b.arguments.length : 0),
+                0,
+              ),
+            };
+            this.logger.warn(
+              `[LLM] stream truncated with no complete tool call ` +
+                `(message=${messageId}, truncated=${truncatedToolCalls}); ` +
+                `discarding attempt and retrying`,
+            );
+            await sessionContext.appendMessages([assistantMessage]);
+            // 复位 UI 流式态：该 messageId 不会再有后续事件
+            await sessionContext.publishStream({
+              type: "finish",
+              messageId,
+              turnId,
+              finishReason: "truncated",
+            } as SessionStreamEvent);
+
+            if (truncationRetries < MAX_TRUNCATION_RETRIES) {
+              truncationRetries += 1;
+              const delayMs = computeRetryDelayMs(truncationRetries - 1, {
+                code: "ECONNRESET",
+              });
+              await sessionContext.publishStream({
+                type: "retry",
+                turnId,
+                retryReason: "network_error",
+                retryAttempt: truncationRetries,
+                retryMaxAttempts: MAX_TRUNCATION_RETRIES,
+                retryDelayMs: delayMs,
+                message: buildRetryMessage(
+                  "network_error",
+                  truncationRetries,
+                  MAX_TRUNCATION_RETRIES,
+                ),
+              } as SessionStreamEvent);
+              await retrySleep(delayMs, abortSignal);
+              await stepHandle?.end({
+                error: { name: truncationError.name, message: truncationError.message },
+              });
+              stepHandle = null;
+              needToContinue = true;
+              continue;
+            }
+
+            // 重试耗尽：结束本步，不执行任何工具
+            this.logger.error(
+              `[LLM] stream truncated: retries exhausted ` +
+                `(${MAX_TRUNCATION_RETRIES}/${MAX_TRUNCATION_RETRIES}); aborting step`,
+            );
+            assistantMessage = null;
+          } else {
+            // 分支 A：保留完整工具，跳过错过的
+            this.logger.warn(
+              `[LLM] stream truncated with ${completeToolCalls} complete / ` +
+                `${truncatedToolCalls} incomplete tool call(s); ` +
+                `executing complete ones, skipping incomplete`,
+            );
+          }
+        }
 
         // 空消息（toMessage 返回 null）已在上方跳过；此处无需 token 统计
 
@@ -820,7 +946,16 @@ export class AgentEngine {
             | undefined;
           /** 已落库的结果消息（落库成功才登记：落库失败时配对缺口由收口补桩） */
           let appendedResults: Message[] = [];
-          if (hasToolCalls && tools && !streamAborted && !abortSignal?.aborted) {
+          // 断流分支 A：存在完整工具时仍执行它们（残缺的已被 skippedTools 挡掉）。
+          // 其余异常中止（超时/限流/用户取消/整段丢弃）继续不执行。
+          const canExecuteOnTruncation =
+            truncationError !== undefined && completeToolCalls > 0;
+          if (
+            hasToolCalls &&
+            tools &&
+            (!streamAborted || canExecuteOnTruncation) &&
+            !abortSignal?.aborted
+          ) {
             try {
               // 执行全部工具（审批由工具 execute 内主动发起——沙盒提权/通用审批服务，
               // 引擎不再预分类挂起；拒绝/超时以 isError tool-result 反馈模型）
@@ -1270,29 +1405,69 @@ export class AgentEngine {
       }
     }
 
-    // 1. 过滤畸形调用（缺 name）→ invalidTools 生成错误响应，合法调用直接执行
+    // 1. 过滤畸形调用：
+    //    - 缺 name → invalidTools 生成错误响应
+    //    - 参数不完整（上游流被截断，没收到终态载体）→ skippedTools，绝不执行
+    //      （半截 JSON 经 partialParse 可能"可解析但残缺"，拿去跑 write 这类
+    //       有副作用的工具等于用错参数落盘，2026-11-17 事故即此）
     const validToolCalls: any[] = [];
     const invalidTools: any[] = [];
+    const skippedTools: any[] = [];
     for (const tc of toolCalls) {
-      if (tc && tc.name) validToolCalls.push(tc);
-      else invalidTools.push(tc);
+      if (!tc || !tc.name) {
+        invalidTools.push(tc);
+        continue;
+      }
+      if (tc.argumentsComplete === false) {
+        skippedTools.push(tc);
+        continue;
+      }
+      validToolCalls.push(tc);
     }
 
     // 执行结果收集
     const toolResponses: any[] = [];
 
+    // 参数不完整的工具：配一条明确的"已跳过"结果，让模型知道该操作没执行，
+    // 而不是让它以为成功、也不再重试同一份坏参数。
+    for (const skipped of skippedTools) {
+      const rawLen =
+        typeof skipped.arguments === "string" ? skipped.arguments.length : 0;
+      this.logger.warn(
+        `[tool-args] skipped incomplete tool=${skipped.name} id=${skipped.toolCallId || "(no-id)"} rawLen=${rawLen}（上游流被截断，参数未收齐）`,
+      );
+      toolResponses.push({
+        toolCallId: skipped.toolCallId,
+        name: skipped.name,
+        content: `工具参数在流式传输中被截断（收到 ${rawLen} 字符，JSON 未闭合），本次未执行。请重新调用该工具。`,
+        isError: true,
+        outcome: "skipped",
+      });
+    }
+
     // 2. 直接执行全部合法工具调用（同一消息内多工具按 executeBatch 并发）
     if (validToolCalls.length > 0) {
+      // 这是进入 JSON.parse 前的原始字符串：块组装/适配器之后、任何降级之前。
+      // 与 BlockAssembler 的 [tool-args] 日志对照，可判断参数是在哪一层丢的。
+      for (const tc of validToolCalls) {
+        this.logger.log(
+          `[tool-args] before JSON.parse tool=${tc.name || "(no-name)"} id=${tc.toolCallId || "(no-id)"} rawType=${typeof tc.arguments} raw=${logPreview(tc.arguments)}`,
+        );
+      }
       const results = await this.toolExecutor.executeBatch(
         validToolCalls.map((tc: any) => ({
           id: tc.toolCallId,
           name: tc.name,
+          argumentsComplete: tc.argumentsComplete !== false,
           arguments: (() => {
             try {
               return typeof tc.arguments === "string"
                 ? JSON.parse(tc.arguments)
                 : tc.arguments;
-            } catch {
+            } catch (error) {
+              this.logger.warn(
+                `[tool-args] JSON.parse failed -> {} tool=${tc.name || "(no-name)"} id=${tc.toolCallId || "(no-id)"} raw=${logPreview(tc.arguments)} error=${error instanceof Error ? error.message : String(error)}`,
+              );
               return {};
             }
           })(),
@@ -1346,7 +1521,7 @@ export class AgentEngine {
       name: string;
       content: string;
       toolCallId: string;
-      outcome?: "success" | "error" | "rejected";
+      outcome?: 'success' | 'error' | 'rejected' | 'skipped';
       images?: FileRef[];
     }> = [];
 

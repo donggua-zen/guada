@@ -27,7 +27,7 @@ export interface ToolCall {
   /** 原始 JSON 参数字符串（流式期间可能半截）或已解析的参数对象 */
   arguments?: string | Record<string, unknown>;
   args?: string | Record<string, unknown>;
-  outcome?: "success" | "error" | "rejected" | "aborted";
+  outcome?: 'success' | 'error' | 'rejected' | 'aborted' | 'skipped';
   metadata?: Record<string, unknown>;
   /** 子代理关联（由流事件 subagent_link 折叠写入）：工具结果落库前即可用，
    *  供工具行提供"打开子代理面板"入口 */

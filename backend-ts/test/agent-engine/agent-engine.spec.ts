@@ -2,7 +2,7 @@
 
 import { AgentEngine } from '../../src/modules/chat/agent-engine.service';
 import type { SessionStreamEvent } from '../../src/modules/chat/types/event-chunk.types';
-import { UpstreamRateLimitError } from '../../src/modules/llm-core/utils/upstream-errors';
+import { UpstreamRateLimitError, UpstreamStreamTruncatedError } from '../../src/modules/llm-core/utils/upstream-errors';
 import { ConflictException } from '@nestjs/common';
 import { createAllMocks } from './helpers/mock-factories';
 import { loadChunksFromJsonl } from './helpers/chunk-replayer';
@@ -677,6 +677,183 @@ describe('AgentEngine - completions', () => {
       const turnEnd = events.find((e) => e.type === 'turn_end');
       expect(turnEnd?.finishReason).toBe('error');
       expect(turnEnd?.error).toBeTruthy();
+    });
+
+    it('上游断流且无完整工具 → 半截消息标记 excludedFromContext、不执行工具、重试后继续', async () => {
+      let calls = 0;
+      const mocks = createAllMocks({
+        llmGenerator: () => {
+          calls += 1;
+          if (calls === 1) {
+            return (async function* () {
+              yield { type: 'block_start', index: 0, blockType: 'tool-call' };
+              yield {
+                type: 'tool_call_delta',
+                index: 0,
+                toolCallId: 'call_1',
+                name: 'write',
+                argumentsDelta: '{"content":"<html>abc',
+              };
+              yield {
+                type: 'block_end',
+                index: 0,
+                block: {
+                  type: 'tool-call',
+                  toolCallId: 'call_1',
+                  name: 'write',
+                  arguments: '{"content":"<html>abc',
+                  argumentsComplete: false,
+                },
+              };
+              throw new UpstreamStreamTruncatedError(
+                'Responses stream ended without terminal event',
+              );
+            })();
+          }
+          return (async function* () {
+            yield { type: 'finish', finishReason: 'stop' };
+          })();
+        },
+      });
+
+      const agentEngine = new AgentEngine(
+        mocks.toolExecutor as any,
+        mocks.llmService as any,
+        {
+          serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
+          parallel: jest.fn(async () => []),
+        } as any,
+      );
+
+      await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
+      const events = mocks.publishedEvents;
+
+      // 半截消息仍落库（审计），但带 excludedFromContext 标记
+      const appendCalls = (mocks.sessionContext.appendMessages as jest.Mock).mock.calls;
+      expect(appendCalls.length).toBe(1);
+      const assistantMessage = appendCalls[0][0][0];
+      expect(assistantMessage.metadata.excludedFromContext).toBe(true);
+      expect(assistantMessage.metadata.discardReason).toBe('stream_truncated');
+      expect(assistantMessage.content[0].argumentsComplete).toBe(false);
+      // 参数保留原文，供审计
+      expect(assistantMessage.content[0].arguments).toBe('{"content":"<html>abc');
+
+      // 不执行任何工具
+      expect(mocks.toolExecutor.executeBatch).not.toHaveBeenCalled();
+
+      // 复位 UI 流式态 + 发重试信号
+      expect(
+        events.some(
+          (e) => e.type === 'finish' && (e as any).finishReason === 'truncated',
+        ),
+      ).toBe(true);
+      expect(events.some((e) => e.type === 'retry')).toBe(true);
+      // 重试成功，回合正常收尾（不是 error）
+      expect(events.find((e) => e.type === 'turn_end')?.finishReason).not.toBe(
+        'error',
+      );
+    });
+
+    it('上游断流但有完整工具 → 保留消息、执行完整工具、跳过残缺工具', async () => {
+      let calls = 0;
+      const mocks = createAllMocks({
+        toolCallsResponse: [
+          {
+            toolCallId: 'call_ok',
+            name: 'tool_load',
+            content: 'ok',
+            isError: false,
+          },
+        ],
+        llmGenerator: () => {
+          calls += 1;
+          if (calls === 1) {
+            return (async function* () {
+              yield { type: 'block_start', index: 0, blockType: 'tool-call' };
+              yield {
+                type: 'tool_call_delta',
+                index: 0,
+                toolCallId: 'call_ok',
+                name: 'tool_load',
+                argumentsDelta: '{"namespace":"file"}',
+              };
+              yield {
+                type: 'block_end',
+                index: 0,
+                block: {
+                  type: 'tool-call',
+                  toolCallId: 'call_ok',
+                  name: 'tool_load',
+                  arguments: '{"namespace":"file"}',
+                  argumentsComplete: true,
+                },
+              };
+              yield { type: 'block_start', index: 1, blockType: 'tool-call' };
+              yield {
+                type: 'tool_call_delta',
+                index: 1,
+                toolCallId: 'call_bad',
+                name: 'write',
+                argumentsDelta: '{"content":"<html>abc',
+              };
+              yield {
+                type: 'block_end',
+                index: 1,
+                block: {
+                  type: 'tool-call',
+                  toolCallId: 'call_bad',
+                  name: 'write',
+                  arguments: '{"content":"<html>abc',
+                  argumentsComplete: false,
+                },
+              };
+              throw new UpstreamStreamTruncatedError(
+                'Responses stream ended without terminal event',
+              );
+            })();
+          }
+          return (async function* () {
+            yield { type: 'finish', finishReason: 'stop' };
+          })();
+        },
+      });
+
+      const agentEngine = new AgentEngine(
+        mocks.toolExecutor as any,
+        mocks.llmService as any,
+        {
+          serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
+          parallel: jest.fn(async () => []),
+        } as any,
+      );
+
+      await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
+
+      // 只执行完整工具 call_ok；残缺的 call_bad 不进入执行器
+      expect(mocks.toolExecutor.executeBatch).toHaveBeenCalledTimes(1);
+      const requests = (mocks.toolExecutor.executeBatch as jest.Mock).mock.calls[0][0];
+      expect(requests).toHaveLength(1);
+      expect(requests[0].id).toBe('call_ok');
+
+      // 消息保留在上下文（不打 excludedFromContext）
+      const appendCalls = (mocks.sessionContext.appendMessages as jest.Mock).mock.calls;
+      const assistantMessage = appendCalls[0][0][0];
+      expect(assistantMessage.metadata.excludedFromContext).toBeUndefined();
+
+      // 残缺工具得到"已跳过"结果
+      const skippedResult = appendCalls
+        .flatMap((c: any[]) => c[0])
+        .find((m: any) =>
+          m.content?.some(
+            (b: any) => b.type === 'tool-result' && b.toolCallId === 'call_bad',
+          ),
+        );
+      expect(skippedResult).toBeTruthy();
+      const skippedBlock = skippedResult.content.find(
+        (b: any) => b.type === 'tool-result',
+      );
+      expect(skippedBlock.isError).toBe(true);
+      expect(skippedBlock.content).toContain('截断');
     });
 
     it('限流以文字说明收尾：无暂停事件、turn_end=rate_limited（有部分内容时照常落库）', async () => {

@@ -29,6 +29,12 @@ export interface ToolCallRequest {
   id: string;
   name: string;
   arguments: Record<string, any>;
+  /**
+   * 参数是否已收齐（上游流给了终态载体）。false 时执行器直接拒绝——
+   * 半截 JSON 经 partialParse 可能"可解析但残缺"，拿去跑有副作用的工具会写错数据。
+   * 缺省视为 true（历史/非流式路径没有该字段）。
+   */
+  argumentsComplete?: boolean;
 }
 
 export interface ToolCallResponse {
@@ -37,7 +43,7 @@ export interface ToolCallResponse {
   content: string;
   isError?: boolean;
   /** 工具执行结果状态，由 agent-engine 在执行后设置 */
-  outcome?: "success" | "error" | "rejected";
+  outcome?: 'success' | 'error' | 'rejected' | 'skipped';
   /** 工具返回的图片（base64），由 agent-engine 注入为隐藏 user 消息 */
   images?: import("../../plugins/api/plugin-api").ImageContent[];
   /**

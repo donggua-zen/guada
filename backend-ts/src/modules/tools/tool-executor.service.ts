@@ -15,6 +15,7 @@ import {
 } from "../plugins/types/plugin.types";
 import type { ToolResultObject, ImageContent } from "../plugins/api/plugin-api";
 import { safeTruncate } from "../../common/utils/string.utils";
+import { logPreview } from "../../common/utils/log-preview.util";
 import { ISessionContext } from "../chat/session-context";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { AskDeniedError } from "../../common/types/ask.types";
@@ -123,6 +124,18 @@ export class ToolExecutor {
         if (abortSignal?.aborted) break;
         const index = nextIndex++;
         const req = requests[index];
+        // 兜底：参数不完整的调用绝不执行（半截 JSON 可能"可解析但残缺"）。
+        // agent-engine 已在批量执行前过滤，这里防御未来新增调用路径绕过。
+        if (req.argumentsComplete === false) {
+          responses[index] = {
+            toolCallId: req.id,
+            name: req.name,
+            content: "工具参数不完整（上游流被截断），本次未执行。",
+            isError: true,
+            outcome: "skipped",
+          };
+          continue;
+        }
         try {
           responses[index] = await this.executeTool(
             req.name,
@@ -207,6 +220,11 @@ export class ToolExecutor {
     abortSignal?: AbortSignal,
     opts?: { allowLazy?: boolean },
   ): Promise<ToolCallResponse> {
+    // 工具执行入口：记录实际送进 handler 的参数（可能已是上层降级后的 {}）。
+    // 与 agent-engine 的 before JSON.parse / BlockAssembler 的原始参数日志对照。
+    this.logger.log(
+      `[tool-args] execute tool=${fullToolName || "(no-name)"} id=${toolCallId || "(no-id)"} args=${logPreview(toolArgs)}`,
+    );
     // 退役工具：不广告、不注册，但旧会话可能仍然按历史习惯调用。
     // 在任何插件查找之前拦截，返回明确的迁移提示而不是“工具不存在”。
     const retiredHint = getRetiredToolMessage(fullToolName);
@@ -288,10 +306,16 @@ export class ToolExecutor {
       if (toolEntry._zodSchema) {
         const result = toolEntry._zodSchema.safeParse(toolArgs);
         if (!result.success) {
+          const issues = result.error.issues
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ");
+          this.logger.warn(
+            `[tool-args] schema validation failed tool=${fullToolName} id=${toolCallId} args=${logPreview(toolArgs)} issues=${issues}`,
+          );
           return {
             toolCallId,
             name: fullToolName,
-            content: `参数校验失败：${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+            content: `参数校验失败：${issues}`,
             isError: true,
           };
         }

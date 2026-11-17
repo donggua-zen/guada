@@ -97,6 +97,14 @@ export interface ToolCallBlock {
   name: string;
   /** 模型产出的原始 JSON 参数字符串 */
   arguments: string;
+  /**
+   * 参数是否已收齐（收到上游终态载体才算完整）。
+   *
+   * 只有流式 delta、没收到 `output_item.done` / `completed.output[]` /
+   * `function_call_arguments.done` 时，参数可能是半截 JSON。缺省视为 true
+   * （非流式路径与历史数据没有该字段）。false 时工具一律不执行。
+   */
+  argumentsComplete?: boolean;
   timing?: BlockTiming;
 }
 

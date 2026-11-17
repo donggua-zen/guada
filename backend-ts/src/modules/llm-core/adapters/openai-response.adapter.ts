@@ -12,6 +12,7 @@ import {
   StreamUsage,
 } from "../types/llm.types";
 import type { Message, ContentBlock } from "../../../common/types/conversation.types";
+import { logPreview } from "../../../common/utils/log-preview.util";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { insecureFetch } from "../utils/tls.util";
 import { withRequestBodyCompression } from "../utils/compression.util";
@@ -26,9 +27,11 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamStreamTruncatedError,
   UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
+import { createAbortError } from "../utils/abort-error.util";
 import { normalizeTransportError } from "../utils/retry-on-error.util";
 import {
   ProviderConfig,
@@ -152,7 +155,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       });
 
       if (params.stream) {
-        yield* this.handleStreamResponse(response);
+        yield* this.handleStreamResponse(response, params.abortSignal);
       } else {
         yield* this.handleNonStreamResponse(response);
       }
@@ -386,10 +389,14 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
    */
   private async *handleStreamResponse(
     response: any,
+    abortSignal?: AbortSignal,
   ): AsyncGenerator<StreamChunk> {
     const tracker = new StreamBlockTracker();
     let pendingFinish: string | null = null;
     let pendingUsage: StreamUsage | null = null;
+    /** 是否收到过上游终止事件（completed/incomplete/failed）。
+     * 没收到就结束 = 上游断流，不能合成正常 finish，否则上层会把半截参数当成功执行。 */
+    let sawTerminal = false;
 
     // 每工具一条 lane。并发 function_call 不能共用一个“当前工具”指针：
     // output_index 是 Responses 流里 added/done/delta 都稳定携带的关联键
@@ -406,6 +413,9 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       candidateArgs: string;
       /** 已由终态事件（done/completed）定型，重复事件不再追加 */
       finalized: boolean;
+      /** 参数是否收齐：仅当收到终态载体（arguments.done / output_item.done /
+       *  completed.output[]）才为 true。只有 delta 的 lane 可能是半截 JSON。 */
+      complete: boolean;
     };
     const lanes: ToolLane[] = [];
     const byItemId = new Map<string, ToolLane>();
@@ -461,6 +471,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         args: "",
         candidateArgs: "",
         finalized: false,
+        complete: false,
       };
       lanes.push(lane);
       register(lane);
@@ -483,8 +494,13 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     // 完整参数回填：已有参数是完整参数前缀时只补后缀（防重复拼接）；
     // 终态参数比已累积的短（说明 delta 已完整）则不覆盖；两者不一致也不覆盖，
     // 避免乱序/重复事件把 JSON 拼坏。
+    //
+    // 只要走到这里，就说明上游给了终态载体（arguments.done / output_item.done /
+    // completed.output[]），参数视为收齐。
     const backfillArgs = (lane: ToolLane, fullArgs: string): StreamChunk[] => {
-      if (!fullArgs || lane.finalized) return [];
+      if (!fullArgs) return [];
+      lane.complete = true;
+      if (lane.finalized) return [];
       if (!lane.args) {
         lane.args = fullArgs;
         lane.finalized = true;
@@ -696,6 +712,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
 
         case "response.completed":
         case "response.incomplete":
+          sawTerminal = true;
           for (const c of handleOutputArray(event.response?.output)) yield c;
           pendingFinish =
             event.type === "response.incomplete" &&
@@ -713,6 +730,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           continue;
 
         case "response.failed":
+          sawTerminal = true;
           for (const c of handleOutputArray(event.response?.output)) yield c;
           this.logger.error(`Response failed: ${event.error?.message}`);
           pendingFinish = "error";
@@ -729,6 +747,13 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       if (lane.candidateArgs) {
         for (const c of backfillArgs(lane, lane.candidateArgs)) yield c;
       }
+      // 适配器出口的最终参数：与 BlockAssembler/agent-engine 的 [tool-args]
+      // 日志对照，可判断模型流本身是否就没给参数。
+      this.logger.log(
+        `[responses.tool] final call_id=${lane.callId || "?"} name=${lane.name || "?"} ` +
+          `output_index=${lane.outputIndex ?? "?"} argsLen=${lane.args.length} ` +
+          `complete=${lane.complete} args=${logPreview(lane.args)}`,
+      );
       if (!lane.args) {
         this.logger.warn(
           `[responses.tool] ${lane.callId || "?"} (${lane.name || "?"}, ` +
@@ -737,8 +762,38 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       }
     }
 
+    // 工具块闭合时带上参数完整性标记：下游据此拒绝执行半截参数。
+    const closeAllChunks = (): StreamChunk[] => {
+      const chunks = tracker.closeAll();
+      for (const c of chunks) {
+        if (c.type !== "block_end" || c.block?.type !== "tool-call") continue;
+        const lane = c.block.toolCallId ? byCallId.get(c.block.toolCallId) : undefined;
+        if (lane) c.block.argumentsComplete = lane.complete;
+      }
+      return chunks;
+    };
+
+    // 上游断流：没有任何终止事件就结束。此时绝不能合成正常 finish——否则上层
+    // 会认为本轮成功，拿半截参数去执行工具（2026-11-17 write 空参数事故）。
+    if (!sawTerminal) {
+      // 先闭合块（携带完整性标记），让组装器拿到带 argumentsComplete 的权威块
+      for (const c of closeAllChunks()) yield c;
+      // 用户主动中止优先：SDK 被 abort 时 for-await 会"干净"结束，
+      // 若先判截断会触发自动重试，违背用户意图。
+      if (abortSignal?.aborted) {
+        throw createAbortError("LLM stream aborted by user");
+      }
+      const toolSummary = lanes
+        .map((l) => `${l.name || "?"}:${l.args.length}${l.complete ? "" : "!"}`)
+        .join(",");
+      throw new UpstreamStreamTruncatedError(
+        `Responses stream ended without terminal event ` +
+          `(tools=[${toolSummary}])`,
+      );
+    }
+
     // 收尾：先闭所有块，再 usage，最后 finish
-    for (const c of tracker.closeAll()) yield c;
+    for (const c of closeAllChunks()) yield c;
     if (pendingUsage) {
       yield { type: "usage", usage: pendingUsage };
     }

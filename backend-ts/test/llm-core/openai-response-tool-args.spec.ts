@@ -10,6 +10,7 @@
  * tool-call 参数，不依赖网络。
  */
 import { OpenAIResponseAdapter } from '../../src/modules/llm-core/adapters/openai-response.adapter';
+import { UpstreamStreamTruncatedError } from '../../src/modules/llm-core/utils/upstream-errors';
 
 function makeCapabilityStub() {
   return {} as any;
@@ -26,6 +27,26 @@ async function run(events: any[]): Promise<any[]> {
     chunks.push(chunk);
   }
   return chunks;
+}
+
+/** 跑完（允许抛错），返回已产出的 chunk 与错误 */
+async function runCollecting(
+  events: any[],
+  abortSignal?: AbortSignal,
+): Promise<{ chunks: any[]; error?: Error }> {
+  const adapter = new OpenAIResponseAdapter(makeCapabilityStub());
+  const chunks: any[] = [];
+  try {
+    for await (const chunk of (adapter as any).handleStreamResponse(
+      stream(events),
+      abortSignal,
+    )) {
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    return { chunks, error: error as Error };
+  }
+  return { chunks };
 }
 
 function added(outputIndex: number, item: Record<string, any>) {
@@ -439,5 +460,64 @@ describe('OpenAIResponseAdapter 流式工具参数', () => {
       totalTokens: 13,
     });
     expect(chunks.find((c) => c.type === 'finish')?.finishReason).toBe('stop');
+  });
+
+  it('无终止事件：抛截断错误，且 block_end 标记参数不完整', async () => {
+    const { chunks, error } = await runCollecting([
+      added(0, { id: 'item_0', call_id: 'call_0', name: 'write' }),
+      {
+        type: 'response.function_call_arguments.delta',
+        item_id: 'item_0',
+        output_index: 0,
+        delta: '{"content":"<html>abc',
+      },
+    ]);
+
+    expect(error).toBeInstanceOf(UpstreamStreamTruncatedError);
+    const end = chunks.find(
+      (c) => c.type === 'block_end' && c.block?.type === 'tool-call',
+    );
+    // 半截 JSON 原样保留供审计，且明确标记不完整
+    expect(end?.block.arguments).toBe('{"content":"<html>abc');
+    expect(end?.block.argumentsComplete).toBe(false);
+  });
+
+  it('用户中止优先于截断判定：抛 AbortError 而不是截断错误', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { error } = await runCollecting(
+      [
+        added(0, { id: 'item_0', call_id: 'call_0', name: 'write' }),
+        {
+          type: 'response.function_call_arguments.delta',
+          item_id: 'item_0',
+          output_index: 0,
+          delta: '{"content":"abc',
+        },
+      ],
+      controller.signal,
+    );
+
+    expect(error?.name).toBe('AbortError');
+    expect(error).not.toBeInstanceOf(UpstreamStreamTruncatedError);
+  });
+
+  it('正常终止：block_end 标记参数完整', async () => {
+    const { chunks, error } = await runCollecting([
+      added(0, { id: 'item_0', call_id: 'call_0', name: 'glob' }),
+      {
+        type: 'response.function_call_arguments.done',
+        item_id: 'item_0',
+        output_index: 0,
+        arguments: '{"pattern":"*.ts"}',
+      },
+      completed(),
+    ]);
+
+    expect(error).toBeUndefined();
+    const end = chunks.find(
+      (c) => c.type === 'block_end' && c.block?.type === 'tool-call',
+    );
+    expect(end?.block.argumentsComplete).toBe(true);
   });
 });

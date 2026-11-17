@@ -4,6 +4,7 @@ import {
 } from '../../src/modules/llm-core/utils/retry-on-error.util';
 import {
   UpstreamNetworkError,
+  UpstreamStreamTruncatedError,
   UpstreamTimeoutError,
 } from '../../src/modules/llm-core/utils/upstream-errors';
 
@@ -72,5 +73,21 @@ describe('normalizeTransportError（传输层裸错误归一化）', () => {
     (raw as any).cause = { code: 'UND_ERR_SOCKET', message: 'other side closed' };
 
     expect(classifyError(normalizeTransportError(raw))).toBe('network_error');
+  });
+
+  it('用户中止优先于截断错误：即使 cause 是截断错误也不重试', () => {
+    const truncated = new UpstreamStreamTruncatedError('stream ended without terminal event');
+    const abort: any = new Error('aborted');
+    abort.name = 'AbortError';
+    abort.cause = truncated;
+
+    expect(classifyError(abort)).toBeNull();
+    expect(classifyError(truncated)).toBe('network_error');
+  });
+
+  it('UpstreamStreamTruncatedError 自身可重试，且不被 normalizeTransportError 改写', () => {
+    const truncated = new UpstreamStreamTruncatedError('Responses stream ended without terminal event');
+    expect(normalizeTransportError(truncated)).toBe(truncated);
+    expect(truncated.discardable).toBe(true);
   });
 });

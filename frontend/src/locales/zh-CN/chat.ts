@@ -354,6 +354,7 @@ export default {
     resultSuccess: '执行结果',
     fieldKey: '字段',
     aborted: '已终止',
+    skipped: '已跳过',
     noResponse: '无响应',
     loadDetailsFailed: '加载工具详情失败',
     lineCount: '{n} 行',

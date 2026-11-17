@@ -9,7 +9,9 @@
  * - seed() 支持断点续传：以历史 Message 的既有块预置，新流块的 index 自动接续偏移
  */
 
+import { Logger } from "@nestjs/common";
 import { partialParse } from "partial-json-parser";
+import { logPreview } from "../../common/utils/log-preview.util";
 import type {
   BlockTiming,
   ContentBlock,
@@ -43,6 +45,7 @@ export interface AssembledResult {
 }
 
 export class BlockAssembler {
+  private readonly logger = new Logger(BlockAssembler.name);
   private partials = new Map<number, PartialBlock>();
   /** 块出现顺序（按首见 index） */
   private order: number[] = [];
@@ -188,11 +191,18 @@ export class BlockAssembler {
   /**
    * 采纳 block_end 权威块前的归一化：
    * - tool-call 参数统一过 repairArguments（正常完成也可能有无效 JSON，与未闭合块同规则）
+   * - 保留 argumentsComplete 标记：false 时下游拒绝执行（半截 JSON 不能拿去跑工具）
    * （P6c：原 contentId 回填逻辑已随 contentId 字段一并删除）
    */
   private normalizeBlock(block: ContentBlock): ContentBlock {
     if (block.type === "tool-call") {
-      return { ...block, arguments: this.repairArguments(block.arguments) };
+      return {
+        ...block,
+        arguments: this.repairArguments(block.arguments, {
+          toolCallId: block.toolCallId,
+          name: block.name,
+        }),
+      };
     }
     return block;
   }
@@ -210,7 +220,8 @@ export class BlockAssembler {
   }
 
   /** 按出现顺序组装权威块列表（未闭合块从增量组装；空 text/reasoning 丢弃） */
-  blocks(): ContentBlock[] {
+  blocks(opts?: { preserveRawArguments?: boolean }): ContentBlock[] {
+    const preserveRaw = opts?.preserveRawArguments === true;
     const result: ContentBlock[] = [];
     for (const index of this.order) {
       const partial = this.partials.get(index);
@@ -218,18 +229,38 @@ export class BlockAssembler {
 
       // block_end 权威终态优先
       if (partial.block) {
-        result.push(partial.block);
+        if (preserveRaw && partial.block.type === "tool-call") {
+          // 审计路径：保留模型原始输出（可能是半截 JSON），不做修复。
+          // 这类消息一律 excludedFromContext，非法 JSON 不会发给上游。
+          result.push({
+            ...partial.block,
+            arguments: partial.arguments || partial.block.arguments,
+            argumentsComplete: partial.block.argumentsComplete,
+          });
+        } else {
+          result.push(partial.block);
+        }
         continue;
       }
 
       if (partial.type === "tool-call") {
+        const raw = partial.arguments || "";
         result.push(
           this.withTiming(
             {
               type: "tool-call",
               toolCallId: partial.toolCallId || "",
               name: partial.name || "",
-              arguments: this.repairArguments(partial.arguments || ""),
+              arguments: preserveRaw
+                ? raw
+                : this.repairArguments(raw, {
+                    toolCallId: partial.toolCallId,
+                    name: partial.name,
+                  }),
+              // 未闭合块不主动标 false：Chat/Anthropic 适配器本来就不发参数完整性
+              // 标记，若这里默认 false 会把正常工具调用全部判成截断。
+              // 只有 Responses 适配器在断流时显式发 block_end(argumentsComplete=false)
+              // 才会命中该分支。
             },
             partial,
           ),
@@ -280,6 +311,11 @@ export class BlockAssembler {
     provider?: string;
     model?: string;
     extraMetadata?: Message["metadata"];
+    /**
+     * 审计路径：工具参数保留模型原始输出（可能是半截 JSON），不做 partialParse 修复。
+     * 用于被丢弃的截断消息——它们一律 excludedFromContext，非法 JSON 不会发给上游。
+     */
+    preserveRawArguments?: boolean;
   }): Message | null {
     if (!this.hasContent()) return null;
 
@@ -295,7 +331,9 @@ export class BlockAssembler {
       kind: "model",
       source: { kind: "model", provider: opts.provider || "", model: opts.model || "" },
       metadata,
-      content: this.blocks(),
+      content: this.blocks({
+        preserveRawArguments: opts.preserveRawArguments === true,
+      }),
     };
   }
 
@@ -306,16 +344,35 @@ export class BlockAssembler {
    * 用 partialParse 解析后重新序列化为合法 JSON，
    * 确保下游消费方（LLM 回传、持久化）不报错。正常完成时模型也可能输出无效 JSON。
    */
-  repairArguments(args: string): string {
-    if (!args || typeof args !== "string") return "{}";
+  repairArguments(
+    args: string,
+    context?: { toolCallId?: string; name?: string },
+  ): string {
+    const tool = context?.name || "(no-name)";
+    const id = context?.toolCallId || "(no-id)";
+    if (!args || typeof args !== "string") {
+      // 这里是“空参数 → {}”的第一现场。必须把原始值和工具元信息打出来，
+      // 否则后续 Zod 只会看到 {}，无法判断是模型没写还是采集/组装丢了。
+      this.logger.warn(
+        `[tool-args] empty/non-string arguments -> {} tool=${tool} id=${id} rawType=${typeof args} raw=${logPreview(args)}`,
+      );
+      return "{}";
+    }
     try {
       JSON.parse(args);
       return args;
-    } catch {
+    } catch (parseError) {
       try {
         const parsed = partialParse(args);
-        return JSON.stringify(parsed);
+        const repaired = JSON.stringify(parsed);
+        this.logger.warn(
+          `[tool-args] invalid JSON repaired tool=${tool} id=${id} rawLen=${args.length} raw=${logPreview(args)} repaired=${logPreview(repaired)} error=${parseError instanceof Error ? parseError.message : String(parseError)}`,
+        );
+        return repaired;
       } catch {
+        this.logger.warn(
+          `[tool-args] invalid JSON -> {} tool=${tool} id=${id} rawLen=${args.length} raw=${logPreview(args)} error=${parseError instanceof Error ? parseError.message : String(parseError)}`,
+        );
         return "{}";
       }
     }

@@ -530,4 +530,37 @@ describe('replayer tool_image/prune（工具截图批量移出上下文）', () 
     const oldNode = state.messages.find((n) => n.id === 'r1')!;
     expect(oldNode.metadata.pruneInfo).toBeUndefined();
   });
+
+  it('excludedFromContext 的 assistant 消息不进上下文视图（审计事件仍在日志里）', () => {
+    const events: BaseEvent[] = [
+      ...baseRound(),
+      {
+        type: 'assistant/message',
+        seq: 5,
+        time: 5,
+        data: {
+          messageId: 'truncated-1',
+          content: [
+            {
+              type: 'tool-call',
+              contentId: 'truncated-1',
+              toolCallId: 'call_trunc',
+              name: 'write',
+              arguments: '{"content":"<html>abc',
+              argumentsComplete: false,
+            },
+          ],
+          metadata: {
+            excludedFromContext: true,
+            discardReason: 'stream_truncated',
+          },
+        },
+      },
+    ];
+
+    const state = foldEvents(events);
+    expect(state.messages.some((m) => m.id === 'truncated-1')).toBe(false);
+    // 同回合正常消息不受影响
+    expect(state.messages.some((m) => m.id === 'a1')).toBe(true);
+  });
 });

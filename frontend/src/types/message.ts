@@ -105,7 +105,7 @@ export interface ToolCallEntry {
     name?: string
     arguments?: string
     /** 工具执行结果（toolCallsResponse / tool/result 写入） */
-    outcome?: 'success' | 'error' | 'rejected'
+    outcome?: 'success' | 'error' | 'rejected' | 'skipped'
     /** 子代理关联（subagent_link 事件写入） */
     subAgentLink?: { subSessionId: string; name?: string }
     /** 子代理终态（subagent_status 事件写入）：早于整批 tool_calls_response 到达 */
@@ -124,7 +124,7 @@ export interface ToolCallResponseEntry {
     name: string
     content: string
     toolCallId: string
-    outcome?: 'success' | 'error' | 'rejected'
+    outcome?: 'success' | 'error' | 'rejected' | 'skipped'
     /** 工具产出的图片引用（物化后的 FileRef；工具结果区渲染缩略图/大图） */
     images?: FileRef[]
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明

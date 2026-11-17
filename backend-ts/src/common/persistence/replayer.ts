@@ -243,6 +243,11 @@ export function foldEvent(
     case 'assistant/message': {
       const data = (event.data as unknown) as AssistantMessageData;
       if (!state.currentTurnId) break; // 回合未开（异常），忽略
+      // 被丢弃的尝试（上游断流重试）：落库供审计，但不进 LLM 上下文。
+      // 与 compaction/summary、tool_image/prune 同一设计意图——界面全量、模型折叠。
+      // 过滤必须在这里（折叠层）而不是 message-transform.pipeline：管线与折叠列表
+      // 有 1:1 约束，压缩记账（shadowedCount + splice）依赖该不变量。
+      if (data.metadata?.excludedFromContext === true) break;
       state.messages.push({
         ...assistantMessageFromData(data, event.time),
         seq: event.seq,

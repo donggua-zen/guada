@@ -9,7 +9,7 @@
         @click.stop="toggleExpand(toolIndex)">
         <component v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" :is="getToolIcon(tool)"
           class="w-4 h-4 shrink-0" style="color: #f56c6c;" />
-        <component v-else-if="tool.outcome === 'aborted'" :is="getToolIcon(tool)"
+        <component v-else-if="tool.outcome === 'aborted' || tool.outcome === 'skipped'" :is="getToolIcon(tool)"
           class="w-4 h-4 shrink-0" style="color: #c0c4cc;" />
         <component v-else :is="getToolIcon(tool)" class="w-4 h-4 shrink-0 text-gray-500" />
         <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
@@ -53,8 +53,9 @@
             <PanelRightExpand20Filled class="w-3.5 h-3.5" />
           </span>
         </GdTooltip>
-        <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示 -->
-        <ChevronDown12Regular class="w-3 h-3 shrink-0 ml-2 text-gray-400 transition-all duration-200"
+        <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示。
+             已跳过的工具没有可展开内容（参数原文不渲染），不显示箭头。 -->
+        <ChevronDown12Regular v-if="tool.outcome !== 'skipped'" class="w-3 h-3 shrink-0 ml-2 text-gray-400 transition-all duration-200"
           :class="isExpanded(toolIndex) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 -rotate-90'" />
       </div>
 
@@ -236,6 +237,10 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
   if (tool.outcome === 'aborted') {
     return `${config.text.completed}（${t('chat.toolCalls.aborted')}）`;
   }
+  // 参数在流式传输中被截断：工具未执行，参数原文不渲染（审计日志里可见）
+  if (tool.outcome === 'skipped') {
+    return `${config.text.completed}（${t('chat.toolCalls.skipped')}）`;
+  }
   return executing ? config.text.executing : config.text.completed;
 };
 
@@ -290,6 +295,8 @@ const todoRows = computed<boolean[]>(() =>
 );
 
 const toggleExpand = (index: number): void => {
+  // 已跳过的工具（参数被截断）没有可展开内容：参数原文不渲染，只留状态占位
+  if (props.toolCalls[index]?.outcome === 'skipped') return;
   const nowExpanded = isExpanded(index);
   const nextExpanded = new Set(expandedIndexes.value);
   const nextCollapsed = new Set(collapsedIndexes.value);

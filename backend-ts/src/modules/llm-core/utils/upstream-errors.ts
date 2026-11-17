@@ -81,3 +81,21 @@ export class UpstreamRequestError extends UpstreamError {
     this.name = "UpstreamRequestError";
   }
 }
+
+/**
+ * Stream truncated — upstream SSE ended without any terminal event
+ * (`response.completed` / `response.incomplete` / `response.failed` / `[DONE]`).
+ *
+ * 与 UpstreamNetworkError 分开：本错误代表"流被截断但连接本身可能正常"，
+ * 上层据此决定丢弃半截内容并重试。**故意不继承 UpstreamNetworkError**——
+ * classifyError 会先命中父类的 network_error 分支，从而遮蔽用户中止判定。
+ */
+export class UpstreamStreamTruncatedError extends UpstreamError {
+  /** 该错误的半截内容可以被丢弃后重试（上层据此走 discard+retry 分支） */
+  readonly discardable = true;
+
+  constructor(message: string, cause?: any) {
+    super(message, cause);
+    this.name = "UpstreamStreamTruncatedError";
+  }
+}

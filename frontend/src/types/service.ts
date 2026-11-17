@@ -83,7 +83,7 @@ export interface StreamToolCallsResponseEvent {
         name: string
         content: string
         toolCallId?: string
-        outcome?: 'success' | 'error' | 'rejected'
+        outcome?: 'success' | 'error' | 'rejected' | 'skipped'
         /** 工具产出的图片引用（物化后的 FileRef；工具结果区渲染缩略图/大图） */
         images?: FileRef[]
         /** UI 渲染元数据（仅前端消费，不进 LLM 上下文） */

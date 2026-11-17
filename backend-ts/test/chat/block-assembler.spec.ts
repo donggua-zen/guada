@@ -257,5 +257,38 @@ describe('BlockAssembler', () => {
       expect(assembler.repairArguments('{"path":"src/')).toBe('{}');
       expect(assembler.repairArguments('{{{')).toBe('{}');
     });
+
+    it('preserveRawArguments：审计路径保留截断原文，并保留 argumentsComplete=false', () => {
+      const assembler = new BlockAssembler();
+      assembler.push({
+        type: 'block_start',
+        index: 0,
+        blockType: 'tool-call',
+      });
+      assembler.push({
+        type: 'tool_call_delta',
+        index: 0,
+        toolCallId: 'call_1',
+        name: 'write',
+        argumentsDelta: '{"content":"<html>abc',
+      });
+      assembler.push({
+        type: 'block_end',
+        index: 0,
+        block: {
+          type: 'tool-call',
+          toolCallId: 'call_1',
+          name: 'write',
+          arguments: '{"content":"<html>abc',
+          argumentsComplete: false,
+        },
+      });
+
+      const msg = assembler.toMessage({ id: 'm1', preserveRawArguments: true })!;
+      const block = msg.content[0] as any;
+      // 不做 partialParse 修复，原文保留供审计（该消息 excludedFromContext，不会发给上游）
+      expect(block.arguments).toBe('{"content":"<html>abc');
+      expect(block.argumentsComplete).toBe(false);
+    });
   });
 });

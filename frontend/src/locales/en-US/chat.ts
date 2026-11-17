@@ -354,6 +354,7 @@
     resultSuccess: 'Execution Result',
     fieldKey: 'Field',
     aborted: 'Aborted',
+    skipped: 'Skipped',
     noResponse: 'No Response',
     loadDetailsFailed: 'Failed to load tool details',
     lineCount: '{n} lines',
