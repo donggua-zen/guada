@@ -947,10 +947,13 @@ const loadPresetAgents = async () => {
 async function loadAllData() {
   pageLoading.value = true
   try {
+    // 技能列表按当前智能体取：全局共享 + 该智能体专属（专属项以锁定态展示）。
+    // 全局技能管理页不传 agentId，因此看不到这些专属技能。
+    const agentId = agentForm.id || undefined
     const [modelsResp, mcpsResp, skillsResp, charsResp] = await Promise.all([
       apiService.fetchModels(),
       apiService.getMcpServers(),
-      apiService.fetchSkills(),
+      apiService.fetchSkills(agentId),
       apiService.fetchAgents(),
       loadLocalTools(),
     ])
@@ -995,12 +998,37 @@ async function loadAllData() {
   }
 }
 
-// 智能体切换时刷新子代理列表
+// 智能体切换时刷新子代理列表与技能列表
 watch(() => agentForm.id, () => {
   if (agentForm.id) {
     loadPresetAgents();
+    void loadSkillsForAgent();
   }
 })
+
+/**
+ * 重新按当前智能体拉取技能列表。
+ *
+ * 切换智能体时专属技能集合会变（插件把技能绑定到某个智能体），
+ * 只靠首次 loadAllData 会残留上一个智能体的专属技能。
+ */
+async function loadSkillsForAgent() {
+  try {
+    const resp = await apiService.fetchSkills(agentForm.id || undefined)
+    skillsList.value = Array.isArray(resp?.items)
+      ? resp.items.filter((s) => s.enabled !== false)
+      : []
+    if (skillsAllowlistMode.value) {
+      for (const skill of skillsList.value) {
+        if (!(skill.id in agentForm.enabledSkills)) {
+          agentForm.enabledSkills[skill.id] = false
+        }
+      }
+    }
+  } catch (err) {
+    console.error('加载技能列表失败', err)
+  }
+}
 
 // 全部禁用开关切换处理
 const handleAllDisabledToggle = async (val: boolean) => {

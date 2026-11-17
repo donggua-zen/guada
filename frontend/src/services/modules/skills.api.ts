@@ -3,7 +3,7 @@ import type { PaginatedResponse } from "@/types/common";
 import type { Skill, SkillCommand, SkillOrigin } from "@/types/skills";
 
 export interface SkillsApi {
-  fetchSkills(): Promise<PaginatedResponse<Skill>>;
+  fetchSkills(agentId?: string): Promise<PaginatedResponse<Skill>>;
   fetchCommands(trigger: string, agentId?: string): Promise<{ items: SkillCommand[]; total: number }>;
   fetchSkillDetail(skillId: string): Promise<Skill | null>;
   fetchSkillDocumentation(skillId: string): Promise<{ content: string }>;
@@ -25,8 +25,15 @@ export interface SkillsApi {
 }
 
 export const skillsApi: SkillsApi = {
-  async fetchSkills(this: ApiContext) {
-    return await this._request<PaginatedResponse<Skill>>("/skills");
+  /**
+   * 技能列表。
+   *
+   * - 无 agentId：全局共享技能（技能管理页）
+   * - 带 agentId：全局 + 该智能体专属技能（智能体配置页，专属技能以锁定态展示）
+   */
+  async fetchSkills(this: ApiContext, agentId?: string) {
+    const query = agentId ? `/skills?agentId=${encodeURIComponent(agentId)}` : "/skills";
+    return await this._request<PaginatedResponse<Skill>>(query);
   },
 
   async fetchCommands(this: ApiContext, trigger: string, agentId?: string) {

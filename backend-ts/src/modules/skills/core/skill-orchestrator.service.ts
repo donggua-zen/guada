@@ -11,6 +11,7 @@ import { SkillLoaderService } from "./skill-loader.service";
 import { SkillVersionManager } from "./skill-version-manager.service";
 import { SkillDefinition, SkillLearnResult, SkillResourceBase } from "../interfaces/skill-manifest.interface";
 import { PluginManager } from "../../plugins/plugin.manager";
+import { isVisibleToAgent } from "../../plugins/utils/agent-visibility";
 import { ToolkitCatalogService } from "../../tools/toolkit-catalog.service";
 
 /**
@@ -147,6 +148,63 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     session?: any,
   ): SkillDefinition[] {
     return skills.filter((s) => this.isSkillVisibleInSession(s, session));
+  }
+
+  /**
+   * 是否为「智能体专属技能」——注册时声明了 visibleTo。
+   *
+   * 这类技能由插件绑定到指定智能体（如 `visibleTo: ['self']` 只给插件自己
+   * 注册的智能体），不是全局共享能力：既不能在其他智能体上启用，
+   * 也不该出现在全局技能管理里。
+   */
+  isAgentScopedSkill(skill: SkillDefinition): boolean {
+    const scope = (skill as any).visibleTo;
+    return Array.isArray(scope) && scope.length > 0;
+  }
+
+  /**
+   * 智能体视角：全局共享技能 + 该智能体专属技能（visibleTo 放行的那部分）。
+   *
+   * 用于**智能体配置页**——那里需要看到"这个智能体能用的全部技能"，
+   * 其中插件绑定的专属技能以锁定态展示。而全局技能管理页只列全局共享技能
+   * （见 `listManageableSkills`），两者口径不同，不能共用。
+   *
+   * @param agentId 目标智能体 id；为空时退化为 `listManageableSkills`
+   */
+  listSkillsForAgent(agentId: string | null | undefined, filterEnabled = false): SkillDefinition[] {
+    const all = this.listSkills(filterEnabled);
+    if (!agentId) return this.listManageableSkills(filterEnabled);
+    return all.filter((s) => {
+      if (!this.isAgentScopedSkill(s)) return true;
+      const provider = String(s.provider || "");
+      const ownerPluginId = provider.startsWith("plugin:")
+        ? provider.substring("plugin:".length)
+        : "";
+      return isVisibleToAgent((s as any).visibleTo, ownerPluginId, agentId);
+    });
+  }
+
+  /**
+   * 管理页口径：只列**全局共享**技能。
+   *
+   * 全局技能管理页展示的是"所有智能体都能用的能力"，因此把智能体专属技能
+   * （visibleTo 非空）排除在外——它们随智能体绑定，在管理页既不能开关、
+   * 也无法被其他智能体使用，列出来只会误导。
+   *
+   * 注意：会话内的技能清单（`# Skills` 段、`skill_learn`）走的是
+   * `isSkillVisibleInSession` + `isVisibleToAgent`，与这里互不影响。
+   */
+  listManageableSkills(filterEnabled = false): SkillDefinition[] {
+    return this.listSkills(filterEnabled).filter(
+      (s) => !this.isAgentScopedSkill(s),
+    );
+  }
+
+  /** 管理页单条查询：智能体专属技能按「不存在」处理（详情/文档/卸载/更新一致） */
+  getManageableSkillDetail(skillId: string): SkillDefinition | null {
+    const skill = this.registry.get(skillId);
+    if (!skill || this.isAgentScopedSkill(skill)) return null;
+    return skill;
   }
 
   /**

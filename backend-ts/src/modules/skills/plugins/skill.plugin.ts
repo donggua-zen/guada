@@ -33,6 +33,21 @@ export class SkillPlugin extends PluginBase {
     super();
   }
 
+  /**
+   * 技能对给定智能体是否在作用域内。
+   *
+   * 未声明 visibleTo = 全局技能，恒为 true；声明了则按 `isVisibleToAgent`
+   * 判定（`self` 匹配本插件注册的智能体，无 agentId 时 fail-closed）。
+   */
+  private isSkillInScope(skill: any, agentId: string | null): boolean {
+    if (!skill?.visibleTo) return true;
+    const provider = String(skill.provider || "");
+    const ownerPluginId = provider.startsWith("plugin:")
+      ? provider.substring("plugin:".length)
+      : "";
+    return isVisibleToAgent(skill.visibleTo, ownerPluginId, agentId);
+  }
+
   async onLoad(api: PluginApi) {
     api.registerNls("zh", langZh);
     api.registerNls("en", langEn);
@@ -40,8 +55,13 @@ export class SkillPlugin extends PluginBase {
     api.registerCommandProvider({
       id: "skill",
       trigger: "slash",
-      fetchItems: () => {
-        const skills = this.orchestrator.listSkills(true);
+      fetchItems: (ctx) => {
+        // 只列当前智能体可用的技能：声明了 visibleTo 的智能体专属技能
+        // 在别的智能体（或无 agentId 的上下文）里不出现，与 skill_learn 口径一致。
+        const agentId = ctx?.agentId ?? null;
+        const skills = this.orchestrator
+          .listSkills(true)
+          .filter((s) => this.isSkillInScope(s, agentId));
         return skills.map((s) => ({
           name: s.manifest?.name || s.id,
           description: s.manifest?.description || "",
@@ -55,6 +75,7 @@ export class SkillPlugin extends PluginBase {
         // + 能力包技能按会话/智能体角色配置检查包是否放行（智能体禁用的包
         // 其技能不再内联）。有 ctx.roleCfg 时生效；缺失则 fail-open。
         const allSkills = this.orchestrator.listSkills(true).filter((s) => {
+          if (!this.isSkillInScope(s, ctx?.agentId ?? null)) return false;
           if (!this.orchestrator.isPluginSkillVisible(s)) return false;
           if (!s.toolkitId) return true;
           const provider = String(s.provider || "");

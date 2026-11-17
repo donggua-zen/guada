@@ -43,13 +43,23 @@ export class SkillsController {
 
   /**
    * 列出所有已加载的 Skills（支持分页）
+   *
+   * 默认（管理页口径）只返回**全局共享**技能。智能体专属技能（注册时声明了
+   * visibleTo）随智能体绑定，不在此列——它们既不能被其他智能体使用，
+   * 也无法在管理页开关，列出来只会误导。
+   *
+   * `?agentId=` 时切换为**智能体配置页口径**：全局共享 + 该智能体的专属技能，
+   * 供面板把专属技能以锁定态展示。
    */
   @Get()
   listSkills(
     @Query('page') page?: number,
     @Query('size') size?: number,
+    @Query('agentId') agentId?: string,
   ): PaginatedResponse<SkillDefinition> {
-    const allSkills = this.orchestrator.listSkills(false);
+    const allSkills = agentId
+      ? this.orchestrator.listSkillsForAgent(agentId, false)
+      : this.orchestrator.listManageableSkills(false);
     const total = allSkills.length;
 
     // 如果未提供分页参数，返回全部数据
@@ -69,7 +79,7 @@ export class SkillsController {
    */
   @Get(':id')
   getSkillDetail(@Param('id') skillId: string): SkillDefinition | null {
-    return this.orchestrator.getSkillDetail(skillId);
+    return this.orchestrator.getManageableSkillDetail(skillId);
   }
 
   /**
@@ -77,7 +87,7 @@ export class SkillsController {
    */
   @Get(':id/documentation')
   async getSkillDocumentation(@Param('id') skillId: string): Promise<{ content: string }> {
-    const skill = this.orchestrator.getSkillDetail(skillId);
+    const skill = this.orchestrator.getManageableSkillDetail(skillId);
     if (!skill) {
       return { content: '' };
     }
@@ -186,7 +196,7 @@ export class SkillsController {
    */
   @Get('enabled-status')
   getEnabledStatus(): Array<{ id: string; enabled: boolean }> {
-    return this.orchestrator.listSkills(false).map(s => ({
+    return this.orchestrator.listManageableSkills(false).map(s => ({
       id: s.id,
       enabled: s.enabled !== false,
     }));
@@ -425,7 +435,7 @@ export class SkillsController {
   @Post(':id/update')
   async updateSkill(@Param('id') skillId: string): Promise<{ success: boolean; message: string }> {
     try {
-      const skill = this.orchestrator.getSkillDetail(skillId);
+      const skill = this.orchestrator.getManageableSkillDetail(skillId);
       if (!skill) {
         return { success: false, message: `Skill '${skillId}' not found` };
       }
@@ -535,7 +545,7 @@ export class SkillsController {
   @Post(':id/uninstall')
   async uninstallSkill(@Param('id') skillId: string): Promise<{ success: boolean; message: string }> {
     try {
-      const skill = this.orchestrator.getSkillDetail(skillId);
+      const skill = this.orchestrator.getManageableSkillDetail(skillId);
       if (!skill) {
         return { success: false, message: `Skill '${skillId}' not found` };
       }
