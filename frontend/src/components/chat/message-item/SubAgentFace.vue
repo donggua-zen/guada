@@ -4,10 +4,12 @@
        - 完成：左下角绿色勾选徽标
        - 失败：整张脸转危险色 + 左下角红色叉号徽标
        - 运行中：眼睛眨眼 + 左右看（仅 running 时挂动画）
-       颜色由外层 .subagent-block 下发 --sa-identity-face；徽标描边跟随背景色。 -->
+       颜色由外层 .subagent-block 下发 --sa-identity-face；徽标描边跟随背景色。
+       外框比同排 16px 线条图标小一圈：实心色块的视觉重量约为细线图标的两倍，
+       等尺寸会显得偏大（viewBox 内缩，眼睛/徽标坐标保持不变）。 -->
   <svg class="sa-face" :class="{ 'is-failed': failed, 'is-running': running && !failed }"
     viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-    <rect class="sa-face__body" width="20" height="20" rx="7" />
+    <rect class="sa-face__body" x="1.5" y="1.5" width="17" height="17" rx="6" />
     <!-- 两层嵌套：外层左右看，内层眨眼，两个动画互不覆盖 -->
     <g class="sa-face__look">
       <g class="sa-face__blink">
