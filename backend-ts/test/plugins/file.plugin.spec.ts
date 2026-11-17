@@ -425,6 +425,37 @@ describe("FilePlugin", () => {
       expect(matchLines.length).toBeLessThanOrEqual(3);
     });
 
+    it("should accept max_results above 50 and clamp at runtime instead of failing", async () => {
+      // 契约层：schema 不再声明 .max(50)，模型写 60/1000 都能通过参数校验
+      const schema = (getTool("grep") as any).inputSchema;
+      expect(() => schema.parse({ pattern: "match", max_results: 60 })).not.toThrow();
+      expect(() => schema.parse({ pattern: "match", max_results: 1000 })).not.toThrow();
+
+      for (let i = 0; i < 8; i++) {
+        await writeFile(
+          `src/bulk${i}.ts`,
+          Array.from({ length: 40 }, () => "match").join("\n"),
+        );
+      }
+      const countLines = (r: string) =>
+        r.split("\n").filter((l: string) => l.includes("match")).length;
+
+      // 60 不再报 "Too big"，如实返回 60 条
+      const r60 = await getTool("grep").execute(
+        { pattern: "match", path: path.join(tmpDir, "src"), max_results: 60 },
+        ctx(),
+      );
+      expect(countLines(r60)).toBe(60);
+
+      // 超大值静默 clamp 到硬上限，只追加提示，不抛错
+      const rBig = await getTool("grep").execute(
+        { pattern: "match", path: path.join(tmpDir, "src"), max_results: 1000 },
+        ctx(),
+      );
+      expect(countLines(rBig)).toBeLessThanOrEqual(200);
+      expect(rBig).toContain("More results exist");
+    });
+
     it("should be case-insensitive when pattern is all lowercase", async () => {
       const result = await getTool("grep").execute(
         { pattern: "hello", path: path.join(tmpDir, "src/b.ts") },

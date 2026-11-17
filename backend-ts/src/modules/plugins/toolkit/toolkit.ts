@@ -42,6 +42,17 @@ function flattenJsonSchema(
   if (node.description) out.description = node.description;
   if (node.enum) out.enum = node.enum;
   if (node.default !== undefined) out.default = node.default;
+  // 数值/长度/条数约束必须随 schema 下发给模型：此前只留 type/description，
+  // 模型看不到 maximum 就写出超限参数，再被运行时 zod.parse 拒绝（grep 的 max_results 就是）。
+  if (node.minimum !== undefined) out.minimum = node.minimum;
+  if (node.maximum !== undefined) out.maximum = node.maximum;
+  if (node.exclusiveMinimum !== undefined) out.exclusiveMinimum = node.exclusiveMinimum;
+  if (node.exclusiveMaximum !== undefined) out.exclusiveMaximum = node.exclusiveMaximum;
+  if (node.multipleOf !== undefined) out.multipleOf = node.multipleOf;
+  if (node.minLength !== undefined) out.minLength = node.minLength;
+  if (node.maxLength !== undefined) out.maxLength = node.maxLength;
+  if (node.minItems !== undefined) out.minItems = node.minItems;
+  if (node.maxItems !== undefined) out.maxItems = node.maxItems;
   if (Array.isArray(node.anyOf)) {
     out.anyOf = node.anyOf.map((n: any) => flattenJsonSchema(n, depth + 1, defs));
   }

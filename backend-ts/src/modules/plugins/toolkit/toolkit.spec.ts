@@ -75,6 +75,27 @@ describe("Toolkit.registerTool：schema 展平", () => {
     expect(tool.parameters.required).toEqual(["file_path"]);
   });
 
+  it("保留数值/长度/条数约束，避免模型看不到上限而写出超限参数", () => {
+    const tool = makeTool(
+      z.object({
+        count: z.number().min(1).max(50).describe("条数"),
+        name: z.string().min(2).max(10).describe("名称"),
+        tags: z.array(z.string()).max(5).describe("标签"),
+      }),
+    );
+
+    expect(tool.parameters.properties.count).toMatchObject({
+      minimum: 1,
+      maximum: 50,
+      description: "条数",
+    });
+    expect(tool.parameters.properties.name).toMatchObject({
+      minLength: 2,
+      maxLength: 10,
+    });
+    expect(tool.parameters.properties.tags).toMatchObject({ maxItems: 5 });
+  });
+
   it("超过深度上限的子树只留容器类型（不把整棵 schema 灌进提示词）", () => {
     const tool = makeTool(
       z.object({

@@ -30,6 +30,15 @@ import { z } from "zod";
 import langZh from "./file.lang.zh.json";
 import langEn from "./file.lang.en.json";
 
+/**
+ * grep 单次调用的运行时硬上限。
+ *
+ * schema 不再声明 .max()：模型可自由给出想要的条数，参数校验永不因"要得太多"失败。
+ * 真正的上限在这里静默 clamp —— 与 glob / zcode 的工具设计一致：超限只截断并提示，
+ * 不让工具调用失败。调大这个值只影响单次输出预算，不影响任何工具契约。
+ */
+const GREP_MAX_RESULTS_CAP = 200;
+
 /** edit 匹配结果：成功 / 未找到 / 多处匹配 */
 type EditTransformResult =
   | { kind: "ok"; content: string; replacements: number; firstLine: number }
@@ -607,7 +616,6 @@ export class FilePlugin extends PluginBase {
           .number()
           .int()
           .min(1)
-          .max(50)
           .optional()
           .describe("Maximum number of matching lines to return, default 50"),
         workspace: workspaceParamField,
@@ -620,6 +628,11 @@ export class FilePlugin extends PluginBase {
         } = args;
         if (!pattern) throw new Error("pattern is required");
 
+        // 上限只在这里静默 clamp：参数校验永不因"要得太多"失败，超限只截断并提示。
+        const effectiveLimit = Math.min(max_results, GREP_MAX_RESULTS_CAP);
+        const moreHint =
+          "\n(More results exist. Use a more specific pattern or increase max_results to see more.)";
+
         const target = await this.resolveTarget(ctx, args.workspace);
         if (target) {
           // 远端分支：POSIX grep 语义（JS 正则的高级语法 \d 等不适用），
@@ -629,14 +642,17 @@ export class FilePlugin extends PluginBase {
             : target.basePath;
           const lines = await target.provider.grep(pattern, {
             path: searchPath,
-            maxResults: max_results,
+            maxResults: effectiveLimit + 1,
             ignore: FilePlugin.IGNORE_PATTERNS,
           });
           if (lines.length === 0) return "No matches found.";
+          const hasMore = lines.length > effectiveLimit;
           const base = target.basePath.replace(/\/$/, "");
-          return lines
+          const output = lines
+            .slice(0, effectiveLimit)
             .map((l) => (l.startsWith(`${base}/`) ? l.slice(base.length + 1) : l))
             .join("\n");
+          return hasMore ? output + moreHint : output;
         }
 
         const basePath = targetPath
@@ -671,30 +687,42 @@ export class FilePlugin extends PluginBase {
 
         const outputLines: string[] = [];
         let total = 0;
+        let hasMore = false;
         const BATCH_SIZE = 20;
 
-        for (let i = 0; i < files.length && total < max_results; i += BATCH_SIZE) {
+        for (let i = 0; i < files.length && total < effectiveLimit; i += BATCH_SIZE) {
           const batch = files.slice(i, Math.min(i + BATCH_SIZE, files.length));
+          // 多取 1 条用于探测 hasMore（与 glob 同思路），最终输出仍截到 effectiveLimit
           const results = await Promise.allSettled(
             batch.map((fp) =>
-              this.grepInFile(fp, regex, relativeRoot, max_results - total),
+              this.grepInFile(fp, regex, relativeRoot, effectiveLimit - total + 1),
             ),
           );
 
-          for (const result of results) {
+          for (let rIdx = 0; rIdx < results.length; rIdx++) {
+            const result = results[rIdx];
             if (result.status === "fulfilled" && result.value) {
-              outputLines.push(...result.value.lines);
-              total += result.value.count;
-              if (total >= max_results) break;
+              const remaining = effectiveLimit - total;
+              if (result.value.lines.length > remaining) hasMore = true;
+              const kept = result.value.lines.slice(0, remaining);
+              outputLines.push(...kept);
+              total += kept.length;
+              if (total >= effectiveLimit) {
+                // 同批次里还有未处理的结果 → 后面必然还有匹配
+                if (rIdx < results.length - 1) hasMore = true;
+                break;
+              }
             }
           }
+          if (total >= effectiveLimit && i + BATCH_SIZE < files.length) hasMore = true;
         }
 
         if (outputLines.length === 0) {
           return "No matches found.";
         }
 
-        return outputLines.join("\n");
+        const output = outputLines.join("\n");
+        return hasMore ? output + moreHint : output;
       },
       display: {
         actionType: "grep",
