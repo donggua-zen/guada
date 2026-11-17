@@ -463,15 +463,20 @@ class ContextMenuManager {
     }
 
     // 场景3：链接
+    // markdown 渲染产物是 href="#" + data-url（Electron 下走事件委托），
+    // 直接取 link.href 会得到 "#"，"在新窗口打开"就变成去开一个空链接。
     const link = target.closest("a");
-    if (link && link.href) {
+    const linkUrl = link
+      ? (link as HTMLElement).dataset.url || link.getAttribute("href")
+      : null;
+    if (link && linkUrl && linkUrl !== "#") {
       items.push({
         label: t("session.contextMenu.openInNewWindow"),
-        action: () => openInExternalBrowser(link.href),
+        action: () => openInExternalBrowser(linkUrl),
       });
       items.push({
         label: t("session.contextMenu.copyLink"),
-        action: () => this.writeClipboardText(link.href),
+        action: () => this.writeClipboardText(linkUrl),
       });
     }
 

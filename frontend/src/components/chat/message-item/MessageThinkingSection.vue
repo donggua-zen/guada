@@ -22,7 +22,7 @@
     <!-- 内容区：仅展开时渲染；折叠态为纯单行步骤，与工具行完全一致 -->
     <div v-if="isExpanded" class="thinking-section__content-wrapper text-sm">
       <div class="thinking-content">
-      <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
+      <MarkdownContent @click="handleContentClick" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
         :content="reasoningContent" :streaming="isThinking" />
       </div>
     </div>
@@ -56,6 +56,23 @@ const isExpanded = ref(false);
 
 const handleToggle = () => {
   isExpanded.value = !isExpanded.value;
+};
+
+/**
+ * 思考区内容点击。
+ *
+ * 原先这里是 `@click.stop`，会把整个事件停在这一层——而 markdown 链接的点击
+ * 由 document 级委托（useMarkdown.installLinkClickHandler）接管，被 stop 后
+ * 思考区里的链接点了完全没反应。因此：命中链接时不停播、也不把点击当作
+ * "展开/收起" 冒泡出去；其余点击保持原有语义（停播 + 通知父层）。
+ */
+const handleContentClick = (event: MouseEvent) => {
+  const target = event.target as HTMLElement | null;
+  if (target && typeof target.closest === "function" && target.closest("a[data-url]")) {
+    return;
+  }
+  event.stopPropagation();
+  emit("click");
 };
 
 /** 摘要：思考内容最后一行（按行拆分取最后一行，从行首显示、结尾截断） */

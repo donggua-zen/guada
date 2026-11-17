@@ -93,6 +93,18 @@
             <iframe v-else-if="previewType === 'pdf' && assetPreviewUrl && !previewError" :src="assetPreviewUrl"
                 class="w-full border-0" style="height: 100%;" />
 
+            <!-- 工作区外的本地文件（file:// 绝对路径）：不做内容预览，只给「用系统程序打开」 -->
+            <div v-else-if="props.tab.outsideWorkspace"
+                class="w-full h-full flex items-center justify-center">
+                <div class="text-center px-4">
+                    <p class="text-gray-400 dark:text-gray-500 text-sm">{{ t('chat.workspace.outsideWorkspace') }}</p>
+                    <p class="text-gray-400 dark:text-gray-500 text-xs mt-1 break-all">{{ props.tab.path }}</p>
+                    <GdButton v-if="isElectron" @click="handleOpenWithSystemApp" size="small" class="mt-3">
+                        {{ t('chat.workspace.openWithSystemApp') }}
+                    </GdButton>
+                </div>
+            </div>
+
             <!-- 不支持的文件 -->
             <div v-else-if="previewType === 'unsupported' && !previewError"
                 class="w-full h-full flex items-center justify-center">
@@ -456,6 +468,26 @@ async function loadFilePreview(): Promise<void> {
         return
     }
 
+    // 工作区外的本地文件（markdown 里的 file:// 绝对路径）：
+    // 后端工作区接口必定 403，直接落到「用系统程序打开」提示，不发请求
+    if (props.tab.outsideWorkspace) {
+        selectedFile.value = {
+            name: props.tab.name!,
+            path: props.tab.path!,
+            extension: props.tab.extension!,
+            size: props.tab.size ?? 0,
+            content: '',
+            mimeType: ''
+        }
+        previewLoading.value = false
+        previewError.value = ''
+        fileNotFound.value = false
+        binaryNotPreviewable.value = false
+        previewType.value = null
+        assetPreviewUrl.value = ''
+        return
+    }
+
     const tab = props.tab
     selectedFile.value = {
         name: tab.name!,
@@ -654,6 +686,8 @@ async function loadHtmlPreviewLocal(filePath: string): Promise<void> {
 
 function handleManualRefresh(): void {
     if (!selectedFile.value) return
+    // 工作区外文件没有可刷新的内容（预览就是一句提示），避免白发一次必然 403 的请求
+    if (props.tab.outsideWorkspace) return
     // 有未保存编辑：先标记冲突，不覆盖用户内容（与外部变更路径一致）
     if (saveStatus.value === 'unsaved') {
         externalConflict.value = true
@@ -744,6 +778,25 @@ async function handleOpenInFileManager(): Promise<void> {
         await window.electronAPI!.showItemInFolder(fullPath)
     } catch (error) {
         console.error('[FilePreviewPanel] Open in file manager failed:', error)
+        toast.error(t('chat.workspace.openFailed'))
+    }
+}
+
+/**
+ * 用系统默认程序打开工作区外的本地文件。
+ *
+ * tab.path 在这里已是绝对路径（file:// 解析而来），不经过工作区拼接，
+ * 也不能走 resolveAbsolutePath（它按工作目录拼相对路径）。
+ */
+async function handleOpenWithSystemApp(): Promise<void> {
+    if (!isElectron || !props.tab.path) return
+    try {
+        const result = await window.electronAPI!.openPath(props.tab.path)
+        if (!result?.success) {
+            toast.error(result?.error || t('chat.workspace.openFailed'))
+        }
+    } catch (error) {
+        console.error('[FilePreviewPanel] Open with system app failed:', error)
         toast.error(t('chat.workspace.openFailed'))
     }
 }

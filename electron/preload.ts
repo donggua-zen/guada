@@ -77,6 +77,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 在资源管理器中显示并选中文件
   showItemInFolder: (filePath: string) => ipcRenderer.invoke('show-item-in-folder', filePath),
 
+  // 用系统默认程序打开本地文件（工作区外的 file:// 链接；主进程做绝对路径 + 可执行扩展名校验）
+  openPath: (targetPath: string) => ipcRenderer.invoke('open-path', targetPath),
+
   // 用外部编辑器打开文件/目录（如 vscode，后续可扩展）
   openWithEditor: (targetPath: string, editor: string) =>
     ipcRenderer.invoke('open-with-editor', { path: targetPath, editor }),

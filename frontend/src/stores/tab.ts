@@ -18,6 +18,11 @@ interface FileTabInput {
     name: string
     extension?: string
     size?: number
+    /**
+     * 标记该文件不在当前会话工作目录内（markdown 里点了工作区外的 file:// 链接）。
+     * 面板据此跳过工作区接口请求（必然 403），改为提示 + 用系统程序打开。
+     */
+    outsideWorkspace?: boolean
 }
 
 export const useTabStore = defineStore('tab', () => {
@@ -155,6 +160,8 @@ export const useTabStore = defineStore('tab', () => {
             extension: file.extension ?? active.extension,
             size: file.size ?? 0,
             isPreview: options.persistent ? false : active.isPreview,
+            // 目录树打开的都是工作区内文件，清掉上一份路径可能带来的标记
+            outsideWorkspace: file.outsideWorkspace === true,
         })
         selectTab(nextKey)
         return true
@@ -184,6 +191,8 @@ export const useTabStore = defineStore('tab', () => {
                 extension: file.extension ?? previewTab.extension,
                 size: file.size ?? 0,
                 isPreview: true,
+                // 必须显式重置：spread 会把上一个文件的标记带过来，污染后续正常文件
+                outsideWorkspace: file.outsideWorkspace === true,
             })
             selectTab(nextKey)
             return
@@ -192,6 +201,7 @@ export const useTabStore = defineStore('tab', () => {
         addTab({
             type: 'file', key: nextKey, path: file.path, name: file.name,
             extension: file.extension, size: file.size ?? 0, isPreview: true,
+            outsideWorkspace: file.outsideWorkspace === true,
         })
         selectTab(nextKey)
     }

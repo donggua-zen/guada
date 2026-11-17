@@ -458,6 +458,8 @@
     mediaPlaybackFailed: 'Cannot play: the format may be unsupported by the browser',
     mediaNotPlayable: 'This media format cannot be played in the browser — try another player',
     workspacePathError: 'Unable to get working directory path',
+    outsideWorkspace: 'This file is outside the current working directory, so it cannot be previewed here',
+    openWithSystemApp: 'Open with Default App',
     openFailed: 'Open Failed',
     addSelectionToSession: 'Add Selection to Session',
     addFileToSession: 'Add File to Session',

@@ -142,6 +142,8 @@ export interface ElectronAPI {
   openInstallFolder: () => void
   openFolder: (folderPath: string) => Promise<{ success: boolean }>
   showItemInFolder: (filePath: string) => Promise<{ success: boolean }>
+  /** 用系统默认程序打开本地文件（工作区外 file:// 链接；主进程校验绝对路径与可执行扩展名） */
+  openPath: (targetPath: string) => Promise<{ success: boolean; error?: string }>
   openWithEditor: (targetPath: string, editor: string) => Promise<{ success: boolean; error?: string }>
   selectFolder: () => Promise<string | null>
   selectFile: () => Promise<string | null>

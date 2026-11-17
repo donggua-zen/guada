@@ -1706,6 +1706,41 @@ function isSafeExternalUrl(url: string): boolean {
   }
 }
 
+/**
+ * "用系统默认程序打开本地文件" 的路径校验。
+ *
+ * 与 open-external 的 http(s) 白名单不同，这里必须接受任意绝对路径
+ * （markdown 里的 file:// 链接指向的地方本来就不受工作目录约束），
+ * 因此改从「防执行」角度收口：
+ * - 必须是绝对路径，且不含 NUL；
+ * - 拒绝可执行/脚本/安装包扩展名 —— 模型输出一条 file:///.../evil.bat
+ *   不应变成一次代码执行（shell.openPath 会按扩展名交给系统关联程序）。
+ */
+const BLOCKED_OPEN_PATH_EXTENSIONS = new Set([
+  ".exe", ".com", ".bat", ".cmd", ".msi", ".scr", ".pif",
+  ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+  ".hta", ".cpl", ".jar", ".reg", ".lnk", ".app", ".sh", ".command",
+  ".scpt", ".msc", ".inf", ".sct", ".dll",
+]);
+
+function validateOpenPath(targetPath: unknown): { ok: true } | { ok: false; error: string } {
+  if (typeof targetPath !== "string" || !targetPath.trim()) {
+    return { ok: false, error: "路径不能为空" };
+  }
+  if (targetPath.includes("\0")) {
+    return { ok: false, error: "路径非法" };
+  }
+  if (!path.isAbsolute(targetPath)) {
+    return { ok: false, error: "仅支持绝对路径" };
+  }
+  const ext = path.extname(targetPath).toLowerCase();
+  if (BLOCKED_OPEN_PATH_EXTENSIONS.has(ext)) {
+    log.warn(`[Security] Blocked open-path for executable extension: ${targetPath}`);
+    return { ok: false, error: `出于安全考虑，不允许直接打开该类型文件（${ext}）` };
+  }
+  return { ok: true };
+}
+
 // 拦截外部链接：弹窗确认后用系统默认浏览器打开
 async function handleExternalUrl(url: string): Promise<void> {
   if (!isSafeExternalUrl(url)) {
@@ -2797,6 +2832,27 @@ function setupIpcHandlers() {
       return { success: true };
     } catch (error) {
       log.error("在资源管理器中显示文件失败", error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // 用系统默认程序打开本地文件（markdown 里工作区外的 file:// 链接）
+  // 校验见 validateOpenPath：必须是绝对路径且非可执行/脚本扩展名。
+  // shell.openPath 以「空字符串 = 成功，非空 = 错误信息」返回，不能当异常处理。
+  ipcMain.handle("open-path", async (_, targetPath: string) => {
+    const check = validateOpenPath(targetPath);
+    if (!check.ok) {
+      return { success: false, error: check.error };
+    }
+    try {
+      const errorMessage = await shell.openPath(targetPath);
+      if (errorMessage) {
+        log.warn(`open-path failed for ${targetPath}: ${errorMessage}`);
+        return { success: false, error: errorMessage };
+      }
+      return { success: true };
+    } catch (error) {
+      log.error("用系统程序打开文件失败", error);
       return { success: false, error: String(error) };
     }
   });

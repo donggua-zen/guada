@@ -13,7 +13,9 @@ import { nextTick } from 'vue'
 import { useSessionStore } from '@/stores/session'
 import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
+import { useWorkspaceTreeStore } from '@/stores/workspaceTree'
 import { openInExternalBrowser } from '@/utils/browserUtils'
+import { baseNameOf, extensionOf, fileUrlToPath, toWorkspaceRelative } from '@/utils/localPath'
 import { openModal } from '@/components/ui/modalService'
 import { t } from '@/locales'
 
@@ -110,6 +112,31 @@ async function showLinkChoiceDialog(url: string): Promise<void> {
 // ── 预览 API（统一入口） ──
 
 /**
+ * 展开工作区侧边栏并把文件开进预览标签。
+ *
+ * 侧边栏从隐藏→可见时 WorkspaceSidebar 需要一个 tick 完成挂载并注册 watch，
+ * 这一步放在这里，让「工作区内」「工作区外」两个入口走同一套时序。
+ */
+async function revealWorkspaceAndOpen(tabInput: {
+    path: string
+    name: string
+    extension: string
+    size: number
+    outsideWorkspace?: boolean
+}): Promise<void> {
+    const layoutStore = useLayoutStore()
+    const wasVisible = layoutStore.workspaceVisible
+    layoutStore.workspaceVisible = true
+
+    if (!wasVisible) {
+        await nextTick()
+    }
+
+    // 打开到唯一的预览标签（复用已有预览标签，不新建/改动持久标签）
+    useTabStore().openFilePreview(tabInput)
+}
+
+/**
  * 预览工作区文件（打开文件预览标签）
  *
  * 直接通过 tabStore 操作：添加标签 + 选中 + 进入预览模式。
@@ -119,21 +146,67 @@ export async function previewFile(filePath: string): Promise<void> {
     const sessionStore = useSessionStore()
     if (!sessionStore.activeSessionId) return
 
-    const layoutStore = useLayoutStore()
-    const wasVisible = layoutStore.workspaceVisible
-    layoutStore.workspaceVisible = true
+    const name = baseNameOf(filePath) || filePath
+    await revealWorkspaceAndOpen({
+        path: filePath,
+        name,
+        extension: extensionOf(name),
+        size: 0,
+    })
+}
 
-    // 侧边栏从隐藏→可见时，WorkspaceSidebar 需要一个 tick 完成挂载并注册 watch
-    if (!wasVisible) {
-        await nextTick()
+/**
+ * 预览工作区外的本地文件：不请求后端（路径牢笼必然 403），
+ * 标签打上 outsideWorkspace，由面板给出提示 + 「用系统程序打开」。
+ */
+export async function previewExternalFile(absolutePath: string): Promise<void> {
+    const sessionStore = useSessionStore()
+    if (!sessionStore.activeSessionId) return
+
+    const name = baseNameOf(absolutePath) || absolutePath
+    await revealWorkspaceAndOpen({
+        path: absolutePath,
+        name,
+        extension: extensionOf(name),
+        size: 0,
+        outsideWorkspace: true,
+    })
+}
+
+/**
+ * 打开 file:// 链接（markdown 里指向本地文件的链接）。
+ *
+ * 决策链：URL 解析失败 → 交回外部打开；解析成功且在工作区内 → 相对路径预览；
+ * 工作区外 → 外部文件预览（附带系统程序打开入口）。不弹窗，点击即开。
+ */
+export async function openLocalFileLink(url: string): Promise<void> {
+    const absolutePath = fileUrlToPath(url)
+    if (!absolutePath) {
+        openInExternalBrowser(url)
+        return
     }
 
-    const tabStore = useTabStore()
-    const name = filePath.replace(/\\/g, '/').split('/').pop() || filePath
-    const ext = name.includes('.') ? name.substring(name.lastIndexOf('.')).toLowerCase() : ''
+    let sessionId: string | null = null
+    try {
+        sessionId = useSessionStore().activeSessionId
+    } catch {
+        // store 未初始化：按工作区外处理
+    }
 
-    // 打开到唯一的预览标签（复用已有预览标签，不新建/改动持久标签）
-    tabStore.openFilePreview({ path: filePath, name, extension: ext, size: 0 })
+    if (sessionId) {
+        // 已在缓存中直接命中，未缓存时才发一次请求
+        const workspaceDir = await useWorkspaceTreeStore().ensureWorkspacePath(sessionId)
+        if (workspaceDir) {
+            const relativePath = toWorkspaceRelative(absolutePath, workspaceDir)
+            // "" 表示指向工作区根目录本身，按工作区外处理（面板无法预览目录）
+            if (relativePath) {
+                await previewFile(relativePath)
+                return
+            }
+        }
+    }
+
+    await previewExternalFile(absolutePath)
 }
 
 /**
@@ -184,14 +257,20 @@ export async function previewUrl(url: string): Promise<void> {
 /**
  * 打开链接（根据用户偏好自动选择方式）
  *
+ * - file:// → 直接在侧边栏预览本地文件（不弹窗：本地文件没有「内置/外部浏览器」之分）
  * - internal: 内置浏览器预览
  * - external: 外部浏览器
  * - ask: 每次询问
  *
- * 非 http/https 链接始终通过外部浏览器打开。
+ * 其余非 http/https 链接（mailto:、vscode: 等）仍交外部处理。
  */
 export async function openLink(url: string): Promise<void> {
     if (!url) return
+
+    if (/^file:/i.test(url)) {
+        await openLocalFileLink(url)
+        return
+    }
 
     if (!isSafeUrl(url)) {
         openInExternalBrowser(url)
@@ -216,11 +295,14 @@ export async function openLink(url: string): Promise<void> {
 /**
  * 智能预览：自动判断是文件路径还是 URL
  * - http(s):// → 内置浏览器
+ * - file:// → 本地文件（工作区内走预览标签，工作区外走系统程序提示）
  * - 其他 → 工作区文件预览
  */
 export function preview(target: string): void {
     if (/^https?:\/\//i.test(target)) {
         void previewUrl(target)
+    } else if (/^file:/i.test(target)) {
+        void openLocalFileLink(target)
     } else {
         void previewFile(target)
     }

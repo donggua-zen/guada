@@ -182,6 +182,20 @@ describe("tabStore.openFilePreview", () => {
 
     expect(store.tabs.map((t) => t.key)).toEqual(["file:/b.ts"]);
   });
+
+  it("outsideWorkspace 随标签落位，并在改键复用时被重置（回归）", () => {
+    const store = useTabStore();
+
+    // 工作区外文件先占住预览标签
+    store.openFilePreview({ path: "C:/outside/a.ts", name: "a.ts", outsideWorkspace: true });
+    expect(store.tabs[0].outsideWorkspace).toBe(true);
+
+    // 后续工作区内文件复用同一标签：标记必须清掉，否则会被误判为不可预览
+    store.openFilePreview({ path: "src/b.ts", name: "b.ts" });
+    expect(store.tabs).toHaveLength(1);
+    expect(store.tabs[0].key).toBe("file:src/b.ts");
+    expect(store.tabs[0].outsideWorkspace).toBe(false);
+  });
 });
 
 describe("tabStore.openNewTab", () => {

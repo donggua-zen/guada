@@ -458,6 +458,8 @@ export default {
     mediaPlaybackFailed: '无法播放：格式可能不受浏览器支持',
     mediaNotPlayable: '该媒体格式浏览器无法播放，可用其他播放器打开',
     workspacePathError: '无法获取工作目录路径',
+    outsideWorkspace: '该文件不在当前工作目录内，无法在侧边栏预览',
+    openWithSystemApp: '用系统默认程序打开',
     openFailed: '打开失败',
     addSelectionToSession: '添加选区到会话',
     addFileToSession: '添加文件到会话',
