@@ -75,6 +75,32 @@ export class SkillsController {
   }
 
   /**
+   * 获取自动扫描状态
+   *
+   * 注意：必须注册在所有 `@Get(':id')` 之前。Nest 按声明顺序匹配路由，
+   * `:id` 会把 `watcher/status`、`enabled-status` 这类字面量段吞掉。
+   */
+  @Get('watcher/status')
+  getWatcherStatus(): { enabled: boolean } {
+    // TODO: 从配置中读取，目前默认启用
+    return { enabled: true };
+  }
+
+  /**
+   * 获取所有技能的启用状态
+   *
+   * 同样必须早于 `@Get(':id')`：否则会被当作 id="enabled-status" 的技能详情，
+   * 返回 200 空体。
+   */
+  @Get('enabled-status')
+  getEnabledStatus(): Array<{ id: string; enabled: boolean }> {
+    return this.orchestrator.listManageableSkills(false).map(s => ({
+      id: s.id,
+      enabled: s.enabled !== false,
+    }));
+  }
+
+  /**
    * 获取 Skill 详情
    */
   @Get(':id')
@@ -130,15 +156,6 @@ export class SkillsController {
   }
 
   /**
-   * 获取自动扫描状态
-   */
-  @Get('watcher/status')
-  getWatcherStatus(): { enabled: boolean } {
-    // TODO: 从配置中读取，目前默认启用
-    return { enabled: true };
-  }
-
-  /**
    * 切换自动扫描开关
    */
   @Post('watcher/toggle')
@@ -189,17 +206,6 @@ export class SkillsController {
     } catch (error: any) {
       return { success: false, message: error.message };
     }
-  }
-
-  /**
-   * 获取所有技能的启用状态
-   */
-  @Get('enabled-status')
-  getEnabledStatus(): Array<{ id: string; enabled: boolean }> {
-    return this.orchestrator.listManageableSkills(false).map(s => ({
-      id: s.id,
-      enabled: s.enabled !== false,
-    }));
   }
 
   /**
