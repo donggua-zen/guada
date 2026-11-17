@@ -73,9 +73,8 @@
             <button ref="sandboxModeButtonRef" class="tool-btn" :class="{ 'run-mode-unrestricted': isUnrestrictedMode }"
               @click.stop="toggleSandboxModePopover">
               <component :is="sandboxModeIcon" class="w-4 h-4"
-                :class="isUnrestrictedMode ? 'text-red-500' : 'text-gray-600'" />
-              <span class="run-mode-label text-xs font-medium" :class="isUnrestrictedMode ? 'text-red-500' : ''">{{
-                sandboxModeLabel }}</span>
+                :class="isUnrestrictedMode ? '' : 'text-gray-600'" />
+              <span class="run-mode-label text-xs font-medium">{{ sandboxModeLabel }}</span>
             </button>
             <SandboxModePopover v-model:visible="sandboxModePopoverVisible" :anchor-el="sandboxModeButtonRef"
               :current-value="currentSandboxMode" :plan-enabled="planModeEnabled" @select="handleSandboxModeChange"
@@ -1809,7 +1808,7 @@ defineExpose({ insertText, insertBadge, focus: focusEditor });
 :deep(.message-editor .ProseMirror p.is-editor-empty:first-child::before) {
   content: attr(data-placeholder);
   float: left;
-  color: var(--gd-color-text-disabled);
+  color: var(--gd-color-field-text-placeholder);
   pointer-events: none;
   height: 0;
 }
@@ -1900,14 +1899,14 @@ defineExpose({ insertText, insertBadge, focus: focusEditor });
   display: block;
 }
 
-/* 自由编辑（danger-full-access）按钮 - 红色警示文字与图标（不加红色背景，hover 保持默认背景） */
+/* 自由编辑（danger-full-access）按钮 - 警示橙文字与图标（不加背景，hover 保持默认背景） */
 .run-mode-unrestricted {
-  color: #ef4444 !important;
+  color: var(--gd-color-permission-full) !important;
   font-weight: 500;
 }
 
 .run-mode-unrestricted:hover {
-  color: #ef4444 !important;
+  color: var(--gd-color-permission-full) !important;
 }
 
 /* 模型选择器按钮 - 原生 button */
@@ -1996,16 +1995,16 @@ defineExpose({ insertText, insertBadge, focus: focusEditor });
 }
 
 .send-btn.stop-btn {
-  background-color: #f56c6c;
-  color: #fff;
+  background-color: var(--gd-color-danger);
+  color: var(--gd-color-danger-text);
 }
 
 .send-btn.stop-btn:hover {
-  background-color: #f78989;
+  background-color: var(--gd-color-danger-hover);
 }
 
 .send-btn.stop-btn:active {
-  background-color: #e64242;
+  background-color: var(--gd-color-danger-active);
 }
 
 .send-btn.queue-btn {

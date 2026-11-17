@@ -104,7 +104,8 @@
 
   --gd-color-bubble-user-bg: #f0f0f0;
   --gd-color-bubble-user-text: #1f2937;
-  --gd-color-bubble-user-border: #e1e1e1;
+  /* 与气泡背景同色：视觉上无边框，保留 1px 盒模型避免尺寸跳动 */
+  --gd-color-bubble-user-border: var(--gd-color-bubble-user-bg);
   --gd-color-bubble-assitant-bg: transparent;
   --gd-color-bubble-assitant-text: #0d0d0d;
   --gd-color-bubble-assitant-border: none;
@@ -199,6 +200,8 @@
   --gd-motion-ease-toast: cubic-bezier(0.77, 0, 0.175, 1);    /* toast 进出场 */
 
   --gd-color-warning: #e6a23c;
+  /* 完全访问档位（最高权限）的警示橙：浅色用深一档保证白底对比度 */
+  --gd-color-permission-full: #e07b00;
   --gd-color-success: #67c23a;
   --gd-color-danger: #f56c6c;
   --gd-color-info: #909399;
@@ -401,7 +404,7 @@ html.dark {
   --gd-color-secondary-950: #e3eefb;
 
   /* 页面、面板与填充面共用中性灰，不再混用蓝灰/绿灰。 */
-  --gd-color-bg: #1c1c1c;
+  --gd-color-bg: #161616;
   --gd-color-surface: #202020;
   --gd-color-secondary-surface: #242424;
   --gd-color-surface-subtle: color-mix(in srgb, var(--gd-color-text) 5%, var(--gd-color-surface));
@@ -417,9 +420,11 @@ html.dark {
   --gd-color-text-gray: #b0b0b0;
   --gd-color-text-disabled: #858585;
 
-  --gd-color-sidebar-bg: #161616;
-  --gd-color-sidebar-bg-active: #303030;
-  --gd-color-sidebar-bg-hover: #242424;
+  /* 深色层次：侧栏比内容区亮一档（侧栏 #2b2b2b / 内容 #161616），
+     与浅色「侧栏略深」的方向相反，符合「面板浮在深底上」的暗色视觉习惯。 */
+  --gd-color-sidebar-bg: #2b2b2b;
+  --gd-color-sidebar-bg-active: #414141;
+  --gd-color-sidebar-bg-hover: #363636;
   --gd-color-sidebar-text: var(--gd-color-text);
   --gd-color-sidebar-text-active: var(--gd-color-text);
   --gd-color-sidebar-text-hover: var(--gd-color-text);
@@ -453,13 +458,16 @@ html.dark {
 
   --gd-color-bubble-user-bg: #2b2b2b;
   --gd-color-bubble-user-text: var(--gd-color-text);
-  --gd-color-bubble-user-border: var(--gd-color-border);
+  /* 与气泡背景同色：视觉上无边框，保留 1px 盒模型避免尺寸跳动 */
+  --gd-color-bubble-user-border: var(--gd-color-bubble-user-bg);
   --gd-color-bubble-assitant-bg: transparent;
   --gd-color-bubble-assitant-text: var(--gd-color-text);
   --gd-color-bubble-assitant-border: transparent;
 
   /* 状态前景保持明亮，实心按钮使用深色字以保证对比度。 */
   --gd-color-warning: #dfb56d;
+  /* 完全访问档位（最高权限）的警示橙：暗底上提亮一档 */
+  --gd-color-permission-full: #ff8a30;
   --gd-color-success: #88bf9b;
   --gd-color-danger: #e99595;
   --gd-color-info: var(--gd-color-text-gray);
@@ -489,7 +497,9 @@ html.dark {
   --gd-md-syntax-tag: #7ee787;
   --gd-md-syntax-punctuation: #e6edf3;
 
-  --gd-layout-card-border: var(--gd-color-border);
+  /* 卡片描边与卡片底色同色：暗色下视觉无边框（保留 1px 盒模型），
+     侧栏与内容区的分界只靠方向影与底色差表达。 */
+  --gd-layout-card-border: var(--gd-color-bg);
   --gd-layout-card-shadow: -4px 0 12px -8px rgba(0, 0, 0, 0.35);
 
   /* 调用轨迹的角色色只用于轨迹徽标，不参与页面底色。 */

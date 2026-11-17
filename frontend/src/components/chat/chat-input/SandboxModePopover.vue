@@ -31,15 +31,15 @@
         @click="handleSelect(opt.value)">
         <div class="flex items-center space-x-2">
           
-            <component class="size-5 shrink-0" :class="opt.danger ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'" :is="opt.icon" />
+            <component class="size-5 shrink-0" :class="opt.danger ? 'text-(--gd-color-permission-full)' : 'text-gray-500 dark:text-gray-400'" :is="opt.icon" />
           
           <div class="flex flex-col">
-            <span :class="opt.danger ? 'text-red-500 font-medium' : ''">{{ opt.label }}</span>
+            <span :class="opt.danger ? 'text-(--gd-color-permission-full) font-medium' : ''">{{ opt.label }}</span>
             <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.desc }}</span>
           </div>
         </div>
         
-          <Checkmark16Regular v-if="currentValue === opt.value" class="size-4 shrink-0" :class="opt.danger ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'" />
+          <Checkmark16Regular v-if="currentValue === opt.value" class="size-4 shrink-0" :class="opt.danger ? 'text-(--gd-color-permission-full)' : 'text-gray-500 dark:text-gray-400'" />
         
       </div>
     </div>
@@ -132,7 +132,7 @@ function handleTogglePlan() {
 }
 
 .rm-item--danger:hover {
-  background: rgba(239, 68, 68, 0.08);
+  background: color-mix(in srgb, var(--gd-color-permission-full) 8%, transparent);
 }
 
 .rm-divider {
