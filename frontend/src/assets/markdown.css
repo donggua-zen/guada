@@ -1,14 +1,15 @@
 /* ============================================================
- * 对话 Markdown 排版（对齐 Qoder 客户端排版规格）
+ * 对话 Markdown 排版（统一块节奏 / 1.75 行高的阅读型规格）
  *
  * 本文件不写字面色、也不写字号字面量：
  * - 颜色取自 --gd-md-* 语义 token（定义于 style.css 的 :root / html.dark）
- * - 尺寸全部由唯一旋钮 --gd-md-font-size 派生（行高、标题阶梯、代码尺寸、块间距）
- * 做「用户自定义对话字号」时覆盖 --gd-md-font-size 一个变量即可整体等比缩放；
+ * - 尺寸旋钮 --gd-md-font-size 只派生需要随字号缩放的部分（行高、标题阶梯、
+ *   行内码）；块间距/列表度量使用固定刻度（16px / 20px / 6px），
+ *   不随界面字号变化。
  * 暗色只切换填充层与语法高亮两组 token，不再另写一套 .dark 排版分支。
  * ============================================================ */
 
-/* 派生尺寸：行高/标题阶梯/间距全部由唯一旋钮 --gd-md-font-size 算出。
+/* 派生尺寸（同 --gd-md-font-size 旋钮）。
  *
  * 为什么写在 .markdown-text 而不是 :root：自定义属性的 var() 替换发生在
  * "该属性所在的那个元素"上。定义在 :root 时，派生值只认 html 上的旋钮，
@@ -19,43 +20,50 @@
  * 让它自带一份等价的派生值，不依赖祖先。 */
 .markdown-text,
 .custom-code-block {
-  --gd-md-line-height: calc(var(--gd-md-font-size) + 10px); /* 24px @14（原 22.4） */
-  --gd-md-line-height-tight: calc(var(--gd-md-font-size) + 6px); /* 20px，紧凑语境 */
-  --gd-md-gap-block: calc(var(--gd-md-font-size) - 2px); /* 块间距 12px @14 */
-  --gd-md-gap-list-item: calc(var(--gd-md-font-size) / 3.5); /* 列表项 4px @14 */
-  --gd-md-indent-list: calc(var(--gd-md-font-size) + 10px); /* 列表缩进 24px @14 */
-  --gd-md-gap-heading: calc(var(--gd-md-font-size) * 2); /* 标题上间距 28px @14 */
-  --gd-md-gap-heading-sm: calc(var(--gd-md-font-size) / 1.75); /* 标题下间距 8px @14 */
-  --gd-md-h1-size: calc(var(--gd-md-font-size) + 6px); /* 20 @14 */
-  --gd-md-h2-size: calc(var(--gd-md-font-size) + 4px); /* 18 @14 */
-  --gd-md-h3-size: calc(var(--gd-md-font-size) + 2px); /* 16 @14 */
-  --gd-md-h4-size: calc(var(--gd-md-font-size) + 1px); /* 15 @14 */
-  --gd-md-code-font-size: calc(var(--gd-md-font-size) - 1px); /* 代码块 13 @14 */
-  --gd-md-code-line-height: calc(var(--gd-md-font-size) + 10px); /* 24 @14，等宽块固定行高 */
-  --gd-md-code-padding-x: calc(var(--gd-md-font-size) - 2px); /* 代码区左右内缩 12 @14，与头部对齐；
-                                                                 原 calc(font × 0.85) = 11.9px 是小数，
-                                                                 代码/语言标签的左边缘会落在小数 x 上 */
-  --gd-md-code-padding-y: calc(var(--gd-md-font-size) - 2px); /* 代码上下留白 12 @14 */
+  --gd-md-line-height: calc(var(--gd-md-font-size) * 1.75); /* 24.5px @14 */
+  --gd-md-line-height-tight: calc(var(--gd-md-font-size) + 6px); /* 20px，紧凑语境（行内码） */
+  --gd-md-gap-block: 16px; /* 顶层块间距：统一 16px */
+  --gd-md-gap-list-item: 6px; /* 列表项间距 6px */
+  --gd-md-indent-list: 20px; /* 列表缩进 20px */
+  --gd-md-gap-heading: 24px; /* 标题上间距 24px */
+  --gd-md-gap-heading-sm: 16px; /* 标题下间距 16px */
+  --gd-md-h1-size: calc(var(--gd-md-font-size) + 4px); /* 18 @14 */
+  --gd-md-h2-size: calc(var(--gd-md-font-size) + 2px); /* 16 @14 */
+  --gd-md-h3-size: var(--gd-md-font-size); /* 14 @14：h3/h4 与正文同号 */
+  --gd-md-h4-size: var(--gd-md-font-size);
+  --gd-md-code-font-size: 12px; /* 代码块 12px */
+  --gd-md-code-line-height: 20px; /* 等宽块固定行高 20px */
+  --gd-md-code-padding-x: 8px; /* 代码体左右呼吸带 8px */
+  --gd-md-code-padding-y: 12px; /* 代码体底部留白 12px */
   --gd-md-inline-code-font-size: calc(var(--gd-md-font-size) - 2px); /* 行内码 12 @14 */
-  --gd-md-table-font-size: var(--gd-md-code-font-size); /* 表格同代码 13 @14 */
-  --gd-md-table-cell-min-width: calc(var(--gd-md-font-size) * 6.5); /* 91px @14（6.4 时是 89.6px 小数，
-                                                                        单元格边框会落在小数 x 上） */
+  --gd-md-table-font-size: var(--gd-md-font-size); /* 表格与正文同字号 14 @14 */
+  --gd-md-table-cell-min-width: 64px; /* 单元格最小宽度 64px */
 }
 
 .markdown-text {
   font-family: var(--gd-md-font-family);
   font-size: var(--gd-md-font-size);
   line-height: var(--gd-md-line-height);
+  /* 全文 +0.025em 字距：中文不贴字，整段更透气 */
+  letter-spacing: 0.025em;
   overflow-wrap: break-word;
   word-break: break-word;
   max-width: 100%;
 }
 
+/* 段内边距清零：块间距由顶层统一节奏规则给 */
 .markdown-text p {
-  margin: 0 0 var(--gd-md-gap-block);
+  margin: 0;
 }
 
-/* ---------- 标题：h1~h4 逐级 +1px 收敛，字号阶梯见 --gd-md-h*-size ---------- */
+/* 顶层块统一 16px 尾距（space-y-4 同构，含 MarkdownContent 内部的容器 div 层）。
+   标题自带的 24/16 上下距与之合并后按 margin 折叠取大值。 */
+.markdown-text > :not(:last-child),
+.markdown-text > div > :not(:last-child) {
+  margin-block-end: var(--gd-md-gap-block);
+}
+
+/* ---------- 标题：层级收敛（18/16/14/14），上下间距 24/16 ---------- */
 .markdown-text h1,
 .markdown-text h2,
 .markdown-text h3,
@@ -70,26 +78,17 @@
 
 .markdown-text h1 {
   font-size: var(--gd-md-h1-size);
-  font-weight: 500;
-  line-height: calc(var(--gd-md-h1-size) + 8px);
+  font-weight: 600;
 }
 
 .markdown-text h2 {
   font-size: var(--gd-md-h2-size);
   font-weight: 600;
-  margin-top: calc(var(--gd-md-gap-heading) - 4px);
 }
 
 .markdown-text h3 {
   font-size: var(--gd-md-h3-size);
   font-weight: 600;
-  margin-top: calc(var(--gd-md-gap-heading) - 8px);
-}
-
-.markdown-text h4,
-.markdown-text h5,
-.markdown-text h6 {
-  margin-top: calc(var(--gd-md-gap-heading) - 12px);
 }
 
 .markdown-text h4 {
@@ -99,16 +98,13 @@
 
 .markdown-text h5 {
   font-size: var(--gd-md-font-size);
-  font-weight: 600;
-  color: var(--gd-md-text-secondary);
+  font-weight: 500;
 }
 
+/* h6 按正体正文级处理：大写/三级色已取消 */
 .markdown-text h6 {
-  font-size: calc(var(--gd-md-font-size) - 1px);
-  font-weight: 600;
-  color: var(--gd-md-text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0;
+  font-size: var(--gd-md-font-size);
+  font-weight: 400;
 }
 
 /* 流式渲染时任何块都可能是首块：首块不留上间距，末块不留下间距
@@ -123,42 +119,57 @@
   margin-bottom: 0;
 }
 
-/* ---------- 链接：常态细下划线，hover 才实心 ---------- */
+/* ---------- 链接：常态无下划线，hover 才出虚线下划线 ---------- */
 .markdown-text a {
-  color: var(--gd-md-accent);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
-  text-underline-offset: calc(var(--gd-md-font-size) / 7);
+  color: var(--gd-md-link-color);
+  font-weight: 500;
+  text-decoration: none;
 }
 
 .markdown-text a:hover {
-  text-decoration-color: currentColor;
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
 }
 
-/* ---------- 列表：原生 marker，marker 与正文分档；嵌套列表靠 padding 递进 ---------- */
+/* ---------- 列表：无序 list-outside 缩进 20px，有序 list-inside ---------- */
 .markdown-text ul,
 .markdown-text ol {
-  margin: 0 0 var(--gd-md-gap-block);
+  margin: 0;
   padding-left: var(--gd-md-indent-list);
 }
 
 .markdown-text ul {
-  list-style: disc;
+  list-style: disc outside;
 }
 
 .markdown-text ol {
-  list-style: decimal;
+  /* 有序列表用 list-inside：两位编号不会向气泡外扩被裁切 */
+  list-style: decimal inside;
+  padding-left: 0;
 }
 
 .markdown-text li {
   margin-bottom: var(--gd-md-gap-list-item);
+  padding-left: 4px; /* 列表项起始留白 */
+}
+
+/* 宽松列表的段落与 marker 同行 */
+.markdown-text li > p {
+  margin: 0;
+  display: inline;
 }
 
 .markdown-text li > ul,
 .markdown-text li > ol {
   margin: var(--gd-md-gap-list-item) 0 0;
-  /* 嵌套再让出半个缩进量，层级一眼可辨 */
-  padding-left: calc(var(--gd-md-indent-list) / 2);
+}
+
+.markdown-text li > ul {
+  padding-left: var(--gd-md-indent-list);
+}
+
+.markdown-text li > ol {
+  padding-left: 0;
 }
 
 .markdown-text li::marker {
@@ -173,44 +184,42 @@
   display: none;
 }
 
-/* GFM 任务列表：勾选框取代 marker */
-.markdown-text li:has(> input[type='checkbox']) {
-  list-style: none;
-}
-
+/* GFM 任务列表：保留 disc marker，与勾选框并存 */
 .markdown-text li > input[type='checkbox'] {
-  margin-right: calc(var(--gd-md-font-size) / 3.5);
+  margin-right: 8px;
   accent-color: var(--gd-md-accent);
 }
 
-/* ---------- 行内码：比正文小 2px，靠内边距成块，无边框 ---------- */
+/* ---------- 行内码：50% 透明胶囊，比正文小 2px ---------- */
 .markdown-text :not(pre) > code {
   font-family: var(--gd-font-mono);
   font-size: var(--gd-md-inline-code-font-size);
   line-height: var(--gd-md-line-height-tight);
-  background-color: var(--gd-md-fill-tertiary);
+  background-color: var(--gd-md-inline-code-bg);
   border-radius: var(--gd-md-inline-code-radius);
-  padding: calc(var(--gd-md-inline-code-radius) / 2) var(--gd-md-inline-code-radius);
-  word-break: break-all;
+  padding: 2px 6px;
+  margin: 0 2px;
+  word-break: normal;
 }
 
 .markdown-text blockquote {
-  margin: var(--gd-md-gap-block) 0;
-  padding-left: calc(var(--gd-md-font-size) + 2px);
-  border-left: 2px solid var(--gd-color-border);
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--gd-md-border);
+  /* ≈ 正文色 70% 透明 */
   color: var(--gd-md-text-secondary);
-  font-style: italic;
+  font-style: normal;
 }
 
 .markdown-text blockquote > :last-child {
   margin-bottom: 0;
 }
 
-/* ---------- 表格：表头一条灰带，表体透出所在语境（Qoder 即如此）
-   早先整块刷成 fill-secondary，看着像一整块灰板，行/列都分不清。
-   表体不铺底色：对话气泡、弹窗、思考区各自的底色不同，铺死会在暗色里露出一块矩形。 ---------- */
+/* ---------- 表格：外框/圆角/灰带表头保留原样式，字号与单元格间距按 14px / 8×12
+   （正文同字号、min-width 64px）。表体不铺底色：
+   对话气泡、弹窗、思考区各自的底色不同，铺死会在暗色里露出一块矩形。 ---------- */
 .markdown-text .custom-table-block {
-  margin: var(--gd-md-gap-block) 0;
+  margin: 0;
   overflow-x: auto;
   max-width: 100%;
   background-color: transparent;
@@ -222,8 +231,9 @@
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
+  /* 表格与正文同字号，行高同正文 1.75 */
   font-size: var(--gd-md-table-font-size);
-  line-height: var(--gd-md-line-height-tight);
+  line-height: var(--gd-md-line-height);
 }
 
 .markdown-text table th,
@@ -231,16 +241,16 @@
   border-bottom: 1px solid var(--gd-md-border);
   text-align: left;
   vertical-align: top;
-  padding: calc(var(--gd-md-font-size) - 4px) calc(var(--gd-md-font-size) + 2px);
+  /* 单元格间距 8×12 */
+  padding: 8px 12px;
   min-width: var(--gd-md-table-cell-min-width);
+  max-width: 448px; /* 单元格最大宽度 28rem */
 }
 
 .markdown-text table th {
-  height: calc(var(--gd-md-line-height) + 12px);
-  padding-block: 0;
-  /* 表头是定高单行：跟 td 的 top 对齐会浮在上沿，必须 middle 才在灰带里垂直居中 */
+  /* 灰带表头保留原样式，只把字号并入正文级 */
   vertical-align: middle;
-  font-size: var(--gd-md-inline-code-font-size);
+  font-size: var(--gd-md-font-size);
   font-weight: 500;
   color: var(--gd-md-text-secondary);
   background-color: var(--gd-md-fill-secondary);
@@ -265,7 +275,7 @@
   height: 0;
   border: none;
   border-top: 1px solid var(--gd-md-divider);
-  margin: calc(var(--gd-md-gap-heading) - 4px) 0;
+  margin: var(--gd-md-gap-heading) 0;
 }
 
 .markdown-text img {
@@ -286,25 +296,18 @@
   color: var(--gd-md-text-secondary);
 }
 
-@media (max-width: 768px) {
-  .markdown-text table th,
-  .markdown-text table td {
-    padding-inline: calc(var(--gd-md-font-size) / 1.75);
-    min-width: calc(var(--gd-md-table-cell-min-width) - var(--gd-md-font-size));
-  }
-}
-
 /* ============================================================
- * 围栏代码块
+ * 围栏代码块（卡片形态）
  * 结构由 useMarkdown.ts 的 code renderer 产出：
  * .custom-code-block > .code-header(.code-language + .code-actions)
  *                    + .code-scroll > pre > code
  *                    + .code-expand
  * ============================================================ */
 .custom-code-block {
-  margin: var(--gd-md-gap-block) 0;
-  background-color: var(--gd-md-fill-tertiary);
-  border-radius: var(--gd-md-radius);
+  margin: 0;
+  background-color: var(--gd-md-code-card-bg);
+  border: 1px solid var(--gd-md-border);
+  border-radius: var(--gd-md-code-radius);
   overflow: hidden;
 }
 
@@ -312,23 +315,37 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: calc(var(--gd-md-font-size) - 2px);
-  min-height: var(--gd-md-code-header-height);
-  /* 8px 固定（原 calc(font/2.33) = 6.0085px 小数）：20px 行盒 + 上下 8px = 36px = min-height，
-     内容高度正好吃满，align-items:center 不再产生小数余量 */
-  padding: 8px var(--gd-md-code-padding-x);
+  gap: 8px;
+  /* 头部留白：左 12 / 右 8 / 上 8（左右呼吸带由 pre 的内边距接管） */
+  padding: 8px 8px 0 12px;
   font-family: var(--gd-md-font-family);
   color: var(--gd-md-code-header-text);
 }
 
+/* 语言标签：文件图标 + 小写等宽语言名 + 次级色 */
 .code-language {
-  font-size: var(--gd-md-inline-code-font-size);
-  font-weight: 500;
-  line-height: var(--gd-md-line-height-tight);
-  color: var(--gd-md-syntax-text);
+  font-family: var(--gd-font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-transform: lowercase;
+  color: var(--gd-md-code-header-text);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* 图标用 mask + currentColor 取色，浅/暗主题自动跟随（不写死颜色） */
+.code-language::before {
+  content: "";
+  display: inline-block;
+  vertical-align: -2px;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M9.5 1H3.5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V5L9.5 1zM9.5 1 13.5 5h-4V1z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M9.5 1H3.5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V5L9.5 1zM9.5 1 13.5 5h-4V1z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 .code-actions {
@@ -360,9 +377,9 @@
   background-color: var(--gd-md-fill-secondary);
 }
 
-/* 换行开关按下态：用强调色标出当前生效的排版模式 */
+/* 换行开关按下态：用链接蓝标出当前生效的排版模式 */
 .code-actions button[aria-pressed='true'] {
-  color: var(--gd-md-accent);
+  color: var(--gd-md-link-color);
 }
 
 .code-actions button.is-copied {
@@ -371,10 +388,9 @@
 
 .code-actions button svg,
 .code-expand svg {
-  /* 16px（原 calc(font + 1px) = 15px 奇数）：24px 按钮内居中余量 4px 整数；
-     15px 会得到 4.5px 半像素，图标随容器相位跳一个设备像素 */
-  width: calc(var(--gd-md-font-size) + 2px);
-  height: calc(var(--gd-md-font-size) + 2px);
+  /* 14px：24px 按钮内居中余量 5px 整数 */
+  width: 14px;
+  height: 14px;
 }
 
 .code-scroll {
@@ -433,16 +449,15 @@
 .custom-code-block code.hljs {
   display: block;
   margin: 0;
-  /* 上下留白 + 左右呼吸带（滚动条叠在呼吸带上，不额外占宽）；
-     顶部减半：头部区已自带留白，内容再满留白会显得过空 */
-  padding: calc(var(--gd-md-code-padding-y) / 2) var(--gd-md-code-padding-x) var(--gd-md-code-padding-y);
+  /* 左右呼吸带（滚动条叠在呼吸带上，不额外占宽）；顶部 0：头部已带 8px 留白 */
+  padding: 0 var(--gd-md-code-padding-x) var(--gd-md-code-padding-y);
   background-color: transparent;
   font-family: var(--gd-font-mono);
   font-size: var(--gd-md-code-font-size);
   line-height: var(--gd-md-code-line-height);
   color: var(--gd-md-syntax-text);
   tab-size: 4;
-  /* 默认不折行：长行横向滚动，由头部开关切到折行模式（对齐 Qoder） */
+  /* 默认不折行：长行横向滚动，由头部开关切到折行模式 */
   white-space: pre;
 }
 
@@ -494,7 +509,6 @@
 .markdown-text .hljs-comment,
 .markdown-text .hljs-quote {
   color: var(--gd-md-syntax-comment);
-  font-style: italic;
 }
 
 .markdown-text .hljs-keyword,

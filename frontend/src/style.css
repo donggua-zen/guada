@@ -287,12 +287,15 @@
   /* 标题/加粗默认与正文同族（Qoder 即如此）：以前在此硬换 Segoe UI Variable，
      会让同一行 Latin 字在中文字体与 Segoe 之间跳字宽。保留钩子供主题覆盖。 */
   --gd-md-heading-font-family: var(--gd-md-font-family);
-  --gd-md-heading-tracking: -0.025em;
+  /* 标题字距与正文同向（+0.025em），不再用负字距挤压标题 */
+  --gd-md-heading-tracking: 0.025em;
   /* 绝对尺寸旋钮（不随字号派生） */
   --gd-md-radius: 8px;
-  --gd-md-inline-code-radius: 4px;
+  --gd-md-inline-code-radius: 6px;
   --gd-md-code-header-height: 36px;
   --gd-md-code-max-height: 280px; /* 代码块折叠高度，超出走底部展开条 */
+  --gd-md-code-radius: 12px; /* 代码块卡片圆角（表格仍用 --gd-md-radius） */
+  --gd-md-code-card-bg: #ffffff; /* 代码块卡片底：页面 #fdfdfd 上用纯白浮起 */
   /* 相对 --gd-md-font-size 派生的行高/阶梯/间距不在此处：见 markdown.css 顶部的
      .markdown-text, .custom-code-block 规则。放在 :root 会漏掉容器级覆盖。 */
 
@@ -301,9 +304,11 @@
      markdown.css 一律用 inherit，避免思考区等次要语境被强行拉成主文本色。 */
   --gd-md-text-secondary: var(--gd-color-text-gray);
   --gd-md-text-tertiary: #8a8a8a; /* 三级文本（h6/代码块图标/占位）：不用 --gd-color-text-disabled，它在暗色下过暗 */
-  --gd-md-accent: var(--gd-color-secondary); /* 链接与引用条共用强调色，主题可换 */
+  --gd-md-accent: var(--gd-color-secondary); /* 强调色（复选框等），主题可换 */
+  --gd-md-link-color: #0066dd; /* 正文链接蓝（浅色 #0066dd / 暗色 #80beff） */
   --gd-md-fill-secondary: #efefef; /* 表头灰带、图标 hover 底 */
-  --gd-md-fill-tertiary: #f6f6f6; /* 代码块与行内码底（原 --gd-code-block-bg: #f8f8f8） */
+  --gd-md-fill-tertiary: #f6f6f6; /* 旧代码块/行内码底色，保留兼容 */
+  --gd-md-inline-code-bg: color-mix(in srgb, #e6e6e6 50%, transparent); /* 行内码：50% 透明胶囊底 */
   --gd-md-scrollbar-thumb: rgba(0, 0, 0, 0.2); /* 代码块/表格滚动条滑块 */
   --gd-md-code-header-text: var(--gd-md-text-secondary);
   /* 加粗字重旋钮：Qoder 用 500；中文在 500 下偏"灰"，需要更实感时覆盖成 600 */
@@ -311,21 +316,21 @@
   /* 对话列宽（消息列 max-width）：markdown.css 的预览 iframe 与 ChatPanel 的 .chat-column 共用。
      ChatPage.vue 的 MSG_MAX_WIDTH 在 setup 时用 getComputedStyle 读同一个值，不再各写一份字面量。 */
   --gd-chat-column-width: 744px;
-  /* 语法高亮色（对齐 Qoder 的 cursor-light 调色板）：highlight.js 出 .hljs-* 类，
+  /* 语法高亮色（GitHub Light 调色板）：highlight.js 出 .hljs-* 类，
      这里按语义角色上色，两套主题共用同一组类名选择器，不再另写 .dark .hljs-* 分支 */
-  --gd-md-syntax-text: #141414;
-  --gd-md-syntax-comment: #6b6b66;
-  --gd-md-syntax-keyword: #a30034;
-  --gd-md-syntax-string: #7565cc;
-  --gd-md-syntax-number: #005293;
-  --gd-md-syntax-function: #cd4500;
-  --gd-md-syntax-type: #005293;
-  --gd-md-syntax-property: #654dc0;
-  --gd-md-syntax-tag: #007041;
-  --gd-md-syntax-punctuation: #5a5a57;
+  --gd-md-syntax-text: #1f2328;
+  --gd-md-syntax-comment: #6e7781;
+  --gd-md-syntax-keyword: #cf222e;
+  --gd-md-syntax-string: #0a3069;
+  --gd-md-syntax-number: #0550ae;
+  --gd-md-syntax-function: #8250df;
+  --gd-md-syntax-type: #953800;
+  --gd-md-syntax-property: #0550ae;
+  --gd-md-syntax-tag: #116329;
+  --gd-md-syntax-punctuation: #1f2328;
   --gd-md-border: var(--gd-color-border);
   --gd-md-divider: var(--gd-color-surface-border);
-  --gd-md-list-marker: var(--gd-md-text-secondary);
+  --gd-md-list-marker: color-mix(in srgb, currentColor 40%, transparent);
 
   /* 布局卡片：内容区圆角卡片 + 卡片外缝隙底色（默认同侧栏色，缝隙融入侧栏） */
   --gd-layout-card-gap: 4px;
@@ -354,191 +359,149 @@
 }
 
 html.dark {
-  /* ====================
-       现代化暗色模式配色方案
-       设计理念：护眼舒适、层次分明、柔和对比
-       ==================== */
+  /* 中性炭灰底色：侧栏 → 内容 → 控件/浮层逐层抬亮，彩色只表达交互和状态。 */
+  --gd-color-primary: #e6a0b5;
+  --gd-color-primary-0f: color-mix(in srgb, var(--gd-color-primary) 6%, transparent);
+  --gd-color-primary-hover: #edb3c4;
+  --gd-color-primary-active: #d990a6;
+  --gd-color-primary-disabled: #50383f;
+  --gd-color-primary-text: #24191d;
+  --gd-color-primary-text-disabled: #bba3aa;
 
-  /* 主色调 - 在暗色模式下稍微降低饱和度，提升可读性 */
-  --gd-color-primary: oklch(70% 0.14 355);
-  /* 柔和的粉红色 */
-  --gd-color-primary-hover: oklch(75% 0.16 355);
-  --gd-color-primary-active: oklch(65% 0.12 355);
-  --gd-color-primary-disabled: oklch(45% 0.08 355);
-  --gd-color-primary-text: #d3d3d3;
-  --gd-color-primary-text-disabled: rgba(255, 255, 255, 0.5);
+  /* 完整覆盖色阶，避免暗色组件继承浅色的 400/600/800 档。 */
+  --gd-color-primary-50: #292326;
+  --gd-color-primary-100: #382c31;
+  --gd-color-primary-200: #513b43;
+  --gd-color-primary-300: #74515d;
+  --gd-color-primary-400: #a46e80;
+  --gd-color-primary-500: #c4869a;
+  --gd-color-primary-600: #d990a6;
+  --gd-color-primary-700: #e6a0b5;
+  --gd-color-primary-800: #edb3c4;
+  --gd-color-primary-900: #f2c6d2;
+  --gd-color-primary-950: #f8dfe6;
 
-  /* 主色调渐变系列 - 用于背景和状态 */
-  --gd-color-primary-50: oklch(25% 0.03 355);
-  /* 极淡粉 - 最浅背景 */
-  --gd-color-primary-100: oklch(30% 0.05 355);
-  /* 淡粉 - 悬停/选中背景 */
-  --gd-color-primary-200: oklch(35% 0.07 355);
-  /* 浅粉 - 边框/分隔线 */
-  --gd-color-primary-300: oklch(40% 0.09 355);
-  /* 中粉 - 强调元素 */
-  --gd-color-primary-500: oklch(55% 0.11 355);
-  /* 标准粉 - 主要交互 */
-  --gd-color-primary-700: oklch(65% 0.13 355);
-  /* 深粉 - 激活状态 */
-  --gd-color-primary-900: oklch(70% 0.14 355);
-  /* 最深粉 - 重点强调 */
-  --gd-color-primary-950: oklch(72% 0.15 355);
-  /* 最深变体 */
+  /* 蓝色用于链接等次要交互，正文尺寸也需有足够对比度。 */
+  --gd-color-secondary: #91b9e5;
+  --gd-color-secondary-hover: #afcdef;
+  --gd-color-secondary-active: #7fa8d4;
+  --gd-color-secondary-disabled: #34465b;
+  --gd-color-secondary-text: #172332;
+  --gd-color-secondary-text-disabled: #a0b0c2;
+  --gd-color-secondary-50: #212832;
+  --gd-color-secondary-100: #2a3645;
+  --gd-color-secondary-200: #384b62;
+  --gd-color-secondary-300: #4c6684;
+  --gd-color-secondary-400: #6687ac;
+  --gd-color-secondary-500: #7fa8d4;
+  --gd-color-secondary-600: #91b9e5;
+  --gd-color-secondary-700: #a0c3eb;
+  --gd-color-secondary-800: #afcdef;
+  --gd-color-secondary-900: #c9def5;
+  --gd-color-secondary-950: #e3eefb;
 
-  /* 次要颜色 - 蓝灰色调，与主色形成互补 */
-  --gd-color-secondary: oklch(55% 0.08 240);
-  --gd-color-secondary-hover: oklch(60% 0.1 240);
-  --gd-color-secondary-active: oklch(50% 0.07 240);
-  --gd-color-secondary-disabled: oklch(35% 0.04 240);
-  --gd-color-secondary-text: #e5e7eb;
-  --gd-color-secondary-text-disabled: rgba(229, 231, 235, 0.5);
-
-  /* ====================
-       核心背景色系统
-       采用深蓝灰色系，避免纯黑，降低视觉刺激
-       ==================== */
-
-  /* 页面主背景 */
-  --gd-color-bg: #222;
-
-  /* 表面层背景 - 用于卡片、面板等 */
-  --gd-color-surface: #222;
-  /* 轻量填充面（插件卡片等）：从 surface 混入少量 text 派生，自动跟随主题 */
-  --gd-color-surface-subtle: color-mix(in srgb, var(--gd-color-text) 6.8%, var(--gd-color-surface));
-  --gd-color-surface-subtle-hover: color-mix(in srgb, var(--gd-color-text) 12%, var(--gd-color-surface));
-  --gd-color-surface-border: oklch(28% 0.02 250);
-  --gd-color-secondary-surface: #222;
-  /* 插件图标托盘：深色下同样与页面背景同色，靠边框区分边界 */
+  /* 页面、面板与填充面共用中性灰，不再混用蓝灰/绿灰。 */
+  --gd-color-bg: #1c1c1c;
+  --gd-color-surface: #202020;
+  --gd-color-secondary-surface: #242424;
+  --gd-color-surface-subtle: color-mix(in srgb, var(--gd-color-text) 5%, var(--gd-color-surface));
+  --gd-color-surface-subtle-hover: color-mix(in srgb, var(--gd-color-text) 9%, var(--gd-color-surface));
+  --gd-color-surface-border: #333333;
+  --gd-color-surface-hover: color-mix(in srgb, var(--gd-color-text) 8%, var(--gd-color-surface));
+  --gd-color-border: #383838;
   --gd-plugin-icon-tray-bg: var(--gd-color-bg);
-  --gd-plugin-icon-tray-border: color-mix(in srgb, var(--gd-color-text) 18%, var(--gd-color-surface));
-  /* #2e3035 左右 */
-  /* 文本颜色 - 确保在深色背景下的可读性 */
-  --gd-color-text: #d3d3d3;
-  /* 主文本，柔和亮色 */
-  --gd-color-text-gray: #a8aab3;
-  /* 次要文本 */
-  --gd-color-text-disabled: #5a5c63;
-  /* 禁用文本 */
+  --gd-plugin-icon-tray-border: var(--gd-color-border);
 
-  /* 边框和分隔线 */
-  --gd-color-border: oklch(32% 0.02 250);
-  /* #383a40 - 细边框 */
+  /* 正常阅读只用前两档；disabled 留给不可交互内容。 */
+  --gd-color-text: #e8e8e8;
+  --gd-color-text-gray: #b0b0b0;
+  --gd-color-text-disabled: #858585;
 
-  /* ====================
-       侧边栏专用配色
-       比主背景稍深，营造层次感
-       ==================== */
-  --gd-color-sidebar-bg: #1f1f1f;
-  --gd-color-sidebar-bg-active: #2f3131;
-  /* --gd-color-sidebar-text-active: var(--gd-color-primary); */
+  --gd-color-sidebar-bg: #161616;
+  --gd-color-sidebar-bg-active: #303030;
+  --gd-color-sidebar-bg-hover: #242424;
+  --gd-color-sidebar-text: var(--gd-color-text);
   --gd-color-sidebar-text-active: var(--gd-color-text);
-  --gd-color-sidebar-bg-hover: #2f3131;
-  --gd-color-sidebar-text-hover: oklch(85% 0.02 250);
-
-  /* 标题栏配色 */
+  --gd-color-sidebar-text-hover: var(--gd-color-text);
   --gd-color-titlebar-bg: var(--gd-color-sidebar-bg);
+  --gd-color-titlebar-border: var(--gd-color-sidebar-bg);
 
-  /* ====================
-       聊天对话区域配色
-       ==================== */
-  --gd-color-conversation-bg: var(--gd-color-surface);
-  /* 使用表面色作为对话列表背景 */
+  --gd-color-conversation-bg: var(--gd-color-sidebar-bg);
   --gd-color-conversation-text: var(--gd-color-text);
-  --gd-color-conversation-border: var(--gd-color-surface-border);
+  --gd-color-conversation-border: transparent;
   --gd-color-conversation-bg-active: var(--gd-color-sidebar-bg-active);
-  /* 与侧边栏保持一致 */
-  --gd-color-conversation-text-active: var(--gd-color-sidebar-text-active);
+  --gd-color-conversation-text-active: var(--gd-color-text);
   --gd-color-conversation-bg-hover: var(--gd-color-sidebar-bg-hover);
-  --gd-color-conversation-text-hover: oklch(88% 0.02 250);
+  --gd-color-conversation-text-hover: var(--gd-color-text);
 
-  /* 输入框背景 */
-  --gd-color-input-bg: #2d2d2d;
-  --gd-color-input-border: #404040;
-
-  /* 表单控件 token（暗色）：灰底由 text(#d3d3d3) 混入 surface(#222) 派生 */
-  --gd-color-field-text-placeholder: color-mix(in srgb, var(--gd-color-text) 40%, transparent);
+  /* 输入区与浮层比页面亮一档；表单选中态用中性底、主色文字。 */
+  --gd-color-input-bg: #2b2b2b;
+  --gd-color-input-border: #484848;
+  --gd-color-field-text-placeholder: #a0a0a0;
   --gd-color-field-outline-bg: var(--gd-color-input-bg);
   --gd-color-field-outline-border: var(--gd-color-input-border);
-  --gd-color-field-outline-border-hover: color-mix(in srgb, var(--gd-color-text) 24%, var(--gd-color-input-border));
-  --gd-color-field-bg-hover: color-mix(in srgb, var(--gd-color-text) 10%, var(--gd-color-surface));
-  --gd-color-field-option-bg-hover: color-mix(in srgb, var(--gd-color-text) 12%, var(--gd-color-surface));
-  --gd-color-field-option-bg-selected: var(--gd-color-primary-100);
+  --gd-color-field-outline-border-hover: #646464;
+  --gd-color-field-bg-hover: color-mix(in srgb, var(--gd-color-text) 9%, var(--gd-color-surface));
+  --gd-color-field-option-bg-hover: var(--gd-color-surface-hover);
+  --gd-color-field-option-bg-selected: color-mix(in srgb, var(--gd-color-text) 12%, var(--gd-color-surface));
 
-  /* 模态框：默认继承，主题可覆盖 */
-  --gd-color-overlay-bg: var(--gd-color-surface);
-  --gd-color-dialog-bg: var(--gd-color-surface);
-  --gd-color-dialog-border: var(--gd-color-border);
-  --gd-dialog-shadow: 0 0 10px rgba(0, 0, 0, 0.1), 0 8px 32px rgba(0, 0, 0, 0.4);
-  --gd-dialog-overlay-opacity: 0.75;
+  --gd-color-overlay-bg: #000;
+  --gd-color-dialog-bg: #272727;
+  --gd-color-dialog-border: #444444;
+  --gd-dialog-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  --gd-dialog-overlay-opacity: 0.6;
 
-  /* ====================
-       消息气泡配色
-       优化对比度，保护视力
-       ==================== */
-
-  /* 用户消息气泡 - 暗色模式下使用与侧边栏一致的配色 */
-  --gd-color-bubble-user-bg: #2f3131;
+  --gd-color-bubble-user-bg: #2b2b2b;
   --gd-color-bubble-user-text: var(--gd-color-text);
   --gd-color-bubble-user-border: var(--gd-color-border);
-
-  /* AI助手消息气泡 - 透明背景，融入整体 */
   --gd-color-bubble-assitant-bg: transparent;
   --gd-color-bubble-assitant-text: var(--gd-color-text);
   --gd-color-bubble-assitant-border: transparent;
 
-  --gd-size-dialog-rounded-radius: 12px;
+  /* 状态前景保持明亮，实心按钮使用深色字以保证对比度。 */
+  --gd-color-warning: #dfb56d;
+  --gd-color-success: #88bf9b;
+  --gd-color-danger: #e99595;
+  --gd-color-info: var(--gd-color-text-gray);
+  --gd-color-warning-text: #281e10;
+  --gd-color-danger-text: #2e1717;
+  --gd-color-warning-text-disabled: #b6a389;
+  --gd-color-danger-text-disabled: #b99c9c;
 
-  --gd-color-warning: #e6a23c;
-  --gd-color-success: #67c23a;
-  --gd-color-danger: #f56c6c;
-  --gd-color-info: #909399;
+  /* 代码块与消息底分层，注释、标题及操作图标保留可读的灰度。 */
+  --gd-md-text-tertiary: #a0a0a0;
+  --gd-md-fill-secondary: #303030;
+  --gd-md-fill-tertiary: #252525;
+  --gd-md-inline-code-bg: color-mix(in srgb, #363636 50%, transparent);
+  --gd-md-code-card-bg: #2b2b2b; /* 页面 #1c1c1c 上的代码卡片 */
+  --gd-md-link-color: #80beff;
+  --gd-md-scrollbar-thumb: rgba(255, 255, 255, 0.24);
+  --gd-md-divider: var(--gd-color-surface-border);
+  /* 语法高亮（GitHub Dark 调色板） */
+  --gd-md-syntax-text: #e6edf3;
+  --gd-md-syntax-comment: #8b949e;
+  --gd-md-syntax-keyword: #ff7b72;
+  --gd-md-syntax-string: #a5d6ff;
+  --gd-md-syntax-number: #79c0ff;
+  --gd-md-syntax-function: #d2a8ff;
+  --gd-md-syntax-type: #ffa657;
+  --gd-md-syntax-property: #79c0ff;
+  --gd-md-syntax-tag: #7ee787;
+  --gd-md-syntax-punctuation: #e6edf3;
 
-  /* 
-    --gd-color-gray-50: #111827;
-    --gd-color-gray-100: #1f2937;
-    --gd-color-gray-200: #374151;
-    --gd-color-gray-300: #4b5563;
-    --gd-color-gray-400: #6b7280;
-    --gd-color-gray-500: #9ca3af;
-    --gd-color-gray-600: #d1d5db;
-    --gd-color-gray-700: #e5e7eb;
-    --gd-color-gray-800: #f3f4f6;
-    --gd-color-gray-900: #f9fafb;
-    --gd-color-gray-950: #ffffff; */
-
-  /* 对话 Markdown（暗色）：文本/强调/边框类 token 已跟随主题变量自动切换，
-     这里只需给出「比页面底色 #222 更亮一档」的两个填充层，避免出现白底代码块。 */
-  --gd-md-fill-secondary: #303131;
-  --gd-md-fill-tertiary: #2a2b2b;
-  --gd-md-scrollbar-thumb: rgba(255, 255, 255, 0.22);
-  --gd-md-divider: oklch(28% 0.02 250);
-  /* 语法高亮（暗色）：Qoder cursor-dark 调色板，与亮色同一组类名选择器 */
-  --gd-md-syntax-text: #f0f0f0;
-  --gd-md-syntax-comment: #9d9d98;
-  --gd-md-syntax-keyword: #82d2ce;
-  --gd-md-syntax-string: #e394dc;
-  --gd-md-syntax-number: #f8c762;
-  --gd-md-syntax-function: #efb080;
-  --gd-md-syntax-type: #87c3ff;
-  --gd-md-syntax-property: #aaa0fa;
-  --gd-md-syntax-tag: #87c3ff;
-  --gd-md-syntax-punctuation: #d6d6dd;
-
-  /* 布局卡片（暗色）：同几何，暗底加深投影 */
   --gd-layout-card-border: var(--gd-color-border);
   --gd-layout-card-shadow: -4px 0 12px -8px rgba(0, 0, 0, 0.35);
 
-  /* 调用轨迹五色系（暗色） */
-  --gd-trajectory-user: #60a5fa;
-  --gd-trajectory-assistant: #2dd4bf;
-  --gd-trajectory-reasoning: #a78bfa;
-  --gd-trajectory-tool-call: #f59e0b;
-  --gd-trajectory-tool-result: #38bdf8;
-  --gd-trajectory-error: #f87171;
-  --gd-trajectory-turn-rail: color-mix(in srgb, #3b82f6 30%, var(--gd-color-sidebar-bg));
-  --gd-trajectory-added: #4ade80;
-  --gd-trajectory-neutral-bg: color-mix(in srgb, var(--gd-color-text-gray) 18%, var(--gd-color-sidebar-bg));
+  /* 调用轨迹的角色色只用于轨迹徽标，不参与页面底色。 */
+  --gd-trajectory-user: #91b9e5;
+  --gd-trajectory-assistant: #8bc5b3;
+  --gd-trajectory-reasoning: #b5a4d9;
+  --gd-trajectory-tool-call: #dfb56d;
+  --gd-trajectory-tool-result: #8abecb;
+  --gd-trajectory-error: var(--gd-color-danger);
+  --gd-trajectory-turn-rail: color-mix(in srgb, var(--gd-trajectory-user) 22%, var(--gd-color-sidebar-bg));
+  --gd-trajectory-added: var(--gd-color-success);
+  --gd-trajectory-neutral-bg: color-mix(in srgb, var(--gd-color-text-gray) 14%, var(--gd-color-sidebar-bg));
 }
 
 :root {
@@ -564,9 +527,9 @@ html.dark {
   /* 更柔和的悬停效果 */
 
   /* 窗口控制按钮（最小化/最大化/关闭）暗色默认配色 */
-  --gd-window-controls-color: #8b8d95;
+  --gd-window-controls-color: var(--gd-color-text-gray);
   --gd-window-controls-hover-bg: var(--gd-titlebar-hover-bg);
-  --gd-window-controls-hover-color: var(--gd-window-controls-color);
+  --gd-window-controls-hover-color: var(--gd-color-text);
 
   /* 流式波纹动画配色（暗色模式） */
   --gd-shimmer-base: #a8aab3;
