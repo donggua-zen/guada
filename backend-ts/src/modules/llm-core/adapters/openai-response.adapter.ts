@@ -395,8 +395,13 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     let pendingFinish: string | null = null;
     let pendingUsage: StreamUsage | null = null;
     /** 是否收到过上游终止事件（completed/incomplete/failed）。
-     * 没收到就结束 = 上游断流，不能合成正常 finish，否则上层会把半截参数当成功执行。 */
+     * 没收到就结束 = 上游没发收尾事件，需进一步判断内容是否已收齐。 */
     let sawTerminal = false;
+    /** 最后一个上游事件类型（含非内容事件，仅诊断用） */
+    let lastEventType = "";
+    /** 最后一个「内容事件」类型：忽略 created/in_progress/metadata 这类信封事件。
+     * 用于区分「内容已收齐只是缺 completed」与「真截断」。 */
+    let lastContentEventType = "";
 
     // 每工具一条 lane。并发 function_call 不能共用一个“当前工具”指针：
     // output_index 是 Responses 流里 added/done/delta 都稳定携带的关联键
@@ -661,6 +666,19 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     };
 
     for await (const event of response) {
+      if (typeof event?.type === "string") {
+        lastEventType = event.type;
+        // 只把「内容事件」纳入完成判定：created/in_progress/metadata 等信封
+        // 事件不代表内容推进，不能用来判定是否收齐。
+        if (
+          event.type.startsWith("response.output_") ||
+          event.type.startsWith("response.function_call_arguments.") ||
+          event.type.startsWith("response.reasoning") ||
+          event.type.startsWith("response.content_part.")
+        ) {
+          lastContentEventType = event.type;
+        }
+      }
       switch (event.type) {
         case "response.output_text.delta":
           for (const c of tracker.textDelta(event.delta)) yield c;
@@ -773,22 +791,61 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       return chunks;
     };
 
-    // 上游断流：没有任何终止事件就结束。此时绝不能合成正常 finish——否则上层
-    // 会认为本轮成功，拿半截参数去执行工具（2026-11-17 write 空参数事故）。
+    // 没有终止事件就结束了。这里不能再一刀切判截断——实测上游（兼容站）会
+    // 间歇性省略 response.completed，但内容其实已经收齐（所有工具都收到
+    // output_item.done / function_call_arguments.done，最后事件是 *_done）。
+    // 误判会让完整回答被打成"网络中断"，用户看到明明写完的内容报错。
+    //
+    // 判定改为「内容是否收齐」：
+    //   1. 有任一工具参数未收齐（只见过 delta/added）→ 真截断
+    //   2. 全部收齐，且最后事件是 *_done → 内容完整，只是上游漏发 completed → 按成功收尾
+    //   3. 全部收齐，但最后事件仍是 *_delta / output_item.added → 正文可能写到一半 → 真截断
     if (!sawTerminal) {
       // 先闭合块（携带完整性标记），让组装器拿到带 argumentsComplete 的权威块
-      for (const c of closeAllChunks()) yield c;
+      const closed = closeAllChunks();
+      for (const c of closed) yield c;
       // 用户主动中止优先：SDK 被 abort 时 for-await 会"干净"结束，
       // 若先判截断会触发自动重试，违背用户意图。
       if (abortSignal?.aborted) {
         throw createAbortError("LLM stream aborted by user");
       }
+
+      const incompleteTools = lanes.filter((l) => !l.complete);
+      const lastIsDone = /\.(done|completed)$/.test(lastContentEventType);
+      const hasVisibleContent = closed.some(
+        (c) =>
+          (c.type === "block_end" && c.block?.type === "tool-call") ||
+          (c.type === "block_end" && c.block?.type === "text") ||
+          (c.type === "block_end" && c.block?.type === "reasoning"),
+      );
+
+      if (incompleteTools.length === 0 && lastIsDone) {
+        // 内容已收齐，上游只是没发 response.completed：按正常完成收尾，
+        // 保留 usage 缺失（上游没给），只打 warn 供排查上游行为。
+        this.logger.warn(
+          `[responses.stream] ended without terminal event but content complete ` +
+            `(last=${lastContentEventType || "?"}, tools=${lanes.length}); treating as stop`,
+        );
+        if (pendingUsage) {
+          yield { type: "usage", usage: pendingUsage };
+        }
+        yield { type: "finish", finishReason: "stop" };
+        return;
+      }
+
+      // 没有可见内容、也没有收齐的工具：上游什么都没给就断了，按截断处理
+      // （上层据此重试）。
       const toolSummary = lanes
         .map((l) => `${l.name || "?"}:${l.args.length}${l.complete ? "" : "!"}`)
         .join(",");
+      this.logger.warn(
+        `[responses.stream] ended without terminal event ` +
+          `(last=${lastContentEventType || lastEventType || "?"}, tools=[${toolSummary}], ` +
+          `incomplete=${incompleteTools.length}, visible=${hasVisibleContent})`,
+      );
       throw new UpstreamStreamTruncatedError(
         `Responses stream ended without terminal event ` +
-          `(tools=[${toolSummary}])`,
+          `(last=${lastContentEventType || lastEventType || "?"}, tools=[${toolSummary}])`,
       );
     }
 

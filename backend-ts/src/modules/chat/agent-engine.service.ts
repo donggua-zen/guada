@@ -542,6 +542,11 @@ export class AgentEngine {
       needToContinue = false;
       let skipLLMCall = false;
       lastRequestMedia = undefined;
+      // 每轮重置本轮错误：上游断流等错误只属于当轮。若不清空，某一轮失败后
+      // 后续轮次即便成功，finalError 仍带着旧消息 → turn/finish 被误标 network_error。
+      // 真正需要上报的错误在下方 catch 里重新赋值。
+      finalError = undefined;
+      businessReason = undefined;
 
       // 通过 agent 钩子（PRE_STEP，副作用管线）让能力订阅者（压缩等）检查/执行——
       // 订阅者原地改写会话存储（store 写即更新）后放行；agent-engine 不感知压缩细节，

@@ -520,4 +520,68 @@ describe('OpenAIResponseAdapter 流式工具参数', () => {
     );
     expect(end?.block.argumentsComplete).toBe(true);
   });
+
+  it('工具已 done 但上游漏发 completed：按正常结束，不报截断', async () => {
+    const { chunks, error } = await runCollecting([
+      added(0, { id: 'item_0', call_id: 'call_0', name: 'browser_run' }),
+      {
+        type: 'response.function_call_arguments.done',
+        item_id: 'item_0',
+        output_index: 0,
+        arguments: '{"name":"x","script":"await tab.screenshot();"}',
+      },
+      {
+        type: 'response.output_item.done',
+        output_index: 0,
+        item: {
+          type: 'function_call',
+          id: 'item_0',
+          call_id: 'call_0',
+          name: 'browser_run',
+          arguments: '{"name":"x","script":"await tab.screenshot();"}',
+        },
+      },
+      // 上游到此直接关流，没有 response.completed
+    ]);
+
+    expect(error).toBeUndefined();
+    expect(chunks.find((c) => c.type === 'finish')?.finishReason).toBe('stop');
+    const end = chunks.find(
+      (c) => c.type === 'block_end' && c.block?.type === 'tool-call',
+    );
+    expect(end?.block.argumentsComplete).toBe(true);
+  });
+
+  it('正文已 output_text.done 但漏发 completed：按正常结束', async () => {
+    const { chunks, error } = await runCollecting([
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_1' } },
+      { type: 'response.output_text.delta', item_id: 'msg_1', output_index: 0, delta: '完整的一句话。' },
+      { type: 'response.output_text.done', item_id: 'msg_1', output_index: 0, text: '完整的一句话。' },
+    ]);
+
+    expect(error).toBeUndefined();
+    expect(chunks.find((c) => c.type === 'finish')?.finishReason).toBe('stop');
+  });
+
+  it('正文停在 delta 且漏发 completed：仍判截断', async () => {
+    const { error } = await runCollecting([
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_1' } },
+      { type: 'response.output_text.delta', item_id: 'msg_1', output_index: 0, delta: '写到一半就断' },
+    ]);
+
+    expect(error).toBeInstanceOf(UpstreamStreamTruncatedError);
+    expect((error as Error).message).toContain('last=response.output_text.delta');
+  });
+
+  it('工具只 added、参数 0 字符就断：判截断并标 argumentsComplete=false', async () => {
+    const { chunks, error } = await runCollecting([
+      added(0, { id: 'item_0', call_id: 'call_0', name: 'read' }),
+    ]);
+
+    expect(error).toBeInstanceOf(UpstreamStreamTruncatedError);
+    const end = chunks.find(
+      (c) => c.type === 'block_end' && c.block?.type === 'tool-call',
+    );
+    expect(end?.block.argumentsComplete).toBe(false);
+  });
 });
