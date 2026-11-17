@@ -2,8 +2,8 @@
   <div class="tool-diff-view">
     <div class="tool-view-header">
       <span class="tool-view-file" :title="filePath">{{ fileName }}</span>
-      <span v-if="stat.added" class="diff-stat diff-stat--add">+{{ stat.added }}</span>
-      <span v-if="stat.removed" class="diff-stat diff-stat--remove">−{{ stat.removed }}</span>
+      <span v-if="diffStat.added" class="diff-stat diff-stat--add">+{{ diffStat.added }}</span>
+      <span v-if="diffStat.removed" class="diff-stat diff-stat--remove">−{{ diffStat.removed }}</span>
     </div>
     <div v-if="rows.length" class="tool-diff-body">
       <table class="diff-table">
@@ -14,7 +14,7 @@
           </tr>
         </tbody>
       </table>
-      <div v-if="rows.length > MAX_ROWS" class="diff-truncated">
+      <div v-if="truncated" class="diff-truncated">
         {{ t('chat.toolCalls.truncatedLines', { n: MAX_ROWS }) }}
       </div>
     </div>
@@ -26,7 +26,8 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { diffLines } from "diff";
 import { useHighlight } from "@/composables/useHighlight";
-import { countDiffLines } from "@/utils/diff";
+import { countDiffLines, type DiffStat } from "@/utils/diff";
+import { takeTextPreview } from "@/utils/textPreview";
 
 const { t } = useI18n();
 
@@ -34,12 +35,18 @@ const props = defineProps<{
   filePath: string;
   oldText: string;
   newText: string;
+  /** 全文增删统计（父层已算过）；缺省时本组件自行计算 */
+  stat?: DiffStat;
 }>();
 
-/** 行数上限：防止超大 diff 撑爆 DOM */
+/** 渲染行数上限：防止超大 diff 撑爆 DOM */
 const MAX_ROWS = 400;
+/** 单侧预览字符上限：diff/高亮只处理前 400 行切片 */
+const MAX_PREVIEW_CHARS = 120_000;
+/** 两侧预览合计的高亮预算：超过则退化为转义纯文本 */
+const MAX_HIGHLIGHT_CHARS = 120_000;
 
-const { highlightCodeLines, getLanguageFromExtension } = useHighlight();
+const { highlightCodeLines, getLanguageFromExtension, escapeHtml } = useHighlight();
 
 const fileName = computed(() => {
   const parts = props.filePath.replace(/\\/g, "/").split("/");
@@ -52,7 +59,17 @@ const language = computed(() => {
   return getLanguageFromExtension(props.filePath.slice(dot)) || "plaintext";
 });
 
-const stat = computed(() => countDiffLines(props.oldText, props.newText));
+/** diff 只在前 400 行切片上计算；行头徽章仍是全文统计 */
+const oldPreview = computed(() =>
+  takeTextPreview(props.oldText, MAX_ROWS, MAX_PREVIEW_CHARS),
+);
+const newPreview = computed(() =>
+  takeTextPreview(props.newText, MAX_ROWS, MAX_PREVIEW_CHARS),
+);
+
+const diffStat = computed(
+  () => props.stat ?? countDiffLines(props.oldText, props.newText),
+);
 
 interface DiffRow {
   type: "add" | "del" | "ctx";
@@ -61,15 +78,21 @@ interface DiffRow {
 }
 
 const rows = computed<DiffRow[]>(() => {
-  if (!props.oldText && !props.newText) return [];
+  const oldText = oldPreview.value.text;
+  const newText = newPreview.value.text;
+  if (!oldText && !newText) return [];
   // 流式期间文本不完整，diffLines 对部分文本同样适用
-  const parts = diffLines(props.oldText, props.newText);
+  const parts = diffLines(oldText, newText);
+  const highlighted = oldText.length + newText.length <= MAX_HIGHLIGHT_CHARS;
   const out: DiffRow[] = [];
   for (const part of parts) {
     const text = part.value.endsWith("\n") ? part.value.slice(0, -1) : part.value;
     if (!text) continue;
     // 整段高亮后按行拆分，保留跨行 token（块注释/模板字符串）的上下文
-    for (const html of highlightCodeLines(text, language.value)) {
+    const htmls = highlighted
+      ? highlightCodeLines(text, language.value)
+      : text.split("\n").map(escapeHtml);
+    for (const html of htmls) {
       if (part.added) {
         out.push({ type: "add", sign: "+", html });
       } else if (part.removed) {
@@ -83,6 +106,13 @@ const rows = computed<DiffRow[]>(() => {
 });
 
 const visibleRows = computed(() => rows.value.slice(0, MAX_ROWS));
+
+const truncated = computed(
+  () =>
+    oldPreview.value.truncated ||
+    newPreview.value.truncated ||
+    rows.value.length > MAX_ROWS,
+);
 </script>
 
 <style scoped>

@@ -235,12 +235,82 @@ export interface ArgsDisplay {
 }
 
 /**
+ * 从流式 JSON 原文中提取顶层字符串字段（只扫描目标字段，不解析整段）。
+ *
+ * 写入类工具的参数里带着整份文件内容，折叠行只需要 file_path；
+ * 为显示文件名去 partial-json 全部 content，会让流式成本随已收内容平方增长。
+ *
+ * 字符串内部的引号必然转义，因此未转义的 `"key"` 只可能出现在键的位置，
+ * content 里即使出现同样的文字也不会误匹配。值仍在传输中（无闭合引号）时
+ * 返回 undefined，由调用方回退完整解析。
+ */
+export function extractStringFieldFromJsonText(
+  raw: string,
+  key: string,
+): string | undefined {
+  const needle = `"${key}"`;
+  let from = 0;
+  while (from < raw.length) {
+    const keyIndex = raw.indexOf(needle, from);
+    if (keyIndex === -1) return undefined;
+
+    let i = keyIndex + needle.length;
+    while (i < raw.length && isJsonWhitespace(raw.charCodeAt(i))) i++;
+    if (raw[i] !== ":") {
+      from = keyIndex + needle.length;
+      continue;
+    }
+    i++;
+    while (i < raw.length && isJsonWhitespace(raw.charCodeAt(i))) i++;
+    if (raw[i] !== '"') return undefined;
+
+    const valueStart = i;
+    i++;
+    while (i < raw.length) {
+      const code = raw.charCodeAt(i);
+      if (code === 92 /* \ */) {
+        i += 2;
+        continue;
+      }
+      if (code === 34 /* " */) {
+        try {
+          return JSON.parse(raw.slice(valueStart, i + 1)) as string;
+        } catch {
+          return undefined;
+        }
+      }
+      i++;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function isJsonWhitespace(code: number): boolean {
+  return code === 32 || code === 9 || code === 10 || code === 13;
+}
+
+/**
  * 参数摘要的结构化版本：文件类工具（argsKey = "file_path"）拆成
  * 文件名 + 目录两段（ZCode 同款交互），其余场景与 getArgsText 一致。
  */
 export function getArgsDisplay(tool: ToolCall): ArgsDisplay | undefined {
   const params = getToolArgs(tool);
   if (!params) return undefined;
+
+  const config = getToolConfig(tool);
+
+  // 文件路径快速通道：缓存/流式参数里跟着整份文件内容时，
+  // 只为行头文件名做一次全量 partialParse 不值得。
+  if (typeof params === "string" && config.argsKey === "file_path") {
+    const filePath = extractStringFieldFromJsonText(params, "file_path");
+    if (filePath !== undefined) {
+      if (!filePath.trim()) return undefined;
+      const file = splitPathDisplay(filePath);
+      return file ? { file } : undefined;
+    }
+    // 未命中（半截 JSON / 字段还没流出来）→ 回退完整解析
+  }
 
   let parsedParams = params;
   if (typeof params === "string") {
@@ -253,7 +323,6 @@ export function getArgsDisplay(tool: ToolCall): ArgsDisplay | undefined {
 
   if (!parsedParams || typeof parsedParams !== "object") return undefined;
 
-  const config = getToolConfig(tool);
   const isKnownTool = resolveToolName(tool) in pluginToolDisplays.value;
 
   if (config.argsKey) {

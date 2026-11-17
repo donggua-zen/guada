@@ -15,6 +15,12 @@ describe("countDiffLines", () => {
     expect(countDiffLines("a\nb\nc", "")).toEqual({ added: 0, removed: 3 });
   });
 
+  it("单侧为空时保留末尾换行口径（不额外算一行）", () => {
+    expect(countDiffLines("", "a\nb\n")).toEqual({ added: 2, removed: 0 });
+    expect(countDiffLines("a\n", "")).toEqual({ added: 0, removed: 1 });
+    expect(countDiffLines("", "")).toEqual({ added: 0, removed: 0 });
+  });
+
   it("混合增删", () => {
     const stat = countDiffLines("keep\nold1\nold2", "keep\nnew1\nnew2\nnew3");
     expect(stat).toEqual({ added: 3, removed: 2 });

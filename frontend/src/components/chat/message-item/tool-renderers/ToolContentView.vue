@@ -6,7 +6,7 @@
     </div>
     <div class="tool-content-body">
       <pre class="tool-content-code"><code><span v-for="(line, i) in visibleLines" :key="i" class="code-line" v-html="line || '&nbsp;'"></span></code></pre>
-      <div v-if="lines.length > MAX_LINES" class="content-truncated">
+      <div v-if="truncated" class="content-truncated">
         {{ t('chat.toolCalls.truncatedLines', { n: MAX_LINES }) }}
       </div>
     </div>
@@ -17,6 +17,9 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useHighlight } from "@/composables/useHighlight";
+import { useThrottledValue } from "@/composables/useThrottledValue";
+import { takeTextPreview } from "@/utils/textPreview";
+import { perfStart } from "@/utils/perf";
 
 const { t } = useI18n();
 
@@ -25,10 +28,14 @@ const props = defineProps<{
   content: string;
 }>();
 
-/** 行数上限：防止超大文件撑爆 DOM */
+/** 渲染行数上限：防止超大文件撑爆 DOM */
 const MAX_LINES = 400;
+/** 预览文本硬上限：先截断再高亮，tokenize 成本不再随原文件大小增长 */
+const MAX_PREVIEW_CHARS = 120_000;
+/** 同步高亮预算：超过则降级为转义后的纯文本（首屏仍立即出现） */
+const MAX_HIGHLIGHT_CHARS = 60_000;
 
-const { highlightCodeLines, getLanguageFromExtension } = useHighlight();
+const { highlightCodeLines, getLanguageFromExtension, escapeHtml } = useHighlight();
 
 const fileName = computed(() => {
   const parts = props.filePath.replace(/\\/g, "/").split("/");
@@ -41,9 +48,40 @@ const language = computed(() => {
   return getLanguageFromExtension(props.filePath.slice(dot)) || "plaintext";
 });
 
-const lineCount = computed(() => props.content.split("\n").length);
+/**
+ * 流式写入时 content 每个 delta 都会增长：切片 + 高亮的成本与已收内容成正比，
+ * 边写边看会把主线程吃满。展示层节流到 500ms 一帧（尾值必达，写完立即收敛）。
+ */
+const shownContent = useThrottledValue(() => props.content, 500);
 
-const lines = computed(() => highlightCodeLines(props.content, language.value));
+/** 先切片再高亮：高亮输入最多 MAX_PREVIEW_CHARS，而不是整份文件 */
+const preview = computed(() => {
+  const span = perfStart("toolCalls.contentPreview");
+  const result = takeTextPreview(shownContent.value, MAX_LINES, MAX_PREVIEW_CHARS);
+  span?.end({
+    chars: shownContent.value.length,
+    previewChars: result.text.length,
+    lines: result.totalLines,
+    truncated: result.truncated ? 1 : 0,
+  });
+  return result;
+});
+
+const lineCount = computed(() => preview.value.totalLines);
+
+const truncated = computed(() => preview.value.truncated);
+
+const lines = computed(() => {
+  const text = preview.value.text;
+  if (!text) return [];
+  const span = perfStart("toolCalls.contentHighlight");
+  const highlighted = text.length <= MAX_HIGHLIGHT_CHARS;
+  const result = highlighted
+    ? highlightCodeLines(text, language.value)
+    : text.split("\n").map(escapeHtml);
+  span?.end({ chars: text.length, highlighted: highlighted ? 1 : 0 });
+  return result;
+});
 
 const visibleLines = computed(() => lines.value.slice(0, MAX_LINES));
 </script>

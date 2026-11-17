@@ -4,6 +4,7 @@
     :file-path="info.args.file || ''"
     :old-text="info.args.oldValue || ''"
     :new-text="info.args.newValue || ''"
+    :stat="info.stat"
   />
   <ToolContentView
     v-else-if="info.kind === 'content'"

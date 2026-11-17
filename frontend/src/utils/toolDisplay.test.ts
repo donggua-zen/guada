@@ -11,6 +11,7 @@ import {
   getRendererArgs,
   getArgsText,
   getArgsDisplay,
+  extractStringFieldFromJsonText,
   isStandaloneTool,
   isStandaloneRendererKind,
   resolvePlanCardStatus,
@@ -351,6 +352,53 @@ describe("resolvePlanCardStatus", () => {
 
   it("成功但没有批准标记不出徽标（如历史数据缺 meta）", () => {
     expect(resolvePlanCardStatus("success", undefined)).toBeUndefined();
+  });
+});
+
+describe("extractStringFieldFromJsonText（流式参数快速取字段）", () => {
+  it("字段在首部 / 尾部都能取到，并解码转义", () => {
+    expect(
+      extractStringFieldFromJsonText('{"file_path":"src/a.ts","content":"x"}', "file_path"),
+    ).toBe("src/a.ts");
+    expect(
+      extractStringFieldFromJsonText('{"content":"x","file_path":"src/a.ts"}', "file_path"),
+    ).toBe("src/a.ts");
+    expect(
+      extractStringFieldFromJsonText(
+        '{"file_path":"D:\\\\proj\\\\a.ts","content":"x"}',
+        "file_path",
+      ),
+    ).toBe("D:\\proj\\a.ts");
+  });
+
+  it("允许键与值之间带空白", () => {
+    expect(
+      extractStringFieldFromJsonText('{ "file_path" : \n "/a/b.ts" }', "file_path"),
+    ).toBe("/a/b.ts");
+  });
+
+  it("content 里出现同名文字（已转义）不会误匹配", () => {
+    const raw = '{"content":"say \\"file_path\\": \\"fake.ts\\"","file_path":"real.ts"}';
+    expect(extractStringFieldFromJsonText(raw, "file_path")).toBe("real.ts");
+  });
+
+  it("值还没流完时返回 undefined（调用方回退完整解析）", () => {
+    expect(extractStringFieldFromJsonText('{"file_path":"src/ma', "file_path")).toBeUndefined();
+    expect(extractStringFieldFromJsonText('{"file_path":', "file_path")).toBeUndefined();
+  });
+
+  it("getArgsDisplay 走快速通道：arguments 为流式字符串时文件 chip 仍可用", () => {
+    setPluginToolDisplays({
+      write: { text: { executing: "", completed: "" }, argsKey: "file_path" },
+    });
+    const tool: ToolCall = {
+      name: "write",
+      // content 很长且尚未收尾，行头只需要 file_path
+      arguments: '{"file_path":"frontend/src/components/icons/toolIcons.ts","content":"export const x',
+    };
+    const display = getArgsDisplay(tool);
+    expect(display?.file?.fileName).toBe("toolIcons.ts");
+    expect(display?.file?.dirPath).toBe("frontend/src/components/icons/");
   });
 });
 

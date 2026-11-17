@@ -425,6 +425,14 @@ const planCardStatus = (index: number): PlanCardStatus | undefined => {
 };
 
 const rendererStat = (index: number): ToolRendererInfo['stat'] | undefined => {
+  const tool = props.toolCalls[index];
+  if (!tool) return undefined;
+  // 只有 diff 卡片有增删徽章。非 diff 直接返回，避免在这里求值 rendererInfos——
+  // 否则折叠的 write/content 行也会在流式期间反复全量解析带整份文件的 arguments。
+  if (getToolRenderer(tool)?.kind !== 'diff') return undefined;
+  // 执行中参数还在增长：每来一个 delta 都对全文做一次 diff 代价太高，
+  // 徽章等调用结束（outcome 落定）后再出。
+  if (props.isStreaming && !tool.outcome) return undefined;
   return rendererInfos.value[index]?.stat;
 };
 
