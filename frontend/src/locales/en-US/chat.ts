@@ -257,7 +257,7 @@
     ],
     codeCopied: 'Code copied to clipboard',
     thinkingActive: 'Thinking...',
-    thinkingDone: 'Deep Thinking Complete',
+    thinkingDone: 'Thinking Complete',
     executingSteps: 'Executing {n} steps',
     executedThenStatus: '{m} steps executed, {status}',
     executedSteps: '{n} steps executed',

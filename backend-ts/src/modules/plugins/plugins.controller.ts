@@ -401,7 +401,7 @@ export class PluginsController {
       remote_read: { argsKey: "file_path", icon: "read", hasAggregate: false },
       remote_write: {
         argsKey: "file_path",
-        icon: "edit",
+        icon: "write",
         hasAggregate: false,
         renderer: { kind: "content", fields: { file: "file_path", content: "content" } },
       },

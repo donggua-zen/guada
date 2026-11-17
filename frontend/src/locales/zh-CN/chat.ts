@@ -257,7 +257,7 @@ export default {
     ],
     codeCopied: '代码已复制到剪贴板',
     thinkingActive: '正在思考...',
-    thinkingDone: '已深度思考',
+    thinkingDone: '已思考',
     executingSteps: '正在执行{n}个步骤',
     executedThenStatus: '已执行{m}个步骤,{status}',
     executedSteps: '已执行{n}个步骤',

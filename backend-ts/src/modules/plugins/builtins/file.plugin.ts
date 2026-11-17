@@ -435,7 +435,7 @@ export class FilePlugin extends PluginBase {
         text: { executing: "%write.executing%", completed: "%write.completed%" },
         aggregate: { executing: "%write.aggregate.executing%", completed: "%write.aggregate.completed%" },
         argsKey: "file_path",
-        icon: "edit",
+        icon: "write",
         renderer: { kind: "content", fields: { file: "file_path", content: "content" } },
       },
       dangerLevel: "high",

@@ -304,7 +304,7 @@ function applyCompleteBlock(content: TurnContent, block: ContentBlock): void {
  *
  * OpenAI 兼容系 adapter（DeepSeek/Gemini 等）的 block_end[reasoning] 曾延迟到
  * 流收尾才补发；text/tool 通道首见即代表思考已让位，此处跨块复位保证 UI 在
- * 正文输出开始时立即切换为"已深度思考"。不写近似时长——权威值由 block_end
+ * 正文输出开始时立即切换为"已思考"。不写近似时长——权威值由 block_end
  * 的 timing 派生，避免与其累加逻辑冲突。
  */
 function resetThinkingInBundle(bundle: MessageBundle): void {

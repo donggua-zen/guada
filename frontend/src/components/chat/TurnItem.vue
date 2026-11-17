@@ -99,6 +99,7 @@
                   <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
                     <!-- <span class="block w-1 h-1 rounded-3xl bg-gray-400 dark:bg-gray-700/50" v-if="!isGroupBusy(groupIndex)"></span> -->
                     <component :is="parts.icon" v-if="!isGroupExpanded(groupIndex, group)"
+                      v-bind="parts.icon === ThinkingIcon ? { active: isGroupBusy(groupIndex) } : {}"
                       class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-gray-500" />
                     <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200"
                       :class="isGroupExpanded(groupIndex, group) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
@@ -221,7 +222,8 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onBeforeUnmount, inject, type Component } from "vue";
 import { useI18n } from "vue-i18n";
-import { Alert16Regular, BrainCircuit20Regular, Wrench24Filled, ChevronDown12Regular, BookOpen16Regular } from "@vicons/fluent";
+import { Alert16Regular, Wrench24Filled, ChevronDown12Regular, BookOpen16Regular } from "@vicons/fluent";
+import ThinkingIcon from '@/components/icons/ThinkingIcon.vue';
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
@@ -501,7 +503,7 @@ const executingCallsOf = (group: DisplayGroup): ToolCall[] =>
  */
 const getActiveStatusParts = (executing: ToolCall[]): { icon: Component; text: string } => {
   if (executing.length === 0) {
-    return { icon: BrainCircuit20Regular, text: t('chat.turn.thinkingActive') };
+    return { icon: ThinkingIcon, text: t('chat.turn.thinkingActive') };
   }
   const refTool = executing[executing.length - 1] as ToolCall;
   const allSameType = executing.every(tc => _resolveToolName(tc as ToolCall) === _resolveToolName(refTool));
@@ -522,7 +524,7 @@ const getActiveStatusParts = (executing: ToolCall[]): { icon: Component; text: s
 
 /**
  * 分组内思考时长文案（多段思考按块级 timing 累加）。
- * 权威时长由 reasoning block_end 派生，未到时返回空串——标题只显示「已深度思考」，
+ * 权威时长由 reasoning block_end 派生，未到时返回空串——标题只显示「已思考」，
  * 不补近似值（避免与 block_end 的累加逻辑冲突）。
  */
 const thinkingDurationText = (group: DisplayGroup): string => {
@@ -570,7 +572,7 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
     if (toolSteps > 0) {
       return { icon: Wrench24Filled, action: t('chat.turn.executedSteps', { n: toolSteps }), args: '' };
     }
-    return { icon: BrainCircuit20Regular, action: t('chat.turn.thinkingDone'), args: '' };
+    return { icon: ThinkingIcon, action: t('chat.turn.thinkingDone'), args: '' };
   }
 
   // 收起态：工具执行中 → 工具动作/聚合文案 + 参数摘要
@@ -609,7 +611,7 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
       ?? group.items.find(i => i.type === 'think');
     const isThinking = thinkItem?.source.state?.isThinking;
     return {
-      icon: BrainCircuit20Regular,
+      icon: ThinkingIcon,
       action: isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone'),
       // 思考中实时跟最后一行摘要；结束后只显示时长，不再透出内容
       args: isThinking ? getThinkingPreview(thinkItem?.reasoningContent) : thinkingDurationText(group),

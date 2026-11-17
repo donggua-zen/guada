@@ -949,7 +949,7 @@ describe("StreamProjector 折叠器", () => {
 // ── 思考态跨块复位（OpenAI 系 adapter block_end 延迟防御） ──
 // OpenAI 兼容流（DeepSeek/Gemini 等）的 block_end[reasoning] 可能延迟到流收尾；
 // text/tool 通道首见即代表思考已让位，投影器需跨块复位 reasoning 块的 isThinking，
-// 保证 UI 在正文输出开始时立即切换为"已深度思考"。
+// 保证 UI 在正文输出开始时立即切换为"已思考"。
 describe("思考态跨块复位", () => {
   let store: ReturnType<typeof createStore>;
   beforeEach(() => { store = createStore(); });

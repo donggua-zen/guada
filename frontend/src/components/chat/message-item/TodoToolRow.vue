@@ -16,7 +16,7 @@
       <!-- 与分组标题同一套「图标 ↔ 箭头」hover 互换：图标常显，hover 淡出，
            箭头只在 hover/展开时出现（两者 absolute inset-0，避免重叠） -->
       <span class="relative w-4 h-4 shrink-0 flex items-center justify-center">
-        <ClipboardTaskListLtr20Regular v-if="!expanded" class="absolute inset-0 w-4 h-4 transition-opacity duration-200"
+        <ToolTodoIcon v-if="!expanded" class="absolute inset-0 w-4 h-4 transition-opacity duration-200"
           :class="[iconClass, hasItems ? 'group-hover:opacity-0' : '']" />
         <ChevronDown12Regular v-if="hasItems" class="absolute inset-0 w-4 h-4 transition-all duration-200"
           :class="expanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
@@ -61,8 +61,8 @@ import {
   ArrowRight16Regular,
   Checkmark16Regular,
   ChevronDown12Regular,
-  ClipboardTaskListLtr20Regular,
 } from '@vicons/fluent'
+import { ToolTodoIcon } from '@/components/icons/toolIcons'
 import {
   countCompletedTodos,
   isTodoListCompleted,

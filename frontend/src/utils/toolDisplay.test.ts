@@ -7,6 +7,8 @@ import { t } from "@/locales";
 import {
   setPluginToolDisplays,
   getToolConfig,
+  getToolIcon,
+  TOOL_ICON_MAP,
   getToolRenderer,
   getRendererArgs,
   getArgsText,
@@ -19,6 +21,45 @@ import {
 } from "./toolDisplay";
 
 const tMock = vi.mocked(t);
+
+describe("getToolIcon（共享语义映射）", () => {
+  beforeEach(() => setPluginToolDisplays({}));
+
+  it("搜索类与自定义工具按同一 search 标识复用图标，不猜测工具名", () => {
+    setPluginToolDisplays(Object.fromEntries(
+      ["glob", "grep", "web_search", "kb_search", "custom_lookup"].map(name => [
+        name, { text: { executing: "", completed: "" }, icon: "search" },
+      ]),
+    ));
+    for (const name of ["glob", "grep", "web_search", "kb_search", "custom_lookup"]) {
+      expect(getToolIcon({ name })).toBe(TOOL_ICON_MAP.search);
+    }
+    expect(getToolIcon({ name: "unregistered_search" })).toBe(TOOL_ICON_MAP.generic);
+  });
+
+  it("旧别名仍指向同一组件；时间有独立钟面", () => {
+    expect(TOOL_ICON_MAP.file).toBe(TOOL_ICON_MAP.read);
+    expect(TOOL_ICON_MAP.console).toBe(TOOL_ICON_MAP.terminal);
+    expect(TOOL_ICON_MAP.eye).toBe(TOOL_ICON_MAP.vision);
+    expect(TOOL_ICON_MAP.wrench).toBe(TOOL_ICON_MAP.generic);
+    expect(TOOL_ICON_MAP.tool).toBe(TOOL_ICON_MAP.generic);
+    expect(TOOL_ICON_MAP.time).not.toBe(TOOL_ICON_MAP.generic);
+  });
+
+  it("缺失或未知标识回退星芒；懒加载调用采用实际工具标识", () => {
+    setPluginToolDisplays({
+      custom: { text: { executing: "", completed: "" }, icon: "unknown_icon" },
+      writer: { text: { executing: "", completed: "" }, icon: "write" },
+      question: { text: { executing: "", completed: "" }, icon: "chat" },
+    });
+    expect(getToolIcon({ name: "custom" })).toBe(TOOL_ICON_MAP.generic);
+    expect(getToolIcon({ name: "unknown" })).toBe(TOOL_ICON_MAP.generic);
+    expect(getToolIcon({ name: "question" })).toBe(TOOL_ICON_MAP.chat);
+    expect(getToolIcon({ name: "tool_use", arguments: { tool_name: "writer" } }))
+      .toBe(TOOL_ICON_MAP.write);
+    expect(TOOL_ICON_MAP.write).not.toBe(TOOL_ICON_MAP.edit);
+  });
+});
 
 /**
  * 工具定制渲染器配置测试

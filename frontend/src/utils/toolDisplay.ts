@@ -1,18 +1,21 @@
 import { ref, type Component } from "vue";
 import {
-  Wrench24Filled,
-  Edit32Filled,
-  Search16Filled,
-  CalendarAgenda20Regular,
-  BookSearch24Regular,
-  Code24Regular,
-  WindowWrench16Regular,
-  TaskListSquareLtr20Regular,
-  EyeTracking16Filled,
-  Window16Regular,
-  WindowConsole20Filled,
-  Desktop16Regular,
-} from "@vicons/fluent";
+  ToolGenericIcon,
+  ToolReadIcon,
+  ToolWriteIcon,
+  ToolEditIcon,
+  ToolSearchIcon,
+  ToolTerminalIcon,
+  ToolBrowserIcon,
+  ToolComputerIcon,
+  ToolVisionIcon,
+  ToolTodoIcon,
+  ToolBookIcon,
+  ToolTimeIcon,
+  ToolChatIcon,
+  ToolCodeIcon,
+  ToolWindowIcon,
+} from "@/components/icons/toolIcons";
 import { t } from "@/locales";
 import { parse as partialParse } from "partial-json";
 import { SUB_AGENT_SPAWN_TOOL } from "./subAgentTools";
@@ -82,24 +85,27 @@ export interface ToolDisplayConfig {
  * 纯前端渲染资源，不随语言包变化。
  */
 export const TOOL_ICON_MAP: Record<string, Component> = {
-  file: CalendarAgenda20Regular,
-  read: CalendarAgenda20Regular,
-  search: Search16Filled,
-  edit: Edit32Filled,
-  browser: WindowWrench16Regular,
-  computer: Desktop16Regular,
-  code: Code24Regular,
-  window: Window16Regular,
-  eye: EyeTracking16Filled,
-  vision: EyeTracking16Filled,
-  todo: TaskListSquareLtr20Regular,
-  book: BookSearch24Regular,
-  terminal: WindowConsole20Filled,
-  console: WindowConsole20Filled,
-  wrench: Wrench24Filled,
-  time: Wrench24Filled,
-  generic: Wrench24Filled,
-  tool: Wrench24Filled,
+  file: ToolReadIcon,
+  read: ToolReadIcon,
+  write: ToolWriteIcon,
+  search: ToolSearchIcon,
+  edit: ToolEditIcon,
+  browser: ToolBrowserIcon,
+  computer: ToolComputerIcon,
+  code: ToolCodeIcon,
+  window: ToolWindowIcon,
+  eye: ToolVisionIcon,
+  vision: ToolVisionIcon,
+  todo: ToolTodoIcon,
+  book: ToolBookIcon,
+  terminal: ToolTerminalIcon,
+  console: ToolTerminalIcon,
+  chat: ToolChatIcon,
+  // 保留旧插件标识；未识别的工具也统一回退到星芒。
+  wrench: ToolGenericIcon,
+  time: ToolTimeIcon,
+  generic: ToolGenericIcon,
+  tool: ToolGenericIcon,
 };
 
 export const DEFAULT_CONFIG: ToolDisplayConfig = {

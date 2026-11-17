@@ -156,7 +156,7 @@ export class AskUserPlugin extends PluginBase {
         // 单位随 NLS 下发（argsCountUnit），与 text 同一条 %key% 解析链。
         argsKey: "questions",
         argsCountUnit: "%askUser.display.questionsUnit%",
-        icon: "generic",
+        icon: "chat",
       },
       // 计划模式逃生舱：计划阶段"问清需求"正是本工具的主场，必须放行
       // （计划门只看声明式能力，不认"询问"这类交互语义）

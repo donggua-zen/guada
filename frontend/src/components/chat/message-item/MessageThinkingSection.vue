@@ -4,11 +4,11 @@
     <div
       class="group thinking-section__header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
       @click.stop="handleToggle">
-      <BrainCircuit20Regular class="w-4 h-4 shrink-0" />
+      <ThinkingIcon :active="isThinking" class="w-4 h-4 shrink-0" />
       <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
         <span class="shrink-0 text-gray-700 dark:text-gray-300 font-medium"
           :class="{ 'shimmer-text': isThinking }">{{ isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone') }}</span>
-        <!-- 摘要：思考内容最后一行，仅思考中实时跟随；结束后只剩「已深度思考 + 时长」 -->
+        <!-- 摘要：思考内容最后一行，仅思考中实时跟随；结束后只剩「已思考 + 时长」 -->
         <span v-if="isThinking && previewText" class="text-sm ml-2 truncate shimmer-text">{{ previewText }}</span>
         <span v-if="thinkingDuration" class="shrink-0 text-xs text-gray-400 ml-2">
           {{ formattedDuration }}
@@ -33,7 +33,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { BrainCircuit20Regular, ChevronDown12Regular } from '@vicons/fluent';
+import { ChevronDown12Regular } from '@vicons/fluent';
+import ThinkingIcon from '@/components/icons/ThinkingIcon.vue';
 import MarkdownContent from '../../ui/MarkdownContent.vue';
 import { formatDuration, getThinkingPreview } from '../../../utils/messageUtils';
 import { useElapsedTicker } from '../../../composables/useElapsedTicker';

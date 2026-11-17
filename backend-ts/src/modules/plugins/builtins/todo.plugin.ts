@@ -180,7 +180,7 @@ Sometimes, you may need to change todos in the middle of a task: call \`action="
         text: { executing: "%todo.executing%", completed: "%todo.completed%" },
         aggregate: { executing: "%todo.aggregate.executing%", completed: "%todo.aggregate.completed%" },
         argsKey: "action",
-        icon: "generic",
+        icon: "todo",
       },
       allowedInPlanMode: true,
       // 计划阶段维护待办有助于计划成型；只写会话状态，不触碰工作区
