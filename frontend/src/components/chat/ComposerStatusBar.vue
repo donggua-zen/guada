@@ -416,7 +416,7 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
   flex: 0 0 auto;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
   font-size: 13px;
-  color: var(--gd-color-text-disabled);
+  color: var(--gd-color-text-gray);
 }
 .csb-count--done {
   color: var(--gd-color-success);
@@ -524,7 +524,7 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
   padding: 3px 2px 1px;
   font-size: 10px;
   line-height: 14px;
-  color: var(--gd-color-text-disabled);
+  color: var(--gd-color-text-gray);
 }
 
 /* 胶囊段内双图标并排（进程+子代理混合构成）：收紧间距避免占满宽度 */
@@ -606,13 +606,13 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
 .csb-row-status {
   flex: 0 0 auto;
   font-size: 11px;
-  color: var(--gd-color-text-disabled);
+  color: var(--gd-color-text-gray);
 }
 .csb-elapsed {
   flex: 0 0 auto;
   font-family: var(--font-mono, "SF Mono", Consolas, monospace);
   font-size: 11px;
-  color: var(--gd-color-text-disabled);
+  color: var(--gd-color-text-gray);
 }
 .csb-kill {
   display: flex;

@@ -5,7 +5,6 @@
     <div class="grid gap-y-4 gap-x-3 mb-8" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
       <div v-for="provider in items" :key="provider.id"
         class="provider-card group flex flex-col overflow-hidden p-2.5 rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) transition-all hover:bg-(--gd-color-surface-hover) hover:shadow-sm cursor-pointer"
-        :class="{ 'opacity-60 grayscale-[30%]': provider.enabled === false }"
         @click="$emit('item-click', provider)">
         <!-- Header: avatar + name -->
         <div class="flex items-center gap-2.5 mb-3">
@@ -24,15 +23,15 @@
         </div>
 
         <!-- Description -->
-        <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
+        <div class="text-(--gd-color-text-gray) line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
           {{ provider.description || '暂无简介' }}
         </div>
 
         <!-- Footer: protocol + 编辑/删除（hover 显示；启停用右上角开关，不重复） -->
         <div class="flex items-center justify-between gap-2 mt-3">
-          <span class="text-xs text-gray-400 dark:text-[#6b6d75]">{{ getProtocolLabel(provider.protocol) }}</span>
+          <span class="text-xs text-(--gd-color-text-gray)">{{ getProtocolLabel(provider.protocol) }}</span>
           <div class="flex items-center gap-3">
-            <span v-if="provider.enabled === false" class="text-xs text-gray-400 dark:text-[#6b6d75]">已禁用</span>
+            <span v-if="provider.enabled === false" class="text-xs text-(--gd-color-text-gray)">已禁用</span>
             <button
               class="edit-btn opacity-0 group-hover:opacity-100 transition-opacity text-xs text-gray-400 hover:text-blue-500"
               @click.stop="$emit('item-edit', provider)">
@@ -46,7 +45,7 @@
           </div>
         </div>
       </div>
-      <div v-if="items.length === 0" class="col-span-full py-8 text-center text-gray-400 dark:text-[#6b6d75] text-sm">
+      <div v-if="items.length === 0" class="col-span-full py-8 text-center text-(--gd-color-text-gray) text-sm">
         暂无数据
       </div>
     </div>
@@ -66,16 +65,16 @@
           </h3>
           <GdTag v-if="template.source === 'plugin'" size="small" type="info" effect="plain" class="shrink-0">插件</GdTag>
         </div>
-        <div class="text-gray-400 dark:text-[#6b6d75] line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
+        <div class="text-(--gd-color-text-gray) line-clamp-2 h-[2.5rem]" style="font-size: calc(var(--gd-size-text-base) - 2px);">
           {{ template.description || '点击添加到您的供应商列表' }}
         </div>
         <div class="flex items-center justify-between gap-2 mt-3">
-          <span class="text-xs text-gray-400 dark:text-[#6b6d75]">{{ getProtocolLabel(template.protocol) }}</span>
+          <span class="text-xs text-(--gd-color-text-gray)">{{ getProtocolLabel(template.protocol) }}</span>
           <span v-if="template.protocolAvailable === false" class="text-xs text-orange-500">协议不可用</span>
-          <span v-else class="text-xs text-gray-400 dark:text-[#6b6d75]">点击添加</span>
+          <span v-else class="text-xs text-(--gd-color-text-gray)">点击添加</span>
         </div>
       </div>
-      <div v-if="templates.length === 0" class="col-span-full py-8 text-center text-gray-400 dark:text-[#6b6d75] text-sm">
+      <div v-if="templates.length === 0" class="col-span-full py-8 text-center text-(--gd-color-text-gray) text-sm">
         暂无数据
       </div>
     </div>

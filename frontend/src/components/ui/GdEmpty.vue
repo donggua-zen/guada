@@ -9,7 +9,7 @@
             <path d="M56 22v20L32 54V34" />
             <path d="M20 16l24 12" />
         </svg>
-        <p v-if="description" class="gd-empty__description m-0 text-[13px] leading-none text-[var(--gd-color-text-disabled)]">
+        <p v-if="description" class="gd-empty__description m-0 text-[13px] leading-none text-[var(--gd-color-text-gray)]">
             {{ description }}
         </p>
         <slot></slot>

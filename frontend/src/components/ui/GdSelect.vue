@@ -83,7 +83,7 @@
                         class="ml-auto shrink-0 text-[var(--gd-color-primary)] w-3.5 h-3.5" />
                 </div>
                 <!-- 空态 -->
-                <div v-if="!filteredEntries.length && !createItem" class="px-2 py-3 text-center text-[12px] leading-none text-[var(--gd-color-field-text-disabled)]">
+                <div v-if="!filteredEntries.length && !createItem" class="px-2 py-3 text-center text-[12px] leading-none text-[var(--gd-color-text-gray)]">
                     {{ noDataText }}
                 </div>
             </template>

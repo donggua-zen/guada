@@ -113,7 +113,7 @@
                       <img :src="getFileIcon(parts.file.fileName)" class="w-4 h-4 shrink-0" alt="" />
                       <span class="group-file-chip__name min-w-0 truncate text-gray-600 dark:text-gray-300">{{ parts.file.fileName }}</span>
                     </span>
-                    <span v-if="parts.file.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-gray-400 dark:text-gray-500"
+                    <span v-if="parts.file.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-(--gd-color-text-gray)"
                       :title="parts.file.fullPath">{{ parts.file.dirPath }}</span>
                   </template>
                   <!-- 其余工具：单行参数摘要 -->
@@ -162,7 +162,7 @@
       <!-- 错误提示（network_error 为新归一化原因；历史遗留的 terminated 裸错误走 errorAlertKind 兜底） -->
       <GdAlert v-if="errorAlertKind === 'network'" :title="t('chat.turn.networkError')" type="warning" class="mt-2">
         <div>{{ t('chat.turn.networkErrorHint') }}</div>
-        <div v-if="assistantMetadata.errorDetail" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+        <div v-if="assistantMetadata.errorDetail" class="mt-1 text-xs text-(--gd-color-text-gray)">
           {{ assistantMetadata.errorDetail }}
         </div>
       </GdAlert>
@@ -185,14 +185,14 @@
 
       <!-- 用户终止提示 -->
       <div v-if="assistantMetadata.finishReason === 'user_cancel'"
-        class="mt-2 text-sm text-gray-400 dark:text-gray-500">
+        class="mt-2 text-sm text-(--gd-color-text-gray)">
         {{ t('chat.turn.manuallyTerminated') }}
       </div>
 
       <!-- 中断收尾提示：冷加载/自愈把停在中断点的回合闭合（工具配对已补齐），
            而不是失败——用户需要知道"这条回复是被打断的，可以继续" -->
       <div v-if="assistantMetadata.finishReason === 'interrupted'"
-        class="mt-2 text-sm text-gray-400 dark:text-gray-500">
+        class="mt-2 text-sm text-(--gd-color-text-gray)">
         {{ t('chat.turn.interruptedRecovered') }}
       </div>
     </template>

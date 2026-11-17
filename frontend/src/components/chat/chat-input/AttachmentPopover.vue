@@ -23,7 +23,7 @@
         <div class="att-divider"></div>
         <div class="att-section-header">{{ t('chat.input.knowledgeBase') }}</div>
         <div class="att-kb-list">
-          <div v-if="knowledgeBases.length === 0" class="text-center py-3 text-gray-400 dark:text-[#6b6d75] text-xs">
+          <div v-if="knowledgeBases.length === 0" class="text-center py-3 text-(--gd-color-text-gray) text-xs">
             {{ t('chat.input.noKnowledgeBase') }}
           </div>
           <div v-for="kb in knowledgeBases" :key="kb.id"
@@ -32,7 +32,7 @@
               @change="$emit('toggle-kb', kb.id)" size="small" />
             <div class="flex-1 min-w-0">
               <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ kb.name }}</div>
-              <div v-if="kb.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ kb.description }}</div>
+              <div v-if="kb.description" class="text-xs text-(--gd-color-text-gray) truncate">{{ kb.description }}</div>
             </div>
           </div>
         </div>
@@ -43,7 +43,7 @@
         <div class="att-divider"></div>
         <div class="att-section-header">{{ attType.label }}</div>
         <div class="att-kb-list">
-          <div v-if="!attType._items || attType._items.length === 0" class="text-center py-3 text-gray-400 dark:text-[#6b6d75] text-xs">
+          <div v-if="!attType._items || attType._items.length === 0" class="text-center py-3 text-(--gd-color-text-gray) text-xs">
             {{ t('common.noData') }}
           </div>
           <div v-for="item in (attType._items || [])" :key="item.id"
@@ -52,7 +52,7 @@
               @change="toggleAttachment(attType.id, item.id)" size="small" />
             <div class="flex-1 min-w-0">
               <div class="text-xs font-medium text-gray-700 dark:text-[#c5c7cc] truncate">{{ item.name }}</div>
-              <div v-if="item.description" class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ item.description }}</div>
+              <div v-if="item.description" class="text-xs text-(--gd-color-text-gray) truncate">{{ item.description }}</div>
             </div>
           </div>
         </div>
@@ -169,51 +169,31 @@ function toggleAttachment(typeId: string, itemId: string) {
 }
 
 .att-item:hover {
-  background: var(--gd-color-sidebar-bg-hover, #f5f5f5);
-}
-
-.dark .att-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--gd-color-surface-hover);
 }
 
 .att-item-icon {
-  color: #666;
-}
-
-.dark .att-item-icon {
-  color: #9ca3af;
+  color: var(--gd-color-text-gray);
 }
 
 .att-item-name {
   font-size: 13px;
   font-weight: 500;
-  color: #333;
-}
-
-.dark .att-item-name {
-  color: #e5e7eb;
+  color: var(--gd-color-text);
 }
 
 .att-section-header {
   font-size: 11px;
   font-weight: 500;
-  color: #999;
+  color: var(--gd-color-text-gray);
   padding: 4px 8px;
   user-select: none;
 }
 
-.dark .att-section-header {
-  color: #6b7280;
-}
-
 .att-divider {
   height: 1px;
-  background: #eee;
+  background: var(--gd-color-border);
   margin: 6px 8px;
-}
-
-.dark .att-divider {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .att-kb-list {
