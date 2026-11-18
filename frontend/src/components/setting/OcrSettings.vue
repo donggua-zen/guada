@@ -15,6 +15,7 @@
               <GdOption :label="t('settings.ocr.disabled')" value="none" />
               <GdOption :label="t('settings.ocr.umiLocal')" value="umi" />
               <GdOption :label="t('settings.ocr.baiduCloud')" value="baidu" />
+              <GdOption :label="t('settings.ocr.deepseek')" value="deepseek" />
             </GdSelect>
           </div>
 
@@ -71,6 +72,26 @@
             </div>
           </template>
 
+          <!-- DeepSeek OCR 配置 -->
+          <template v-if="settingsForm.provider === 'deepseek'">
+            <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
+              <div class="flex flex-col gap-1 min-w-0 flex-1">
+                <span class="text-base text-gray-900 dark:text-[#e8e9ed]">DeepSeek API Key</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.ocr.deepseekApiKeyDesc') }}<span
+                    class="text-[#409eff] cursor-pointer hover:underline" @click="openDeepSeekUrl">{{ t('settings.ocr.getApiKey') }}</span></span>
+              </div>
+              <div class="flex flex-col items-end gap-1.5 shrink-0">
+                <GdInput v-model="settingsForm.deepseekApiKey" type="password" show-password
+                  :placeholder="deepseekUseProviderKey ? t('settings.ocr.deepseekUseProviderKeyPlaceholder') : 'sk-...'"
+                  :disabled="deepseekUseProviderKey" style="width: 360px;" clearable />
+                <GdCheckbox v-model="deepseekUseProviderKey" size="small"
+                  :title="t('settings.ocr.deepseekUseProviderKeyDesc')">
+                  {{ t('settings.ocr.deepseekUseProviderKey') }}
+                </GdCheckbox>
+              </div>
+            </div>
+          </template>
+
           <!-- 提示信息 -->
           <div class="px-4 py-3.5 bg-gray-50 dark:bg-[#1e1f23] border-t border-gray-100 dark:border-[#2e3035]">
             <div class="text-xs text-gray-500 dark:text-[#8b8d95] space-y-1">
@@ -86,6 +107,11 @@
                 <div>{{ t('settings.ocr.baiduTip1') }}</div>
                 <div>{{ t('settings.ocr.baiduTip2') }}</div>
                 <div>{{ t('settings.ocr.baiduTip3') }}</div>
+              </template>
+              <template v-else-if="settingsForm.provider === 'deepseek'">
+                <div>{{ t('settings.ocr.deepseekTip1') }}</div>
+                <div>{{ t('settings.ocr.deepseekTip2') }}</div>
+                <div>{{ t('settings.ocr.deepseekTip3') }}</div>
               </template>
             </div>
           </div>
@@ -106,6 +132,7 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 import { useI18n } from 'vue-i18n'
 import GdInput from '@/components/ui/GdInput.vue';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
+import GdCheckbox from '@/components/ui/GdCheckbox.vue';
 import GdSelect from '@/components/ui/GdSelect.vue';
 import GdOption from '@/components/ui/GdSelectOption';
 
@@ -118,16 +145,22 @@ const settingsForm = reactive({
   umiPort: 1224,
   baiduApiKey: '',
   baiduSecretKey: '',
+  deepseekApiKey: '',
   ocrMode: 'auto',
 })
 
+// DeepSeek：复用「模型服务」中同类型供应商的 Key（与搜索设置同语义）
+const deepseekUseProviderKey = ref(true)
+
 // 原始设置备份，用于对比是否有改动
 const originalSettings = ref<Record<string, unknown> | null>(null)
+const originalUseProviderKey = ref(true)
 
-// 计算是否有改动
+// 计算是否有改动（含 DeepSeek 复用开关）
 const hasChanges = computed(() => {
   if (!originalSettings.value) return false
   return JSON.stringify(settingsForm) !== JSON.stringify(originalSettings.value)
+    || deepseekUseProviderKey.value !== originalUseProviderKey.value
 })
 
 // 自动保存（防抖 300ms）
@@ -136,12 +169,16 @@ const debouncedSave = useDebounceFn(async () => {
   await handleSave()
 }, 300)
 
-// 监听设置变化自动保存
+// 监听设置变化自动保存（含全部密钥字段，避免百度/DeepSeek Key 改动不触发保存）
 watch(() => ({
   provider: settingsForm.provider,
   umiHost: settingsForm.umiHost,
   umiPort: settingsForm.umiPort,
+  baiduApiKey: settingsForm.baiduApiKey,
+  baiduSecretKey: settingsForm.baiduSecretKey,
+  deepseekApiKey: settingsForm.deepseekApiKey,
   ocrMode: settingsForm.ocrMode,
+  deepseekUseProviderKey: deepseekUseProviderKey.value,
 }), () => {
   debouncedSave()
 }, { deep: true })
@@ -150,6 +187,9 @@ watch(() => ({
 const openOcrDocs = () => {
   openInExternalBrowser('https://ai.dingd.cn/docs/ocr')
 }
+
+// 打开 DeepSeek API Key 获取页
+const openDeepSeekUrl = () => openInExternalBrowser('https://platform.deepseek.com/api_keys')
 
 // 加载 OCR 分组设置
 const loadSettings = async () => {
@@ -162,10 +202,14 @@ const loadSettings = async () => {
     settingsForm.umiPort = response.umiPort || 1224
     settingsForm.baiduApiKey = response.baiduApiKey || ''
     settingsForm.baiduSecretKey = response.baiduSecretKey || ''
+    settingsForm.deepseekApiKey = response.deepseek?.apiKey || ''
+    // 未显式保存过开关时：没填 Key 默认勾选复用模型服务 Key
+    deepseekUseProviderKey.value = response.deepseek?.useProviderKey ?? !settingsForm.deepseekApiKey
     settingsForm.ocrMode = response.ocrMode === 'force' ? 'force' : 'auto'
 
     // 备份原始数据
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
+    originalUseProviderKey.value = deepseekUseProviderKey.value
   } catch (error) {
     console.error('获取 OCR 设置失败:', error)
     // OCR 分组可能不存在，使用默认值
@@ -188,6 +232,11 @@ const handleSave = async () => {
     } else if (settingsForm.provider === 'baidu') {
       dataToSave.baiduApiKey = settingsForm.baiduApiKey || ''
       dataToSave.baiduSecretKey = settingsForm.baiduSecretKey || ''
+    } else if (settingsForm.provider === 'deepseek') {
+      dataToSave.deepseek = {
+        apiKey: settingsForm.deepseekApiKey || '',
+        useProviderKey: deepseekUseProviderKey.value,
+      }
     }
 
     // 使用分组设置接口更新 ocr 分组
@@ -195,6 +244,7 @@ const handleSave = async () => {
 
     // 保存成功后更新原始数据备份
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
+    originalUseProviderKey.value = deepseekUseProviderKey.value
 
     notify.success(t('common.saveSuccess'), t('settings.ocr.updated'))
   } catch (error) {

@@ -5,6 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { SettingsService } from "../settings/settings.service";
 import { PdfToImageService } from "../../common/pdf-render/pdf-to-image.service";
+import { ProviderFileStore } from "../llm-core/provider-file.store";
 import { retryWithBackoff } from "../llm-core/utils/retry.util";
 import type { FileProgressCallback } from "../../common/types/file-progress.types";
 
@@ -20,14 +21,22 @@ type PdfOcrMode = "native" | "render" | "none";
  * OCR 服务配置接口
  */
 interface OcrConfig {
-  provider: "umi" | "baidu" | "none";
+  provider: "umi" | "baidu" | "deepseek" | "none";
   umiHost?: string;
   umiPort?: number;
   baiduApiKey?: string;
   baiduSecretKey?: string;
+  deepseek?: {
+    apiKey?: string;
+    /** 复用「模型服务」中 type=deepseek 的 Key；未显式配置时默认 true */
+    useProviderKey?: boolean;
+  };
   /** 扫描页 OCR 策略：auto=仅低字符页（默认）；force=全页强制 OCR */
   ocrMode?: "auto" | "force";
 }
+
+/** DeepSeek OCR 接口地址（与模型服务共用 Key，独立计费） */
+const DEEPSEEK_OCR_URL = "https://api.deepseek.com/v1/tools/ocr";
 
 /**
  * OCR 提供商能力声明
@@ -112,8 +121,8 @@ interface BaiduOcrResponse {
 
 /**
  * OCR 服务
- * 支持 UMI 本地 OCR 和百度 OCR 两种提供商
- * PDF 识别按能力分派：umi 走原生 PDF 任务，百度等仅支持图片的提供商走“渲染为图片后逐页识别”
+ * 支持 UMI 本地 OCR、百度 OCR、DeepSeek OCR 三种提供商
+ * PDF 识别按能力分派：umi 走原生 PDF 任务，百度/DeepSeek 等 render 型提供商走“渲染为图片后逐页识别”
  */
 @Injectable()
 export class OcrService {
@@ -124,6 +133,8 @@ export class OcrService {
     private readonly settingsService: SettingsService,
     // 测试/旧代码可能以两参构造；DI 场景下由模块注入
     @Optional() private readonly pdfToImage?: PdfToImageService,
+    // @Global ProvidersModule 导出；放最后 + @Optional 以兼容两参/三参实例化的旧测试
+    @Optional() private readonly providerStore?: ProviderFileStore,
   ) {}
 
   /**
@@ -143,6 +154,11 @@ export class OcrService {
         umiPort: settings.umiPort || 1224,
         baiduApiKey: settings.baiduApiKey,
         baiduSecretKey: settings.baiduSecretKey,
+        deepseek: {
+          apiKey: settings.deepseek?.apiKey || "",
+          // 未显式配置过时默认复用模型服务 Key（与搜索设置同语义）
+          useProviderKey: settings.deepseek?.useProviderKey ?? true,
+        },
         ocrMode: settings.ocrMode === "force" ? "force" : "auto",
       };
     } catch (error) {
@@ -161,6 +177,10 @@ export class OcrService {
       return { supportsPdf: true, supportsImage: true, pdfMode: "native" };
     } else if (config.provider === "baidu") {
       // 百度仅接受图片：由 PdfToImageService 渲染后逐页识别
+      return { supportsPdf: true, supportsImage: true, pdfMode: "render" };
+    } else if (config.provider === "deepseek") {
+      // DeepSeek OCR 无「按页码子集识别」参数，声明 render 走既有逐页混合路由，
+      // 以保留页码溯源（native 路径会把整本塞进单个 page）
       return { supportsPdf: true, supportsImage: true, pdfMode: "render" };
     }
     return { supportsPdf: false, supportsImage: false, pdfMode: "none" };
@@ -280,6 +300,8 @@ export class OcrService {
       return await this.recognizeImageWithUmi(buffer, config, label);
     } else if (config.provider === "baidu") {
       return await this.recognizeImageWithBaidu(buffer, config, label);
+    } else if (config.provider === "deepseek") {
+      return await this.recognizeImageWithDeepSeek(buffer, config, label);
     }
     throw new Error(`不支持的 OCR 提供商: ${config.provider}`);
   }
@@ -680,12 +702,122 @@ export class OcrService {
     return response.data.access_token;
   }
 
+  // ==================== DeepSeek OCR ====================
+
+  /**
+   * 解析 DeepSeek OCR 使用的 API Key
+   * useProviderKey=true 时复用「模型服务」中 type=deepseek 的 Key（优先 enabled），
+   * 找不到时给出可行动作错误而非静默回退；否则使用用户手动填写的 Key。
+   */
+  private resolveDeepSeekKey(config: OcrConfig): string {
+    if (config.deepseek?.useProviderKey) {
+      const candidates = (this.providerStore?.listProviders() ?? [])
+        .filter((p) => p.type === "deepseek" && p.apiKey?.trim());
+      const key = (candidates.find((p) => p.enabled) || candidates[0])?.apiKey?.trim();
+      if (key) return key;
+      throw new Error(
+        "未在模型服务中找到 DeepSeek API Key，请在「模型服务」中配置 DeepSeek 供应商，" +
+        "或在 OCR 设置中关闭「使用模型服务 Key」并手动填写。",
+      );
+    }
+    const manualKey = config.deepseek?.apiKey?.trim();
+    if (!manualKey) {
+      throw new Error("请先在设置中配置 DeepSeek OCR API Key");
+    }
+    return manualKey;
+  }
+
+  /**
+   * 使用 DeepSeek OCR 识别图片（内存 buffer）
+   * multipart/form-data：purpose 必须在 file 之前；Bearer 鉴权与模型服务共用 Key。
+   */
+  private async recognizeImageWithDeepSeek(
+    fileData: Buffer,
+    config: OcrConfig,
+    label: string,
+  ): Promise<string> {
+    const apiKey = this.resolveDeepSeekKey(config);
+    this.logger.log(`使用 DeepSeek OCR 识别图片: ${label}`);
+
+    const { default: FormData } = await import("form-data");
+    const form = new FormData();
+    form.append("purpose", "text_recognition");
+    form.append("file", fileData, { filename: label || "image.png" });
+
+    // 总时长上限 180s，留一点客户端余量
+    const response = await firstValueFrom(
+      this.httpService.post<any>(DEEPSEEK_OCR_URL, form, {
+        headers: {
+          ...form.getHeaders(),
+          Authorization: `Bearer ${apiKey}`,
+        },
+        timeout: 185000,
+        // 识别期间服务端持续发换行保活，axios 不应因无 JSON 而提前判定
+        responseType: "text",
+        transformResponse: [(data) => data],
+      }),
+    );
+
+    return parseDeepSeekOcrResponse(response.data, this.logger, label);
+  }
+
   /**
    * 延迟函数
    */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+}
+
+/**
+ * 清洗 DeepSeek OCR 逐页文本中的布局标记与归一化坐标。
+ * 形如 <｜ref｜>标题<｜/ref｜><｜box｜>[[52, 40, 948, 96]]<｜/box｜>，
+ * 直接入库会污染文本块与向量，故只保留可读文字。
+ */
+export function cleanDeepSeekOcrText(text: string): string {
+  return text
+    .replace(/<｜ref｜>([\s\S]*?)<｜\/ref｜>/g, "$1")
+    .replace(/<｜box｜>[\s\S]*?<\｜\/box｜>/g, "")
+    // 兜底：清除任何残留的 <｜xx｜> / <｜/xx｜> 标记
+    .replace(/<\/?｜[^｜]{1,24}｜>/g, "");
+}
+
+/**
+ * 解析 DeepSeek OCR 响应。
+ * 响应体在识别期间以换行保活，最终是一个 JSON 对象；换行是合法 JSON 前导空白，
+ * JSON.parse 可直接忽略。识别失败时即便 HTTP 200 也会带 { error }。
+ */
+export function parseDeepSeekOcrResponse(
+  raw: unknown,
+  logger: Logger,
+  label: string,
+): string {
+  let data: any = raw;
+  if (typeof raw === "string") {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`DeepSeek OCR 响应不是合法 JSON: ${label}`);
+    }
+  }
+
+  if (data?.error) {
+    throw new Error(`DeepSeek OCR 识别失败: ${data.error.message || JSON.stringify(data.error)}`);
+  }
+  const pages: any[] = Array.isArray(data?.pages) ? data.pages : [];
+  if (pages.length === 0) {
+    throw new Error(`DeepSeek OCR 未返回识别结果: ${label}`);
+  }
+
+  const truncated = pages.filter((p) => p?.finish_reason === "length").length;
+  if (truncated > 0) {
+    logger.warn(`DeepSeek OCR 有 ${truncated} 页输出被截断（${label}），文本可能不完整`);
+  }
+
+  return pages
+    .map((p) => cleanDeepSeekOcrText(String(p?.text || "")))
+    .join("\n")
+    .trim();
 }
 
 /**

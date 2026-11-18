@@ -244,6 +244,7 @@ export interface OcrGroupSettings {
     umiPort?: number
     baiduApiKey?: string
     baiduSecretKey?: string
+    deepseek?: { apiKey?: string; useProviderKey?: boolean }
     ocrMode?: string
 }
 
