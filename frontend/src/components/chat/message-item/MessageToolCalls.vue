@@ -6,6 +6,7 @@
            独立渲染行（计划卡等）不渲染——整行只有卡片，状态由卡片头部徽标表达。 -->
       <div v-if="!standaloneRows[toolIndex]"
         class="tool-call-row group flex items-center text-sm text-(--gd-color-text-subtle) cursor-pointer transition-colors duration-200 min-w-0"
+        :class="{ 'gd-run-shimmer': isToolExecuting(tool, toolIndex) }"
         @click.stop="toggleExpand(toolIndex)">
         <component v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" :is="getToolIcon(tool)"
           class="tool-call-icon w-4 h-4 shrink-0" style="color: var(--gd-color-danger);" />
@@ -642,7 +643,7 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
 /* 行悬停高亮：整行文字提亮（-webkit-text-fill-color 会继承到子文本）。
    水波纹文案自身声明了 transparent 填充，优先于继承值，波纹不受影响；
    .keep-color 保住 diff 增删色不被提亮覆盖。 */
-.tool-call-row:hover {
+.tool-call-row:not(.gd-run-shimmer):hover {
   -webkit-text-fill-color: var(--gd-color-text);
 }
 

@@ -92,7 +92,7 @@
               <!-- text-sm（Tailwind v4 = 14px/20px 行盒）：原先的 text-[14px] 只给字号，
                    行盒继承 html{line-height:1.5} = 21px（奇数），图标居中余量会随容器奇偶变半像素 -->
               <div v-if="group.isCollapsible" class="process-group__header text-sm group"
-                :class="{ 'shimmer-text': isGroupBusy(groupIndex), 'text-(--gd-color-text-subtle)': !isGroupBusy(groupIndex) }"
+                :class="{ 'gd-run-shimmer': isGroupBusy(groupIndex), 'text-(--gd-color-text-subtle)': !isGroupBusy(groupIndex) }"
                 @click="toggleGroup(groupIndex, group)">
                 <template v-for="(parts, _) in [getGroupTitleParts(group, isGroupBusy(groupIndex), isGroupExpanded(groupIndex, group))]" :key="_">
                   <!-- 图标盒 16px（偶数）：20px 行盒内居中余量 2px 整数；奇数盒会得到 X.5px 余量 -->
@@ -1130,39 +1130,14 @@ html.gd-resizing-moved .turn-wrapper:not(.turn-wrapper--no-cv) {
 }
 
 /* 行悬停高亮：整行文字提亮（text-fill 可继承，子文本随之变亮）。
-   忙碌态由 shimmer-text 自身声明透明填充，波纹不受影响，故排除该状态。 */
-.process-group__header:not(.shimmer-text):hover {
+   忙碌态由 gd-run-shimmer 自身声明透明填充，波纹不受影响，故排除该状态。 */
+.process-group__header:not(.gd-run-shimmer):hover {
   color: var(--gd-color-text);
   -webkit-text-fill-color: var(--gd-color-text);
 }
 
-.process-group__header:not(.shimmer-text):hover .group-header-icon {
+.process-group__header:not(.gd-run-shimmer):hover .group-header-icon {
   color: var(--gd-color-text);
-}
-
-/* 流式过程中的文字波纹效果（action + args 一起波纹） */
-.shimmer-text {
-  background: linear-gradient(90deg,
-      var(--gd-shimmer-base, #a8aab3) 0%,
-      var(--gd-shimmer-base, #a8aab3) 25%,
-      var(--gd-shimmer-highlight, #ffffff) 50%,
-      var(--gd-shimmer-base, #a8aab3) 75%,
-      var(--gd-shimmer-base, #a8aab3) 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: shimmer-slide 1.5s linear infinite;
-}
-
-@keyframes shimmer-slide {
-  0% {
-    background-position: 100% 0;
-  }
-
-  100% {
-    background-position: -100% 0;
-  }
 }
 
 /* grid-template-rows 是布局属性，过渡期间每帧都要重排到滚动容器：300ms/60Hz ≈ 18 帧。

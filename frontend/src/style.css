@@ -539,9 +539,49 @@ html.dark {
   --gd-window-controls-hover-bg: var(--gd-titlebar-hover-bg);
   --gd-window-controls-hover-color: var(--gd-window-controls-color);
 
-  /* 流式波纹动画配色 */
+  /* 流式波纹动画配色（旧款：亮带扫过灰底，仍被 SubAgent/Workflow 卡片使用） */
   --gd-shimmer-base: #606266;
   --gd-shimmer-highlight: #c0c4cc;
+}
+
+/* ====================
+   进行中轨迹行扫光（工具行 / 思考行 / 分组标题共用）
+
+   亮色文字为底，一条 54px 宽的暗缺口从左扫到右：
+   1) background-color 铺亮底（会被 background-clip: text 裁进文字）；
+   2) 上层渐变只有中间 54px 是暗色，其余透明，由底层亮色透出；
+   3) 背景图 200% 宽，position 100% 时缺口在行首、0% 时在行尾，
+      4s 线性扫满全周期（无末尾停留）。
+   缺口的 px 宽度在背景图坐标系里是绝对值，不随行宽缩放；
+   纯 CSS，无 JS 测量。缺口色 = 正文色 22% 混页面底色，明暗自动适配。
+   ==================== */
+.gd-run-shimmer {
+  background-color: var(--gd-color-text);
+  background-image: linear-gradient(90deg,
+      transparent calc(50% - 27px),
+      color-mix(in srgb, var(--gd-color-text) 22%, var(--gd-color-bg)) 50%,
+      transparent calc(50% + 27px));
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gd-run-shimmer-slide 4s linear infinite;
+}
+
+/* 需要保留自身颜色的子元素（如 diff 增删行数） */
+.gd-run-shimmer .keep-color {
+  -webkit-text-fill-color: currentColor;
+}
+
+@keyframes gd-run-shimmer-slide {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: 0% 0;
+  }
 }
 
 html.dark {
@@ -1198,7 +1238,8 @@ html.gd-resizing .turn-placeholder__line,
 html.gd-resizing .ts-dot-matrix,
 html.gd-resizing .animate-spin,
 html.gd-resizing .animate-pulse,
-html.gd-resizing .shimmer-text {
+html.gd-resizing .gd-run-shimmer,
+html.gd-resizing .is-shimmer {
   animation-play-state: paused !important;
 }
 

@@ -3,13 +3,13 @@
     <!-- 标题行：与工具调用行同构的单行步骤（图标 + 动作文案 + 摘要 + 箭头） -->
     <div
       class="thinking-row group thinking-section__header flex items-center text-sm text-(--gd-color-text-subtle) cursor-pointer transition-colors duration-200 min-w-0"
+      :class="{ 'gd-run-shimmer': isThinking }"
       @click.stop="handleToggle">
       <ThinkingIcon :active="isThinking" class="thinking-icon w-4 h-4 shrink-0" />
       <div class="ml-2 min-w-0 flex-1 flex items-center overflow-hidden">
-        <span class="shrink-0"
-          :class="{ 'shimmer-text': isThinking }">{{ isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone') }}</span>
+        <span class="shrink-0">{{ isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone') }}</span>
         <!-- 摘要：思考内容最后一行，仅思考中实时跟随；结束后只剩「已思考 + 时长」 -->
-        <span v-if="isThinking && previewText" class="text-sm ml-2 truncate shimmer-text">{{ previewText }}</span>
+        <span v-if="isThinking && previewText" class="text-sm ml-2 truncate">{{ previewText }}</span>
         <span v-if="thinkingDuration" class="shrink-0 text-xs text-(--gd-color-text-subtlest) ml-2">
           {{ formattedDuration }}
         </span>
@@ -141,37 +141,12 @@ const formattedDuration = computed(() => {
 
 /* 行悬停高亮：整行文字提亮（-webkit-text-fill-color 继承到子文本）。
    波纹文案自身声明 transparent 填充，优先于继承值，水波纹不受影响。 */
-.thinking-row:hover {
+.thinking-row:not(.gd-run-shimmer):hover {
   -webkit-text-fill-color: var(--gd-color-text);
 }
 
 .thinking-row:hover .thinking-icon {
   color: var(--gd-color-text);
-}
-
-/* 流式思考中的文字波纹（文案 + 摘要一起波纹，与分组标题 shimmer-text 同款） */
-.shimmer-text {
-  background: linear-gradient(90deg,
-      var(--gd-shimmer-base, #a8aab3) 0%,
-      var(--gd-shimmer-base, #a8aab3) 25%,
-      var(--gd-shimmer-highlight, #ffffff) 50%,
-      var(--gd-shimmer-base, #a8aab3) 75%,
-      var(--gd-shimmer-base, #a8aab3) 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: shimmer-slide 1.5s linear infinite;
-}
-
-@keyframes shimmer-slide {
-  0% {
-    background-position: 100% 0;
-  }
-
-  100% {
-    background-position: -100% 0;
-  }
 }
 
 @keyframes fadeIn {
