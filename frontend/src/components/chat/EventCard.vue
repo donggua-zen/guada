@@ -49,16 +49,13 @@
       <template v-else>
         <div class="event-card__divider">
           <span class="event-card__line event-card__line--left" aria-hidden="true"></span>
-          <button type="button" class="event-card__compaction-btn" @click="expanded = !expanded">
+          <!-- 压缩卡暂不提供展开：摘要内容不外露，图标与文案固定为「已完成」形态 -->
+          <span class="event-card__compaction-btn event-card__compaction-btn--compressing">
             <!-- 14px（偶数）：与上方压缩中胶囊同规格；13px 在 24px 行内的居中余量是 5.5px 半像素 -->
-            <span class="w-3.5 h-3.5"><Archive20Regular v-if="!expanded" />
-              <ArrowUp16Regular v-else /></span>
+            <Archive20Regular class="w-3.5 h-3.5" />
             <span class="event-card__compaction-text">{{ compactLabel }}</span>
-          </button>
+          </span>
           <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
-        </div>
-        <div v-if="expanded && summaryText" class="event-card__summary">
-          {{ summaryText }}
         </div>
       </template>
       <!-- 降级说明（摘要卡/结果卡共用；成功摘要后仍保留，刷新由 compaction_summary.degraded 重建） -->
@@ -258,9 +255,6 @@ const shadowedCount = computed(
     compactInfo.value?.shadowedMessageIds?.length ??
     0,
 );
-const summaryText = computed(
-  () => compactInfo.value?.summary ?? props.event?.metadata?.summary ?? "",
-);
 /** 压缩失败原因 → i18n key（未知分类降级为通用标题） */
 const COMPRESSION_ERROR_KEYS: Record<string, string> = {
   rate_limited: "chat.turn.compressionFailedReason.rateLimited",
@@ -359,12 +353,11 @@ const degradedLabel = computed(() => {
   return parts.join("");
 });
 
-const compactLabel = computed(() => {
-  if (expanded.value) return t("chat.turn.collapseSummary");
-  return shadowedCount.value > 0
+const compactLabel = computed(() =>
+  shadowedCount.value > 0
     ? t("chat.turn.contextCompactedCount", { count: shadowedCount.value })
-    : t("chat.turn.contextCompacted");
-});
+    : t("chat.turn.contextCompacted"),
+);
 
 /** 未压缩原因 → i18n key（未知原因回退 unknown，不把 key 直接暴露给用户） */
 const SKIP_REASON_KEYS: Record<string, string> = {
