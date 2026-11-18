@@ -162,6 +162,12 @@ export class ShellPlugin extends PluginBase {
                 ? "PowerShell command to execute, e.g. Get-ChildItem, $env:OS, node script.js"
                 : "System command to execute, e.g. ls -la, echo hello, node script.js",
           ),
+        description: z
+          .string()
+          .optional()
+          .describe(
+            "Clear, concise description of what this command does, shown to the user as the command's title. Describe the intent in plain words (5-10 words for simple commands); do NOT echo the command text, its flags, or file paths. Examples: `git status` -> 'Show working tree status'; `ls -la` -> 'List files in current directory'; `npm test` -> 'Run the test suite'.",
+          ),
         encoding: z
           .string()
           .optional()
@@ -323,6 +329,7 @@ export class ShellPlugin extends PluginBase {
         text: { executing: "%run_command.executing%", completed: "%run_command.completed%" },
         aggregate: { executing: "%run_command.aggregate.executing%", completed: "%run_command.aggregate.completed%" },
         argsKey: "command",
+        descriptionKey: "description",
         icon: "terminal",
         renderer: { kind: "terminal", fields: { command: "command" } },
       },

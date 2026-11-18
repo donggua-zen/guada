@@ -356,6 +356,12 @@ export interface ToolDisplay {
   /** 从 args 中提取摘要的字段名 */
   argsKey?: string;
   /**
+   * 语义摘要字段名：模型调用时现写的"这次调用在做什么"（如 Bash 的 description）。
+   * 前端折叠行优先取它当标题，比 argsKey（命令/路径原文）更可读；展开详情仍用原文。
+   * 缺省 = 只用 argsKey，行为不变。
+   */
+  descriptionKey?: string;
+  /**
    * `argsKey` 指向**数组**时，项数后缀（如"个问题"）。
    * 前端渲染为「3 个问题」；随 display 一起走 NLS（%key%）。
    */
@@ -419,6 +425,8 @@ export interface ToolHandlerDef {
   actionType?: string;
   /** 从 args 中提取摘要的字段名（默认自动取第一个字符串参数） */
   argsKey?: string;
+  /** 语义摘要字段名：折叠行标题优先取它（如 Bash 的 description），回退 argsKey */
+  descriptionKey?: string;
   /** argsKey 指向数组时的项数后缀（如「个问题」；随 display 走 NLS 解析） */
   argsCountUnit?: string;
   /** 执行中/已完成展示文案 */

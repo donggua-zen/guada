@@ -312,6 +312,58 @@ describe("getArgsText（行内参数摘要）", () => {
       getArgsText({ name: "task_output", arguments: { timeout: 30000 } } as ToolCall),
     ).toBe("30000");
   });
+
+  it("descriptionKey 优先于 argsKey：命令折叠行显示语义描述而非命令原文", () => {
+    setPluginToolDisplays({
+      run_command: {
+        text: { executing: "正在执行命令", completed: "已执行命令" },
+        argsKey: "command",
+        descriptionKey: "description",
+      },
+    });
+    expect(
+      getArgsText({
+        name: "run_command",
+        arguments: { command: "git status", description: "Show working tree status" },
+      } as ToolCall),
+    ).toBe("Show working tree status");
+  });
+
+  it("descriptionKey 未给出/为空时回退 argsKey（命令原文）", () => {
+    setPluginToolDisplays({
+      run_command: {
+        text: { executing: "", completed: "" },
+        argsKey: "command",
+        descriptionKey: "description",
+      },
+    });
+    // 模型没写 description
+    expect(
+      getArgsText({ name: "run_command", arguments: { command: "ls -la" } } as ToolCall),
+    ).toBe("ls -la");
+    // description 是空白串
+    expect(
+      getArgsText({
+        name: "run_command",
+        arguments: { command: "ls -la", description: "   " },
+      } as ToolCall),
+    ).toBe("ls -la");
+  });
+
+  it("descriptionKey 在流式半截 JSON 里也能提前提取（不必等 command 解析完）", () => {
+    setPluginToolDisplays({
+      run_command: {
+        text: { executing: "", completed: "" },
+        argsKey: "command",
+        descriptionKey: "description",
+      },
+    });
+    const raw =
+      '{"command":"npm test && very long command that streams slowly", "description":"Run the test suite", "encoding":';
+    expect(getArgsText({ name: "run_command", arguments: raw } as ToolCall)).toBe(
+      "Run the test suite",
+    );
+  });
 });
 
 describe("getArgsDisplay（结构化参数摘要：文件路径拆分）", () => {

@@ -68,6 +68,12 @@ export interface ToolDisplayConfig {
   aggregate?: { executing: string; completed: string };
   argsKey?: string;
   /**
+   * 语义摘要字段名（如 run_command 的 description）：折叠行标题优先取它，
+   * 比 argsKey（命令原文）更可读。展开详情仍由 renderer 从原文读取，不受影响。
+   * 由后端 display.descriptionKey 下发。
+   */
+  descriptionKey?: string;
+  /**
    * `argsKey` 指向**数组**时，项数后缀（如"个问题"）。
    * 由插件经 NLS 下发（%key%），前端渲染为「3 个问题」。
    */
@@ -300,11 +306,35 @@ function isJsonWhitespace(code: number): boolean {
  * 参数摘要的结构化版本：文件类工具（argsKey = "file_path"）拆成
  * 文件名 + 目录两段（ZCode 同款交互），其余场景与 getArgsText 一致。
  */
+/**
+ * 从参数里读取语义摘要（模型现写的 description）。
+ * 字符串形态走定点扫描，避免流式期间为一行标题对超长 command 做全量 partialParse。
+ */
+function readDescriptionSummary(
+  params: string | Record<string, unknown>,
+  key: string | undefined,
+): string | undefined {
+  if (!key) return undefined;
+  const value =
+    typeof params === "string"
+      ? extractStringFieldFromJsonText(params, key)
+      : params[key];
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  return formatArgSummary(value);
+}
+
 export function getArgsDisplay(tool: ToolCall): ArgsDisplay | undefined {
   const params = getToolArgs(tool);
   if (!params) return undefined;
 
   const config = getToolConfig(tool);
+
+  // 语义摘要优先（流式快速通道）：description 字段一旦流出就先显示，
+  // 不必等整段参数 partialParse（command 可能很长）。
+  if (typeof params === "string" && config.descriptionKey) {
+    const summary = readDescriptionSummary(params, config.descriptionKey);
+    if (summary) return { text: summary };
+  }
 
   // 文件路径快速通道：缓存/流式参数里跟着整份文件内容时，
   // 只为行头文件名做一次全量 partialParse 不值得。
@@ -330,6 +360,13 @@ export function getArgsDisplay(tool: ToolCall): ArgsDisplay | undefined {
   if (!parsedParams || typeof parsedParams !== "object") return undefined;
 
   const isKnownTool = resolveToolName(tool) in pluginToolDisplays.value;
+
+  // 语义摘要优先：模型现写的 description 比 argsKey（命令原文）更适合当折叠行标题。
+  // 取不到（模型没写 / 字段还没流出来）时自然回退到下面的 argsKey 逻辑。
+  if (config.descriptionKey) {
+    const summary = readDescriptionSummary(parsedParams, config.descriptionKey);
+    if (summary) return { text: summary };
+  }
 
   if (config.argsKey) {
     const value = parsedParams[config.argsKey];
