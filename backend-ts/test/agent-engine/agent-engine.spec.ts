@@ -856,6 +856,47 @@ describe('AgentEngine - completions', () => {
       expect(skippedBlock.content).toContain('截断');
     });
 
+    it('llmIncompleteOutputAction=error：断流后不重试，直接终止报错', async () => {
+      let calls = 0;
+      const mocks = createAllMocks({
+        llmGenerator: () => {
+          calls += 1;
+          return (async function* () {
+            yield { type: 'block_start', index: 0, blockType: 'text' };
+            yield { type: 'text_delta', index: 0, text: '写了一半的结论' };
+            throw new UpstreamStreamTruncatedError(
+              'Responses stream ended without terminal event',
+            );
+          })();
+        },
+      });
+
+      const agentEngine = new AgentEngine(
+        mocks.toolExecutor as any,
+        mocks.llmService as any,
+        {
+          serial: jest.fn(async (_e: string, _p: unknown, fallback: () => unknown) => fallback()),
+          parallel: jest.fn(async () => []),
+        } as any,
+        undefined,
+        undefined,
+        { getSettingValue: jest.fn(async () => 'error') } as any,
+      );
+
+      await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
+
+      // 只请求一次，不进入重试循环
+      expect(calls).toBe(1);
+      // 半截消息按审计落库但不进上下文
+      const appendCalls = (mocks.sessionContext.appendMessages as jest.Mock).mock.calls;
+      const assistantMessage = appendCalls[0][0][0];
+      expect(assistantMessage.metadata.excludedFromContext).toBe(true);
+      // turn 以 network_error 结束，且没有 retry 事件
+      const turnEnd = mocks.publishedEvents.find((e) => e.type === 'turn_end');
+      expect(turnEnd?.finishReason).toBe('network_error');
+      expect(mocks.publishedEvents.some((e) => e.type === 'retry')).toBe(false);
+    });
+
     it('限流以文字说明收尾：无暂停事件、turn_end=rate_limited（有部分内容时照常落库）', async () => {
       const mocks = createAllMocks({
         llmGenerator: () => {

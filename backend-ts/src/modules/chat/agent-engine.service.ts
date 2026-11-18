@@ -2,6 +2,13 @@ import { Injectable, Logger, Optional } from "@nestjs/common";
 import * as path from "path";
 import * as fs from "fs";
 import { ToolExecutor } from "../tools/tool-executor.service";
+import { SettingsService } from "../settings/settings.service";
+import {
+  SG_SYSTEM,
+  SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION,
+  INCOMPLETE_OUTPUT_ACTION_DEFAULT,
+  type IncompleteOutputAction,
+} from "../../constants/settings.constants";
 import type {
   Message,
   ContentBlock,
@@ -132,6 +139,12 @@ export class AgentEngine {
     /** 插件启用态过滤（运行时开关；缺省时由 provider 自行门控） */
     @Optional()
     private readonly pluginManager?: PluginManager,
+    /**
+     * 系统设置（可选：测试手工构造时缺省）。当前只用于读取
+     * llmIncompleteOutputAction；读取失败回退默认 retry。
+     */
+    @Optional()
+    private readonly settingsService?: SettingsService,
   ) {}
 
   /**
@@ -413,6 +426,26 @@ export class AgentEngine {
    * @returns 回合结束原因（businessReason 或 "stop"）；工具转交用户输入（计划审批反馈）时
    *          另带 followUpUserInput，由调用方（chat-runner）作为真实用户消息开启新轮次
    */
+  /**
+   * 读取「不完整输出」处理方式：
+   * - retry（默认）：丢弃半截内容并自动重试
+   * - error：不重试，直接结束回合并报错
+   *
+   * 读设置失败不影响主链路，按默认 retry 处理。
+   */
+  private async getIncompleteOutputAction(): Promise<IncompleteOutputAction> {
+    try {
+      const value = await this.settingsService?.getSettingValue(
+        SG_SYSTEM,
+        SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION,
+        INCOMPLETE_OUTPUT_ACTION_DEFAULT,
+      );
+      return value === "error" ? "error" : "retry";
+    } catch {
+      return INCOMPLETE_OUTPUT_ACTION_DEFAULT;
+    }
+  }
+
   private async executeAgentLoop(
     sessionContext: ISessionContext,
     turnId: string,
@@ -447,6 +480,11 @@ export class AgentEngine {
      */
     const MAX_TRUNCATION_RETRIES = 5;
     let truncationRetries = 0;
+    /**
+     * 不完整输出的处理方式（系统设置，默认 retry）：
+     * retry = 丢弃半截内容后自动重试；error = 直接终止本回合并报错。
+     */
+    const incompleteOutputAction = await this.getIncompleteOutputAction();
     let finalError: string | undefined;
     let finalUsage: any;
     /** 最近一次 LLM 请求的媒体投影统计（每轮重置；用于 context_stats 展示） */
@@ -857,8 +895,11 @@ export class AgentEngine {
             };
             this.logger.warn(
               `[LLM] stream truncated with no complete tool call ` +
-                `(message=${messageId}, truncated=${truncatedToolCalls}); ` +
-                `discarding attempt and retrying`,
+                `(message=${messageId}, truncated=${truncatedToolCalls}, ` +
+                `action=${incompleteOutputAction}); ` +
+                (incompleteOutputAction === "retry"
+                  ? `discarding attempt and retrying`
+                  : `discarding attempt and stopping (no retry)`),
             );
             await sessionContext.appendMessages([assistantMessage]);
             // 复位 UI 流式态：该 messageId 不会再有后续事件
@@ -869,7 +910,10 @@ export class AgentEngine {
               finishReason: "truncated",
             } as SessionStreamEvent);
 
-            if (truncationRetries < MAX_TRUNCATION_RETRIES) {
+            if (
+              incompleteOutputAction === "retry" &&
+              truncationRetries < MAX_TRUNCATION_RETRIES
+            ) {
               truncationRetries += 1;
               const delayMs = computeRetryDelayMs(truncationRetries - 1, {
                 code: "ECONNRESET",
@@ -896,10 +940,13 @@ export class AgentEngine {
               continue;
             }
 
-            // 重试耗尽：结束本步，不执行任何工具
+            // 不重试（配置为 error）或重试耗尽：结束本步，不执行任何工具。
+            // businessReason/finalError 已由上方 catch 设为 network_error。
             this.logger.error(
-              `[LLM] stream truncated: retries exhausted ` +
-                `(${MAX_TRUNCATION_RETRIES}/${MAX_TRUNCATION_RETRIES}); aborting step`,
+              incompleteOutputAction === "error"
+                ? `[LLM] stream truncated: llmIncompleteOutputAction=error; aborting step without retry`
+                : `[LLM] stream truncated: retries exhausted ` +
+                    `(${MAX_TRUNCATION_RETRIES}/${MAX_TRUNCATION_RETRIES}); aborting step`,
             );
             assistantMessage = null;
           } else {

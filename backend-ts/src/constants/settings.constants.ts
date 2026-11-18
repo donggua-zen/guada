@@ -18,6 +18,15 @@ export const DEFAULT_CHAT_UPLOAD_SUBDIR = 'uploads';
 export const SK_SYS_KB_STORAGE_ROOT = 'kbStorageRoot';
 export const SK_SYS_LLM_REQUEST_TIMEOUT_MS = 'llmRequestTimeoutMs';
 export const SK_SYS_LLM_IDLE_TIMEOUT_MS = 'llmIdleTimeoutMs';
+/**
+ * 不完整输出（上游流中断、参数未收齐）的处理方式：
+ * - retry：丢弃半截内容并自动重试（默认，恢复成功率更高）
+ * - error：不重试，直接结束本回合并报错（避免长输出反复从头生成）
+ */
+export const SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION = 'llmIncompleteOutputAction';
+export const INCOMPLETE_OUTPUT_ACTIONS = ['retry', 'error'] as const;
+export type IncompleteOutputAction = (typeof INCOMPLETE_OUTPUT_ACTIONS)[number];
+export const INCOMPLETE_OUTPUT_ACTION_DEFAULT: IncompleteOutputAction = 'retry';
 /** 防休眠模式：off 不干预 / busy 仅执行任务时 / always 应用运行期间一直保持唤醒（仅桌面端生效） */
 export const SK_SYS_KEEP_AWAKE_MODE = 'keepAwakeMode';
 /** 防休眠模式的合法取值 */

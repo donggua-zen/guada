@@ -103,6 +103,19 @@
               </GdInputNumber>
             </div>
           </div>
+          <!-- 不完整输出处理：上游流中断/参数未收齐时，自动丢弃重试还是直接终止 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-t border-gray-100 dark:border-[#2e3035]">
+            <div class="flex flex-col gap-1 min-w-0 flex-1">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.general.llmIncompleteOutputAction') }}</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">{{ t('settings.general.llmIncompleteOutputActionDesc') }}</span>
+            </div>
+            <div class="shrink-0 w-52">
+              <GdSelect v-model="settingsForm.llmIncompleteOutputAction" size="default">
+                <GdOption :label="t('settings.general.llmIncompleteOutputActionRetry')" value="retry" />
+                <GdOption :label="t('settings.general.llmIncompleteOutputActionError')" value="error" />
+              </GdSelect>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -199,6 +212,8 @@ const settingsForm = reactive({
   kbStorageRoot: '',
   llmRequestTimeoutMs: 600,   // 秒（后端存储为毫秒）
   llmIdleTimeoutMs: 120,     // 秒
+  // 不完整输出：retry 自动丢弃重试（默认）/ error 直接终止报错
+  llmIncompleteOutputAction: 'retry' as 'retry' | 'error',
   keepAwakeMode: 'busy' as 'off' | 'busy' | 'always',
   // Shell 后端：auto = 自动检测（Git Bash → PowerShell → cmd）
   shellBackend: 'auto' as 'auto' | 'gitbash' | 'powershell' | 'cmd',
@@ -255,6 +270,7 @@ const loadSettings = async () => {
     settingsForm.kbStorageRoot = response.kbStorageRoot || ''
     settingsForm.llmRequestTimeoutMs = Math.round(Number(response.llmRequestTimeoutMs) / 1000) || 600
     settingsForm.llmIdleTimeoutMs = Math.round(Number(response.llmIdleTimeoutMs) / 1000) || 120
+    settingsForm.llmIncompleteOutputAction = response.llmIncompleteOutputAction === 'error' ? 'error' : 'retry'
     settingsForm.keepAwakeMode = response.keepAwakeMode || 'busy'
     // Shell 后端：历史值/非法值收敛为 auto（后端校验也会拒非法值）
     const shellBackend = response.shellBackend
@@ -337,6 +353,7 @@ const handleSave = async () => {
       kbStorageRoot: kbRoot || null,
       llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs * 1000,
       llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs * 1000,
+      llmIncompleteOutputAction: settingsForm.llmIncompleteOutputAction,
       keepAwakeMode: settingsForm.keepAwakeMode,
       shellBackend: settingsForm.shellBackend,
     }

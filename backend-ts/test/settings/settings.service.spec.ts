@@ -26,6 +26,7 @@ import {
   SK_SYS_CHAT_UPLOAD_SUBDIR,
   SK_SYS_KB_STORAGE_ROOT,
   SK_SYS_KEEP_AWAKE_MODE,
+  SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION,
   SK_SYS_WORKSPACE_BASE_DIR,
 } from "../../src/constants/settings.constants";
 
@@ -192,6 +193,32 @@ describe("SettingsService", () => {
       const saved = await service.getGroupSettings(SG_SYSTEM);
       expect(saved[SK_SYS_KEEP_AWAKE_MODE]).toBeUndefined();
     });
+  });
+
+  describe("updateGroupSettings：不完整输出处理方式校验", () => {
+    it.each(["retry", "error"])("合法值 %s → 落盘并可读回", async (action) => {
+      await service.updateGroupSettings(SG_SYSTEM, {
+        [SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION]: action,
+      });
+
+      await expect(service.getGroupSettings(SG_SYSTEM)).resolves.toMatchObject({
+        [SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION]: action,
+      });
+    });
+
+    it.each(["stop", "discard", 1, null, true])(
+      "非法值 %p → 抛 BadRequestException 且不落盘",
+      async (bad) => {
+        await expect(
+          service.updateGroupSettings(SG_SYSTEM, {
+            [SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION]: bad,
+          }),
+        ).rejects.toThrow(BadRequestException);
+
+        const saved = await service.getGroupSettings(SG_SYSTEM);
+        expect(saved[SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION]).toBeUndefined();
+      },
+    );
   });
 
   describe("启动清理已移除的默认对话模型配置", () => {

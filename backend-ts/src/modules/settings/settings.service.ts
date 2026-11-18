@@ -18,6 +18,8 @@ import {
   KEEP_AWAKE_MODES,
   SK_SYS_SHELL_BACKEND,
   SHELL_BACKENDS,
+  SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION,
+  INCOMPLETE_OUTPUT_ACTIONS,
   LEGACY_SK_MOD_CHAT,
   MODEL_ID_KEYS,
 } from '../../constants/settings.constants';
@@ -109,6 +111,15 @@ export class SettingsService implements OnModuleInit {
       if (incoming !== '' && !SHELL_BACKENDS.includes(incoming)) {
         throw new BadRequestException(
           `shellBackend 只能是 ${SHELL_BACKENDS.join(' / ')}`,
+        );
+      }
+    }
+    if (group === SG_SYSTEM && SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION in data) {
+      // 只接受 retry / error，非法值静默回退会让用户以为改了行为实际没改
+      const incoming = data[SK_SYS_LLM_INCOMPLETE_OUTPUT_ACTION];
+      if (incoming !== '' && !INCOMPLETE_OUTPUT_ACTIONS.includes(incoming)) {
+        throw new BadRequestException(
+          `llmIncompleteOutputAction 只能是 ${INCOMPLETE_OUTPUT_ACTIONS.join(' / ')}`,
         );
       }
     }
