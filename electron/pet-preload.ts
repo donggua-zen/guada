@@ -157,6 +157,8 @@ const petAPI = {
   /** 命中心跳：forward 的 mousemove 到达渲染层时通知主进程放开穿透 */
   hitHeartbeat: () => ipcRenderer.send("pet:hit-heartbeat"),
   hitLeave: () => ipcRenderer.send("pet:hit-leave"),
+  /** 诊断：上报最近一次 mousemove 的原始数据 */
+  debugMove: (info: unknown) => ipcRenderer.send("pet:debug-move", info),
 };
 
 contextBridge.exposeInMainWorld("petAPI", petAPI);

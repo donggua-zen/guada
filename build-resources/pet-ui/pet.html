@@ -759,7 +759,18 @@
   function reportHitAt(e) {
     var hit = false;
     var br = bubble.classList.contains('show') ? bubble.getBoundingClientRect() : null;
-    hit = inRect(e.clientX, e.clientY, bboxRect()) || inRect(e.clientX, e.clientY, br);
+    var box = bboxRect();
+    hit = inRect(e.clientX, e.clientY, box) || inRect(e.clientX, e.clientY, br);
+    // 诊断：记录最近一次 mousemove 的原始坐标与判定（一键抓状态时能看清为何 miss）
+    window.__petLastMove = {
+      at: Date.now(),
+      client: { x: Math.round(e.clientX), y: Math.round(e.clientY) },
+      screen: { x: Math.round(e.screenX), y: Math.round(e.screenY) },
+      imageBox: box,
+      bubbleBox: br ? { x: Math.round(br.left), y: Math.round(br.top), w: Math.round(br.width), h: Math.round(br.height) } : null,
+      hit: hit,
+    };
+    if (api.debugMove) api.debugMove(window.__petLastMove);
     // 只在状态翻转或心跳续期时发 IPC
     var now = Date.now();
     if (hit === lastHeartbeatState && now - lastHeartbeat < 120) return;
@@ -773,6 +784,25 @@
     lastHeartbeatState = false;
     api.hitLeave();
   });
+
+  // 调试出口：让主进程能问「渲染层认为当前光标命中了吗」
+  window.__petHeartbeat = { last: 0, state: null };
+  window.__petProbeHit = function () {
+    var b = bboxRect();
+    var br = bubble.classList.contains('show') ? bubble.getBoundingClientRect() : null;
+    return {
+      image: b,
+      bubble: br ? { x: Math.round(br.left), y: Math.round(br.top), w: Math.round(br.width), h: Math.round(br.height) } : null,
+      lastHeartbeatAt: lastHeartbeat,
+      lastState: lastHeartbeatState,
+      lastMove: window.__petLastMove || null,
+      mode: typeof mode === 'undefined' ? null : mode,
+      canvas: (function () {
+        var r = canvasEl.getBoundingClientRect();
+        return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
+      })(),
+    };
+  };
 
   var drag = {
     active: false, moved: false, sx: 0, sy: 0, lastX: 0, lastY: 0, pointerId: null,

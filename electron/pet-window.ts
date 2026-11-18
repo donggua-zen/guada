@@ -521,6 +521,10 @@ export class PetWindowController {
   private pollTimer: NodeJS.Timeout | null = null;
   /** 拖动基准：按下时的屏幕光标与窗口位置（绝对坐标拖动用） */
   private dragOrigin: { sx: number; sy: number; wx: number; wy: number } | null = null;
+  /** 诊断：最近若干次 tick 的命中判定（排查「一直穿透」用） */
+  private tickTrace: Array<{ t: number; x: number; y: number; hit: boolean; ignore: boolean }> = [];
+  /** 诊断：渲染层最近一次 mousemove 的原始数据 */
+  private lastMousemove: unknown = null;
   /**
    * 新窗口的首次 show 由我们主动触发（showInactive），
    * 这一跳不该再触发「重建」，否则会无限递归。
@@ -1048,6 +1052,11 @@ export class PetWindowController {
     this.tick();
   }
 
+  /** 诊断：记录渲染层最近一次 mousemove 的原始数据 */
+  noteMousemove(info: unknown): void {
+    this.lastMousemove = info;
+  }
+
   /** 渲染层上报命中几何（图片矩形 + 气泡矩形） */
   setHitGeometry(geometry: PetHitGeometry | null): void {
     const valid = (r: PetRect | null | undefined): r is PetRect =>
@@ -1127,6 +1136,9 @@ export class PetWindowController {
       cursorLocal: cursor && win && !win.isDestroyed()
         ? { x: cursor.x - win.getBounds().x, y: cursor.y - win.getBounds().y }
         : null,
+      // 最近若干次 tick 的判定轨迹（诊断拖不动时看它是否一直 miss）
+      tickTrace: this.tickTrace,
+      lastMousemove: this.lastMousemove,
     };
   }
 
@@ -1336,6 +1348,23 @@ export class PetWindowController {
       this.interactingSince = 0;
     }
     this.applyShape();
+    // 诊断轨迹：记录最近 20 拍的判定（排查「一直穿透」时看它是否始终 miss）
+    try {
+      const cursor = screen.getCursorScreenPoint();
+      const b = win.getBounds();
+      const local = { x: cursor.x - b.x, y: cursor.y - b.y };
+      const hit = resolvePetHit(cursor, b, this.geometry);
+      this.tickTrace.push({
+        t: now,
+        x: local.x,
+        y: local.y,
+        hit,
+        ignore: this.appliedIgnore === true,
+      });
+      if (this.tickTrace.length > 20) this.tickTrace.shift();
+    } catch {
+      /* 显示器拓扑变化时可能抛，忽略 */
+    }
   }
 
   /**

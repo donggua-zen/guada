@@ -2213,6 +2213,8 @@ function setupIpcHandlers() {
   // 这是「息屏唤醒后拖不动」的关键恢复通道（不依赖 cursor 坐标或系统事件）。
   ipcMain.on("pet:hit-heartbeat", () => petWindow?.noteHitHeartbeat());
   ipcMain.on("pet:hit-leave", () => petWindow?.clearHitHeartbeat());
+  // 诊断：记录渲染层最近一次 mousemove（抓状态时能看清为何 miss）
+  ipcMain.on("pet:debug-move", (_e, info: unknown) => petWindow?.noteMousemove(info));
   // 诊断：确认 pointerdown 是否真的到达渲染层（排查「拖不动」时分界点）
   ipcMain.on("pet:debug-pointer", (_e, pos: unknown) => {
     const p = pos as { x?: number; y?: number } | undefined;
@@ -2346,15 +2348,21 @@ function setupIpcHandlers() {
           label: "调试：复制诊断信息",
           click: () => {
             const state = petWindow?.debugState() ?? {};
-            const lines = Object.entries(state)
+            // tickTrace / lastMousemove 单独打（太长，混在主状态里看不清）
+            const { tickTrace, lastMousemove, ...rest } = state as Record<string, unknown>;
+            const lines = Object.entries(rest)
               .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
               .join("\n");
             clipboard.writeText(
-              `[桌宠诊断] ${new Date().toISOString()}\n${lines}\n\n` +
+              `[桌宠诊断] ${new Date().toISOString()}\n${lines}\n` +
+                `tickTrace: ${JSON.stringify(tickTrace)}\n` +
+                `lastMousemove: ${JSON.stringify(lastMousemove)}\n\n` +
                 `platform: ${process.platform} ${process.arch}\n` +
                 `electron: ${process.versions.electron}\n`,
             );
             log.info(`[pet] 诊断信息已复制\n${lines}`);
+            log.info(`[pet] tickTrace ${JSON.stringify(tickTrace ?? null)}`);
+            log.info(`[pet] lastMousemove ${JSON.stringify(lastMousemove ?? null)}`);
           },
         },
         {
@@ -2366,6 +2374,11 @@ function setupIpcHandlers() {
               .executeJavaScript(
                 `(function(){
                   var d = window.__petDrag || {};
+                  // 渲染层自己算的命中判定（与 reportHitAt 同一套 bboxRect）
+                  var selfHit = null;
+                  try {
+                    if (window.__petProbeHit) selfHit = window.__petProbeHit();
+                  } catch (e) { selfHit = 'err:' + e.message; }
                   return JSON.stringify({
                     dragActive: d.active,
                     dragMoved: d.moved,
@@ -2379,6 +2392,8 @@ function setupIpcHandlers() {
                     ghostUp: window.__petGhostUp || 0,
                     realUp: window.__petRealUp || 0,
                     mode: window.__petGetMode ? window.__petGetMode() : null,
+                    heartbeat: window.__petHeartbeat || null,
+                    selfHit: selfHit,
                   });
                 })()`,
               )
