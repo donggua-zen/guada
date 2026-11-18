@@ -415,8 +415,9 @@ html.dark {
   --gd-plugin-icon-tray-bg: var(--gd-color-bg);
   --gd-plugin-icon-tray-border: var(--gd-color-border);
 
-  /* 正常阅读只用前两档；disabled 留给不可交互内容。 */
-  --gd-color-text: #e8e8e8;
+  /* 正常阅读只用前两档；disabled 留给不可交互内容。
+     主文本取 245（#f5f5f5）：浅色 #171717 的对称档，暗底上正文才不显灰。 */
+  --gd-color-text: #f5f5f5;
   --gd-color-text-gray: #b0b0b0;
   --gd-color-text-disabled: #858585;
 
