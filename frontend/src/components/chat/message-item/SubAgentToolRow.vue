@@ -147,12 +147,11 @@ html.dark .subagent-block {
 }
 
 /* 行布局与分组标题对齐：标题是「16px 图标 + 6px 间距」→ 文字落在 22px。
-   头像带 2px 左边距（完成/失败徽标要向左溢出到 0，不能被滚动容器裁掉），
-   所以间距收窄到 4px，2 + 16 + 4 = 22px，两处文字左缘一致。 */
+   头像不再靠 2px 左边距避让徽标，直接从行左缘起排，与其它图标同列。 */
 .sa-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   max-width: 100%;
   min-width: 0;
   font-size: 14px;
@@ -172,8 +171,8 @@ html.dark .subagent-block {
 }
 
 .sa-task {
-  /* 头像与名称之间收到 4px（对齐分组标题的 22px 文字左缘），名称与描述之间补回 8px */
-  margin-left: 4px;
+  /* 名称与描述之间比图标间距多 2px，回到 8px */
+  margin-left: 2px;
   min-width: 0;
   overflow: hidden;
   color: var(--sa-task);

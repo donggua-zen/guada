@@ -1,31 +1,31 @@
 <template>
-  <!-- 子代理头像：参考项目 WorkflowAgentFace 同款——身份色圆角方块 + 两只药丸眼。
+  <!-- 子代理头像：身份色圆角方块 + 两只药丸眼。
        状态用「形状 + 颜色」双通道表达，避免只靠粉/红区分：
        - 完成：左下角绿色勾选徽标
        - 失败：整张脸转危险色 + 左下角红色叉号徽标
        - 运行中：眼睛眨眼 + 左右看（仅 running 时挂动画）
        颜色由外层 .subagent-block 下发 --sa-identity-face；徽标描边跟随背景色。
-       外框比同排 16px 线条图标小一圈：实心色块的视觉重量约为细线图标的两倍，
-       等尺寸会显得偏大（viewBox 内缩，眼睛/徽标坐标保持不变）。 -->
+       实体比同排 16px 线条图标略小（实心块的视觉重量约为细线图标的两倍）；
+       脸与眼睛在 viewBox 内居中，徽标压在脸左下角，不靠整体右移来避让。 -->
   <svg class="sa-face" :class="{ 'is-failed': failed, 'is-running': running && !failed }"
     viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-    <rect class="sa-face__body" x="1.5" y="1.5" width="17" height="17" rx="6" />
+    <rect class="sa-face__body" x="1" y="1" width="18" height="18" rx="6.3" />
     <!-- 两层嵌套：外层左右看，内层眨眼，两个动画互不覆盖 -->
     <g class="sa-face__look">
       <g class="sa-face__blink">
         <g class="sa-face__eyes">
-          <rect x="7" y="6" width="4" height="6" rx="2" />
-          <rect x="13" y="6" width="4" height="6" rx="2" />
+          <rect x="5" y="6" width="4" height="6" rx="2" />
+          <rect x="11" y="6" width="4" height="6" rx="2" />
         </g>
       </g>
     </g>
     <g v-if="done && !failed" class="sa-face__done">
-      <circle cx="3" cy="17" r="5.5" stroke-width="1.5" />
-      <path d="m0.5 17 1.7 1.7 3.3-3.4" stroke-width="1.5" />
+      <circle cx="5.5" cy="18" r="4.5" stroke-width="1" />
+      <path d="m3.45 18 1.4 1.4 2.7-2.8" stroke-width="1.4" />
     </g>
     <g v-else-if="failed" class="sa-face__failed">
-      <circle cx="3" cy="17" r="5.5" stroke-width="1.5" />
-      <path d="m0.9 14.9 4.2 4.2M5.1 14.9l-4.2 4.2" stroke-width="1.6" />
+      <circle cx="5.5" cy="18" r="4.5" stroke-width="1" />
+      <path d="m3.4 15.9 4.2 4.2M7.6 15.9l-4.2 4.2" stroke-width="1.5" />
     </g>
   </svg>
 </template>
@@ -46,10 +46,8 @@ defineProps<{
   width: 16px;
   height: 16px;
   min-width: 16px;
-  /* 完成/失败徽标向左下溢出约 2px：留出安全边距，避免贴到消息流左缘被裁切 */
-  margin-left: 2px;
   flex-shrink: 0;
-  /* 徽标画在 20 格之外，不能被 svg 视口裁掉 */
+  /* 徽标压在脸左下角，底部可能溢出约 1.5px；保留 visible 防止圆角/描边被裁 */
   overflow: visible;
 }
 
@@ -90,10 +88,8 @@ defineProps<{
     transform: translateX(-2px);
   }
 
-  /* 眼睛基准位置偏右（为左下角徽标留空间）：右侧位移收一点，
-     否则最右帧只剩 1 格留白、贴到脸缘。左侧留白足够，保持 2px。 */
   44%, 56% {
-    transform: translateX(1.2px);
+    transform: translateX(2px);
   }
 
   64%, 84% {
