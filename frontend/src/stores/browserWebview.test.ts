@@ -260,3 +260,89 @@ describe("browserWebview viewport", () => {
     expect(store.renderableOverrides.has("b")).toBe(false);
   });
 });
+
+/**
+ * 会话过滤（sessionWebviews / currentSessionId）
+ *
+ * 约束：
+ * - 渲染用 allWebviews（不过滤会话），侧栏标签投影用 sessionWebviews（按会话过滤）：
+ *   两者不一致时表现为「网页打开且可操作，侧栏没有标签」——必须由绑定方保证
+ *   currentSessionId 及时非空（见 composables/useBrowserSessionBinding）
+ * - 子代理创建的标签由后端写入 sessionId = 父会话、createdBy = 子会话，
+ *   因此父会话侧栏能看到它们
+ */
+describe("browserWebview 会话过滤", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  function addOwnedWindow(
+    store: ReturnType<typeof useBrowserWebviewStore>,
+    id: string,
+    metadata: Record<string, unknown>,
+  ): void {
+    store.addWebview({
+      windowId: id,
+      url: "about:blank",
+      title: "t",
+      partition: "p",
+      preloadUrl: "preload",
+      isVisible: false,
+      metadata,
+    });
+  }
+
+  it("未绑定会话：sessionWebviews 为空但 allWebviews 仍有窗口（网页可见、标签不可见）", () => {
+    const store = useBrowserWebviewStore();
+    addOwnedWindow(store, "win_1", { sessionId: "s1", createdBy: "s1" });
+
+    expect(store.currentSessionId).toBeNull();
+    expect(store.sessionWebviews).toEqual([]);
+    expect(store.agentWebviews).toEqual([]);
+    expect(store.allWebviews.map((w) => w.windowId)).toEqual(["win_1"]);
+  });
+
+  it("绑定会话：只返回 metadata.sessionId 匹配的窗口", () => {
+    const store = useBrowserWebviewStore();
+    addOwnedWindow(store, "win_1", { sessionId: "s1", createdBy: "s1" });
+    addOwnedWindow(store, "win_2", { sessionId: "s2", createdBy: "s2" });
+    // 人类打开的窗口可能没有 createdBy
+    addOwnedWindow(store, "win_3", { sessionId: "s1", openedBy: "user" });
+
+    store.setCurrentSession("s1");
+
+    expect(store.sessionWebviews.map((w) => w.windowId)).toEqual(["win_1", "win_3"]);
+    // agentWebviews 按 createdBy 过滤：win_3 没有 createdBy，不属于任何代理
+    expect(store.agentWebviews.map((w) => w.windowId)).toEqual(["win_1"]);
+  });
+
+  it("子代理标签归属于父会话：父会话侧栏可见，agentWebviews 只列自己创建的", () => {
+    const store = useBrowserWebviewStore();
+    // 子代理 sub_1 创建的标签：后端写 sessionId=父会话 s1、createdBy=sub_1
+    addOwnedWindow(store, "win_sub", { sessionId: "s1", createdBy: "sub_1" });
+
+    store.setCurrentSession("s1");
+    expect(store.sessionWebviews.map((w) => w.windowId)).toEqual(["win_sub"]);
+    expect(store.agentWebviews).toEqual([]);
+
+    store.setCurrentSession("sub_1");
+    expect(store.sessionWebviews).toEqual([]);
+    expect(store.agentWebviews.map((w) => w.windowId)).toEqual(["win_sub"]);
+  });
+
+  it("切换会话：隐藏活跃窗口与预览坐标，webview 本身不销毁", () => {
+    const store = useBrowserWebviewStore();
+    addOwnedWindow(store, "win_1", { sessionId: "s1" });
+
+    store.setCurrentSession("s1");
+    store.setActive("win_1");
+    store.setPreviewRect({ x: 0, y: 0, width: 800, height: 600 });
+
+    store.setCurrentSession("s2");
+
+    expect(store.activeWindowId).toBeNull();
+    expect(store.previewRect).toBeNull();
+    expect(store.allWebviews.map((w) => w.windowId)).toEqual(["win_1"]);
+    expect(store.sessionWebviews).toEqual([]);
+  });
+});

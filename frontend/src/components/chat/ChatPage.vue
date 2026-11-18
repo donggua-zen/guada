@@ -258,6 +258,7 @@ import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import { useTabStore } from "@/stores/tab";
 import { useWorkflowRunsStore } from "@/stores/workflowRuns";
 import { useTitle } from '@/composables/useTitle';
+import { useBrowserSessionBinding } from '@/composables/useBrowserSessionBinding';
 import { isMobileDevice } from '@/composables/useDevice';
 import { writeTextToClipboard } from '@/utils/clipboard';
 import { previewFile } from '@/utils/workspacePreview';
@@ -627,10 +628,11 @@ const mainSession = computed<Session | null>(() => {
   return sessionStore.getSession(id) ?? null;
 });
 
-// 会话切换时同步浏览器 webview store（隐藏活跃预览，webview 不销毁）
-watch(() => mainSession.value?.id, (sessionId) => {
-  browserWebviewStore.setCurrentSession(sessionId || null);
-});
+// 会话切换时同步浏览器 webview store（隐藏活跃预览，webview 不销毁）。
+// 必须 immediate：路由返回/组件重挂载时 mainSession 首帧就非空（会话对象已在
+// sessionStore 里），非 immediate 的 watch 等不到变化 → currentSessionId 永久为 null，
+// 侧栏浏览器标签永不出现（网页本身仍可正常打开操作），要切一次会话才恢复。
+useBrowserSessionBinding(() => mainSession.value?.id ?? null);
 
 
 // 判断是否为 Electron 环境
@@ -1033,9 +1035,8 @@ onUnmounted(() => {
     unsubscribeSubAgentClosed();
     unsubscribeSubAgentClosed = null;
   }
-  // 清理当前会话标记：currentSessionId 表示"用户正在看的会话"，
-  // 离开聊天页后不应再命中自动预览等基于该状态的条件
-  browserWebviewStore.setCurrentSession(null);
+  // 当前会话标记的清理（currentSessionId = "用户正在看的会话"）已由
+  // useBrowserSessionBinding 的 onScopeDispose 统一负责，此处不再重复。
 });
 
 
