@@ -9,7 +9,15 @@ import type { ToolCall } from '@/utils/toolDisplay';
 import type { ToolCallResponseEntry } from '@/types/message';
 import type { DisplayItem } from '@/utils/messageUtils';
 
-export type GroupExpandOverrides = ReadonlyMap<string, boolean>;
+/**
+ * 展开覆盖的只读视图。
+ *
+ * 不要求调用方提供真正的 Map：状态表（disclosureState）是模块级单例、按复合键索引，
+ * 只需要 `get` 一个能力。Map 天然满足该接口，测试与既有调用无需改动。
+ */
+export interface GroupExpandOverrides {
+  get(key: string): boolean | undefined
+}
 
 export function resolveGroupExpanded(
   overrides: GroupExpandOverrides,
@@ -84,6 +92,28 @@ export function estimateGroupLines(items: ReadonlyArray<DisplayItem>): number {
     }
   }
   return lines;
+}
+
+/**
+ * 折叠组的 body 子树是否应该挂载。
+ *
+ * 为什么不是只靠 CSS：旧实现用 `content-visibility: hidden` 让折叠组退出布局/绘制，
+ * 省的是布局与绘制，组件实例、响应式订阅与 DOM 都还在（实测一个会话 62 个折叠组、
+ * 内部 2378 个节点）。长会话里这些节点会让「一次全量布局」（窗口最大化/还原）变贵，
+ * 因此收起态改为不挂载。
+ *
+ * 三个例外必须保留挂载：
+ * - 不可折叠组（独立渲染工具卡，如计划卡）：正文就是内容本身；
+ * - 展开态：显然；
+ * - 收起动画进行中：此刻摘掉子树，收起动画会当场塌掉（0fr 没有可裁剪的内容）。
+ */
+export function shouldMountGroupBody(input: {
+  isCollapsible: boolean
+  isExpanded: boolean
+  isAnimating: boolean
+}): boolean {
+  if (!input.isCollapsible) return true
+  return input.isExpanded || input.isAnimating
 }
 
 /**

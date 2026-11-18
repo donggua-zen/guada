@@ -15,6 +15,15 @@ export interface ChatSessionScrollMemoryState {
   clientHeight: number
   /** 离开时的跟随态：true 表示下次恢复应直接贴底（内容可能已大幅变化，绝对位置无意义）。 */
   wasPinnedToBottom: boolean
+  /**
+   * 视口内第一个回合的 id 与其相对滚动视口顶部的偏移（px）。
+   *
+   * 有界窗口下屏外回合是「按上次实测高度」的占位，未浏览过的回合只有 800px 估算，
+   * 绝对 scrollTop 会因此失真（真实中位高度约 1700px）。按回合锚点恢复不依赖
+   * 上方内容的高度估算：挂载该回合后直接用它的真实几何定位。
+   */
+  anchorTurnId?: string
+  anchorOffsetPx?: number
   updatedAt: number
 }
 

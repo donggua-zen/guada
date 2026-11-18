@@ -1,11 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   estimateGroupLines,
   hasUnfinishedSteps,
   nextGroupExpandOverride,
   resolveGroupExpanded,
   resolveGroupTitlePhase,
+  shouldMountGroupBody,
 } from "./groupExpansion";
+import {
+  disclosureKey,
+  getDisclosure,
+  resetDisclosureState,
+  setDisclosure,
+} from "@/utils/disclosureState";
 import type { DisplayItem } from "@/utils/messageUtils";
 import type { ToolCall } from "@/utils/toolDisplay";
 import type { ToolCallResponseEntry } from "@/types/message";
@@ -221,6 +228,57 @@ describe("resolveGroupTitlePhase", () => {
 });
 
 /**
+ * 回归：展开状态存进模块级状态表后，读取与写入必须用**同一个键**。
+ *
+ * 曾经的 bug：toggle 时用裸 group.id 调 nextGroupExpandOverride，
+ * 而读取走的是带 turnId 前缀的复合键——于是永远读不到已写入的值，
+ * 每次都按运行态取反。对「非最后一组」（isActive=false）表现为
+ * 每次点击都算出 true，分组能展开但永远收不起来。
+ */
+describe("展开覆盖 × 模块级状态表", () => {
+  beforeEach(() => {
+    resetDisclosureState();
+  });
+
+  const view = { get: (key: string) => getDisclosure(key) };
+  const turnId = "turn-1";
+  const groupId = "process-abc";
+  const key = disclosureKey(turnId, groupId);
+
+  it("非最后一组（isActive=false）：第一次点击展开，第二次点击必须收起", () => {
+    // 第一次点击：运行态收起 → 展开
+    const first = nextGroupExpandOverride(view, key, false);
+    expect(first).toBe(true);
+    setDisclosure(key, first);
+    expect(resolveGroupExpanded(view, key, false)).toBe(true);
+
+    // 第二次点击：必须基于已写入的值取反 → 收起
+    const second = nextGroupExpandOverride(view, key, false);
+    expect(second).toBe(false);
+    setDisclosure(key, second);
+    expect(resolveGroupExpanded(view, key, false)).toBe(false);
+  });
+
+  it("用裸 group.id 读写对不上复合键（这正是原 bug 的成因）", () => {
+    // 写入用复合键
+    setDisclosure(key, true);
+    // 用裸 id 读不到 → 回落到运行态，导致「永远收起不了」
+    expect(resolveGroupExpanded(view, groupId, false)).toBe(false);
+    // 正确键能读到
+    expect(resolveGroupExpanded(view, key, false)).toBe(true);
+  });
+
+  it("最后一组（isActive=true）：点击先收起，再点击展开", () => {
+    const first = nextGroupExpandOverride(view, key, true);
+    expect(first).toBe(false);
+    setDisclosure(key, first);
+
+    const second = nextGroupExpandOverride(view, key, true);
+    expect(second).toBe(true);
+  });
+});
+
+/**
  * 分组长度的估算（决定"是否值得播展开动画"）：
  * 折叠态用 content-visibility 退出布局，读不到 scrollHeight，只能按内容折算。
  */
@@ -253,5 +311,39 @@ describe("estimateGroupLines", () => {
 
   it("多项累加", () => {
     expect(estimateGroupLines([thinkItem("a".repeat(120)), toolItem(1)])).toBe(6);
+  });
+});
+
+/**
+ * 折叠组 body 是否挂载：
+ * 收起态不挂载子树（省组件实例与 DOM，不只是省布局/绘制）；
+ * 但不可折叠组、展开态、收起动画进行中都必须挂载。
+ */
+describe("shouldMountGroupBody", () => {
+  it("展开的折叠组：挂载", () => {
+    expect(
+      shouldMountGroupBody({ isCollapsible: true, isExpanded: true, isAnimating: false }),
+    ).toBe(true);
+  });
+
+  it("收起的折叠组：不挂载", () => {
+    expect(
+      shouldMountGroupBody({ isCollapsible: true, isExpanded: false, isAnimating: false }),
+    ).toBe(false);
+  });
+
+  it("收起动画进行中：必须挂载，否则动画当场塌掉", () => {
+    expect(
+      shouldMountGroupBody({ isCollapsible: true, isExpanded: false, isAnimating: true }),
+    ).toBe(true);
+  });
+
+  it("不可折叠组（独立工具卡）：始终挂载", () => {
+    expect(
+      shouldMountGroupBody({ isCollapsible: false, isExpanded: false, isAnimating: false }),
+    ).toBe(true);
+    expect(
+      shouldMountGroupBody({ isCollapsible: false, isExpanded: true, isAnimating: false }),
+    ).toBe(true);
   });
 });

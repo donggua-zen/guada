@@ -1,6 +1,6 @@
 <template>
   <div data-gd-slot="message" class="turn-wrapper last:min-h-[60vh]"
-    :class="{ 'turn-wrapper--last': isLast, 'animate-in': animateIn, 'turn-wrapper--no-cv': !contentVisibilityEnabled }"
+    :class="{ 'turn-wrapper--last': isLast, 'animate-in': animateIn, 'turn-wrapper--no-cv': !contentVisibilityEnabled, 'turn-wrapper--eager-groups': !lazyGroupsEnabled }"
     :data-message-id="user?.messageId">
     <!-- ============================================ -->
     <!-- User 部分 -->
@@ -128,19 +128,21 @@
                   'is-expanded': isGroupContentVisible(groupIndex, group),
                   'no-transition': isGroupInstant(group),
                 }">
-                <div class="process-group__body"
-                  :class="{ 'is-skipped': isGroupBodySkipped(groupIndex, group) }">
-                  <div class="process-group__body-scroll space-y-2"
+                <div class="process-group__body">
+                  <div v-if="isGroupBodyMounted(groupIndex, group)" class="process-group__body-scroll space-y-2"
                     :class="{ 'py-2': group.isCollapsible, 'no-mask': !group.isCollapsible }">
                     <template v-for="item in group.items" :key="item.id">
                       <MessageThinkingSection v-if="item.type === 'think'"
                         :reasoning-content="item.reasoningContent || ''"
                         :is-thinking="item.source.state?.isThinking || false"
                         :thinking-duration-ms="item.source.thinkingDurationMs"
-                        :thinking-started-at="item.source.thinkingStartedAt" />
-                      <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
+                        :thinking-started-at="item.source.thinkingStartedAt"
+                        :persist-key="disclosureKeyOf(props.turn.id, item.id)" />
+                      <MessageToolCalls v-if="item.type === 'tool'"
+                        :tool-calls="item.toolCalls || []"
                         :tool-responses="item.toolResponses"
-                        :is-streaming="streamingState.isStreaming" :session-id="props.sessionId" />
+                        :is-streaming="streamingState.isStreaming" :session-id="props.sessionId"
+                        :persist-key="disclosureKeyOf(props.turn.id, item.id)" />
                     </template>
                   </div>
                 </div>
@@ -247,7 +249,8 @@ import { isJobNoticeSource } from '@/utils/jobNotice';
 import { previewFile } from '@/utils/workspacePreview';
 import { getToolFileOpenTarget } from '@/utils/toolWorkspace';
 import type { FilePathDisplay } from '@/utils/pathDisplay';
-import { resolveGroupExpanded, nextGroupExpandOverride, hasUnfinishedSteps, isToolCallExecuting, resolveGroupTitlePhase, estimateGroupLines } from './groupExpansion';
+import { resolveGroupExpanded, nextGroupExpandOverride, hasUnfinishedSteps, isToolCallExecuting, resolveGroupTitlePhase, estimateGroupLines, shouldMountGroupBody, type GroupExpandOverrides } from './groupExpansion';
+import { disclosureKey, getDisclosure, setDisclosure } from '@/utils/disclosureState';
 import { getFileIcon } from '@/composables/useFileIcon';
 import { perfCount } from '@/utils/perf';
 
@@ -315,28 +318,51 @@ const activeBlocks = computed(() => {
 // ============================================
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
+
+/** 本回合某个分组的稳定键（跨卸载保持） */
+const groupKeyOf = (groupId: string): string => disclosureKey(props.turn.id, groupId);
+
+/** 传给子组件的行级键（工具行 / 思考框共用） */
+const disclosureKeyOf = (turnId: string, localId: string): string =>
+  disclosureKey(turnId, localId);
+
 /**
  * 分组展开状态的显式覆盖（group.id -> 是否展开，仅用户点击时写入）。
+ *
+ * 状态存在模块级表里（disclosureState），不放在本组件：回合会被 ChatPanel 的有界窗口
+ * 回收成占位，组件卸载后本地 ref 会丢，表现为「展开分组 → 滚远 → 滚回来又收起」。
+ * 键带 turnId 前缀，回合删除时可整批清理。
+ *
  * 缺省不落状态：由 isGroupExpanded 按运行态派生——流式中的最后一组展开、其余收起。
  */
-const groupExpandOverrides = ref<Map<string, boolean>>(new Map());
+/** 覆盖表视图：只读 get，避免把整张表交给渲染层 */
+const groupExpandOverrides = computed<GroupExpandOverrides>(() => ({
+  get: (key: string) => getDisclosure(key),
+}));
 
-/**
- * 分组展开态：显式覆盖优先；无覆盖时按运行态派生——进行中的最后一组默认展开。
- * 回合结束后活动组不再满足 isLastActive，自动回落为收起；
- * 用户手动展开过的组因覆盖存在而保持展开。
- */
 const isGroupExpanded = (groupIndex: number, group: DisplayGroup): boolean => {
-  return resolveGroupExpanded(groupExpandOverrides.value, group.id, isLastActive(groupIndex));
+  return resolveGroupExpanded(
+    groupExpandOverrides.value,
+    groupKeyOf(group.id),
+    isLastActive(groupIndex),
+  );
 };
 
-// ── 折叠态退出布局 ────────────────────────────────────────────────
-/* 折叠只是 0fr 裁剪，内容一直留在布局树里：旧回合的分组可能有几千 px（思考正文 + N 个工具行，
-   `.process-group__body-scroll` 没限高、还挂着两层 mask），于是列表每一次重排都要把它们算一遍。
-   折叠态给 body 加 content-visibility:hidden（隐含 contain:size layout paint style），子树彻底
-   退出布局与绘制；只有展开/收起动画期间临时恢复可见，动画结束再摘掉。
-   代价：content-visibility:hidden 的元素 scrollHeight 恒为 0，所以"大分组"判定只能按数据估算，
-   不能在 toggle 时读 DOM。 */
+// ── 折叠组：收起态不挂载子树 ──────────────────────────────────────
+/* 旧实现只加 `content-visibility: hidden`：省的是布局与绘制，组件实例、响应式订阅与
+   DOM 都还在（实测一个会话 62 个折叠组、内部 2378 个节点）。长会话里这些节点会让
+   一次全量布局（窗口最大化/还原）变贵，因此收起态直接不挂载。
+   收起动画期间必须保留挂载，否则 0fr 没有可裁剪的内容、动画会当场塌掉。
+   A/B 开关：localStorage['gd:lazy-groups']='0' 关闭（回到「常驻挂载」旧行为）。 */
+
+/** 延迟挂载开关（模块级求值一次，与 gd:lazy-turns / gd:turn-cv 同一套约定） */
+const lazyGroupsEnabled = (() => {
+  try {
+    return localStorage.getItem('gd:lazy-groups') !== '0';
+  } catch {
+    return true;
+  }
+})();
 
 /** 过渡时长（与 CSS 的 grid-template-rows 保持一致） */
 const GROUP_EXPAND_ANIMATION_MS = 150;
@@ -349,7 +375,11 @@ const INSTANT_EXPAND_ESTIMATE_LINES = 60;
 const isGroupInstant = (group: DisplayGroup): boolean =>
   group.isCollapsible && estimateGroupLines(group.items) > INSTANT_EXPAND_ESTIMATE_LINES;
 
-/** 正在播放展开/收起动画的分组：动画期间内容必须可见，否则会当场消失 */
+/**
+ * 正在播放展开/收起动画的分组：这段时间内内容必须保持挂载，
+ * 动画结束后（GROUP_EXPAND_ANIMATION_MS + 余量）才允许卸载。
+ * 语义对齐 zcode 的 TOOL_CONTENT_COLLAPSE_UNMOUNT_DELAY_MS：先让高度动画走完，再摘子树。
+ */
 const animatingGroupIds = ref<Set<string>>(new Set());
 const animatingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -373,18 +403,24 @@ onBeforeUnmount(() => {
   animatingTimers.clear();
 });
 
-/** 折叠且不在动画中 → 让 body 退出布局。不可折叠组始终渲染，不参与。 */
-const isGroupBodySkipped = (groupIndex: number, group: DisplayGroup): boolean =>
-  group.isCollapsible
-  && !isGroupExpanded(groupIndex, group)
-  && !animatingGroupIds.value.has(group.id);
+/** 分组 body 的子树是否挂载（收起且不在动画中 → 不挂载） */
+const isGroupBodyMounted = (groupIndex: number, group: DisplayGroup): boolean => {
+  if (!lazyGroupsEnabled) return true;
+  return shouldMountGroupBody({
+    isCollapsible: group.isCollapsible,
+    isExpanded: isGroupContentVisible(groupIndex, group),
+    isAnimating: animatingGroupIds.value.has(group.id),
+  });
+};
 
 const toggleGroup = (groupIndex: number, group: DisplayGroup) => {
   const active = isLastActive(groupIndex);
-  groupExpandOverrides.value.set(group.id, nextGroupExpandOverride(groupExpandOverrides.value, group.id, active));
-  // 动画期间内容必须保持可见（否则收起动画会当场把内容摘掉）。
-  // 两个写入在同一帧提交，渲染结果就是"可见 + is-expanded"，0fr→1fr 的过渡不会丢帧。
-  if (!isGroupInstant(group)) markGroupAnimating(group.id);
+  const key = groupKeyOf(group.id);
+  const next = nextGroupExpandOverride(groupExpandOverrides.value, key, active);
+  setDisclosure(key, next);
+  // 收起时必须让内容多留一会儿：动画结束前摘掉子树，0fr 会当场塌掉。
+  // 展开不需要（内容本来就要挂载）。
+  if (!next && !isGroupInstant(group)) markGroupAnimating(group.id);
   // 归因：点击次数 vs ChatPanel 的 chat.contentResize（每次尺寸变化 = 一帧重排）
   perfCount('turn.expand');
 };
@@ -1143,12 +1179,16 @@ html.gd-resizing-moved .turn-wrapper:not(.turn-wrapper--no-cv) {
   overflow: hidden;
 }
 
-/* 折叠态：整棵子树退出布局与绘制（content-visibility:hidden 隐含 contain:size layout paint style）。
-   旧回合的分组可能有几千 px（思考正文 + N 个工具行、没限高、还挂两层 mask），留在布局树里
-   会拖慢列表的每一次重排。动画期间由 isGroupBodySkipped 保持可见，否则收起动画会当场把内容摘掉。
+/* 折叠态不再需要 content-visibility：内容本身已经不挂载（isGroupBodyMounted）。
+   这条规则只在 A/B 开关（gd:lazy-groups=0）关闭延迟挂载时生效——那时子树常驻，
+   仍需让它退出布局与绘制。
    这里不加 contain：body 已经 overflow:hidden，再加 contain 只会给子卡片弹层新增包含块。 */
-.process-group__body.is-skipped {
+.turn-wrapper--eager-groups .process-group__body {
   content-visibility: hidden;
+}
+
+.turn-wrapper--eager-groups .process-group__collapsible.is-expanded .process-group__body {
+  content-visibility: visible;
 }
 
 .process-group__body-scroll {

@@ -41,11 +41,16 @@
                 </Transition>
 
                 <template v-for="(turn, index) in visibleTurns" :key="turn.id">
-                  <!-- 懒挂载占位：未进入视口附近的回合只占高度，不创建组件树。
-                       接近视口时由 v-lazy-turn 挂载并保留，避免 30 回合一次性 mount 阻塞主线程。 -->
+                  <!-- 懒挂载占位：视口附近以外的回合只占高度，不创建组件树。
+                       接近视口时由 v-lazy-turn 挂载；滚远后由 reclaimTurnWindow 退回占位，
+                       使已挂载回合数有上限（长会话不再随浏览历史无限累积 DOM）。
+                       高度优先用上次实测的步进高度，避免卸载后列表总高度缩水。 -->
                   <div v-if="!isTurnMounted(turn)" v-lazy-turn="turn.id" class="turn-placeholder"
+                    :class="{ 'turn-placeholder--event': turn.kind === 'event' }"
                     :data-turn-id="turn.id" :style="{ height: `${estimatedTurnHeight(turn)}px` }">
-                    <div class="turn-placeholder__skeleton">
+                    <!-- 骨架线只给「从未浏览过」的占位：浏览过又被回收的回合已有实测高度，
+                         再闪一次加载动画会让人误以为内容丢了。 -->
+                    <div v-if="!turnHeightCache.has(turn.id)" class="turn-placeholder__skeleton">
                       <div class="turn-placeholder__line" style="width: 38%" />
                       <div class="turn-placeholder__line" style="width: 62%" />
                     </div>
@@ -247,9 +252,15 @@ import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables
 import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
 import { getErrorMessage, getApiErrorStatus } from '@/utils/errorMessage'
 import { shouldClearComposerAfterSend } from '@/utils/sendResult'
+import {
+  planTurnWindow,
+  resolvePlaceholderHeight,
+  type MountedTurnGeometry,
+} from '@/utils/turnWindow'
 import { perfStart, perfCount, traceSessionOpen, endSessionOpenTrace } from '@/utils/perf'
 import { themeOwnsBackground } from '@/services/theme-runtime'
 import { isResizeActivityActive } from '@/composables/useResizeActivity'
+import { clearDisclosureForTurn } from '@/utils/disclosureState'
 import {
   parseLocalSlashCommand,
   type LocalSlashCommand,
@@ -633,7 +644,8 @@ function handleFollowingChange(following: boolean) {
 /** 到顶：按分页游标拉取更早一页（在途标记与游标判定留在本组件）。 */
 function handleNearTop() {
   // 懒挂载：先补齐已加载但尚未挂载的回合（小批量 + 锚点补偿），避免把"占位区顶部"误判成历史到顶。
-  if (hasUnmountedTurns.value) {
+  // 只关心视口上方：有界窗口下视口下方必然有占位，那是正常状态而不是"还没补齐"。
+  if (hasUnmountedTurnsAbove.value) {
     mountNextUnmountedBatch(8);
     return;
   }
@@ -668,6 +680,8 @@ function handleScroll() {
   scheduleMountVisiblePlaceholders()
   // 锚点保持器：滚动后重记视口内第一个回合，作为内容高度变化的参照
   scheduleAnchorRefresh()
+  // 有界窗口：滚动停止后把远离视口的已挂载回合退回占位，避免长会话无限积累 DOM
+  scheduleReclaimTurnWindow()
 }
 
 /**
@@ -694,11 +708,17 @@ function captureScrollMemoryForSession(sessionId: string | null) {
   if (!metrics) return;
   const key = scrollMemoryKeyFor(sessionId);
   if (!key) return;
+  // 回合锚点：有界窗口下绝对 scrollTop 会因占位高度估算而失真，恢复以回合为准。
+  // 每次都现取（contentAnchor 可能是滚动前的旧采样），读不到滚动元素时不写锚点字段，
+  // 恢复会回落到绝对位置（旧行为）。
+  const scrollEl = scrollContainerRef.value?.getScrollElement?.() ?? null;
+  const anchor = scrollEl ? captureLazyAnchor(scrollEl) : contentAnchor;
   saveChatSessionScrollMemory(key, {
     scrollTop: metrics.scrollTop,
     scrollHeight: metrics.contentHeight,
     clientHeight: metrics.viewportHeight,
     wasPinnedToBottom: isFollowingScroll.value,
+    ...(anchor ? { anchorTurnId: anchor.id, anchorOffsetPx: Math.round(anchor.top) } : {}),
     updatedAt: Date.now(),
   });
 }
@@ -711,6 +731,11 @@ async function applyScrollRestoreForSession() {
   const key = scrollMemoryKeyFor(sessionId);
   const container = scrollContainerRef.value;
   if (!key || !container) return;
+  // 上一个会话可能留下未落定的待恢复（用户中途离开）：不清理的话，下面的锚点恢复
+  // 成功后它仍会挂在那里，随后任意一次内容变化都会把位置拉到上一会话的目标。
+  pendingScrollRestore = null;
+  scrollRestoreApplied = false;
+  contentAnchor = null;
   traceSessionOpen(sessionId, 'scroll:restore-start');
   const state = loadChatSessionScrollMemory(key);
   if (!state) {
@@ -737,6 +762,26 @@ async function applyScrollRestoreForSession() {
   // 待恢复」的分支是给用户中途滚动用的，不能把它自己这步 setFollowing 也算进去。
   // （applyingScrollRestore 已兜住；顺序 + 标记双保险。）
   scrollRestoreApplied = false;
+  // 有回合锚点：先按锚点开窗挂载，再按真实几何定位（不依赖上方占位的高度估算）。
+  if (state.anchorTurnId) {
+    const list = visibleTurns.value;
+    const idx = list.findIndex((t) => t.id === state.anchorTurnId);
+    if (idx >= 0) {
+      const start = Math.max(0, idx - LAZY_TURNS_INITIAL);
+      const end = Math.min(list.length, idx + LAZY_TURNS_INITIAL + 1);
+      mountedTurnIds.value = new Set(list.slice(start, end).map((t) => t.id));
+      await nextTick();
+      if (restoreScrollToTurnAnchor(state)) {
+        traceSessionOpen(sessionId, 'scroll:anchor-restored', {
+          turnId: state.anchorTurnId,
+          offset: state.anchorOffsetPx ?? 0,
+        });
+        applyingScrollRestore = false;
+        rememberContentAnchor();
+        return;
+      }
+    }
+  }
   pendingScrollRestore = { key, state };
   traceSessionOpen(sessionId, 'scroll:restore-apply', {
     top: state.scrollTop,
@@ -744,6 +789,31 @@ async function applyScrollRestoreForSession() {
   });
   applyPendingScrollRestore();
   applyingScrollRestore = false;
+}
+
+/**
+ * 按回合锚点恢复阅读位置：把该回合钉回离开时的视口偏移。
+ *
+ * 与绝对 scrollTop 的区别：这里只依赖目标回合自身的实测几何，上方内容无论按
+ * 800px 估算还是实测高度参与布局，都不影响落点。返回 false 表示锚点元素不在
+ * DOM（回合已被删除/过滤），由调用方回落到绝对位置恢复。
+ */
+function restoreScrollToTurnAnchor(state: ChatSessionScrollMemoryState): boolean {
+  const container = scrollContainerRef.value;
+  const root = container?.getScrollElement?.();
+  if (!container || !root || !state.anchorTurnId) return false;
+  const el = root.querySelector<HTMLElement>(
+    `[data-turn-id="${CSS.escape(state.anchorTurnId)}"]`,
+  );
+  if (!el) return false;
+  const offset = state.anchorOffsetPx ?? 0;
+  const drift = el.getBoundingClientRect().top - root.getBoundingClientRect().top - offset;
+  if (Math.abs(drift) > 1) {
+    container.markLayoutScroll?.();
+    root.scrollTop += drift;
+  }
+  scrollRestoreApplied = true;
+  return true;
 }
 
 function applyPendingScrollRestore() {
@@ -774,7 +844,11 @@ function handleContentResizeForScrollRestore() {
   // 拖拽分割条/缩放窗口期间宽度逐帧变化，每次都会走到这里；此时扫描占位（对全部占位
   // 做 getBoundingClientRect）纯属浪费——横向变宽不改变垂直可见性，而且会和上一帧的
   // 样式写入交替，插入强制同步布局。稳定后（松手 150ms）尾帧会自然补一次。
-  if (!isResizeActivityActive()) scheduleMountVisiblePlaceholders()
+  if (!isResizeActivityActive()) {
+    scheduleMountVisiblePlaceholders()
+    // 调整结束后补一次有界窗口规划：调整期间刻意跳过卸载（宽度未稳定时量到的高度不可用）
+    scheduleReclaimTurnWindow()
+  }
   scheduleAnchorRestore()
   if (!pendingScrollRestore || isFollowingScroll.value) return;
   // 首次写入之前一律不判定到位：此刻 scrollTop 还是替换内容后的初始值，
@@ -841,14 +915,38 @@ const showScrollToBottomBtn = computed(() =>
 );
 
 // ============================================
-// 回合懒挂载：首屏只挂载最后 N 个回合，其余用等高占位；接近视口再挂载并保留（不卸载）。
-// 目的：30 回合 × 数千组件一次性 mount 会阻塞主线程 1s+（实测 ~1.4–1.6s）。
-// 关闭：localStorage['gd:lazy-turns']='0' 后刷新。
-// 安全回退：非贴底滚动记忆、滚到顶要加载更早历史、大纲跳转 → 全量挂载。
+// 回合懒挂载 + 有界窗口：首屏只挂载最后 N 个回合，其余用等高占位；接近视口再挂载。
+//
+// 为什么「挂载后永久保留」不够：长会话浏览历史后已挂载回合持续累积，窗口最大化/
+// 还原这类一次全量布局的代价随之线性增长（实测 30 回合 Layout 约 173ms，9 回合约 46ms）。
+// 因此超出视口滞回区的回合会重新卸载为占位（reclaimTurnWindow），已挂载数量有上限。
+//
+// 高度来源：卸载前实测每个回合的「步进高度」（含上下外边距），写入占位，保证卸载
+// 本身不改变列表总高度；没有实测值的新回合才回落到 800px 估算。
+// 关闭：localStorage['gd:lazy-turns']='0' 后刷新（关闭后不卸载，行为与旧版一致）。
 // ============================================
 const LAZY_TURNS_INITIAL = 8
 const LAZY_TURN_ESTIMATE_PX = 800
+const LAZY_TURN_ESTIMATE_EVENT_PX = 160
 const LAZY_TURNS_KEY = 'gd:lazy-turns'
+
+/** 卸载滞回边界：必须明显大于挂载边界（Observer 的 800px），否则同一位置反复挂载/卸载 */
+const TURN_WINDOW_KEEP_MARGIN_PX = 2400
+/**
+ * 已挂载回合上限：保护区（视口内 + 尾部流式）可能超过该值。
+ * A/B 与集成验证可用 `localStorage['gd:turn-window-max']='6'` 覆盖（与 gd:lazy-turns 同一套约定）。
+ */
+const TURN_WINDOW_MAX_MOUNTED = (() => {
+  try {
+    const raw = Number(localStorage.getItem('gd:turn-window-max'))
+    return Number.isInteger(raw) && raw > 0 ? raw : 24
+  } catch {
+    return 24
+  }
+})()
+/** 滚动停止后延迟规划一次卸载，避免滚动中反复量布局 */
+const TURN_WINDOW_IDLE_MS = 300
+
 const lazyTurnsEnabled = (() => {
   try {
     return localStorage.getItem(LAZY_TURNS_KEY) !== '0'
@@ -859,20 +957,44 @@ const lazyTurnsEnabled = (() => {
 const mountedTurnIds = ref<Set<string>>(new Set())
 let prevVisibleTurnIds: string[] = []
 
+/** 已实测的回合步进高度（含外边距）；卸载后作为占位高度 */
+const turnHeightCache = new Map<string, number>()
+
 const isTurnMounted = (turn: Turn): boolean =>
   !lazyTurnsEnabled || mountedTurnIds.value.has(turn.id)
 
 const estimatedTurnHeight = (turn: Turn): number =>
-  turn.kind === 'event' ? 160 : LAZY_TURN_ESTIMATE_PX
+  resolvePlaceholderHeight(
+    turnHeightCache.get(turn.id),
+    turn.kind === 'event' ? LAZY_TURN_ESTIMATE_EVENT_PX : LAZY_TURN_ESTIMATE_PX,
+  )
 
-const hasUnmountedTurns = computed(() =>
-  lazyTurnsEnabled && visibleTurns.value.some((t) => !mountedTurnIds.value.has(t.id)),
+/** 首个已挂载回合的下标（-1 = 全部未挂载） */
+const firstMountedTurnIndex = computed(() =>
+  visibleTurns.value.findIndex((t) => mountedTurnIds.value.has(t.id)),
 )
 
-/** 会话打开（骨架屏隐藏）时初始化挂载窗口；非贴底记忆直接全量，避免恢复位置落在占位区。 */
+/**
+ * 视口上方是否还有未挂载回合。
+ *
+ * 到顶分页只在「上方确实是占位」时才先补挂：旧实现用全局 hasUnmountedTurns 判定，
+ * 有界窗口下视口下方必然存在占位，会导致每次到顶都去补挂下方回合、永远拉不到更早历史。
+ */
+const hasUnmountedTurnsAbove = computed(() => {
+  if (!lazyTurnsEnabled) return false
+  const list = visibleTurns.value
+  if (list.length === 0) return false
+  const first = firstMountedTurnIndex.value
+  if (first < 0) return true
+  return first > 0
+})
+
+/** 会话打开（骨架屏隐藏）时初始化挂载窗口：贴底→尾部窗口；非贴底记忆→记忆位置附近的窗口。 */
 function resetLazyMountForOpen() {
   const list = visibleTurns.value
   prevVisibleTurnIds = list.map((t) => t.id)
+  // 高度缓存按回合 id 命中，跨会话无意义；同时避免长会话切换后无限增长
+  turnHeightCache.clear()
   if (!lazyTurnsEnabled) {
     mountedTurnIds.value = new Set(prevVisibleTurnIds)
     return
@@ -881,30 +1003,83 @@ function resetLazyMountForOpen() {
   const key = sessionId ? scrollMemoryKeyFor(sessionId) : null
   const memory = key ? loadChatSessionScrollMemory(key) : null
   if (memory && memory.wasPinnedToBottom === false) {
-    mountedTurnIds.value = new Set(prevVisibleTurnIds)
+    // 非贴底记忆：只挂载记忆位置附近，不能全量（全量会让还原位置的首次布局与
+    // 长会话整体 DOM 规模绑定，正是本文件要解决的问题）
+    mountedTurnIds.value = new Set(initialMountedIdsForScrollRestore(list, memory))
     return
   }
   const start = Math.max(0, list.length - LAZY_TURNS_INITIAL)
   mountedTurnIds.value = new Set(list.slice(start).map((t) => t.id))
 }
 
-/** 全量挂载已加载回合（大纲跳转等需要目标元素真实存在的场景；不做滚动补偿）。 */
-function mountAllLoadedTurns() {
+/**
+ * 非贴底恢复时的初始挂载窗口。
+ *
+ * 记忆里只有绝对 scrollTop，没有回合索引；用「已挂载回合的平均步进高度」把 scrollTop
+ * 折算成大致下标，再取该位置前后一段。折算不精确没关系：几何兜底（mountVisiblePlaceholders）
+ * 会在首帧后按真实位置补挂，内容锚点保持器负责抵消高度差。
+ */
+function initialMountedIdsForScrollRestore(
+  list: Turn[],
+  memory: ChatSessionScrollMemoryState,
+): string[] {
+  const half = Math.ceil(LAZY_TURNS_INITIAL / 2)
+  // 优先按回合锚点定位（与高度估算无关）；没有锚点的旧记忆才用平均高度折算
+  let anchorIndex = -1
+  if (memory.anchorTurnId) {
+    anchorIndex = list.findIndex((t) => t.id === memory.anchorTurnId)
+  }
+  if (anchorIndex < 0) {
+    const estimate = LAZY_TURN_ESTIMATE_PX
+    anchorIndex = Math.min(
+      Math.max(0, Math.floor(memory.scrollTop / estimate)),
+      Math.max(0, list.length - 1),
+    )
+  }
+  const start = Math.max(0, anchorIndex - half)
+  const end = Math.min(list.length, anchorIndex + half + 1)
+  const ids = list.slice(start, end).map((t) => t.id)
+  // 尾部必须始终有挂载窗口：贴底是常态，且流式输出只发生在尾部
+  const tail = list.slice(Math.max(0, list.length - LAZY_TURNS_INITIAL)).map((t) => t.id)
+  return Array.from(new Set([...ids, ...tail]))
+}
+
+/**
+ * 只挂载目标回合及其前后若干回合（大纲/引用跳转用）。
+ *
+ * 旧实现为「找一个目标先全量挂载」（mountAllLoadedTurns）。在有界窗口下，那等于把
+ * 刚刚省下的 DOM 一次性重建，正是窗口最大化/还原峰值要避免的形态，故整条路径已删除：
+ * 这里按目标位置开窗——目标回合本身 + 前后各 LAZY_TURNS_INITIAL 个，足够承载
+ * 跳转落点与相邻上下文。
+ */
+async function mountTurnsAround(turnId: string) {
+  if (!lazyTurnsEnabled) return
   const list = visibleTurns.value
-  if (list.length === 0) return
-  if (list.every((t) => mountedTurnIds.value.has(t.id))) return
-  mountedTurnIds.value = new Set(list.map((t) => t.id))
+  const index = list.findIndex((t) => t.id === turnId)
+  if (index < 0) return
+  if (mountedTurnIds.value.has(turnId)) return
+  const start = Math.max(0, index - LAZY_TURNS_INITIAL)
+  const end = Math.min(list.length, index + LAZY_TURNS_INITIAL + 1)
+  mountPlaceholders(list.slice(start, end).map((t) => t.id))
+  await nextTick()
 }
 
 /**
  * 到顶兜底：只挂载紧邻当前窗口的一小批（而不是一次性 20+ 个），
  * 每批用锚点补偿，避免"内容突然被顶出去"。
+ *
+ * 有界窗口下必须只补「当前已挂载区间上方」的回合：下方那些占位属于正常窗口外内容，
+ * 补挂它们只会白增 DOM，而且会让到顶分页永远等不到补齐。
  */
 function mountNextUnmountedBatch(count = 8) {
   const list = visibleTurns.value
-  const unmounted = list.filter((t) => !mountedTurnIds.value.has(t.id))
-  if (unmounted.length === 0) return
-  mountPlaceholders(unmounted.slice(-count).map((t) => t.id))
+  const first = firstMountedTurnIndex.value
+  const upperBound = first < 0 ? list.length : first
+  const unmountedAbove = list
+    .slice(0, upperBound)
+    .filter((t) => !mountedTurnIds.value.has(t.id))
+  if (unmountedAbove.length === 0) return
+  mountPlaceholders(unmountedAbove.slice(-count).map((t) => t.id))
 }
 
 // 新回合（流式追加）自动挂载；删除的回合清理；同一会话内不重置已挂载集合。
@@ -932,7 +1107,8 @@ watch(() => visibleTurns.value.map((t) => t.id), (ids) => {
   if (changed) mountedTurnIds.value = next
 })
 
-// 占位观察：进入视口上下各 800px 即挂载并保留。
+// 占位观察：进入视口上下各 800px 即挂载。卸载由 reclaimTurnWindow 统一规划
+// （滞回边界 2400px 明显大于这里的 800px，不会在同一位置反复挂载/卸载）。
 let turnObserver: IntersectionObserver | null = null
 const lazyPlaceholderEls = new Map<string, HTMLElement>()
 
@@ -1076,6 +1252,99 @@ function mountVisiblePlaceholders() {
     ids.push(id)
   }
   mountPlaceholders(ids)
+}
+
+// ── 有界窗口：卸载视口外的已挂载回合 ──────────────────────────────
+/**
+ * 实测已挂载回合的内容高度并写入缓存。
+ *
+ * 只取内容高度（getBoundingClientRect().height，不含外边距）：占位在 CSS 里采用与
+ * `.turn-wrapper` 相同的外边距，相邻元素之间的外边距折叠行为与真实回合一致，
+ * 因此不需要把外边距折算进高度。若把外边距算进高度，占位与下一个真实回合相接处
+ * 会重复计入一次间距。
+ */
+function measureMountedTurnHeights(entries: HTMLElement[]): void {
+  for (const el of entries) {
+    const id = el.dataset.turnId
+    if (!id) continue
+    const height = el.getBoundingClientRect().height
+    if (Number.isFinite(height) && height > 0) {
+      turnHeightCache.set(id, Math.round(height))
+    }
+  }
+}
+
+/** 规划并执行一次卸载；返回是否真的卸载了内容。 */
+function reclaimTurnWindow(): boolean {
+  if (!lazyTurnsEnabled) return false
+  // 调整态期间不做卸载：此刻宽度逐帧变化，量到的高度没有复用价值，
+  // 且卸载会与冻结高度/cv 叠加成额外的高度变化。
+  if (isResizeActivityActive()) return false
+  // 滚动恢复未落定前不卸载：目标位置还没到，卸载会改变可滚动范围。
+  if (pendingScrollRestore || applyingScrollRestore) return false
+  if (showSkeleton.value) return false
+
+  const root = scrollContainerRef.value?.getScrollElement?.()
+  if (!root) return false
+  const elements = Array.from(
+    root.querySelectorAll<HTMLElement>('.turn-wrapper[data-turn-id]'),
+  )
+  if (elements.length <= TURN_WINDOW_MAX_MOUNTED) return false
+
+  measureMountedTurnHeights(elements)
+
+  const rootRect = root.getBoundingClientRect()
+  const entries: MountedTurnGeometry[] = elements.map((el) => {
+    const rect = el.getBoundingClientRect()
+    return {
+      id: el.dataset.turnId ?? '',
+      top: rect.top - rootRect.top,
+      bottom: rect.bottom - rootRect.top,
+      height: rect.height,
+    }
+  })
+
+  const plan = planTurnWindow(entries, {
+    viewportHeight: rootRect.height,
+    keepMarginPx: TURN_WINDOW_KEEP_MARGIN_PX,
+    maxMounted: TURN_WINDOW_MAX_MOUNTED,
+    protectedIds: protectedTurnIds(),
+  })
+  if (plan.unmount.length === 0) return false
+
+  // 卸载会替换成同高占位；非贴底时先记锚点，patch 后把锚点钉回原位
+  if (!isFollowingScroll.value) rememberContentAnchor()
+  const next = new Set(mountedTurnIds.value)
+  for (const entry of plan.unmount) next.delete(entry.id)
+  mountedTurnIds.value = next
+  perfCount('chat.turnReclaim', plan.unmount.length)
+  scheduleAnchorRestore()
+  return true
+}
+
+/**
+ * 永不卸载的回合：尾部窗口（流式输出所在处、新消息动画）+ 视口内可见回合。
+ *
+ * 尾部固定保留 LAZY_TURNS_INITIAL 个：贴底是常态，尾部卸载会让新内容
+ * 在占位区里长高，跟随态贴底与输入区避让都会失真。
+ */
+function protectedTurnIds(): Set<string> {
+  const list = visibleTurns.value
+  const ids = new Set<string>()
+  const tailStart = Math.max(0, list.length - LAZY_TURNS_INITIAL)
+  for (let i = tailStart; i < list.length; i += 1) ids.add(list[i].id)
+  return ids
+}
+
+let turnWindowIdleTimer: ReturnType<typeof setTimeout> | null = null
+/** 滚动停止后延迟规划卸载，避免滚动过程中反复量布局。 */
+function scheduleReclaimTurnWindow() {
+  if (!lazyTurnsEnabled) return
+  if (turnWindowIdleTimer !== null) clearTimeout(turnWindowIdleTimer)
+  turnWindowIdleTimer = setTimeout(() => {
+    turnWindowIdleTimer = null
+    reclaimTurnWindow()
+  }, TURN_WINDOW_IDLE_MS)
 }
 
 function ensureTurnObserver(): IntersectionObserver | null {
@@ -1249,8 +1518,13 @@ onUnmounted(() => {
     clearTimeout(anchorRefreshTimer);
     anchorRefreshTimer = null;
   }
+  if (turnWindowIdleTimer !== null) {
+    clearTimeout(turnWindowIdleTimer);
+    turnWindowIdleTimer = null;
+  }
   contentAnchor = null;
   lazyPlaceholderEls.clear();
+  turnHeightCache.clear();
 });
 
 /**
@@ -1726,6 +2000,8 @@ async function deleteTurnMessage(turn: Turn) {
         const turnId = turn?.id;
         await apiService.deleteTurn(currentSessionId.value, turnId);
         sessionStore.deleteTurnById(currentSessionId.value, turnId);
+        // 展开状态按回合 id 前缀存放：回合没了就整批清掉，避免状态表残留
+        clearDisclosureForTurn(turnId);
         toast.success(t('common.deleteSuccess'));
       }
     }
@@ -2278,13 +2554,12 @@ const prefersReducedMotion = () =>
 async function scrollToMessage(messageId: string) {
   // 大纲跳转是明确的导航：挂载/滚动期间不要让旧锚点做补偿
   contentAnchor = null
-  // 懒挂载下目标回合可能还是占位：先全量挂载，保证锚点元素存在
+  // 懒挂载下目标回合可能还是占位：只挂载目标附近窗口（不全量，避免重建整个长会话）
   const targetTurn = visibleTurns.value.find((t) =>
     (t.messages ?? []).some((m) => m.messageId === messageId),
   )
   if (lazyTurnsEnabled && targetTurn && !mountedTurnIds.value.has(targetTurn.id)) {
-    mountAllLoadedTurns()
-    await nextTick()
+    await mountTurnsAround(targetTurn.id)
   }
 
   // 使用外层容器作为滚动上下文
@@ -2346,12 +2621,23 @@ async function scrollToMessage(messageId: string) {
 }
 
 /* 懒挂载占位：只占高度，不创建组件树；进入视口附近后替换为 TurnItem。
-   顶部两条 shimmer 线条明确表示“还在加载”，避免被误认为内容缺失。 */
+   顶部两条 shimmer 线条明确表示“还在加载”，避免被误认为内容缺失。
+
+   盒模型必须与 .turn-wrapper 对齐（TurnItem.vue）：那里是 margin 20px/25px、
+   content-box + padding-inline 4px/-4px。占位沿用同样的上下外边距，相邻元素的
+   外边距折叠行为才一致；否则每次卸载/挂载都会改变列表总高度（20+25px/回合），
+   表现为滚动位置跳动。box-sizing: border-box 让内联 height 直接等于回合内容高度，
+   padding-top 只吃掉占位内部空间，不再额外增加高度。 */
 .turn-placeholder {
   width: 100%;
   box-sizing: border-box;
   pointer-events: none;
   padding-top: 10px;
+  padding-inline: 4px;
+  margin-top: 20px;
+  margin-bottom: 25px;
+  margin-inline: -4px;
+  overflow: hidden;
 }
 
 .turn-placeholder__skeleton {
@@ -2654,5 +2940,11 @@ async function scrollToMessage(messageId: string) {
 .event-turn {
   width: 100%;
   margin-bottom: 25px;
+}
+
+/* 事件回合的占位：与 .event-turn 同盒模型（无 margin-top、只留 25px 尾距）。
+   两种外壳的高度/外边距不同，占位必须按 kind 分流，否则事件卡卸载后会多出 20px。 */
+.turn-placeholder--event {
+  margin-top: 0;
 }
 </style>

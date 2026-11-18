@@ -38,6 +38,7 @@ import ThinkingIcon from '@/components/icons/ThinkingIcon.vue';
 import MarkdownContent from '../../ui/MarkdownContent.vue';
 import { formatDuration, getThinkingPreview } from '../../../utils/messageUtils';
 import { useElapsedTicker } from '../../../composables/useElapsedTicker';
+import { getDisclosure, setDisclosure } from '@/utils/disclosureState';
 
 const { t } = useI18n();
 
@@ -47,16 +48,35 @@ const props = defineProps<{
   thinkingDurationMs: number | null | undefined;
   /** 思考跳动锚点（epoch ms，流式期间展示层秒表用） */
   thinkingStartedAt?: number | null;
+  /**
+   * 展开状态的持久键（由 TurnItem 传入 `<turnId>\0<itemId>`）。
+   * 有值时写入模块级 disclosureState，回合被有界窗口回收、重新挂载后仍保持展开；
+   * 无值时退回组件本地状态（其他宿主行为不变）。
+   */
+  persistKey?: string;
 }>();
 
 const emit = defineEmits<{
   click: [];
 }>();
 
-const isExpanded = ref(false);
+const localExpanded = ref(false);
+
+/**
+ * 展开态：有持久键时以模块级状态表为准（跨回合回收保持），否则用组件本地 ref。
+ * 状态表只存「用户点过」的值，undefined 表示回到默认收起。
+ */
+const isExpanded = computed<boolean>(() => {
+  if (!props.persistKey) return localExpanded.value;
+  return getDisclosure(props.persistKey) ?? false;
+});
 
 const handleToggle = () => {
-  isExpanded.value = !isExpanded.value;
+  if (props.persistKey) {
+    setDisclosure(props.persistKey, !isExpanded.value);
+    return;
+  }
+  localExpanded.value = !localExpanded.value;
 };
 
 /**

@@ -164,12 +164,19 @@ import TodoToolRow from './TodoToolRow.vue';
 import ToolImageGrid from './ToolImageGrid.vue';
 import { useSessionStore } from '@/stores/session';
 import { perfStart } from '@/utils/perf';
+import { getDisclosure, setDisclosure } from '@/utils/disclosureState';
 
 const props = defineProps<{
   toolCalls: ToolCall[];
   toolResponses?: ToolCallResponseEntry[];
   isStreaming?: boolean;
   sessionId?: string;
+  /**
+   * 行级展开状态的持久键前缀（由 TurnItem 传入 `<turnId>\0<itemId>`）。
+   * 有值时展开状态写入模块级 disclosureState，回合被回收重挂后仍保持；
+   * 无值时退回组件本地状态（其他宿主行为不变）。
+   */
+  persistKey?: string;
 }>();
 
 const { t } = useI18n();
@@ -247,9 +254,12 @@ const getActionText = (tool: ToolCall, toolIndex: number): string => {
 // ── 展开/闭合（默认闭合，点击展开）──
 // 例外：独立渲染工具（计划卡、子智能体行等，isStandaloneTool）默认展开——正文就是内容本身，
 // 模型还在写时就要"边写边看"，不该先点一下才可见；用户显式折叠后尊重其选择。
-
-const expandedIndexes = ref<Set<number>>(new Set());
-const collapsedIndexes = ref<Set<number>>(new Set());
+//
+// 状态存放：有 persistKey（由 TurnItem 传入 `<turnId>\0<itemId>`）时写入模块级
+// disclosureState，这样工具行所在的回合被有界窗口回收、重新挂载后仍保持展开；
+// 没有 persistKey 的其他宿主退回组件本地状态，行为不变。
+const localExpanded = ref<Set<number>>(new Set());
+const localCollapsed = ref<Set<number>>(new Set());
 
 /** 默认展开的行：仅独立渲染工具（计划卡/子智能体行等）——正文即内容本身。
  *  带图片的工具行不再默认展开：行头的图片数量徽标已能提示有产出，点击行再看缩略图。 */
@@ -259,9 +269,23 @@ const isDefaultExpandedRow = (index: number): boolean => {
   return isStandaloneTool(tool);
 };
 
+/** 行级持久键：`<persistKey>\0<toolCallId|index>`（同一工具行跨卸载稳定） */
+const rowKey = (index: number): string | null => {
+  if (!props.persistKey) return null;
+  const tool = props.toolCalls[index];
+  const id = tool?.id || `i${index}`;
+  return `${props.persistKey}\u0000${id}`;
+};
+
 const isExpanded = (index: number): boolean => {
-  if (expandedIndexes.value.has(index)) return true;
-  return isDefaultExpandedRow(index) && !collapsedIndexes.value.has(index);
+  const key = rowKey(index);
+  const persisted = key ? getDisclosure(key) : undefined;
+  if (persisted !== undefined) return persisted;
+  if (!key) {
+    if (localExpanded.value.has(index)) return true;
+    return isDefaultExpandedRow(index) && !localCollapsed.value.has(index);
+  }
+  return isDefaultExpandedRow(index);
 };
 
 /**
@@ -298,8 +322,14 @@ const toggleExpand = (index: number): void => {
   // 已跳过的工具（参数被截断）没有可展开内容：参数原文不渲染，只留状态占位
   if (props.toolCalls[index]?.outcome === 'skipped') return;
   const nowExpanded = isExpanded(index);
-  const nextExpanded = new Set(expandedIndexes.value);
-  const nextCollapsed = new Set(collapsedIndexes.value);
+  const key = rowKey(index);
+  if (key) {
+    // 写用户选择：显式值优先于「独立工具行默认展开」的派生结果
+    setDisclosure(key, !nowExpanded);
+    return;
+  }
+  const nextExpanded = new Set(localExpanded.value);
+  const nextCollapsed = new Set(localCollapsed.value);
   if (nowExpanded) {
     nextExpanded.delete(index);
     nextCollapsed.add(index);
@@ -307,8 +337,8 @@ const toggleExpand = (index: number): void => {
     nextExpanded.add(index);
     nextCollapsed.delete(index);
   }
-  expandedIndexes.value = nextExpanded;
-  collapsedIndexes.value = nextCollapsed;
+  localExpanded.value = nextExpanded;
+  localCollapsed.value = nextCollapsed;
 };
 
 /** 结果取后端返回的工具结果：按 toolCallId 优先匹配（并行调用结果到达顺序不保证与
