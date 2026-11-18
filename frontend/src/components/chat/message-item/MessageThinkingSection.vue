@@ -2,27 +2,27 @@
   <div class="process-section thinking-section">
     <!-- 标题行：与工具调用行同构的单行步骤（图标 + 动作文案 + 摘要 + 箭头） -->
     <div
-      class="group thinking-section__header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
+      class="thinking-row group thinking-section__header flex items-center text-sm text-(--gd-color-text-subtle) cursor-pointer transition-colors duration-200 min-w-0"
       @click.stop="handleToggle">
-      <ThinkingIcon :active="isThinking" class="w-4 h-4 shrink-0" />
-      <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
-        <span class="shrink-0 text-gray-700 dark:text-gray-300 font-medium"
+      <ThinkingIcon :active="isThinking" class="thinking-icon w-4 h-4 shrink-0" />
+      <div class="ml-2 min-w-0 flex-1 flex items-center overflow-hidden">
+        <span class="shrink-0"
           :class="{ 'shimmer-text': isThinking }">{{ isThinking ? t('chat.turn.thinkingActive') : t('chat.turn.thinkingDone') }}</span>
         <!-- 摘要：思考内容最后一行，仅思考中实时跟随；结束后只剩「已思考 + 时长」 -->
         <span v-if="isThinking && previewText" class="text-sm ml-2 truncate shimmer-text">{{ previewText }}</span>
-        <span v-if="thinkingDuration" class="shrink-0 text-xs text-gray-400 ml-2">
+        <span v-if="thinkingDuration" class="shrink-0 text-xs text-(--gd-color-text-subtlest) ml-2">
           {{ formattedDuration }}
         </span>
       </div>
       <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示 -->
-      <ChevronDown12Regular class="w-3 h-3 shrink-0 ml-2 text-gray-400 transition-all duration-200"
+      <ChevronDown12Regular class="w-4 h-4 shrink-0 ml-2 text-(--gd-color-text-subtlest) transition-all duration-200"
         :class="isExpanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 -rotate-90'" />
     </div>
 
     <!-- 内容区：仅展开时渲染；折叠态为纯单行步骤，与工具行完全一致 -->
     <div v-if="isExpanded" class="thinking-section__content-wrapper text-sm">
       <div class="thinking-content">
-      <MarkdownContent @click="handleContentClick" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
+      <MarkdownContent @click="handleContentClick" class="flex-1 markdown-text text-(--gd-color-text-subtlest)"
         :content="reasoningContent" :streaming="isThinking" />
       </div>
     </div>
@@ -137,6 +137,16 @@ const formattedDuration = computed(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column-reverse;
+}
+
+/* 行悬停高亮：整行文字提亮（-webkit-text-fill-color 继承到子文本）。
+   波纹文案自身声明 transparent 填充，优先于继承值，水波纹不受影响。 */
+.thinking-row:hover {
+  -webkit-text-fill-color: var(--gd-color-text);
+}
+
+.thinking-row:hover .thinking-icon {
+  color: var(--gd-color-text);
 }
 
 /* 流式思考中的文字波纹（文案 + 摘要一起波纹，与分组标题 shimmer-text 同款） */

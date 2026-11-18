@@ -75,6 +75,14 @@
   --gd-color-text: #171717;
   --gd-color-text-gray: #666;
   --gd-color-text-disabled: #9ca3af;
+  /* 轨迹行/次要文本三档中性色：strong 是派生基色，subtle/subtlest 按比例取 alpha。
+     主题预设只需覆盖 --gd-color-text-strong，两个派生档自动跟随。 */
+  --gd-color-text-strong: #171717;
+  --gd-color-text-subtle: color-mix(in srgb, var(--gd-color-text-strong) 70%, transparent);
+  --gd-color-text-subtlest: color-mix(in srgb, var(--gd-color-text-strong) 40%, transparent);
+  /* diff 增删行数徽章：与轨迹行配色体系配套的专用色 */
+  --gd-color-diff-added: #1e8a3e;
+  --gd-color-diff-removed: #e03131;
   --gd-color-surface: #fff;
   --gd-color-secondary-surface: var(--gd-color-sidebar-bg);
   /* 轻量填充面（插件卡片等）：从 surface 混入少量 text 派生，
@@ -420,6 +428,12 @@ html.dark {
   --gd-color-text: #f5f5f5;
   --gd-color-text-gray: #b0b0b0;
   --gd-color-text-disabled: #858585;
+  /* 轨迹行三档：暗色派生基色取中性灰而非正文色，subtle≈#888 / subtlest≈#4f4f4f */
+  --gd-color-text-strong: #d4d4d4;
+  --gd-color-text-subtle: color-mix(in srgb, var(--gd-color-text-strong) 60%, transparent);
+  --gd-color-text-subtlest: color-mix(in srgb, var(--gd-color-text-strong) 30%, transparent);
+  --gd-color-diff-added: #46bf72;
+  --gd-color-diff-removed: #ff5c5c;
 
   /* 深色层次：侧栏比内容区亮一档（侧栏 #2b2b2b / 内容 #161616），
      与浅色「侧栏略深」的方向相反，符合「面板浮在深底上」的暗色视觉习惯。 */

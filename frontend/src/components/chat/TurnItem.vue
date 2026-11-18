@@ -92,7 +92,7 @@
               <!-- text-sm（Tailwind v4 = 14px/20px 行盒）：原先的 text-[14px] 只给字号，
                    行盒继承 html{line-height:1.5} = 21px（奇数），图标居中余量会随容器奇偶变半像素 -->
               <div v-if="group.isCollapsible" class="process-group__header text-sm group"
-                :class="{ 'shimmer-text': isGroupBusy(groupIndex), 'text-gray-600 dark:text-gray-400': !isGroupBusy(groupIndex) }"
+                :class="{ 'shimmer-text': isGroupBusy(groupIndex), 'text-(--gd-color-text-subtle)': !isGroupBusy(groupIndex) }"
                 @click="toggleGroup(groupIndex, group)">
                 <template v-for="(parts, _) in [getGroupTitleParts(group, isGroupBusy(groupIndex), isGroupExpanded(groupIndex, group))]" :key="_">
                   <!-- 图标盒 16px（偶数）：20px 行盒内居中余量 2px 整数；奇数盒会得到 X.5px 余量 -->
@@ -100,26 +100,26 @@
                     <!-- <span class="block w-1 h-1 rounded-3xl bg-gray-400 dark:bg-gray-700/50" v-if="!isGroupBusy(groupIndex)"></span> -->
                     <component :is="parts.icon" v-if="!isGroupExpanded(groupIndex, group)"
                       v-bind="parts.icon === ThinkingIcon ? { active: isGroupBusy(groupIndex) } : {}"
-                      class="absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-gray-500" />
+                      class="group-header-icon absolute inset-0 w-4 h-4 transition-opacity duration-200 group-hover:opacity-0 text-(--gd-color-text-subtle)" />
                     <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200"
                       :class="isGroupExpanded(groupIndex, group) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
                       :style="isGroupExpanded(groupIndex, group) ? {} : { transform: 'rotate(-90deg)' }" />
                   </span>
-                  <span class="shrink-0 font-medium ml-1.5">{{ parts.action }}</span>
+                  <span class="shrink-0 ml-1.5">{{ parts.action }}</span>
                   <!-- 文件类工具：文件名 chip（扩展名图标 + basename，hover 全路径）+ 目录串（次要色，优先截断） -->
                   <template v-if="parts.file">
                     <span class="group-file-chip inline-flex min-w-0 max-w-full items-center gap-1 ml-1.5"
                       :class="{ 'is-openable': canOpenGroupFile(parts) }"
                       :title="parts.file.fullPath" @click="onGroupFileClick(parts, $event)">
                       <img :src="getFileIcon(parts.file.fileName)" class="w-4 h-4 shrink-0" alt="" />
-                      <span class="group-file-chip__name min-w-0 truncate text-gray-600 dark:text-gray-300">{{ parts.file.fileName }}</span>
+                      <span class="group-file-chip__name min-w-0 truncate text-(--gd-color-text)">{{ parts.file.fileName }}</span>
                     </span>
-                    <span v-if="parts.file.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-(--gd-color-text-gray)"
+                    <span v-if="parts.file.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-(--gd-color-text-subtlest)"
                       :title="parts.file.fullPath">{{ parts.file.dirPath }}</span>
                   </template>
                   <!-- 其余工具：单行参数摘要 -->
                   <span v-else-if="parts.args" class="text-sm truncate ml-1.5"
-                    :class="{ 'text-gray-400 dark:text-gray-400': !isGroupBusy(groupIndex) }">{{ parts.args }}</span>
+                    :class="{ 'text-(--gd-color-text-subtle)': !isGroupBusy(groupIndex) }">{{ parts.args }}</span>
                 </template>
               </div>
               <!-- 分组内容 -->
@@ -224,7 +224,8 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onBeforeUnmount, inject, type Component } from "vue";
 import { useI18n } from "vue-i18n";
-import { Alert16Regular, Wrench24Filled, ChevronDown12Regular, BookOpen16Regular } from "@vicons/fluent";
+import { Alert16Regular, ChevronDown12Regular, BookOpen16Regular } from "@vicons/fluent";
+import { ToolGenericIcon } from '@/components/icons/toolIcons';
 import ThinkingIcon from '@/components/icons/ThinkingIcon.vue';
 import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
@@ -555,7 +556,7 @@ const getActiveStatusParts = (executing: ToolCall[]): { icon: Component; text: s
         || t('chat.turn.executingSteps', { n: executing.length }),
     };
   }
-  return { icon: Wrench24Filled, text: t('chat.turn.executingSteps', { n: executing.length }) };
+  return { icon: ToolGenericIcon, text: t('chat.turn.executingSteps', { n: executing.length }) };
 };
 
 /**
@@ -606,7 +607,7 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
     }
     // 已结束：有工具显示工具步骤总数；纯思考显示思考态
     if (toolSteps > 0) {
-      return { icon: Wrench24Filled, action: t('chat.turn.executedSteps', { n: toolSteps }), args: '' };
+      return { icon: ToolGenericIcon, action: t('chat.turn.executedSteps', { n: toolSteps }), args: '' };
     }
     return { icon: ThinkingIcon, action: t('chat.turn.thinkingDone'), args: '' };
   }
@@ -638,7 +639,7 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
         fileOpenable: false,
       };
     }
-    return { icon: Wrench24Filled, action: t('chat.turn.executingSteps', { n: executing.length }), args: '' };
+    return { icon: ToolGenericIcon, action: t('chat.turn.executingSteps', { n: executing.length }), args: '' };
   }
 
   // 收起态：纯思考，或工具已完成、当前正在思考 → 思考态（只有这种时候才显示思考）
@@ -681,7 +682,7 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
   }
 
   // 混合工具 — 通用图标
-  return { icon: Wrench24Filled, action: t('chat.turn.executedSteps', { n: toolSteps }), args: '' };
+  return { icon: ToolGenericIcon, action: t('chat.turn.executedSteps', { n: toolSteps }), args: '' };
 };
 
 /** 收起态分组标题文件名：可打开时阻止冒泡开预览，否则让点击展开分组 */
@@ -1128,7 +1129,14 @@ html.gd-resizing-moved .turn-wrapper:not(.turn-wrapper--no-cv) {
   display: none;
 }
 
-.process-group__header:hover {
+/* 行悬停高亮：整行文字提亮（text-fill 可继承，子文本随之变亮）。
+   忙碌态由 shimmer-text 自身声明透明填充，波纹不受影响，故排除该状态。 */
+.process-group__header:not(.shimmer-text):hover {
+  color: var(--gd-color-text);
+  -webkit-text-fill-color: var(--gd-color-text);
+}
+
+.process-group__header:not(.shimmer-text):hover .group-header-icon {
   color: var(--gd-color-text);
 }
 

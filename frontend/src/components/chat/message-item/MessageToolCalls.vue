@@ -5,16 +5,16 @@
       <!-- 通用工具头部：状态图标 + 状态文案 + 参数摘要 + 折叠开关。
            独立渲染行（计划卡等）不渲染——整行只有卡片，状态由卡片头部徽标表达。 -->
       <div v-if="!standaloneRows[toolIndex]"
-        class="group flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
+        class="tool-call-row group flex items-center text-sm text-(--gd-color-text-subtle) cursor-pointer transition-colors duration-200 min-w-0"
         @click.stop="toggleExpand(toolIndex)">
         <component v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" :is="getToolIcon(tool)"
-          class="w-4 h-4 shrink-0" style="color: #f56c6c;" />
+          class="tool-call-icon w-4 h-4 shrink-0" style="color: var(--gd-color-danger);" />
         <component v-else-if="tool.outcome === 'aborted' || tool.outcome === 'skipped'" :is="getToolIcon(tool)"
-          class="w-4 h-4 shrink-0" style="color: #c0c4cc;" />
-        <component v-else :is="getToolIcon(tool)" class="w-4 h-4 shrink-0 text-gray-500" />
-        <div class="ml-1.5 min-w-0 flex-1 flex items-center text-gray-400 dark:text-gray-500 overflow-hidden">
+          class="tool-call-icon w-4 h-4 shrink-0" style="color: var(--gd-color-text-subtlest);" />
+        <component v-else :is="getToolIcon(tool)" class="tool-call-icon w-4 h-4 shrink-0 text-(--gd-color-text-subtle)" />
+        <div class="ml-2 min-w-0 flex-1 flex items-center overflow-hidden">
           <span class="shrink-0"
-            :class="tool.outcome === 'aborted' ? 'text-gray-400 dark:text-gray-500 font-medium' : 'text-gray-700 dark:text-gray-300 font-medium'">{{
+            :class="tool.outcome === 'aborted' ? 'text-(--gd-color-text-subtlest)' : ''">{{
               getActionText(tool, toolIndex) }}</span>
           <!-- 文件类工具：三段式行头（ZCode 同款）——文件名 chip（扩展名图标 + basename，
                优先显示、hover 看全路径）+ 目录串（带尾斜杠，次要色，优先被截断） -->
@@ -25,9 +25,9 @@
               :title="rowDisplays[toolIndex].file!.fullPath"
               @click="openToolFile(toolIndex, $event)">
               <img :src="rowDisplays[toolIndex].fileIcon" class="w-4 h-4 shrink-0" alt="" />
-              <span class="tool-file-chip__name min-w-0 truncate text-gray-600 dark:text-gray-300">{{ rowDisplays[toolIndex].file!.fileName }}</span>
+              <span class="tool-file-chip__name min-w-0 truncate text-(--gd-color-text)">{{ rowDisplays[toolIndex].file!.fileName }}</span>
             </span>
-            <span v-if="rowDisplays[toolIndex].file!.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-gray-400 dark:text-gray-500"
+            <span v-if="rowDisplays[toolIndex].file!.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-(--gd-color-text-subtlest)"
               :title="rowDisplays[toolIndex].file!.fullPath">{{ rowDisplays[toolIndex].file!.dirPath }}</span>
           </template>
           <!-- 其余工具：单行参数摘要（原样/计数，可截断） -->
@@ -40,8 +40,8 @@
           </span>
           <!-- diff 类工具的增删行数徽章 -->
           <span v-if="rendererStat(toolIndex)" class="ml-2 shrink-0 font-mono text-xs flex items-center gap-1.5">
-            <span v-if="rendererStat(toolIndex)!.added" style="color: var(--gd-color-success)">+{{ rendererStat(toolIndex)!.added }}</span>
-            <span v-if="rendererStat(toolIndex)!.removed" style="color: var(--gd-color-danger)">−{{ rendererStat(toolIndex)!.removed }}</span>
+            <span v-if="rendererStat(toolIndex)!.added" class="keep-color" style="color: var(--gd-color-diff-added)">+{{ rendererStat(toolIndex)!.added }}</span>
+            <span v-if="rendererStat(toolIndex)!.removed" class="keep-color" style="color: var(--gd-color-diff-removed)">−{{ rendererStat(toolIndex)!.removed }}</span>
           </span>
         </div>
         <!-- 子代理工具：打开对应子代理会话的面板（点击不触发行展开；
@@ -55,7 +55,7 @@
         </GdTooltip>
         <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示。
              已跳过的工具没有可展开内容（参数原文不渲染），不显示箭头。 -->
-        <ChevronDown12Regular v-if="tool.outcome !== 'skipped'" class="w-3 h-3 shrink-0 ml-2 text-gray-400 transition-all duration-200"
+        <ChevronDown12Regular v-if="tool.outcome !== 'skipped'" class="w-4 h-4 shrink-0 ml-2 text-(--gd-color-text-subtlest) transition-all duration-200"
           :class="isExpanded(toolIndex) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 -rotate-90'" />
       </div>
 
@@ -73,7 +73,7 @@
              独立渲染行不显示——其失败/拒绝状态由卡片头部徽标承担 -->
         <div v-if="!standaloneRows[toolIndex] && (tool.outcome === 'error' || tool.outcome === 'rejected')"
           class="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
-          <ErrorCircle16Regular class="w-3.5 h-3.5" style="color:#f56c6c" />
+          <ErrorCircle16Regular class="w-3.5 h-3.5" style="color: var(--gd-color-danger)" />
           <span class="ml-1.5">{{ t('chat.toolCalls.resultFailed') }}</span>
         </div>
 
@@ -637,6 +637,21 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   color: var(--gd-color-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* 行悬停高亮：整行文字提亮（-webkit-text-fill-color 会继承到子文本）。
+   水波纹文案自身声明了 transparent 填充，优先于继承值，波纹不受影响；
+   .keep-color 保住 diff 增删色不被提亮覆盖。 */
+.tool-call-row:hover {
+  -webkit-text-fill-color: var(--gd-color-text);
+}
+
+.tool-call-row:hover .keep-color {
+  -webkit-text-fill-color: currentColor;
+}
+
+.tool-call-row:hover .tool-call-icon {
+  color: var(--gd-color-text);
 }
 
 </style>
