@@ -22,6 +22,7 @@ import {
   type JobOutcome,
   type JobOutputRead,
   type JobReadOptions,
+  type JobSendResult,
   type JobSettledEvent,
   type JobSnapshot,
   type JobStartSpec,
@@ -411,18 +412,24 @@ export class JobRegistryService
   }
 
   /**
-   * 向运行中的作业投递**原始输入**（字节流类写 stdin / 子 Agent 继续对话）。
-   * 换行与控制字符由调用方自带：registry 不做任何协议层加工，保持通用。
+   * 向运行中的作业投递**原始输入**（字节流类写 stdin / 子 Agent 运行中注入步边界、
+   * 空闲开新回合）。换行与控制字符由调用方自带：registry 不做任何协议层加工，保持通用。
    * 作业未声明 send 时明确报错，让模型换用对应的能力，而不是静默丢弃。
+   * hook 返回 JobSendResult 时透传投递语义，返回 void 视为 delivered。
    */
-  async send(id: JobId, sessionId: string, input: string): Promise<void> {
+  async send(id: JobId, sessionId: string, input: string): Promise<JobSendResult> {
     const record = this.getRecord(id, sessionId);
     if (!record.spec.send) {
       throw new Error(
         `job ${id} (kind: ${record.spec.kind}) does not support send`,
       );
     }
-    await record.spec.send(input);
+    const result = await record.spec.send(input);
+    // hook 可能返回 void（字节流类）或 JobSendResult；归一化后者，缺省视为 delivered
+    if (result && typeof result === "object" && "delivery" in result) {
+      return result;
+    }
+    return { delivery: "delivered" };
   }
 
   list(sessionId: string): JobSnapshot[] {

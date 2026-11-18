@@ -50,7 +50,12 @@ export type QueueSource =
    * 会话目标自动续跑：校验器判未完成后入队的下一轮指令。
    * hidden:true 会随 source 合并进 userMessage.metadata，前端据此隐藏该消息。
    */
-  | { kind: "goal"; goalId?: string; iteration?: number; hidden?: boolean; [key: string]: any };
+  | { kind: "goal"; goalId?: string; iteration?: number; hidden?: boolean; [key: string]: any }
+  /**
+   * 协调者投递（主 Agent → 运行中子会话的兜底路径）：目标忙且非 manager 跟踪时，
+   * SubAgentManager.deliver 走 enqueueMessage 入队，当前流结束后开新回合投递。
+   */
+  | { kind: "coordinator"; senderSessionId?: string; [key: string]: any };
 
 /**
  * QueueSource → MessageSource（P4b：队列来源真正进入三层消息的 source）
@@ -81,6 +86,14 @@ export function toMessageSource(
     case "goal":
       // 目标续跑：模型可见但前端隐藏（metadata.hidden 由 startStream 合并 source 时写入）
       return { kind: "plugin", plugin: "goal" };
+    case "coordinator":
+      // 协调者投递：结构化来源进 MessageSource，前端可按 coordinator 样式渲染
+      return {
+        kind: "coordinator",
+        ...(source.senderSessionId
+          ? { senderSessionId: source.senderSessionId }
+          : {}),
+      };
     default:
       return undefined;
   }

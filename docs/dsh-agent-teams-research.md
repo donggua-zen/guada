@@ -279,7 +279,7 @@ const ready = tasks.filter(t => t.status === 'pending'
 | --- | --- | --- | --- |
 | 队长 | 当前会话 | 任意会话 | ✅ 无需改 |
 | 成员 | `startContinuable` + persona + toolFilter + 独立路由 | `SubAgentManager.spawn(agentId, lifecycle)` | 缺 **persona 注入**、**per-member 工具过滤**、**可续聊 + 空闲唤醒** |
-| 唤醒 | `followup queue/steer`，运行中可插入 | `sendMessage` 仅允许 idle，运行中直接报错 | 需增加 inbox + 步边界准入 / steer |
+| 唤醒 | `followup queue/steer`，运行中可插入 | ~~`sendMessage` 仅允许 idle，运行中直接报错~~ 已补齐（2026-11-17）：`SubAgentManager.deliver` — 运行中进 steer inbox，`PRE_STEP` 步边界同轮注入；空闲解冻开新回合 | ✅ inbox + 步边界 steer 已落地（`deliver` / `handleSubAgentPreStep` / `runSubAgentRounds`） |
 | 状态边沿 | `agent/status` idle/running | 有 settle 事件与 `isSubAgentRunning` | 需补 **idle/running 事件总线** |
 | 工具面 | 14 个工具 + `tools.restrict` | 插件 toolkit + 智能体级 toolkit 过滤（`applyRoleLayer`） | 缺**会话级临时过滤器**；可用"临时 agent 配置"绕 |
 | 状态持久化 | 工作区 JSON + JSONL | JSONL 事件溯源 + DB 元数据 + `.guada/` 目录 | ✅ 基础更好，可放 `.guada/teams/` |
@@ -301,7 +301,7 @@ const ready = tasks.filter(t => t.status === 'pending'
 
 1. 新模块 `backend-ts/src/modules/team/`：`team.store.ts`（`<workspace>/.guada/teams/<teamId>/team.json` + `inbox/*.jsonl`）、`team.scheduler.ts`、`team.mailbox.ts`。
 2. 复用 `SubAgentManager.spawn(..., lifecycle="persist")`；在 `settle`/`spawn` 处补发 `team/member-idle|running` 事件。
-3. 给 `SubAgentManager` 增加 `deliver(sessionId, text, mode: queue|steer)`：idle 走现有 `sendMessage`，running 走"下一步注入"（可先落 inbox，在 `executeSubAgentStream` 的步边界消费）。
+3. ~~给 `SubAgentManager` 增加 `deliver(sessionId, text, mode: queue|steer)`~~ **已落地（2026-11-17）**：`deliver({parentSessionId, sessionId, message})` — running 进 inbox 由 `PRE_STEP` 步边界消费，idle 走现有 `sendMessage`；job_send 经 `JobSendResult` 拿到 `steered/queued/started` 回执。
 4. 工具面先做 6 个：`team_create / team_add_member / team_create_task / team_claim_task / team_update_task / team_send_message / team_status`。
 5. 调度触发点：任务图变更 + 成员 idle 事件；所有写操作走 `withTeamLock`。
 

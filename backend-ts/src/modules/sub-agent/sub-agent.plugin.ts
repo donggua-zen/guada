@@ -266,7 +266,8 @@ Foreground (default) blocks until done and returns the result. Background mode r
           "",
           "### 5. Critical Operational Guidelines (Cautions)",
           "   - Boundary isolation: When splitting tasks, the boundaries must be absolutely clear. It is strictly forbidden to assign the same file to multiple sub-agents for modification, or to have overlapping responsibilities among different sub-agents.",
-          "   - Resource release: A sub-agent's session is automatically closed (frozen, kept for replay) once its result is delivered to you — no close call is ever needed. To continue interacting with a background sub-agent, use job_send on its Job ID; it resumes automatically.",
+          "   - Resource release: A sub-agent's session is automatically closed (frozen, kept for replay) once its result is delivered to you — no close call is ever needed. To interact with a background sub-agent, use job_send on its Job ID: while it is running, the message is injected at its next step boundary (between tool calls) without interrupting the current turn; when it has finished, it resumes automatically with a new turn.",
+          "   - Steering timing: job_send to a running sub-agent takes effect only at its next step boundary — a message cannot unstick a sub-agent blocked inside one long tool call; use job_stop only if you want to end it.",
           "   - Transparency management: Users cannot see the internal interaction logs between you and the sub-agents. You must not assume that users are aware of execution details. Ultimately, you must summarize and distill the results of sub-tasks and present them to the user in a clear, structured form.",
         ];
 

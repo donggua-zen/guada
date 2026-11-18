@@ -615,6 +615,227 @@ describe("SubAgentManager", () => {
     });
   });
 
+  describe("deliver / steer inbox", () => {
+    /** 后台长跑流（手动 onComplete 结束），返回每一轮的回调 */
+    function manualStream(chatRunner: FakeChatRunner): any[] {
+      const rounds: any[] = [];
+      chatRunner.startStreamImpl = (_p, cb) => {
+        rounds.push(cb);
+        return new Promise<void>(() => undefined);
+      };
+      return rounds;
+    }
+
+    async function spawnRunningBackground(ctx: ReturnType<typeof setup>) {
+      manualStream(ctx.chatRunner);
+      await ctx.manager.spawn(
+        { parentContext: createFakeParentContext(), name: "长跑", task: "t" },
+        "background",
+      );
+      await until(() => ctx.chatRunner.activeStreams.has("sub-1"));
+    }
+
+    it("运行中的子代理 deliver → steered，不产生第二次 startStream", async () => {
+      const ctx = setup();
+      await spawnRunningBackground(ctx);
+
+      const receipt = await ctx.manager.deliver({
+        parentSessionId: "parent-1",
+        sessionId: "sub-1",
+        message: "补充指令",
+      });
+
+      expect(receipt).toMatchObject({
+        subSessionId: "sub-1",
+        delivery: "steered",
+        pending: 1,
+      });
+      expect(ctx.chatRunner.startStreamCalls).toHaveLength(1);
+    });
+
+    it("PRE_STEP 消费 steer inbox：注入隐藏 user 消息并清空", async () => {
+      const ctx = setup();
+      await spawnRunningBackground(ctx);
+      await ctx.manager.deliver({
+        parentSessionId: "parent-1",
+        sessionId: "sub-1",
+        message: "先看 X",
+      });
+
+      const injectUserPrompt = jest.fn().mockResolvedValue(undefined);
+      const sessionContext = { sessionId: "sub-1", sessionType: "sub_agent", injectUserPrompt };
+      await ctx.manager.handleSubAgentPreStep({ sessionContext } as any);
+
+      expect(injectUserPrompt).toHaveBeenCalledTimes(1);
+      const [text, plugin] = injectUserPrompt.mock.calls[0];
+      expect(plugin).toBe("subagent_steer");
+      expect(text).toContain("先看 X");
+      expect(text).toContain("<system_reminder>");
+
+      // 第二次 PRE_STEP：inbox 已空，不注入
+      await ctx.manager.handleSubAgentPreStep({ sessionContext } as any);
+      expect(injectUserPrompt).toHaveBeenCalledTimes(1);
+    });
+
+    it("非子会话的 PRE_STEP 不注入", async () => {
+      const ctx = setup();
+      await spawnRunningBackground(ctx);
+      await ctx.manager.deliver({
+        parentSessionId: "parent-1",
+        sessionId: "sub-1",
+        message: "hi",
+      });
+
+      const injectUserPrompt = jest.fn().mockResolvedValue(undefined);
+      await ctx.manager.handleSubAgentPreStep({
+        sessionContext: { sessionId: "sub-1", sessionType: "web", injectUserPrompt },
+      } as any);
+
+      expect(injectUserPrompt).not.toHaveBeenCalled();
+    });
+
+    it("注入失败时消息放回队首（不丢）", async () => {
+      const ctx = setup();
+      await spawnRunningBackground(ctx);
+      await ctx.manager.deliver({
+        parentSessionId: "parent-1",
+        sessionId: "sub-1",
+        message: "先看 X",
+      });
+
+      const failing = jest.fn().mockRejectedValueOnce(new Error("db fail"));
+      await ctx.manager.handleSubAgentPreStep({
+        sessionContext: { sessionId: "sub-1", sessionType: "sub_agent", injectUserPrompt: failing },
+      } as any);
+
+      // 修复后重试：消息仍在，可再次注入
+      const injectUserPrompt = jest.fn().mockResolvedValue(undefined);
+      await ctx.manager.handleSubAgentPreStep({
+        sessionContext: { sessionId: "sub-1", sessionType: "sub_agent", injectUserPrompt },
+      } as any);
+      expect(injectUserPrompt).toHaveBeenCalledTimes(1);
+      expect(injectUserPrompt.mock.calls[0][0]).toContain("先看 X");
+    });
+
+    it("回合结束后残留 inbox → 兜底开新回合消化，最终结果取最后一轮", async () => {
+      const ctx = setup();
+      const rounds = manualStream(ctx.chatRunner);
+      await ctx.manager.spawn(
+        { parentContext: createFakeParentContext(), name: "长跑", task: "t" },
+        "background",
+      );
+      await until(() => ctx.chatRunner.activeStreams.has("sub-1"));
+
+      await ctx.manager.deliver({
+        parentSessionId: "parent-1",
+        sessionId: "sub-1",
+        message: "补充指令",
+      });
+
+      // 结束第一轮 → rounds 兜底应开第二回合，内容为 steer 消息
+      rounds[0].onComplete("completed");
+      ctx.chatRunner.finishStream("sub-1");
+      await until(() => ctx.chatRunner.startStreamCalls.length === 2);
+
+      expect(ctx.chatRunner.startStreamCalls[1].params).toMatchObject({ sessionId: "sub-1" });
+      expect(ctx.chatRunner.startStreamCalls[1].params.userMessage.content).toBe("补充指令");
+
+      // 结束第二轮 → run 收尾（无等待者、无 job → 信箱回退给父会话）
+      rounds[1].onComplete("completed");
+      ctx.chatRunner.finishStream("sub-1");
+      await until(() => ctx.chatRunner.enqueued.length === 1);
+      expect(ctx.chatRunner.enqueued[0].sessionId).toBe("parent-1");
+    });
+
+    it("空闲子代理 deliver → started（解冻 + 新回合，阻塞至完成）", async () => {
+      const ctx = setup();
+      ctx.sessionStore.seed({
+        id: "sub-9",
+        parentId: "parent-1",
+        title: "既有子代理",
+        closedAt: new Date(),
+      });
+      completesImmediately(ctx.chatRunner);
+
+      const receipt = await ctx.manager.deliver({
+        parentSessionId: "parent-1",
+        sessionId: "sub-9",
+        message: "继续",
+      });
+
+      expect(receipt.delivery).toBe("started");
+      expect(receipt.result).toMatchObject({ subSessionId: "sub-9", status: "completed" });
+      // 解冻已发生
+      expect(
+        ctx.sessionStore.updateCalls.find(
+          (u) => u.id === "sub-9" && u.patch.closedAt === null,
+        ),
+      ).toBeTruthy();
+    });
+
+    it("非 manager 跟踪但会话有活跃流 → queued（转入会话队列，不开新流）", async () => {
+      const ctx = setup();
+      ctx.sessionStore.seed({
+        id: "sub-9",
+        parentId: "parent-1",
+        title: "既有子代理",
+        closedAt: null,
+      });
+      ctx.chatRunner.activeStreams.add("sub-9");
+
+      const receipt = await ctx.manager.deliver({
+        parentSessionId: "parent-1",
+        sessionId: "sub-9",
+        message: "hi",
+      });
+
+      expect(receipt.delivery).toBe("queued");
+      expect(ctx.chatRunner.startStreamCalls).toHaveLength(0);
+      expect(ctx.chatRunner.enqueued).toHaveLength(1);
+      expect(ctx.chatRunner.enqueued[0].source).toMatchObject({
+        kind: "coordinator",
+        senderSessionId: "parent-1",
+      });
+    });
+
+    it("close/kill 清空 steer inbox（不再开新轮）", async () => {
+      const ctx = setup();
+      const rounds = manualStream(ctx.chatRunner);
+      await ctx.manager.spawn(
+        { parentContext: createFakeParentContext(), name: "长跑", task: "t" },
+        "background",
+      );
+      await until(() => ctx.chatRunner.activeStreams.has("sub-1"));
+      await ctx.manager.deliver({
+        parentSessionId: "parent-1",
+        sessionId: "sub-1",
+        message: "补充指令",
+      });
+
+      await ctx.manager.closeSubAgent("sub-1", "parent-1", "D:/ws");
+
+      // 第一轮结束后：inbox 已被 close 清空 → 不开第二回合
+      rounds[0].onComplete("completed");
+      ctx.chatRunner.finishStream("sub-1");
+      await new Promise((r) => setTimeout(r, 30));
+      expect(ctx.chatRunner.startStreamCalls).toHaveLength(1);
+    });
+
+    it("job_send hook 走 deliver：运行中返回 steered 投递语义", async () => {
+      const ctx = setup({ withRegistry: true });
+      manualStream(ctx.chatRunner);
+      const spawned = await ctx.manager.spawn(
+        { parentContext: createFakeParentContext(), name: "长跑", task: "t" },
+        "background",
+      );
+      await until(() => ctx.chatRunner.activeStreams.has("sub-1"));
+
+      const receipt = await ctx.registry!.send(spawned.jobId!, "parent-1", "补充");
+
+      expect(receipt.delivery).toBe("steered");
+    });
+  });
+
   describe("waitForComplete", () => {
     it("已有完成结果时立即返回并清空队列", async () => {
       const { manager, chatRunner } = setup();

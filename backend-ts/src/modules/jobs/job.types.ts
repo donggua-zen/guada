@@ -131,6 +131,22 @@ export interface JobOutcome {
   exitCode?: number | null;
 }
 
+/**
+ * send 的投递语义（对齐 zcode SendMessage 的 delivery）
+ *
+ * - delivered：已原样投递（字节流类写 stdin；hook 未返回结构化结果时的缺省）
+ * - steered：目标正运行，消息已进入其运行中回合，在下一个步边界注入（不打断）
+ * - queued：目标忙但暂不可注入，消息入队，当前回合结束后投递
+ * - started：目标空闲，已开启新回合并等待其完成
+ */
+export type JobSendDelivery = "delivered" | "steered" | "queued" | "started";
+
+export interface JobSendResult {
+  delivery: JobSendDelivery;
+  /** 附加说明（队列深度等），供工具回执拼装 */
+  detail?: string;
+}
+
 export interface JobStartSpec {
   kind: JobKind;
   label: string;
@@ -148,10 +164,11 @@ export interface JobStartSpec {
   cancel: (reason?: string) => void | Promise<void>;
   /**
    * 可选：向运行中的作业投递**原始输入**。字节流类（shell / remote-shell / pty）直接写
-   * stdin——换行与控制字符由调用方自带，执行器不做协议层加工；子代理类作为追加消息。
+   * stdin——换行与控制字符由调用方自带，执行器不做协议层加工；子代理类运行中注入
+   * 步边界、空闲开新回合。可返回 JobSendResult 描述投递语义（缺省视为 delivered）。
    * 缺省表示该类作业不支持 send（registry 会明确报错，而不是静默丢弃）。
    */
-  send?: (input: string) => Promise<void>;
+  send?: (input: string) => Promise<JobSendResult | void>;
   /** 结果已被 read/wait/consume 交付，或 kill 主动抑制通知；只调用一次 */
   onReported?: () => void;
   /** 终态 job 被 TTL 清理或 disposeSession 移除；只调用一次 */

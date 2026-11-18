@@ -369,6 +369,52 @@ describe("JobsPlugin", () => {
     expect(text).not.toContain("no trailing newline");
   });
 
+  it("job_send 子代理 steered 回执（运行中注入步边界）", async () => {
+    const send = jest.fn(async () => ({ delivery: "steered", detail: "(pending 2)" }));
+    const { spec } = makeSpec({ kind: "subagent", handle: "sub-1", send });
+    const id = registry.start(spec) as JobId;
+
+    const text = await tools.get("job_send").execute(
+      { job_id: id, input: "补充指令" },
+      ctx,
+    );
+
+    // "补充指令" = 12 字节
+    expect(text).toContain(`steered 12 bytes into job ${id}'s running turn`);
+    expect(text).toContain("next step boundary");
+    expect(text).toContain("(pending 2)");
+    expect(text).not.toContain("no trailing newline");
+  });
+
+  it("job_send 子代理 queued 回执（当前回合结束后投递）", async () => {
+    const send = jest.fn(async () => ({ delivery: "queued" }));
+    const { spec } = makeSpec({ kind: "subagent", handle: "sub-1", send });
+    const id = registry.start(spec) as JobId;
+
+    const text = await tools.get("job_send").execute(
+      { job_id: id, input: "hi" },
+      ctx,
+    );
+
+    expect(text).toContain(`queued 2 bytes for job ${id}`);
+    expect(text).toContain("delivered after the current turn");
+  });
+
+  it("job_send 子代理 started 回执（空闲开新回合，指引 job_read）", async () => {
+    const send = jest.fn(async () => ({ delivery: "started" }));
+    const { spec } = makeSpec({ kind: "subagent", handle: "sub-1", send });
+    const id = registry.start(spec) as JobId;
+
+    const text = await tools.get("job_send").execute(
+      { job_id: id, input: "继续" },
+      ctx,
+    );
+
+    expect(text).toContain(`sent 6 bytes to job ${id}`);
+    expect(text).toContain("a new turn completed");
+    expect(text).toContain(`Use job_read ${id} to read the reply`);
+  });
+
   it("job_send 对不支持的作业明确报错", async () => {
     const { spec } = makeSpec(); // 无 send
     const id = registry.start(spec) as JobId;

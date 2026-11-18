@@ -598,7 +598,7 @@ cd guada-agent && go test ./...
 
 ### 12.5 已知限制
 
-- 【TODO·待定】子 Agent 的 `job_send` 在运行中报错（只支持空闲时开新回合）。补齐方式是 DSH/zcode 式步边界注入（steer）：消息进收件箱，在子 Agent 的两次工具调用之间注入上下文同轮转向。属低频场景，暂不排期，需要时再按 dsh-agent-teams-research.md §282 的差距记录实施。
+- ~~【TODO·待定】子 Agent 的 `job_send` 在运行中报错~~ **已解决（2026-11-17）**：`job_send` 走 `SubAgentManager.deliver`——运行中进 steer inbox，`PRE_STEP` 钩子在两次工具调用之间同轮注入（回执 `steered`）；最后窗口到达的由 `runSubAgentRounds` 兜底开新回合；空闲仍解冻开新回合（回执 `started`，阻塞至完成）。已知限制：卡在单个长工具里时要等该工具返回，只能 `job_stop`。
 - `waitForComplete`/`getSubAgents` 方法保留（测试与内部诊断仍在用），只是不再有模型工具调用它们。
 - 历史会话回放：旧文案的 processId 仍能解析展示，但新会话不再产生 processId 文案。
 

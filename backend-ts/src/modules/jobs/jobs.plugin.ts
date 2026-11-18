@@ -173,7 +173,7 @@ export class JobsPlugin extends PluginBase {
 
 - Shell / remote-shell / pty jobs: \`input\` is written to the process's stdin **verbatim** — include a trailing "\\n" yourself when the program expects a line (most interactive prompts wait for Enter).
 - stdin here is a pipe, not a terminal: "\\x04" (Ctrl-D) does not produce EOF and "\\x03" (Ctrl-C) does not raise SIGINT — use job_stop to end an interactive program.
-- Sub-agent jobs: the input is delivered as a follow-up message; a finished sub-agent resumes automatically. Blocks until the sub-agent's reply for this turn is ready.
+- Sub-agent jobs: for a **running** sub-agent the message is queued into its current turn and injected at its next step boundary (between tool calls) — it does NOT interrupt the current tool or reply; the receipt says "steered". If the sub-agent is stuck inside one long tool call, the message waits until that call returns — use job_stop only if you want to end it. A finished sub-agent resumes automatically with a new turn (receipt says "started", blocks until the reply is ready); read replies with job_read.
 - Other job kinds do not accept input and fail with a clear error.`,
       inputSchema: z.object({
         job_id: z.string().describe("Job id returned by the tool that started the background work."),
@@ -193,13 +193,23 @@ export class JobsPlugin extends PluginBase {
         if (!job) {
           return `job ${args.job_id} is no longer available`;
         }
-        await this.registry.send(jobId, sessionId, args.input);
+        const receipt = await this.registry.send(jobId, sessionId, args.input);
         // 回执按真实写入字节数（UTF-8）：中文/emoji 的字符数与字节数不等。
         const bytes = Buffer.byteLength(args.input, "utf8");
         const hint = this.needsNewlineHint(job, args.input)
           ? `\n[note: no trailing newline was sent — most interactive programs wait for Enter; include "\\n" in input if it should run]`
           : "";
-        return `sent ${bytes} bytes to job ${job.id}${hint}`;
+        const detail = receipt.detail ? ` ${receipt.detail}` : "";
+        switch (receipt.delivery) {
+          case "steered":
+            return `steered ${bytes} bytes into job ${job.id}'s running turn; it will see the message at its next step boundary.${detail}${hint}`;
+          case "queued":
+            return `queued ${bytes} bytes for job ${job.id}; it will be delivered after the current turn.${detail}${hint}`;
+          case "started":
+            return `sent ${bytes} bytes to job ${job.id}; a new turn completed. Use job_read ${job.id} to read the reply.${detail}${hint}`;
+          default:
+            return `sent ${bytes} bytes to job ${job.id}${hint}`;
+        }
       },
       display: {
         actionType: "process",
@@ -216,7 +226,7 @@ export class JobsPlugin extends PluginBase {
 
 - Tools that start background work return a stable **job id**. Track it.
 - The system notifies you in-session when a job finishes; do not busy-poll or sleep on it.
-- job_list shows this session's jobs; job_read returns the output since your last read (pass wait_ms only when genuinely blocked); job_send feeds input verbatim — include "\n" yourself for keyboard-style input (shell stdin, or a follow-up message that resumes a sub-agent); job_stop cancels work that no longer matters. job_read keeps only the newest 64 KB when more is waiting — the note says how much was skipped, and the full log is at the given path.
+- job_list shows this session's jobs; job_read returns the output since your last read (pass wait_ms only when genuinely blocked); job_send feeds input verbatim — include "\n" yourself for keyboard-style input (shell stdin; a sub-agent receives it at its next step boundary without interrupting, and a finished one resumes with a new turn); job_stop cancels work that no longer matters. job_read keeps only the newest 64 KB when more is waiting — the note says how much was skipped, and the full log is at the given path.
 - Before giving a final answer, collect every still-relevant job with job_read, and job_stop the ones that are no longer needed.`,
     });
   }

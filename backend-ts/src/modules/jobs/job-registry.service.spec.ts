@@ -616,4 +616,39 @@ describe("JobRegistryService", () => {
     const subagentRead = await registry.read(subagentId, "s1");
     expect(subagentRead.job.logSize).toBeUndefined();
   });
+
+  describe("send 投递语义", () => {
+    it("hook 返回 JobSendResult 时透传给调用方", async () => {
+      const send = jest.fn(async () =>
+        ({ delivery: "steered", detail: "(pending 1)" } as const),
+      );
+      const { spec } = makeSpec({ kind: "subagent", send });
+      const id = registry.start(spec);
+
+      await expect(registry.send(id, "s1", "补充")).resolves.toEqual({
+        delivery: "steered",
+        detail: "(pending 1)",
+      });
+      expect(send).toHaveBeenCalledWith("补充");
+    });
+
+    it("hook 返回 void 时归一化为 delivered（字节流类保持兼容）", async () => {
+      const send = jest.fn(async () => {});
+      const { spec } = makeSpec({ send });
+      const id = registry.start(spec);
+
+      await expect(registry.send(id, "s1", "y" + String.fromCharCode(10))).resolves.toEqual({
+        delivery: "delivered",
+      });
+    });
+
+    it("未声明 send 的作业明确报错（不静默丢弃）", async () => {
+      const { spec } = makeSpec();
+      const id = registry.start(spec);
+
+      await expect(registry.send(id, "s1", "hi")).rejects.toThrow(
+        "does not support send",
+      );
+    });
+  });
 });

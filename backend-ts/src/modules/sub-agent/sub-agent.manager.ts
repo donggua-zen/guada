@@ -1,4 +1,6 @@
 import { Injectable, Logger, OnModuleInit, Inject, Optional } from "@nestjs/common";
+import { OnEvent } from "@nestjs/event-emitter";
+import { randomUUID } from "crypto";
 import { SESSION_STORE_TOKEN } from '../chat/session-store.facade';
 import type { SessionStoreFacade } from '../chat/session-store.facade';
 import { AgentFileStore } from "../agents/agent-file.store";
@@ -6,6 +8,9 @@ import { ChatRunnerService } from "../chat/chat-runner.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { normalizeSandboxMode } from "../../common/services/sandbox-policy";
 import { ISessionContext } from "../chat/session-context";
+import { HOOKS } from "../chat/types/hooks.contract";
+import type { PreStepPayload } from "../chat/types/hooks.contract";
+import { wrapSystemReminder } from "../../common/utils/system-reminder.util";
 import { safeTruncate } from "../../common/utils/string.utils";
 import { JobRegistryService } from "../jobs/job-registry.service";
 import { sliceJobText } from "../jobs/job-output.util";
@@ -143,6 +148,47 @@ export interface SubAgentResult {
 }
 
 /**
+ * deliver() 的投递回执（对齐 zcode SendMessage 的 delivery 语义）
+ *
+ * - steered：目标正被 manager 跟踪运行，消息已进 inbox，将在下一个步边界
+ *   （PRE_STEP，两次工具调用之间）注入当前回合——不中断、不等待
+ * - queued：目标忙但非 manager 跟踪（如用户直接在子会话里交互），转入会话
+ *   队列，当前流结束后作为新回合投递
+ * - started：目标空闲，已按现有语义解冻并开启新回合（阻塞至回合完成）
+ */
+export interface SubAgentDeliveryReceipt {
+  subSessionId: string;
+  delivery: "steered" | "queued" | "started";
+  /** steered 时的 inbox 深度 */
+  pending?: number;
+  /** started 路径的回合结果 */
+  result?: SubAgentResult;
+}
+
+/** 运行中子 Agent 的待注入消息（FIFO） */
+interface SubAgentInboxEntry {
+  id: string;
+  text: string;
+  enqueuedAt: number;
+}
+
+/**
+ * 单次 run 的收尾屏障
+ *
+ * finishing 在 runSubAgentRounds 排空 inbox 后同步置位；done 在结算/冻结
+ * 全部完成后 resolve。deliver 借此关闭「最后一轮已排空、settle 未完成」窗口
+ * 内的投递竞态（避免消息搁浅或在冻结与开新回合之间夹出脏状态）。
+ */
+interface SubAgentRunLifecycle {
+  finishing: boolean;
+  done: Promise<void>;
+  resolveDone: () => void;
+}
+
+/** steer 兜底轮次上限：防止持续投递把子 Agent 无限续轮 */
+const MAX_SUBAGENT_STEER_ROUNDS = 8;
+
+/**
  * 父会话下的子 Agent 状态管理
  */
 interface ParentSessionState {
@@ -186,6 +232,10 @@ export class SubAgentManager implements OnModuleInit {
     string,
     { parentContext: ISessionContext; toolCallId: string }
   >();
+  /** 子会话 → 运行中待注入消息（steer inbox）；close/settle 时清理 */
+  private readonly inbox = new Map<string, SubAgentInboxEntry[]>();
+  /** 子会话 → 本次 run 的收尾屏障；deliver 借此关闭收尾窗口竞态 */
+  private readonly lifecycles = new Map<string, SubAgentRunLifecycle>();
 
   constructor(
     @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
@@ -199,6 +249,50 @@ export class SubAgentManager implements OnModuleInit {
 
   onModuleInit() {
     this.logger.log("SubAgentManager initialized");
+  }
+
+  /**
+   * steer inbox 的步边界消费者（PRE_STEP 副作用管线）
+   *
+   * PRE_STEP 在每次 LLM 请求前、getHistory() 之前串行执行：此处注入的隐藏
+   * user 消息会自动进入下一次请求——即「两次工具调用之间」的同轮转向，
+   * 不 abort、不重置回合、不切开工具批次（对齐 zcode SendMessage 的 guide 语义）。
+   */
+  @OnEvent(HOOKS.PRE_STEP)
+  async handleSubAgentPreStep(payload: PreStepPayload): Promise<void> {
+    const session = payload.sessionContext;
+    if (session.sessionType !== "sub_agent") return;
+    if (payload.abortSignal?.aborted) return;
+
+    const entries = this.inbox.get(session.sessionId);
+    if (!entries?.length) return;
+    // 原子摘取：注入失败时再放回队首，保证消息不丢
+    this.inbox.delete(session.sessionId);
+
+    const text = entries
+      .map(
+        (e) =>
+          wrapSystemReminder(
+            `主代理在你执行任务期间发来一条补充消息：\n${e.text}\n\n请在完成当前任务前处理这条消息。`,
+          ),
+      )
+      .join("\n\n");
+
+    try {
+      await session.injectUserPrompt(text, "subagent_steer");
+      this.logger.log(
+        `子 Agent steer 已注入步边界: ${session.sessionId}, ${entries.length} 条`,
+      );
+    } catch (error) {
+      this.inbox.set(session.sessionId, [
+        ...entries,
+        ...(this.inbox.get(session.sessionId) ?? []),
+      ]);
+      this.logger.warn(
+        `子 Agent steer 注入失败: ${session.sessionId}`,
+        error instanceof Error ? error.message : error,
+      );
+    }
   }
 
   /**
@@ -393,16 +487,13 @@ export class SubAgentManager implements OnModuleInit {
     abortSignal?: AbortSignal,
   ): Promise<SubAgentResult> {
     // 1. 验证子会话存在且属于该父会话
-    const subSession = await this.sessionStore.get(params.sessionId);
-    if (!subSession) {
-      throw new Error("Sub-agent session does not exist.");
-    }
-    if (subSession.parentId !== params.parentSessionId) {
-      throw new Error("Sub-agent does not belong to this parent session.");
-    }
-    // 2. 结果交付后子会话已冻结（自动冻结是唯一生命周期）：解冻继续交互。
-    // 名额由 countByParentId 按未冻结会话计数，解冻即自然恢复占用。
+    const subSession = await this.assertSubSessionOwnership(
+      params.parentSessionId,
+      params.sessionId,
+    );
     if (subSession.closedAt) {
+      // 结果交付后子会话已冻结（自动冻结是唯一生命周期）：解冻继续交互。
+      // 名额由 countByParentId 按未冻结会话计数，解冻即自然恢复占用。
       await this.sessionStore.update(params.sessionId, {
         closedAt: null,
         closeReason: null,
@@ -429,6 +520,96 @@ export class SubAgentManager implements OnModuleInit {
       mode,
       abortSignal,
     );
+  }
+
+  /** 校验子会话存在且属于该父会话（sendMessage / deliver 共用），返回子会话记录 */
+  private async assertSubSessionOwnership(
+    parentSessionId: string,
+    sessionId: string,
+  ) {
+    const subSession = await this.sessionStore.get(sessionId);
+    if (!subSession) {
+      throw new Error("Sub-agent session does not exist.");
+    }
+    if (subSession.parentId !== parentSessionId) {
+      throw new Error("Sub-agent does not belong to this parent session.");
+    }
+    return subSession;
+  }
+
+  /**
+   * 向子 Agent 投递消息（运行中可发，对齐 zcode SendMessage 语义）
+   *
+   * - manager 跟踪的 run 正在执行：消息进 inbox，由 PRE_STEP 在下一个步边界
+   *   注入当前回合（steered）——不打断、不等待
+   * - 收尾窗口（run 已排空 inbox、settle/freeze 未完成）：等 finish barrier
+   *   后走空闲路径，消息不丢
+   * - 非 manager 跟踪但确有活跃流（用户直接在子会话交互）：转入会话队列，
+   *   当前流结束后作为新回合投递（queued）
+   * - 空闲/已冻结：复用 sendMessage 解冻 + 新回合（started，阻塞至完成）
+   */
+  async deliver(params: {
+    parentSessionId: string;
+    sessionId: string;
+    message: string;
+  }): Promise<SubAgentDeliveryReceipt> {
+    await this.assertSubSessionOwnership(params.parentSessionId, params.sessionId);
+
+    // 以下判断与入队必须在同一同步段内完成（Node 单线程保证与 runSubAgentRounds
+    // 的排空检查互斥，不存在 interleaving）
+    const lifecycle = this.lifecycles.get(params.sessionId);
+    if (lifecycle?.finishing) {
+      await lifecycle.done;
+    } else {
+      const trackedRunning =
+        this.states.get(params.parentSessionId)?.running.has(params.sessionId) ===
+        true;
+      if (trackedRunning) {
+        const entries = this.inbox.get(params.sessionId) ?? [];
+        entries.push({
+          id: randomUUID(),
+          text: params.message,
+          enqueuedAt: Date.now(),
+        });
+        this.inbox.set(params.sessionId, entries);
+        this.logger.log(
+          `子 Agent 运行中，消息已进 steer inbox: ${params.sessionId}, 深度 ${entries.length}`,
+        );
+        return {
+          subSessionId: params.sessionId,
+          delivery: "steered",
+          pending: entries.length,
+        };
+      }
+    }
+
+    // 非 manager 跟踪但确有活跃流：转会话队列（当前流结束后开新回合）
+    if (this.chatRunnerService.hasActiveStream(params.sessionId)) {
+      await this.chatRunnerService.enqueueMessage({
+        sessionId: params.sessionId,
+        blocks: [{ type: "text", text: params.message }],
+        source: {
+          kind: "coordinator",
+          senderSessionId: params.parentSessionId,
+        },
+      });
+      this.logger.log(
+        `子 Agent 非跟踪运行中，消息转入会话队列: ${params.sessionId}`,
+      );
+      return { subSessionId: params.sessionId, delivery: "queued" };
+    }
+
+    // 空闲（含已冻结）：现有语义——解冻 + 新回合，阻塞至回合完成
+    const result = await this.sendMessage({
+      parentSessionId: params.parentSessionId,
+      sessionId: params.sessionId,
+      message: params.message,
+    });
+    return {
+      subSessionId: params.sessionId,
+      delivery: "started",
+      result,
+    };
   }
 
   /**
@@ -554,11 +735,15 @@ export class SubAgentManager implements OnModuleInit {
     const state = this.getOrCreateState(parentSessionId);
     state.running.add(subSessionId);
 
-    const pending = this.runSubAgentStream(
+    // 收尾屏障：deliver 借此识别「run 已排空 inbox、结算/冻结未完成」窗口
+    const lifecycle = this.createLifecycle(subSessionId);
+
+    const pending = this.runSubAgentRounds(
       subSessionId,
       content,
       parentSessionId,
       mode === "foreground" ? abortSignal : undefined,
+      lifecycle,
     );
 
     // 后台作业结算：done 必须在 settle（completed 入队/one_shot 清理）之后 resolve，
@@ -578,6 +763,7 @@ export class SubAgentManager implements OnModuleInit {
             this.logger.error(`子 Agent 结算失败: ${subSessionId}`, error);
           } finally {
             resolveJobDone?.(toJobOutcome(result));
+            this.releaseLifecycle(subSessionId);
           }
         },
         async (error) => {
@@ -596,6 +782,7 @@ export class SubAgentManager implements OnModuleInit {
             this.logger.error(`子 Agent 结算失败: ${subSessionId}`, settleError);
           } finally {
             resolveJobDone?.(toJobOutcome(errorResult));
+            this.releaseLifecycle(subSessionId);
           }
         },
       );
@@ -605,12 +792,24 @@ export class SubAgentManager implements OnModuleInit {
       const name = await this.getSubAgentName(subSessionId);
       // 注册失败（配额满等）直接抛错：子 Agent 不注册 job 就不让跑，
       // 否则配额被回退路径架空，且模型管不到这个进程。
-      const jobId = this.registerSubAgentJob(
-        subSessionId,
-        parentSessionId,
-        name,
-        jobDone,
-      );
+      // 此时流已启动（pending 先行），必须同步回收 running/inbox/lifecycle 并取消流，
+      // 否则 registerSubAgentJob 抛错会让这个 run 永久泄漏。
+      let jobId: JobId | undefined;
+      try {
+        jobId = this.registerSubAgentJob(
+          subSessionId,
+          parentSessionId,
+          name,
+          jobDone,
+        );
+      } catch (error) {
+        state.running.delete(subSessionId);
+        this.cleanupParentStateIfEmpty(parentSessionId);
+        this.clearInbox(subSessionId, "job 注册失败");
+        this.releaseLifecycle(subSessionId);
+        this.chatRunnerService.cancelStream(subSessionId);
+        throw error;
+      }
       // 先登记 job 再接 pending：避免 pending 先结算、wait 先取走结果时产生 job 重复通知。
       onSettled();
       return { subSessionId, status: "running", content: "", jobId };
@@ -655,12 +854,13 @@ export class SubAgentManager implements OnModuleInit {
             error: raceResult.result.error,
           },
         );
-        // 结果已作为工具结果交付，自动冻结子会话（fire-and-forget，失败仅告警）
-        this.maybeAutoDispose(
+        // 结果已作为工具结果交付，自动冻结子会话（fire-and-forget，失败仅告警）。
+        // 冻结完成后才释放收尾屏障：deliver 不会在 freeze 与开新回合之间夹入脏状态。
+        void this.maybeAutoDispose(
           subSessionId,
           parentSessionId,
           raceResult.result,
-        );
+        ).finally(() => this.releaseLifecycle(subSessionId));
         return raceResult.result;
       }
 
@@ -680,33 +880,39 @@ export class SubAgentManager implements OnModuleInit {
           error: raceResult.error,
           finishReason: "error",
         };
-        this.maybeAutoDispose(
+        void this.maybeAutoDispose(
           subSessionId,
           parentSessionId,
           errorResult,
-        );
+        ).finally(() => this.releaseLifecycle(subSessionId));
         return errorResult;
       }
 
       // 超时：转后台，pending 完成后入队
       const name = await this.getSubAgentName(subSessionId);
       // 注册失败（配额满等）直接抛错——此时子 Agent 已跑了一轮，结果会随错误返回，
-      // 不再产生模型管不到的无 job 后台会话。
-      const jobId = this.registerSubAgentJob(
-        subSessionId,
-        parentSessionId,
-        name,
-        jobDone,
-      );
-      // 先登记 job 再接 pending，避免 wait 先取走结果时 job 仍发完成通知。
-      onSettled();
-      return {
-        subSessionId,
-        status: "running",
-        content: "",
-        jobId,
-        error: `Sub-agent exceeded ${FOREGROUND_TIMEOUT_MS / 60_000}-minute foreground timeout and was moved to background.`,
-      };
+      // 不再产生模型管不到的无 job 后台会话。已跑的轮次挂无 job 结算（信箱回退），
+      // 防止 state.running/lifecycle 泄漏。
+      try {
+        const jobId = this.registerSubAgentJob(
+          subSessionId,
+          parentSessionId,
+          name,
+          jobDone,
+        );
+        // 先登记 job 再接 pending，避免 wait 先取走结果时 job 仍发完成通知。
+        onSettled();
+        return {
+          subSessionId,
+          status: "running",
+          content: "",
+          jobId,
+          error: `Sub-agent exceeded ${FOREGROUND_TIMEOUT_MS / 60_000}-minute foreground timeout and was moved to background.`,
+        };
+      } catch (error) {
+        onSettled();
+        throw error;
+      }
     } finally {
       // 清理定时器
       if (timeoutHandle) clearTimeout(timeoutHandle);
@@ -735,6 +941,101 @@ export class SubAgentManager implements OnModuleInit {
     ) {
       this.states.delete(parentSessionId);
     }
+  }
+
+  /** 为一次 run 建收尾屏障（executeSubAgentStream 专属） */
+  private createLifecycle(subSessionId: string): SubAgentRunLifecycle {
+    let resolveDone!: () => void;
+    const done = new Promise<void>((resolve) => {
+      resolveDone = resolve;
+    });
+    const lifecycle: SubAgentRunLifecycle = { finishing: false, done, resolveDone };
+    this.lifecycles.set(subSessionId, lifecycle);
+    return lifecycle;
+  }
+
+  /** run 的结算/冻结全部完成后释放收尾屏障（幂等） */
+  private releaseLifecycle(subSessionId: string): void {
+    const lifecycle = this.lifecycles.get(subSessionId);
+    if (!lifecycle) return;
+    this.lifecycles.delete(subSessionId);
+    lifecycle.resolveDone();
+  }
+
+  /** 丢弃指定子会话的 steer inbox（close/kill/注册失败等终态路径），返回丢弃条数 */
+  private clearInbox(subSessionId: string, reason: string): number {
+    const entries = this.inbox.get(subSessionId);
+    if (!entries?.length) return 0;
+    this.inbox.delete(subSessionId);
+    this.logger.warn(
+      `子 Agent steer 消息被丢弃(${reason}): ${subSessionId}, 共 ${entries.length} 条`,
+    );
+    return entries.length;
+  }
+
+  /**
+   * 等待上一条流完全释放后再开下一轮。
+   *
+   * stopStream 先 complete 订阅者（触发 onComplete → settle）再 abort、再 delete：
+   * settle 的重放（readSubAgentResult）是异步的，通常在 delete 之后才 resolve；
+   * 但不能依赖这个时序——setImmediate 让出宏任务 + 有界轮询，确保下一轮
+   * startStream 不会撞上未删除的旧流条目（delete 会误删新流）。
+   */
+  private async waitForStreamRelease(subSessionId: string): Promise<void> {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    for (
+      let i = 0;
+      i < 100 && this.chatRunnerService.hasActiveStream(subSessionId);
+      i++
+    ) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  /**
+   * 运行子 Agent 的回合循环：首轮任务 + steer inbox 兜底轮
+   *
+   * steer 消息的主消费点是 PRE_STEP 步边界（同轮注入）；但「最后一个
+   * text-only 模型流期间」到达的消息在本轮已无 PRE_STEP 消费点，这里在
+   * 回合结束后开后续回合消化，保证消息不丢（对齐 zcode 的 queue 降级）。
+   * 期间 state.running 保持占用，settle/jobDone 只在全部轮次结束后执行。
+   */
+  private async runSubAgentRounds(
+    subSessionId: string,
+    firstContent: string,
+    parentSessionId: string,
+    abortSignal: AbortSignal | undefined,
+    lifecycle: SubAgentRunLifecycle,
+  ): Promise<SubAgentResult> {
+    let result = await this.runSubAgentStream(
+      subSessionId,
+      firstContent,
+      parentSessionId,
+      abortSignal,
+    );
+
+    for (let round = 0; round < MAX_SUBAGENT_STEER_ROUNDS; round++) {
+      if (abortSignal?.aborted) break;
+      await this.waitForStreamRelease(subSessionId);
+      const entries = this.inbox.get(subSessionId);
+      if (!entries?.length) {
+        // 与 deliver 的同步检查互斥：置位必须在同一同步段内（无 await 间隔）
+        lifecycle.finishing = true;
+        return result;
+      }
+      this.inbox.delete(subSessionId);
+      this.logger.log(
+        `子 Agent steer 兜底开新回合: ${subSessionId}, 第 ${round + 1} 轮, ${entries.length} 条`,
+      );
+      result = await this.runSubAgentStream(
+        subSessionId,
+        entries.map((e) => e.text).join("\n\n"),
+        parentSessionId,
+      );
+    }
+
+    this.logger.warn(`子 Agent steer 轮次达上限: ${subSessionId}`);
+    return result;
   }
 
   /**
@@ -931,6 +1232,9 @@ export class SubAgentManager implements OnModuleInit {
     // 主动关闭不产生完成通知；同时触发 completed/jobIds 清理。
     this.suppressSubAgentJob(subSessionId);
 
+    // 显式 close/kill 是终态：未消费的 steer 消息随之丢弃（运行中注入无意义）
+    this.clearInbox(subSessionId, "close/kill");
+
     // 主动关闭也是终态：若该子代理还没结算，立即让工具行转失败/关闭态
     await this.publishToolStatus(subSessionId, "error", {
       stopReason: "closed",
@@ -977,6 +1281,9 @@ export class SubAgentManager implements OnModuleInit {
     await this.disposeSession(subSessionId, parentSessionId, {
       stopReason: "closed",
     });
+
+    // 冻结完成后释放收尾屏障（幂等；onSettled 路径可能已释放）
+    this.releaseLifecycle(subSessionId);
 
     this.logger.log(`子 Agent 已关闭: ${subSessionId}`);
   }
@@ -1074,13 +1381,14 @@ export class SubAgentManager implements OnModuleInit {
           },
         );
       },
-      send: async (input) => {
-        await this.sendMessage({
+      send: (input) =>
+        // 运行中 → steer inbox（下一工具轮注入）；空闲 → 解冻开新回合。
+        // 回执经 JobRegistry.send 透传给 job_send（steered/started/queued）。
+        this.deliver({
           parentSessionId,
           sessionId: subSessionId,
           message: input,
-        });
-      },
+        }),
       onReported: () =>
         this.handleSubAgentJobReported(subSessionId, parentSessionId),
       onDisposed: () =>
@@ -1308,11 +1616,14 @@ export class SubAgentManager implements OnModuleInit {
           );
           this.cleanupParentStateIfEmpty(parentSessionId);
           // 主 Agent 已消费结果，此时才冻结子会话
-          this.maybeAutoDispose(
-            subSessionId,
-            parentSessionId,
-            entry?.result,
-          );
+          // 运行中（deliver 已开新回合）不冻结：避免给活跃会话打 closedAt
+          if (!this.isSubAgentRunning(subSessionId)) {
+            this.maybeAutoDispose(
+              subSessionId,
+              parentSessionId,
+              entry?.result,
+            );
+          }
         },
       })
       .catch((error) => {
