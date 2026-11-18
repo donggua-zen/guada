@@ -371,10 +371,10 @@
 
 html.dark {
   /* 中性炭灰底色：侧栏 → 内容 → 控件/浮层逐层抬亮，彩色只表达交互和状态。 */
-  --gd-color-primary: #e6a0b5;
+  --gd-color-primary: #f77fa0;
   --gd-color-primary-0f: color-mix(in srgb, var(--gd-color-primary) 6%, transparent);
-  --gd-color-primary-hover: #edb3c4;
-  --gd-color-primary-active: #d990a6;
+  --gd-color-primary-hover: #fe91ad;
+  --gd-color-primary-active: #ed6e93;
   --gd-color-primary-disabled: #50383f;
   --gd-color-primary-text: #24191d;
   --gd-color-primary-text-disabled: #bba3aa;
@@ -386,11 +386,11 @@ html.dark {
   --gd-color-primary-300: #74515d;
   --gd-color-primary-400: #a46e80;
   --gd-color-primary-500: #c4869a;
-  --gd-color-primary-600: #d990a6;
-  --gd-color-primary-700: #e6a0b5;
-  --gd-color-primary-800: #edb3c4;
-  --gd-color-primary-900: #f2c6d2;
-  --gd-color-primary-950: #f8dfe6;
+  --gd-color-primary-600: #ed6e93;
+  --gd-color-primary-700: #f77fa0;
+  --gd-color-primary-800: #fe91ad;
+  --gd-color-primary-900: #ffb4c9;
+  --gd-color-primary-950: #ffcedc;
 
   /* 蓝色用于链接等次要交互，正文尺寸也需有足够对比度。 */
   --gd-color-secondary: #91b9e5;
