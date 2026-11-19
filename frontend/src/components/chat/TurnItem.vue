@@ -594,13 +594,15 @@ const getGroupTitleParts = (group: DisplayGroup, busy: boolean, expanded: boolea
       const executing = executingCallsOf(group);
       const status = getActiveStatusParts(executing);
       const completedToolSteps = toolSteps - executing.length;
-      // 状态段为空时只保留已执行前缀，绝不拼出「已执行N个步骤,」这种悬空分隔符
+      // 状态段为空时只保留已执行前缀，绝不拼出「已执行N个步骤,」这种悬空分隔符。
+      // 注意：status 必须作为插值参数传给 t()——vue-i18n 会把未传值的 {status}
+      // 插成空串（模板只剩逗号），事后 .replace('{status}', …) 是找不到占位符的。
       const fallback = completedToolSteps > 0
         ? t('chat.turn.executedSteps', { n: completedToolSteps })
         : t('chat.turn.executingSteps', { n: Math.max(executing.length, 1) });
       const action = status.text
         ? (completedToolSteps > 0
-          ? t('chat.turn.executedThenStatus', { m: completedToolSteps }).replace('{status}', status.text)
+          ? t('chat.turn.executedThenStatus', { m: completedToolSteps, status: status.text })
           : status.text)
         : fallback;
       return { icon: status.icon, action, args: '' };
