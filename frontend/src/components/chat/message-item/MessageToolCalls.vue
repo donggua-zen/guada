@@ -5,7 +5,7 @@
       <!-- 通用工具头部：状态图标 + 状态文案 + 参数摘要 + 折叠开关。
            独立渲染行（计划卡等）不渲染——整行只有卡片，状态由卡片头部徽标表达。 -->
       <div v-if="!standaloneRows[toolIndex]"
-        class="tool-call-row group flex items-center text-sm text-(--gd-color-text-subtle) cursor-pointer transition-colors duration-200 min-w-0"
+        class="tool-call-row group flex items-center text-sm text-(--gd-color-text-subtle) cursor-pointer min-w-0"
         :class="{ 'gd-run-shimmer': isToolExecuting(tool, toolIndex) }"
         @click.stop="toggleExpand(toolIndex)">
         <component v-if="tool.outcome === 'error' || tool.outcome === 'rejected'" :is="getToolIcon(tool)"
@@ -638,6 +638,12 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   color: var(--gd-color-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* 只过渡文字色：过渡 background-color 会在扫光类移除时把整行背景从实色淡出
+   （background-clip 已恢复默认，背景不再裁进文字），表现为一次黑底闪烁。 */
+.tool-call-row {
+  transition: color 0.2s ease;
 }
 
 /* 行悬停高亮：整行文字提亮（-webkit-text-fill-color 会继承到子文本）。

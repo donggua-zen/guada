@@ -2,7 +2,7 @@
   <div class="process-section thinking-section">
     <!-- 标题行：与工具调用行同构的单行步骤（图标 + 动作文案 + 摘要 + 箭头） -->
     <div
-      class="thinking-row group thinking-section__header flex items-center text-sm text-(--gd-color-text-subtle) cursor-pointer transition-colors duration-200 min-w-0"
+      class="thinking-row group thinking-section__header flex items-center text-sm text-(--gd-color-text-subtle) cursor-pointer min-w-0"
       :class="{ 'gd-run-shimmer': isThinking }"
       @click.stop="handleToggle">
       <ThinkingIcon :active="isThinking" class="thinking-icon w-4 h-4 shrink-0" />
@@ -137,6 +137,11 @@ const formattedDuration = computed(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column-reverse;
+}
+
+/* 只过渡文字色：避免扫光类移除时整行背景从实色淡出造成闪底。 */
+.thinking-row {
+  transition: color 0.2s ease;
 }
 
 /* 行悬停高亮：整行文字提亮（-webkit-text-fill-color 继承到子文本）。

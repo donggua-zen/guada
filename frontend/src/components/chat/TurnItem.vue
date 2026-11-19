@@ -1123,7 +1123,8 @@ html.gd-resizing-moved .turn-wrapper:not(.turn-wrapper--no-cv) {
   max-width: 100%;
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  /* 只过渡文字色：过渡背景会在扫光类移除时把整行背景从实色淡出造成闪底 */
+  transition: color 0.2s ease;
   user-select: none;
 }
 

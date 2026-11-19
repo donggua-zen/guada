@@ -2,7 +2,7 @@
   <div class="todo-call-card">
     <!-- 头部：折叠/展开都显示；折叠态无背景，仅展开后的列表卡片带背景 -->
     <div
-      class="group todo-header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] font-medium transition-colors duration-200 min-w-0"
+      class="group todo-header flex items-center text-sm text-(--gd-color-text-subtle) min-w-0"
       :class="{ 'cursor-pointer todo-header--interactive': hasItems }"
       :role="hasItems ? 'button' : undefined"
       :tabindex="hasItems ? 0 : undefined"
@@ -22,11 +22,11 @@
           :class="expanded ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
           :style="expanded ? {} : { transform: 'rotate(-90deg)' }" />
       </span>
-      <span class="ml-1.5 shrink-0 font-medium">{{ t('chat.todo.label') }}</span>
-      <span class="todo-summary ml-1.5 min-w-0 truncate text-sm text-gray-400 dark:text-gray-500">
+      <span class="ml-2 shrink-0">{{ t('chat.todo.label') }}</span>
+      <span class="todo-summary ml-2 min-w-0 truncate text-sm text-(--gd-color-text-subtle)">
         {{ summaryText }}
       </span>
-      <span v-if="hasItems" class="todo-count ml-1.5 shrink-0 font-mono text-sm text-gray-400 dark:text-gray-500">
+      <span v-if="hasItems" class="todo-count ml-2 shrink-0 font-mono text-sm text-(--gd-color-text-subtlest)">
         {{ doneCount }}/{{ items.length }}
       </span>
     </div>
@@ -124,8 +124,8 @@ const summaryText = computed(() => {
 })
 
 const iconClass = computed(() => {
-  if (props.failed) return 'todo-icon--error'
-  return 'text-gray-500'
+  if (props.failed) return 'todo-icon--error';
+  return 'todo-icon--subtle';
 })
 
 // 列表变空（例如执行完成后全部完成且无参数回退）时退出展开态，避免空卡片
@@ -144,6 +144,11 @@ function toggle(): void {
   width: 100%;
 }
 
+/* 只过渡文字色，hover 提亮更平滑 */
+.todo-header--interactive {
+  transition: color 0.2s ease;
+}
+
 /* 与工具分组头一致：无背景，hover 整行文字提亮；图标 ↔ 箭头互换见模板 */
 .todo-header--interactive:hover,
 .todo-header--interactive:hover .todo-summary,
@@ -152,18 +157,23 @@ function toggle(): void {
 }
 
 .todo-card-body {
-  background: var(--gd-color-sidebar-bg);
+  /* 与工具展开卡一致：微透明表面底色 + 细边框，亮暗色统一走 surface token */
+  background: color-mix(in srgb, var(--gd-color-surface) 80%, transparent);
+  border: 1px solid var(--gd-color-border);
   border-radius: var(--gd-size-surface-radius);
 }
 
 .todo-text {
-  color: var(--gd-color-text-gray);
+  color: var(--gd-color-text-subtle);
 }
 .todo-text-strong {
   color: var(--gd-color-text);
 }
 .todo-text-done {
   color: var(--gd-color-text-disabled);
+}
+.todo-icon--subtle {
+  color: var(--gd-color-text-subtle);
 }
 .todo-icon--active {
   color: var(--gd-color-text);
@@ -178,6 +188,6 @@ function toggle(): void {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 1px solid var(--gd-color-text-disabled);
+  border: 1px solid var(--gd-color-text-subtlest);
 }
 </style>

@@ -278,7 +278,8 @@
      ==================== */
   --gd-font-sans:
     -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
   --gd-font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "MesloLGS NF", "JetBrainsMono Nerd Font", "Hack Nerd Font", "Symbols Nerd Font",
@@ -424,12 +425,13 @@ html.dark {
   --gd-plugin-icon-tray-border: var(--gd-color-border);
 
   /* 正常阅读只用前两档；disabled 留给不可交互内容。
-     主文本取 245（#f5f5f5）：浅色 #171717 的对称档，暗底上正文才不显灰。 */
-  --gd-color-text: #f5f5f5;
+     主文本取 220（#dcdcdc）：APCA Lc ≈ -84.5，落在正文 75–90 的舒适带，
+     避开近白文字在深底上的光晕（halation）。 */
+  --gd-color-text: #dcdcdc;
   --gd-color-text-gray: #b0b0b0;
   --gd-color-text-disabled: #858585;
-  /* 轨迹行三档：暗色派生基色取中性灰而非正文色，subtle≈#888 / subtlest≈#4f4f4f */
-  --gd-color-text-strong: #d4d4d4;
+  /* 轨迹行三档：派生基色与正文同色，subtle≈#8d / subtlest≈#53 */
+  --gd-color-text-strong: #dcdcdc;
   --gd-color-text-subtle: color-mix(in srgb, var(--gd-color-text-strong) 60%, transparent);
   --gd-color-text-subtlest: color-mix(in srgb, var(--gd-color-text-strong) 30%, transparent);
   --gd-color-diff-added: #46bf72;
