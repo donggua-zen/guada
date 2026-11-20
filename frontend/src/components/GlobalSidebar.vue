@@ -29,21 +29,17 @@
       <div
         class="flex items-center gap-1 shrink-0 opacity-0 pointer-events-none transition-opacity duration-200 group-hover/mode-row:opacity-100 group-hover/mode-row:pointer-events-auto">
         <!-- 全部展开 / 全部收起 -->
-        <GdTooltip :content="toggleAllGroupsTooltip" placement="bottom">
-          <div class="session-action-trigger hover:bg-(--gd-color-sidebar-bg-hover)" @click="toggleAllGroups">
+        <div v-tooltip:bottom="toggleAllGroupsTooltip" class="session-action-trigger hover:bg-(--gd-color-sidebar-bg-hover)" @click="toggleAllGroups">
             <span class="w-4 h-4"><ArrowMinimize16Regular v-if="allGroupsExpanded" />
               <ArrowMaximize16Regular v-else /></span>
           </div>
-        </GdTooltip>
         <!-- 新建分组 / 项目 -->
-        <GdTooltip :content="createGroupTooltip" placement="bottom">
-          <div class="session-action-trigger hover:bg-(--gd-color-sidebar-bg-hover)"
+        <div v-tooltip:bottom="createGroupTooltip" class="session-action-trigger hover:bg-(--gd-color-sidebar-bg-hover)"
             @click="handleCreateGroupShortcut">
             
               <FolderAdd16Regular class="w-4 h-4"  />
             
           </div>
-        </GdTooltip>
       </div>
     </div>
 
@@ -74,9 +70,7 @@
                 <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200 opacity-0 group-hover:opacity-100"
                   :class="isGroupExpanded(group.id) ? '' : '-rotate-90'" />
               </span>
-              <GdTooltip v-if="group.kind === 'workspace' && group.path" :content="group.path" placement="bottom">
-                <span class="text-sm font-medium">{{ group.name }}</span>
-              </GdTooltip>
+              <span v-if="group.kind === 'workspace' && group.path" v-tooltip:bottom="group.path" class="text-sm font-medium">{{ group.name }}</span>
               <span v-else class="text-sm font-medium">{{ getGroupDisplayName(group) }}</span>
             </div>
             <div
@@ -124,14 +118,11 @@
               </DropdownMenu>
 
               <!-- 新建会话按钮（hover 显示，与省略号同一套无边框/无底色样式；置顶分区无此操作） -->
-              <GdTooltip v-if="group.id !== PINNED_GROUP_ID"
-                :content="t('ui.sidebar.newSessionInGroup', { name: getGroupDisplayName(group) })" placement="bottom">
-                <div class="session-action-trigger" @click.stop="openNewSession(group)">
+              <div v-if="group.id !== PINNED_GROUP_ID" v-tooltip:bottom="t('ui.sidebar.newSessionInGroup', { name: getGroupDisplayName(group) })" class="session-action-trigger" @click.stop="openNewSession(group)">
                   
                     <CommentAdd16Regular class="w-4 h-4"  />
                   
                 </div>
-              </GdTooltip>
             </div>
           </div>
 
@@ -173,20 +164,14 @@
                 <div
                   v-if="(getSessionQueuedCount(session.id) > 0 || getSessionAwaiting(session.id)) && (session.id !== currentSessionId || windowHidden)"
                   class="shrink-0 mr-6 flex items-center gap-1">
-                  <GdTooltip v-if="getSessionQueuedCount(session.id) > 0"
-                    :content="t('ui.sidebar.queuedTooltip', { n: getSessionQueuedCount(session.id) })" placement="right">
-                    <span
+                  <span v-if="getSessionQueuedCount(session.id) > 0" v-tooltip:right="t('ui.sidebar.queuedTooltip', { n: getSessionQueuedCount(session.id) })"
                       class="inline-flex items-center rounded-full border border-blue-500/35 bg-blue-500/15 px-1.5 text-[11px] leading-4 text-blue-600 dark:text-blue-400">
                       {{ t('ui.sidebar.queuedCount', { n: getSessionQueuedCount(session.id) }) }}
                     </span>
-                  </GdTooltip>
-                  <GdTooltip v-if="getSessionAwaiting(session.id)" :content="getSessionAwaitingTooltip(session.id)"
-                    placement="right">
-                    <span
+                  <span v-if="getSessionAwaiting(session.id)" v-tooltip:right="getSessionAwaitingTooltip(session.id)"
                       class="inline-flex items-center rounded-full border border-amber-500/35 bg-amber-500/15 px-1.5 text-[11px] leading-4 text-amber-600 dark:text-amber-400">
                       {{ getSessionAwaitingLabel(session.id) }}
                     </span>
-                  </GdTooltip>
                 </div>
                 <!-- 操作菜单：绝对定位悬浮于右缘，不占 flex 空间，标题可占满整行 -->
                 <div class="session-actions absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center"
@@ -291,24 +276,20 @@
       </DropdownMenu>
 
       <!-- 移动访问：手机端远程控制入口（仅桌面端） -->
-      <GdTooltip v-if="isElectron" :content="t('ui.sidebar.mobileAccess')" placement="bottom">
-        <div @click="mobileAccessDialogVisible = true"
+      <div v-if="isElectron" v-tooltip:bottom="t('ui.sidebar.mobileAccess')" @click="mobileAccessDialogVisible = true"
           class="relative flex items-center justify-center px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200 shrink-0 text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)">
           <component :is="Phone16Regular" class="w-4 h-4" />
           <span v-if="mobileAccessActive" class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
         </div>
-      </GdTooltip>
 
       <!-- 设置 -->
-      <GdTooltip :content="t('ui.sidebar.settings')" placement="bottom">
-        <div @click="handleNavClick('setting')"
+      <div v-tooltip:bottom="t('ui.sidebar.settings')" @click="handleNavClick('setting')"
           class="flex items-center justify-center px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-200 shrink-0"
           :class="currentActiveTab === 'setting'
             ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
             : 'text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)'">
           <component :is="Settings16Filled" class="w-4 h-4" />
         </div>
-      </GdTooltip>
     </div>
   </div>
 
@@ -397,7 +378,6 @@ import SessionTitle from './SessionTitle.vue'
 import ThinkingStatus from './chat/ThinkingStatus.vue'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
-import GdTooltip from './ui/GdTooltip.vue'
 import GroupEditDialog from './session/GroupEditDialog.vue'
 import GroupIcon from './session/GroupIcon.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'

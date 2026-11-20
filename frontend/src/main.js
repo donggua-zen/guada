@@ -25,6 +25,7 @@ import * as Vue from "vue";
 import { reactive, watch } from "vue";
 import "@/services/plugin-loader";
 import { registerUiPrimitives } from "@/components/ui/register";
+import { tooltipDirective } from "@/directives/tooltip";
 import { initGlobalErrorHandler } from "@/utils/globalErrorHandler";
 // 设备像素网格：CSS 需要 1/dpr 才能把卡片底边吸附到设备像素上（防输入区底部半行泄漏）
 import { initDevicePixelGrid } from "@/utils/devicePixelGrid";
@@ -357,6 +358,8 @@ app.use(router);
 app.use(i18n);
 // 插件 UI 原语全局注册：让插件产物运行时能 resolveComponent('GdXxx')
 registerUiPrimitives(app);
+// 轻量 tooltip 指令：直接挂到真实元素，不产生 wrapper；复用 components/ui/tooltip.ts 单例
+app.directive("tooltip", tooltipDirective);
 
 // 用户信息同步到插件运行时（__GuaDaShared__.runtime.user），登录/登出自动更新
 const authStore = useAuthStore(pinia);

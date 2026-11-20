@@ -13,7 +13,7 @@
       <!-- 插件智能体徽标 -->
       <span v-if="agent.pluginId"
         class="shrink-0 inline-flex items-center px-1 py-0.5 text-[10px] leading-none rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300"
-        :title="t('agents.list.pluginAgentTip', { plugin: agent.pluginId })">
+        v-tooltip="t('agents.list.pluginAgentTip', { plugin: agent.pluginId })">
         {{ t('agents.list.pluginAgentBadge') }}
       </span>
 

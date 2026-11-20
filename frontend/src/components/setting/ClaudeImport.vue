@@ -109,7 +109,7 @@
                 <div class="ci-group__head" @click="toggleGroup(group.key)">
                     <ChevronDown24Regular v-if="isGroupOpen(group.key)" class="ci-group__caret size-4" />
                     <ChevronRight24Regular v-else class="ci-group__caret size-4" />
-                    <span class="ci-group__title" :title="group.path">{{ group.label }}</span>
+                    <span class="ci-group__title" v-tooltip="group.path">{{ group.label }}</span>
                     <span class="ci-group__count">
                         {{ t('settings.claudeImport.groupCount', { n: group.items.length }) }}
                         <template v-if="group.total !== group.items.length">
@@ -130,7 +130,7 @@
                             @click.stop
                             @change="(val: boolean) => setSelect(candidate.sessionId, val)" />
                         <div class="ci-row__main">
-                            <div class="ci-row__title" :title="candidate.previewTitle || candidate.sessionId">
+                            <div class="ci-row__title" v-tooltip="candidate.previewTitle || candidate.sessionId">
                                 {{ candidate.previewTitle || shortId(candidate.sessionId) }}
                             </div>
                             <div class="ci-row__meta">

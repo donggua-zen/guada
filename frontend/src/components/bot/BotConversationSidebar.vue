@@ -91,7 +91,7 @@
                 type="button"
                 class="bot-card-qr"
                 :class="{ 'is-pending': botStatusKey(group) === 'connecting' }"
-                :title="t('bot.card.qrCode')"
+                v-tooltip="t('bot.card.qrCode')"
                 :aria-label="t('bot.card.qrCode')"
                 @click.stop="openQrForGroup(group)"
               >
@@ -109,7 +109,7 @@
                   <button
                     type="button"
                     class="bot-card-kebab"
-                    :title="t('common.more')"
+                    v-tooltip="t('common.more')"
                   >
                     <MoreHorizontal20Filled class="w-4 h-4" />
                   </button>
@@ -144,9 +144,9 @@
                 v-if="!group.unknownBot"
                 class="status-dot"
                 :class="`is-${botStatusKey(group)}`"
-                :title="statusTitle(group)"
+                v-tooltip="statusTitle(group)"
               ></span>
-              <span v-if="lastErrorOf(group)" class="bot-card-error" :title="lastErrorOf(group)">
+              <span v-if="lastErrorOf(group)" class="bot-card-error" v-tooltip="lastErrorOf(group)">
                 {{ lastErrorOf(group) }}
               </span>
               <span v-else-if="!group.unknownBot" class="meta-item">
@@ -177,7 +177,7 @@
                 <button
                   type="button"
                   class="conversation-main"
-                  :title="`${conv.displayName} · ${platformLabel(conv.platform)}`"
+                  v-tooltip="`${conv.displayName} · ${platformLabel(conv.platform)}`"
                   @click.stop="emit('select', conv)"
                 >
                   <BotUserAvatar
@@ -218,7 +218,7 @@
                     <button
                       type="button"
                       class="history-trigger"
-                      :title="t('common.more')"
+                      v-tooltip="t('common.more')"
                     >
                       <MoreHorizontal20Filled class="w-4 h-4" />
                     </button>
@@ -295,11 +295,9 @@
         <Add16Regular class="w-3.5 h-3.5"  />
         {{ t('bot.chat.addBot') }}
       </button>
-      <GdTooltip :content="t('bot.card.docs')" placement="top">
-        <button type="button" class="bot-docs" @click="emit('docs')">
+      <button v-tooltip="t('bot.card.docs')" type="button" class="bot-docs" @click="emit('docs')">
           <Document16Regular class="w-3.5 h-3.5"  />
         </button>
-      </GdTooltip>
     </div>
   </aside>
 </template>
@@ -316,7 +314,6 @@ import { ChevronDown12Regular, ChevronRight12Regular, Chat20Regular, Document16R
 import { ScrollContainer } from '@/components/ui'
 import DropdownMenu from '@/components/ui/DropdownMenu.vue'
 import DropdownMenuItem from '@/components/ui/DropdownMenuItem.vue'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
 import {
   Broom20Regular,
   Delete20Regular,

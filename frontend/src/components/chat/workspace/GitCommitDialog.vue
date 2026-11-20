@@ -9,23 +9,18 @@
       <div class="git-cd-branch">
         <Branch20Regular class="w-4 h-4"  />
         <span class="git-cd-branch-name">{{ git.selectedBranch || '-' }}</span>
-        <GdTooltip class="git-cd-generate-tip" placement="top"
-          :content="git.generatingMessage ? t('git.generateMessageCancelTitle') : t('git.generateMessageTitle')">
-          <button type="button" class="git-cd-generate"
+        <button v-tooltip="git.generatingMessage ? t('git.generateMessageCancelTitle') : t('git.generateMessageTitle')" type="button" class="git-cd-generate git-cd-generate-tip"
             :class="{ 'is-loading': git.generatingMessage }"
             :disabled="!git.status?.isGitRepo || git.totalChanges === 0"
             @click="git.generatingMessage ? git.cancelGenerateMessage() : git.generateCommitMessage()">
             <span class="w-3.5 h-3.5" :class="{ 'animate-spin': git.generatingMessage }"><ArrowSync16Regular v-if="git.generatingMessage" />
               <Wand16Regular v-else /></span>
           </button>
-        </GdTooltip>
-        <GdTooltip placement="top" :content="t('git.constraintTitle')">
-          <button type="button" class="git-cd-constraint"
+        <button v-tooltip="t('git.constraintTitle')" type="button" class="git-cd-constraint"
             :disabled="!git.status?.isGitRepo"
             @click="git.openConstraintDialog()">
             <Settings16Regular class="w-3.5 h-3.5"  />
           </button>
-        </GdTooltip>
       </div>
       <!-- 提交信息：无边框极简输入（图片同款，只有光标提示） -->
       <textarea v-model="git.commitMessage" class="git-cd-message" rows="6"
@@ -98,7 +93,6 @@
 import { useI18n } from "vue-i18n";
 import { Branch20Regular, BranchFork16Regular, ArrowUpload16Regular, Checkmark12Regular, Checkmark16Regular, Wand16Regular, Settings16Regular, ArrowSync16Regular } from "@vicons/fluent";
 import GdDialog from "../../ui/GdDialog.vue";
-import GdTooltip from "../../ui/GdTooltip.vue";
 import { useGitStore } from "@/stores/git";
 
 const { t } = useI18n();

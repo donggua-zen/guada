@@ -9,19 +9,15 @@
       <span v-if="!isMac && !isMobileDevice" class="text-xs font-normal text-(--gd-titlebar-text-color) opacity-80 mr-3">GuaDa AI</span>
 
       <!-- 搜索按钮 -->
-      <GdTooltip v-if="authStore.isAuthenticated" :content="t('ui.titlebar.searchSession')" placement="bottom">
-        <button class="titlebar-menu-btn" @click="showSearchDialog = true">
+      <button v-if="authStore.isAuthenticated" v-tooltip:bottom="t('ui.titlebar.searchSession')" class="titlebar-menu-btn" @click="showSearchDialog = true">
           <Search16Regular class="w-4 h-4" />
         </button>
-      </GdTooltip>
 
       <!-- Debug 下拉菜单（仅 Electron） -->
       <div v-if="isElectron" class="relative flex items-center h-full debug-dropdown" :class="{ 'active': showDebugMenu }">
-        <GdTooltip :content="t('ui.titlebar.debugTools')" placement="bottom">
-          <button class="titlebar-menu-btn debug-button" @click="toggleDebugMenu">
+        <button v-tooltip:bottom="t('ui.titlebar.debugTools')" class="titlebar-menu-btn debug-button" @click="toggleDebugMenu">
             <Bug16Regular class="w-4 h-4" />
           </button>
-        </GdTooltip>
 
         <div v-if="showDebugMenu"
           class="absolute top-full left-0 mt-1 bg-(--gd-color-sidebar-bg) border border-(--gd-color-titlebar-border) rounded-md shadow-lg min-w-40 z-1000 overflow-hidden">
@@ -38,17 +34,14 @@
       </div>
 
       <!-- GitHub 仓库 -->
-      <GdTooltip :content="t('ui.titlebar.githubRepo')" placement="bottom">
-        <button class="titlebar-menu-btn" @click="openInExternalBrowser('https://github.com/donggua-zen/guada')">
+      <button v-tooltip:bottom="t('ui.titlebar.githubRepo')" class="titlebar-menu-btn" @click="openInExternalBrowser('https://github.com/donggua-zen/guada')">
           <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
           </svg>
         </button>
-      </GdTooltip>
 
       <!-- 更新提示：胶囊式版本标签，直接显示「新版本 / 下载中 / 待安装」 -->
-      <GdTooltip v-if="updateStore.hasUpdate" :content="updateTooltip" placement="bottom">
-        <button
+      <button v-if="updateStore.hasUpdate" v-tooltip:bottom="updateTooltip"
           type="button"
           class="update-badge"
           :class="updateBadgeClass"
@@ -64,7 +57,6 @@
           <ArrowDownload16Regular v-else class="update-badge__icon" />
           <span>{{ updateBadgeLabel }}</span>
         </button>
-      </GdTooltip>
     </div>
   </div>
 
@@ -86,8 +78,6 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 import { isMobileDevice } from '@/composables/useDevice'
 import { useAuthStore } from '@/stores/auth'
 import { useUpdateStore } from '@/stores/update'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
-
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 const isMac = isElectron && window.electronAPI?.platform === 'darwin'
 

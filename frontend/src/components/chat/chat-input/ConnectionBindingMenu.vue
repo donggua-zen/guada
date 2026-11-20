@@ -15,7 +15,7 @@
             <span class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis">{{ opt.description }}</span>
           </div>
           <span v-if="opt.path" class="text-xs text-[#999] dark:text-[#6b7280] whitespace-nowrap overflow-hidden text-ellipsis"
-            :title="opt.path">
+            v-tooltip="opt.path">
             <Folder16Regular class="align-[-1px] mr-0.5 w-3 h-3"  />{{ opt.path }}
           </span>
         </div>

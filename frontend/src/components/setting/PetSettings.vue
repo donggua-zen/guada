@@ -60,7 +60,7 @@
                 v-if="avatar.source !== 'bundled'"
                 class="absolute top-2 left-2 rounded px-1 py-0.5 text-[10px] leading-none"
                 :class="sourceBadgeClass(avatar)"
-                :title="avatar.description || avatar.name"
+                v-tooltip="avatar.description || avatar.name"
               >{{ sourceLabel(avatar.source) }}</span>
               <span
                 v-if="avatar.id === selectedAvatarId"
@@ -71,7 +71,7 @@
                 v-if="canUninstall(avatar)"
                 type="button"
                 class="absolute bottom-1.5 right-1.5 rounded px-1.5 py-0.5 text-[10px] leading-none text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 dark:hover:bg-red-950/40"
-                :title="t('settings.pet.uninstall')"
+                v-tooltip="t('settings.pet.uninstall')"
                 :disabled="uninstalling === avatar.id"
                 @click.stop="handleUninstall(avatar)"
               >

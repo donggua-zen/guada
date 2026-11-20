@@ -11,15 +11,13 @@
         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 18l6-6-6-6" />
       </svg>
-      <span class="wf-card-name" :class="{ 'is-shimmer': starting }" :title="title">{{ title }}</span>
+      <span class="wf-card-name" :class="{ 'is-shimmer': starting }" v-tooltip="title">{{ title }}</span>
       <span class="wf-card-meta">{{ metaText }}</span>
-      <GdTooltip v-if="openWorkflowTab" :content="t('chat.workspace.workflowTab')" placement="bottom">
-        <button class="wf-card-detail" @click.stop="openWorkflowTab?.(props.sessionId)">
+      <button v-if="openWorkflowTab" v-tooltip:bottom="t('chat.workspace.workflowTab')" class="wf-card-detail" @click.stop="openWorkflowTab?.(props.sessionId)">
           
             <Flowchart20Regular class="w-3.5 h-3.5"  />
           
         </button>
-      </GdTooltip>
     </div>
     <div v-if="!collapsed" class="wf-card-body">
       <!-- 阶段站条（脚本声明了 phases 时接管成员展示；
@@ -66,7 +64,6 @@ import { useI18n } from "vue-i18n";
 
 import { ChevronDown12Regular, Flowchart20Regular } from "@vicons/fluent";
 import { parse as partialParse } from "partial-json";
-import GdTooltip from "@/components/ui/GdTooltip.vue";
 import WorkflowStatusDot from "@/components/chat/workflow/WorkflowStatusDot.vue";
 import WorkflowMemberTree from "@/components/chat/workflow/WorkflowMemberTree.vue";
 import WorkflowPhaseTrack from "@/components/chat/workflow/WorkflowPhaseTrack.vue";

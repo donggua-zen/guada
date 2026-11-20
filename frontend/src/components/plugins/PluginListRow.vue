@@ -28,7 +28,7 @@
 
     <div class="flex shrink-0 items-center gap-2">
       <DropdownMenu v-if="menuItems.length > 0" @command="(command: string) => emit('command', command)">
-        <div class="row-menu-trigger" :title="t('common.more')" :aria-label="t('common.more')">
+        <div class="row-menu-trigger" v-tooltip="t('common.more')" :aria-label="t('common.more')">
           
             <MoreHorizontal20Filled class="w-4 h-4"  />
           

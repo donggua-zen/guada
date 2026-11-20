@@ -94,14 +94,11 @@
           <span class="event-card__compaction-text">{{ noticeLabel }}</span>
         </button>
         <!-- 子代理结果通知：点进派生子代理的会话（source.subSessionId 结构化携带） -->
-        <GdTooltip v-if="isSubagentNotice && subSessionId && openSubAgentSession"
-          :content="t('chat.toolCalls.openSubAgentPanel')" placement="top">
-          <span class="event-card__subagent-btn" @click="openSubAgentSession(subSessionId)">
+        <span v-if="isSubagentNotice && subSessionId && openSubAgentSession" v-tooltip="t('chat.toolCalls.openSubAgentPanel')" class="event-card__subagent-btn" @click="openSubAgentSession(subSessionId)">
             
               <PanelRightExpand20Filled class="w-3.5 h-3.5"  />
             
           </span>
-        </GdTooltip>
         <span class="event-card__line event-card__line--right" aria-hidden="true"></span>
       </div>
       <div v-if="expanded && noticeText" class="event-card__summary">{{ noticeText }}</div>
@@ -162,7 +159,6 @@ import {
   Warning16Regular,
   Cut20Regular,
 } from "@vicons/fluent";
-import GdTooltip from "@/components/ui/GdTooltip.vue";
 import { stripSystemReminder } from "@/utils/messageUtils";
 import { resolveNoticeEventType } from "@/utils/jobNotice";
 import { formatBytes } from "@/utils/formatBytes";

@@ -23,19 +23,19 @@
             <span v-if="rowDisplays[toolIndex].remoteName" class="shrink-0 ml-2 text-sm">{{ t('chat.toolCalls.remote') }}·</span>
             <span class="tool-file-chip inline-flex min-w-0 max-w-full items-center gap-1 ml-2"
               :class="{ 'is-openable': canOpenToolFile(toolIndex) }"
-              :title="rowDisplays[toolIndex].file!.fullPath"
+              v-tooltip="rowDisplays[toolIndex].file!.fullPath"
               @click="openToolFile(toolIndex, $event)">
               <img :src="rowDisplays[toolIndex].fileIcon" class="w-4 h-4 shrink-0" alt="" />
               <span class="tool-file-chip__name min-w-0 truncate text-(--gd-color-text)">{{ rowDisplays[toolIndex].file!.fileName }}</span>
             </span>
             <span v-if="rowDisplays[toolIndex].file!.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-(--gd-color-text-subtlest)"
-              :title="rowDisplays[toolIndex].file!.fullPath">{{ rowDisplays[toolIndex].file!.dirPath }}</span>
+              v-tooltip="rowDisplays[toolIndex].file!.fullPath">{{ rowDisplays[toolIndex].file!.dirPath }}</span>
           </template>
           <!-- 其余工具：单行参数摘要（原样/计数，可截断） -->
           <span v-else-if="rowDisplays[toolIndex].argsText" class="text-sm ml-2 truncate">{{ rowDisplays[toolIndex].argsText }}</span>
           <!-- 工具产出图片数量徽标（缩略图在展开区；此处让闭合状态也能看出有图） -->
           <span v-if="toolImages[toolIndex].length" class="tool-image-count shrink-0"
-            :title="t('chat.toolCalls.imageCount', { count: toolImages[toolIndex].length })">
+            v-tooltip="t('chat.toolCalls.imageCount', { count: toolImages[toolIndex].length })">
             <Image24Regular class="w-[13px] h-[13px]" />
             {{ toolImages[toolIndex].length }}
           </span>
@@ -47,13 +47,9 @@
         </div>
         <!-- 子代理工具：打开对应子代理会话的面板（点击不触发行展开；
              无 provide 的宿主如 Bot 会话面板下不渲染） -->
-        <GdTooltip v-if="canOpenSubAgentPanel && subAgentLinks[toolIndex]"
-          :content="t('chat.toolCalls.openSubAgentPanel')" placement="top"
-          class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <span class="open-subagent-btn" @click.stop="openSubAgentPanel(toolIndex)">
+        <span v-if="canOpenSubAgentPanel && subAgentLinks[toolIndex]" v-tooltip="t('chat.toolCalls.openSubAgentPanel')" class="open-subagent-btn shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200" @click.stop="openSubAgentPanel(toolIndex)">
             <PanelRightExpand20Filled class="w-3.5 h-3.5" />
           </span>
-        </GdTooltip>
         <!-- 展开箭头：闭合朝右、展开朝下；hover 时显示，展开后持续显示。
              已跳过的工具没有可展开内容（参数原文不渲染），不显示箭头。 -->
         <ChevronDown12Regular v-if="tool.outcome !== 'skipped'" class="w-4 h-4 shrink-0 ml-2 text-(--gd-color-text-subtlest) transition-all duration-200"
@@ -157,7 +153,6 @@ import { getFileIcon } from '@/composables/useFileIcon';
 import { resolveSubAgentLink, findToolResponse } from '@/utils/subAgentLink';
 import type { ToolCallResponseEntry } from '@/types/message';
 import type { FileRef } from '@/types/stream/content-block.types';
-import GdTooltip from '@/components/ui/GdTooltip.vue';
 import ToolCustomView from './tool-renderers/ToolCustomView.vue';
 import SubAgentToolRow from './SubAgentToolRow.vue';
 import WorkflowRunInlineCard from './WorkflowRunInlineCard.vue';

@@ -15,13 +15,13 @@
           v-if="exitCode !== undefined"
           class="term-pill"
           :class="pillClass"
-          :title="processStatus"
+          v-tooltip="processStatus"
         >{{ pillText }}</span>
         <span v-if="uptimeText" class="term-uptime">{{ uptimeText }}</span>
         <span
           v-if="backgrounded && processId"
           class="term-pill term-pill--bg"
-          :title="processId"
+          v-tooltip="processId"
         >{{ t('chat.toolCalls.terminalBackground') }}</span>
       </div>
     </div>

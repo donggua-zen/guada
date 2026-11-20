@@ -40,7 +40,7 @@
             <ArrowRight16Regular v-else-if="item.status === 'in_progress'" class="todo-icon--active w-3.5 h-3.5" />
             <span v-else class="todo-ring" />
           </span>
-          <span class="min-w-0 flex-1 text-xs leading-relaxed break-words" :title="item.content"
+          <span class="min-w-0 flex-1 text-xs leading-relaxed break-words" v-tooltip="item.content"
             :class="item.status === 'completed'
               ? 'line-through todo-text-done'
               : item.status === 'in_progress'

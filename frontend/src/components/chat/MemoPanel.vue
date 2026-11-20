@@ -9,11 +9,7 @@
             <div class="flex items-center gap-1.5">
               <span class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">{{ t('chat.memo.contextUsage')
                 }}</span>
-              <GdTooltip :content="t('chat.memo.contextUsageTooltip')" placement="top">
-                
-                  <QuestionCircle16Filled class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors w-3.5 h-3.5"  />
-                
-              </GdTooltip>
+              <QuestionCircle16Filled v-tooltip="t('chat.memo.contextUsageTooltip')" class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors w-3.5 h-3.5"  />
             </div>
             <span class="text-base font-bold" :class="usageColorClass">
               {{ tokenStats.percentage }}%
@@ -63,11 +59,7 @@
             <div class="flex items-center gap-1.5">
               <span class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">{{ t('chat.memo.requestMedia')
                 }}</span>
-              <GdTooltip :content="t('chat.memo.requestMediaTooltip')" placement="top">
-                
-                  <QuestionCircle16Filled class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors w-3.5 h-3.5"  />
-                
-              </GdTooltip>
+              <QuestionCircle16Filled v-tooltip="t('chat.memo.requestMediaTooltip')" class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors w-3.5 h-3.5"  />
             </div>
             <span class="text-base font-bold" :class="mediaColorClass">
               {{ mediaUsagePercent }}%
@@ -162,7 +154,7 @@
 
           <!-- 底部信息：时间戳和操作按钮 -->
           <div class="flex items-center justify-between text-xs pt-3">
-            <span class="text-gray-400 dark:text-[#8b8d95] truncate" :title="formatTime(summaries[0].createdAt)">
+            <span class="text-gray-400 dark:text-[#8b8d95] truncate" v-tooltip="formatTime(summaries[0].createdAt)">
               {{ formatTime(summaries[0].createdAt) }}
             </span>
             <div class="flex gap-1">
@@ -302,7 +294,6 @@ import { usePopup } from '@/composables/usePopup';
 import { toast } from '@/components/ui/toastService';
 import { ArrowClockwise16Regular, QuestionCircle16Filled, Wand16Regular, List16Regular } from '@vicons/fluent';
 import dayjs from 'dayjs';
-import GdTooltip from '@/components/ui/GdTooltip.vue';
 import GdButton from '@/components/ui/GdButton.vue';
 import GdInputNumber from '@/components/ui/GdInputNumber.vue';
 

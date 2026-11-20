@@ -24,7 +24,7 @@
             <span class="wf-col-rail" :class="railClass(i)" aria-hidden="true"></span>
             <WorkflowStatusDot :status="dotStatus(station.status)" class="wf-col-lamp" />
           </div>
-          <div class="wf-col-caption" :title="station.detail || station.title">
+          <div class="wf-col-caption" v-tooltip="station.detail || station.title">
             <span class="wf-col-name" :class="{ 'is-active': station.status === 'active' }">
               {{ station.title || t("chat.workspace.wfPhaseOther") }}
             </span>
@@ -39,7 +39,7 @@
               class="wf-pill"
               :class="{ 'is-clickable': !!agent.subSessionId && !!openSubAgent }"
               :style="{ animationDelay: `${pillDelay(i, j)}ms` }"
-              :title="agent.label"
+              v-tooltip="agent.label"
               @click="onOpen(agent)"
             >
               <WorkflowStatusDot :status="agent.status" size="sm" />

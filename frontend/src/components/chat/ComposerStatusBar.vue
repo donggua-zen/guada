@@ -17,14 +17,14 @@
         <span class="csb-icon">
           <Target20Regular class="w-3.5 h-3.5 csb-icon--muted" />
         </span>
-        <span class="csb-text" :title="goal.objective">{{ goal.objective }}</span>
+        <span class="csb-text" v-tooltip="goal.objective">{{ goal.objective }}</span>
         <span class="csb-count">{{ goalCapsuleText }}</span>
-        <button v-if="goal.phase === 'active' && goalState?.armed !== false" class="csb-goal-btn" :title="t('chat.goal.pause')"
+        <button v-if="goal.phase === 'active' && goalState?.armed !== false" class="csb-goal-btn" v-tooltip="t('chat.goal.pause')"
           :aria-label="t('chat.goal.pause')" @click.stop="pauseGoal">
           <Pause16Regular class="w-2.5 h-2.5" />
         </button>
         <button v-else-if="goal.phase === 'paused' || (goal.phase === 'active' && goalState?.armed === false)"
-          class="csb-goal-btn" :title="goalState?.armed === false ? t('chat.goal.resumeDisarmed') : t('chat.goal.resume')"
+          class="csb-goal-btn" v-tooltip="goalState?.armed === false ? t('chat.goal.resumeDisarmed') : t('chat.goal.resume')"
           :aria-label="goalState?.armed === false ? t('chat.goal.resumeDisarmed') : t('chat.goal.resume')"
           @click.stop="resumeGoal">
           <Play16Regular class="w-2.5 h-2.5" />
@@ -38,7 +38,7 @@
           <Checkmark16Regular v-else-if="currentTodo?.status === 'completed'" class="w-3.5 h-3.5 csb-icon--done" />
           <span v-else class="csb-ring"></span>
         </span>
-        <span class="csb-text" :title="currentTodo?.content">{{ currentTodo?.content }}</span>
+        <span class="csb-text" v-tooltip="currentTodo?.content">{{ currentTodo?.content }}</span>
         <span class="csb-count csb-count--done">{{ todoDoneCount }}/{{ todoItems.length }}</span>
       </span>
 
@@ -67,11 +67,9 @@
             <header class="csb-sec-head">
               <span class="csb-sec-title">{{ t('chat.goal.title') }}</span>
               <span class="csb-sec-count">{{ goalPhaseText }}</span>
-              <GdTooltip :content="t('chat.goal.clear')" placement="bottom">
-                <button class="csb-sec-btn ml-auto" @click="clearGoal">
+              <button v-tooltip:bottom="t('chat.goal.clear')" class="csb-sec-btn ml-auto" @click="clearGoal">
                   <Dismiss16Regular class="w-3.5 h-3.5" />
                 </button>
-              </GdTooltip>
             </header>
             <div class="csb-list">
               <div class="csb-row">
@@ -121,30 +119,24 @@
             <header class="csb-sec-head">
               <span class="csb-sec-title">{{ t('chat.workspace.backgroundJobs') }}</span>
               <span class="csb-sec-count">{{ backgroundJobCount }}</span>
-              <GdTooltip v-if="subagentJobs.length && openSubagentList" :content="t('chat.workspace.subagentListTab')" placement="bottom">
-                <button class="csb-sec-btn ml-auto" @click="openSubagentList?.(props.sessionId)">
+              <button v-if="subagentJobs.length && openSubagentList" v-tooltip:bottom="t('chat.workspace.subagentListTab')" class="csb-sec-btn ml-auto" @click="openSubagentList?.(props.sessionId)">
                   <Bot20Regular class="w-3.5 h-3.5" />
                 </button>
-              </GdTooltip>
             </header>
 
             <!-- 终端进程组：等宽命令摘要 + 已运行时长 + 终止 -->
             <template v-if="processJobs.length">
               <div class="csb-group-label">{{ t('chat.workspace.processes') }}</div>
               <div class="csb-list">
-                <GdTooltip v-for="p in processJobs" :key="p.id" :content="p.label" placement="bottom">
-                  <div class="csb-row csb-row--clickable" @click="openProcessLog(p)">
+                <div v-for="p in processJobs" :key="p.id" v-tooltip:bottom="p.label" class="csb-row csb-row--clickable" @click="openProcessLog(p)">
                     <span class="csb-icon"><span class="csb-spinner"></span></span>
                     <span class="csb-row-text csb-row-text--cmd">{{ shortCommand(p.label) }}</span>
                     <span class="csb-row-status">{{ jobStatusText(p) }}</span>
                     <span class="csb-elapsed">{{ elapsedText(p.startedAt) }}</span>
-                    <GdTooltip :content="t('chat.workspace.killProcess')" placement="bottom">
-                      <button class="csb-kill" @click.stop="killJob(p)">
+                    <button v-tooltip:bottom="t('chat.workspace.killProcess')" class="csb-kill" @click.stop="killJob(p)">
                         <Dismiss16Regular class="w-2.5 h-2.5" />
                       </button>
-                    </GdTooltip>
                   </div>
-                </GdTooltip>
               </div>
             </template>
 
@@ -152,8 +144,7 @@
             <template v-if="subagentJobs.length">
               <div class="csb-group-label">{{ t('chat.workspace.subagents') }}</div>
               <div class="csb-list">
-                <GdTooltip v-for="s in subagentJobs" :key="s.id" :content="s.label" placement="bottom">
-                  <div class="csb-row csb-row--clickable"
+                <div v-for="s in subagentJobs" :key="s.id" v-tooltip:bottom="s.label" class="csb-row csb-row--clickable"
                     :class="{ 'csb-row--plain': !openSubAgent }" @click="openSubAgent?.(subSessionIdOf(s))">
                     <span class="csb-icon"><span class="csb-spinner"></span></span>
                     <img v-if="subagentAvatar(s)" :src="subagentAvatar(s)" class="csb-avatar" alt="" />
@@ -161,13 +152,10 @@
                     <span class="csb-row-text">{{ s.label }}</span>
                     <span class="csb-row-status">{{ jobStatusText(s) }}</span>
                     <span class="csb-elapsed">{{ elapsedText(s.startedAt) }}</span>
-                    <GdTooltip :content="t('chat.workspace.killProcess')" placement="bottom">
-                      <button class="csb-kill" @click.stop="killJob(s)">
+                    <button v-tooltip:bottom="t('chat.workspace.killProcess')" class="csb-kill" @click.stop="killJob(s)">
                         <Dismiss16Regular class="w-2.5 h-2.5" />
                       </button>
-                    </GdTooltip>
                   </div>
-                </GdTooltip>
               </div>
             </template>
           </section>
@@ -181,7 +169,6 @@
 import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, Pause16Regular, Play16Regular, Target20Regular, WindowConsole20Filled } from "@vicons/fluent";
-import GdTooltip from "@/components/ui/GdTooltip.vue";
 import { useGoalStatus } from "@/composables/useGoalStatus";
 import { useTodoStatus } from "@/composables/useTodoStatus";
 import { useBackgroundJobs } from "@/composables/useBackgroundJobs";

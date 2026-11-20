@@ -1,7 +1,7 @@
 <template>
   <div
     class="title-info flex items-center gap-2 min-w-0"
-    :title="tooltip || undefined"
+    v-tooltip="tooltip || undefined"
   >
     <BotUserAvatar
       :avatar-url="avatarUrl"
@@ -20,7 +20,7 @@
       v-if="online !== null"
       class="status-dot"
       :class="online ? 'online' : 'offline'"
-      :title="onlineTitle"
+      v-tooltip="onlineTitle"
     ></span>
     <span v-if="botName" class="title-bot truncate min-w-0">{{ botName }}</span>
   </div>

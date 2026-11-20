@@ -1,7 +1,5 @@
 <template>
-    <GdTooltip v-if="title" :content="title" placement="top">
-        <span class="plan-badge" :class="`plan-badge-${status}`">{{ label }}</span>
-    </GdTooltip>
+    <span v-if="title" v-tooltip="title" class="plan-badge" :class="`plan-badge-${status}`">{{ label }}</span>
     <span v-else class="plan-badge" :class="`plan-badge-${status}`">{{ label }}</span>
 </template>
 
@@ -19,8 +17,6 @@ export type PlanBadgeStatus = SessionPlanStatus | PlanCardStatus
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
-
 const props = defineProps<{
     status: PlanBadgeStatus
     /** 有值时包一层 tooltip：计划卡在失败态用它给出真实原因 */

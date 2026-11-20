@@ -18,7 +18,7 @@
                     <!-- 统一标签（文件 + 浏览器，按创建顺序，可拖拽排序） -->
                     <div v-for="(tab, index) in tabs" :key="tab.key" class="browser-tab"
                         :class="{ active: activeTabKey === tab.key }"
-                        :title="tabTitle(tab)" draggable="true"
+                        v-tooltip="tabTitle(tab)" draggable="true"
                         @click="onTabClick(tab)"
                         @dblclick="onTabDblClick(tab)"
                         @dragstart="onTabDragStart(index, $event)"
@@ -51,7 +51,7 @@
                             <span class="tab-favicon tab-git">
                                 <Bot20Regular class="w-3.5 h-3.5"  />
                             </span>
-                            <span v-if="isSubAgentRunning(tab.key)" class="tab-run-dot" :title="t('chat.workspace.subagentRunning')"></span>
+                            <span v-if="isSubAgentRunning(tab.key)" class="tab-run-dot" v-tooltip="t('chat.workspace.subagentRunning')"></span>
                         </template>
                         <!-- 子代理列表面板图标（与单个子代理标签的 Bot 图标区分） -->
                         <span v-else-if="tab.type === 'subagentlist'" class="tab-favicon tab-git">
@@ -84,13 +84,11 @@
                 </div>
 
                 <!-- 起始页按钮：打开起始页（无任何标签时同样显示该页） -->
-                <GdTooltip :content="t('chat.workspace.newTab')" placement="bottom">
-                    <button class="sidebar-tool-btn no-drag" @click="tabStore.openNewTab()">
+                <button v-tooltip:bottom="t('chat.workspace.newTab')" class="sidebar-tool-btn no-drag" @click="tabStore.openNewTab()">
                         
                             <Add16Regular class="w-3.5 h-3.5"  />
                         
                     </button>
-                </GdTooltip>
             </div>
 
             <!-- 弹性占位（拖拽区域） -->
@@ -99,24 +97,18 @@
             <!-- 悬浮对话开关：只在全屏（= 对话搬进悬浮面板）时出现。
                  它是隐藏面板后的唯一回程入口，与面板头部的 ✕ 完全等价。
                  面板自身因此不必常驻悬浮球之类的小图标 -->
-            <GdTooltip v-if="layoutStore.workspaceFullscreen"
-                :content="layoutStore.floatingChatVisible ? t('chat.floating.hide') : t('chat.floating.show')"
-                placement="bottom">
-                <button class="sidebar-tool-btn no-drag mr-1.5" :class="{ active: layoutStore.floatingChatVisible }"
+            <button v-if="layoutStore.workspaceFullscreen" v-tooltip:bottom="layoutStore.floatingChatVisible ? t('chat.floating.hide') : t('chat.floating.show')" class="sidebar-tool-btn no-drag mr-1.5" :class="{ active: layoutStore.floatingChatVisible }"
                     @click="layoutStore.toggleFloatingChat()">
                     
                         <Chat16Regular class="w-4 h-4"  />
                     
                 </button>
-            </GdTooltip>
 
             <!-- 全屏按钮 -->
-            <GdTooltip :content="layoutStore.workspaceFullscreen ? t('chat.workspace.exitFullscreen') : t('chat.workspace.fullscreen')" placement="bottom">
-                <button class="sidebar-tool-btn no-drag mr-1.5" @click="layoutStore.toggleWorkspaceFullscreen()">
+            <button v-tooltip:bottom="layoutStore.workspaceFullscreen ? t('chat.workspace.exitFullscreen') : t('chat.workspace.fullscreen')" class="sidebar-tool-btn no-drag mr-1.5" @click="layoutStore.toggleWorkspaceFullscreen()">
                     <span class="w-4 h-4"><FullScreenMaximize16Regular v-if="!layoutStore.workspaceFullscreen" />
                         <ArrowMinimize16Regular v-else /></span>
                 </button>
-            </GdTooltip>
         </div>
         <!-- 内容区：主内容（左）+ 目录树（右，目录树已归入 FilePreviewPanel 的 pane2） -->
         <div class="flex-1 min-h-0 flex overflow-hidden">
@@ -196,7 +188,6 @@ import { useI18n } from 'vue-i18n';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Branch20Regular, Pulse20Regular, Bot20Regular, PeopleTeam20Regular, Flowchart20Regular, ArrowMinimize16Regular, FullScreenMaximize16Regular, Chat16Regular, Code20Regular, Notepad20Regular, Add16Regular, Dismiss12Regular, DataUsage20Regular } from '@vicons/fluent';
 import { getFileIcon } from '@/composables/useFileIcon';
-import GdTooltip from '@/components/ui/GdTooltip.vue';
 import FilePreviewPanel from './FilePreviewPanel.vue';
 import SubagentChatTab from './SubagentChatTab.vue';
 import SubagentListPanel from './SubagentListPanel.vue';

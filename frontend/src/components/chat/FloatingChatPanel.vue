@@ -17,7 +17,7 @@
         <span class="truncate">{{ sessionTitle }}</span>
       </div>
       <div class="flex items-center gap-0.5 shrink-0">
-        <button class="fcp-btn" :title="t('chat.floating.hide')" @click.stop="hide">
+        <button class="fcp-btn" v-tooltip="t('chat.floating.hide')" @click.stop="hide">
           <Dismiss16Regular class="w-3.5 h-3.5"  />
         </button>
       </div>

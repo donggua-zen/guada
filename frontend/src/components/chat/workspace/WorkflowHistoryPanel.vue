@@ -11,7 +11,7 @@
         {{ workflowStore.isPending(props.sessionId) ? t('common.loading') : t('chat.workspace.workflowEmpty') }}
       </div>
       <div v-for="run in runs" :key="run.runId" class="wh-run">
-        <div class="wh-run-row" :title="run.description || run.name || run.runId"
+        <div class="wh-run-row" v-tooltip="run.description || run.name || run.runId"
           @click="toggleRun(run.runId)">
           <WorkflowStatusDot :status="run.status" />
           <svg class="wh-chevron" :class="{ 'is-open': isExpanded(run.runId) }" width="12" height="12"

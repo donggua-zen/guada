@@ -4,15 +4,13 @@
         <div class="plugins-view-bar">
             <div class="plugins-view-bar__left">
                 <PluginViewSwitch v-model="view" :items="viewItems" />
-                <GdTooltip :content="t('plugins.skills.subtitle')" placement="top">
-                    <button type="button" class="plugins-view-info" :aria-label="t('plugins.page.info')">
+                <button v-tooltip="t('plugins.skills.subtitle')" type="button" class="plugins-view-info" :aria-label="t('plugins.page.info')">
                         <Info24Regular />
                     </button>
-                </GdTooltip>
             </div>
             <div class="plugins-view-bar__right">
                 <template v-if="view === 'installed'">
-                    <GdButton circle :loading="scanning" :title="t('plugins.skills.scan')" @click="handleScan">
+                    <GdButton circle :loading="scanning" v-tooltip="t('plugins.skills.scan')" @click="handleScan">
                         <template #icon>
                             <ArrowClockwise16Regular />
                         </template>
@@ -50,7 +48,7 @@
                         </template>
                         {{ marketLoading ? t('common.loading') : t('plugins.skills.marketRefresh') }}
                     </GdButton>
-                    <GdButton circle size="small" :title="t('plugins.page.marketOpenWeb')" @click="handleOpenMarketSite">
+                    <GdButton circle size="small" v-tooltip="t('plugins.page.marketOpenWeb')" @click="handleOpenMarketSite">
                         <template #icon>
                             <ArrowUpRight16Regular />
                         </template>
@@ -74,7 +72,7 @@
                         </template>
                         {{ skillHubLoading ? t('common.loading') : t('plugins.skills.skillhubRefresh') }}
                     </GdButton>
-                    <GdButton circle size="small" :title="t('plugins.page.marketOpenWeb')" @click="handleOpenSkillHubSite">
+                    <GdButton circle size="small" v-tooltip="t('plugins.page.marketOpenWeb')" @click="handleOpenSkillHubSite">
                         <template #icon>
                             <ArrowUpRight16Regular />
                         </template>
@@ -120,9 +118,7 @@
                         <GdTag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</GdTag>
                     </template>
                     <template #actions>
-                        <GdTooltip v-if="skill.provider" :content="t('plugins.skills.pluginManaged')" placement="top">
-                            <GdSwitch :model-value="skill.enabled !== false" disabled size="small" />
-                        </GdTooltip>
+                        <GdSwitch v-if="skill.provider" v-tooltip="t('plugins.skills.pluginManaged')" :model-value="skill.enabled !== false" disabled size="small" />
                         <GdSwitch
                             v-else
                             :model-value="skill.enabled !== false"
@@ -292,7 +288,6 @@ import { getSkillDisplayName, getSkillDisplayDescription } from '@/utils/skillDi
 import { groupSkills } from '@/utils/pluginGroups'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import { openInExternalBrowser } from '@/utils/browserUtils'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import PluginListRow from './PluginListRow.vue'
 import PluginViewSwitch from './PluginViewSwitch.vue'

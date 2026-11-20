@@ -3,43 +3,32 @@
     class="message-actions flex flex-nowrap gap-0 text-sm w-full mt-3 text-gray-500 items-center min-w-0 whitespace-nowrap"
     :class="[isAssistant ? 'justify-start -translate-x-1' : 'justify-end translate-x-1']">
 
-    <GdTooltip :content="t('chat.messageActions.copy')" placement="top">
-      <div class="message-action-button" @click="$emit('copy')">
+    <div v-tooltip="t('chat.messageActions.copy')" class="message-action-button" @click="$emit('copy')">
         <Copy16Regular class="w-4 h-4" />
       </div>
-    </GdTooltip>
 
     <template v-if="!isAssistant && allowGenerate">
-      <GdTooltip :content="t('chat.messageActions.edit')" placement="top">
-        <div class="message-action-button" @click="$emit('generate')">
+      <div v-tooltip="t('chat.messageActions.edit')" class="message-action-button" @click="$emit('generate')">
           <Edit16Regular class="w-4 h-4" />
         </div>
-      </GdTooltip>
     </template>
 
     <template v-if="isAssistant && isLast">
-      <GdTooltip :content="t('chat.messageActions.regenerate')" placement="top">
-        <div class="message-action-button" @click="$emit('regenerate')">
+      <div v-tooltip="t('chat.messageActions.regenerate')" class="message-action-button" @click="$emit('regenerate')">
           <ArrowClockwise16Regular class="w-4 h-4" />
         </div>
-      </GdTooltip>
     </template>
 
     <template v-if="isAssistant">
-      <GdTooltip
-        :content="branching ? t('chat.messageActions.branching') : t('chat.messageActions.branchFromHere')"
-        placement="top">
-        <!-- 真 button 而非 div：让 .message-action-button 预置的 disabled: 工具类生效 -->
-        <button type="button" class="message-action-button"
+      <!-- 真 button 而非 div：让 .message-action-button 预置的 disabled: 工具类生效 -->
+      <button v-tooltip="branching ? t('chat.messageActions.branching') : t('chat.messageActions.branchFromHere')" type="button" class="message-action-button"
           :disabled="branching || branchDisabled" @click="handleBranch">
           <ArrowSync16Regular v-if="branching" class="w-4 h-4 animate-spin" />
           <BranchFork16Regular v-else class="w-4 h-4" />
         </button>
-      </GdTooltip>
     </template>
 
-    <GdTooltip :content="t('chat.messageActions.more')" placement="top">
-      <DropdownMenu @command="handleCommand">
+    <DropdownMenu v-tooltip="t('chat.messageActions.more')" @command="handleCommand">
         <div class="message-action-button">
           <MoreHorizontal16Regular class="w-4 h-4 pointer-events-none" />
         </div>
@@ -50,22 +39,19 @@
         </DropdownMenuItem>
       </template>
     </DropdownMenu>
-    </GdTooltip>
 
     <!-- 用量：只常显总量，明细走 tooltip（窄屏优先截断这一段） -->
-    <GdTooltip v-if="isAssistant && tokenUsage" class="min-w-0" :content="tokenDetail" placement="top">
-      <div class="ml-2 flex min-w-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+    <div v-if="isAssistant && tokenUsage" v-tooltip="tokenDetail" class="ml-2 flex min-w-0 items-center gap-1 text-xs text-gray-500 dark:text-gray-400 min-w-0">
         <ChartMultiple20Regular class="w-3.5 h-3.5 shrink-0" />
         <span class="truncate">{{ tokenSummary }}</span>
       </div>
-    </GdTooltip>
 
     <template v-if="isAssistant">
       <div v-if="durationText" class="ml-2 flex shrink-0 items-center justify-center text-gray-500">
         <Clock12Regular class="w-3 h-3 mr-1" />
         <span class="text-xs">{{ durationText }}</span>
       </div>
-      <span class="ml-2 shrink-0 text-xs text-gray-500" :title="props.timeFull">{{ props.timeFriendly }}</span>
+      <span class="ml-2 shrink-0 text-xs text-gray-500" v-tooltip="props.timeFull">{{ props.timeFriendly }}</span>
     </template>
   </div>
 </template>
@@ -75,7 +61,6 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import DropdownMenu from '../../ui/DropdownMenu.vue';
 import DropdownMenuItem from '../../ui/DropdownMenuItem.vue';
-import GdTooltip from '../../ui/GdTooltip.vue';
 import { formatCompactTokens } from '@/utils/usageFormat';
 
 const { t } = useI18n();

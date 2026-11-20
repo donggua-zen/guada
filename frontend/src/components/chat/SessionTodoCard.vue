@@ -19,7 +19,7 @@
         
         <span v-else class="todo-ring"></span>
       </span>
-      <span class="min-w-0 flex-1 truncate text-xs todo-text" :title="currentItem?.content">
+      <span class="min-w-0 flex-1 truncate text-xs todo-text" v-tooltip="currentItem?.content">
         {{ currentItem?.content }}
       </span>
       <span v-if="doneCount" class="shrink-0 font-mono text-xs todo-text-faint">
@@ -57,7 +57,7 @@
             
             <span v-else class="todo-ring"></span>
           </span>
-          <span class="min-w-0 flex-1 text-xs leading-relaxed break-words" :title="item.content"
+          <span class="min-w-0 flex-1 text-xs leading-relaxed break-words" v-tooltip="item.content"
             :class="item.status === 'completed'
               ? 'line-through todo-text-done'
               : item.status === 'in_progress'

@@ -1,7 +1,7 @@
 <template>
   <div class="tool-diff-view">
     <div class="tool-view-header">
-      <span class="tool-view-file" :title="filePath">{{ fileName }}</span>
+      <span class="tool-view-file" v-tooltip="filePath">{{ fileName }}</span>
       <span v-if="diffStat.added" class="diff-stat diff-stat--add">+{{ diffStat.added }}</span>
       <span v-if="diffStat.removed" class="diff-stat diff-stat--remove">−{{ diffStat.removed }}</span>
     </div>

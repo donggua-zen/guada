@@ -4,8 +4,7 @@
        选多个 = 「远程目录：首个连接名」+ 数量徽章（一眼看出选了哪些、有没有选错，不必点开核对）；
        连接清单未到位时名称位置显示微光骨架占位（避免闪原始连接 ID）；
        hover 提示完整名单；弹窗 = 各远程连接的勾选清单（点击切换绑定，✓ 为已绑定） -->
-  <GdTooltip :content="tooltipContent" placement="top">
-    <GdButton ref="buttonRef" class="workspace-btn mr-0.5" text @click.stop="togglePopover">
+  <GdButton v-tooltip="tooltipContent" ref="buttonRef" class="workspace-btn mr-0.5" text @click.stop="togglePopover">
       
         <Cloud24Regular class="w-4.5 h-4.5"  />
       
@@ -20,7 +19,6 @@
         <ChevronUpDown16Regular class="ml-0.5 w-4 h-4"  />
       
     </GdButton>
-  </GdTooltip>
 
   <GdPopover :show="popoverVisible" @update:show="popoverVisible = $event" :width="300" :max-height="400"
     :anchor-el="buttonRef?.$el ?? null">
@@ -61,7 +59,6 @@ import GdButton from '@/components/ui/GdButton.vue';
 
 import { Checkmark16Filled, ChevronUpDown16Regular, Cloud16Regular, Cloud24Regular } from '@vicons/fluent'
 import GdPopover from '../../ui/GdPopover.vue'
-import GdTooltip from '../../ui/GdTooltip.vue'
 import ConnectionBindingMenu from './ConnectionBindingMenu.vue'
 import { SSH_CONNECTION_ATTACHMENT_TYPE } from '@/constants'
 import { toggleConnectionBinding, useRemoteWorkspaceStore } from '@/stores/remoteWorkspace'

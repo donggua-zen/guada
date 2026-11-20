@@ -104,18 +104,14 @@
                   <!-- 工作目录打开操作（仅 Electron）：主按钮 = 上次选择的方式，下拉箭头切换 -->
                   <template v-if="isElectron && mainSession?.id">
                     <div class="relative inline-flex items-center">
-                      <GdTooltip :content="openWithCurrent.label" placement="bottom">
-                        <div class="header-icon-btn" @click="openWorkspaceWith(openWithMode)">
+                      <div v-tooltip:bottom="openWithCurrent.label" class="header-icon-btn" @click="openWorkspaceWith(openWithMode)">
                           <!-- WindowsExplorer / Finder 是 <img>（尺寸走 font-size），VsCode 是 <svg>（走 w/h） -->
                           <component :is="openWithCurrent.icon" class="w-5 h-5" style="font-size: 20px" />
                         </div>
-                      </GdTooltip>
-                      <GdTooltip :content="t('chat.workspace.openWith')" placement="bottom">
-                        <div ref="openWithBtnRef" class="header-icon-btn" style="padding: 4px 2px"
+                      <div v-tooltip:bottom="t('chat.workspace.openWith')" ref="openWithBtnRef" class="header-icon-btn" style="padding: 4px 2px"
                           @click="openWithMenuVisible = !openWithMenuVisible">
                           <ChevronDown16Regular class="w-3.5 h-3.5" />
                         </div>
-                      </GdTooltip>
                       <GdPopover v-model:show="openWithMenuVisible" :anchor-el="openWithBtnRef" :width="190">
                         <div class="py-1">
                           <div v-for="option in openWithOptions" :key="option.mode" class="open-with-item"
@@ -128,30 +124,20 @@
                     </div>
                   </template>
                   <!-- 概览面板开关（常驻，不自动隐藏）：点击展开/收起；激活态=面板展示中 -->
-                  <GdTooltip v-if="mainSession"
-                    :content="overviewPanelShown ? t('chat.workspace.collapseOverview') : t('chat.workspace.openOverview')"
-                    placement="bottom">
-                    <div class="header-icon-btn" :class="{ active: overviewPanelShown }" data-overview-pin
+                  <div v-if="mainSession" v-tooltip:bottom="overviewPanelShown ? t('chat.workspace.collapseOverview') : t('chat.workspace.openOverview')" class="header-icon-btn" :class="{ active: overviewPanelShown }" data-overview-pin
                       @click="overviewPanelShown ? handleOverviewCollapse() : handleOverviewRestore()">
                       <AppsListDetail20Regular class="w-5 h-5" />
                     </div>
-                  </GdTooltip>
                   <!-- v3：插件侧栏面板入口（仅当有插件注册 conversation.side.panel 时出现） -->
-                  <GdTooltip v-if="mainSession && pluginPanelsList.length"
-                    :content="pluginPanelOpen ? t('plugins.sidePanel.close') : t('plugins.sidePanel.open')"
-                    placement="bottom">
-                    <div class="header-icon-btn" :class="{ active: pluginPanelOpen }"
+                  <div v-if="mainSession && pluginPanelsList.length" v-tooltip:bottom="pluginPanelOpen ? t('plugins.sidePanel.close') : t('plugins.sidePanel.open')" class="header-icon-btn" :class="{ active: pluginPanelOpen }"
                       @click="toggleFirstPluginPanel">
                       <PuzzlePiece20Regular class="w-5 h-5" />
                     </div>
-                  </GdTooltip>
                   <!-- 工作目录切换 -->
-                  <GdTooltip v-if="mainSession?.id" :content="layoutStore.workspaceVisible ? t('chat.header.closeWorkspace') : t('chat.header.openWorkspace')" placement="bottom">
-                  <div class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
+                  <div v-if="mainSession?.id" v-tooltip:bottom="layoutStore.workspaceVisible ? t('chat.header.closeWorkspace') : t('chat.header.openWorkspace')" class="header-icon-btn" :class="{ active: layoutStore.workspaceVisible }"
                     @click="layoutStore.toggleWorkspace()">
                     <PanelRightExpand20Filled class="w-5 h-5" />
                   </div>
-                  </GdTooltip>
                 </template>
               </PageHeader>
 
@@ -190,13 +176,11 @@
                           @click="selectAsideTab('plugin', panel)">
                           {{ panel.meta?.label || panel.pluginId }}
                         </button>
-                        <GdTooltip :content="t('plugins.sidePanel.close')" placement="bottom">
-                          <button type="button"
+                        <button v-tooltip:bottom="t('plugins.sidePanel.close')" type="button"
                             class="ml-auto shrink-0 w-6 h-6 inline-flex items-center justify-center rounded-md text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover)"
                             @click="closeAside">
                             <Dismiss16Regular class="w-4 h-4" />
                           </button>
-                        </GdTooltip>
                       </div>
                       <div class="flex-1 min-h-0">
                         <component v-if="activePluginPanel" :is="activePluginPanel.component"
@@ -272,7 +256,6 @@ import ChatPanel from "./ChatPanel.vue";
 import CreateSessionChatPanel from "./CreateSessionChatPanel.vue";
 // 引入组件
 import PageHeader from "@/components/PageHeader.vue";
-import GdTooltip from "@/components/ui/GdTooltip.vue";
 import DropdownMenu from "@/components/ui/DropdownMenu.vue";
 import DropdownMenuItem from "@/components/ui/DropdownMenuItem.vue";
 import {
@@ -457,7 +440,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocPointerDown))
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
 
 // 子会话列表（概览"子代理"区与侧边栏标签解析元数据的数据源，支持动态增改）
-// 含已冻结（closedAt 非空）的子代理 —— 结束后保留仅供回看，与刷新后 fetchSession 的表现一致
+// 含已结束（上一次运行结束）的子代理 —— 记录始终保留仅供回看，与刷新后 fetchSession 的表现一致
 const subSessions = ref<Session[]>([]);
 
 /**
@@ -484,22 +467,22 @@ function handleSubAgentCreate(event: SessionEvent) {
 }
 
 /**
- * 处理子 Agent 关闭事件（来自 SSE 全局广播，sessionId = 父会话 id）
+ * 处理子 Agent 运行结束事件（来自 SSE 全局广播，sessionId = 父会话 id）
  *
- * 后端已将子会话冻结（closedAt 标记，仅供回放），此处就地标记而非移除：
- * 子代理列表面板把该行收进"已结束"段，与刷新后 fetchSession 返回的表现一致。
- * 侧边栏已打开的子代理标签保持不动（记录仍在，标签由用户手动关闭；
- * 冻结的子代理也可随时从列表面板"已结束"段重开回放）。
+ * 语义是"这一次运行结束了"，不是会话被关闭：就地记下结束时间与原因，
+ * 从不移除记录。列表面板按「有无活跃流」把该行收进"已结束"段；
+ * 该子代理随时可被 job_send 唤醒再跑一轮（届时会重新出现在活跃段）。
+ * 侧边栏已打开的子代理标签保持不动（记录仍在，标签由用户手动关闭）。
  * 过滤理由同 handleSubAgentCreate。
  */
-function handleSubAgentClosed(event: SessionEvent) {
+function handleSubAgentEnded(event: SessionEvent) {
   if (event.sessionId !== mainSession.value?.id) return;
   const payload = event.payload || {};
   const subSessionId = payload.subSessionId;
   if (!subSessionId) return;
 
   const sub = subSessions.value.find(s => s.id === subSessionId);
-  if (sub && !sub.closedAt) {
+  if (sub) {
     sub.closedAt = new Date().toISOString();
     sub.closeReason = payload.stopReason || null;
     sub.isStreaming = false;
@@ -653,7 +636,7 @@ const workspaceSize = computed(() => layoutStore.workspaceSplitSize);
 
 // SSE 事件监听取消函数(stream_status_changed 已由 useSessionEvents 统一订阅,此处不再重复监听)
 let unsubscribeSubAgentCreate: (() => void) | null = null;
-let unsubscribeSubAgentClosed: (() => void) | null = null;
+let unsubscribeSubAgentEnded: (() => void) | null = null;
 
 
 // 业务逻辑函数
@@ -678,7 +661,7 @@ const fetchSession = async (sessionId: string) => {
     sessionStore.mergeSession(session);
     lastFetchedSessionId = sessionId;
 
-    // 子会话列表（含已冻结的，供概览"子代理"区与侧边栏标签解析元数据；
+    // 子会话列表（含已结束的，供概览"子代理"区与侧边栏标签解析元数据；
     // isStreaming 由后端注入）
     subSessions.value = session.subSessions || [];
   } catch (error) {
@@ -1015,7 +998,7 @@ onMounted(async () => {
 
   // 注册子 Agent 生命周期事件监听（仅负责增删 Tab）
   unsubscribeSubAgentCreate = apiService.onSessionEvent('sub_agent_create', handleSubAgentCreate);
-  unsubscribeSubAgentClosed = apiService.onSessionEvent('sub_agent_closed', handleSubAgentClosed);
+  unsubscribeSubAgentEnded = apiService.onSessionEvent('sub_agent_ended', handleSubAgentEnded);
 });
 
 // 工作目录隐藏时重置全屏状态（显示由激活标签驱动，无需重置标签）
@@ -1031,9 +1014,9 @@ onUnmounted(() => {
     unsubscribeSubAgentCreate();
     unsubscribeSubAgentCreate = null;
   }
-  if (unsubscribeSubAgentClosed) {
-    unsubscribeSubAgentClosed();
-    unsubscribeSubAgentClosed = null;
+  if (unsubscribeSubAgentEnded) {
+    unsubscribeSubAgentEnded();
+    unsubscribeSubAgentEnded = null;
   }
   // 当前会话标记的清理（currentSessionId = "用户正在看的会话"）已由
   // useBrowserSessionBinding 的 onScopeDispose 统一负责，此处不再重复。

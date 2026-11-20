@@ -9,13 +9,11 @@
                 {{ t('chat.workspace.workingDir') }}</h3>
             <div class="flex items-center gap-0 shrink-0">
                 <!-- 刷新按钮 -->
-                <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
-                    <GdButton class="workspace-tool-btn" text @click="refreshTree" :loading="treeStore.isLoading">
+                <GdButton v-tooltip:bottom="t('chat.workspace.refresh')" class="workspace-tool-btn" text @click="refreshTree" :loading="treeStore.isLoading">
                         
                             <ArrowClockwise16Regular class="w-4 h-4"  />
                         
                     </GdButton>
-                </GdTooltip>
             </div>
         </div>
         <!-- 目录树内容 -->
@@ -66,7 +64,6 @@ import { ArrowClockwise16Regular, Copy16Regular, Edit16Regular, Delete16Regular,
 import { VsCode, WindowsExplorer, Finder } from '@/components/icons';
 import { getFileIcon } from '@/composables/useFileIcon';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
-import GdTooltip from '@/components/ui/GdTooltip.vue';
 import { toast } from '@/components/ui/toastService';
 import TreeView, { type TreeViewRow } from './TreeView.vue';
 import type { WorkspaceNode } from '@/types/workspace';

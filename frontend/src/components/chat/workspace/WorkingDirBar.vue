@@ -1,12 +1,13 @@
 <template>
   <!-- 紧凑单行（输入框底部外侧）：主目录（点击打开目录树）+ 附加远程目录 chips + 添加绑定 -->
   <div class="working-dir-bar">
-    <GdTooltip class="wdb-main-tip" :content="mainWorkspacePath || t('chat.workspace.workingDir')" placement="bottom">
-      <button class="wdb-main" @click="openWorkspaceTree">
+    <span class="wdb-main-tip">
+      <button class="wdb-main" v-tooltip:bottom="mainWorkspacePath || t('chat.workspace.workingDir')"
+        @click="openWorkspaceTree">
         <Folder16Regular class="wdb-icon w-4 h-4"  />
         <span class="wdb-name">{{ mainWorkspaceBasename || t('chat.workspace.workingDir') }}</span>
       </button>
-    </GdTooltip>
+    </span>
 
     <!-- 附加目录：已绑定的远程连接；点击弹信息卡（解绑在卡内，避免 hover 按钮撑宽跳动）。
          连接清单加载期间渲染骨架占位，避免闪原始连接 ID -->
@@ -20,11 +21,9 @@
 
     <!-- 添加附加目录：共享绑定菜单（✓ 为已绑定，点击 toggle 不关闭，点外部收起；空态引导去设置页） -->
     <DropdownMenu>
-      <GdTooltip :content="t('chat.workspace.addAttachedDir')" placement="bottom">
-        <button class="wdb-add">
-          <Add16Regular class="w-3 h-3"  />
-        </button>
-      </GdTooltip>
+      <button class="wdb-add" v-tooltip:bottom="t('chat.workspace.addAttachedDir')">
+        <Add16Regular class="w-3 h-3"  />
+      </button>
       <template #dropdown>
         <div class="wdb-menu">
           <ConnectionBindingMenu :attached-ids="attachedIds" @toggle="handleAttachedToggle" />
@@ -64,7 +63,6 @@ import { ref, computed, watch, nextTick, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { Folder16Regular, Cloud16Regular, Cube16Regular, Desktop16Regular, Add16Regular } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
-import GdTooltip from "../../ui/GdTooltip.vue";
 import GdPopover from "../../ui/GdPopover.vue";
 import ConnectionBindingMenu from "../chat-input/ConnectionBindingMenu.vue";
 import { SSH_CONNECTION_ATTACHMENT_TYPE } from "@/constants";
@@ -243,9 +241,11 @@ onMounted(() => {
   padding: 0;
 }
 
-/* GdTooltip 包裹层是真正的 flex 子项：宽度上限挂在这里（按钮的百分比若相对
-   inline-flex 包裹层会按自身内容收缩，导致目录名截成"p."） */
+/* 主目录入口的布局 wrapper：宽度上限挂在这里（按钮的百分比若相对
+   inline-flex 包裹层会按自身内容收缩，导致目录名截成"p."）。 */
 .wdb-main-tip {
+  display: inline-flex;
+  flex-shrink: 0;
   max-width: 60%;
   min-width: 0;
 }

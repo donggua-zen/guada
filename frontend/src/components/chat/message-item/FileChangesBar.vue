@@ -24,7 +24,7 @@
           class="fcb__file-row"
           @click="$emit('openDiff', entry)"
         >
-          <span class="fcb__file-path is-link" :title="entry.filePath"
+          <span class="fcb__file-path is-link" v-tooltip="entry.filePath"
             @click.stop="$emit('openFile', entry)">{{ entry.fileName }}</span>
           <span class="fcb__file-dir">{{ dirPath(entry.filePath) }}</span>
           <span class="fcb__file-stats">

@@ -2,13 +2,11 @@
     <div class="plan-panel h-full flex flex-col min-h-0">
         <!-- 常驻头部：目录开关（历史图标）+ 当前计划（无计划时退化为面板名） -->
         <div class="flex items-center gap-2 px-3 py-1.5 shrink-0 border-b border-(--gd-color-surface-border)">
-            <GdTooltip :content="t('chat.plan.directory')" placement="bottom">
-                <button class="plan-icon-btn" :class="{ 'is-active': directoryOpen }" @click="toggleDirectory">
+            <button v-tooltip:bottom="t('chat.plan.directory')" class="plan-icon-btn" :class="{ 'is-active': directoryOpen }" @click="toggleDirectory">
                     
                         <History16Regular class="w-4 h-4"  />
                     
                 </button>
-            </GdTooltip>
             <template v-if="selected">
                 <span class="text-sm font-medium truncate">{{ selected.title }}</span>
                 <PlanStatusBadge v-if="selected.status" class="shrink-0" :status="selected.status" />
@@ -38,13 +36,11 @@
                 <div v-if="directoryOpen" class="plan-directory">
                     <div class="flex items-center justify-between px-2.5 py-1.5 shrink-0">
                         <span class="text-xs font-medium text-(--gd-color-text-gray)">{{ t('chat.plan.title') }}</span>
-                        <GdTooltip :content="t('chat.plan.refresh')" placement="bottom">
-                            <button class="plan-icon-btn" @click="refresh">
+                        <button v-tooltip:bottom="t('chat.plan.refresh')" class="plan-icon-btn" @click="refresh">
                                 
                                     <ArrowClockwise16Regular class="w-3.5 h-3.5"  />
                                 
                             </button>
-                        </GdTooltip>
                     </div>
                     <div class="flex-1 min-h-0 overflow-y-auto px-1.5 pb-2">
                         <div v-if="plans.length === 0" class="px-2 py-6 text-center text-xs text-(--gd-color-text-gray)">
@@ -70,7 +66,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { ArrowClockwise16Regular, History16Regular } from '@vicons/fluent'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
 import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
 import { useSessionStore } from '@/stores/session'

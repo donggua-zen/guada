@@ -11,7 +11,7 @@
             
               <Document16Regular class="text-gray-500 dark:text-[#8b8d95] shrink-0 w-4 h-4"  />
             
-            <span class="text-sm text-gray-700 dark:text-[#e8e9ed] truncate" :title="task.fileName">
+            <span class="text-sm text-gray-700 dark:text-[#e8e9ed] truncate" v-tooltip="task.fileName">
               {{ task.fileName }}
             </span>
           </div>

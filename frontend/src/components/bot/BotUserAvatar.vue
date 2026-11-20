@@ -2,7 +2,7 @@
   <span
     class="shrink-0 flex items-center justify-center overflow-hidden rounded-full bg-gray-50 dark:bg-[#2a2c30]"
     :class="sizeClass"
-    :title="name || undefined"
+    v-tooltip="name || undefined"
   >
     <img
       v-if="showUserAvatar"

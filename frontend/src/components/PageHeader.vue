@@ -11,11 +11,9 @@
     }">
     <!-- 左侧：侧边栏切换按钮 -->
     <div class="flex items-center justify-start no-drag ml-3">
-      <GdTooltip v-if="!hideSidebarToggle" :content="layoutStore.sidebarEffectiveVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')" placement="bottom">
-        <div class="header-icon-btn" @click="layoutStore.toggleSidebar()">
+      <div v-if="!hideSidebarToggle" v-tooltip:bottom="layoutStore.sidebarEffectiveVisible ? t('common.sidebar.collapse') : t('common.sidebar.expand')" class="header-icon-btn" @click="layoutStore.toggleSidebar()">
           <LeftBarIcon class="w-5 h-5" />
         </div>
-      </GdTooltip>
     </div>
 
     <!-- 中间：标题区域 -->
@@ -41,7 +39,6 @@
 import { useLayoutStore } from '@/stores/layout'
 import { useI18n } from 'vue-i18n'
 import LeftBarIcon from './icons/LeftBarIcon.vue'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
 import { useFullscreen } from '@/composables/useFullscreen'
 
 const { t } = useI18n()

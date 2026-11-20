@@ -110,12 +110,12 @@
                   <template v-if="parts.file">
                     <span class="group-file-chip inline-flex min-w-0 max-w-full items-center gap-1 ml-1.5"
                       :class="{ 'is-openable': canOpenGroupFile(parts) }"
-                      :title="parts.file.fullPath" @click="onGroupFileClick(parts, $event)">
+                      v-tooltip="parts.file.fullPath" @click="onGroupFileClick(parts, $event)">
                       <img :src="getFileIcon(parts.file.fileName)" class="w-4 h-4 shrink-0" alt="" />
                       <span class="group-file-chip__name min-w-0 truncate text-(--gd-color-text)">{{ parts.file.fileName }}</span>
                     </span>
                     <span v-if="parts.file.dirPath" class="min-w-0 truncate ml-1.5 text-sm shrink-[2] text-(--gd-color-text-subtlest)"
-                      :title="parts.file.fullPath">{{ parts.file.dirPath }}</span>
+                      v-tooltip="parts.file.fullPath">{{ parts.file.dirPath }}</span>
                   </template>
                   <!-- 其余工具：单行参数摘要 -->
                   <span v-else-if="parts.args" class="text-sm truncate ml-1.5"

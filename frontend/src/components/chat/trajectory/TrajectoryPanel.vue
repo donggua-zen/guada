@@ -13,21 +13,15 @@
           {{ summary.models.join(', ') }}
         </span>
         <div class="ml-auto flex items-center gap-0.5">
-          <GdTooltip :content="t('trajectory.expandAll')" placement="bottom">
-            <button type="button" class="btn-icon" @click="expandAll(true)">
+          <button v-tooltip:bottom="t('trajectory.expandAll')" type="button" class="btn-icon" @click="expandAll(true)">
               <ChevronDown16Regular class="w-3.5 h-3.5" />
             </button>
-          </GdTooltip>
-          <GdTooltip :content="t('trajectory.collapseAll')" placement="bottom">
-            <button type="button" class="btn-icon" @click="expandAll(false)">
+          <button v-tooltip:bottom="t('trajectory.collapseAll')" type="button" class="btn-icon" @click="expandAll(false)">
               <ChevronRight16Regular class="w-3.5 h-3.5" />
             </button>
-          </GdTooltip>
-          <GdTooltip :content="t('trajectory.refresh')" placement="bottom">
-            <button type="button" class="btn-icon" :disabled="loading" @click="refresh()">
+          <button v-tooltip:bottom="t('trajectory.refresh')" type="button" class="btn-icon" :disabled="loading" @click="refresh()">
               <ArrowClockwise16Regular class="w-3.5 h-3.5" :class="{ 'animate-spin': loading }" />
             </button>
-          </GdTooltip>
         </div>
       </div>
       <input
@@ -73,7 +67,6 @@ import {
   ChevronDown16Regular,
   ChevronRight16Regular,
 } from '@vicons/fluent';
-import GdTooltip from '@/components/ui/GdTooltip.vue';
 import TrajectoryLedger from './TrajectoryLedger.vue';
 import { useTrajectory } from '@/composables/useTrajectory';
 import { formatTrajectoryTokens } from './format';

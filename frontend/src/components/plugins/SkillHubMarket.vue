@@ -71,7 +71,7 @@
                     <span
                         v-if="skill.stats.stars > 0"
                         class="skillhub-row-meta__item"
-                        :title="`${t('plugins.skills.skillhubStars')} ${skill.stats.stars}`"
+                        v-tooltip="`${t('plugins.skills.skillhubStars')} ${skill.stats.stars}`"
                         :aria-label="`${t('plugins.skills.skillhubStars')} ${skill.stats.stars}`"
                     >
                         <Star16Regular class="skillhub-row-meta__icon" />
@@ -80,7 +80,7 @@
                     <span
                         v-if="skill.stats.downloads > 0"
                         class="skillhub-row-meta__item"
-                        :title="`${t('plugins.skills.skillhubDownloads')} ${skill.stats.downloads}`"
+                        v-tooltip="`${t('plugins.skills.skillhubDownloads')} ${skill.stats.downloads}`"
                         :aria-label="`${t('plugins.skills.skillhubDownloads')} ${skill.stats.downloads}`"
                     >
                         <ArrowDownload16Regular class="skillhub-row-meta__icon" />
@@ -215,7 +215,7 @@
                     {{ evaluation.userSummary }}
                 </p>
                 <div v-for="dimension in evaluation.dimensions" :key="dimension.key" class="skillhub-dim">
-                    <span class="skillhub-dim__name" :title="dimension.userReason || ''">
+                    <span class="skillhub-dim__name" v-tooltip="dimension.userReason || ''">
                         {{ dimensionName(dimension.key) }}
                     </span>
                     <span class="skillhub-dim__bar">

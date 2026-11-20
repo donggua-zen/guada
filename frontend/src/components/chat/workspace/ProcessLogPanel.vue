@@ -2,23 +2,19 @@
   <div class="process-log-panel h-full flex flex-col">
     <!-- 头部：命令摘要 + 状态 + 操作 -->
     <div class="pl-header shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-[#2e3035]">
-      <span class="pl-command" :title="log?.command || command">{{ log?.command || command }}</span>
+      <span class="pl-command" v-tooltip="log?.command || command">{{ log?.command || command }}</span>
       <span class="pl-status" :class="statusClass">
         <span v-if="isRunning" class="pl-spinner"></span>
         <span v-else class="pl-dot"></span>
         {{ statusText }}
       </span>
       <div class="flex-1"></div>
-      <GdTooltip :content="t('chat.workspace.refresh')" placement="bottom">
-        <button class="pl-btn" @click="fetchLog('initial')" :disabled="loading">
+      <button v-tooltip:bottom="t('chat.workspace.refresh')" class="pl-btn" @click="fetchLog('initial')" :disabled="loading">
           <ArrowClockwise16Regular class="w-3.5 h-3.5"  :class="{ 'animate-spin': loading }" />
         </button>
-      </GdTooltip>
-      <GdTooltip v-if="isRunning" :content="t('chat.workspace.killProcess')" placement="bottom">
-        <button class="pl-btn pl-btn-danger" @click="killProcess">
+      <button v-if="isRunning" v-tooltip:bottom="t('chat.workspace.killProcess')" class="pl-btn pl-btn-danger" @click="killProcess">
           <Dismiss16Filled class="w-3.5 h-3.5"  />
         </button>
-      </GdTooltip>
     </div>
 
     <!-- 日志正文 -->
@@ -26,7 +22,7 @@
       <!-- 原始命令：sticky 常驻正文顶部，滚动翻日志时也知道这条日志是哪条命令产生的。
            头部那条会被宽限与省略号截断，这里给一份随时可读的（超长命令默认折两行，点击展开） -->
       <div v-if="commandLine" class="pl-cmdline sticky top-0 z-10 px-3 py-1.5 border-b border-gray-100 dark:border-[#2e3035]"
-        :class="{ 'pl-cmdline--expanded': commandExpanded }" :title="commandLine"
+        :class="{ 'pl-cmdline--expanded': commandExpanded }" v-tooltip="commandLine"
         @click="commandExpanded = !commandExpanded">{{ commandLine }}</div>
       <pre v-if="log?.content" class="pl-content">{{ log.content }}</pre>
       <div v-else-if="loading" class="pl-empty">{{ t('common.loading') }}</div>
@@ -46,7 +42,6 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { ArrowClockwise16Regular, Dismiss16Filled } from '@vicons/fluent';
-import GdTooltip from '@/components/ui/GdTooltip.vue';
 import { toast } from '@/components/ui/toastService';
 import { apiService, type UiJobOutput } from '@/services/ApiService';
 import { useJobsStore } from '@/stores/jobs';

@@ -14,8 +14,8 @@
         <div class="overview-agent">
           <Avatar class="overview-agent-avatar" :src="agent.avatarUrl" :name="agent.name" type="assistant" round />
           <div class="overview-agent-meta">
-            <div class="overview-agent-name" :title="agent.name">{{ agent.name }}</div>
-            <div v-if="agent.description" class="overview-agent-desc" :title="agent.description">
+            <div class="overview-agent-name" v-tooltip="agent.name">{{ agent.name }}</div>
+            <div v-if="agent.description" class="overview-agent-desc" v-tooltip="agent.description">
               {{ agent.description }}
             </div>
           </div>
@@ -27,14 +27,11 @@
         <div class="overview-section-title">
           <span>{{ t('chat.workspace.sectionGit') }}</span>
           <!-- 聚合变更数上移标题栏并右对齐；点击打开 Git 审阅标签（替代原“Git 变更”行） -->
-          <GdTooltip v-if="git.totalStats.add || git.totalStats.del" :content="t('git.title')" placement="bottom"
-            class="ml-auto">
-            <button class="flex gap-1 font-mono text-[12px] cursor-pointer bg-transparent border-0 p-0 hover:opacity-70"
+          <button v-if="git.totalStats.add || git.totalStats.del" v-tooltip:bottom="t('git.title')" class="flex gap-1 font-mono text-[12px] cursor-pointer bg-transparent border-0 p-0 hover:opacity-70 ml-auto"
               @click="openGit">
               <span v-if="git.totalStats.add" class="text-[#1a7f37] dark:text-[#3fb950]">+{{ git.totalStats.add }}</span>
               <span v-if="git.totalStats.del" class="text-[#cf222e] dark:text-[#f85149]">-{{ git.totalStats.del }}</span>
             </button>
-          </GdTooltip>
           <span v-else-if="git.status?.gitUnavailable" class="ml-auto overview-row-value--empty text-[12px]">{{ t('git.notInstalled') }}</span>
           <span v-else-if="git.isGitRepo" class="ml-auto overview-row-value--empty text-[12px]">{{ t('git.noChanges') }}</span>
         </div>
@@ -113,7 +110,6 @@ import {
 } from "@vicons/fluent";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
-import GdTooltip from "../../ui/GdTooltip.vue";
 import Avatar from "../../ui/Avatar.vue";
 import { useGitStore } from "@/stores/git";
 import { useTabStore } from "@/stores/tab";

@@ -9,10 +9,10 @@
       <SubAgentFace :done="done" :failed="isFailed" :running="running" />
 
       <span v-if="identityName" class="sa-link sa-identity" :class="{ 'is-clickable': clickable }"
-        :title="identityName" @click.stop="onClick">{{ identityName }}</span>
+        v-tooltip="identityName" @click.stop="onClick">{{ identityName }}</span>
       <span v-if="task" class="sa-link sa-task"
         :class="{ 'is-clickable': clickable, 'is-shimmer': running }"
-        :title="taskFull" @click.stop="onClick">{{ task }}</span>
+        v-tooltip="taskFull" @click.stop="onClick">{{ task }}</span>
     </div>
 
     <!-- 失败原因：子代理是独立渲染行（standaloneRows），既不套通用失败横幅、也走不到
@@ -86,7 +86,7 @@ const task = computed(() => {
   return value.split('\n').map((l) => l.trim()).find(Boolean) ?? '';
 });
 
-/** 完整任务文本：截断后靠 title 看全（多行也保留换行） */
+/** 完整任务文本：供 v-tooltip 展示被截断的全文 */
 const taskFull = computed(() => {
   const value = args.value.task;
   return typeof value === 'string' ? value.trim() : '';

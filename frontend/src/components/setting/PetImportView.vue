@@ -12,7 +12,7 @@
         <div class="flex flex-wrap items-center gap-2">
           <code
             class="min-w-0 flex-1 select-all truncate rounded-lg bg-gray-500/8 px-3 py-2 font-mono text-xs text-gray-700 dark:bg-white/5 dark:text-[#d0d1d5]"
-            :title="petsDir"
+            v-tooltip="petsDir"
           >{{ petsDir || '…' }}</code>
           <GdButton size="small" @click="handleOpenFolder">
             {{ t('settings.pet.openFolder') }}

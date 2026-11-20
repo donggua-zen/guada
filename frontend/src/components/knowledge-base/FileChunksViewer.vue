@@ -86,7 +86,7 @@
                                     <span class="chunk-meta text-xs text-gray-400 dark:text-[#6b6d75]">
                                         {{ t('knowledge.chunks.index') }}: {{ chunk.chunkIndex }}, {{ t('knowledge.chunks.tokenCount') }}: {{ chunk.tokenCount }}
                                     </span>
-                                    <button type="button" class="copy-btn" :title="t('knowledge.chunks.copy')"
+                                    <button type="button" class="copy-btn" v-tooltip="t('knowledge.chunks.copy')"
                                         @click="copyChunk(chunk.content)">
                                         <Copy20Regular class="size-3.5" />
                                     </button>

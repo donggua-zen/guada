@@ -192,7 +192,7 @@
                     <div class="flex items-start justify-between gap-2 mb-1">
                       <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ card.kit.name || card.kit.id }}</div>
                       <span v-if="isKitLocked(card.pluginId, card.kit.id)"
-                        :title="t('agents.setting.pluginLockedKitTip')"
+                        v-tooltip="t('agents.setting.pluginLockedKitTip')"
                         class="shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] leading-none rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300">
                         {{ t('agents.setting.pluginLockedKitBadge') }}
                       </span>
@@ -329,7 +329,7 @@
                     <div class="flex items-start justify-between gap-2 mb-2">
                       <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ getSkillDisplayName(skill.manifest, skill.id) }}</div>
                       <div class="flex items-center gap-1.5 shrink-0">
-                        <span v-if="isSkillLocked(skill.id)" :title="t('agents.setting.pluginLockedKitTip')"
+                        <span v-if="isSkillLocked(skill.id)" v-tooltip="t('agents.setting.pluginLockedKitTip')"
                           class="inline-flex items-center px-1.5 py-0.5 text-[10px] leading-none rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300">
                           {{ t('agents.setting.pluginLockedKitBadge') }}
                         </span>

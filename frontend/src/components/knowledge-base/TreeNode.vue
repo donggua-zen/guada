@@ -31,14 +31,8 @@
             
             <!-- 状态标签 -->
             <GdTag v-if="!node.isDirectory" size="small" :type="getStatusType(node.processingStatus)" class="shrink-0">
-                <GdTooltip v-if="node.processingStatus === 'processing' && node.currentStep" :content="node.currentStep" placement="top">
-                    <span>{{ getStatusText(node.processingStatus) }}</span>
-                </GdTooltip>
-                <GdTooltip v-else-if="node.processingStatus === 'failed'"
-                    :content="node.errorMessage || t('knowledge.status.unknownError')"
-                    placement="top">
-                    <span>{{ getStatusText(node.processingStatus) }}</span>
-                </GdTooltip>
+                <span v-if="node.processingStatus === 'processing' && node.currentStep" v-tooltip="node.currentStep">{{ getStatusText(node.processingStatus) }}</span>
+                <span v-else-if="node.processingStatus === 'failed'" v-tooltip="node.errorMessage || t('knowledge.status.unknownError')">{{ getStatusText(node.processingStatus) }}</span>
                 <span v-else>{{ getStatusText(node.processingStatus) }}</span>
             </GdTag>
         </div>
@@ -70,7 +64,6 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronRight16Regular } from '@vicons/fluent'
 import type { KBFile } from '@/stores/knowledgeBase'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdTag from '@/components/ui/GdTag.vue';
 import FolderIcon from '@/components/ui/FolderIcon.vue'
 import { getFileIconByExt } from '@/composables/useFileIcon'

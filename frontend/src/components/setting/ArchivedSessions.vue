@@ -52,7 +52,7 @@
                     <span class="flex-1 truncate text-sm text-(--gd-color-text)">{{ session.title }}</span>
                     <span class="text-xs text-gray-400 shrink-0">{{ formatLastActive(session.lastActiveAt || session.updatedAt) }}</span>
                     <div class="action-btn p-1 rounded cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                        :title="t('settings.archived.unarchive')" @click="handleUnarchive(session)">
+                        v-tooltip="t('settings.archived.unarchive')" @click="handleUnarchive(session)">
                         
                             <ArrowUndo20Regular class="w-3.5 h-3.5 text-blue-500"  />
                         

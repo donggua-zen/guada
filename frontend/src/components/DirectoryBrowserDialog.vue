@@ -3,7 +3,7 @@
     :close-on-click-modal="true" append-to-body class="directory-browser-dialog" @open="handleOpen">
     <!-- 路径输入 + 跳转 + 返回上级 -->
     <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-      <button type="button" :disabled="!canGoUp || loading" :title="t('ui.directoryBrowser.goUp')"
+      <button type="button" :disabled="!canGoUp || loading" v-tooltip="t('ui.directoryBrowser.goUp')"
         class="flex items-center justify-center w-7 h-7 rounded-md transition-colors shrink-0"
         :class="canGoUp && !loading
           ? 'cursor-pointer hover:bg-(--gd-color-sidebar-bg-hover) text-(--gd-color-text)'
@@ -53,7 +53,7 @@
           :class="entry.isDirectory
             ? 'cursor-pointer hover:bg-(--gd-color-sidebar-bg-hover)'
             : 'opacity-50 cursor-default'"
-          :title="entry.name"
+          v-tooltip="entry.name"
           @click="entry.isDirectory && enterDir(entry.name)"
           @dblclick.prevent="entry.isDirectory && enterDir(entry.name)">
           <span class="shrink-0 w-4 h-4" :class="entry.isDirectory ? 'text-(--gd-color-warning, #e6a23c)' : 'text-gray-400'"><Folder16Regular v-if="entry.isDirectory" />
@@ -65,7 +65,7 @@
 
     <template #footer>
       <div class="flex items-center justify-end gap-2">
-        <span class="flex-1 truncate text-xs text-gray-400 font-mono" :title="currentPath">{{ currentPath }}</span>
+        <span class="flex-1 truncate text-xs text-gray-400 font-mono" v-tooltip="currentPath">{{ currentPath }}</span>
         <GdButton size="small" @click="dialogVisible = false">{{ t('common.cancel') }}</GdButton>
         <GdButton size="small" type="primary" :disabled="!exists || loading" @click="confirmSelect">
           {{ confirmText || t('ui.directoryBrowser.confirm') }}

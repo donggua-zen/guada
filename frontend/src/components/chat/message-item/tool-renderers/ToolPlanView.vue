@@ -19,13 +19,11 @@
             <span v-else-if="executing && !pendingApproval && content" class="plan-status">
                 {{ t('chat.plan.streamingHint') }}
             </span>
-            <GdTooltip :content="t('chat.messageActions.copy')" placement="top">
-                <button class="plan-icon-btn" @click="copyPlan">
+            <button v-tooltip="t('chat.messageActions.copy')" class="plan-icon-btn" @click="copyPlan">
                     
                         <Copy16Regular class="w-3.5 h-3.5"  />
                     
                 </button>
-            </GdTooltip>
         </div>
         <div class="plan-preview">
             <div ref="clipEl" class="plan-preview-clip" :class="{ 'is-overflowing': overflowing }">
@@ -57,7 +55,6 @@ import GdButton from '@/components/ui/GdButton.vue';
 
 import { ArrowRight16Regular, Copy16Regular, Notepad20Regular } from '@vicons/fluent'
 import MarkdownContent from '@/components/ui/MarkdownContent.vue'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
 import PlanStatusBadge from '@/components/chat/PlanStatusBadge.vue'
 import { toast } from '@/components/ui/toastService';
 import { useThrottledValue } from '@/composables/useThrottledValue'

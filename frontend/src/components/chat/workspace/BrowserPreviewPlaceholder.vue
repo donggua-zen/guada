@@ -6,7 +6,7 @@
       <div class="nav-btn-group">
         <button
           class="nav-btn"
-          :title="t('chat.workspace.back')"
+          v-tooltip="t('chat.workspace.back')"
           :disabled="!store.canGoBack"
           @click="goBack"
         >
@@ -16,7 +16,7 @@
         </button>
         <button
           class="nav-btn"
-          :title="t('chat.workspace.forward')"
+          v-tooltip="t('chat.workspace.forward')"
           :disabled="!store.canGoForward"
           @click="goForward"
         >
@@ -26,7 +26,7 @@
         </button>
         <button
           class="nav-btn"
-          :title="store.isLoading ? t('chat.workspace.stop') : t('chat.workspace.refresh')"
+          v-tooltip="store.isLoading ? t('chat.workspace.stop') : t('chat.workspace.refresh')"
           @click="store.isLoading ? stopLoading() : refresh()"
         >
           <!-- 刷新图标 / 停止图标 -->
@@ -67,7 +67,7 @@
         <button
           ref="viewportBtnRef"
           class="viewport-btn"
-          :title="t('chat.workspace.viewportSize')"
+          v-tooltip="t('chat.workspace.viewportSize')"
           @click="viewportMenuVisible = !viewportMenuVisible"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -128,7 +128,7 @@
       </div>
 
       <!-- 静音切换按钮 -->
-      <button class="nav-btn" :title="store.isMuted ? t('chat.workspace.unmute') : t('chat.workspace.mute')" @click="store.toggleMuted()">
+      <button class="nav-btn" v-tooltip="store.isMuted ? t('chat.workspace.unmute') : t('chat.workspace.mute')" @click="store.toggleMuted()">
         <!-- 静音状态：喇叭带斜线 -->
         <svg v-if="store.isMuted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
@@ -146,7 +146,7 @@
       <button
         v-if="store.isActivePointerLocked"
         class="pointer-lock-chip"
-        :title="t('chat.workspace.pointerLockHint')"
+        v-tooltip="t('chat.workspace.pointerLockHint')"
         @click="releasePointerLock"
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

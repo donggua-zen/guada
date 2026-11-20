@@ -28,34 +28,28 @@
         <span v-if="totalStats.del" class="git-stat-del">-{{ totalStats.del }}</span>
       </span>
       <span v-if="isGitRepo && (status?.ahead || status?.behind)" class="git-toolbar-ab"
-        :title="t('git.aheadBehind', { ahead: status?.ahead, behind: status?.behind })">
+        v-tooltip="t('git.aheadBehind', { ahead: status?.ahead, behind: status?.behind })">
         ↑{{ status?.ahead || 0 }} ↓{{ status?.behind || 0 }}
       </span>
       <div class="flex-1"></div>
-      <GdTooltip :content="t('git.refresh')" placement="bottom">
-        <button class="git-tool-btn" :disabled="!isGitRepo || refreshing" @click="refresh">
+      <button v-tooltip:bottom="t('git.refresh')" class="git-tool-btn" :disabled="!isGitRepo || refreshing" @click="refresh">
           <!-- RefreshRight 为 16 viewBox：按原生尺寸渲染，避免非整数缩放发虚 -->
           
             <ArrowClockwise16Regular class="w-4 h-4"  :class="{ 'animate-spin': refreshing }" />
           
         </button>
-      </GdTooltip>
       <!-- 视图切换（unified/split）：单按钮，图标随当前状态切换（显示目标视图图标）：
            分栏视图下显示统一视图图标（CalendarAgenda），统一视图下显示分栏图标（DualScreen） -->
-      <GdTooltip :content="diffView === 'unified' ? t('git.splitView') : t('git.unifiedView')" placement="bottom">
-        <button class="git-tool-btn" @click="toggleDiffView">
+      <button v-tooltip:bottom="diffView === 'unified' ? t('git.splitView') : t('git.unifiedView')" class="git-tool-btn" @click="toggleDiffView">
           <!-- 20 viewBox：原生尺寸 20px，保证像素对齐锐利 -->
           <span class="w-5 h-5"><CalendarAgenda20Regular v-if="diffView === 'split'" />
             <DualScreen20Regular v-else /></span>
         </button>
-      </GdTooltip>
       <!-- 右侧变更目录树开关 -->
-      <GdTooltip :content="t('git.toggleTree')" placement="bottom">
-        <button class="git-tool-btn" :class="{ 'git-tool-btn--active': showTree }"
+      <button v-tooltip:bottom="t('git.toggleTree')" class="git-tool-btn" :class="{ 'git-tool-btn--active': showTree }"
           @click="showTree = !showTree">
           <TextboxAlignTopRotate9020Regular class="w-5 h-5"  />
         </button>
-      </GdTooltip>
       <!-- 提交（弹窗：消息 + 是否包含未暂存 + 提交/提交并推送/推送）：胶囊按钮 -->
       <button class="git-commit-btn" :disabled="!isGitRepo || totalChanges === 0"
         @click="git.openCommitDialog()">
@@ -109,22 +103,18 @@
         <template v-if="selectedRow">
           <div class="git-diff-header">
             <span class="git-status" :class="`git-status--${statusClass(selectedRow)}`">{{ selectedRow.statusChar }}</span>
-            <span class="git-diff-header-path" :title="selectedRow.file.path">{{ selectedRow.file.path }}</span>
+            <span class="git-diff-header-path" v-tooltip="selectedRow.file.path">{{ selectedRow.file.path }}</span>
             <span v-if="selectedStats && (selectedStats.add || selectedStats.del)" class="git-diff-stats">
               <span v-if="selectedStats.add" class="git-stat-add">+{{ selectedStats.add }}</span>
               <span v-if="selectedStats.del" class="git-stat-del">-{{ selectedStats.del }}</span>
             </span>
             <div class="git-diff-nav-group">
-              <GdTooltip :content="t('git.prevFileShortcut')" placement="bottom">
-                <button class="git-diff-nav" @click="cycleSelection(-1)">
+              <button v-tooltip:bottom="t('git.prevFileShortcut')" class="git-diff-nav" @click="cycleSelection(-1)">
                   <ArrowUp12Regular class="w-3 h-3"  />
                 </button>
-              </GdTooltip>
-              <GdTooltip :content="t('git.nextFileShortcut')" placement="bottom">
-                <button class="git-diff-nav" @click="cycleSelection(1)">
+              <button v-tooltip:bottom="t('git.nextFileShortcut')" class="git-diff-nav" @click="cycleSelection(1)">
                   <ArrowDown12Regular class="w-3 h-3"  />
                 </button>
-              </GdTooltip>
             </div>
           </div>
           <div v-if="loadingKey === selectedKey" class="git-diff-loading">
@@ -278,13 +268,13 @@
                 </template>
                 <!-- 目录行：名称 + hover 操作（暂存/取消暂存整个目录） -->
                 <template v-else-if="row.isDir">
-                  <span class="git-tree-name" :title="row.path">{{ row.name }}</span>
+                  <span class="git-tree-name" v-tooltip="row.path">{{ row.name }}</span>
                   <span class="git-row-actions" @click.stop>
-                    <button v-if="(row.stagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.unstageAll')"
+                    <button v-if="(row.stagedCount ?? 0) > 0" class="git-row-btn" v-tooltip="t('git.unstageAll')"
                       @click="unstageDir(row.group, row as GitTreeRow)">
                       <Subtract16Regular class="w-3 h-3"  />
                     </button>
-                    <button v-if="(row.unstagedCount ?? 0) > 0" class="git-row-btn" :title="t('git.stageAll')"
+                    <button v-if="(row.unstagedCount ?? 0) > 0" class="git-row-btn" v-tooltip="t('git.stageAll')"
                       @click="stageDir(row.group, row as GitTreeRow)">
                       <Add16Regular class="w-3 h-3"  />
                     </button>
@@ -294,13 +284,13 @@
                 <template v-else>
                   <span class="git-status" :class="`git-status--${statusClass(row.row)}`">{{ row.row.statusChar }}</span>
                   <span class="git-tree-name" :class="{ 'git-tree-name--partial': row.row?.isPartial }"
-                    :title="row.row.file.path">{{ row.name }}</span>
+                    v-tooltip="row.row.file.path">{{ row.name }}</span>
                   <span class="git-row-actions" @click.stop>
-                    <button v-if="row.row.group === 'staged'" class="git-row-btn" :title="t('git.unstage')"
+                    <button v-if="row.row.group === 'staged'" class="git-row-btn" v-tooltip="t('git.unstage')"
                       @click="unstageFile(row.row)">
                       <Subtract16Regular class="w-3 h-3"  />
                     </button>
-                    <button v-else class="git-row-btn" :title="t('git.stage')" @click="stageFile(row.row)">
+                    <button v-else class="git-row-btn" v-tooltip="t('git.stage')" @click="stageFile(row.row)">
                       <Add16Regular class="w-3 h-3"  />
                     </button>
                   </span>
@@ -336,7 +326,6 @@ import { Branch20Regular, BranchFork16Regular, Search20Regular, Add16Regular, Su
 import { GdSplitpanes } from "../../ui";
 import DropdownMenu from "../../ui/DropdownMenu.vue";
 import DropdownMenuItem from "../../ui/DropdownMenuItem.vue";
-import GdTooltip from "../../ui/GdTooltip.vue";
 import TreeView, { type TreeViewRow } from "./TreeView.vue";
 import GitDiffRow from "./GitDiffRow.vue";
 import { apiService } from "@/services/ApiService";

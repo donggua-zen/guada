@@ -3,8 +3,7 @@
        有 subSessionId 且宿主提供入口时点击跳子代理会话。
        单一来源：对话流内联卡片与工作流审阅面板共用（原概览/审阅两份 scoped 拷贝收口于此）。 -->
   <div v-if="agents.length" class="wf-agents">
-    <GdTooltip v-for="agent in agents" :key="agent.callId" :content="agent.label" placement="bottom">
-      <div class="wf-agent w-full" :class="{ 'wf-agent--clickable': isClickable(agent) }"
+    <div v-for="agent in agents" :key="agent.callId" v-tooltip:bottom="agent.label" class="wf-agent w-full" :class="{ 'wf-agent--clickable': isClickable(agent) }"
         @click="onClick(agent)">
         <div class="wf-agent-row">
           <WorkflowStatusDot :status="agent.status" size="sm" />
@@ -12,13 +11,11 @@
         </div>
         <div class="wf-agent-sub">{{ subText(agent) }}</div>
       </div>
-    </GdTooltip>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import GdTooltip from "@/components/ui/GdTooltip.vue";
 import WorkflowStatusDot from "./WorkflowStatusDot.vue";
 import { workflowAgentSubText } from "@/utils/workflowDisplay";
 import type { WorkflowAgentState } from "@/types/stream/workflow.types";

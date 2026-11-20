@@ -5,7 +5,7 @@
     class="git-diff-line git-diff-gap git-diff-vrow git-diff-gap-click"
     :class="{ expanded: line.type === 'gap-close' }"
     :style="{ top: top + 'px' }"
-    :title="line.type === 'gap' ? t('git.expandUnmodified') : t('git.collapseUnmodified')"
+    v-tooltip="line.type === 'gap' ? t('git.expandUnmodified') : t('git.collapseUnmodified')"
     @click="emit('toggle', line)"
   >
     <div class="git-diff-gap-inner">

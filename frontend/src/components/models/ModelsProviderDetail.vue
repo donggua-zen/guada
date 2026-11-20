@@ -53,10 +53,8 @@
                       class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-[#2a2c30] border border-gray-100 dark:border-[#2e3035]">
                       <div class="flex items-center gap-0.5">
                         <template v-for="cap in (model.config?.inputCapabilities || [])" :key="'in-' + cap">
-                          <GdTooltip :content="t('settings.providerDetail.input') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
-                            <span class="hover:text-primary transition-colors w-4 h-4"><TextT24Regular v-if="cap === 'text'" />
+                          <span v-tooltip="t('settings.providerDetail.input') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" class="hover:text-primary transition-colors w-4 h-4"><TextT24Regular v-if="cap === 'text'" />
                               <Image24Regular v-else-if="cap === 'image'" /></span>
-                          </GdTooltip>
                         </template>
                       </div>
                       
@@ -64,27 +62,18 @@
                       
                       <div class="flex items-center gap-0.5">
                         <template v-for="cap in (model.config?.outputCapabilities || [])" :key="'out-' + cap">
-                          <GdTooltip :content="t('settings.providerDetail.output') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" placement="top">
-                            <span class="hover:text-primary transition-colors w-4 h-4"><TextT24Regular v-if="cap === 'text'" />
+                          <span v-tooltip="t('settings.providerDetail.output') + (cap === 'text' ? t('settings.providerDetail.text') : t('settings.providerDetail.image'))" class="hover:text-primary transition-colors w-4 h-4"><TextT24Regular v-if="cap === 'text'" />
                               <Image24Regular v-else-if="cap === 'image'" /></span>
-                          </GdTooltip>
                         </template>
                       </div>
                       <template v-if="(model.config?.features || []).length > 0 || (model.thinkingEfforts?.length ?? 0) > 0">
                         <span class="w-px h-3 bg-gray-200 dark:bg-[#2e3035] mx-1"></span>
                         <template v-for="feature in (model.config?.features || [])" :key="feature">
-                          <GdTooltip :content="getLableName(feature)" placement="top">
-                            <span class="hover:text-primary transition-colors w-4 h-4"><WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                          <span v-tooltip="getLableName(feature)" class="hover:text-primary transition-colors w-4 h-4"><WrenchScrewdriver24Regular v-if="feature === 'tools'" />
                               <Beaker16Regular v-else /></span>
-                          </GdTooltip>
                         </template>
                         <!-- 思考能力判据是档位菜单（空 = 不能思考） -->
-                        <GdTooltip v-if="(model.thinkingEfforts?.length ?? 0) > 0" :content="getLableName('thinking')"
-                          placement="top">
-                          
-                            <LightbulbFilament24Regular class="hover:text-primary transition-colors w-4 h-4"  />
-                          
-                        </GdTooltip>
+                        <LightbulbFilament24Regular v-if="(model.thinkingEfforts?.length ?? 0) > 0" v-tooltip="getLableName('thinking')" class="hover:text-primary transition-colors w-4 h-4"  />
                       </template>
                     </div>
                   </div>
@@ -148,9 +137,7 @@
                   <span class="flex items-center gap-2">
                     <TextT24Regular class="size-4"  />
                     <span class="text-[13px] leading-none">{{ t('settings.providerDetail.text') }}</span>
-                    <GdTooltip :content="t('settings.providerDetail.capabilityLocked')" placement="top">
-                      <LockClosed16Regular class="size-4 text-[var(--gd-color-text-disabled)]"  />
-                    </GdTooltip>
+                    <LockClosed16Regular v-tooltip="t('settings.providerDetail.capabilityLocked')" class="size-4 text-[var(--gd-color-text-disabled)]"  />
                   </span>
                 </GdCheckbox>
                 <GdCheckbox value="image">
@@ -168,9 +155,7 @@
                   <span class="flex items-center gap-2">
                     <TextT24Regular class="size-4"  />
                     <span class="text-[13px] leading-none">{{ t('settings.providerDetail.text') }}</span>
-                    <GdTooltip :content="t('settings.providerDetail.capabilityLocked')" placement="top">
-                      <LockClosed16Regular class="size-4 text-[var(--gd-color-text-disabled)]"  />
-                    </GdTooltip>
+                    <LockClosed16Regular v-tooltip="t('settings.providerDetail.capabilityLocked')" class="size-4 text-[var(--gd-color-text-disabled)]"  />
                   </span>
                 </GdCheckbox>
                 <GdCheckbox value="image">
@@ -419,17 +404,10 @@
                     {{ t('settings.providerDetail.embeddingBadge') }}
                   </span>
                   <template v-for="feature in (model.config?.features || [])" :key="feature">
-                    <GdTooltip :content="getLableName(feature)" placement="top">
-                      <span class="hover:text-primary transition-colors w-3.5 h-3.5"><WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                    <span v-tooltip="getLableName(feature)" class="hover:text-primary transition-colors w-3.5 h-3.5"><WrenchScrewdriver24Regular v-if="feature === 'tools'" />
                         <Beaker16Regular v-else /></span>
-                    </GdTooltip>
                   </template>
-                  <GdTooltip v-if="(model.thinkingEfforts?.length ?? 0) > 0" :content="getLableName('thinking')"
-                    placement="top">
-                    
-                      <LightbulbFilament24Regular class="hover:text-primary transition-colors w-3.5 h-3.5"  />
-                    
-                  </GdTooltip>
+                  <LightbulbFilament24Regular v-if="(model.thinkingEfforts?.length ?? 0) > 0" v-tooltip="getLableName('thinking')" class="hover:text-primary transition-colors w-3.5 h-3.5"  />
                 </div>
                 <GdButton link type="primary" size="small" @click="handleSelectFromFetch(model)">
                   {{ t('settings.providerDetail.select') }}
@@ -479,7 +457,6 @@ const emit = defineEmits<{
 }>()
 import { useDebounceFn } from '@vueuse/core'
 import Avatar from '../ui/Avatar.vue'
-import GdTooltip from '../ui/GdTooltip.vue'
 import {
   TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular, Box16Regular, LockClosed16Regular, ChevronRight16Regular, ArrowSync16Regular,
   Settings16Regular, SubtractCircle16Regular, Search16Regular, ChevronLeft20Regular, Add16Regular, ArrowDownload16Regular, Beaker16Regular, Wand16Regular

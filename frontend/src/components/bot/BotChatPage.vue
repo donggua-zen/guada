@@ -6,7 +6,7 @@
           v-if="isNarrow && activeSessionId"
           type="button"
           class="header-icon-btn"
-          :title="t('bot.chat.back')"
+          v-tooltip="t('bot.chat.back')"
           @click="handleBack"
         >
           <ArrowLeft16Regular class="w-4.5 h-4.5"  />

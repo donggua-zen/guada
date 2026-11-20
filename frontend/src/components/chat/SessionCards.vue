@@ -27,7 +27,7 @@
           <!-- 并发待答计数：同会话还有多少个在排队（后端无超时，漏答会卡住回合） -->
           <span v-if="waitingCount > 0"
             class="shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-            :title="t('chat.ask.queueTooltip')">
+            v-tooltip="t('chat.ask.queueTooltip')">
             {{ t('chat.ask.queueMore', { n: waitingCount }) }}
           </span>
           <!-- 分页器（对齐 ZCode：翻页只走箭头，选完不自动翻；单页为禁用态） -->
@@ -93,7 +93,7 @@
           <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
             <span class="ask-hint">{{ t('chat.ask.keyboardHint') }}</span>
             <div class="flex items-center gap-2">
-              <GdButton size="small" :disabled="busy" :title="t('chat.ask.ignoreTip')" @click="ignoreAsk">
+              <GdButton size="small" :disabled="busy" v-tooltip="t('chat.ask.ignoreTip')" @click="ignoreAsk">
                 {{ t('chat.ask.ignore') }}
               </GdButton>
               <GdButton type="primary" size="small" :loading="busy" :disabled="busy || !hasAnswer"

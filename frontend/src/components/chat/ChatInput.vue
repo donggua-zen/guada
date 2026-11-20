@@ -81,13 +81,11 @@
               @toggle-plan="handlePlanModeToggle" />
             <!-- 计划模式退出按钮：**只在计划模式开启时存在**（按钮可见 = 计划模式开，故不再需要高亮表达状态）。
                  入口在安全档位弹窗里（计划模式项）；此处 hover 图标变 × 表示"点击即退出"。 -->
-            <GdTooltip v-if="planModeEnabled" :content="t('chat.input.planModeOff')" placement="top">
-              <button class="tool-btn plan-mode-btn" @click.stop="exitPlanMode">
+            <button v-if="planModeEnabled" v-tooltip="t('chat.input.planModeOff')" class="tool-btn plan-mode-btn" @click.stop="exitPlanMode">
                 <Lightbulb24Regular class="plan-mode-icon-default w-4 h-4" />
                 <Dismiss16Regular class="plan-mode-icon-hover w-4 h-4" />
                 <span class="plan-mode-label text-xs font-medium">{{ t('chat.input.planMode') }}</span>
               </button>
-            </GdTooltip>
             <!-- <GdDivider direction="vertical"></GdDivider> -->
           </template>
 
@@ -102,7 +100,7 @@
           <button ref="modelButtonRef" @click.stop="openModelPanel" class="model-selector-btn"
             :class="{ 'is-open': modelButtonExpanded, 'cursor-not-allowed': props.readonly || props.configLocked }"
             :aria-disabled="props.readonly || props.configLocked"
-            :title="modelButtonTitle" :style="{ width: modelButtonWidth }">
+            v-tooltip="modelButtonTitle" :style="{ width: modelButtonWidth }">
             <span class="text-sm font-medium truncate flex-1 min-w-0"
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                 currentModelNameOnly }}</span>
@@ -110,25 +108,16 @@
             }}</span>
           </button>
           <!-- 会话设置按钮 -->
-          <GdTooltip v-if="!props.readonly" class="token-limit-control" :content="t('chat.input.tokenLimit')"
-            placement="top">
-            <button ref="settingsButtonRef" class="tool-btn" @click.stop="toggleSettingsPopover">
+          <button v-if="!props.readonly" v-tooltip="t('chat.input.tokenLimit')" ref="settingsButtonRef" class="tool-btn token-limit-control" @click.stop="toggleSettingsPopover">
               <span class="text-xs font-medium">{{ maxTokensLabel }}</span>
             </button>
-          </GdTooltip>
           <MaxTokensPopover v-model:visible="settingsPopoverVisible" :anchor-el="settingsButtonRef"
             :current-value="props.config?.maxTokensLimit ?? null" @change="handleMaxTokensChange" />
           <!-- 停止/发送按钮（单按钮，与参考项目一致）：流式中无输入=停止，有输入/附件=入队 -->
-          <GdTooltip v-if="streaming && !inputContent.trim() && uploadFiles.length === 0"
-            :content="t('chat.input.stopGenerating')" placement="top">
-            <button class="send-btn stop-btn" @click="abortResponse">
+          <button v-if="streaming && !inputContent.trim() && uploadFiles.length === 0" v-tooltip="t('chat.input.stopGenerating')" class="send-btn stop-btn" @click="abortResponse">
               <Stop24Filled class="w-4.5 h-4.5" />
             </button>
-          </GdTooltip>
-          <GdTooltip v-else
-            :content="sendBusy ? t('chat.input.sending') : streaming ? t('chat.input.enqueue') : t('chat.input.send')"
-            placement="top">
-            <button class="send-btn" :class="{ 'queue-btn': streaming, 'send-btn--pending': sendBusy }"
+          <button v-else v-tooltip="sendBusy ? t('chat.input.sending') : streaming ? t('chat.input.enqueue') : t('chat.input.send')" class="send-btn" :class="{ 'queue-btn': streaming, 'send-btn--pending': sendBusy }"
               :aria-busy="sendBusy || undefined" @click="sendMessage"
               :disabled="props.readonly || (!inputContent.trim() && uploadFiles.length === 0) || !props.config?.modelId || sendBusy">
               <!-- 发送中：转圈 loading（与 GdButton 的 loading 同款视觉），
@@ -139,7 +128,6 @@
               </svg>
               <Send24Filled v-else class="w-4.5 h-4.5" />
             </button>
-          </GdTooltip>
         </div>
       </div>
 
@@ -180,7 +168,6 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import FileItem from '../ui/FileItem.vue';
 import GdDialog from '../ui/GdDialog.vue';
-import GdTooltip from '../ui/GdTooltip.vue';
 import AttachmentPopover from './chat-input/AttachmentPopover.vue';
 import MaxTokensPopover from './chat-input/MaxTokensPopover.vue';
 import SandboxModePopover from './chat-input/SandboxModePopover.vue';

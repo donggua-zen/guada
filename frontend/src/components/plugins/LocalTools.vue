@@ -4,15 +4,13 @@
     <div class="plugins-view-bar">
       <div class="plugins-view-bar__left">
         <PluginViewSwitch v-model="view" :items="viewItems" />
-        <GdTooltip :content="t('plugins.localTools.subtitle')" placement="top">
-          <button type="button" class="plugins-view-info" :aria-label="t('plugins.page.info')">
+        <button v-tooltip="t('plugins.localTools.subtitle')" type="button" class="plugins-view-info" :aria-label="t('plugins.page.info')">
             <Info24Regular />
           </button>
-        </GdTooltip>
       </div>
       <div class="plugins-view-bar__right">
         <template v-if="view === 'installed'">
-          <GdButton circle :loading="loading" :title="t('common.refresh')" @click="loadGlobalTools">
+          <GdButton circle :loading="loading" v-tooltip="t('common.refresh')" @click="loadGlobalTools">
             <template #icon>
               <ArrowClockwise16Regular class="size-4" />
             </template>
@@ -31,7 +29,7 @@
               <Search16Regular class="size-4" />
             </template>
           </GdInput>
-          <GdButton circle size="small" :title="t('plugins.page.marketOpenWeb')" @click="handleOpenMarketSite">
+          <GdButton circle size="small" v-tooltip="t('plugins.page.marketOpenWeb')" @click="handleOpenMarketSite">
             <template #icon>
               <ArrowUpRight16Regular />
             </template>
@@ -147,8 +145,6 @@ import GdTag from '@/components/ui/GdTag.vue';
 import { toast } from '@/components/ui/toastService';
 import GdInput from '@/components/ui/GdInput.vue';
 import GdSwitch from '@/components/ui/GdSwitch.vue';
-import GdTooltip from '@/components/ui/GdTooltip.vue';
-
 import {
   ArrowClockwise16Regular,
   ArrowUpRight16Regular,

@@ -62,7 +62,7 @@
   </div>
 
   <!-- 全局悬浮引导入口（X 关闭或完成后消失） -->
-  <div v-if="!visible && !hasCompleted" class="guide-fab" @click="openGuide" :title="t('ui.setupGuide.viewGuide')">
+  <div v-if="!visible && !hasCompleted" class="guide-fab" @click="openGuide" v-tooltip="t('ui.setupGuide.viewGuide')">
     <QuestionCircle16Filled class="size-4"  />
   </div>
 </template>

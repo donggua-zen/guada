@@ -79,7 +79,7 @@
                                 class="flex min-w-[6px] flex-1 flex-col gap-[3px]">
                                 <div v-for="(day, index) in week.days" :key="index" class="aspect-square w-full rounded-sm"
                                     :class="day ? heatmapClass(day.level) : 'bg-transparent'"
-                                    :title="day && !day.future ? `${day.date} · ${formatCompactTokens(day.totalTokens)} tokens · ${day.requestCount}` : ''" />
+                                    v-tooltip="day && !day.future ? `${day.date} · ${formatCompactTokens(day.totalTokens)} tokens · ${day.requestCount}` : ''" />
                             </div>
                         </div>
                         <!-- 月份标签：left 用百分比（与等分列同步，不依赖 DOM 测量）。
@@ -117,7 +117,7 @@
                     <div class="flex items-end justify-around gap-2 h-36 w-full border-b border-gray-100 dark:border-[#2e3035]">
                         <div v-for="point in trendPoints" :key="point.date"
                             class="flex flex-col justify-end h-full min-w-[6px] flex-1 max-w-[48px]"
-                            :title="pointTitle(point)">
+                            v-tooltip="pointTitle(point)">
                             <div class="flex flex-col-reverse w-full h-full rounded-sm overflow-hidden"
                                 :class="point.totalTokens > 0 ? 'bg-gray-100 dark:bg-[#25262b]' : ''">
                                 <div v-for="segment in point.models"

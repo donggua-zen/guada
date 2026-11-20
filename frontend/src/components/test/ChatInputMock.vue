@@ -58,29 +58,21 @@
       <div class="input-actions w-full flex justify-between mt-2">
         <div class="tools left-tools flex gap-0.5 items-center">
           <!-- 图片按钮 -->
-          <GdTooltip content="添加图片" placement="top">
-            <GdButton class="tool-btn" @click="triggerImageInput" text>
+          <GdButton v-tooltip="'添加图片'" class="tool-btn" @click="triggerImageInput" text>
               <Image24Regular class="w-[22px] h-[22px]"  />
             </GdButton>
-          </GdTooltip>
           <!-- 附件按钮 -->
-          <GdTooltip content="上传文件" placement="top">
-            <GdButton class="tool-btn" @click="triggerFileInput" text>
+          <GdButton v-tooltip="'上传文件'" class="tool-btn" @click="triggerFileInput" text>
               <Attach24Regular class="w-[22px] h-[22px]"  />
             </GdButton>
-          </GdTooltip>
           <!-- 知识库按钮 -->
-          <GdTooltip content="知识库" placement="top">
-            <GdButton class="tool-btn" @click="openKnowledgeBasePanel" text>
+          <GdButton v-tooltip="'知识库'" class="tool-btn" @click="openKnowledgeBasePanel" text>
               <BookSearch24Regular class="w-[22px] h-[22px]"  />
             </GdButton>
-          </GdTooltip>
           <!-- 技能按钮（新增） -->
-          <GdTooltip content="选择技能 /" placement="top">
-            <GdButton class="tool-btn" @click="insertSkill('code-reviewer')" text>
+          <GdButton v-tooltip="'选择技能 /'" class="tool-btn" @click="insertSkill('code-reviewer')" text>
               <Wrench20Regular class="w-[22px] h-[22px]"  />
             </GdButton>
-          </GdTooltip>
         </div>
         <div class="right-actions">
           <!-- 模型选择按钮 -->
@@ -93,24 +85,18 @@
             </div>
           </GdButton>
           <div class="tools right-tools">
-            <GdTooltip content="会话设置" placement="top">
-              <GdButton class="tool-btn" text>
+            <GdButton v-tooltip="'会话设置'" class="tool-btn" text>
                 <Settings24Regular class="w-[22px] h-[22px]"  />
               </GdButton>
-            </GdTooltip>
           </div>
           <div>
-            <GdTooltip v-if="streaming && !rawText.trim()" content="停止生成" placement="top">
-              <GdButton class="send-btn stop-btn" @click="abortResponse" circle type="danger">
+            <GdButton v-if="streaming && !rawText.trim()" v-tooltip="'停止生成'" class="send-btn stop-btn" @click="abortResponse" circle type="danger">
                 <template #icon><Stop24Filled class="w-[22px] h-[22px]"  /></template>
               </GdButton>
-            </GdTooltip>
-            <GdTooltip v-else content="发送" placement="top">
-              <GdButton class="send-btn" type="primary" @click="sendMessage" circle
+            <GdButton v-else v-tooltip="'发送'" class="send-btn" type="primary" @click="sendMessage" circle
                 :disabled="!rawText.trim()">
                 <template #icon><Send24Filled class="w-[22px] h-[22px]"  /></template>
               </GdButton>
-            </GdTooltip>
           </div>
         </div>
       </div>
@@ -143,7 +129,6 @@ import {
   Settings24Regular, BookSearch24Regular, FolderOpen24Regular,
   Apps20Regular, Wrench20Regular
 } from '@vicons/fluent';
-import GdTooltip from '../ui/GdTooltip.vue';
 import GdButton from '@/components/ui/GdButton.vue';
 import GdTag from '@/components/ui/GdTag.vue';
 import GdDivider from '@/components/ui/GdDivider.vue';

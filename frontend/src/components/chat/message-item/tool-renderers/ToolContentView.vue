@@ -1,7 +1,7 @@
 <template>
   <div class="tool-content-view">
     <div class="tool-view-header">
-      <span class="tool-view-file" :title="filePath">{{ fileName }}</span>
+      <span class="tool-view-file" v-tooltip="filePath">{{ fileName }}</span>
       <span class="tool-view-meta">{{ t('chat.toolCalls.lineCount', { n: lineCount }) }}</span>
     </div>
     <div class="tool-content-body">

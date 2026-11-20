@@ -55,7 +55,7 @@
           <img v-else :src="getFileIcon(item)" class="w-5 h-5 object-contain shrink-0" alt="file icon" />
 
           <!-- 名称 -->
-          <span class="text-sm text-gray-700 dark:text-[#e8e9ed] truncate" :title="item.displayName">
+          <span class="text-sm text-gray-700 dark:text-[#e8e9ed] truncate" v-tooltip="item.displayName">
             {{ item.displayName }}
           </span>
         </div>
@@ -64,21 +64,13 @@
         <div class="flex items-center min-w-0">
           <template v-if="!item.isDirectory">
             <!-- 处理中或等待处理时显示进度百分比 -->
-            <GdTooltip v-if="(item.processingStatus === 'processing' || item.processingStatus === 'pending') && item.currentStep" 
-              :content="item.currentStep" 
-              placement="top">
-              <GdTag size="small" :type="getStatusType(item.processingStatus)" class="truncate max-w-full">
+            <GdTag v-if="(item.processingStatus === 'processing' || item.processingStatus === 'pending') && item.currentStep" v-tooltip="item.currentStep" size="small" :type="getStatusType(item.processingStatus)" class="truncate max-w-full">
                 {{ getStatusDisplayText(item) }}
               </GdTag>
-            </GdTooltip>
             <!-- 失败时 hover 显示具体错误原因 -->
-            <GdTooltip v-else-if="item.processingStatus === 'failed'"
-              :content="item.errorMessage || t('knowledge.status.unknownError')"
-              placement="top">
-              <GdTag size="small" :type="getStatusType(item.processingStatus)">
+            <GdTag v-else-if="item.processingStatus === 'failed'" v-tooltip="item.errorMessage || t('knowledge.status.unknownError')" size="small" :type="getStatusType(item.processingStatus)">
                 {{ getStatusDisplayText(item) }}
               </GdTag>
-            </GdTooltip>
             <!-- 其他状态直接显示 -->
             <GdTag v-else size="small" :type="getStatusType(item.processingStatus)">
               {{ getStatusDisplayText(item) }}
@@ -193,7 +185,6 @@ import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
 import GdTree from '@/components/ui/GdTree.vue'
 import { getFileIconByExt } from '@/composables/useFileIcon'

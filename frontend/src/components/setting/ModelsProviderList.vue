@@ -10,11 +10,11 @@
         <div class="flex items-center gap-2.5 mb-3">
           <CardAvatar :src="getProviderIcon(provider)" :name="provider.name" />
           <h3 class="font-semibold text-gray-900 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);"
-            :title="provider.name">
+            v-tooltip="provider.name">
             {{ provider.name }}
           </h3>
-          <span v-if="provider.typeAvailable === false" class="text-[10px] text-orange-500 shrink-0" title="贡献该类型的插件已卸载或禁用">类型不可用</span>
-          <span v-else-if="provider.protocolAvailable === false" class="text-[10px] text-orange-500 shrink-0" title="该协议适配器已禁用或卸载">协议不可用</span>
+          <span v-if="provider.typeAvailable === false" class="text-[10px] text-orange-500 shrink-0" v-tooltip="'贡献该类型的插件已卸载或禁用'">类型不可用</span>
+          <span v-else-if="provider.protocolAvailable === false" class="text-[10px] text-orange-500 shrink-0" v-tooltip="'该协议适配器已禁用或卸载'">协议不可用</span>
           <GdSwitch
             :model-value="provider.enabled !== false"
             size="small"
@@ -60,7 +60,7 @@
         <div class="flex items-center gap-2.5 mb-3">
           <CardAvatar :src="getProviderIcon(template)" :name="template.name" />
           <h3 class="font-semibold text-gray-700 dark:text-[#e8e9ed] truncate flex-1 min-w-0" style="font-size: var(--gd-size-text-sm);"
-            :title="template.name">
+            v-tooltip="template.name">
             {{ template.name }}
           </h3>
           <GdTag v-if="template.source === 'plugin'" size="small" type="info" effect="plain" class="shrink-0">插件</GdTag>

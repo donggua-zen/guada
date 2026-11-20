@@ -45,7 +45,7 @@
   </div>
 
   <!-- 浮动按钮（面板隐藏时显示） -->
-  <button v-if="!isVisible && isDev" class="mock-float-btn" @click="toggleVisibility" title="打开 Mock 测试面板">
+  <button v-if="!isVisible && isDev" class="mock-float-btn" @click="toggleVisibility" v-tooltip="'打开 Mock 测试面板'">
     🎭
   </button>
 </template>

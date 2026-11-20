@@ -149,8 +149,7 @@
                   @abort="abortResponse">
                   <template #right-actions-before>
                     <!-- 上下文使用率：圆形进度条 -->
-                    <GdTooltip :content="contextTooltip" placement="top">
-                      <button ref="contextRingRef" class="context-ring-btn"
+                    <button v-tooltip="contextTooltip" ref="contextRingRef" class="context-ring-btn"
                         :class="{ 'is-open': memoPanelVisible }" @click.stop="toggleMemoPanel">
                         <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
                           <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
@@ -159,7 +158,6 @@
                             transform="rotate(-90 18 18)" />
                         </svg>
                       </button>
-                    </GdTooltip>
                   </template>
                 </ChatInput>
               </div>
@@ -279,7 +277,6 @@ import SessionCards from './SessionCards.vue';
 import WorkingDirBar from './workspace/WorkingDirBar.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { ArrowSync16Regular } from '@vicons/fluent'
-import GdTooltip from '../ui/GdTooltip.vue';
 import GdButton from '@/components/ui/GdButton.vue';
 
 import GdPopover from '@/components/ui/GdPopover.vue'

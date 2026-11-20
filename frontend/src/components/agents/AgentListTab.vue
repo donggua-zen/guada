@@ -49,13 +49,13 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-start justify-between">
                   <div class="flex items-center gap-1.5 min-w-0">
-                    <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="agent.name">
+                    <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" v-tooltip="agent.name">
                       {{ agent.name }}
                     </div>
                     <!-- 插件智能体徽标：只读，随插件启停 -->
                     <span v-if="agent.pluginId"
                       class="shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] leading-none rounded border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300"
-                      :title="t('agents.list.pluginAgentTip', { plugin: agent.pluginId })">
+                      v-tooltip="t('agents.list.pluginAgentTip', { plugin: agent.pluginId })">
                       {{ t('agents.list.pluginAgentBadge') }}
                     </span>
                   </div>
@@ -67,7 +67,7 @@
 
                   </GdButton>
                 </div>
-                <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5 font-mono truncate" :title="agent.id">
+                <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5 font-mono truncate" v-tooltip="agent.id">
                   {{ agent.id }}
                 </div>
               </div>

@@ -4,15 +4,13 @@
         <div class="plugins-view-bar">
             <div class="plugins-view-bar__left">
                 <PluginViewSwitch v-model="view" :items="viewItems" />
-                <GdTooltip :content="t('plugins.mcp.subtitle')" placement="top">
-                    <button type="button" class="plugins-view-info" :aria-label="t('plugins.page.info')">
+                <button v-tooltip="t('plugins.mcp.subtitle')" type="button" class="plugins-view-info" :aria-label="t('plugins.page.info')">
                         <Info24Regular />
                     </button>
-                </GdTooltip>
             </div>
             <div class="plugins-view-bar__right">
                 <template v-if="view === 'installed'">
-                    <GdButton circle :loading="loading" :title="t('common.refresh')" @click="loadServers">
+                    <GdButton circle :loading="loading" v-tooltip="t('common.refresh')" @click="loadServers">
                         <template #icon>
                             <ArrowClockwise16Regular class="size-4" />
                         </template>
@@ -42,7 +40,7 @@
                             <Search16Regular class="size-4"  />
                         </template>
                     </GdInput>
-                    <GdButton circle size="small" :loading="marketLoading" :title="t('plugins.mcpMarket.refresh')" @click="handleMarketRefresh">
+                    <GdButton circle size="small" :loading="marketLoading" v-tooltip="t('plugins.mcpMarket.refresh')" @click="handleMarketRefresh">
                         <template #icon>
                             <ArrowClockwise16Regular class="size-4" />
                         </template>
@@ -324,7 +322,6 @@ import { openInExternalBrowser } from '@/utils/browserUtils'
 import { usePluginViewQuery } from '../../composables/usePluginViewQuery'
 import { apiService } from '../../services/ApiService'
 import GdDialog from '@/components/ui/GdDialog.vue'
-import GdTooltip from '@/components/ui/GdTooltip.vue'
 import PluginListRow from './PluginListRow.vue'
 import PluginViewSwitch from './PluginViewSwitch.vue'
 import McpMarket from './McpMarket.vue'

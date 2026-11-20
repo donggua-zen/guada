@@ -3,7 +3,7 @@
     <!-- 表头：数量 + 暂停；暂停后由下方横幅承接"继续发送" -->
     <div class="queue-header">
       <span class="queue-title">{{ t('chat.queue.title', { n: queue.length }) }}</span>
-      <button v-if="!pausedReason" class="queue-header-btn" :title="t('chat.queue.pause')" @click="emit('pause')">
+      <button v-if="!pausedReason" class="queue-header-btn" v-tooltip="t('chat.queue.pause')" @click="emit('pause')">
         <Pause24Filled class="w-[13px] h-[13px]"  />
       </button>
     </div>
@@ -24,7 +24,7 @@
         'is-sending': item.status === 'running',
         'is-failed': item.status === 'failed',
         'is-promoting': isPromoting(item),
-      }" :title="item.status === 'failed' ? item.error : undefined">
+      }" v-tooltip="item.status === 'failed' ? item.error : undefined">
         <div class="queue-item-files" v-if="item.files?.length > 0">
           <Attach24Regular class="w-3 h-3"  />
           <span>{{ item.files.length }}</span>
@@ -44,29 +44,29 @@
           </span>
         </div>
         <div class="queue-actions" v-if="item.status === 'queued' && !isPromoting(item)">
-          <button class="queue-action-btn" :disabled="!canMoveUp(item.id)" :title="t('chat.queue.moveUp')"
+          <button class="queue-action-btn" :disabled="!canMoveUp(item.id)" v-tooltip="t('chat.queue.moveUp')"
             @click="emit('move', item.id, -1)">
             <ArrowUp24Regular class="w-3.5 h-3.5"  />
           </button>
-          <button class="queue-action-btn" :disabled="!canMoveDown(item.id)" :title="t('chat.queue.moveDown')"
+          <button class="queue-action-btn" :disabled="!canMoveDown(item.id)" v-tooltip="t('chat.queue.moveDown')"
             @click="emit('move', item.id, 1)">
             <ArrowDown24Regular class="w-3.5 h-3.5"  />
           </button>
-          <button class="queue-action-btn" :title="t('chat.queue.sendNow')" @click="emit('sendNow', item.id)">
+          <button class="queue-action-btn" v-tooltip="t('chat.queue.sendNow')" @click="emit('sendNow', item.id)">
             <Play24Filled class="w-3.5 h-3.5"  />
           </button>
-          <button class="queue-action-btn" @click="emit('edit', item)" :title="t('chat.queue.edit')">
+          <button class="queue-action-btn" @click="emit('edit', item)" v-tooltip="t('chat.queue.edit')">
             <Edit24Regular class="w-3.5 h-3.5"  />
           </button>
-          <button class="queue-action-btn" @click="emit('remove', item.id)" :title="t('chat.queue.withdraw')">
+          <button class="queue-action-btn" @click="emit('remove', item.id)" v-tooltip="t('chat.queue.withdraw')">
             <Dismiss24Regular class="w-3.5 h-3.5"  />
           </button>
         </div>
         <div class="queue-actions" v-else-if="item.status === 'failed'">
-          <button class="queue-action-btn" @click="emit('retry', item.id)" :title="t('chat.queue.retry')">
+          <button class="queue-action-btn" @click="emit('retry', item.id)" v-tooltip="t('chat.queue.retry')">
             <ArrowClockwise24Regular class="w-3.5 h-3.5"  />
           </button>
-          <button class="queue-action-btn" @click="emit('remove', item.id)" :title="t('chat.queue.withdraw')">
+          <button class="queue-action-btn" @click="emit('remove', item.id)" v-tooltip="t('chat.queue.withdraw')">
             <Dismiss24Regular class="w-3.5 h-3.5"  />
           </button>
         </div>
