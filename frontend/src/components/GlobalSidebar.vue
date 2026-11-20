@@ -70,8 +70,8 @@
                 <ChevronDown12Regular class="absolute inset-0 w-4 h-4 transition-all duration-200 opacity-0 group-hover:opacity-100"
                   :class="isGroupExpanded(group.id) ? '' : '-rotate-90'" />
               </span>
-              <span v-if="group.kind === 'workspace' && group.path" v-tooltip:bottom="group.path" class="text-sm font-medium">{{ group.name }}</span>
-              <span v-else class="text-sm font-medium">{{ getGroupDisplayName(group) }}</span>
+              <span v-if="group.kind === 'workspace' && group.path" v-tooltip:bottom="group.path" class="text-sm">{{ group.name }}</span>
+              <span v-else class="text-sm">{{ getGroupDisplayName(group) }}</span>
             </div>
             <div
               class="flex items-center gap-1 opacity-0 pointer-events-none transition-opacity duration-200 group-hover:opacity-100 group-hover:pointer-events-auto">

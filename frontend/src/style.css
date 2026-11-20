@@ -278,7 +278,7 @@
      ==================== */
   --gd-font-sans:
     -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
-    "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+    system-ui, "Microsoft YaHei UI", "Microsoft YaHei",
     "Helvetica Neue", Helvetica, Arial, sans-serif;
   --gd-font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
@@ -630,6 +630,8 @@ body {
   margin: 0;
   padding: 0;
   font-family: var(--gd-font-sans);
+  /* 灰度抗锯齿：笔画更细更柔，避免 ClearType 次像素渲染让英文显粗 */
+  -webkit-font-smoothing: antialiased;
   overflow: hidden;
   /* 给 body 设置相对定位，创建 stacking context，使 backdrop-filter 能正确工作 */
   position: relative;

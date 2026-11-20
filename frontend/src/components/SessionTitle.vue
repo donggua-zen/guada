@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
   width: max-content;
   white-space: nowrap;
   font-size: 0.875rem; /* text-sm */
-  font-weight: 500; /* font-medium */
+  font-weight: 400;
   line-height: 1.25rem;
 }
 
