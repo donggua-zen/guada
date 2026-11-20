@@ -38,6 +38,7 @@ export class WorkflowPlugin extends PluginBase {
     // core 级：默认启用但允许用户全局关闭（功能较重且为新功能；
     // 工具注入仍有 agents 白名单门控 + sub_agent 会话禁递归）
     category: "core" as const,
+    icon: "images/plugins/workflow.svg",
   };
 
   constructor(

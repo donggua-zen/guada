@@ -26,6 +26,7 @@ export class SkillBundledPlugin extends PluginBase {
     version: "1.0.0",
     description: "系统内置技能（skill-creator / skill-installer），可单独启用/停用",
     category: "core" as const,
+    icon: "images/plugins/skill_bundled.svg",
   };
   private readonly BUNDLED_DIR = path.join(process.cwd(), "bundled-skills");
   private readonly SKILL_NAMES = ["skill-creator", "skill-installer"];

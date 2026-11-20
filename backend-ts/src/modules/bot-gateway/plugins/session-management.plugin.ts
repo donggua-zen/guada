@@ -19,6 +19,7 @@ export class SessionManagementPlugin extends PluginBase {
     description: "%sessionManagement.description%",
     version: "1.0.0",
     category: "core" as const,
+    icon: "images/plugins/session_management.svg",
   };
 
   constructor(

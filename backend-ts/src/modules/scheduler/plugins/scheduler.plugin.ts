@@ -17,6 +17,7 @@ export class SchedulerPlugin extends PluginBase {
     description: "%scheduler.description%",
     version: "1.0.0",
     category: "core" as const,
+    icon: "images/plugins/scheduler.svg",
   };
 
   constructor(private schedulerService: SchedulerService) {

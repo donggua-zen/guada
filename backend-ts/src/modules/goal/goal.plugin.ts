@@ -60,6 +60,7 @@ export class GoalPlugin extends PluginBase {
     version: '1.0.0',
     category: 'system' as const,
     essential: true,
+    icon: "images/plugins/goal.svg",
   };
 
   constructor(

@@ -26,6 +26,7 @@ export class BotFileSenderPlugin extends PluginBase {
     description: "%botFileSender.description%",
     version: "1.0.0",
     category: "core" as const,
+    icon: "images/plugins/bot_file_sender.svg",
   };
 
   constructor(private botInstanceManager: BotInstanceManager) {
