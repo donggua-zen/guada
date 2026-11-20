@@ -121,14 +121,14 @@
               <!-- 输入区上方状态行：运行时状态胶囊（待办 / 后台进程 / 子代理）+ 回到底部，并排居中。
                    绝对定位浮层，不占布局高度（见 .composer-status-row 样式注释）。
                    位于避让过侧边栏的 .chat-column 内 → 开侧边栏时与输入框同轴居中。
-                   子代理段数据由 ChatPage 经 props 下传（含已冻结项，胶囊内部只取活跃项）。 -->
+                   子代理段数据由 ChatPage 经 props 下传（含已结束项，胶囊内部只取活跃项）。 -->
               <div class="composer-status-row">
                 <ComposerStatusBar v-if="!props.readonly"
                   :session-id="currentSessionId || undefined" :sub-sessions="props.subSessions" />
                 <!-- 0 宽插槽：按钮在插槽内绝对定位，插槽本身不占宽度。
                      行的居中因此只由胶囊决定 → 按钮出现/消失（到达或离开底部）不再把胶囊横移
                      （实测 18px：胶囊与图标一起跳，与"到底部时图标动了"的现象一致）。
-                     三段全空（无胶囊）时按钮是行内唯一元素，由 :has() 那条规则把它自身摆到中轴上；
+                     四段全空（无胶囊）时按钮是行内唯一元素，由 :has() 那条规则把它自身摆到中轴上；
                      否则插槽锚点居中而按钮画在锚点右侧，会整体偏右半个身位（14px）。 -->
                 <div class="scroll-btn-slot">
                   <ScrollToBottomButton :show="showScrollToBottomBtn" @click="handleScrollToBottomClick" />
@@ -361,7 +361,7 @@ const props = defineProps<{
   /** 输入编辑器重建 key（Bot 会话按 sessionId+只读态切换，保证占位文案随状态更新） */
   composerKey?: string;
   hideHeader?: boolean;    // 隐藏头部（子 Agent）
-  /** 子会话列表（ChatPage 维护，含已冻结项）：输入区运行时胶囊的「子代理」段数据源 */
+  /** 子会话列表（ChatPage 维护，含已结束项）：输入区运行时胶囊的「子代理」段数据源 */
   subSessions?: Session[];
   /** 浮层面板视觉宽（px，0 = 不渲染）；恒为浮层渲染，与占位解耦 */
   asideWidth?: number;
@@ -2925,7 +2925,7 @@ async function scrollToMessage(messageId: string) {
 /* 无运行时胶囊时，按钮是状态行里唯一可见的元素：插槽锚点被居中在行中轴，而按钮画在锚点
    右侧 → 不修正就整体偏右 14px（半个按钮宽，28 / 2）。左移半个身位让它自身居中。
    有胶囊时这条不生效，间距仍是上面的 8px（:has 匹配 ComposerStatusBar 的根节点，
-   三段全空时该节点不渲染）。 */
+   四段全空时该节点不渲染）。 */
 .composer-status-row:not(:has(.composer-status-bar)) .scroll-btn-slot > :deep(*) {
   margin-left: -14px;
 }

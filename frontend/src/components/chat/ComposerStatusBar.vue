@@ -1,12 +1,14 @@
 <template>
-  <!-- 输入区运行时状态胶囊（共享外壳）：单条 28px 药丸内分三段——目标 / 待办 / 后台任务，
-       任一段没有内容就整段不渲染，三段全空整根不渲染；hover 在上方弹出面板按域分段列细节。
+  <!-- 输入区运行时状态胶囊（共享外壳）：单条 28px 药丸内分「目标 / 待办 / 后台进程 / 后台子代理」四段，
+       任一段没有内容就整段不渲染，四段全空整根不渲染；hover 在上方弹出面板按域分段列细节。
+       后台任务之所以拆成两段而不是一段双图标：两类同时存在时，两个 14px 图标塞不进
+       同一个 16px 图标容器，负边距叠压后小尺寸下糊成一团，且合并计数看不出类型构成。
        数据契约：目标（REST + goal_updated + onConnected 补拉）、待办（REST + todo_updated）、
        后台任务（jobs_snapshot + jobs REST 基线；shell 后台进程与后台子代理已统一为 job 托管，
-       按 kind 拆组展示），各域逻辑见 composables/useGoalStatus.ts、composables/useTodoStatus.ts、
+       按 kind 拆段展示），各域逻辑见 composables/useGoalStatus.ts、composables/useTodoStatus.ts、
        composables/useBackgroundJobs.ts。
        前台子代理（对话流内阻塞运行的 spawn）不是 job，不进本胶囊——由消息流行内头像动画表达。
-       已结束（冻结）子代理不在本胶囊表达（运行时状态专属），回放入口见子代理列表面板
+       已结束的子代理不在本胶囊表达（运行时状态专属），回放入口见子代理列表面板
        （workspace/SubagentListPanel.vue）。 -->
   <div v-if="hasAny" class="composer-status-bar" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
     <!-- 外壳：唯一一条药丸，段间以细竖线分隔（同形约定见 ChatPanel 的 .composer-status-row 注释） -->
@@ -15,7 +17,7 @@
            active 但 armed=false（后端重启）时显示恢复按钮重新激活自动推进。 ── -->
       <span v-if="goal" class="csb-seg">
         <span class="csb-icon">
-          <Target20Regular class="w-3.5 h-3.5 csb-icon--muted" />
+          <Target20Regular class="w-4 h-4 csb-icon--muted" />
         </span>
         <span class="csb-text" v-tooltip="goal.objective">{{ goal.objective }}</span>
         <span class="csb-count">{{ goalCapsuleText }}</span>
@@ -34,27 +36,34 @@
       <!-- ── 待办段 ── -->
       <span v-if="todoItems.length" class="csb-seg">
         <span class="csb-icon">
-          <ArrowRight16Regular v-if="currentTodo?.status === 'in_progress'" class="w-3.5 h-3.5 csb-icon--active" />
-          <Checkmark16Regular v-else-if="currentTodo?.status === 'completed'" class="w-3.5 h-3.5 csb-icon--done" />
+          <ArrowRight16Regular v-if="currentTodo?.status === 'in_progress'" class="w-4 h-4 csb-icon--active" />
+          <Checkmark16Regular v-else-if="currentTodo?.status === 'completed'" class="w-4 h-4 csb-icon--done" />
           <span v-else class="csb-ring"></span>
         </span>
         <span class="csb-text" v-tooltip="currentTodo?.content">{{ currentTodo?.content }}</span>
         <span class="csb-count csb-count--done">{{ todoDoneCount }}/{{ todoItems.length }}</span>
       </span>
 
-      <!-- ── 后台任务段：只出总数（shell 后台进程 + 后台子代理，统一 job 托管）；
-           图标随构成变化——纯进程用终端图标、纯子代理用机器人图标、混合并排，
-           一眼可辨后台任务的类型构成；分类明细在 hover 面板里看 ── -->
-      <span v-if="backgroundJobCount" class="csb-seg">
+      <!-- ── 后台任务段（按 kind 拆成两段：进程 / 子代理，各自图标 + 各自计数）。
+           拆段的理由：两类同时存在时，两个 14px 图标挤不进同一个 16px 图标容器，
+           只能靠负边距互相叠压 → 小尺寸下糊成一团、右缘顶到计数，看不出"几个进程几个子代理"。
+           拆开后段间沿用胶囊统一的细竖线分隔，与 hover 面板里的分组（后台进程 / 子代理）一致。
+           两类各自的 stopping 计数独立，某一类全部停手中只让那一格变中性色。 ── -->
+      <span v-if="processJobs.length" class="csb-seg csb-seg--bg">
         <span class="csb-icon">
-          <WindowConsole20Filled v-if="!subagentJobs.length" class="w-3.5 h-3.5 csb-icon--muted" />
-          <Bot20Regular v-else-if="!processJobs.length" class="w-3.5 h-3.5 csb-icon--muted" />
-          <template v-else>
-            <WindowConsole20Filled class="w-3.5 h-3.5 csb-icon--muted" />
-            <Bot20Regular class="w-3.5 h-3.5 csb-icon--muted csb-icon--pair" />
-          </template>
+          <WindowConsole20Filled class="w-4 h-4 csb-icon--muted" />
         </span>
-        <span class="csb-count" :class="{ 'csb-count--live': stoppingCount === 0 }">{{ backgroundJobCount }}</span>
+        <span class="csb-count" :class="{ 'csb-count--live': processStoppingCount === 0 }">{{ processJobs.length }}</span>
+      </span>
+
+      <span v-if="subagentJobs.length" class="csb-seg csb-seg--bg csb-seg--subagent">
+        <span class="csb-icon">
+          <!-- 复用智能体专属头像（对话流 SubAgentToolRow 同一个组件），替掉通用机器人图标：
+               子代理有自己的视觉身份，胶囊里也该认得出来。只有 running 时挂眨眼/左顾右盼动画
+               （全部 stopping 时眼睛停下，与计数转中性色表达同一件事）。 -->
+          <SubAgentFace :running="subagentFaceAnimating" />
+        </span>
+        <span class="csb-count" :class="{ 'csb-count--live': subagentStoppingCount === 0 }">{{ subagentJobs.length }}</span>
       </span>
     </div>
 
@@ -148,7 +157,8 @@
                     :class="{ 'csb-row--plain': !openSubAgent }" @click="openSubAgent?.(subSessionIdOf(s))">
                     <span class="csb-icon"><span class="csb-spinner"></span></span>
                     <img v-if="subagentAvatar(s)" :src="subagentAvatar(s)" class="csb-avatar" alt="" />
-                    <Bot20Regular v-else class="w-3.5 h-3.5 csb-icon--muted csb-avatar-fallback" />
+                    <!-- 无自定义头像时用智能体专属头像（与胶囊段、对话流同一个组件），不再回落机器人图标 -->
+                    <SubAgentFace v-else class="csb-avatar-fallback" :running="s.status === 'running'" />
                     <span class="csb-row-text">{{ s.label }}</span>
                     <span class="csb-row-status">{{ jobStatusText(s) }}</span>
                     <span class="csb-elapsed">{{ elapsedText(s.startedAt) }}</span>
@@ -169,6 +179,7 @@
 import { computed, inject, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, Pause16Regular, Play16Regular, Target20Regular, WindowConsole20Filled } from "@vicons/fluent";
+import SubAgentFace from "./message-item/SubAgentFace.vue";
 import { useGoalStatus } from "@/composables/useGoalStatus";
 import { useTodoStatus } from "@/composables/useTodoStatus";
 import { useBackgroundJobs } from "@/composables/useBackgroundJobs";
@@ -198,13 +209,22 @@ const { processJobs, subagentJobs, elapsedText, killJob, openProcessLog } = useB
   () => props.sessionId,
 );
 
-/** 后台任务总数（统一 job 托管：终端进程 + 后台子代理） */
+/** 后台任务总数（统一 job 托管：终端进程 + 后台子代理）；胶囊已按 kind 拆两段，这里只供面板/显隐判据用 */
 const backgroundJobCount = computed(
   () => processJobs.value.length + subagentJobs.value.length,
 );
-/** 停止中数量：>0 时胶囊计数用中性色（任务已不可再交互，等快照确认终态） */
-const stoppingCount = computed(
-  () => [...processJobs.value, ...subagentJobs.value].filter((j) => j.status === "stopping").length,
+/** 停止中数量（分类）：>0 时该段的计数用中性色（任务已不可再交互，等快照确认终态）。
+    按类拆分而非合计——进程全部停手但子代理仍在跑时，只有进程那格该变灰。 */
+const processStoppingCount = computed(
+  () => processJobs.value.filter((j) => j.status === "stopping").length,
+);
+const subagentStoppingCount = computed(
+  () => subagentJobs.value.filter((j) => j.status === "stopping").length,
+);
+/** 子代理头像是否做眨眼/左顾右盼：还有 running 的才动（全部停手就静止，避免"还在跑"的误读）。
+    一个胶囊只挂一张脸，不按 job 数量叠多张——密度和高度都不允许。 */
+const subagentFaceAnimating = computed(
+  () => subagentJobs.value.some((j) => j.status === "running"),
 );
 
 /** 子代理 job.handle = 子会话 id：点击打开子代理标签的入参 */
@@ -279,7 +299,7 @@ function clearGoal(): void {
   void mutateGoal(() => apiService.clearSessionGoal(sid, g.revision));
 }
 
-/** 任一段有内容才有胶囊（三段全空 → 整根不渲染，回到底部按钮的 :has() 锚点依赖此行为） */
+/** 任一段有内容才有胶囊（四段全空 → 整根不渲染，回到底部按钮的 :has() 锚点依赖此行为） */
 const hasAny = computed(
   () => !!goal.value || todoItems.value.length > 0 || backgroundJobCount.value > 0,
 );
@@ -355,14 +375,28 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
   padding: 0 10px;
   height: 100%;
 }
-.csb-seg:first-child {
+.csb-seg:first-child:not(.csb-seg--bg) {
   padding-left: 12px;
 }
-.csb-seg:last-child {
+.csb-seg:last-child:not(.csb-seg--bg) {
   padding-right: 12px;
 }
 .csb-seg + .csb-seg {
   border-left: 1px solid var(--gd-color-surface-border);
+}
+/* 后台任务的两个分类段（进程 / 子代理）内容只有「图标 + 数字」，比文本段短得多：
+   收紧段内间距，避免拆成两段后把胶囊撑长。首末段也统一 8px——药丸两端的圆角留白
+   按 16px 图标算 8px 已足够，不必跟文本段一样留 12px。 */
+.csb-seg--bg {
+  gap: 4px;
+  padding: 0 8px;
+}
+/* 子代理段：头像的身份色由对话流侧 .subagent-block 下发，胶囊不在那个子树里，
+   这里补一份同样的变量（跟随主题主色，与 SubAgentToolRow 的取值保持同源）。
+   头像是 16×16 的实心块，视觉重量约为细线图标的两倍，故与计数之间多留 1px。 */
+.csb-seg--subagent {
+  --sa-identity-face: var(--gd-color-primary);
+  gap: 5px;
 }
 
 /* 图标容器用偶数尺寸：奇数会让居中余量成半像素，图标随容器位置跳一个设备像素 */
@@ -374,6 +408,9 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
   height: 16px;
   flex: 0 0 auto;
 }
+/* 容器与图标同为 16px：居中余量是 0，图标与文本基线严丝合缝，也不会出现
+   "容器 − 图标 = 奇数" 导致的半像素偏移。胶囊内图标一律 w-4 h-4，不要再写 w-3.5
+   （14px 会在容器里留 2px 空档，视觉上图标偏小且与 13px 文本不对称）。 */
 .csb-icon--muted {
   color: var(--gd-color-text-gray);
 }
@@ -514,15 +551,9 @@ const openSubagentList = inject<((sessionId?: string) => void) | null>(
   color: var(--gd-color-text-gray);
 }
 
-/* 胶囊段内双图标并排（进程+子代理混合构成）：收紧间距避免占满宽度 */
-.csb-icon--pair {
-  margin-left: -3px;
-}
-
-/* 子代理无头像时的回落图标：与 img 头像同尺寸同对齐 */
+/* 子代理无自定义头像时的回落头像（SubAgentFace 自带 16×16 与 overflow:visible，
+   这里只补 flex 不收缩，尺寸/形状由组件内部控制） */
 .csb-avatar-fallback {
-  width: 16px;
-  height: 16px;
   flex-shrink: 0;
 }
 /* GdTooltip 渲染 inline trigger 包装器：撑满整行，否则 flex 行被压成内容宽、
