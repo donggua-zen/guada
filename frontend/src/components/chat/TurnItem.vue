@@ -105,10 +105,11 @@
                       :class="isGroupExpanded(groupIndex, group) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
                       :style="isGroupExpanded(groupIndex, group) ? {} : { transform: 'rotate(-90deg)' }" />
                   </span>
-                  <span class="shrink-0 ml-1.5">{{ parts.action }}</span>
+                  <!-- 文字起点对齐内部行：图标 16px + ml-2（工具行/思考行同为 ml-2，标题不能短一档） -->
+                  <span class="shrink-0 ml-2">{{ parts.action }}</span>
                   <!-- 文件类工具：文件名 chip（扩展名图标 + basename，hover 全路径）+ 目录串（次要色，优先截断） -->
                   <template v-if="parts.file">
-                    <span class="group-file-chip inline-flex min-w-0 max-w-full items-center gap-1 ml-1.5"
+                    <span class="group-file-chip inline-flex min-w-0 max-w-full items-center gap-1 ml-2"
                       :class="{ 'is-openable': canOpenGroupFile(parts) }"
                       v-tooltip="parts.file.fullPath" @click="onGroupFileClick(parts, $event)">
                       <img :src="getFileIcon(parts.file.fileName)" class="w-4 h-4 shrink-0" alt="" />
@@ -118,7 +119,7 @@
                       v-tooltip="parts.file.fullPath">{{ parts.file.dirPath }}</span>
                   </template>
                   <!-- 其余工具：单行参数摘要 -->
-                  <span v-else-if="parts.args" class="text-sm truncate ml-1.5"
+                  <span v-else-if="parts.args" class="text-sm truncate ml-2"
                     :class="{ 'text-(--gd-color-text-subtle)': !isGroupBusy(groupIndex) }">{{ parts.args }}</span>
                 </template>
               </div>
@@ -233,7 +234,7 @@ import { toResourceUrl } from '../../utils/url';
 import { isVisionImageMediaType } from '@/utils/media-type';
 import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
 import type { Turn, MessageContent, TurnContent, FileAttachment } from '@/types/message';
-import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, getArgsDisplay, type ToolCall } from '@/utils/toolDisplay';
+import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, getArgsDisplay, hasToolAggregate, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
 import ThinkingStatus from './ThinkingStatus.vue';
@@ -547,14 +548,17 @@ const getActiveStatusParts = (executing: ToolCall[]): { icon: Component; text: s
   if (allSameType) {
     const config = getToolConfig(refTool);
     const aggregateText = formatAggregateText(config.aggregate?.executing, executing.length);
-    return {
-      icon: getToolIcon(refTool),
-      // 单个工具优先用工具自己的动作文案（如「正在读取作业输出」），
-      // 多工具才用聚合文案（如「正在执行 2 个步骤」）。
-      text: (executing.length === 1 ? config.text.executing : '')
+    // 插件声明了带 {n} 的聚合模板时，即使只有 1 个也显示带数量的文案
+    // （如「正在执行1条命令」「正在读取1个文件」）；未声明聚合的工具保留自己的
+    // 动作文案（如 job_read 的「正在读取作业输出」），避免落到通用兜底「正在执行1个步骤」。
+    // 多个执行中工具则优先聚合/通用步骤数。思考不走这里（executing 为空 → 正在思考…）。
+    const text = executing.length > 1
+      ? (aggregateText || t('chat.turn.executingSteps', { n: executing.length }))
+      : ((hasToolAggregate(refTool) ? aggregateText : '')
+        || config.text.executing
         || aggregateText
-        || t('chat.turn.executingSteps', { n: executing.length }),
-    };
+        || t('chat.turn.executingSteps', { n: 1 }));
+    return { icon: getToolIcon(refTool), text };
   }
   return { icon: ToolGenericIcon, text: t('chat.turn.executingSteps', { n: executing.length }) };
 };

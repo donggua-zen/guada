@@ -13,6 +13,7 @@ import {
   getRendererArgs,
   getArgsText,
   getArgsDisplay,
+  hasToolAggregate,
   extractStringFieldFromJsonText,
   isStandaloneTool,
   isStandaloneRendererKind,
@@ -553,5 +554,49 @@ describe("无 display 文案的工具（MCP 等）降级为显示工具名", () 
     expect(
       getArgsText({ name: "mcp__binary_overview", arguments: '{"query":"hello"}' }),
     ).toBe("hello");
+  });
+});
+
+describe("hasToolAggregate（是否声明了带 {n} 的聚合模板）", () => {
+  beforeEach(() => {
+    setPluginToolDisplays({});
+  });
+
+  it("插件声明了带 {n} 的聚合：true（单个也走「正在执行1条命令」）", () => {
+    setPluginToolDisplays({
+      run_command: {
+        text: { executing: "正在执行命令", completed: "已执行命令" },
+        aggregate: { executing: "正在执行{n}条命令", completed: "已执行{n}条命令" },
+      },
+    });
+    expect(hasToolAggregate({ name: "run_command" })).toBe(true);
+  });
+
+  it("聚合模板没有 {n}（单项式文案）：false，保留工具自己的动作文案", () => {
+    setPluginToolDisplays({
+      computer_observe: {
+        text: { executing: "正在观察桌面", completed: "已观察桌面" },
+        aggregate: { executing: "观察桌面", completed: "已观察桌面" },
+      },
+    });
+    expect(hasToolAggregate({ name: "computer_observe" })).toBe(false);
+  });
+
+  it("未注册工具：false（getToolConfig 的通用兜底不算聚合）", () => {
+    expect(hasToolAggregate({ name: "mcp__whois" })).toBe(false);
+  });
+
+  it("tool_use 二跳后按真实工具名判定", () => {
+    setPluginToolDisplays({
+      read: {
+        text: { executing: "正在读取文件", completed: "已读取文件" },
+        aggregate: { executing: "正在读取{n}个文件", completed: "已读取{n}个文件" },
+      },
+    });
+    const tool = {
+      name: "tool_use",
+      arguments: JSON.stringify({ tool_name: "read", arguments: { file_path: "a.ts" } }),
+    } as ToolCall;
+    expect(hasToolAggregate(tool)).toBe(true);
   });
 });

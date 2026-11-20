@@ -205,6 +205,18 @@ export function getToolConfig(tool: ToolCall): ToolDisplayConfig {
   };
 }
 
+/**
+ * 工具是否**声明了**带 {n} 占位符的聚合模板（插件 display.aggregate.executing）。
+ *
+ * 未声明时 getToolConfig 会兜底成通用「正在执行{n}个步骤」——那不是有意义的
+ * 聚合文案（如 job_read 的「正在读取作业输出」更具体）。调用方据此决定
+ * 单个执行中工具是走聚合文案还是工具自己的动作文案。
+ */
+export function hasToolAggregate(tool: ToolCall): boolean {
+  const template = pluginToolDisplays.value[resolveToolName(tool)]?.aggregate?.executing;
+  return !!template?.includes("{n}");
+}
+
 export function getToolIcon(tool: ToolCall): Component {
   const config = getToolConfig(tool);
   if (config.icon) {
