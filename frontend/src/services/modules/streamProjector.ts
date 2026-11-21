@@ -134,10 +134,23 @@ function getCurrentTurn(sessionId: string): string | undefined {
  * 关联键是 provider 发出的 callId（一次调用唯一），不依赖 messageId——工具结果是独立消息。
  * 展示折叠：结果按 callId 挂回调用块，而非按消息 id。
  */
+function isDiscardedBundle(bundle: {
+  metadata?: Record<string, any>;
+}): boolean {
+  return (
+    bundle.metadata?.excludedFromContext === true ||
+    bundle.metadata?.streamRecovery?.discarded === true ||
+    bundle.metadata?.streamRecoveryDiscarded === true
+  );
+}
+
 function findBlockByToolCallId(turns: Turn[], toolCallId: string): TurnContent | undefined {
   for (const t of turns) {
     if (!Array.isArray(t.messages)) continue;
     for (const m of t.messages) {
+      // 被流恢复丢弃的 attempt 不再承接工具结果：结果要挂到新提交的
+      // tool_settlement 消息束上，否则 UI 结果会挂回已隐藏的旧块。
+      if (isDiscardedBundle(m)) continue;
       if (!Array.isArray(m.blocks)) continue;
       for (const b of m.blocks) {
         const entries = (b.metadata?.toolCalls || []) as ToolCallEntry[];
@@ -1223,10 +1236,13 @@ export function applyChunkToStore(
       if (!turn.state) turn.state = {};
       turn.state.isWorking = true;
       turn.state.retry = {
+        retrySource: chunk.retrySource,
         retryReason: chunk.retryReason,
         retryAttempt: chunk.retryAttempt,
         retryMaxAttempts: chunk.retryMaxAttempts,
         retryDelayMs: chunk.retryDelayMs,
+        anchorId: chunk.anchorId,
+        failedRequestId: chunk.failedRequestId,
         message: chunk.message,
       };
     }
@@ -1433,6 +1449,11 @@ export function applyChunkToStore(
       bundle.metadata = {
         ...bundle.metadata,
         ...(chunk.finishReason ? { finishReason: chunk.finishReason } : {}),
+        // 流恢复丢弃标记：实时路径没有 assistant/message 领域事件，
+        // 靠 finish 标记让 TurnItem 立即把该 attempt 从展示流中摘掉。
+        ...(chunk.finishReason === "stream_recovery_discarded"
+          ? { streamRecoveryDiscarded: true }
+          : {}),
       };
       content.state.isStreaming = false;
       content.state.isThinking = false;

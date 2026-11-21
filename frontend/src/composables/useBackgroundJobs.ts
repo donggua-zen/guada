@@ -62,7 +62,7 @@ export function useBackgroundJobs(sessionId: MaybeRefOrGetter<string | undefined
     return formatProcessDuration(nowTick.value - startedAt);
   }
 
-  /** 停止后台任务（进程与子代理同一条 kill 协议；subagent 的 cancel 钩子 = closeSubAgent） */
+  /** 停止后台任务（进程与子代理同一条 kill 协议；subagent 的 cancel 钩子 = stopSubAgent） */
   async function killJob(job: UiJobInfo): Promise<void> {
     const sid = toValue(sessionId);
     if (!sid) return;

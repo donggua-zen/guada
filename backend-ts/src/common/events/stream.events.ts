@@ -14,7 +14,8 @@ export interface StreamStatusChangedEvent {
   source?: string;
   payload: {
     status: "running" | "completed" | "user_cancel" | "error";
-    // running 时
+    // running 时：与 SQLite 会话行一致的服务端权威活跃时间
+    lastActiveAt?: string | null;
     messageId?: string;
     replaceTurnId?: string | null;
     session?: any;
@@ -86,19 +87,22 @@ export interface SubAgentCreatedEvent {
 }
 
 /**
- * 子 Agent 关闭事件（内部模块间使用）
+ * 子 Agent 运行结束事件（内部模块间使用）
  *
- * 事件名：subagent.closed
+ * 事件名：subagent.run_ended
+ *
+ * 语义：一次运行结束了（完成/失败/被停止），**不是会话被关闭**。
+ * 会话与历史始终保留，后续仍可 sendMessage 开新回合。
  */
-export interface SubAgentClosedEvent {
+export interface SubAgentRunEndedEvent {
   sessionId: string;
   timestamp: string;
   source?: string;
   payload: {
     subSessionId: string;
-    /** 停止原因（对齐 SubAgentStopReason：completed/aborted/error/max_tokens/refusal/closed） */
+    /** 停止原因（对齐 SubAgentStopReason：completed/aborted/error/max_tokens/refusal/stopped） */
     stopReason?: string;
-    /** 结果摘要（截断 200 字符；仅 one_shot 自动清理时携带） */
+    /** 结果摘要（截断 200 字符） */
     content?: string;
   };
 }
@@ -222,7 +226,7 @@ export function toSessionEvent(
     | SessionUpdatedEvent
     | SessionDeletedEvent
     | SubAgentCreatedEvent
-    | SubAgentClosedEvent
+    | SubAgentRunEndedEvent
     | TodoUpdatedEvent
     | GoalUpdatedEvent
     | UserQueueChangedEvent,

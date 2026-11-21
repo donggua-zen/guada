@@ -8,7 +8,7 @@ import {
   SessionUpdatedEvent,
   SessionDeletedEvent,
   SubAgentCreatedEvent,
-  SubAgentClosedEvent,
+  SubAgentRunEndedEvent,
   TodoUpdatedEvent,
   GoalUpdatedEvent,
   UserQueueChangedEvent,
@@ -41,7 +41,7 @@ export type SessionEventType =
   | "stream_status_changed"
   | "user_message_created"
   | "sub_agent_create"
-  | "sub_agent_closed"
+  | "sub_agent_ended"
   | "todo_updated"
   | "goal_updated"
   | "jobs_snapshot"
@@ -249,7 +249,12 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
           toSessionEvent("stream_status_changed", {
             sessionId: stream.sessionId,
             timestamp: new Date().toISOString(),
-            payload: { status: "running", kind: stream.kind, sessionType },
+            payload: {
+              status: "running",
+              kind: stream.kind,
+              sessionType,
+              lastActiveAt: stream.lastActiveAt,
+            },
           }),
         ),
       } as MessageEvent);
@@ -339,12 +344,12 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 监听内部 subagent.closed 事件，转发给 SSE 客户端
+   * 监听内部 subagent.run_ended 事件，转发给 SSE 客户端
    */
-  @OnEvent("subagent.closed")
-  handleSubAgentClosed(event: SubAgentClosedEvent) {
+  @OnEvent("subagent.run_ended")
+  handleSubAgentRunEnded(event: SubAgentRunEndedEvent) {
     this.broadcastToAllClients(
-      toSessionEvent("sub_agent_closed", event),
+      toSessionEvent("sub_agent_ended", event),
     );
   }
 

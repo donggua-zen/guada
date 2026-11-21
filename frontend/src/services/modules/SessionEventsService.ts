@@ -10,7 +10,7 @@ export type SessionEventType =
   | "stream_status_changed"
   | "user_message_created"
   | "sub_agent_create"
-  | "sub_agent_closed"
+  | "sub_agent_ended"
   | "todo_updated"
   | "goal_updated"
   | "jobs_snapshot"

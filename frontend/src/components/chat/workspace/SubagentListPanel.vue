@@ -1,7 +1,8 @@
 <template>
   <!-- 子代理列表面板：本会话全部子代理（活跃段 + 已结束段）。
-       活跃 = 未冻结（运行中/已完成/失败），已结束 = 后端 closedAt 冻结（仅供回放，点击重开只读会话）。
-       数据源：ChatPage 维护的 subSessions（含已冻结项）经 WorkspaceSidebar 下传；
+       活跃 = 有活跃流（运行中）；已结束 = 上一次运行已结束（仍可回放，也可被 job_send 唤醒）。
+       判据是活跃流而非 close 标记——子代理会话没有关闭态。
+       数据源：ChatPage 维护的 subSessions（含已结束项）经 WorkspaceSidebar 下传；
        运行状态读 sessionStore.streamStatus（与标签运行点/输入区胶囊同源）。
        已结束回放的唯一入口——原概览面板「子代理」区迁出后由此承载。 -->
   <div class="subagent-list h-full w-full flex flex-col overflow-hidden">
@@ -26,10 +27,10 @@
 
       <!-- 已结束段：常显（本面板是独立标签、纵向空间充足，折叠只是多余的一次点击；
            原概览区块的默认收起是为窄条浮层防历史挤占首屏，此约束在这里不存在） -->
-      <template v-if="frozen.length">
-        <div class="sl-group-label">{{ t('chat.workspace.subagentsEnded', { count: frozen.length }) }}</div>
+      <template v-if="ended.length">
+        <div class="sl-group-label">{{ t('chat.workspace.subagentsEnded', { count: ended.length }) }}</div>
         <div class="sl-group">
-          <div v-for="item in frozen" :key="item.id" class="sl-row sl-row--frozen"
+          <div v-for="item in ended" :key="item.id" class="sl-row sl-row--ended"
             :class="{ 'sl-row--clickable': !!openSubAgent }" @click="openSubAgent?.(item.id)">
             <WorkflowStatusDot :status="dotStatus(item)" size="sm" />
             <img v-if="item.avatarUrl" :src="item.avatarUrl" class="sl-avatar" alt="" />
@@ -53,7 +54,7 @@ import type { WorkflowMemberStatus } from "@/types/stream/workflow.types";
 
 const props = defineProps<{
   sessionId: string;
-  /** 子会话列表（ChatPage 维护：SSE sub_agent_create/closed 增改 + fetchSession 基线，含已冻结的） */
+  /** 子会话列表（ChatPage 维护：SSE sub_agent_create/ended 增改 + fetchSession 基线，含已结束的） */
   subSessions?: Session[];
 }>();
 
@@ -64,7 +65,7 @@ const items = computed(() =>
   buildSubagentItems(props.subSessions, (id) => sessionStore.peekStreamStatus(id), t("chat.workspace.subagentTab")),
 );
 const active = computed(() => splitSubagents(items.value).active);
-const frozen = computed(() => splitSubagents(items.value).frozen);
+const ended = computed(() => splitSubagents(items.value).ended);
 
 // 行点击 → 打开子代理标签（复用 ChatPage provide；无 provide 的宿主下不可点）
 const openSubAgent = inject<((subSessionId: string) => void) | null>(
@@ -157,7 +158,7 @@ function statusText(item: SubagentItem): string {
   color: var(--gd-color-text);
 }
 /* 已结束行弱化（名称转灰），点击仍可重开回放 */
-.sl-row--frozen .sl-name {
+.sl-row--ended .sl-name {
   color: var(--gd-color-text-gray);
 }
 .sl-status {

@@ -76,7 +76,14 @@ export const ToolTodoIcon = createToolIcon("ToolTodoIcon", [
 ]);
 
 export const ToolBookIcon = createToolIcon("ToolBookIcon", [
-  ["path", { d: "M8 4.25C6 2.5 3.75 2 1.75 2.75v10C4 12 6 12.75 8 14c2-1.25 4-2 6.25-1.25v-10C12.25 2 10 2.5 8 4.25ZM8 4.25V14M4 5.75l1.75.75M10.25 6.5 12 5.75" }],
+  ["path", {
+    d: "M7.15.2h1.7a1.25 1.25 0 0 1 1.25 1.25v13.1a1.25 1.25 0 0 1-1.25 1.25h-1.7a1.25 1.25 0 0 1-1.25-1.25V1.45A1.25 1.25 0 0 1 7.15.2ZM7.25 1.2h1.5a.35.35 0 0 1 .35.35v6.4H6.9v-6.4a.35.35 0 0 1 .35-.35Z",
+    transform: "rotate(45 8 8)", fill: "currentColor", "fill-rule": "evenodd", stroke: "none",
+  }],
+  ["path", {
+    d: "M3 1.1Q3.4 2.6 4.9 3 3.4 3.4 3 4.9 2.6 3.4 1.1 3 2.6 2.6 3 1.1ZM13 11.1Q13.4 12.6 14.9 13 13.4 13.4 13 14.9 12.6 13.4 11.1 13 12.6 12.6 13 11.1Z",
+    fill: "currentColor", stroke: "none",
+  }],
 ]);
 
 export const ToolTimeIcon = createToolIcon("ToolTimeIcon", [

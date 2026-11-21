@@ -99,18 +99,33 @@ export function isRateLimitError(error: any): boolean {
  * 从错误对象中提取 Retry-After header（兼容各 SDK）
  */
 export function getRetryAfterFromError(error: any): number | undefined {
-  // OpenAI SDK: APIError.headers (可能有大写 key)
-  if (error.headers) {
-    const ms = parseRetryAfterMs(error.headers);
-    if (ms !== undefined) return ms;
-  }
+  let current = error;
+  const seen = new WeakSet<object>();
+  for (let depth = 0; current && depth < 4; depth += 1) {
+    if (typeof current !== "object") break;
+    if (seen.has(current)) break;
+    seen.add(current);
 
-  // Anthropic SDK: 可能在 response_headers 中
-  if (error.response_headers) {
-    const ms = parseRetryAfterMs(error.response_headers);
-    if (ms !== undefined) return ms;
+    // adapter 包装后的结构化字段（UpstreamRateLimitError.retryAfterMs）
+    if (
+      typeof current.retryAfterMs === "number" &&
+      Number.isFinite(current.retryAfterMs) &&
+      current.retryAfterMs > 0
+    ) {
+      return current.retryAfterMs;
+    }
+    // OpenAI SDK: APIError.headers (可能有大写 key)
+    if (current.headers) {
+      const ms = parseRetryAfterMs(current.headers);
+      if (ms !== undefined) return ms;
+    }
+    // Anthropic SDK: 可能在 response_headers 中
+    if (current.response_headers) {
+      const ms = parseRetryAfterMs(current.response_headers);
+      if (ms !== undefined) return ms;
+    }
+    current = current.cause;
   }
-
   return undefined;
 }
 

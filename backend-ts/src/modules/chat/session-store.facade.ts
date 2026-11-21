@@ -92,10 +92,6 @@ export class SessionStoreFacade {
     return this.meta.childrenOf(parentId);
   }
 
-  countByParentId(parentId: string): Promise<number> {
-    return this.meta.countByParentId(parentId);
-  }
-
   findByBotAndExternalId(
     botId: string,
     externalId: string,
@@ -125,7 +121,7 @@ export class SessionStoreFacade {
     return this.meta.update(id, patch);
   }
 
-  updateLastActiveAt(id: string): Promise<void> {
+  updateLastActiveAt(id: string): Promise<string | null> {
     return this.meta.updateLastActiveAt(id);
   }
 

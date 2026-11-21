@@ -91,6 +91,8 @@ export interface ToolCallBlock {
   name: string;
   /** 模型产出的原始 JSON 参数字符串 */
   arguments: string;
+  /** 参数是否已由协议终止事件确认收齐（false/undefined 不执行） */
+  argumentsComplete?: boolean;
   timing?: BlockTiming;
 }
 

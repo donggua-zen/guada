@@ -1037,6 +1037,24 @@ html.dark .avatar-auto {
   color: hsl(var(--avatar-hue, 0), 45%, 68%);
 }
 
+/* 深色品牌图标在暗色模式下反转成浅色。
+   起因：OpenAI 的 logo 用 fill="currentColor"（models/OpenAI.svg）或干脆不写 fill
+   （providers/openai.svg，默认黑），二者都靠 <img src> 加载 —— SVG 在 <img> 里是独立
+   文档，既继承不到外层 color（currentColor 退化成黑色），外部 CSS 也进不去。
+   于是暗色底上是黑图标，几乎不可见。这里用滤镜在渲染层反转，不改资源文件：
+   两张图都是纯黑图形，invert(0.92) 得到约 #EBEBEB，比纯白柔和、与暗色正文同档。
+   选择器用「路径子串」而非绝对路径：Web 下 src 以 / 开头，Electron 下去掉了前导 /，
+   子串匹配对两者都成立（资源名恒定，见 utils/modelUtils.ts 的 PROVIDER_LOGOS 与
+   setting/ModelsProviderList.vue 的 getProviderIcon）。
+   openai-response.svg 是同一张图的副本（同 p-id、同为无 fill），一并列入。
+   注意：其它品牌 logo（Anthropic/DeepSeek/Tongyi 等）都是写死的品牌色或渐变，
+   反相会破坏品牌色，故只列这三张近黑图；将来新增近黑 logo 需在此追加。 */
+html.dark img[src*="images/models/OpenAI.svg"],
+html.dark img[src*="images/providers/openai.svg"],
+html.dark img[src*="images/providers/openai-response.svg"] {
+  filter: invert(0.92);
+}
+
 /* ==================== 移动端适配（html.mobile 门控，Electron 永不命中） ==================== */
 
 /* 页面头部行（标题 + 按钮组）：flex-row + shrink-0 按钮组在窄屏会把标题列挤成"一字一行"。
@@ -1192,6 +1210,20 @@ html.mobile .group span.relative .group-hover\:opacity-0 {
 html.mobile .group span.relative .opacity-0.group-hover\:opacity-100 {
   opacity: 0;
   pointer-events: none;
+}
+
+/* 移动端更多按钮常显：即使会话行没有 hover，也为按钮预留标题渐隐区，避免标题被遮挡 */
+html.mobile .session-title-wrap {
+  -webkit-mask-image: linear-gradient(to right,
+    black 0%,
+    black calc(100% - 36px),
+    rgba(0, 0, 0, 0.5) calc(100% - 32px),
+    transparent calc(100% - 26px));
+  mask-image: linear-gradient(to right,
+    black 0%,
+    black calc(100% - 36px),
+    rgba(0, 0, 0, 0.5) calc(100% - 32px),
+    transparent calc(100% - 26px));
 }
 
 /* 会话操作触发按钮命中区扩大（桌面 28px 偏小） */

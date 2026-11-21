@@ -15,6 +15,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamResponseFailedError,
   UpstreamStreamTruncatedError,
 } from "./upstream-errors";
 import { getRetryAfterFromError } from "./retry.util";
@@ -40,6 +41,12 @@ export interface RetryConfig {
 }
 
 // ==================== Constants ====================
+
+/**
+ * 主对话循环可重试错误（限流/超时/网络）的统一重试预算。
+ * 前端提示「正在重试 N/M 次」中的 M 即来自此值。
+ */
+export const DEFAULT_LLM_MAX_RETRIES = 10;
 
 const BASE_DELAY_MS = 2000;
 const MAX_DELAY_MS = 18000;
@@ -192,6 +199,10 @@ export function classifyError(
   }
 
   // 1. Upstream typed exceptions — thrown by adapters
+  if (error instanceof UpstreamResponseFailedError) {
+    // 协议级 failed 事件：是否重试由 adapter 的结构化结论决定。
+    return error.retryable ? "network_error" : null;
+  }
   if (error instanceof UpstreamStreamTruncatedError) {
     // 上游流在无终止事件的情况下结束：可丢弃半截内容后重试。
     return error.discardable ? "network_error" : null;
@@ -230,6 +241,9 @@ export function classifyError(
 
   // 5. HTTP status codes — 429 已在 step 2 处理，这里处理 5xx 和 4xx
   const status = error.status ?? error.statusCode;
+  if (status === 429) {
+    return "rate_limited";
+  }
   if (status && NON_RETRYABLE_STATUS.has(status)) {
     return null; // 4xx client errors — not retryable
   }
@@ -249,6 +263,18 @@ export function classifyError(
   }
 
   return null;
+}
+
+/**
+ * 传输层重试分类：一旦已经产生了可见输出，传输层不再重试，全部交给
+ * Core Stream Recovery。`hasVisibleOutput` 由 agent-engine 的流消费器计算。
+ */
+export function classifyTransportError(
+  error: any,
+  hasVisibleOutput: boolean,
+): RetryableErrorType | null {
+  if (hasVisibleOutput) return null;
+  return classifyError(error);
 }
 
 // ==================== Retry info formatting ====================

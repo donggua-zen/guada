@@ -468,6 +468,21 @@ describe("sessionStore 目录分组视图", () => {
     ]);
   });
 
+  it("相同或无效活跃时间按 id 升序稳定排序", () => {
+    const store = useSessionStore();
+    store.setSession({ id: "b", title: "B", lastActiveAt: "2026-01-01T00:00:00Z" } as any);
+    store.setSession({ id: "a", title: "A", lastActiveAt: "2026-01-01T00:00:00Z" } as any);
+    store.setSession({ id: "c", title: "C", lastActiveAt: "invalid" } as any);
+    store.setSession({ id: "d", title: "D", lastActiveAt: "" } as any);
+
+    expect(store.getSessionsByGroup(null).map((session) => session.id)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+    ]);
+  });
+
   it("空键 / 未注册目录 / 大小写不符一律落「通用」", () => {
     const store = useSessionStore();
     store.setSession(mk("no-key"));

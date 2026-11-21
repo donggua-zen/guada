@@ -148,10 +148,22 @@ export interface TurnState {
      * 不落库、不进消息 metadata——纯流式期间的瞬态视图态。
      */
     retry?: {
-        retryReason: 'timeout' | 'rate_limited' | 'network_error'
+        retrySource?:
+            | 'transport'
+            | 'stream_recovery'
+            | 'output_continuation'
+            | 'overflow'
+        retryReason:
+            | 'timeout'
+            | 'rate_limited'
+            | 'network_error'
+            | 'stream_failed'
+            | 'output_limit'
         retryAttempt: number
         retryMaxAttempts: number
         retryDelayMs: number
+        anchorId?: string
+        failedRequestId?: string
         message?: string
     }
 }

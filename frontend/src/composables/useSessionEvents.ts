@@ -4,7 +4,7 @@
  * 统一管理所有 SSE 会话事件的监听与分发：
  * - session_created / session_deleted / session_updated → 同步 sessionStore
  * - stream_started / stream_finished → 更新侧边栏 working 状态 + 队列消费
- * - sub_agent_create / sub_agent_closed → 由 ChatPage 单独监听（仅聊天页需要）
+ * - sub_agent_create / sub_agent_ended → 由 ChatPage 单独监听（仅聊天页需要）
  *
  * 应在 MainLayout.vue 中调用（始终挂载，不会因路由切换而卸载）。
  */
@@ -49,36 +49,116 @@ export function useSessionEvents() {
     currentSessionId.value = next;
   }
 
-  /**
-   * SSE 重连后校准当前会话：
-   * 息屏/断网期间回合可能已经结束（stopStream 删了缓冲，重连补发不会包含终态），
-   * 此时本地仍标记 isStreaming=true → 复位流状态并请求聊天区重载历史。
-   * 仍在前台运行的流由服务端补发缓冲 + hub 去重接管，不触发重载。
-   */
-  async function resyncCurrentSessionIfNeeded() {
-    const sessionId = currentSessionId.value;
-    if (!sessionId) return;
+  // === 流状态校准（后台断线后终态事件不可补发，恢复时以服务端为准） ===
+  //
+  // 息屏/断网期间回合可能已结束：终态帧（stream_status_changed: completed）只在完成
+  // 那一刻对在线连接广播一次，stopStream 随即删除缓冲 → 重连补发（buildCatchupEvents
+  // 只重放仍在运行的流）不含已完成会话的任何帧。本地若仍自认 isStreaming=true 就会
+  // 永久卡 running（补拉判断 server.isStreaming 曾因详情端点不注入该字段而永不生效）。
+  // 借鉴 zcode 的"恢复即查状态"：恢复时对本地所有 running 会话探测服务端真实状态，
+  // 已终态则复位瞬态并重载历史，不等事件。
+
+  /** 每会话最后收到流帧的时间（watchdog 判静默用） */
+  const lastStreamChunkAt = new Map<string, number>();
+  /** watchdog 轮询间隔（仅前台运行；后台浏览器本就可能暂停 timer） */
+  const STREAM_WATCHDOG_INTERVAL_MS = 10_000;
+  /** 流静默超过该时长 → 主动探测一次服务端状态（LLM 长思考也可能静默，探测无害） */
+  const STREAM_SILENCE_PROBE_AFTER_MS = 60_000;
+  /** 同一会话两次探测的最小间隔（长思考静默期间不至于每 10s 打一次 status 接口） */
+  const STREAM_PROBE_MIN_INTERVAL_MS = 60_000;
+
+  let streamWatchdogTimer: ReturnType<typeof setInterval> | null = null;
+  /** 正在探测的会话代数，旧响应不能覆盖探测期间已开启的新回合 */
+  const probeGeneration = new Map<string, number>();
+  const lastProbeAt = new Map<string, number>();
+  /** 已知终态的历史需要重新拉取；ChatPanel 挂载时也会消费该标记 */
+  const staleSessionHistory = new Set<string>();
+
+  function markSessionHistoryStale(sessionId: string): void {
+    staleSessionHistory.add(sessionId);
     const state = sessionStore.getSessionState(sessionId);
-    if (!state?.isStreaming) return;
+    state.loaded = false;
+    emitSessionResync(sessionId);
+  }
+
+  function isSessionHistoryStale(sessionId: string): boolean {
+    return staleSessionHistory.has(sessionId);
+  }
+
+  function clearSessionHistoryStale(sessionId: string): void {
+    staleSessionHistory.delete(sessionId);
+  }
+
+  async function probeStreamingSession(sessionId: string): Promise<void> {
+    const generation = (probeGeneration.get(sessionId) ?? 0) + 1;
+    probeGeneration.set(sessionId, generation);
     try {
-      const server = await apiService.fetchSession(sessionId);
-      if (server && server.isStreaming === false) {
-        sessionStore.syncStreamingState(sessionId, false);
-        resetSessionTurnsTransientState(sessionStore, sessionId);
-        sessionStore.clearSessionPendingAsks(sessionId);
-        emitSessionResync(sessionId);
+      const status = await apiService.getStreamStatus(sessionId);
+      if (probeGeneration.get(sessionId) !== generation) return;
+      if (status?.isRunning !== false) return;
+      if (!sessionStore.sessionIsStreaming(sessionId)) return;
+      // 状态端点只说明流已停止；有会话快照时用持久化 closeReason 保留失败态。
+      let finalStatus: "completed" | "error" = "completed";
+      try {
+        const session = await apiService.fetchSession(sessionId);
+        if (probeGeneration.get(sessionId) !== generation) return;
+        if (session?.closeReason && session.closeReason !== "completed") {
+          finalStatus = "error";
+        }
+      } catch {
+        // status 仍是权威的运行态；详情暂时不可用时按 completed 收敛。
       }
+      if (probeGeneration.get(sessionId) !== generation) return;
+      if (!sessionStore.sessionIsStreaming(sessionId)) return;
+      sessionStore.syncStreamingState(sessionId, false);
+      sessionStore.setStreamStatus(sessionId, finalStatus);
+      resetSessionTurnsTransientState(sessionStore, sessionId);
+      sessionStore.clearSessionPendingAsks(sessionId);
+      markSessionHistoryStale(sessionId);
     } catch {
-      /* 补拉失败静默：下一次重连再试 */
+      /* 探测失败静默：下一个触发点（重连/切前台/watchdog）再试 */
     }
+  }
+
+  /** 对本地所有 running 会话校准（重连/切回前台触发，覆盖侧栏 working 残留） */
+  function resyncStreamingSessions(): void {
+    for (const sid of sessionStore.streamingSessionIds()) {
+      void probeStreamingSession(sid);
+    }
+  }
+
+  /** watchdog：前台时段轮询，本地 running 且长时间无流帧 → 探测服务端状态 */
+  function startStreamWatchdog() {
+    if (streamWatchdogTimer) return;
+    streamWatchdogTimer = setInterval(() => {
+      if (document.hidden) return;
+      const now = Date.now();
+      for (const sid of sessionStore.streamingSessionIds()) {
+        // 刚发起、从未收到帧的会话同样按静默处理：若服务端已注册流则 isRunning=true，探测无害
+        if (now - (lastStreamChunkAt.get(sid) ?? 0) < STREAM_SILENCE_PROBE_AFTER_MS) {
+          continue;
+        }
+        if (now - (lastProbeAt.get(sid) ?? 0) < STREAM_PROBE_MIN_INTERVAL_MS) {
+          continue;
+        }
+        lastProbeAt.set(sid, now);
+        void probeStreamingSession(sid);
+      }
+    }, STREAM_WATCHDOG_INTERVAL_MS);
   }
 
   function handleVisibilityChange() {
     windowHidden.value = document.hidden;
     // 回到前台即视为已读（阅后即焚）；只清当前会话，其他会话的未读保留。
     // 隐藏时不做任何补亮：已看过的待答卡不重复提醒，避免红点与真正的未读混淆。
-    if (!document.hidden && currentSessionId.value) {
-      sessionStore.setSidebarFlag(currentSessionId.value, "unread", false);
+    if (!document.hidden) {
+      if (currentSessionId.value) {
+        sessionStore.setSidebarFlag(currentSessionId.value, "unread", false);
+      }
+      // 切回前台即校准：覆盖"连接假活"（socket 看似 OPEN 实际半开，既不会触发
+      // onConnected 重连补拉，也可能未达 15s 强制重建阈值）——借鉴 zcode 的
+      // visible/resume 恢复先探测原状态再收敛。
+      resyncStreamingSessions();
     }
   }
 
@@ -104,6 +184,9 @@ export function useSessionEvents() {
       streamReceiver.subscribeAll((chunk) => {
         const sid = chunk.sessionId;
         if (!sid) return;
+
+        // 记录最后流帧时间（watchdog 判静默用；hub 已按 streamSeq 去重）
+        lastStreamChunkAt.set(sid, Date.now());
 
         // 后端重启：清掉上一个进程残留的待批状态（本帧若恰是 ask_requested，
         // 紧随其后的 projectChunk 会重新写入；新进程仍待批的 ask 由补发帧重建）。
@@ -186,8 +269,7 @@ export function useSessionEvents() {
           void refreshQueue(currentSessionId.value);
         }
 
-        // 状态校准：息屏期间回合可能已结束，补发不会包含终态 → 主动核对并重载历史
-        void resyncCurrentSessionIfNeeded();
+        resyncStreamingSessions();
       }) ?? (() => {}),
     );
 
@@ -270,7 +352,13 @@ export function useSessionEvents() {
           }
         }
 
-        sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
+        // 只有后端明确返回了持久化值，才更新排序字段；event.timestamp 只是事件时间。
+        if (payload?.session?.lastActiveAt) {
+          sessionStore.updateSessionLastActiveTime(
+            sessionId,
+            payload.session.lastActiveAt,
+          );
+        }
 
         if (
           sessionId !== currentSessionId.value ||
@@ -341,14 +429,12 @@ export function useSessionEvents() {
         // 主会话:侧边栏"工作中"(后端确认 running 才显示)
         sessionStore.setSidebarFlag(sessionId, "working", status === "running");
 
-        // 流开始即置顶：本方窗口发起的流同样要续期「最近活跃」时间。
-        // 侧边栏按 lastActiveAt 降序排序(见 stores/session.ts getSessionsByGroup)，
-        // 而自身事件会在下方 source 过滤处被忽略、走不到末尾的更新时间——不在此处补一刀，
-        // 给老会话发消息后它就不会被顶到列表最前(发送链路 ChatPanel.handleSendMessage
-        // 只调 apiService.chat，本地不写 lastActiveAt；后端只落库不发事件)。
-        // 仅 running 置顶；终态不改序(避免流结束后会话又跳回顶部)。
-        if (status === "running") {
-          sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
+        // 仅使用后端刚写入 SQLite 的活跃时间，不用事件时间推导排序状态。
+        if (status === "running" && payload?.lastActiveAt) {
+          sessionStore.updateSessionLastActiveTime(
+            sessionId,
+            payload.lastActiveAt,
+          );
         }
 
         // 忽略自身发起的流(不更新会话对象/未读标记)
@@ -365,10 +451,13 @@ export function useSessionEvents() {
           }
         }
 
-        // 非自身事件：续期最近活跃。此处必须保留（running 已在 source 过滤前置顶，
-        // 但对"事件携带新会话、本地刚由 payload.session 建对象"的非自身场景，
-        // 置顶要发生在对象落库之后，故这里不再按状态区分——同值重复写无副作用）。
-        sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
+        // 新会话对象已由后端快照合并；排序只接受明确的权威 lastActiveAt。
+        if (payload?.lastActiveAt) {
+          sessionStore.updateSessionLastActiveTime(
+            sessionId,
+            payload.lastActiveAt,
+          );
+        }
 
         if (
           sessionId !== currentSessionId.value ||
@@ -378,6 +467,10 @@ export function useSessionEvents() {
         }
       }),
     );
+
+    // 流静默 watchdog：覆盖 onConnected/visibilitychange 之外的丢终态路径
+    // （如半开连接期间事件静默丢失）。探测无害化设计，详见 probeStreamingSession。
+    startStreamWatchdog();
   }
 
   /**
@@ -399,6 +492,14 @@ export function useSessionEvents() {
 
   function cleanup() {
     document.removeEventListener("visibilitychange", handleVisibilityChange);
+    if (streamWatchdogTimer) {
+      clearInterval(streamWatchdogTimer);
+      streamWatchdogTimer = null;
+    }
+    lastStreamChunkAt.clear();
+    lastProbeAt.clear();
+    probeGeneration.clear();
+    staleSessionHistory.clear();
     for (const unsub of unsubscribers) {
       try {
         unsub();
@@ -409,5 +510,11 @@ export function useSessionEvents() {
     unsubscribers.length = 0;
   }
 
-  return { init, cleanup, refreshQueue };
+  return {
+    init,
+    cleanup,
+    refreshQueue,
+    isSessionHistoryStale,
+    clearSessionHistoryStale,
+  };
 }

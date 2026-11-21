@@ -25,6 +25,8 @@ vi.stubGlobal("document", {
   },
   removeEventListener: vi.fn(),
 });
+// node 环境无 window：emitSessionResync 经 window 派发 CustomEvent，提供最小 EventTarget
+vi.stubGlobal("window", new EventTarget());
 
 // 捕获 apiService.onSessionEvent 注册的 handler,供测试手动触发
 const registeredHandlers = new Map<string, (event: any) => void>();
@@ -49,6 +51,7 @@ vi.mock("@/services/ApiService", () => ({
     fetchSession: vi.fn(async (sessionId: string) => ({
       id: sessionId,
       isStreaming: false,
+      closeReason: null,
     })),
     fetchPendingAsks: vi.fn(async () => ({ pending: [] })),
     fetchSessionQueue: vi.fn(async () => ({
@@ -89,6 +92,7 @@ vi.mock("vue-router", () => ({
 
 import { useSessionEvents } from "./useSessionEvents";
 import { apiService } from "@/services/ApiService";
+import { SESSION_RESYNC_EVENT } from "@/utils/sessionResync";
 import type { UserQueueSnapshot } from "@/types/session";
 
 /** 服务端队列快照工厂 */
@@ -438,22 +442,45 @@ describe("useSessionEvents 统一订阅器", () => {
     expect(store.getSession("s1")?.title).toBe("其他窗口会话");
   });
 
-  it("自身发起的流开始(running):续期 lastActiveAt,把老会话顶到侧边栏最前", () => {
+  it("session_updated 不把事件时间当作活跃时间，只接受会话快照中的权威值", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    store.setSession({ id: "s1", title: "会话", lastActiveAt: "2026-08-01T00:00:00Z" } as any);
+
+    emitSessionEvent("session_updated", {
+      sessionId: "s1",
+      timestamp: "2026-08-24T00:00:00Z",
+      source: "client-other",
+      payload: { session: { id: "s1", title: "重命名" } },
+    });
+    expect(store.getSession("s1")!.title).toBe("重命名");
+    expect(store.getSession("s1")!.lastActiveAt).toBe("2026-08-01T00:00:00Z");
+
+    emitSessionEvent("session_updated", {
+      sessionId: "s1",
+      timestamp: "2026-08-25T00:00:00Z",
+      source: "client-other",
+      payload: { session: { id: "s1", lastActiveAt: "2026-08-03T00:00:00Z" } },
+    });
+    expect(store.getSession("s1")!.lastActiveAt).toBe("2026-08-03T00:00:00Z");
+  });
+
+  it("自身流只应用后端权威 lastActiveAt，不使用事件 timestamp 推进排序", () => {
     useSessionEvents().init();
     const store = useSessionStore();
 
-    // 两个老会话：s-old 更旧，正常排序在后
     store.setSession({ id: "s-old", title: "老会话", lastActiveAt: "2026-08-01T00:00:00Z" } as any);
     store.setSession({ id: "s-new", title: "新会话", lastActiveAt: "2026-08-02T00:00:00Z" } as any);
-    expect(store.getSessionsByGroup(null)[0].id).toBe("s-new");
 
-    // 在自身窗口给老会话发消息 → 流开始事件(source === clientId)
-    emitStreamStatus({ sessionId: "s-old", status: "running" }, "client-self");
-
-    // lastActiveAt 被续期（emitStreamStatus 注入的固定时间戳）
-    expect(store.getSession("s-old")!.lastActiveAt).toBe("2026-08-24T00:00:00Z");
-    // 排序副作用：老会话跃居第一
+    emitStreamStatus(
+      { sessionId: "s-old", status: "running", lastActiveAt: "2026-08-03T00:00:00Z" },
+      "client-self",
+    );
+    expect(store.getSession("s-old")!.lastActiveAt).toBe("2026-08-03T00:00:00Z");
     expect(store.getSessionsByGroup(null)[0].id).toBe("s-old");
+
+    emitStreamStatus({ sessionId: "s-old", status: "running" }, "client-self");
+    expect(store.getSession("s-old")!.lastActiveAt).toBe("2026-08-03T00:00:00Z");
   });
 
   it("自身发起的流终态(completed):不置顶(避免流结束后会话又跳回顶部)", () => {
@@ -607,6 +634,121 @@ describe("useSessionEvents 统一订阅器", () => {
 
     expect(apiService.fetchSessionQueue).toHaveBeenCalledWith("s2");
     expect(store.getMessageQueue("s2").map((m) => m.content)).toEqual(["A"]);
+  });
+
+  // === 流状态校准（后台断线后终态事件不可补发，恢复时以服务端为准） ===
+  //
+  // 背景：终态帧只在完成那一刻对在线连接广播一次，stopStream 随即删缓冲，
+  // 重连补发不含已完成会话的任何帧 → 本地 running 必须靠主动探测服务端收敛。
+  // 曾因详情端点不返回顶层 isStreaming 而永不生效（undefined === false 恒假）。
+
+  /** 监听会话 resync 事件，返回解除监听函数 */
+  function trackSessionResync(resyncs: string[]): () => void {
+    const onResync = (e: Event) =>
+      resyncs.push((e as CustomEvent<{ sessionId: string }>).detail.sessionId);
+    window.addEventListener(SESSION_RESYNC_EVENT, onResync);
+    return () => window.removeEventListener(SESSION_RESYNC_EVENT, onResync);
+  }
+
+  it("（重）建连:本地 running 但服务端已终态 → 复位流状态并重载当前会话", async () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    emitStreamStatus({ sessionId: "s1", status: "running" }, "client-other");
+    store.upsertSessionPendingAsk("s1", { requestId: "r1", kind: "approval", questions: [] });
+    expect(store.sessionIsStreaming("s1")).toBe(true);
+    expect(store.getSidebarState("s1").working).toBe(true);
+
+    // 手机切后台期间回合跑完：重连后 getStreamStatus 返回 isRunning:false（beforeEach 默认）
+    const resyncs: string[] = [];
+    const off = trackSessionResync(resyncs);
+    for (const cb of connectHandlers) cb();
+    await flushMicrotasks();
+    off();
+
+    // 与 stream_status_changed 终态同款收敛 + 当前会话派发重载事件
+    expect(store.sessionIsStreaming("s1")).toBe(false);
+    expect(store.getSidebarState("s1").working).toBe(false);
+    expect(store.peekStreamStatus("s1")).toBe("completed");
+    expect(store.sessionPendingAsk("s1")).toBeUndefined();
+    expect(resyncs).toEqual(["s1"]);
+  });
+
+  it("（重）建连:服务端仍在运行 → 不复位(流由补发缓冲 + hub 去重接管)", async () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    emitStreamStatus({ sessionId: "s1", status: "running" }, "client-other");
+    vi.mocked(apiService.getStreamStatus).mockResolvedValue({
+      isRunning: true,
+      subscriberCount: 1,
+      bufferedEventCount: 3,
+    });
+
+    const resyncs: string[] = [];
+    const off = trackSessionResync(resyncs);
+    for (const cb of connectHandlers) cb();
+    await flushMicrotasks();
+    off();
+
+    expect(store.sessionIsStreaming("s1")).toBe(true);
+    expect(store.getSidebarState("s1").working).toBe(true);
+    expect(resyncs).toEqual([]);
+  });
+
+  it("（重）建连:非当前会话已终态 → 复位侧栏 working 并派发历史重载", async () => {
+    useSessionEvents().init(); // 当前路由会话是 s1
+    const store = useSessionStore();
+
+    emitStreamStatus({ sessionId: "s2", status: "running" }, "client-other");
+    expect(store.getSidebarState("s2").working).toBe(true);
+
+    const resyncs: string[] = [];
+    const off = trackSessionResync(resyncs);
+    for (const cb of connectHandlers) cb();
+    await flushMicrotasks();
+    off();
+
+    // 任何会话的历史都应失效；若该子会话面板已挂载会立即重载，未挂载时下次打开补拉。
+    expect(store.sessionIsStreaming("s2")).toBe(false);
+    expect(store.getSidebarState("s2").working).toBe(false);
+    expect(resyncs).toEqual(["s2"]);
+  });
+
+  it("切回前台:本地 running 且服务端已终态 → 校准复位(覆盖连接假活,不依赖 onConnected)", async () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    emitStreamStatus({ sessionId: "s1", status: "running" }, "client-other");
+    (document as any).hidden = false;
+    for (const cb of visibilityHandlers) cb();
+    await flushMicrotasks();
+
+    expect(apiService.getStreamStatus).toHaveBeenCalledWith("s1");
+    expect(store.sessionIsStreaming("s1")).toBe(false);
+    expect(store.getSidebarState("s1").working).toBe(false);
+  });
+
+  it("watchdog:本地 running 静默超阈值 → 探测服务端并复位;已收敛后不再探测", async () => {
+    vi.useFakeTimers();
+    try {
+      useSessionEvents().init();
+      const store = useSessionStore();
+
+      emitStreamStatus({ sessionId: "s1", status: "running" }, "client-other");
+      expect(store.sessionIsStreaming("s1")).toBe(true);
+
+      // 前台静默一个轮询周期(watchdog 间隔 10s) → 探测(isRunning:false) → 复位
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(apiService.getStreamStatus).toHaveBeenCalledWith("s1");
+      expect(store.sessionIsStreaming("s1")).toBe(false);
+
+      // 已收敛（不在 running 集合）→ 后续周期不再探测
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(apiService.getStreamStatus).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -27,6 +27,12 @@ interface OpenLane {
   arguments?: string;
   /** 已补发 block_end 闭合（通道切换时前置闭块；closeAll 跳过防止重复） */
   closed?: boolean;
+  /**
+   * 工具参数是否已确认收齐（收到协议终止事件后由 adapter 显式 finalize）。
+   * false/undefined 表示流提前结束，closeAll 会写 argumentsComplete=false，
+   * 下游恢复层据此拒绝执行半截工具。
+   */
+  finalized?: boolean;
 }
 
 export class StreamBlockTracker {
@@ -147,9 +153,28 @@ export class StreamBlockTracker {
   }
 
   /**
+   * 标记一个工具通道的参数已收齐（Anthropic content_block_stop /
+   * Chat finish_reason / Gemini 完整 functionCall 等协议终止信号）。
+   */
+  finalizeToolCall(wireIndex: number): void {
+    const lane = this.lanes.get(`tool:${wireIndex}`);
+    if (lane?.type === "tool-call") lane.finalized = true;
+  }
+
+  /** 标记全部工具通道参数已收齐（流正常结束、收到协议终止事件后调用）。 */
+  finalizeAllToolCalls(): void {
+    for (const lane of this.lanes.values()) {
+      if (lane.type === "tool-call") lane.finalized = true;
+    }
+  }
+
+  /**
    * 流收尾：按通道创建顺序为所有未闭合块补发 block_end；
    * 空 text/reasoning 不发（与 BlockAssembler 组装规则一致），工具调用始终闭合。
    * 通道切换时已前置闭块的 lane 在此跳过（防重复 block_end）。
+   *
+   * 工具块显式携带 argumentsComplete：只有 adapter 在终止事件后 finalize 过的
+   * 才算完整；流提前结束时未 finalize 的通道一律标记 false，恢复层据此丢弃。
    */
   closeAll(): StreamChunk[] {
     const chunks: StreamChunk[] = [];
@@ -161,6 +186,7 @@ export class StreamBlockTracker {
           toolCallId: lane.toolCallId || "",
           name: lane.name || "",
           arguments: lane.arguments || "",
+          argumentsComplete: lane.finalized === true,
         };
         chunks.push({ type: "block_end", index: lane.index, block });
         continue;

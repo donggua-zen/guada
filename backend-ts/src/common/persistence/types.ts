@@ -201,9 +201,22 @@ export interface StepStartData {
  * 必须与 step/start 配对闭合（记录器 finally 兜底）；失败也要落 end（error 语义），
  * step/end 的收口纪律：agent-loop 在 finally 里收口。
  */
+/** 流恢复摘要（step/end 审计；对齐 ZCode StreamRecovery* 事件的关键字段） */
+export interface StepStreamRecoverySummary {
+  branch: "no_tool_committed" | "tool_settlement";
+  attempt: number;
+  maxAttempts: number;
+  failureKind?: string;
+  anchorId?: string;
+  failedRequestId?: string;
+  discardedTextChars?: number;
+  discardedReasoningChars?: number;
+  discardedToolCallChars?: number;
+}
+
 export interface StepEndData {
   requestId: string;
-  /** 最终成功尝试的序号（streamWithRetry 内部重试计数；无重试 = 0） */
+  /** 最终成功尝试的序号（streamWithTransportRetry 内部重试计数；无重试 = 0） */
   attemptIndex: number;
   /**
    * 该次调用的 token 用量（上游 usage 聚合）。仅辅助调用写——辅助调用不产生
@@ -221,6 +234,10 @@ export interface StepEndData {
   assistantMessageId?: string;
   /** 媒体预算占位清单（本次请求被替换为文本占位的图片） */
   mediaOverlay?: StepMediaOverlayEntry[];
+  /** 流恢复摘要（本次尝试是否因流失败被丢弃/工具结算） */
+  streamRecovery?: StepStreamRecoverySummary;
+  /** 输出长度续写摘要 */
+  outputContinuation?: { attempt: number; maxAttempts: number };
 }
 
 // ─── 消息级三事件（user/message、assistant/message、tool/result）───

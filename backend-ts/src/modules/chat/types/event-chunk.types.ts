@@ -90,19 +90,42 @@ export interface UserMessageEvent {
   userMessage: any;
 }
 
+/** 重试来源：传输层 / 核心流恢复 / 输出长度续写 / 上下文溢出恢复 */
+export type RetrySource =
+  | "transport"
+  | "stream_recovery"
+  | "output_continuation"
+  | "overflow";
+
+/** 重试原因分类 */
+export type RetryReason =
+  | "timeout"
+  | "rate_limited"
+  | "network_error"
+  | "stream_failed"
+  | "output_limit";
+
 /** LLM 流重试信号（引擎级，非模型输出）——轮次级瞬态，前端挂 turn.state.retry（不落库） */
 export interface RetryEvent {
   type: "retry";
   /** 所属回合外壳 id（retry 是回合级瞬态，与 isWorking 同层） */
   turnId?: string;
-  /** 重试原因分类：timeout / rate_limited / network_error */
-  retryReason: "timeout" | "rate_limited" | "network_error";
+  /** 本次尝试的 assistant 消息 id（流恢复时是即将被丢弃的尝试） */
+  messageId?: string;
+  /** 重试来源，前端据此显示“网络重试 / 流中断恢复 / 继续生成” */
+  retrySource?: RetrySource;
+  /** 重试原因分类 */
+  retryReason: RetryReason;
   /** 当前重试次数（1-based） */
   retryAttempt: number;
   /** 最大重试次数 */
   retryMaxAttempts: number;
   /** 等待毫秒数 */
   retryDelayMs: number;
+  /** 流恢复 anchor（前一条消息 / 最后一个已提交工具结果） */
+  anchorId?: string;
+  /** 触发恢复的上游请求 id（来自 response.failed / 网络状态） */
+  failedRequestId?: string;
   message?: string;
 }
 
@@ -293,7 +316,7 @@ export interface SubAgentStatusEvent {
   toolCallId: string;
   subSessionId: string;
   status: "completed" | "error";
-  /** 结构化停止原因（completed/aborted/error/max_tokens/refusal/closed） */
+  /** 结构化停止原因（completed/aborted/error/max_tokens/refusal/stopped） */
   stopReason?: string;
   /** 错误摘要（status=error 时可能有值） */
   error?: string;

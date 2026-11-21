@@ -28,6 +28,8 @@ interface ActiveStream {
   maxBufferSize: number;
   isRunning: boolean;
   startedAt: Date;
+  /** 服务端持久化的 lastActiveAt，供 SSE 重连补发保持排序事实一致 */
+  lastActiveAt?: string | null;
   /** 停止原因，由 stopStream 设置，subscribe 的 complete 回调通过闭包读取 */
   stopReason?: "user_cancel" | "completed" | "error";
   /** 流类型：chat=对话回合；maintenance=维护任务（手动压缩等伪流，buffer 无回合历史） */
@@ -100,6 +102,8 @@ export class SessionStreamManager {
     kind: "chat" | "maintenance" = "chat",
     /** 会话类型（web/bot/sub_agent/team）；缺省按 web（补发 running 状态用） */
     sessionType: string = "web",
+    /** 已写入会话元数据的活跃时间 */
+    lastActiveAt?: string | null,
   ): boolean {
     if (this.activeStreams.has(sessionId)) {
       const existing = this.activeStreams.get(sessionId)!;
@@ -119,6 +123,7 @@ export class SessionStreamManager {
       maxBufferSize: this.DEFAULT_MAX_BUFFER_SIZE,
       isRunning: true,
       startedAt: new Date(),
+      lastActiveAt,
       kind,
       sessionType,
     };

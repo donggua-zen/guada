@@ -33,6 +33,7 @@
           <span class="queue-text">{{ item.content }}</span>
         </div>
         <div class="queue-status">
+          <span v-if="deliveryBadge(item)" class="queue-delivery">{{ deliveryBadge(item) }}</span>
           
             <ArrowSync16Regular class="w-3 h-3 animate-spin" v-if="item.status === 'running' || isPromoting(item)" />
           
@@ -54,6 +55,10 @@
           </button>
           <button class="queue-action-btn" v-tooltip="t('chat.queue.sendNow')" @click="emit('sendNow', item.id)">
             <Play24Filled class="w-3.5 h-3.5"  />
+          </button>
+          <button class="queue-action-btn" v-tooltip="injectHint(item)"
+            :disabled="item.delivery === 'inject'" @click="emit('setDelivery', item.id, 'inject')">
+            {{ deliveryBadge(item) }}
           </button>
           <button class="queue-action-btn" @click="emit('edit', item)" v-tooltip="t('chat.queue.edit')">
             <Edit24Regular class="w-3.5 h-3.5"  />
@@ -117,7 +122,19 @@ const emit = defineEmits<{
   pause: []
   sendNow: [id: string]
   move: [id: string, direction: -1 | 1]
+  setDelivery: [id: string, mode: 'queue' | 'inject' | 'interrupt']
 }>()
+
+/** 投递时机徽标：只对非默认时机显示，避免每条都挂标签 */
+const deliveryBadge = (item: QueuedMessage): string => {
+  if (item.delivery === 'inject') return '边界接管'
+  if (item.delivery === 'interrupt') return '立即'
+  return ''
+}
+const injectHint = (item: QueuedMessage): string =>
+  item.delivery === 'inject'
+    ? '已在工具边界接管'
+    : '改为「当前工具跑完后开新回合」发送'
 
 function isPromoting(item: QueuedMessage): boolean {
   return !!props.promotingId && props.promotingId === item.id
@@ -286,6 +303,17 @@ function pauseLabel(reason: QueuePauseReason): string {
 }
 
 .queue-label {
+  white-space: nowrap;
+}
+
+/* 投递时机徽标（边界接管/立即） */
+.queue-delivery {
+  padding: 0 5px;
+  border: 1px solid var(--gd-color-border);
+  border-radius: 4px;
+  color: var(--gd-color-text-subtle);
+  font-size: 10px;
+  line-height: 15px;
   white-space: nowrap;
 }
 

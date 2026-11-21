@@ -113,11 +113,24 @@
             </button>
           <MaxTokensPopover v-model:visible="settingsPopoverVisible" :anchor-el="settingsButtonRef"
             :current-value="props.config?.maxTokensLimit ?? null" @change="handleMaxTokensChange" />
-          <!-- 停止/发送按钮（单按钮，与参考项目一致）：流式中无输入=停止，有输入/附件=入队 -->
+          <!-- 停止/发送按钮（单按钮，与参考项目一致）：流式中无输入=停止，有输入/附件=按投递时机入队 -->
           <button v-if="streaming && !inputContent.trim() && uploadFiles.length === 0" v-tooltip="t('chat.input.stopGenerating')" class="send-btn stop-btn" @click="abortResponse">
               <Stop24Filled class="w-4.5 h-4.5" />
             </button>
-          <button v-else v-tooltip="sendBusy ? t('chat.input.sending') : streaming ? t('chat.input.enqueue') : t('chat.input.send')" class="send-btn" :class="{ 'queue-btn': streaming, 'send-btn--pending': sendBusy }"
+          <div v-else-if="streaming" class="delivery-trigger">
+            <button v-tooltip="deliveryModeLabel" class="delivery-btn" @click.stop="deliveryMenuOpen = !deliveryMenuOpen">
+              <span class="text-[11px] font-medium">{{ deliveryModeLabel }}</span>
+              <ChevronDown16Regular class="w-3 h-3" />
+            </button>
+            <div v-if="deliveryMenuOpen" class="delivery-menu">
+              <button v-for="opt in deliveryOptions" :key="opt.value" class="delivery-item"
+                :class="{ 'is-active': deliveryMode === opt.value }" @click.stop="selectDelivery(opt.value)">
+                <span class="delivery-item__title">{{ opt.label }}</span>
+                <span class="delivery-item__hint">{{ opt.hint }}</span>
+              </button>
+            </div>
+          </div>
+          <button v-else v-tooltip="sendBusy ? t('chat.input.sending') : t('chat.input.send')" class="send-btn" :class="{ 'send-btn--pending': sendBusy }"
               :aria-busy="sendBusy || undefined" @click="sendMessage"
               :disabled="props.readonly || (!inputContent.trim() && uploadFiles.length === 0) || !props.config?.modelId || sendBusy">
               <!-- 发送中：转圈 loading（与 GdButton 的 loading 同款视觉），
@@ -184,7 +197,7 @@ import {
 
   Send24Filled, Stop24Filled, BookSearch24Regular, Cloud24Regular,
   ClipboardTask24Regular, ShieldLock24Regular, ShieldError16Regular, Add16Filled,
-  Lightbulb24Regular, Dismiss16Regular
+  Lightbulb24Regular, Dismiss16Regular, ChevronDown16Regular
 } from '@vicons/fluent'
 import { apiService } from '@/services/ApiService';
 import { useModelCatalog } from '@/composables/useModelCatalog';
@@ -1277,7 +1290,32 @@ const pendingUploadFiles = computed(() =>
 const sending = ref(false);
 
 /** 发送进行中（附件上传 + 等服务端确认）：按钮转 loading、Enter 不再触发发送 */
-const sendBusy = computed(() => sending.value || props.sendPending);
+const sendBusy = computed(() => sending.value || props.sendPending)
+
+/**
+ * 忙碌时的投递时机（会话级通用能力，非子代理专用）：
+ * - queue：等当前回合自然结束
+ * - inject：当前回合跑到「工具批次结束、该发下一次请求」的边界时结束本回合，再以新回合发送
+ * - interrupt：立即中止当前回合后发送
+ */
+const deliveryMode = ref<'queue' | 'inject' | 'interrupt'>('queue')
+const deliveryMenuOpen = ref(false)
+const deliveryOptions = [
+  { value: 'queue' as const, label: '排队', hint: '等当前回合结束后发送' },
+  { value: 'inject' as const, label: '边界接管', hint: '工具跑完就开新回合发送' },
+  { value: 'interrupt' as const, label: '立即打断', hint: '中止当前回合后立即发送' },
+]
+const deliveryModeLabel = computed(
+  () => deliveryOptions.find((o) => o.value === deliveryMode.value)?.label ?? '排队',
+)
+const selectDelivery = (mode: 'queue' | 'inject' | 'interrupt') => {
+  deliveryMode.value = mode
+  deliveryMenuOpen.value = false
+}
+// 点击外部关闭投递菜单（菜单非模态，不拦截其他交互）
+const onDocClickCloseDelivery = () => { deliveryMenuOpen.value = false }
+onMounted(() => document.addEventListener('click', onDocClickCloseDelivery))
+onUnmounted(() => document.removeEventListener('click', onDocClickCloseDelivery));
 
 const sendMessage = async () => {
   if (sendBusy.value) return;
@@ -1304,7 +1342,8 @@ const sendMessage = async () => {
     emit('send', {
       content,
       files: localFiles.value,
-      knowledgeBaseIds: props.config?.knowledgeBaseIds || []
+      knowledgeBaseIds: props.config?.knowledgeBaseIds || [],
+      ...(props.streaming ? { delivery: deliveryMode.value } : {}),
     });
   } finally {
     sending.value = false;
@@ -1950,6 +1989,64 @@ defineExpose({ insertText, insertBadge, focus: focusEditor });
 
 .send-btn:hover:not(:disabled) {
   background-color: var(--gd-color-primary-hover);
+}
+
+/* 投递时机选择（流式中替代发送按钮，选择"这条消息何时送达"） */
+.delivery-trigger {
+  position: relative;
+  flex-shrink: 0;
+}
+.delivery-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--gd-color-border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--gd-color-text-subtle);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s, color .15s;
+}
+.delivery-btn:hover {
+  border-color: var(--gd-color-primary);
+  color: var(--gd-color-primary);
+}
+.delivery-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  min-width: 208px;
+  padding: 4px;
+  border: 1px solid var(--gd-color-border);
+  border-radius: 8px;
+  background: var(--gd-color-surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+.delivery-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.delivery-item:hover { background: var(--gd-color-surface-hover); }
+.delivery-item.is-active { background: color-mix(in srgb, var(--gd-color-primary) 12%, transparent); }
+.delivery-item__title {
+  color: var(--gd-color-text);
+  font-size: var(--gd-size-text-base);
+}
+.delivery-item__hint {
+  color: var(--gd-color-text-subtle);
+  font-size: 11px;
 }
 
 .send-btn:active:not(:disabled) {

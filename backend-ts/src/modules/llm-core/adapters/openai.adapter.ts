@@ -47,6 +47,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamStreamTruncatedError,
   UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
@@ -484,6 +485,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
     const tracker = new StreamBlockTracker();
     let pendingFinish: string | null = null;
     let pendingUsage: StreamUsage | null = null;
+    let sawFinishReason = false;
 
     for await (const chunk of response) {
       // OpenAI 的 stream_options.include_usage 尾块是 choices:[]，usage 在 chunk 顶层。
@@ -499,7 +501,15 @@ export class OpenAIAdapter implements IProtocolAdapter {
       const content = delta?.content || null;
 
       // finish_reason / usage 只暂存，收尾时统一发射
-      if (choice.finish_reason) pendingFinish = choice.finish_reason;
+      if (choice.finish_reason) {
+        // 兼容部分网关把输出上限写成 max_tokens（Anthropic 风格）；
+        // 统一归一化为 length，供 output continuation 识别。
+        pendingFinish =
+          choice.finish_reason === "max_tokens"
+            ? "length"
+            : choice.finish_reason;
+        sawFinishReason = true;
+      }
 
       if (reasoning) {
         for (const c of tracker.reasoningDelta(reasoning)) yield c;
@@ -520,7 +530,18 @@ export class OpenAIAdapter implements IProtocolAdapter {
       }
     }
 
-    // [DONE] 收尾：先闭所有块，再 usage，最后 finish
+    // 没有 finish_reason = 流在协议终止前结束。先把未闭合块（工具参数 false）
+    // 交给组装器，再抛截断，让 Core Stream Recovery 决定丢弃/结算，绝不能合成 stop。
+    if (!sawFinishReason) {
+      for (const c of tracker.closeAll()) yield c;
+      throw new UpstreamStreamTruncatedError(
+        "Chat stream ended without finish_reason",
+        { lastEventType: "stream_end" },
+      );
+    }
+
+    // 正常收尾：先 finalize 工具参数，再闭所有块，最后 usage/finish
+    tracker.finalizeAllToolCalls();
     for (const c of tracker.closeAll()) yield c;
     if (pendingUsage) {
       this.logger.debug(`[llm.diag.usage] stream=1 ${JSON.stringify(pendingUsage)}`);
@@ -584,6 +605,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
               typeof tc.function?.arguments === "string"
                 ? tc.function.arguments
                 : JSON.stringify(tc.function?.arguments ?? {}),
+            argumentsComplete: true,
           },
         };
       }
@@ -597,7 +619,13 @@ export class OpenAIAdapter implements IProtocolAdapter {
     } else {
       this.logger.debug('[llm.diag.usage] stream=0 missing (provider returned no usage)');
     }
-    yield { type: "finish", finishReason: choice.finish_reason || "stop" };
+    yield {
+      type: "finish",
+      finishReason:
+        choice.finish_reason === "max_tokens"
+          ? "length"
+          : choice.finish_reason || "stop",
+    };
   }
 
   private handleError(

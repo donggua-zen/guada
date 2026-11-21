@@ -70,6 +70,8 @@ export interface InputMessageState {
     files: ChatFileView[]
     knowledgeBaseIds?: string[]
     isWaiting: boolean
+    /** 忙碌时的投递时机（仅流式中发送时携带） */
+    delivery?: DeliveryMode
 }
 
 /** 排队消息入队时冻结的发送设置（补发时作为回合级覆盖，不写回会话设置） */
@@ -89,9 +91,19 @@ export interface QueuedMessageSettingsSnapshot {
  * M3 起队列所有权在后端：本结构是 UserQueueSnapshotItem 的本地投影，
  * 不再由前端增删改，只能通过 store.applyQueueSnapshot 整块替换。
  */
+/**
+ * 消息投递时机（与后端 DeliveryMode 同构）
+ * - queue：等当前回合自然结束后再发
+ * - inject：当前回合跑到「工具批次结束、该发下一次请求」的边界时结束本回合，再以新回合发送
+ * - interrupt：立即中止当前回合后发送
+ */
+export type DeliveryMode = 'queue' | 'inject' | 'interrupt'
+
 export interface QueuedMessage {
     id: string
     content: string
+    /** 投递时机（缺省 queue） */
+    delivery?: DeliveryMode
     /** 发送契约形态（FileRef） */
     files: FileRef[]
     knowledgeBaseIds?: string[]
@@ -119,6 +131,8 @@ export interface UserQueueSettingsOverride {
 export interface UserQueueSnapshotItem {
     id: string
     content: string
+    /** 投递时机（后端缺省 queue） */
+    delivery?: DeliveryMode
     files: FileRef[]
     knowledgeBaseIds?: string[]
     replaceTurnId?: string
@@ -348,9 +362,11 @@ export interface Session {
     isStreaming?: boolean     // 是否正在流式响应（后端注入）
     // ==================================
 
-    // === 子代理冻结标记（仅子会话使用；非空 = 已结束仅供回放） ===
-    closedAt?: string | null  // 冻结时间（ISO 字符串）
-    closeReason?: string | null  // 结束原因：completed / error / closed
+    // === 子代理「最近一次运行结束」标记（仅子会话使用；不表示会话被关闭） ===
+    // 会话没有关闭态：非空只说明上次运行结束了，随时可被 job_send 唤醒再跑。
+    // 「活跃 / 已结束」分组一律以有无活跃流为准，本字段只用于展示与刷新后还原失败态。
+    closedAt?: string | null  // 上次运行结束时间（ISO 字符串）
+    closeReason?: string | null  // 结束原因：completed / error / aborted / max_tokens / refusal / stopped
     // ==================================
 
     // === 子会话列表（后端注入） ===

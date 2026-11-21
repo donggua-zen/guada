@@ -1212,4 +1212,155 @@ describe("projectChunk 会话级交互卡先于缓存门控", () => {
 
     expect(store.state.pendingAsks).toBeUndefined();
   });
+
+  it("retry 事件保留来源/次数/anchor（流恢复与长度续写可区分）", () => {
+    applyLiveChunk(store as any, "s1", {
+      type: "turn_start",
+      turnId: "T1",
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "retry",
+      turnId: "T1",
+      messageId: "m1",
+      retrySource: "stream_recovery",
+      retryReason: "network_error",
+      retryAttempt: 2,
+      retryMaxAttempts: 10,
+      retryDelayMs: 0,
+      anchorId: "m1:previous-message-anchor",
+      failedRequestId: "resp_123",
+      message: "上游流中断，正在恢复 2/10...",
+    } as any);
+
+    const turn = store.state.turns.find((t: any) => t.id === "T1");
+    expect(turn?.state?.retry).toMatchObject({
+      retrySource: "stream_recovery",
+      retryAttempt: 2,
+      retryMaxAttempts: 10,
+      anchorId: "m1:previous-message-anchor",
+      failedRequestId: "resp_123",
+    });
+  });
+
+  it("finish(stream_recovery_discarded) 给消息束打丢弃标记（实时路径）", () => {
+    applyLiveChunk(store as any, "s1", {
+      type: "turn_start",
+      turnId: "T1",
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "block_start",
+      messageId: "m1",
+      turnId: "T1",
+      index: 0,
+      blockType: "text",
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "text_delta",
+      messageId: "m1",
+      turnId: "T1",
+      index: 0,
+      text: "半截正文",
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "finish",
+      messageId: "m1",
+      turnId: "T1",
+      finishReason: "stream_recovery_discarded",
+    } as any);
+
+    const turn = store.state.turns.find((t: any) => t.id === "T1");
+    const bundle = turn?.messages?.find((m: any) => m.messageId === "m1");
+    expect(bundle?.metadata?.streamRecoveryDiscarded).toBe(true);
+    expect(bundle?.metadata?.finishReason).toBe("stream_recovery_discarded");
+  });
+
+  it("工具结算：结果挂到新的 committed 消息束，不挂回已丢弃的旧束", () => {
+    applyLiveChunk(store as any, "s1", {
+      type: "turn_start",
+      turnId: "T1",
+    } as any);
+    // 旧 attempt：正文 + tool-call，随后被丢弃
+    applyLiveChunk(store as any, "s1", {
+      type: "block_start",
+      messageId: "old",
+      turnId: "T1",
+      index: 0,
+      blockType: "text",
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "text_delta",
+      messageId: "old",
+      turnId: "T1",
+      index: 0,
+      text: "半截正文",
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "block_end",
+      messageId: "old",
+      turnId: "T1",
+      index: 1,
+      block: {
+        type: "tool-call",
+        toolCallId: "call_1",
+        name: "read",
+        arguments: "{}",
+        argumentsComplete: true,
+      },
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "finish",
+      messageId: "old",
+      turnId: "T1",
+      finishReason: "stream_recovery_discarded",
+    } as any);
+    // 工具结算：新 committed 消息束重放同一个 tool-call
+    applyLiveChunk(store as any, "s1", {
+      type: "block_end",
+      messageId: "committed",
+      turnId: "T1",
+      index: 0,
+      block: {
+        type: "tool-call",
+        toolCallId: "call_1",
+        name: "read",
+        arguments: "{}",
+        argumentsComplete: true,
+      },
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "finish",
+      messageId: "committed",
+      turnId: "T1",
+      finishReason: "tool-calls",
+    } as any);
+    applyLiveChunk(store as any, "s1", {
+      type: "tool_calls_response",
+      turnId: "T1",
+      toolCallsResponse: [
+        {
+          messageId: "m_result",
+          name: "read",
+          content: "ok",
+          toolCallId: "call_1",
+          outcome: "success",
+        },
+      ],
+    } as any);
+
+    const turn = store.state.turns.find((t: any) => t.id === "T1");
+    const oldBundle = turn?.messages?.find((m: any) => m.messageId === "old");
+    const committed = turn?.messages?.find(
+      (m: any) => m.messageId === "committed",
+    );
+    expect(oldBundle?.metadata?.streamRecoveryDiscarded).toBe(true);
+    const committedTool = committed?.blocks?.find(
+      (b: any) => b.metadata?.toolCalls?.length,
+    );
+    expect(committedTool?.metadata?.toolCallsResponse).toHaveLength(1);
+    expect(committedTool?.metadata?.toolCallsResponse[0].content).toBe("ok");
+    const oldTool = oldBundle?.blocks?.find(
+      (b: any) => b.metadata?.toolCalls?.length,
+    );
+    expect(oldTool?.metadata?.toolCallsResponse).toBeUndefined();
+  });
 });

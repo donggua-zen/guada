@@ -13,10 +13,10 @@
         <div class="message-item__card">
           <!-- 用户文本 -->
           <div class="message-item__text break-all whitespace-pre-wrap">
-            <template v-if="isSystemMessage">
+            <template v-if="isSystemMessage || isCoordinatorTurn">
               <div class="system-message-header">
                 <Alert16Regular class="system-message-icon w-3.5 h-3.5" />
-                <span class="system-message-label">{{ systemMessageLabel }}</span>
+                <span class="system-message-label">{{ isCoordinatorTurn ? coordinatorLabel : systemMessageLabel }}</span>
               </div>
               <div class="system-message-divider" />
               <div class="system-message-body">
@@ -46,8 +46,8 @@
             :clickable="isVisionImageMediaType(file.type)"
             @click="handleImageClick(file)"></FileItem>
         </div>
-        <!-- 用户操作按钮 -->
-        <MessageActions :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
+        <!-- 用户操作按钮：协调者消息不是人类输入，不提供复制/重新生成/删除/分支 -->
+        <MessageActions v-if="!isCoordinatorTurn" :is-assistant="false" :is-last="false" :allow-generate="allowGenerate"
           :time-full="userTime.full" :time-friendly="userTime.firendly"
           @copy="emit('copy', userView)" @generate="emit('generate', props.turn)"
           @delete="emit('delete', props.turn)" />
@@ -246,7 +246,7 @@ import { useFileChanges, type FileChangeEntry } from '@/composables/useFileChang
 import { useElapsedTicker } from '@/composables/useElapsedTicker';
 import { useTabStore } from '@/stores/tab';
 import { useLayoutStore } from '@/stores/layout';
-import { isHiddenBlock, getThinkingPreview, formatDuration as formatThinkingDuration } from '@/utils/messageUtils';
+import { isHiddenBlock, isCoordinatorMessage, getThinkingPreview, formatDuration as formatThinkingDuration } from '@/utils/messageUtils';
 import { isJobNoticeSource } from '@/utils/jobNotice';
 import { previewFile } from '@/utils/workspacePreview';
 import { getToolFileOpenTarget } from '@/utils/toolWorkspace';
@@ -306,10 +306,26 @@ const emit = defineEmits<{
 const user = computed(
   () => props.turn.messages?.find((m) => m.role === 'user' && !isHiddenBlock(m)) ?? null,
 );
+
+/** 本回合是否是主代理投递的协调者回合（真实回合，但非人类输入） */
+const isCoordinatorTurn = computed(() => isCoordinatorMessage(user.value));
+/** 协调者回合的标题文案 */
+const coordinatorLabel = computed(() => t('chat.turn.coordinatorGuidance', '主代理补充指令'));
+
 const events = computed(() => props.turn.messages?.filter((m) => m.role === 'event') ?? []);
+/**
+ * 被 Core Stream Recovery 丢弃的 attempt：只进审计/日志，不进展示流。
+ * 实时路径由 finish(stream_recovery_discarded) 打标，历史路径读 assistant metadata。
+ */
+const isDiscardedBundle = (m: {
+  metadata?: Record<string, any>;
+}): boolean =>
+  m.metadata?.excludedFromContext === true ||
+  m.metadata?.streamRecovery?.discarded === true ||
+  m.metadata?.streamRecoveryDiscarded === true;
 const activeBlocks = computed(() => {
   const msgs = props.turn.messages?.filter(
-    (m) => m.role !== 'user' && m.role !== 'event',
+    (m) => m.role !== 'user' && m.role !== 'event' && !isDiscardedBundle(m),
   ) ?? [];
   // 引用收集（flatMap 不复制块），供 displayGroups/useFileChanges 等按块消费的派生层
   return msgs.flatMap((m) => m.blocks);
@@ -822,9 +838,27 @@ const streamingState = computed(() => ({
 // LLM 流重试瞬态（回合级 turn.state.retry，retry 事件标记，重试成功输出/turn_end 清除）
 const retryState = computed<{
   message?: string;
+  attempt?: string;
+  source?: string;
 } | null>(() => {
   const retry = props.turn?.state?.retry;
-  return retry?.message ? { message: retry.message } : null;
+  if (!retry) return null;
+  const sourceLabel =
+    retry.retrySource === 'stream_recovery'
+      ? '流中断恢复'
+      : retry.retrySource === 'output_continuation'
+        ? '继续生成'
+        : retry.retrySource === 'transport'
+          ? '网络重试'
+          : '重试';
+  const attempt = `${retry.retryAttempt}/${retry.retryMaxAttempts}`;
+  return {
+    message:
+      retry.message ||
+      `${sourceLabel}，正在重试 ${attempt}...`,
+    attempt,
+    source: retry.retrySource,
+  };
 });
 
 const currentModelName = computed(() => {
@@ -891,6 +925,7 @@ const tokenUsage = computed(() => {
   let totalTokens = 0;
   // usage 已在折叠器写入 assistant bundle.metadata（消息级，不再逐块求和）
   for (const m of props.turn.messages) {
+    if (isDiscardedBundle(m)) continue;
     const usage = m.metadata?.usage;
     if (usage) {
       totalPromptTokens += usage.promptTokens || 0;
@@ -1226,5 +1261,4 @@ html.gd-resizing-moved .turn-wrapper:not(.turn-wrapper--no-cv) {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-
 </style>

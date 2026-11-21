@@ -33,6 +33,11 @@ export interface ChatStreamParams {
   resumeData?: unknown;
   /** 仅排队消息补发时传入 */
   settingsOverride?: ChatSettingsOverride;
+  /**
+   * 忙碌时的投递时机：queue（默认，等回合结束）/ inject（工具边界接管）/ interrupt（立即打断）。
+   * 空闲时无意义（直接开新回合）。
+   */
+  delivery?: 'queue' | 'inject' | 'interrupt';
   // 用户消息参数
   // overwrite 模式：按需设置 content/files/replaceTurnId/knowledgeBaseIds，不设置 id
   // resume 模式：只需设置 id;resume 复用既有回合,另带 turnId(回合外壳 id,与消息 id 解耦)
@@ -108,6 +113,7 @@ export class ChatStreamService {
       resumeData,
       userMessage,
       settingsOverride,
+      delivery,
     } = params;
 
     const isSubscribeMode = regenerationMode === "subscribe";
@@ -138,6 +144,7 @@ export class ChatStreamService {
           resumeData,
           userMessage,
           ...(settingsOverride ? { settingsOverride } : {}),
+          ...(delivery ? { delivery } : {}),
         }),
         signal: controller.signal,
       });

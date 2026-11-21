@@ -308,6 +308,19 @@ export function isHiddenBlock(
 }
 
 /**
+ * 是否为主代理投递给子代理的协调者消息（source.kind='coordinator'）
+ *
+ * 它与人类输入共用同一条投递队列，但语义上不是人类发言：
+ * - 是可见的真实回合锚点（刷新可回放，不再用 metadata.hidden 隐藏）
+ * - 渲染成「主代理补充指令」样式，不作为可编辑/可重新生成的用户输入
+ */
+export function isCoordinatorMessage(
+  message?: { source?: { kind?: string } | null; metadata?: Record<string, unknown> | null } | null,
+): boolean {
+  return message?.source?.kind === "coordinator";
+}
+
+/**
  * 剥离 <system_reminder> 标签，返回内部内容（P5b/P5c）
  *
  * 通知类消息（process_monitor / sub_agent）的 text 块以

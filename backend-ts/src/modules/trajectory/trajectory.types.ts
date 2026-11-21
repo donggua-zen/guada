@@ -52,7 +52,7 @@ export interface TrajectoryStepView {
   durationMs: number | null;
   usage?: TokenUsage;
   finishReason?: string;
-  /** 最终成功尝试序号（streamWithRetry 内部重试；无重试 = 0） */
+  /** 最终成功尝试序号（streamWithTransportRetry 内部重试；无重试 = 0） */
   attemptIndex?: number;
   error?: { name: string; message: string };
   /** 媒体预算占位清单（本次请求被替换为文本占位的图片） */

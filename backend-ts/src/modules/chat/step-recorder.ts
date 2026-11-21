@@ -23,6 +23,7 @@ import type {
   StepMediaOverlayEntry,
   StepSource,
   StepStartData,
+  StepStreamRecoverySummary,
 } from '../../common/persistence/types';
 
 const logger = new Logger('StepRecorder');
@@ -61,7 +62,7 @@ export interface StepBeginMeta {
 
 /** step/end 增量数据（end 入参；durationMs 由记录器自动计算） */
 export interface StepEndInput {
-  /** 最终成功尝试的序号（streamWithRetry 内部重试计数；无重试 = 0） */
+  /** 最终成功尝试的序号（streamWithTransportRetry 内部重试计数；无重试 = 0） */
   attemptIndex?: number;
   usage?: import('../../common/types/conversation.types').TokenUsage;
   finishReason?: string;
@@ -70,6 +71,10 @@ export interface StepEndInput {
   assistantMessageId?: string;
   /** 媒体预算占位清单（本次请求被替换为文本占位的图片） */
   mediaOverlay?: StepMediaOverlayEntry[];
+  /** 流恢复摘要（本次尝试因流失败被丢弃/工具结算） */
+  streamRecovery?: StepStreamRecoverySummary;
+  /** 输出长度续写摘要 */
+  outputContinuation?: { attempt: number; maxAttempts: number };
 }
 
 export interface StepHandle {
@@ -78,7 +83,7 @@ export interface StepHandle {
    * 未传 error 且此前未收口 → 视为正常完成收口。
    */
   end(input?: StepEndInput): Promise<void>;
-  /** 透出流式重试进度（streamWithRetry 的 attempt；end 时作为 attemptIndex 缺省值） */
+  /** 透出流式重试进度（streamWithTransportRetry 的 attempt；end 时作为 attemptIndex 缺省值） */
   noteAttempt(attempt: number): void;
   /** step/start 事件 seq（append 失败时为 null——括号未入日志，end 也不再写） */
   readonly startSeq: number | null;
@@ -203,6 +208,12 @@ export async function beginStep(
         ...(input?.mediaOverlay === undefined || input.mediaOverlay.length === 0
           ? {}
           : { mediaOverlay: input.mediaOverlay }),
+        ...(input?.streamRecovery === undefined
+          ? {}
+          : { streamRecovery: input.streamRecovery }),
+        ...(input?.outputContinuation === undefined
+          ? {}
+          : { outputContinuation: input.outputContinuation }),
       };
       try {
         await ctx.appendStepEnd(endData);

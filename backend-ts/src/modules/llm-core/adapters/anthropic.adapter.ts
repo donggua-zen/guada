@@ -40,6 +40,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamStreamTruncatedError,
   UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
@@ -252,6 +253,8 @@ export class AnthropicAdapter implements IProtocolAdapter {
       { kind: "text" | "reasoning" | "tool-call"; text: string }
     >();
     const toolMeta = new Map<number, { id: string; name: string }>();
+    const closedBlocks = new Set<number>();
+    let sawFinish = false;
     let pendingSignature = "";
     let pendingRedactedData = "";
     // message_start 返回的 input_tokens（总输入 token 数），合并到 message_delta
@@ -353,6 +356,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
         case "content_block_stop": {
           const info = blocks.get(event.index);
           if (!info) continue;
+          closedBlocks.add(event.index);
           if (info.kind === "tool-call") {
             const meta = toolMeta.get(event.index);
             yield {
@@ -363,6 +367,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
                 toolCallId: meta?.id || "",
                 name: meta?.name || "",
                 arguments: info.text,
+                argumentsComplete: true,
               },
             };
           } else if (info.text) {
@@ -398,9 +403,13 @@ export class AnthropicAdapter implements IProtocolAdapter {
           };
           // usage 固定先于 finish
           yield { type: "usage", usage: streamUsage };
+          sawFinish = true;
+          const rawStopReason = event.delta?.stop_reason || "stop";
+          // Anthropic 的输出上限是 max_tokens；归一化为跨协议统一的 length，
+          // 供 output-token continuation 识别。
           const finish: Extract<StreamChunk, { type: "finish" }> = {
             type: "finish",
-            finishReason: event.delta?.stop_reason || "stop",
+            finishReason: rawStopReason === "max_tokens" ? "length" : rawStopReason,
           };
           if (pendingSignature) {
             finish.signature = pendingSignature;
@@ -418,6 +427,42 @@ export class AnthropicAdapter implements IProtocolAdapter {
           // content_block_stop 已处理 / message_stop 等忽略
           continue;
       }
+    }
+
+    // 没有 message_delta = 流在协议终止前结束。先闭合残留块（工具参数 false），
+    // 再抛截断；Core Stream Recovery 会决定丢弃正文/结算完整工具。
+    if (!sawFinish) {
+      for (const [index, info] of blocks) {
+        if (closedBlocks.has(index)) continue;
+        closedBlocks.add(index);
+        if (info.kind === "tool-call") {
+          const meta = toolMeta.get(index);
+          yield {
+            type: "block_end",
+            index,
+            block: {
+              type: "tool-call",
+              toolCallId: meta?.id || "",
+              name: meta?.name || "",
+              arguments: info.text,
+              argumentsComplete: false,
+            },
+          };
+        } else if (info.text) {
+          yield {
+            type: "block_end",
+            index,
+            block:
+              info.kind === "text"
+                ? { type: "text", text: info.text }
+                : { type: "reasoning", summary: info.text },
+          };
+        }
+      }
+      throw new UpstreamStreamTruncatedError(
+        "Anthropic stream ended without message_delta",
+        { lastEventType: "stream_end" },
+      );
     }
   }
 
@@ -454,6 +499,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
             toolCallId: block.id,
             name: block.name,
             arguments: JSON.stringify(block.input ?? {}),
+            argumentsComplete: true,
           },
         };
       }
@@ -478,9 +524,10 @@ export class AnthropicAdapter implements IProtocolAdapter {
         },
       };
     }
+    const stopReason = (message as any).stop_reason;
     yield {
       type: "finish",
-      finishReason: (message as any).stop_reason || "stop",
+      finishReason: stopReason === "max_tokens" ? "length" : stopReason || "stop",
       ...(signature ? { signature } : {}),
     };
   }

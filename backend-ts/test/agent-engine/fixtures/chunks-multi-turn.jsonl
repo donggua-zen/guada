@@ -12,6 +12,7 @@
 {"type": "tool_call_delta", "index": 1, "argumentsDelta": "test"}
 {"type": "tool_call_delta", "index": 1, "argumentsDelta": ".txt\"}"}
 {"type": "block_end", "index": 0, "block": {"type": "reasoning", "contentId": "", "summary": "我需要先调用工具"}}
+{"type": "block_end", "index": 1, "block": {"type": "tool-call", "contentId": "", "toolCallId": "call_001", "name": "file__read", "arguments": "{\"file_path\":\"test.txt\"}", "argumentsComplete": true}}
 {"type": "usage", "usage": {"promptTokens": 200, "completionTokens": 30, "totalTokens": 230}}
 {"type": "finish", "finishReason": "tool_calls"}
 {"type": "block_start", "index": 0, "blockType": "text"}

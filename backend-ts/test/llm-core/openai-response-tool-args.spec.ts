@@ -10,7 +10,10 @@
  * tool-call 参数，不依赖网络。
  */
 import { OpenAIResponseAdapter } from '../../src/modules/llm-core/adapters/openai-response.adapter';
-import { UpstreamStreamTruncatedError } from '../../src/modules/llm-core/utils/upstream-errors';
+import {
+  UpstreamResponseFailedError,
+  UpstreamStreamTruncatedError,
+} from '../../src/modules/llm-core/utils/upstream-errors';
 
 function makeCapabilityStub() {
   return {} as any;
@@ -583,5 +586,169 @@ describe('OpenAIResponseAdapter 流式工具参数', () => {
       (c) => c.type === 'block_end' && c.block?.type === 'tool-call',
     );
     expect(end?.block.argumentsComplete).toBe(false);
+  });
+
+  it('response.failed：抛结构化错误（读 response.error），不合成 finish', async () => {
+    const { chunks, error } = await runCollecting([
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_1' } },
+      {
+        type: 'response.output_text.delta',
+        item_id: 'msg_1',
+        output_index: 0,
+        delta: '  ',
+      },
+      {
+        type: 'response.failed',
+        response: {
+          id: 'resp_123',
+          status: 'failed',
+          error: {
+            code: 'invalid_value',
+            param: 'url',
+            type: 'invalid_request_error',
+            message:
+              'Unable to download content from the provided URL before the timeout.',
+          },
+        },
+      },
+    ]);
+
+    expect(error).toBeInstanceOf(UpstreamResponseFailedError);
+    const failed = error as UpstreamResponseFailedError;
+    expect(failed.code).toBe('invalid_value');
+    expect(failed.param).toBe('url');
+    expect(failed.requestId).toBe('resp_123');
+    expect(failed.retryable).toBe(true);
+    expect(chunks.find((c) => c.type === 'finish')).toBeUndefined();
+    // 失败前已产出的正文仍先闭合，交给恢复层统计/丢弃
+    expect(
+      chunks.some(
+        (c) => c.type === 'block_end' && c.block?.type === 'text',
+      ),
+    ).toBe(true);
+  });
+
+  it('response.failed 携带完整工具：block_end 带 argumentsComplete=true', async () => {
+    const { chunks, error } = await runCollecting([
+      added(0, { id: 'item_0', call_id: 'call_0', name: 'read' }),
+      {
+        type: 'response.function_call_arguments.done',
+        item_id: 'item_0',
+        output_index: 0,
+        arguments: '{"path":"a.ts"}',
+      },
+      {
+        type: 'response.failed',
+        response: {
+          status: 'failed',
+          error: { code: 'server_error', message: 'boom' },
+        },
+      },
+    ]);
+
+    expect(error).toBeInstanceOf(UpstreamResponseFailedError);
+    const ends = toolEnds(chunks);
+    expect(ends).toHaveLength(1);
+    expect(ends[0].argumentsComplete).toBe(true);
+    expect(ends[0].arguments).toBe('{"path":"a.ts"}');
+  });
+
+  it('response.incomplete(max_output_tokens) → finishReason=length', async () => {
+    const { chunks, error } = await runCollecting([
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_1' } },
+      {
+        type: 'response.output_text.delta',
+        item_id: 'msg_1',
+        output_index: 0,
+        delta: '写到一半',
+      },
+      {
+        type: 'response.incomplete',
+        response: {
+          output: [],
+          incomplete_details: { reason: 'max_output_tokens' },
+        },
+      },
+    ]);
+
+    expect(error).toBeUndefined();
+    expect(chunks.find((c) => c.type === 'finish')?.finishReason).toBe(
+      'length',
+    );
+  });
+
+  it('response.failed 上游读流中断（upstream_error）→ retryable=true', async () => {
+    const { chunks, error } = await runCollecting([
+      { type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'msg_1' } },
+      {
+        type: 'response.output_text.delta',
+        item_id: 'msg_1',
+        output_index: 0,
+        delta: ' ',
+      },
+      {
+        type: 'response.failed',
+        response: {
+          id: 'resp_read_error',
+          status: 'failed',
+          error: {
+            code: 'upstream_stream_read_error',
+            param: null,
+            type: 'upstream_error',
+            message: 'Upstream response stream was interrupted',
+          },
+        },
+      },
+    ]);
+
+    expect(error).toBeInstanceOf(UpstreamResponseFailedError);
+    const failed = error as UpstreamResponseFailedError;
+    expect(failed.code).toBe('upstream_stream_read_error');
+    expect(failed.retryable).toBe(true);
+    expect(chunks.find((c) => c.type === 'finish')).toBeUndefined();
+  });
+
+  it('response.failed 请求校验错误（invalid_request_error）→ retryable=false', async () => {
+    const { error } = await runCollecting([
+      {
+        type: 'response.failed',
+        response: {
+          status: 'failed',
+          error: {
+            code: 'unsupported_parameter',
+            type: 'invalid_request_error',
+            message: 'Unsupported parameter: enable_thinking',
+          },
+        },
+      },
+    ]);
+
+    expect(error).toBeInstanceOf(UpstreamResponseFailedError);
+    expect((error as UpstreamResponseFailedError).retryable).toBe(false);
+  });
+
+  it('sub2api_placeholder 事件不计入正文/完成判定', async () => {
+    const { chunks, error } = await runCollecting([
+      {
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: { type: 'message', id: 'msg_ph' },
+        sub2api_placeholder: true,
+      },
+      {
+        type: 'response.output_text.delta',
+        item_id: 'msg_ph',
+        output_index: 0,
+        delta: ' ',
+        sub2api_placeholder: true,
+      },
+      completed([], { input_tokens: 1, output_tokens: 0, total_tokens: 1 }),
+    ]);
+
+    expect(error).toBeUndefined();
+    expect(
+      chunks.some((c) => c.type === 'text_delta' || c.type === 'block_end'),
+    ).toBe(false);
+    expect(chunks.find((c) => c.type === 'finish')?.finishReason).toBe('stop');
   });
 });

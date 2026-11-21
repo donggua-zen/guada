@@ -27,6 +27,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamResponseFailedError,
   UpstreamStreamTruncatedError,
   UpstreamTimeoutError,
 } from "../utils/upstream-errors";
@@ -397,6 +398,8 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     /** 是否收到过上游终止事件（completed/incomplete/failed）。
      * 没收到就结束 = 上游没发收尾事件，需进一步判断内容是否已收齐。 */
     let sawTerminal = false;
+    /** response.failed 的结构化错误：收尾闭合块后再抛，保证组装器拿到半截内容 */
+    let terminalFailure: UpstreamResponseFailedError | undefined;
     /** 最后一个上游事件类型（含非内容事件，仅诊断用） */
     let lastEventType = "";
     /** 最后一个「内容事件」类型：忽略 created/in_progress/metadata 这类信封事件。
@@ -666,6 +669,11 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     };
 
     for await (const event of response) {
+      // 中转/兼容层（sub2api）会在真正内容前注入占位 message 事件。它们不是
+      // 模型输出，不能计入可见内容、完成判定或工具 lane。
+      if ((event as any)?.sub2api_placeholder === true) {
+        continue;
+      }
       if (typeof event?.type === "string") {
         lastEventType = event.type;
         // 只把「内容事件」纳入完成判定：created/in_progress/metadata 等信封
@@ -729,12 +737,16 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           continue;
 
         case "response.completed":
-        case "response.incomplete":
+        case "response.incomplete": {
           sawTerminal = true;
           for (const c of handleOutputArray(event.response?.output)) yield c;
+          const incompleteReason = event.response?.incomplete_details?.reason;
+          // 输出上限的统一语义是 length；model_context_window_exceeded 属于
+          // “成功响应但填满窗口”，同样交给 output continuation 续写。
           pendingFinish =
             event.type === "response.incomplete" &&
-            event.response?.incomplete_details?.reason === "max_output_tokens"
+            (incompleteReason === "max_output_tokens" ||
+              incompleteReason === "model_context_window_exceeded")
               ? "length"
               : "stop";
           if (event.response?.usage) {
@@ -746,13 +758,44 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
             };
           }
           continue;
+        }
 
-        case "response.failed":
+        case "response.failed": {
           sawTerminal = true;
           for (const c of handleOutputArray(event.response?.output)) yield c;
-          this.logger.error(`Response failed: ${event.error?.message}`);
-          pendingFinish = "error";
+          // OpenAI Responses 把错误放在 response.error 下；部分兼容网关也放
+          // 顶层 error。两处都读，避免再次出现 "Response failed: undefined"。
+          const failure = event.response?.error ?? event.error;
+          const message =
+            typeof failure?.message === "string" && failure.message.length > 0
+              ? failure.message
+              : "Upstream response failed";
+          const code =
+            typeof failure?.code === "string" ? failure.code : undefined;
+          const param =
+            typeof failure?.param === "string" ? failure.param : undefined;
+          const type =
+            typeof failure?.type === "string" ? failure.type : undefined;
+          const requestId =
+            typeof event.response?.id === "string"
+              ? event.response.id
+              : typeof event.response_id === "string"
+                ? event.response_id
+                : undefined;
+          const retryable = isRetryableResponseFailure(code, message, type);
+          this.logger.error(
+            `Response failed: code=${code ?? "?"} param=${param ?? "?"} ` +
+              `requestId=${requestId ?? "?"} retryable=${retryable} message=${message}`,
+          );
+          terminalFailure = new UpstreamResponseFailedError(message, {
+            code,
+            param,
+            type,
+            requestId,
+            retryable,
+          });
           continue;
+        }
 
         default:
           continue;
@@ -846,11 +889,24 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       throw new UpstreamStreamTruncatedError(
         `Responses stream ended without terminal event ` +
           `(last=${lastContentEventType || lastEventType || "?"}, tools=[${toolSummary}])`,
+        {
+          lastEventType: lastContentEventType || lastEventType || undefined,
+          completeToolCallIds: lanes
+            .filter((l) => l.complete && l.callId)
+            .map((l) => l.callId),
+          incompleteToolCallIds: lanes
+            .filter((l) => !l.complete && (l.callId || l.itemId))
+            .map((l) => l.callId || l.itemId),
+        },
       );
     }
 
-    // 收尾：先闭所有块，再 usage，最后 finish
+    // 收尾：先闭所有块（携带 argumentsComplete），failed 直接抛结构化错误，
+    // 不再合成 finish{error} 让上层误当成正常终止。
     for (const c of closeAllChunks()) yield c;
+    if (terminalFailure) {
+      throw terminalFailure;
+    }
     if (pendingUsage) {
       yield { type: "usage", usage: pendingUsage };
     }
@@ -865,6 +921,26 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
   private *handleNonStreamResponse(response: any): Generator<StreamChunk> {
     if (!response || !response.output) {
       throw new Error("Invalid response from LLM Responses API");
+    }
+
+    // 非流式同样可能返回 failed；不能把空 output 当成功收尾。
+    if (response.status === "failed" || response.error) {
+      const failure = response.error ?? {};
+      const message =
+        typeof failure.message === "string" && failure.message.length > 0
+          ? failure.message
+          : "Upstream response failed";
+      const code =
+        typeof failure.code === "string" ? failure.code : undefined;
+      const type =
+        typeof failure.type === "string" ? failure.type : undefined;
+      throw new UpstreamResponseFailedError(message, {
+        code,
+        param: typeof failure.param === "string" ? failure.param : undefined,
+        type,
+        requestId: typeof response.id === "string" ? response.id : undefined,
+        retryable: isRetryableResponseFailure(code, message, type),
+      });
     }
 
     let index = 0;
@@ -888,6 +964,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
             toolCallId: output.call_id || output.id,
             name: output.name,
             arguments: output.arguments || "{}",
+            argumentsComplete: true,
           },
         };
       } else if (output.type === "reasoning") {
@@ -918,7 +995,16 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         },
       };
     }
-    yield { type: "finish", finishReason: "stop" };
+    const incompleteReason = response.incomplete_details?.reason;
+    yield {
+      type: "finish",
+      finishReason:
+        response.status === "incomplete" &&
+        (incompleteReason === "max_output_tokens" ||
+          incompleteReason === "model_context_window_exceeded")
+          ? "length"
+          : "stop",
+    };
   }
 
   /**
@@ -979,6 +1065,45 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
  * 从 OpenAI 协议 usage 对象中提取缓存 token 字段
  * 兼容 OpenAI 官方 (prompt_tokens_details.cached_tokens) 和 DeepSeek (prompt_cache_hit_tokens) 风格
  */
+const TRANSIENT_RESPONSE_FAILURE_CODES = new Set([
+  "server_error",
+  "internal_error",
+  "service_unavailable",
+  "rate_limit_exceeded",
+  "insufficient_quota",
+  "overloaded",
+  "timeout",
+  // 上游聚合层（xingchiapi / sub2api 等）自身读流中断：瞬时错误，
+  // 丢弃已产出的半截内容后重试即可。
+  "upstream_stream_read_error",
+  "upstream_stream_error",
+  "upstream_error",
+]);
+
+const TRANSIENT_RESPONSE_FAILURE_RE =
+  /\b(stream idle|stream stalled|stream interrupted|interrupted|timeout|timed out|overloaded|rate limit|server error|temporarily unavailable|ECONNRESET|EPIPE|ETIMEDOUT)\b/i;
+
+/**
+ * response.failed 是否允许传输层/Core Stream Recovery 重试。
+ *
+ * 与 ZCode 的 isRetryableStreamRecoveryFailure 对齐：结构化 code 优先，
+ * message 兜底。`invalid_value/param=url` 这类错误如果上游 message 明确写了
+ * timeout，仍视为可重试（URL 拉取可能是瞬时超时）；想 fail-fast 的用户把
+ * llmIncompleteOutputAction 设为 error。
+ */
+function isRetryableResponseFailure(
+  code: string | undefined,
+  message: string,
+  type?: string,
+): boolean {
+  if (code && TRANSIENT_RESPONSE_FAILURE_CODES.has(code)) return true;
+  if (TRANSIENT_RESPONSE_FAILURE_RE.test(message)) return true;
+  // upstream_error / server_error 类型是上游侧故障（非请求校验），
+  // 默认按瞬时错误处理；invalid_request_error / invalid_value 仍 fail-fast。
+  if (type === "upstream_error" || type === "server_error") return true;
+  return false;
+}
+
 function extractOpenAICachedTokens(
   rawUsage: any,
 ): { read?: number; missed?: number } | undefined {

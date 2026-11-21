@@ -53,8 +53,8 @@ export const EVENT_METHOD = {
   SESSION_TODO_UPDATED: "session/todo_updated",
 
   // ---- 子代理事件(带 sessionId) ----
-  SUBAGENT_CREATED: "subagent/created",
-  SUBAGENT_CLOSED: "subagent/closed",
+  // 注：子代理实际推送走旧形状 sub_agent_create / sub_agent_ended（见 stream.events），
+  // 这里不重复登记常量，避免出现第二套无人消费的事件名。
 
   // ---- 宿主级全局事件(可无 sessionId) ----
   HOST_PLUGINS_CHANGED: "host/plugins_changed",

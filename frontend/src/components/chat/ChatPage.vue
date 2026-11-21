@@ -229,6 +229,7 @@ import { ref, onMounted, onUnmounted, watch, computed, nextTick, defineAsyncComp
 import { useI18n } from "vue-i18n";
 const { t } = useI18n()
 import { apiService } from "@/services/ApiService";
+import { emitSessionResync } from "@/utils/sessionResync";
 import { NEW_SESSION_ID } from "@/constants";
 import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
@@ -483,9 +484,11 @@ function handleSubAgentEnded(event: SessionEvent) {
 
   const sub = subSessions.value.find(s => s.id === subSessionId);
   if (sub) {
-    sub.closedAt = new Date().toISOString();
+    sub.closedAt = payload.closedAt || event.timestamp || sub.closedAt || null;
     sub.closeReason = payload.stopReason || null;
-    sub.isStreaming = false;
+    sessionStore.applyStreamSnapshot(sub.id, false, sub.closeReason);
+    sessionStore.getSessionState(subSessionId).loaded = false;
+    emitSessionResync(subSessionId);
   }
 }
 
@@ -637,9 +640,10 @@ const workspaceSize = computed(() => layoutStore.workspaceSplitSize);
 // SSE 事件监听取消函数(stream_status_changed 已由 useSessionEvents 统一订阅,此处不再重复监听)
 let unsubscribeSubAgentCreate: (() => void) | null = null;
 let unsubscribeSubAgentEnded: (() => void) | null = null;
+let unsubscribeParentConnected: (() => void) | null = null;
+let removeParentVisibility: (() => void) | null = null;
 
 
-// 业务逻辑函数
 
 /** 会话详情请求代际：快速连切时丢弃过期响应，保证 mainSession 不落后于路由 */
 let sessionFetchGeneration = 0;
@@ -649,6 +653,16 @@ let lastFetchedSessionId: string | null = null;
 /**
  * 根据会话 ID 从 API 获取会话详情
  */
+const applySessionSnapshot = (session: Session) => {
+  sessionStore.mergeSession(session);
+  sessionStore.applyStreamSnapshot(session.id, session.isStreaming === true, session.closeReason);
+  for (const child of session.subSessions || []) {
+    sessionStore.mergeSession(child);
+    sessionStore.applyStreamSnapshot(child.id, child.isStreaming === true, child.closeReason);
+  }
+  subSessions.value = session.subSessions || [];
+};
+
 const fetchSession = async (sessionId: string) => {
   const generation = ++sessionFetchGeneration;
   try {
@@ -656,14 +670,8 @@ const fetchSession = async (sessionId: string) => {
     // 期间路由已再次变化 → 丢弃，避免旧会话覆盖新会话
     if (generation !== sessionFetchGeneration || routeSessionId.value !== sessionId) return;
 
-    // 写入唯一数据源：mainSession 是它的派生视图，SSE/本端保存都更新同一对象。
-    // 用 merge 保留侧栏已注入的 isStreaming 等前端字段。
-    sessionStore.mergeSession(session);
+    applySessionSnapshot(session);
     lastFetchedSessionId = sessionId;
-
-    // 子会话列表（含已结束的，供概览"子代理"区与侧边栏标签解析元数据；
-    // isStreaming 由后端注入）
-    subSessions.value = session.subSessions || [];
   } catch (error) {
     // 路由已切走时不要用旧会话的失败把用户重定向到新建页
     if (generation !== sessionFetchGeneration || routeSessionId.value !== sessionId) return;
@@ -987,18 +995,23 @@ watch(
   }
 );
 
-// 生命周期
+// 生命周期监听同步注册，避免异步 onMounted 之后才调用 onUnmounted。
+const refreshCurrentParent = () => {
+  const id = mainSession.value?.id;
+  if (id) void fetchSession(id);
+};
+unsubscribeParentConnected = apiService.onConnected?.(refreshCurrentParent) ?? null;
+const onParentVisibility = () => {
+  if (!document.hidden) refreshCurrentParent();
+};
+window.addEventListener('visibilitychange', onParentVisibility);
+removeParentVisibility = () => window.removeEventListener('visibilitychange', onParentVisibility);
+
 onMounted(async () => {
   const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
-
-  await updateSelectedSession(sessionId);
-
-  // stream_status_changed 已由 useSessionEvents(MainLayout 常驻)统一订阅并写入 sessionStore.streamStatus,
-  // 消费方直读 store,本组件不再派生、也不重复 onSessionEvent。
-
-  // 注册子 Agent 生命周期事件监听（仅负责增删 Tab）
   unsubscribeSubAgentCreate = apiService.onSessionEvent('sub_agent_create', handleSubAgentCreate);
   unsubscribeSubAgentEnded = apiService.onSessionEvent('sub_agent_ended', handleSubAgentEnded);
+  await updateSelectedSession(sessionId);
 });
 
 // 工作目录隐藏时重置全屏状态（显示由激活标签驱动，无需重置标签）
@@ -1018,6 +1031,10 @@ onUnmounted(() => {
     unsubscribeSubAgentEnded();
     unsubscribeSubAgentEnded = null;
   }
+  unsubscribeParentConnected?.();
+  unsubscribeParentConnected = null;
+  removeParentVisibility?.();
+  removeParentVisibility = null;
   // 当前会话标记的清理（currentSessionId = "用户正在看的会话"）已由
   // useBrowserSessionBinding 的 onScopeDispose 统一负责，此处不再重复。
 });

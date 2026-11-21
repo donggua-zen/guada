@@ -120,7 +120,7 @@ export class JobNotifierService {
    * 旧实现是"先 markReported 再入队"，入队抛错就永久丢失通知（reported 已置位，
    * 任何后续 drain/重连都不会再投）。现在失败保持 reported=false 并挂回待投递队列，
    * 下一次回合正常收尾（handleTurnFinished）会重试。
-   * markReported 仍是"结果已通告"的唯一真相：子 Agent 的 onReported 据此清 completed/自动冻结。
+   * markReported 仍是"结果已通告"的唯一真相：子 Agent 的 onReported 据此清 completed/补记运行结束。
    */
   private async deliver(job: JobSnapshot): Promise<void> {
     if (job.reported || this.inFlight.has(job.id)) return;

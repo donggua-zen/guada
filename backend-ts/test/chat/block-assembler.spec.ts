@@ -70,6 +70,7 @@ describe('BlockAssembler', () => {
           toolCallId: 'call_1',
           name: 'read_file',
           arguments: '{"path":"a.ts"}',
+          argumentsComplete: false,
         },
       ]);
     });
@@ -115,7 +116,13 @@ describe('BlockAssembler', () => {
 
       expect(stripTiming(assembler.blocks())).toEqual([
         { type: 'reasoning', summary: '旧思考' },
-        { type: 'tool-call', toolCallId: 'call_x', name: 'shell', arguments: '{"cmd":"ls"}' },
+        {
+          type: 'tool-call',
+          toolCallId: 'call_x',
+          name: 'shell',
+          arguments: '{"cmd":"ls"}',
+          argumentsComplete: false,
+        },
       ]);
     });
   });

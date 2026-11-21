@@ -36,6 +36,7 @@ import {
   UpstreamRateLimitError,
   UpstreamNetworkError,
   UpstreamRequestError,
+  UpstreamStreamTruncatedError,
   UpstreamTimeoutError,
 } from "../utils/upstream-errors";
 import { getRetryAfterFromError } from "../utils/retry.util";
@@ -222,10 +223,20 @@ export class GeminiAdapter implements IProtocolAdapter {
 
   private async *handleGeminiStream(result: any, abortSignal?: AbortSignal): AsyncGenerator<StreamChunk> {
     const tracker = new StreamBlockTracker();
+    let finishReason: string | undefined;
 
     for await (const chunk of result.stream) {
       // 中止检查：SDK 无原生 signal，逐块检查近实时生效（for-await 退出时自动终结底层流）
       this.throwIfAborted(abortSignal);
+
+      // finishReason 通常只在最后一个候选块上出现
+      const candidateFinish = chunk.candidates?.[0]?.finishReason;
+      if (
+        candidateFinish &&
+        candidateFinish !== "FINISH_REASON_UNSPECIFIED"
+      ) {
+        finishReason = candidateFinish;
+      }
 
       // 处理文本内容
       const text = chunk.text();
@@ -249,7 +260,35 @@ export class GeminiAdapter implements IProtocolAdapter {
       }
     }
 
-    // 收尾：闭块 → usage → finish
+    // 部分 SDK 只在聚合后的 result.response 上给 finishReason；流结束时补读一次，
+    // 避免把正常结束误判为截断。
+    if (!finishReason) {
+      try {
+        const finalResponse = await result.response;
+        const finalReason = finalResponse?.candidates?.[0]?.finishReason;
+        if (
+          finalReason &&
+          finalReason !== "FINISH_REASON_UNSPECIFIED"
+        ) {
+          finishReason = finalReason;
+        }
+      } catch {
+        // 聚合结果不可用时按截断处理
+      }
+    }
+
+    // 没有 finishReason = 流在协议终止前结束。先闭合残留块（工具参数 false），
+    // 再抛截断；绝不能合成 stop 让半截工具进入执行层。
+    if (!finishReason) {
+      for (const c of tracker.closeAll()) yield c;
+      throw new UpstreamStreamTruncatedError(
+        "Gemini stream ended without finishReason",
+        { lastEventType: "stream_end" },
+      );
+    }
+
+    // 正常收尾：先 finalize 工具参数，再闭块 → usage → finish
+    tracker.finalizeAllToolCalls();
     for (const c of tracker.closeAll()) yield c;
     // Gemini 流结束后，尝试获取 usage_metadata（缓存统计 + token 统计）
     const usageMetadata =
@@ -267,7 +306,16 @@ export class GeminiAdapter implements IProtocolAdapter {
         },
       };
     }
-    yield { type: "finish", finishReason: "stop" };
+    const normalizedFinish = finishReason.toUpperCase();
+    yield {
+      type: "finish",
+      finishReason:
+        normalizedFinish === "MAX_TOKENS"
+          ? "length"
+          : normalizedFinish === "STOP"
+            ? "stop"
+            : finishReason.toLowerCase(),
+    };
   }
 
   private buildGenerationConfig(params: LLMCompletionParams) {

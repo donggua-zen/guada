@@ -257,10 +257,10 @@ export class BlockAssembler {
                     toolCallId: partial.toolCallId,
                     name: partial.name,
                   }),
-              // 未闭合块不主动标 false：Chat/Anthropic 适配器本来就不发参数完整性
-              // 标记，若这里默认 false 会把正常工具调用全部判成截断。
-              // 只有 Responses 适配器在断流时显式发 block_end(argumentsComplete=false)
-              // 才会命中该分支。
+              // 走到这里 = 流结束前没有收到权威 block_end。所有 adapter 现在都会在
+              // 正常终止时显式 finalize 并携带 argumentsComplete=true；未闭合的
+              // 工具参数一律视为不完整，恢复层/执行层据此拒绝执行。
+              argumentsComplete: false,
             },
             partial,
           ),

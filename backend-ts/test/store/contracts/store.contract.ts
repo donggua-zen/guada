@@ -6,7 +6,7 @@
  * 领域层就不需要为新驱动做任何适配。
  *
  * 当前覆盖：
- * - `runSessionMetaContract`：会话行 CRUD、查询三态、分页 tiebreak、删除幂等
+ * - `runSessionMetaContract`：会话行 CRUD、查询三态、分页 tiebreak、子会话查询、删除幂等
  * - `runSessionGroupContract`：分组 CRUD 与解绑语义
  * - `runProjectGroupContract`：目录分组派生成员关系与启动标记
  * - `runEventLogContract`：事件追加的 seq 分配与连续性
@@ -152,17 +152,6 @@ export function runSessionMetaContract(
       for (let i = 1; i < children.length; i += 1) {
         expect(children[i].createdAt >= children[i - 1].createdAt).toBe(true);
       }
-    });
-
-    it('countByParentId 排除已冻结（closedAt 非空）子会话', async () => {
-      const parent = await driver.create({ title: 'p' });
-      await driver.create({ id: 'c1', parentId: parent.id });
-      await driver.create({
-        id: 'c2',
-        parentId: parent.id,
-        closedAt: new Date().toISOString(),
-      });
-      expect(await driver.countByParentId(parent.id)).toBe(1);
     });
 
     it('deleteRows 幂等：对不存在的 id 返回 0，不抛错', async () => {

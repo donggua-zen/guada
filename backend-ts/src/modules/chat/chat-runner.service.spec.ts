@@ -39,7 +39,7 @@ describe("ChatRunnerService.startStream 流生命周期", () => {
     streamManager = new SessionStreamManager();
     sessionService = {
       getSessionById: jest.fn().mockResolvedValue(session),
-      updateLastActiveAt: jest.fn().mockResolvedValue(undefined),
+      updateLastActiveAt: jest.fn().mockResolvedValue("2026-08-24T00:00:00.000Z"),
     };
     agentEngine = { run: jest.fn() };
     sessionContextFactory = { createFromSession: jest.fn() };
@@ -129,6 +129,9 @@ describe("ChatRunnerService.startStream 流生命周期", () => {
     expect(typeof unsubscribe).toBe("function");
     // startStream 返回时引擎在后台运行，流处于活跃态
     expect(streamManager.hasActiveStream(sessionId)).toBe(true);
+    expect(streamManager.getActiveStreams()[0].lastActiveAt).toBe(
+      "2026-08-24T00:00:00.000Z",
+    );
     expect(agentEngine.run).toHaveBeenCalledTimes(1);
 
     // 引擎正常结束 → runAgentEngine 收尾关闭流
@@ -141,5 +144,9 @@ describe("ChatRunnerService.startStream 流生命周期", () => {
       .filter((c) => c[0] === "stream.status_changed")
       .map((c) => c[1].payload.status);
     expect(statuses).toEqual(["running", "completed"]);
+    const runningEvent = eventBus.emit.mock.calls.find(
+      (call) => call[0] === "stream.status_changed" && call[1].payload.status === "running",
+    )?.[1];
+    expect(runningEvent.payload.lastActiveAt).toBe("2026-08-24T00:00:00.000Z");
   });
 });

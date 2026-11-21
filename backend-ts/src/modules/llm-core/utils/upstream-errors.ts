@@ -93,9 +93,69 @@ export class UpstreamRequestError extends UpstreamError {
 export class UpstreamStreamTruncatedError extends UpstreamError {
   /** 该错误的半截内容可以被丢弃后重试（上层据此走 discard+retry 分支） */
   readonly discardable = true;
+  /** 最后一个内容事件类型（诊断 / 恢复判定） */
+  readonly lastEventType?: string;
+  /** 协议原始 finish reason（如 max_tokens / model_context_window_exceeded） */
+  readonly rawFinishReason?: string;
+  /** 已收齐参数的工具调用 id */
+  readonly completeToolCallIds?: string[];
+  /** 参数未收齐的工具调用 id */
+  readonly incompleteToolCallIds?: string[];
 
-  constructor(message: string, cause?: any) {
-    super(message, cause);
+  constructor(
+    message: string,
+    details: {
+      cause?: any;
+      status?: number;
+      lastEventType?: string;
+      rawFinishReason?: string;
+      completeToolCallIds?: string[];
+      incompleteToolCallIds?: string[];
+    } = {},
+  ) {
+    super(message, details.cause, details.status);
     this.name = "UpstreamStreamTruncatedError";
+    this.lastEventType = details.lastEventType;
+    this.rawFinishReason = details.rawFinishReason;
+    this.completeToolCallIds = details.completeToolCallIds;
+    this.incompleteToolCallIds = details.incompleteToolCallIds;
+  }
+}
+
+/**
+ * Upstream explicitly failed the response mid-stream (Responses `response.failed`
+ * 或等价的协议错误事件)。
+ *
+ * 与 `UpstreamRequestError` 的区别：这是**流中**失败，可能已经产出了半截正文/
+ * 完整工具调用；Core Stream Recovery 需要拿到结构化 `code/param/retryable`
+ * 来决定“丢弃正文后重试”还是“直接报错”。
+ */
+export class UpstreamResponseFailedError extends UpstreamError {
+  readonly code?: string;
+  readonly param?: string;
+  readonly type?: string;
+  readonly requestId?: string;
+  /** 是否允许传输层/恢复层重试（由适配器按 code/param/message 结构化判定） */
+  readonly retryable: boolean;
+
+  constructor(
+    message: string,
+    details: {
+      code?: string;
+      param?: string;
+      type?: string;
+      requestId?: string;
+      retryable?: boolean;
+      status?: number;
+      cause?: any;
+    } = {},
+  ) {
+    super(message, details.cause, details.status);
+    this.name = "UpstreamResponseFailedError";
+    this.code = details.code;
+    this.param = details.param;
+    this.type = details.type;
+    this.requestId = details.requestId;
+    this.retryable = details.retryable === true;
   }
 }

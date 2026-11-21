@@ -45,6 +45,7 @@ describe("getToolIcon（共享语义映射）", () => {
     expect(TOOL_ICON_MAP.wrench).toBe(TOOL_ICON_MAP.generic);
     expect(TOOL_ICON_MAP.tool).toBe(TOOL_ICON_MAP.generic);
     expect(TOOL_ICON_MAP.time).not.toBe(TOOL_ICON_MAP.generic);
+    expect(TOOL_ICON_MAP.book).toBeDefined();
   });
 
   it("缺失或未知标识回退星芒；懒加载调用采用实际工具标识", () => {

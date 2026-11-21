@@ -22,7 +22,7 @@ describe('OpenAIAdapter 流式 usage', () => {
     const adapter = new OpenAIAdapter(makeCapabilityStub());
     const generator = (adapter as any).handleStreamResponse(
       stream([
-        { choices: [{ delta: { content: 'OK' }, finish_reason: null }] },
+        { choices: [{ delta: { content: 'OK' }, finish_reason: 'stop' }] },
         {
           choices: [],
           usage: {

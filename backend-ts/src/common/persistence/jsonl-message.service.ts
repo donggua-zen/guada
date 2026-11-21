@@ -391,6 +391,9 @@ export class JsonlMessageService implements IMessageStore {
       if (!turnId) return 0;
       const last = state.messages[state.messages.length - 1];
       if (!last || last.role !== 'assistant' || last.turnId !== turnId) return 0;
+      // 被流恢复丢弃的 attempt 不进上下文，不能为它的残缺工具补 result
+      // （否则会留下孤儿 tool 消息，出站时又要再被配对守卫删除）。
+      if (last.metadata?.excludedFromContext === true) return 0;
 
       const paired = new Set<string>();
       const dangling: Array<{ toolCallId: string; name: string }> = [];

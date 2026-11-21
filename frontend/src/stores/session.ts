@@ -10,6 +10,18 @@ import { resolveProjectBucketId } from '@/utils/projectGroupBucket'
  */
 export const UNGROUPED_ID = '__ungrouped__'
 
+const sessionActivityTime = (session: Pick<Session, 'lastActiveAt' | 'updatedAt'>): number => {
+    const value = session.lastActiveAt || session.updatedAt
+    const time = value ? new Date(value).getTime() : 0
+    return Number.isFinite(time) ? time : 0
+}
+
+const compareSessionsByActivity = (a: Session, b: Session): number => {
+    const timeDifference = sessionActivityTime(b) - sessionActivityTime(a)
+    if (timeDifference) return timeDifference
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+}
+
 /**
  * 会话状态 Store
  * 采用 "单一 Map + 分组视图" 架构，sessionsMap 是所有会话的唯一数据源
@@ -315,11 +327,7 @@ export const useSessionStore = defineStore('session', () => {
         const targetGroupId = groupId === UNGROUPED_ID ? null : groupId
         return Array.from(sessionsMap.value.values())
             .filter(s => (s.groupId || null) === targetGroupId && isVisibleInGroup(s))
-            .sort((a, b) => {
-                const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
-                const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
-                return timeB - timeA
-            })
+            .sort(compareSessionsByActivity)
     }
 
     /**
@@ -352,11 +360,7 @@ export const useSessionStore = defineStore('session', () => {
         return Array.from(sessionsMap.value.values())
             .filter(s => isVisibleInGroup(s)
                 && resolveProjectBucketId(s, groups) === bucketId)
-            .sort((a, b) => {
-                const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
-                const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
-                return timeB - timeA
-            })
+            .sort(compareSessionsByActivity)
     }
 
     /** 按目录桶获取可见会话（受该桶已加载数量截断） */
@@ -378,11 +382,7 @@ export const useSessionStore = defineStore('session', () => {
     const getPinnedSessions = (): Session[] => {
         return Array.from(sessionsMap.value.values())
             .filter(s => s.pinned && !s.archived && s.sessionType !== 'bot' && s.sessionType !== 'sub_agent')
-            .sort((a, b) => {
-                const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
-                const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
-                return timeB - timeA
-            })
+            .sort(compareSessionsByActivity)
     }
 
     /**
@@ -570,6 +570,21 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
+     * 枚举本地标记为流式中的会话 ID（SSE 重连/切回前台后的状态校准入口）
+     *
+     * 后台断线期间错过的终态事件（stream_status_changed: completed/error）无法靠
+     * 补发恢复（stopStream 已删缓冲），校准方需要先知道"哪些会话本地仍自认 running"。
+     * 遍历缓存 Map 即可，miss 不创建（避免无谓缓存）。
+     */
+    const streamingSessionIds = (): string[] => {
+        const ids: string[] = []
+        for (const [id, state] of sessions.value) {
+            if (state.isStreaming) ids.push(id)
+        }
+        return ids
+    }
+
+    /**
      * 会话流类型（chat=对话回合；maintenance=维护任务如手动压缩伪流）
      * 由 stream_status_changed 事件写入；loadSession 据此决定是否跳过事件页拉取
      * （maintenance 流 buffer 无回合历史，跳过会导致消息列表空白）。
@@ -595,6 +610,17 @@ export const useSessionStore = defineStore('session', () => {
         state.streamStatus = status
     }
 
+    /** 对父详情/子会话详情中的权威流状态做校准，不写主会话侧栏标记。 */
+    const applyStreamSnapshot = (sessionId: string, isStreaming: boolean, closeReason?: string | null): void => {
+        const state = getSessionState(sessionId)
+        state.isStreaming = isStreaming
+        state.streamStatus = isStreaming
+            ? 'running'
+            : closeReason && closeReason !== 'completed'
+                ? 'error'
+                : 'completed'
+    }
+
     // === 消息队列（M3：服务端快照投影） ===
     //
     // 队列所有权在后端：本文件只保存快照，所有增删改/排序/暂停都走 REST，
@@ -605,6 +631,7 @@ export const useSessionStore = defineStore('session', () => {
         return {
             id: item.id,
             content: item.content,
+            delivery: item.delivery ?? 'queue',
             files: item.files ?? [],
             ...(item.knowledgeBaseIds?.length
                 ? { knowledgeBaseIds: item.knowledgeBaseIds }
@@ -977,9 +1004,11 @@ export const useSessionStore = defineStore('session', () => {
         getEarliestTurnId,
         sessionIsStreaming,
         setSessionIsStreaming,
+        streamingSessionIds,
         setSessionStreamKind,
         sessionStreamKind,
         setStreamStatus,
+        applyStreamSnapshot,
         peekStreamStatus,
         sessionIsCompressing,
         setSessionIsCompressing,

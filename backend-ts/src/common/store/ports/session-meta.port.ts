@@ -56,8 +56,6 @@ export interface SessionMetaPort {
   ): Promise<PagedSessionRows>;
 
   childrenOf(parentId: string): Promise<SessionRow[]>;
-  /** 某父会话下活跃子会话数（排除已冻结 closedAt） */
-  countByParentId(parentId: string): Promise<number>;
   /** 按 botId + externalId 查 bot 会话（幂等映射） */
   findByBotAndExternalId(
     botId: string,
@@ -77,8 +75,8 @@ export interface SessionMetaPort {
   create(input: CreateSessionInput): Promise<SessionRow>;
   /** 部分更新（undefined 保持原值，null 显式置空）；未命中返回 null */
   update(id: string, patch: Partial<SessionRow>): Promise<SessionRow | null>;
-  /** 仅刷新最后活跃时间（每条消息一次） */
-  updateLastActiveAt(id: string): Promise<void>;
+  /** 仅刷新最后活跃时间（每条消息一次）；返回实际写入的 ISO 时间，不存在时返回 null */
+  updateLastActiveAt(id: string): Promise<string | null>;
   /** 仅回填模型引用，不触碰 updatedAt / lastActiveAt（启动迁移用） */
   backfillModelId(id: string, modelId: string): Promise<void>;
 

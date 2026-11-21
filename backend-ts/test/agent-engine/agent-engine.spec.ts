@@ -2,7 +2,11 @@
 
 import { AgentEngine } from '../../src/modules/chat/agent-engine.service';
 import type { SessionStreamEvent } from '../../src/modules/chat/types/event-chunk.types';
-import { UpstreamRateLimitError, UpstreamStreamTruncatedError } from '../../src/modules/llm-core/utils/upstream-errors';
+import {
+  UpstreamRateLimitError,
+  UpstreamResponseFailedError,
+  UpstreamStreamTruncatedError,
+} from '../../src/modules/llm-core/utils/upstream-errors';
 import { ConflictException } from '@nestjs/common';
 import { createAllMocks } from './helpers/mock-factories';
 import { loadChunksFromJsonl } from './helpers/chunk-replayer';
@@ -733,7 +737,11 @@ describe('AgentEngine - completions', () => {
       expect(appendCalls.length).toBe(1);
       const assistantMessage = appendCalls[0][0][0];
       expect(assistantMessage.metadata.excludedFromContext).toBe(true);
-      expect(assistantMessage.metadata.discardReason).toBe('stream_truncated');
+      expect(assistantMessage.metadata.discardReason).toBe('stream_recovery');
+      expect(assistantMessage.metadata.error?.name).toBe('StreamRecoveryDiscarded');
+      expect(assistantMessage.metadata.streamRecovery?.branch).toBe(
+        'no_tool_committed',
+      );
       expect(assistantMessage.content[0].argumentsComplete).toBe(false);
       // 参数保留原文，供审计
       expect(assistantMessage.content[0].arguments).toBe('{"content":"<html>abc');
@@ -744,10 +752,20 @@ describe('AgentEngine - completions', () => {
       // 复位 UI 流式态 + 发重试信号
       expect(
         events.some(
-          (e) => e.type === 'finish' && (e as any).finishReason === 'truncated',
+          (e) =>
+            e.type === 'finish' &&
+            (e as any).finishReason === 'stream_recovery_discarded',
         ),
       ).toBe(true);
-      expect(events.some((e) => e.type === 'retry')).toBe(true);
+      expect(
+        events.some(
+          (e) =>
+            e.type === 'retry' &&
+            (e as any).retrySource === 'stream_recovery' &&
+            (e as any).retryAttempt === 1 &&
+            (e as any).retryMaxAttempts === 10,
+        ),
+      ).toBe(true);
       // 重试成功，回合正常收尾（不是 error）
       expect(events.find((e) => e.type === 'turn_end')?.finishReason).not.toBe(
         'error',
@@ -835,25 +853,39 @@ describe('AgentEngine - completions', () => {
       expect(requests).toHaveLength(1);
       expect(requests[0].id).toBe('call_ok');
 
-      // 消息保留在上下文（不打 excludedFromContext）
+      // 工具结算消息只含完整工具，正文与残缺工具都被丢弃
       const appendCalls = (mocks.sessionContext.appendMessages as jest.Mock).mock.calls;
-      const assistantMessage = appendCalls[0][0][0];
-      expect(assistantMessage.metadata.excludedFromContext).toBeUndefined();
-
-      // 残缺工具得到"已跳过"结果
-      const skippedResult = appendCalls
+      const committed = appendCalls
         .flatMap((c: any[]) => c[0])
-        .find((m: any) =>
+        .find(
+          (m: any) =>
+            m.role === 'assistant' &&
+            m.content?.some((b: any) => b.type === 'tool-call'),
+        );
+      expect(committed).toBeTruthy();
+      expect(committed.metadata.excludedFromContext).toBeUndefined();
+      expect(committed.metadata.finishReason).toBe('tool-calls');
+      expect(committed.metadata.streamRecovery?.branch).toBe('tool_settlement');
+      const toolCalls = committed.content.filter(
+        (b: any) => b.type === 'tool-call',
+      );
+      expect(toolCalls).toHaveLength(1);
+      expect(toolCalls[0].toolCallId).toBe('call_ok');
+      expect(
+        committed.content.some(
+          (b: any) => b.type === 'text' || b.type === 'reasoning',
+        ),
+      ).toBe(false);
+
+      // 残缺工具 call_bad 不进入上下文，也不再生成 skipped 结果
+      const allAppended = appendCalls.flatMap((c: any[]) => c[0]);
+      expect(
+        allAppended.some((m: any) =>
           m.content?.some(
             (b: any) => b.type === 'tool-result' && b.toolCallId === 'call_bad',
           ),
-        );
-      expect(skippedResult).toBeTruthy();
-      const skippedBlock = skippedResult.content.find(
-        (b: any) => b.type === 'tool-result',
-      );
-      expect(skippedBlock.isError).toBe(true);
-      expect(skippedBlock.content).toContain('截断');
+        ),
+      ).toBe(false);
     });
 
     it('llmIncompleteOutputAction=error：断流后不重试，直接终止报错', async () => {
@@ -897,14 +929,27 @@ describe('AgentEngine - completions', () => {
       expect(mocks.publishedEvents.some((e) => e.type === 'retry')).toBe(false);
     });
 
-    it('限流以文字说明收尾：无暂停事件、turn_end=rate_limited（有部分内容时照常落库）', async () => {
+    it('流中段限流：丢弃半截正文后流恢复重试，成功后续写', async () => {
+      let calls = 0;
       const mocks = createAllMocks({
         llmGenerator: () => {
+          calls += 1;
+          if (calls === 1) {
+            return (async function* () {
+              yield { type: 'block_start', index: 0, blockType: 'text' };
+              yield { type: 'text_delta', index: 0, text: '部分内容' };
+              throw new UpstreamRateLimitError('429 Too Many Requests');
+            })();
+          }
           return (async function* () {
-            // 先产出部分内容（sawContent=true → 不重试，快速抛出），再触发限流
             yield { type: 'block_start', index: 0, blockType: 'text' };
-            yield { type: 'text_delta', index: 0, text: '部分内容' };
-            throw new UpstreamRateLimitError('429 Too Many Requests');
+            yield { type: 'text_delta', index: 0, text: '完整回答' };
+            yield {
+              type: 'block_end',
+              index: 0,
+              block: { type: 'text', text: '完整回答' },
+            };
+            yield { type: 'finish', finishReason: 'stop' };
           })();
         },
       });
@@ -920,24 +965,39 @@ describe('AgentEngine - completions', () => {
       await agentEngine.run(mocks.sessionContext, { id: 'msg-001' });
       const events = mocks.publishedEvents;
 
-      // 无暂停请求帧（rate_limited 不再触发"继续"卡，只发文字说明）
       expect(events.some((e) => e.type === 'ask_requested')).toBe(false);
-      // 回合以 rate_limited 收尾，turn_end 携带说明文字
-      const turnEnd = events.find((e) => e.type === 'turn_end');
-      expect(turnEnd?.finishReason).toBe('rate_limited');
-      expect(turnEnd?.error).toBeTruthy();
-      // 429 常见于请求阶段（模型无输出 → 空消息路径，无消息可落库）；本用例为流中段 429，
-      // 已产出的部分内容照常落库（不再对 rate_limited 做额外拦截）
-      const appended = (mocks.sessionContext.appendMessages as jest.Mock).mock.calls as any[];
-      expect(appended.length).toBe(1);
-      const persisted = appended[0][0] as any[];
+      expect(calls).toBe(2);
+      expect(events.find((e) => e.type === 'turn_end')?.finishReason).toBe(
+        'stop',
+      );
+      // 第一次尝试被标记丢弃（审计），第二次成功进入上下文
+      const appended = (mocks.sessionContext.appendMessages as jest.Mock).mock.calls.flatMap(
+        (c: any[]) => c[0],
+      );
+      const discarded = appended.find(
+        (m: any) =>
+          m.role === 'assistant' &&
+          m.metadata?.excludedFromContext === true &&
+          m.content?.some((b: any) => b.text === '部分内容'),
+      );
+      expect(discarded).toBeTruthy();
+      expect(discarded.metadata.streamRecovery?.branch).toBe(
+        'no_tool_committed',
+      );
       expect(
-        persisted.some(
-          (m) =>
+        appended.some(
+          (m: any) =>
             m.role === 'assistant' &&
-            m.content?.some(
-              (b: any) => b.type === 'text' && b.text === '部分内容',
-            ),
+            m.metadata?.excludedFromContext !== true &&
+            m.content?.some((b: any) => b.text === '完整回答'),
+        ),
+      ).toBe(true);
+      expect(
+        events.some(
+          (e) =>
+            e.type === 'retry' &&
+            (e as any).retrySource === 'stream_recovery' &&
+            (e as any).retryAttempt === 1,
         ),
       ).toBe(true);
     });
@@ -968,6 +1028,204 @@ describe('AgentEngine - completions', () => {
       );
       expect(errorEvent).toBeDefined();
       expect(errorEvent?.error).toContain('API error');
+    });
+  });
+
+  describe('Output Length Continuation', () => {
+    function makeEngine(mocks: ReturnType<typeof createAllMocks>) {
+      return new AgentEngine(
+        mocks.toolExecutor as any,
+        mocks.llmService as any,
+        {
+          serial: jest.fn(
+            async (_e: string, _p: unknown, fallback: () => unknown) =>
+              fallback(),
+          ),
+          parallel: jest.fn(async () => []),
+        } as any,
+      );
+    }
+
+    it('length 无工具：保留正文、追加隐藏续写消息、第二次成功', async () => {
+      let calls = 0;
+      const mocks = createAllMocks({
+        llmGenerator: () => {
+          calls += 1;
+          if (calls === 1) {
+            return (async function* () {
+              yield { type: 'block_start', index: 0, blockType: 'text' };
+              yield { type: 'text_delta', index: 0, text: '前半段' };
+              yield {
+                type: 'block_end',
+                index: 0,
+                block: { type: 'text', text: '前半段' },
+              };
+              yield { type: 'finish', finishReason: 'length' };
+            })();
+          }
+          return (async function* () {
+            yield { type: 'block_start', index: 0, blockType: 'text' };
+            yield { type: 'text_delta', index: 0, text: '后半段' };
+            yield {
+              type: 'block_end',
+              index: 0,
+              block: { type: 'text', text: '后半段' },
+            };
+            yield { type: 'finish', finishReason: 'stop' };
+          })();
+        },
+      });
+
+      await makeEngine(mocks).run(mocks.sessionContext, { id: 'msg-001' });
+
+      const events = mocks.publishedEvents;
+      expect(calls).toBe(2);
+      expect(events.find((e) => e.type === 'turn_end')?.finishReason).toBe(
+        'stop',
+      );
+      expect(
+        events.some(
+          (e) =>
+            e.type === 'retry' &&
+            (e as any).retrySource === 'output_continuation' &&
+            (e as any).retryAttempt === 1 &&
+            (e as any).retryMaxAttempts === 3,
+        ),
+      ).toBe(true);
+
+      const appended = (
+        mocks.sessionContext.appendMessages as jest.Mock
+      ).mock.calls.flatMap((c: any[]) => c[0]);
+      const continuation = appended.find(
+        (m: any) => m.metadata?.queryScope === 'output_token_continuation',
+      );
+      expect(continuation).toBeTruthy();
+      expect(continuation.metadata.hidden).toBe(true);
+      expect(continuation.content[0].text).toContain('Resume directly');
+      const assistants = appended.filter(
+        (m: any) => m.role === 'assistant',
+      );
+      expect(assistants).toHaveLength(2);
+      expect(assistants.every((m: any) => m.metadata?.excludedFromContext !== true))
+        .toBe(true);
+    });
+
+    it('第 4 次 length：保留正文并以 output token maximum 报错', async () => {
+      let calls = 0;
+      const mocks = createAllMocks({
+        llmGenerator: () => {
+          calls += 1;
+          return (async function* () {
+            yield { type: 'block_start', index: 0, blockType: 'text' };
+            yield { type: 'text_delta', index: 0, text: `第${calls}段` };
+            yield {
+              type: 'block_end',
+              index: 0,
+              block: { type: 'text', text: `第${calls}段` },
+            };
+            yield { type: 'finish', finishReason: 'length' };
+          })();
+        },
+      });
+
+      await makeEngine(mocks).run(mocks.sessionContext, { id: 'msg-001' });
+
+      const events = mocks.publishedEvents;
+      expect(calls).toBe(4);
+      const turnEnd = events.find((e) => e.type === 'turn_end');
+      expect(turnEnd?.finishReason).toBe('error');
+      expect(turnEnd?.error).toContain('output token maximum');
+    });
+  });
+
+  describe('Response Failed Recovery', () => {
+    function makeEngine(mocks: ReturnType<typeof createAllMocks>) {
+      return new AgentEngine(
+        mocks.toolExecutor as any,
+        mocks.llmService as any,
+        {
+          serial: jest.fn(
+            async (_e: string, _p: unknown, fallback: () => unknown) =>
+              fallback(),
+          ),
+          parallel: jest.fn(async () => []),
+        } as any,
+      );
+    }
+
+    it('不可重试的 response.failed：丢弃半截正文并直接报错', async () => {
+      const mocks = createAllMocks({
+        llmGenerator: () =>
+          (async function* () {
+            yield { type: 'block_start', index: 0, blockType: 'text' };
+            yield { type: 'text_delta', index: 0, text: '半截正文' };
+            throw new UpstreamResponseFailedError('invalid url', {
+              code: 'invalid_value',
+              param: 'url',
+              retryable: false,
+            });
+          })(),
+      });
+
+      await makeEngine(mocks).run(mocks.sessionContext, { id: 'msg-001' });
+
+      const events = mocks.publishedEvents;
+      expect(events.find((e) => e.type === 'turn_end')?.finishReason).toBe(
+        'error',
+      );
+      const appended = (
+        mocks.sessionContext.appendMessages as jest.Mock
+      ).mock.calls.flatMap((c: any[]) => c[0]);
+      const audit = appended.find(
+        (m: any) => m.role === 'assistant' && m.metadata?.excludedFromContext,
+      );
+      expect(audit).toBeTruthy();
+      expect(audit.metadata.discardReason).toBe('stream_failed');
+      expect(audit.metadata.streamRecovery?.branch).toBe('no_tool_committed');
+    });
+
+    it('可重试的 response.failed：丢弃半截正文后恢复成功', async () => {
+      let calls = 0;
+      const mocks = createAllMocks({
+        llmGenerator: () => {
+          calls += 1;
+          if (calls === 1) {
+            return (async function* () {
+              yield { type: 'block_start', index: 0, blockType: 'text' };
+              yield { type: 'text_delta', index: 0, text: '半截正文' };
+              throw new UpstreamResponseFailedError('upstream timeout', {
+                code: 'server_error',
+                retryable: true,
+              });
+            })();
+          }
+          return (async function* () {
+            yield { type: 'block_start', index: 0, blockType: 'text' };
+            yield { type: 'text_delta', index: 0, text: '恢复后的回答' };
+            yield {
+              type: 'block_end',
+              index: 0,
+              block: { type: 'text', text: '恢复后的回答' },
+            };
+            yield { type: 'finish', finishReason: 'stop' };
+          })();
+        },
+      });
+
+      await makeEngine(mocks).run(mocks.sessionContext, { id: 'msg-001' });
+
+      const events = mocks.publishedEvents;
+      expect(calls).toBe(2);
+      expect(events.find((e) => e.type === 'turn_end')?.finishReason).toBe(
+        'stop',
+      );
+      expect(
+        events.some(
+          (e) =>
+            e.type === 'retry' &&
+            (e as any).retrySource === 'stream_recovery',
+        ),
+      ).toBe(true);
     });
   });
 

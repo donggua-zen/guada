@@ -97,7 +97,7 @@
                     :promoting-id="queuePromotionId" :can-move-up="canMoveQueuedUp"
                     :can-move-down="canMoveQueuedDown" @edit="handleEditQueued" @remove="handleRemoveQueued"
                     @retry="handleRetryQueued" @continue="handleContinueQueue" @pause="handlePauseQueue"
-                    @send-now="handleSendNow" @move="handleMoveQueued" />
+                    @send-now="handleSendNow" @move="handleMoveQueued" @set-delivery="handleSetQueueDelivery" />
                 </div>
               </Transition>
 
@@ -2294,6 +2294,8 @@ async function handleSendMessage(payload?: InputMessageState) {
         ...(Object.keys(settingsOverride).length > 0
           ? { settingsOverride }
           : {}),
+        // 忙碌时的投递时机（queue/inject/interrupt）；空闲时后端忽略。
+        ...(data.delivery ? { delivery: data.delivery } : {}),
       };
       const response = props.sendHandler
         ? await props.sendHandler(payload)
@@ -2415,6 +2417,17 @@ async function handleMoveQueued(id: string, direction: -1 | 1) {
   const sid = currentSessionId.value;
   try {
     const snapshot = await apiService.reorderSessionQueue(sid, id, direction);
+    sessionStore.applyQueueSnapshot(sid, snapshot);
+  } catch (error) {
+    reportQueueError(error);
+  }
+}
+
+async function handleSetQueueDelivery(id: string, mode: 'queue' | 'inject' | 'interrupt') {
+  if (!currentSessionId.value) return;
+  const sid = currentSessionId.value;
+  try {
+    const snapshot = await apiService.setSessionQueueItemDelivery(sid, id, mode);
     sessionStore.applyQueueSnapshot(sid, snapshot);
   } catch (error) {
     reportQueueError(error);

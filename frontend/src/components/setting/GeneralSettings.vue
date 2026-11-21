@@ -235,7 +235,7 @@ const debouncedSave = useDebounceFn(async () => {
 }, 300)
 
 // 监听设置变化自动保存
-watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs, keepAwakeMode: settingsForm.keepAwakeMode, shellBackend: settingsForm.shellBackend }), () => {
+watch(() => ({ workspaceBaseDir: settingsForm.workspaceBaseDir, chatUploadSubdir: settingsForm.chatUploadSubdir, kbStorageRoot: settingsForm.kbStorageRoot, llmRequestTimeoutMs: settingsForm.llmRequestTimeoutMs, llmIdleTimeoutMs: settingsForm.llmIdleTimeoutMs, llmIncompleteOutputAction: settingsForm.llmIncompleteOutputAction, keepAwakeMode: settingsForm.keepAwakeMode, shellBackend: settingsForm.shellBackend }), () => {
   debouncedSave()
 }, { deep: true })
 

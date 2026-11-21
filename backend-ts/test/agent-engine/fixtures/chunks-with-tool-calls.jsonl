@@ -102,5 +102,6 @@
 {"type": "tool_call_delta", "index": 2, "argumentsDelta": "}"}
 {"type": "block_end", "index": 0, "block": {"type": "reasoning", "contentId": "", "summary": "用户想要测试工具的多路并发稳定性，需要：\n1. 使用文件工具写入5个文件（test1.txt ~ test5.txt）\n2. 使用文件工具并发读取这5个文件\n3. 使用命令行工具并发读取这5个文件\n\n首先我需要加载文件工具集来了解如何使用文件操作工具。\n\n让我先加载文件工具。"}}
 {"type": "block_end", "index": 1, "block": {"type": "text", "contentId": "", "text": "好的！我先加载文件工具集的用法，然后进行并发测试。"}}
+{"type": "block_end", "index": 2, "block": {"type": "tool-call", "contentId": "", "toolCallId": "call_00_OqvDAfT37BtLapqkSQTX2479", "name": "tool_load", "arguments": "{\"namespace\": \"file\"}", "argumentsComplete": true}}
 {"type": "usage", "usage": {"promptTokens": 4057, "completionTokens": 132, "totalTokens": 4189}}
 {"type": "finish", "finishReason": "tool_calls"}

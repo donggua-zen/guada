@@ -1,5 +1,5 @@
 import type { ApiContext } from "./api-context";
-import type { UserQueueSnapshot } from "@/types/session";
+import type { UserQueueSnapshot, DeliveryMode } from "@/types/session";
 
 /**
  * 会话级用户输入队列（M3：队列所有权在后端）
@@ -16,6 +16,11 @@ export interface SessionQueueApi {
   sendSessionQueueItemNow(
     sessionId: string,
     itemId: string,
+  ): Promise<UserQueueSnapshot>;
+  setSessionQueueItemDelivery(
+    sessionId: string,
+    itemId: string,
+    mode: DeliveryMode,
   ): Promise<UserQueueSnapshot>;
   reorderSessionQueue(
     sessionId: string,
@@ -52,6 +57,18 @@ export const sessionQueueApi: SessionQueueApi = {
     return await this._request<UserQueueSnapshot>(
       `/sessions/${sessionId}/queue/${itemId}/send-now`,
       { method: "POST" },
+    );
+  },
+
+  async setSessionQueueItemDelivery(
+    this: ApiContext,
+    sessionId: string,
+    itemId: string,
+    mode: DeliveryMode,
+  ) {
+    return await this._request<UserQueueSnapshot>(
+      `/sessions/${sessionId}/queue/${itemId}/delivery`,
+      { method: "POST", data: { mode } },
     );
   },
 

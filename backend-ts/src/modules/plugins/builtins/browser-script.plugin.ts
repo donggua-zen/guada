@@ -168,14 +168,16 @@ The script may use top-level await and must end with \`return <JSON-serializable
   }
 
   /**
-   * 旧扁平浏览器插件退役后，子代理关闭时的浏览器标签清理迁到这里。
+   * 旧扁平浏览器插件退役后，子代理运行结束时的浏览器标签清理迁到这里。
    * 脚本的 created_by 仍是实际会话 id，因此 browser_close_by_creator 可直接命中。
+   *
+   * 挂「运行结束」而非「会话关闭」：会话没有关闭态，标签属于这一次运行。
    */
-  @OnEvent("subagent.closed")
-  async handleSubAgentClosed(event: any): Promise<void> {
+  @OnEvent("subagent.run_ended")
+  async handleSubAgentRunEnded(event: any): Promise<void> {
     const subSessionId = event?.payload?.subSessionId;
     if (!subSessionId) return;
-    this.logger.log(`子 Agent ${subSessionId} 已关闭，清理其浏览器标签`);
+    this.logger.log(`子 Agent ${subSessionId} 运行结束，清理其浏览器标签`);
     try {
       await this.bridgeClient.request("browser_close_by_creator", {
         created_by: subSessionId,

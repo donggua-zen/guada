@@ -580,6 +580,10 @@ export class SessionService {
 
     return {
       ...session,
+      // 顶层必须注入:前端 SSE 重连后的状态校准(useSessionEvents.resyncStreamingSessions)
+      // 以"单会话详情是否仍返回 isStreaming"判断回合是否已结束——漏掉会导致切后台回来
+      // 后界面永久卡在 running(列表端点均注入,此处保持契约一致)。
+      isStreaming: this.streamManager.hasActiveStream(sessionId),
       agent: session.agent
         ? {
             ...session.agent,
@@ -1079,7 +1083,7 @@ export class SessionService {
       );
     }
 
-    // 子会话（子代理 / workflow 成员，含已冻结的）随主会话一并删除：
+    // 子会话（子代理 / workflow 成员，含已结束的）随主会话一并删除：
     // 子会话通过 parentId 关联；只删主会话会让它们变成孤儿，因此一并清理。
     // 先取消并清理父/子会话的后台作业，避免删除后 job 仍尝试投递到不存在的会话。
     if (this.jobRegistry) {
@@ -1651,7 +1655,7 @@ ${diffText}
   /**
    * 更新会话最后活跃时间
    */
-  async updateLastActiveAt(sessionId: string) {
+  async updateLastActiveAt(sessionId: string): Promise<string | null> {
     return await this.sessionStore.updateLastActiveAt(sessionId);
   }
 

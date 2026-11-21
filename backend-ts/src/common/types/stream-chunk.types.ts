@@ -5,7 +5,8 @@
  * - 块生命周期三段式：block_start 开块 → *_delta 增量 → block_end 闭块（携带组装完成的权威块）
  * - index 为一次 LLM 调用内的块序号；同一 index 的 start/delta/end 归属同一个块
  * - usage 固定先于 finish；finish 是终端事件，之后不得再有 chunk
- * - 失败不抛异常穿越流：统一折叠为终端 finish（finishReason='error' | 'aborted' 等）
+ * - 失败以 typed error 抛出（UpstreamStreamTruncatedError / UpstreamResponseFailedError），
+ *   由 agent 层的 Core Stream Recovery 决定丢弃/结算/终止；不再把失败伪装成 finish
  */
 
 import type { ContentBlock, ContentBlockType } from "./conversation.types";

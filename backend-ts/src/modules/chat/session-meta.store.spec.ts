@@ -305,8 +305,9 @@ describe("SessionMetaStore", () => {
       const row = await store.create({ title: "热写" });
       const before = (await store.getMeta(String(row.id)))!;
       await new Promise((r) => setTimeout(r, 10));
-      await store.updateLastActiveAt(String(row.id));
+      const persistedLastActiveAt = await store.updateLastActiveAt(String(row.id));
       const after = (await store.getMeta(String(row.id)))!;
+      expect(persistedLastActiveAt).toBe(after.lastActiveAt);
       expect(after.lastActiveAt! > before.lastActiveAt!).toBe(true);
       expect(after.updatedAt > before.updatedAt).toBe(true);
     });
@@ -491,10 +492,6 @@ describe("SessionMetaStore", () => {
       const children = await store.childrenOf("a1");
       expect(children.map((c) => c.id)).toEqual(["s1", "s2"]);
       expect(toRow(children[0]).createdAt).toBeInstanceOf(Date);
-    });
-
-    it("countByParentId 排除已冻结（closedAt 非空）子会话", async () => {
-      expect(await store.countByParentId("a1")).toBe(1);
     });
 
     it("updatedDesc 排序（归档列表用）", async () => {

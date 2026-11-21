@@ -147,15 +147,39 @@ export class SessionsController {
   async archiveSession(
     @Param("id") id: string,
     @Body() data: { archived: boolean },
+    @Headers("x-client-id") clientId: string,
   ) {
-    return this.sessionService.archiveSession(id, data.archived);
+    const result = await this.sessionService.archiveSession(id, data.archived);
+    if (result.session) {
+      this.eventBus.emit("session.updated", {
+        sessionId: id,
+        timestamp: new Date().toISOString(),
+        source: clientId || undefined,
+        payload: { session: result.session },
+      });
+    }
+    return result;
   }
 
   @Post("sessions/batch-archive")
   async batchArchiveSessions(
     @Body() data: { sessionIds: string[]; archived: boolean },
+    @Headers("x-client-id") clientId: string,
   ) {
-    return this.sessionService.batchArchiveSessions(data.sessionIds, data.archived);
+    const result = await this.sessionService.batchArchiveSessions(data.sessionIds, data.archived);
+    for (const id of data.sessionIds) {
+      if (result.skipped.includes(id)) continue;
+      const session = await this.sessionService.getSessionById(id);
+      if (session) {
+        this.eventBus.emit("session.updated", {
+          sessionId: id,
+          timestamp: new Date().toISOString(),
+          source: clientId || undefined,
+          payload: { session },
+        });
+      }
+    }
+    return result;
   }
 
   @Post("sessions")

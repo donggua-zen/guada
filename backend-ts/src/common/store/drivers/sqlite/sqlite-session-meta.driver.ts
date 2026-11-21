@@ -323,18 +323,6 @@ export class SqliteSessionMetaDriver implements SessionMetaPort, OnModuleDestroy
     return this.query({ parentId }, 'createdAsc');
   }
 
-  /** 某父会话下活跃子会话数（排除已冻结 closedAt）——子代理名额上限依据 */
-  async countByParentId(parentId: string): Promise<number> {
-    if (!this.db) return 0;
-    return (
-      this.db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM sessions WHERE parent_id = ? AND closed_at IS NULL`,
-        )
-        .get(parentId) as { n: number }
-    ).n;
-  }
-
   /** 按 botId + externalId 查 bot 会话（复合索引；幂等映射） */
   async findByBotAndExternalId(
     botId: string,
@@ -498,14 +486,15 @@ export class SqliteSessionMetaDriver implements SessionMetaPort, OnModuleDestroy
     return merged;
   }
 
-  /** 仅刷新最后活跃时间（每条消息一次；单字段 UPDATE） */
-  async updateLastActiveAt(id: string): Promise<void> {
+  /** 仅刷新最后活跃时间（每条消息一次；返回实际写入的时间戳） */
+  async updateLastActiveAt(id: string): Promise<string | null> {
     await this.startup();
-    if (!this.db || !this.readMeta(id)) return;
+    if (!this.db || !this.readMeta(id)) return null;
     const now = new Date().toISOString();
     this.db
       .prepare(`UPDATE sessions SET updated_at = ?, last_active_at = ? WHERE id = ?`)
       .run(now, now, id);
+    return now;
   }
 
   /**

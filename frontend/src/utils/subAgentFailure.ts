@@ -24,7 +24,12 @@ function responseText(response?: Partial<ToolCallResponseEntry> | null): string 
   }
 }
 
-/** 插件状态标签 `[Sub-agent ended with error. Reason: X. One-shot sub-agent auto-closed.]` → X */
+/**
+ * 插件状态标签 `[Sub-agent ended with error. Reason: X.]` → X
+ *
+ * 同时兼容历史会话里带 `One-shot sub-agent auto-closed.` / `Sub-agent auto-closed.`
+ * 尾缀的旧文案（旧日志永不重写，解析必须容错）。
+ */
 function reasonFromTag(text: string): string | undefined {
   const tag = /\[Sub-agent [^\]]*\]/.exec(text)?.[0];
   if (!tag) return undefined;
@@ -32,7 +37,10 @@ function reasonFromTag(text: string): string | undefined {
   if (!afterReason) return undefined;
   return (
     afterReason
-      .replace(/\.?\s*(?:One-shot sub-agent auto-closed|Session ID:\s*\S+?)\.?\]?$/, '')
+      .replace(
+        /\.?\s*(?:One-shot sub-agent auto-closed|Sub-agent auto-closed|Session ID:\s*\S+?)\.?\]?$/,
+        '',
+      )
       .trim() || undefined
   );
 }
