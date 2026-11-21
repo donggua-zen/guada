@@ -26,6 +26,14 @@ export const HOOKS = {
   // ── agent 生命周期钩子 ──
   /** 每步请求派生前（副作用管线：压缩等订阅者原地改写会话存储后放行） */
   PRE_STEP: 'agent.pre_step',
+  /**
+   * 工具批次结束、下一次请求前的交接点（parallel 收集，不短路）。
+   *
+   * 用于"在边界结束本回合、以新回合送达消息"的投递时机（DeliveryMode=inject）。
+   * 与 PRE_STEP 分开：PRE_STEP 是 serial 副作用管线（压缩订阅者依赖其放行语义），
+   * 若把交接决策挂在那里会按注册顺序抢掉压缩。
+   */
+  STEP_HANDOFF: 'agent.step_handoff',
   /** 模型请求失败后（决策：返回 { kind:'retry' } 重试，undefined 保留错误） */
   REQUEST_ERROR: 'agent.request_error',
   // ── 回合生命周期钩子（parallel 收集：全部订阅者续跑消息并集）──
@@ -56,6 +64,23 @@ export interface PreStepPayload {
   sessionContext: ISessionContext;
   abortSignal?: AbortSignal;
 }
+
+// ─── STEP_HANDOFF ───
+
+export interface StepHandoffPayload {
+  sessionContext: ISessionContext;
+  /** 已完成的循环迭代数（回合首个请求为 1，尚无工具批次） */
+  iterationCount: number;
+  /** 上一迭代是否真的执行过工具批次（决定是否处于"工具跑完、该发下一次请求"的边界） */
+  completedToolBatch: boolean;
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * 边界交接决策：任一订阅者返回 handoff 即结束本回合（不影响其他订阅者的副作用）。
+ * 消息不在该点写入，由队列在新回合启动时落库并广播。
+ */
+export type StepHandoffDecision = { kind: 'handoff' } | undefined;
 
 // ─── REQUEST_ERROR ───
 

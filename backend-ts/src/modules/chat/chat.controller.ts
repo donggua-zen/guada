@@ -19,6 +19,10 @@ import { AuthGuard } from "../auth/auth.guard";
 
 import { SessionService } from "./session.service";
 import { FileRef } from "../../common/types/conversation.types";
+import {
+  normalizeDeliveryMode,
+  type DeliveryMode,
+} from "../../common/types/delivery.types";
 import { Response, Request } from "express";
 import { SessionStreamManager } from "./session-stream.manager";
 import { ChatRunnerService } from "./chat-runner.service";
@@ -72,6 +76,8 @@ export class ChatController {
        * 白名单校验见 types/turn-settings-override.ts。
        */
       settingsOverride?: Record<string, unknown>;
+      /** 忙碌时的投递时机：queue（默认）/ inject（工具边界接管）/ interrupt（立即打断） */
+      delivery?: string;
     },
     @Res() res: Response,
     @Req() req: Request,
@@ -83,7 +89,9 @@ export class ChatController {
       resumeData,
       userMessage,
       settingsOverride: rawSettingsOverride,
+      delivery: rawDelivery,
     } = body;
+    const delivery = normalizeDeliveryMode(rawDelivery);
 
     // `/workflow [任务]` 统一规范化为标签，交给 TagParserPipeline 注入显式请求说明。
     // 与本地控制命令（/compact）不同：这里不拦截回合，只改写标记后继续正常建流，
@@ -194,10 +202,11 @@ export class ChatController {
     const canQueueUserInput = !!(
       userMessage?.content?.trim() || userMessage?.files?.length
     );
-    const enqueueUserInput = () =>
+    const enqueueUserInput = (delivery?: DeliveryMode) =>
       this.userInputQueue.enqueue({
         sessionId,
         content: userMessage?.content ?? "",
+        ...(delivery ? { delivery } : {}),
         ...(userMessage?.files?.length ? { files: userMessage.files } : {}),
         ...(source.injectedBlocks?.length
           ? { injectedBlocks: source.injectedBlocks }
@@ -213,13 +222,19 @@ export class ChatController {
       });
 
     // M3：会话忙碌时用户消息不再 409，而是进入后端用户队列（多窗口共用一条 FIFO）。
+    // delivery 决定投递时机：queue（默认）/ inject（工具边界接管）/ interrupt（立即打断）。
     if (canQueueUserInput && this.streamManager.hasActiveStream(sessionId)) {
-      const { item, snapshot } = enqueueUserInput();
+      const { item, snapshot } = enqueueUserInput(delivery);
+      if (delivery === "interrupt") {
+        // 立即打断：入队后立刻中止当前回合，终态结算会消费该队首项开新回合。
+        await this.chatRunner.sendQueuedNow(sessionId, item.id);
+      }
       if (!res.writableEnded) {
         res.status(200).json({
           ok: true,
           queued: true,
           itemId: item.id,
+          delivery,
           revision: snapshot.revision,
           epoch: snapshot.epoch,
         });
@@ -255,7 +270,7 @@ export class ChatController {
         canQueueUserInput &&
         (code === "SESSION_BUSY" || code === "STREAM_START_FAILED")
       ) {
-        const { item, snapshot } = enqueueUserInput();
+        const { item, snapshot } = enqueueUserInput(delivery);
         if (!res.writableEnded) {
           res.status(200).json({
             ok: true,

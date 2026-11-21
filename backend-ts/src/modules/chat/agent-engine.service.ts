@@ -49,6 +49,7 @@ import { PluginManager } from "../plugins/plugin.manager";
 import {
   HOOKS,
   type RequestErrorAction,
+  type StepHandoffDecision,
   type TurnStoppingDecision,
   type TurnStoppingPayload,
 } from "./types/hooks.contract";
@@ -468,6 +469,12 @@ export class AgentEngine {
     let loopStartTime = Date.now();
     // 工具调用轮次计数器
     let iterationCount = 0;
+    /**
+     * 上一迭代是否真的执行过工具批次。
+     * 只有为 true 时才处于「工具跑完、本该发起下一次请求」的边界，
+     * 这是 inject 投递（结束本回合、开新回合）的唯一合法时机。
+     */
+    let completedToolBatch = false;
     // 回合拦截器触发次数（防止无限循环）
     let interceptorCount = 0;
     const MAX_INTERCEPTOR_ITERATIONS = 3;
@@ -580,6 +587,9 @@ export class AgentEngine {
       needToContinue = false;
       let skipLLMCall = false;
       lastRequestMedia = undefined;
+      // 本迭代读取后立即复位：工具批次标记只对"紧接着的这一次请求前"有效。
+      const atToolBoundary = completedToolBatch;
+      completedToolBatch = false;
       // 每轮重置本轮错误：上游断流等错误只属于当轮。若不清空，某一轮失败后
       // 后续轮次即便成功，finalError 仍带着旧消息 → turn/finish 被误标 network_error。
       // 真正需要上报的错误在下方 catch 里重新赋值。
@@ -596,6 +606,29 @@ export class AgentEngine {
           { sessionContext, abortSignal },
           () => undefined,
         );
+      }
+
+      // 边界交接：工具批次已执行完、即将发起下一次请求。
+      // 若队列里有 inject 投递的消息，在这里结束本回合（正常收口），
+      // 由 chat-runner 在 turn_finished 后以新回合发送——不注入当前请求。
+      if (atToolBoundary && !abortSignal?.aborted) {
+        const decisions = await this.eventBus.parallel<StepHandoffDecision>(
+          HOOKS.STEP_HANDOFF,
+          {
+            sessionContext,
+            iterationCount,
+            completedToolBatch: true,
+            abortSignal,
+          },
+        );
+        if (decisions.some((d) => d?.kind === "handoff")) {
+          businessReason = "handoff";
+          needToContinue = false;
+          this.logger.log(
+            `[handoff] 回合在工具边界交接: session=${sessionContext.sessionId} iteration=${iterationCount}`,
+          );
+          break;
+        }
       }
 
       // 副作用后重读完整请求消息列表（含 system prompt、摘要和历史）——压缩等已生效
@@ -1062,6 +1095,9 @@ export class AgentEngine {
               pendingFollowUpInput = execResult.followUpUserInput;
             } else {
               needToContinue = true;
+              // 本迭代真的执行过工具 → 下一次迭代开头就是「工具跑完、该发下一次请求」的边界，
+              // 也是 inject 投递唯一合法的交接点。
+              if (appendedResults.length > 0) completedToolBatch = true;
             }
           }
         }

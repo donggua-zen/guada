@@ -20,6 +20,11 @@ import {
   UserInputQueueService,
   type UserQueueSnapshot,
 } from "./user-input-queue.service";
+import {
+  HOOKS,
+  type StepHandoffDecision,
+  type StepHandoffPayload,
+} from "./types/hooks.contract";
 
 /**
  * 流订阅回调
@@ -231,8 +236,8 @@ export class ChatRunnerService {
     // 基准取自「上一条仍在历史里的用户消息」的 metadata.sshBindings，重答/删轮次后自动重新判定，
     // 不再依赖会话级 lastInjectedIds 记账（那份记账不会随消息删除回退）。
 
-    // 更新会话最后活跃时间，用于会话管理和清理策略
-    await this.sessionService.updateLastActiveAt(sessionId);
+    // 更新会话最后活跃时间；返回值就是持久化的排序时间，随 running 事件透传。
+    const lastActiveAt = await this.sessionService.updateLastActiveAt(sessionId);
 
     const hasActiveStream = this.streamManager.hasActiveStream(sessionId);
 
@@ -259,7 +264,13 @@ export class ChatRunnerService {
     // 启动新流
     const abortController = new AbortController();
 
-    const started = this.streamManager.startStream(sessionId, abortController);
+    const started = this.streamManager.startStream(
+      sessionId,
+      abortController,
+      "chat",
+      sessionContext.sessionType,
+      lastActiveAt,
+    );
     if (!started) {
       throw new HttpException(
         { error: "Session is busy", code: "STREAM_START_FAILED" },
@@ -301,6 +312,7 @@ export class ChatRunnerService {
         regenerationMode,
         resumeData,
         clientId,
+        lastActiveAt,
       ).catch((error) => {
         this.logger.error(`Agent engine error stack:`, error?.stack);
         this.streamManager.publish(sessionId, {
@@ -473,6 +485,10 @@ export class ChatRunnerService {
           ...(head.replaceTurnId
             ? { replaceTurnId: head.replaceTurnId }
             : {}),
+          // 来源随队列项一起透传：coordinator（主代理）与 user（人类）走同一路径，
+          // 只有 source.kind 不同 → 前端据此渲染「主代理补充指令」而不是用户气泡。
+          ...(head.messageSource ? { source: head.messageSource } : {}),
+          ...(head.messageMetadata ? { metadata: head.messageMetadata } : {}),
         },
         settingsOverride: head.settingsOverride,
         source: {
@@ -504,6 +520,22 @@ export class ChatRunnerService {
   }
 
   /**
+   * 边界接管决策（STEP_HANDOFF，parallel 收集）：队首是 inject 项时，
+   * 结束本回合，让 turn_finished 后的队列消费以新回合发送它。
+   *
+   * 不在这里写消息：inject 语义是"新回合"，不是注入当前请求。
+   */
+  @OnEvent(HOOKS.STEP_HANDOFF)
+  handleStepHandoff(payload: StepHandoffPayload): StepHandoffDecision {
+    if (payload.abortSignal?.aborted) return undefined;
+    if (!payload.completedToolBatch) return undefined;
+    if (!this.userInputQueue.hasPendingInject(payload.sessionContext.sessionId)) {
+      return undefined;
+    }
+    return { kind: "handoff" };
+  }
+
+  /**
    * 立即发送：把目标提升到队首；有活跃流时先停当前回合，
    * 终态结算里消费 promotion 后恢复消费（不再因 user_cancel 暂停）。
    */
@@ -511,6 +543,8 @@ export class ChatRunnerService {
     sessionId: string,
     itemId: string,
   ): Promise<UserQueueSnapshot> {
+    // 立即打断 = interrupt 投递：提升到队首 + 中止当前回合。
+    this.userInputQueue.setDelivery(sessionId, itemId, "interrupt");
     const snapshot = this.userInputQueue.requestSendNow(sessionId, itemId);
     if (this.streamManager.hasActiveStream(sessionId)) {
       this.streamManager.abortStream(sessionId);
@@ -831,6 +865,7 @@ export class ChatRunnerService {
     regenerationMode: string = "overwrite",
     resumeData?: any,
     clientId?: string,
+    lastActiveAt?: string | null,
   ): Promise<void> {
     const sessionId = sessionContext.sessionId;
     let finalReason: string | undefined;
@@ -844,6 +879,7 @@ export class ChatRunnerService {
         source: clientId,
         payload: {
           status: "running",
+          lastActiveAt,
           workspacePath: sessionContext.workspacePath,
           sessionType: sessionContext.sessionType,
         },
@@ -935,7 +971,14 @@ export class ChatRunnerService {
         });
       }
 
-      const NORMAL_FINISH = new Set(["stop", undefined, "plan_rejected"]);
+      const NORMAL_FINISH = new Set([
+        "stop",
+        undefined,
+        "plan_rejected",
+        // 工具边界交接（DeliveryMode=inject）：本回合主动让位给排队消息，
+        // 属于正常收尾——不触发退避重试，也不暂停队列。
+        "handoff",
+      ]);
       const normalFinish = NORMAL_FINISH.has(finalReason);
 
       // 用户队列先结算：正常收尾自动发下一条；停止/出错则暂停等用户操作；

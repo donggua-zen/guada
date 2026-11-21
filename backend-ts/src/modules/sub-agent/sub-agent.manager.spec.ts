@@ -9,9 +9,10 @@ import { SubAgentManager, SubAgentResult } from "./sub-agent.manager";
  * SubAgentManager 生命周期契约测试
  *
  * 重点覆盖 workflow 路径（spawnForWorkflow）：该路径绕过 executeSubAgentStream
- * 与 settle，是唯一没有自动清理调用点的分支，必须在本轮结束后自行冻结子会话。
- * 否则子会话永不写 closedAt，被 countByParentId 持续计入 spawn() 的每父会话
- * 10 个子代理名额，最终让普通 subagent_spawn 报错。
+ * 与 settle，是唯一没有收尾调用点的分支，必须在本轮结束后自行记录运行结束时间。
+ *
+ * 注意语义：子代理会话没有「关闭/冻结」态。closedAt 只是「最近一次运行结束时间」，
+ * 写入它不影响会话能否继续交互——sendMessage 无需解冻即可直接开新回合。
  */
 describe("SubAgentManager workflow 子代理生命周期", () => {
   let tmpRoot: string;
@@ -49,6 +50,12 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
         subSessionId: args[0] as string,
       }));
 
+  /** 该父会话下已记录运行结束的子会话数（替代旧 countByParentId 配额断言） */
+  const endedChildCount = async (): Promise<number> => {
+    const children = await store.childrenOf(PARENT);
+    return children.filter((c) => !!c.closedAt).length;
+  };
+
   beforeEach(async () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sub-agent-manager-spec-"));
     fs.mkdirSync(path.join(tmpRoot, "sessions"), { recursive: true });
@@ -78,7 +85,7 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   });
 
-  it("本轮结束即冻结子会话、发出 subagent.closed 并释放配额", async () => {
+  it("本轮结束即记录运行结束、发出 subagent.run_ended", async () => {
     stubStream(workflowResult());
 
     const result = await manager.spawnForWorkflow({
@@ -92,31 +99,48 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     expect(sub.closedAt).toBeTruthy();
     expect(sub.closeReason).toBe("completed");
 
-    const closed = emitted.find((e) => e.event === "subagent.closed");
-    expect(closed).toBeTruthy();
-    expect(closed!.evt.sessionId).toBe(PARENT);
-    expect(closed!.evt.payload.subSessionId).toBe(result.subSessionId);
-
-    // 配额已释放：冻结会话被 countByParentId 排除
-    expect(await store.countByParentId(PARENT)).toBe(0);
+    const ended = emitted.find((e) => e.event === "subagent.run_ended");
+    expect(ended).toBeTruthy();
+    expect(ended!.evt.sessionId).toBe(PARENT);
+    expect(ended!.evt.payload.subSessionId).toBe(result.subSessionId);
+    expect(ended!.evt.payload.stopReason).toBe("completed");
   });
 
-  it("连续运行超过 10 个 workflow 子代理也不泄漏名额", async () => {
+  it("不再广播已废弃的 subagent.closed 事件", async () => {
     stubStream(workflowResult());
 
+    await manager.spawnForWorkflow({
+      parentContext: parentContext(),
+      name: "member-legacy",
+      task: "do legacy",
+      workflow: { runId: "run-1" },
+    });
+
+    expect(emitted.find((e) => e.event === "subagent.closed")).toBeUndefined();
+  });
+
+  it("连续运行超过 10 个 workflow 子代理：每个都留下结束记录", async () => {
+    stubStream(workflowResult());
+
+    const ids: string[] = [];
     for (let i = 0; i < 12; i++) {
-      await manager.spawnForWorkflow({
+      const result = await manager.spawnForWorkflow({
         parentContext: parentContext(),
         name: `member-${i}`,
         task: `do ${i}`,
         workflow: { runId: "run-1", label: `member-${i}` },
       });
+      ids.push(result.subSessionId);
     }
 
-    expect(await store.countByParentId(PARENT)).toBe(0);
+    // 没有名额限制后子会话可以无限累积，但每个都必须留下结束时间戳
+    expect(await endedChildCount()).toBe(12);
+    for (const id of ids) {
+      expect((await store.get(id))!.closedAt).toBeTruthy();
+    }
   });
 
-  it("父会话中止时仍完成冻结（aborted 结算）", async () => {
+  it("父会话中止时仍完成收尾（aborted 结算）", async () => {
     stubStream(
       workflowResult({
         status: "error",
@@ -141,10 +165,9 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
     const sub = await store.get(result.subSessionId)!;
     expect(sub.closedAt).toBeTruthy();
     expect(sub.closeReason).toBe("aborted");
-    expect(await store.countByParentId(PARENT)).toBe(0);
   });
 
-  it("冻结后的子会话经 sendMessage 自动解冻继续交互", async () => {
+  it("运行结束后的子会话经 sendMessage 直接继续交互（无解冻步骤）", async () => {
     stubStream(workflowResult());
 
     const result = await manager.spawnForWorkflow({
@@ -154,7 +177,10 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
       workflow: { runId: "run-1" },
     });
 
-    // 冻结后发送 → 自动解冻，进入执行（第二次 stub 的结果会再次冻结）
+    // 第一次运行已结束（closedAt 非空），但这不阻止继续对话
+    const before = await store.get(result.subSessionId)!;
+    expect(before.closedAt).toBeTruthy();
+
     stubStream(workflowResult({ content: "follow-up reply" }));
     const second = await manager.sendMessage({
       parentSessionId: PARENT,
@@ -162,17 +188,16 @@ describe("SubAgentManager workflow 子代理生命周期", () => {
       message: "follow up",
     });
     expect(second.content).toBe("follow-up reply");
-    // 自动冻结是 fire-and-forget：轮询等待落库
+
+    // 新一轮结束后时间戳刷新（fire-and-forget：轮询等待落库）
     const deadline = Date.now() + 2_000;
     let after = await store.get(result.subSessionId)!;
-    while (!after.closedAt && Date.now() < deadline) {
+    while (after.closedAt === before.closedAt && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 25));
       after = await store.get(result.subSessionId)!;
     }
     expect(after.closedAt).toBeTruthy();
-
-    // 名额随解冻→再冻结恢复正常
-    expect(await store.countByParentId(PARENT)).toBe(0);
+    expect(after.closeReason).toBe("completed");
   });
 
   it("spawn 前台完成时按 toolCallId 即时发 subagent_status（不等整批工具结果）", async () => {

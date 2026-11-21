@@ -13,7 +13,7 @@ import langEn from "./sub-agent.lang.en.json";
 /**
  * 子代理跳转信息：前端据此在工具行 / 结果通知上提供"打开子代理面板"入口。
  * meta 是 UI 专用通道（不进 LLM 上下文），故可对模型隐藏 Session ID 的同时仍让用户点进会话
- * ——one_shot 完成分支刻意不把 ID 写进 content，避免 AI 去操作已冻结的会话。
+ * ——完成分支刻意不把 ID 写进 content：模型继续交互统一走 job_send，不必记住会话标识。
  */
 function subAgentLinkMeta(subSessionId: string, name?: string) {
   return {
@@ -167,13 +167,12 @@ Foreground (default) blocks until done and returns the result. Background mode r
         }
         const parts: string[] = [];
         if (result.content) parts.push(result.content);
-        // 结果交付后会话已自动冻结（仅供回放），不返回 Session ID：
-        // 继续交互走 job_send（自动解冻）。隐藏只针对模型：
-        // meta.link 是 UI 通道，用户仍可点开该会话回放
+        // 一次运行结束，会话保留可用（回放）；继续交互走 job_send。
+        // 隐藏只针对模型：meta.link 是 UI 通道，用户仍可点开该会话回放
         const tag =
           result.status === "error"
-            ? `[Sub-agent ended with error${result.error ? `. Reason: ${result.error}` : ""}. Sub-agent auto-closed.]`
-            : "[Sub-agent completed and auto-closed.]";
+            ? `[Sub-agent ended with error${result.error ? `. Reason: ${result.error}` : ""}.]`
+            : "[Sub-agent completed.]";
         parts.push(tag);
         return { content: parts.join("\n"), meta: linkMeta };
       },
@@ -266,8 +265,8 @@ Foreground (default) blocks until done and returns the result. Background mode r
           "",
           "### 5. Critical Operational Guidelines (Cautions)",
           "   - Boundary isolation: When splitting tasks, the boundaries must be absolutely clear. It is strictly forbidden to assign the same file to multiple sub-agents for modification, or to have overlapping responsibilities among different sub-agents.",
-          "   - Resource release: A sub-agent's session is automatically closed (frozen, kept for replay) once its result is delivered to you — no close call is ever needed. To interact with a background sub-agent, use job_send on its Job ID: while it is running, the message is injected at its next step boundary (between tool calls) without interrupting the current turn; when it has finished, it resumes automatically with a new turn.",
-          "   - Steering timing: job_send to a running sub-agent takes effect only at its next step boundary — a message cannot unstick a sub-agent blocked inside one long tool call; use job_stop only if you want to end it.",
+          "   - Resource release: nothing to release. A sub-agent's run simply ends once its result is delivered to you — there is no close call and no session to dispose. The session and its files stay available for replay, and job_send resumes it with full context. To interact with a background sub-agent, use job_send on its Job ID: while it is running, the message starts a new visible turn once its current tool batch ends (it does not interrupt the current tool); when it has finished, it resumes automatically with a new turn. The completion notification fires only after all queued follow-ups are processed.",
+          "   - Steering timing: job_send to a running sub-agent takes effect at the tool-batch boundary — a message cannot unstick a sub-agent blocked inside one long tool call; use job_stop only if you want to end it.",
           "   - Transparency management: Users cannot see the internal interaction logs between you and the sub-agents. You must not assume that users are aware of execution details. Ultimately, you must summarize and distill the results of sub-tasks and present them to the user in a clear, structured form.",
         ];
 

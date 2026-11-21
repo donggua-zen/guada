@@ -5,8 +5,13 @@ import { EventBusService } from "../../common/events/event-bus.service";
 import type {
   ContentBlock,
   FileRef,
+  MessageSource,
 } from "../../common/types/conversation.types";
 import type { TurnSettingsOverride } from "./types/turn-settings-override";
+import {
+  normalizeDeliveryMode,
+  type DeliveryMode,
+} from "../../common/types/delivery.types";
 
 /**
  * 用户输入队列（M3：队列所有权在后端）
@@ -30,6 +35,16 @@ export interface UserInputQueueItem {
   id: string;
   sessionId: string;
   content: string;
+  /** 投递时机（queue/inject/interrupt）；缺省 queue */
+  delivery: DeliveryMode;
+  /**
+   * 显式消息来源（coordinator=主代理投递）。
+   * 缺省不写 → 折叠为真实用户输入；主代理投递时写 coordinator，
+   * 从而与人类输入共用队列却渲染成不同形态。
+   */
+  messageSource?: MessageSource;
+  /** 随消息落库的消息级 metadata（如 inputPresentation） */
+  messageMetadata?: Record<string, any>;
   files?: FileRef[];
   /** 命令标记解析产物（@提及等系统注入块），补发时随消息落库 */
   injectedBlocks?: ContentBlock[];
@@ -45,6 +60,7 @@ export interface UserInputQueueItem {
 export interface UserQueueItemView {
   id: string;
   content: string;
+  delivery: DeliveryMode;
   files: FileRef[];
   knowledgeBaseIds?: string[];
   replaceTurnId?: string;
@@ -76,6 +92,12 @@ interface SessionUserQueueState {
 export interface EnqueueUserInputParams {
   sessionId: string;
   content: string;
+  /** 投递时机；缺省 queue（等价于"排队等当前回合结束"） */
+  delivery?: DeliveryMode;
+  /** 显式消息来源（主代理投递写 coordinator；人类输入不写） */
+  messageSource?: MessageSource;
+  /** 随消息落库的消息级 metadata */
+  messageMetadata?: Record<string, any>;
   files?: FileRef[];
   /** 命令标记解析产物（@提及等系统注入块），补发时随消息落库 */
   injectedBlocks?: ContentBlock[];
@@ -128,6 +150,11 @@ export class UserInputQueueService {
       id: randomUUID(),
       sessionId: params.sessionId,
       content,
+      delivery: normalizeDeliveryMode(params.delivery),
+      ...(params.messageSource ? { messageSource: params.messageSource } : {}),
+      ...(params.messageMetadata
+        ? { messageMetadata: params.messageMetadata }
+        : {}),
       ...(files.length > 0 ? { files } : {}),
       ...(params.injectedBlocks?.length
         ? { injectedBlocks: params.injectedBlocks }
@@ -307,6 +334,49 @@ export class UserInputQueueService {
     return id;
   }
 
+  /**
+   * 是否有待边界接管的 inject 项（供 STEP_HANDOFF 决策）。
+   *
+   * 只认队首：inject 语义是"在最近的工具边界接管"，
+   * 若队首是 queue 项，说明用户希望它等回合自然结束，此时不应提前打断。
+   */
+  hasPendingInject(sessionId: string): boolean {
+    const state = this.queues.get(sessionId);
+    const head = state?.items[0];
+    return !!state && !state.paused && head?.status === "queued" && head.delivery === "inject";
+  }
+
+  /** 切换队列项的投递时机（排队 ↔ 边界接管 ↔ 立即） */
+  setDelivery(
+    sessionId: string,
+    itemId: string,
+    mode: DeliveryMode,
+  ): UserQueueSnapshot {
+    const state = this.queues.get(sessionId);
+    if (!state) {
+      throw new HttpException(
+        { error: "排队消息不存在", code: "QUEUE_ITEM_NOT_FOUND" },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const item = state.items.find((entry) => entry.id === itemId);
+    if (!item) {
+      throw new HttpException(
+        { error: "排队消息不存在", code: "QUEUE_ITEM_NOT_FOUND" },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (item.status === "running") {
+      throw new HttpException(
+        { error: "消息已开始发送", code: "QUEUE_ITEM_ALREADY_STARTED" },
+        HttpStatus.CONFLICT,
+      );
+    }
+    item.delivery = normalizeDeliveryMode(mode);
+    this.touch(state);
+    return this.publish(sessionId, state);
+  }
+
   // === 供 ChatRunner 消费 ===
 
   /** 队首（只读）；调用方需自行判断 status 与 paused */
@@ -461,6 +531,7 @@ export class UserInputQueueService {
       items: state.items.map((item) => ({
         id: item.id,
         content: item.content,
+        delivery: item.delivery,
         files: item.files ?? [],
         ...(item.knowledgeBaseIds?.length
           ? { knowledgeBaseIds: item.knowledgeBaseIds }

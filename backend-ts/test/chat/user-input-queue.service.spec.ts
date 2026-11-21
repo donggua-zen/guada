@@ -172,4 +172,71 @@ describe("UserInputQueueService", () => {
     expect(queue.getSnapshot("s1").items).toHaveLength(0);
     expect(queue.getAllCounts()).toEqual({ s2: 1 });
   });
+
+  // ── 投递时机（通用能力：人类用户与主代理共用同一队列）──
+
+  it("缺省投递时机是 queue，快照原样透出", () => {
+    const { queue } = build();
+    queue.enqueue({ sessionId: "s1", content: "A" });
+    expect(queue.getSnapshot("s1").items[0].delivery).toBe("queue");
+  });
+
+  it("可入队时指定 inject / interrupt，并支持事后切换", () => {
+    const { queue } = build();
+    const { item } = queue.enqueue({
+      sessionId: "s1",
+      content: "A",
+      delivery: "inject",
+    });
+    expect(queue.getSnapshot("s1").items[0].delivery).toBe("inject");
+
+    queue.setDelivery("s1", item.id, "interrupt");
+    expect(queue.getSnapshot("s1").items[0].delivery).toBe("interrupt");
+
+    // 非法值回落默认（queue），不写坏枚举
+    queue.setDelivery("s1", item.id, "bogus" as any);
+    expect(queue.getSnapshot("s1").items[0].delivery).toBe("queue");
+  });
+
+  it("hasPendingInject 只认队首且未暂停（inject 语义＝最近边界接管）", () => {
+    const { queue } = build();
+    // 队首是 queue 项：不接管
+    queue.enqueue({ sessionId: "s1", content: "A" });
+    queue.enqueue({ sessionId: "s1", content: "B", delivery: "inject" });
+    expect(queue.hasPendingInject("s1")).toBe(false);
+
+    // 队首换成 inject 项：接管
+    const { queue: q2 } = build();
+    q2.enqueue({ sessionId: "s1", content: "A", delivery: "inject" });
+    expect(q2.hasPendingInject("s1")).toBe(true);
+
+    // 暂停后不接管（用户显式暂停队列时不应被提前打断）
+    q2.pause("s1", "manual");
+    expect(q2.hasPendingInject("s1")).toBe(false);
+  });
+
+  it("running 项不允许切换投递时机", () => {
+    const { queue } = build();
+    const [a] = enqueue(queue, "s1", ["A"]);
+    queue.markRunning("s1", a);
+    expect(() => queue.setDelivery("s1", a, "inject")).toThrow(HttpException);
+  });
+
+  it("协调者来源随队列项透传（用于前端渲染主代理补充指令）", () => {
+    const { queue } = build();
+    queue.enqueue({
+      sessionId: "sub-1",
+      content: "补充",
+      delivery: "inject",
+      messageSource: { kind: "coordinator", senderSessionId: "parent-1" },
+      messageMetadata: { inputPresentation: "coordinator_steer" },
+    });
+    const item = queue.getSnapshot("sub-1").items[0];
+    expect(item.delivery).toBe("inject");
+    // 快照不暴露内部 source（避免前端依赖），但队列项持有它
+    expect(queue.peekHead("sub-1")).toMatchObject({
+      messageSource: { kind: "coordinator" },
+      messageMetadata: { inputPresentation: "coordinator_steer" },
+    });
+  });
 });

@@ -135,11 +135,11 @@ export interface JobOutcome {
  * send 的投递语义（对齐 zcode SendMessage 的 delivery）
  *
  * - delivered：已原样投递（字节流类写 stdin；hook 未返回结构化结果时的缺省）
- * - steered：目标正运行，消息已进入其运行中回合，在下一个步边界注入（不打断）
- * - queued：目标忙但暂不可注入，消息入队，当前回合结束后投递
+ * - queued：目标正运行（子代理），消息入其会话队列，当前工具批次结束后
+ *   以**新回合**送达（不注入当前请求）
  * - started：目标空闲，已开启新回合并等待其完成
  */
-export type JobSendDelivery = "delivered" | "steered" | "queued" | "started";
+export type JobSendDelivery = "delivered" | "queued" | "started";
 
 export interface JobSendResult {
   delivery: JobSendDelivery;

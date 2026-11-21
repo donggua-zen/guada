@@ -174,7 +174,7 @@ export class JobsPlugin extends PluginBase {
 
 - Shell / remote-shell / pty jobs: \`input\` is written to the process's stdin **verbatim** — include a trailing "\\n" yourself when the program expects a line (most interactive prompts wait for Enter).
 - stdin here is a pipe, not a terminal: "\\x04" (Ctrl-D) does not produce EOF and "\\x03" (Ctrl-C) does not raise SIGINT — use job_stop to end an interactive program.
-- Sub-agent jobs: for a **running** sub-agent the message is queued into its current turn and injected at its next step boundary (between tool calls) — it does NOT interrupt the current tool or reply; the receipt says "steered". If the sub-agent is stuck inside one long tool call, the message waits until that call returns — use job_stop only if you want to end it. A finished sub-agent resumes automatically with a new turn (receipt says "started", blocks until the reply is ready); read replies with job_read.
+- Sub-agent jobs: for a **running** sub-agent the message is queued into its session queue — when the current tool batch finishes (right before the next model request would start), the current turn ends and the message starts a **new visible turn** (receipt says "queued"). It does NOT interrupt the current tool. If the sub-agent is stuck inside one long tool call, the message waits until that call returns — use job_stop only if you want to end it. A finished sub-agent resumes automatically with a new turn (receipt says "started", blocks until the reply is ready); read replies with job_read. The completion notification fires only after the sub-agent has processed all queued follow-ups.
 - Other job kinds do not accept input and fail with a clear error.`,
       inputSchema: z.object({
         job_id: z.string().describe("Job id returned by the tool that started the background work."),
@@ -202,10 +202,8 @@ export class JobsPlugin extends PluginBase {
           : "";
         const detail = receipt.detail ? ` ${receipt.detail}` : "";
         switch (receipt.delivery) {
-          case "steered":
-            return `steered ${bytes} bytes into job ${job.id}'s running turn; it will see the message at its next step boundary.${detail}${hint}`;
           case "queued":
-            return `queued ${bytes} bytes for job ${job.id}; it will be delivered after the current turn.${detail}${hint}`;
+            return `queued ${bytes} bytes for job ${job.id}; it will start a new turn when the current one ends (at the tool-batch boundary).${detail}${hint}`;
           case "started":
             return `sent ${bytes} bytes to job ${job.id}; a new turn completed. Use job_read ${job.id} to read the reply.${detail}${hint}`;
           default:
@@ -227,7 +225,7 @@ export class JobsPlugin extends PluginBase {
 
 - Tools that start background work return a stable **job id**. Track it.
 - The system notifies you in-session when a job finishes; do not busy-poll or sleep on it.
-- job_list shows this session's jobs; job_read returns the output since your last read (pass wait_ms only when genuinely blocked); job_send feeds input verbatim — include "\n" yourself for keyboard-style input (shell stdin; a sub-agent receives it at its next step boundary without interrupting, and a finished one resumes with a new turn); job_stop cancels work that no longer matters. job_read keeps only the newest 64 KB when more is waiting — the note says how much was skipped, and the full log is at the given path.
+- job_list shows this session's jobs; job_read returns the output since your last read (pass wait_ms only when genuinely blocked); job_send feeds input verbatim — include "\n" yourself for keyboard-style input (shell stdin; a running sub-agent receives the message as a new turn once its current tool batch ends, and a finished one resumes with a new turn); job_stop cancels work that no longer matters. job_read keeps only the newest 64 KB when more is waiting — the note says how much was skipped, and the full log is at the given path.
 - Before giving a final answer, collect every still-relevant job with job_read, and job_stop the ones that are no longer needed.`,
     });
   }

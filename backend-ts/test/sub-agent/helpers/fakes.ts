@@ -102,6 +102,72 @@ export class FakeChatRunner {
   async enqueueMessage(msg: any): Promise<void> {
     this.enqueued.push(msg);
   }
+
+  /** 通用用户/协调者队列消费（真实 ChatRunner 的 drainUserQueue 替身） */
+  readonly drained: string[] = [];
+  async drainUserQueue(sessionId: string): Promise<void> {
+    this.drained.push(sessionId);
+  }
+}
+
+/**
+ * 用户/协调者队列替身：只记录入队内容与投递时机。
+ *
+ * 子代理的补充消息现在写入子会话自己的会话队列（与人类输入同一条路径），
+ * 因此这里断言的是「入了哪个会话的队列、delivery 是什么、source 是否 coordinator」。
+ */
+export class FakeUserInputQueue {
+  readonly items: Array<{
+    sessionId: string;
+    content: string;
+    delivery?: string;
+    messageSource?: any;
+    messageMetadata?: any;
+  }> = [];
+  /** sessionId → 会话级状态（paused/isProcessing），默认无暂停、非处理中 */
+  readonly sessionStates = new Map<
+    string,
+    { paused: any; isProcessing: boolean }
+  >();
+
+  enqueue(params: any): { item: any; snapshot: any } {
+    this.items.push(params);
+    return { item: { id: `q-${this.items.length}` }, snapshot: {} };
+  }
+
+  getCount(sessionId: string): number {
+    return this.items.filter((i) => i.sessionId === sessionId).length;
+  }
+
+  getState(sessionId: string): { paused: any; isProcessing: boolean } {
+    return (
+      this.sessionStates.get(sessionId) ?? { paused: null, isProcessing: false }
+    );
+  }
+
+  isProcessing(sessionId: string): boolean {
+    return this.getState(sessionId).isProcessing;
+  }
+
+  /** 测试辅助：注入/覆盖会话级状态 */
+  setSessionState(
+    sessionId: string,
+    state: { paused: any; isProcessing: boolean },
+  ): void {
+    this.sessionStates.set(sessionId, state);
+  }
+
+  clearSession(sessionId: string): void {
+    // 清掉该会话的全部待投递项（stop/kill 路径）
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      if (this.items[i].sessionId === sessionId) this.items.splice(i, 1);
+    }
+    this.sessionStates.delete(sessionId);
+  }
+
+  hasPendingInject(_sessionId: string): boolean {
+    return false;
+  }
 }
 
 export class FakeEventBus {

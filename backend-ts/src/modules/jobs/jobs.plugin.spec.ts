@@ -369,8 +369,8 @@ describe("JobsPlugin", () => {
     expect(text).not.toContain("no trailing newline");
   });
 
-  it("job_send 子代理 steered 回执（运行中注入步边界）", async () => {
-    const send = jest.fn(async () => ({ delivery: "steered", detail: "(pending 2)" }));
+  it("job_send 子代理 queued 回执（运行中排队，工具边界后开新回合）", async () => {
+    const send = jest.fn(async () => ({ delivery: "queued", detail: "(pending 2)" }));
     const { spec } = makeSpec({ kind: "subagent", handle: "sub-1", send });
     const id = registry.start(spec) as JobId;
 
@@ -380,8 +380,8 @@ describe("JobsPlugin", () => {
     );
 
     // "补充指令" = 12 字节
-    expect(text).toContain(`steered 12 bytes into job ${id}'s running turn`);
-    expect(text).toContain("next step boundary");
+    expect(text).toContain(`queued 12 bytes for job ${id}`);
+    expect(text).toContain("new turn when the current one ends");
     expect(text).toContain("(pending 2)");
     expect(text).not.toContain("no trailing newline");
   });
@@ -397,7 +397,7 @@ describe("JobsPlugin", () => {
     );
 
     expect(text).toContain(`queued 2 bytes for job ${id}`);
-    expect(text).toContain("delivered after the current turn");
+    expect(text).toContain("new turn when the current one ends");
   });
 
   it("job_send 子代理 started 回执（空闲开新回合，指引 job_read）", async () => {

@@ -14,6 +14,7 @@ import {
   UserInputQueueService,
   type UserQueueSnapshot,
 } from "./user-input-queue.service";
+import { normalizeDeliveryMode } from "../../common/types/delivery.types";
 
 /**
  * 会话级用户输入队列（M3：队列所有权在后端）
@@ -48,6 +49,20 @@ export class SessionQueueController {
     @Param("itemId") itemId: string,
   ): Promise<UserQueueSnapshot> {
     return this.chatRunner.sendQueuedNow(sessionId, itemId);
+  }
+
+  /** 切换投递时机：queue（排队）/ inject（工具边界接管）/ interrupt（立即打断） */
+  @Post(":itemId/delivery")
+  setDelivery(
+    @Param("sessionId") sessionId: string,
+    @Param("itemId") itemId: string,
+    @Body() body: { mode?: string },
+  ): UserQueueSnapshot {
+    return this.userInputQueue.setDelivery(
+      sessionId,
+      itemId,
+      normalizeDeliveryMode(body?.mode),
+    );
   }
 
   @Post("reorder")

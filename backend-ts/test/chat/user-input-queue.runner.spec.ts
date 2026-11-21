@@ -212,4 +212,56 @@ describe("ChatRunnerService 用户队列消费", () => {
     queue.enqueue({ sessionId: "s1", content: "A" });
     expect(runner.hasActiveWork()).toBe(true);
   });
+
+  // ── 边界接管（DeliveryMode=inject，通用能力，主代理与人类用户共用）──
+
+  it("工具批次边界 + 队首 inject → 决策为 handoff", () => {
+    const { runner, queue } = build();
+    queue.enqueue({ sessionId: "s1", content: "A", delivery: "inject" });
+
+    expect(
+      runner.handleStepHandoff({
+        sessionContext: { sessionId: "s1" },
+        iterationCount: 2,
+        completedToolBatch: true,
+      } as any),
+    ).toEqual({ kind: "handoff" });
+  });
+
+  it("没有工具批次时不接管（回合首个请求不能凭空切轮次）", () => {
+    const { runner, queue } = build();
+    queue.enqueue({ sessionId: "s1", content: "A", delivery: "inject" });
+
+    expect(
+      runner.handleStepHandoff({
+        sessionContext: { sessionId: "s1" },
+        iterationCount: 1,
+        completedToolBatch: false,
+      } as any),
+    ).toBeUndefined();
+  });
+
+  it("队首是 queue 项时不接管（用户选择了等回合自然结束）", () => {
+    const { runner, queue } = build();
+    queue.enqueue({ sessionId: "s1", content: "A" });
+
+    expect(
+      runner.handleStepHandoff({
+        sessionContext: { sessionId: "s1" },
+        iterationCount: 2,
+        completedToolBatch: true,
+      } as any),
+    ).toBeUndefined();
+  });
+
+  it("handoff 属于正常收尾：不暂停队列，继续消费下一条", async () => {
+    const { runner, queue } = build();
+    queue.enqueue({ sessionId: "s1", content: "A", delivery: "inject" });
+
+    (runner as any).settleUserQueueAfterTurn("s1", "handoff", true);
+    await flush();
+
+    expect(queue.getSnapshot("s1").paused).toBeNull();
+    expect((runner as any).startStream).toHaveBeenCalledTimes(1);
+  });
 });

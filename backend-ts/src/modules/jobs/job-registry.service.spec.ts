@@ -620,13 +620,13 @@ describe("JobRegistryService", () => {
   describe("send 投递语义", () => {
     it("hook 返回 JobSendResult 时透传给调用方", async () => {
       const send = jest.fn(async () =>
-        ({ delivery: "steered", detail: "(pending 1)" } as const),
+        ({ delivery: "queued", detail: "(pending 1)" } as const),
       );
       const { spec } = makeSpec({ kind: "subagent", send });
       const id = registry.start(spec);
 
       await expect(registry.send(id, "s1", "补充")).resolves.toEqual({
-        delivery: "steered",
+        delivery: "queued",
         detail: "(pending 1)",
       });
       expect(send).toHaveBeenCalledWith("补充");
