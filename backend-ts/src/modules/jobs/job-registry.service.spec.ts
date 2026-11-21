@@ -425,7 +425,7 @@ describe("JobRegistryService", () => {
     expect(read).toHaveBeenNthCalledWith(2, { maxBytes: 512 * 1024 });
   });
 
-  it("挂起通知：只在已结算且未读时生效，clear/take 语义正确", async () => {
+  it("挂起通知：只在已结算且未读时生效，take 语义正确", async () => {
     const a = makeSpec();
     const idA = registry.start(a.spec);
     const b = makeSpec();
@@ -451,11 +451,6 @@ describe("JobRegistryService", () => {
 
     // 已读的 job 即使标记也不投
     registry.markNoticePending(idC);
-    expect(registry.takePendingNotices("s1")).toEqual([]);
-
-    // clear 幂等
-    registry.markNoticePending(idB);
-    registry.clearPendingNotices("s1");
     expect(registry.takePendingNotices("s1")).toEqual([]);
   });
 

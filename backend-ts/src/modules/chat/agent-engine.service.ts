@@ -979,6 +979,7 @@ export class AgentEngine {
             sessionContext,
             iterationCount,
             completedToolBatch: true,
+            turnId,
             abortSignal,
           },
         );

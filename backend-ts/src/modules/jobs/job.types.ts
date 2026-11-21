@@ -4,19 +4,21 @@
  * 执行器（shell / subagent / workflow / remote / pty）只负责真正的工作；
  * JobRegistry 负责稳定 id、状态、读取、取消、归属和完成通知。
  *
- * ── 作业完成后的结果交付：三条路径，靠 `reported` 收口互斥 ──
+ * ── 作业完成后的结果交付：四条路径，靠 `reported` 收口互斥 ──
  * 1. 回合内完成、且是 shell / remote-shell：
  *    回合「正常收尾」时由 turn.stopping 续跑钩子收割
  *    （shell.plugin.handleTurnStopping → processManager.drainCompleted /
  *    workspaceRouter.drainRemoteProcesses）。输出直接注入本轮并触发新一轮 LLM 调用，
  *    drain 时先 registry.markReported → 不会再发一条完成通知。
- * 2. 其余情况（subagent，以及未命中路径 1 的 kind）：
- *    settle 时会话仍在跑 → markNoticePending；回合正常收尾时由 JobNotifier
- *    批量投递一条 <system_reminder> 通知（user_cancel / error 收尾不投递）。
- * 3. 模型主动 job_read：读到终态同样置 reported，抑制路径 1/2 的重复投递。
+ * 2. settle 时会话仍在跑（subagent，以及未命中路径 1 的 kind）：
+ *    markNoticePending；JobNotifier 在下一次 LLM 请求的工具边界（STEP_HANDOFF）
+ *    自动注入带输出全文的 <system_reminder> 通知（不结束当前回合）。
+ * 3. 回合正常收尾时仍未投出的挂起通知（含边界未及消费的）：
+ *    JobNotifier 批量投递，以新回合送达（user_cancel / error 收尾不投递）。
+ * 4. 模型主动 job_read：读到终态同样置 reported，抑制路径 1/2/3 的重复投递。
  *
- * 注意：registry.takePendingNotices 只在回合收尾被调用；turn.stopping 不碰这条队列，
- * 它在进程层就把输出消费掉了（见 JobRegistryService.markNoticePending 注释）。
+ * 注意：registry.takePendingNotices 在 STEP_HANDOFF 边界与回合收尾都会被调用；
+ * turn.stopping 不碰这条队列，它在进程层就把输出消费掉了（见 markNoticePending 注释）。
  */
 
 export type JobId = `job-${string}`;
@@ -83,6 +85,12 @@ export function isByteLogJobKind(kind: JobKind): boolean {
 export const JOB_READ_DEFAULT_MAX_BYTES = 64 * 1024;
 export const JOB_READ_MIN_MAX_BYTES = 1024;
 export const JOB_READ_MAX_MAX_BYTES = 512 * 1024;
+
+/**
+ * 完成通知正文里携带的输出上限（尾部切片，关键信息在尾部）。
+ * 与 JOB_READ_DEFAULT_MAX_BYTES 对齐；超出时正文带截断说明，模型用 job_read 追读。
+ */
+export const JOB_NOTICE_MAX_BYTES = 64 * 1024;
 
 /** 每会话并发 running/stopping 作业上限 */
 export const JOB_MAX_CONCURRENT_PER_SESSION = 10;

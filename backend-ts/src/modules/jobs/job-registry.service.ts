@@ -497,25 +497,20 @@ export class JobRegistryService
   }
 
   /**
-   * 完成通知挂起：settle 时会话不空闲（有活跃流）→ 不在回合中间插一条用户消息。
+   * 完成通知挂起：settle 时会话不空闲（有活跃流）→ 不打断回合，等边界投递。
    * 之后的交付有两条路：
-   * ① 回合正常收尾时 JobNotifier 批量投出（takePendingNotices）；
-   * ② shell/remote-shell 的完成输出会先被 turn.stopping 续跑钩子在进程层收割，
+   * ① 下一次 LLM 请求的工具边界（STEP_HANDOFF）由 JobNotifier 落库注入
+   *    （takePendingNotices；内存文本类带输出全文）；
+   * ② 回合正常收尾时 JobNotifier 批量投出（takePendingNotices）；
+   *    shell/remote-shell 的完成输出会先被 turn.stopping 续跑钩子在进程层收割，
    *    收割时已 markReported —— 于是本标记在取出时因 reported 被跳过，不会重复投递。
-   * 回合以 user_cancel / error 收尾则不投（与 processQueue 同一道门），记录随 TTL 清理。
+   * 回合以 user_cancel / error 收尾不投递：挂起通知保留，下一次边界/收尾机会送达
+   * （不在回合开始时作废——通知不能丢；记录随 TTL 清理）。
    */
   markNoticePending(id: JobId): void {
     const record = this.jobs.get(id);
     if (!record || record.reported || !record.settled) return;
     record.noticePending = true;
-  }
-
-  /** 回合开始：会话重新运行，挂起标记全部作废（模型可 job_list 自行发现）。 */
-  clearPendingNotices(sessionId: string): void {
-    for (const id of this.sessionJobs.get(sessionId) ?? []) {
-      const record = this.jobs.get(id);
-      if (record) record.noticePending = false;
-    }
   }
 
   /**

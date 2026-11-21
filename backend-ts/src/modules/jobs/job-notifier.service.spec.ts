@@ -125,7 +125,7 @@ describe("JobNotifierService", () => {
     expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
   });
 
-  it("回合开始清除挂起：再收尾不再投递", async () => {
+  it("回合开始不再作废挂起：收尾仍投递（通知不丢）", async () => {
     chatRunner.hasActiveStream.mockReturnValue(true);
     const { spec, done } = makeSpec();
     registry.start(spec);
@@ -137,18 +137,14 @@ describe("JobNotifierService", () => {
       notify: true,
     });
 
-    // 会话再次运行（新用户回合）→ 挂起作废
-    notifier.handleStreamStatusChanged({
-      sessionId: "s1",
-      payload: { status: "running" },
-    });
     chatRunner.hasActiveStream.mockReturnValue(false);
     await notifier.handleTurnFinished({ sessionId: "s1", normalFinish: true });
 
-    expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
+    expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
+    expect(registry.get(registry.list("s1")[0].id, "s1")?.reported).toBe(true);
   });
 
-  it("user_cancel / 异常收尾不投递（挂起保留到下次回合开始被清除）", async () => {
+  it("user_cancel / 异常收尾不投递（挂起保留，等下次边界/收尾机会）", async () => {
     chatRunner.hasActiveStream.mockReturnValue(true);
     const { spec, done } = makeSpec();
     const id = registry.start(spec);
@@ -385,5 +381,193 @@ describe("JobNotifierService", () => {
 
     expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
     expect(registry.get(id, "s1")?.reported).toBe(true);
+  });
+
+  describe("工具边界注入（STEP_HANDOFF）", () => {
+    function makeSessionContext(overrides: Record<string, any> = {}) {
+      let seq = 0;
+      return {
+        sessionId: "s1",
+        generateMessageId: jest.fn(() => `msg-${++seq}`),
+        appendMessages: jest.fn().mockResolvedValue(undefined),
+        publishStream: jest.fn().mockResolvedValue(undefined),
+        ...overrides,
+      } as any;
+    }
+
+    /** 会话忙碌中完成一个 subagent 作业 → 通知挂起（不直投） */
+    async function settleSubagentPending() {
+      chatRunner.hasActiveStream.mockReturnValue(true);
+      const { spec, done } = makeSpec({
+        kind: "subagent",
+        label: "researcher",
+        handle: "sub-1",
+      });
+      const id = registry.start(spec);
+      done.resolve({ status: "completed" });
+      await flushAsync();
+      await notifier.handleJobSettled({
+        sessionId: "s1",
+        job: registry.get(id, "s1")!,
+        notify: true,
+      });
+      expect(chatRunner.enqueueMessage).not.toHaveBeenCalled();
+      return id;
+    }
+
+    it("挂起的 subagent 通知在边界落库：带输出全文、置 reported、广播 user_message", async () => {
+      const id = await settleSubagentPending();
+      const sessionContext = makeSessionContext();
+
+      await notifier.handleStepHandoffBoundary({
+        sessionContext,
+        iterationCount: 2,
+        completedToolBatch: true,
+        turnId: "turn-1",
+      } as any);
+
+      expect(sessionContext.appendMessages).toHaveBeenCalledTimes(1);
+      const message = sessionContext.appendMessages.mock.calls[0][0][0];
+      expect(message).toMatchObject({ role: "user", kind: "user" });
+      expect(message.source).toEqual(
+        expect.objectContaining({
+          kind: "sub_agent",
+          subSessionId: "sub-1",
+          jobId: id,
+        }),
+      );
+      const text = message.content[0].text;
+      expect(text).toContain("<system_reminder>");
+      expect(text).toContain(`Background job ${id}`);
+      expect(text).toContain("--- output ---");
+      expect(text).toContain("hello");
+      expect(registry.get(id, "s1")?.reported).toBe(true);
+
+      expect(sessionContext.publishStream).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "user_message",
+          turnId: "turn-1",
+          messageId: message.id,
+        }),
+      );
+    });
+
+    it("终态 job_read 先读 → 边界不再注入（exactly-once）", async () => {
+      const id = await settleSubagentPending();
+      // 模型在边界前主动读到终态：终态 read 置 reported
+      await registry.read(id, "s1");
+      const sessionContext = makeSessionContext();
+
+      await notifier.handleStepHandoffBoundary({
+        sessionContext,
+        iterationCount: 2,
+        completedToolBatch: true,
+      } as any);
+
+      expect(sessionContext.appendMessages).not.toHaveBeenCalled();
+      expect(sessionContext.publishStream).not.toHaveBeenCalled();
+    });
+
+    it("shell 类作业边界不代投：挂回 pending，由收尾兜底", async () => {
+      chatRunner.hasActiveStream.mockReturnValue(true);
+      const { spec, done } = makeSpec();
+      const id = registry.start(spec);
+      done.resolve({ status: "completed" });
+      await flushAsync();
+      await notifier.handleJobSettled({
+        sessionId: "s1",
+        job: registry.get(id, "s1")!,
+        notify: true,
+      });
+
+      const sessionContext = makeSessionContext();
+      await notifier.handleStepHandoffBoundary({
+        sessionContext,
+        iterationCount: 2,
+        completedToolBatch: true,
+      } as any);
+
+      expect(sessionContext.appendMessages).not.toHaveBeenCalled();
+      // 挂回 pending：回合收尾仍能投出（进程层收割未命中的兜底）
+      chatRunner.hasActiveStream.mockReturnValue(false);
+      await notifier.handleTurnFinished({ sessionId: "s1", normalFinish: true });
+      expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("落库失败 → 全部挂回（reported 保持 false），收尾重试", async () => {
+      const id = await settleSubagentPending();
+      const sessionContext = makeSessionContext({
+        appendMessages: jest.fn().mockRejectedValue(new Error("disk full")),
+      });
+
+      await notifier.handleStepHandoffBoundary({
+        sessionContext,
+        iterationCount: 2,
+        completedToolBatch: true,
+      } as any);
+
+      expect(registry.get(id, "s1")?.reported).toBe(false);
+      chatRunner.hasActiveStream.mockReturnValue(false);
+      await notifier.handleTurnFinished({ sessionId: "s1", normalFinish: true });
+      expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("subagent 空闲直投 → 通知正文带输出全文（未截断不带读取指引）", async () => {
+      chatRunner.hasActiveStream.mockReturnValue(false);
+      const { spec, done } = makeSpec({
+        kind: "subagent",
+        label: "researcher",
+        handle: "sub-1",
+        read: jest.fn(async () => ({
+          text: "final answer from child",
+          offset: 0,
+          nextOffset: 23,
+          size: 23,
+          truncated: false,
+        })),
+      });
+      const id = registry.start(spec);
+      done.resolve({ status: "completed" });
+      await flushAsync();
+
+      await notifier.handleJobSettled({
+        sessionId: "s1",
+        job: registry.get(id, "s1")!,
+        notify: true,
+      });
+
+      expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
+      const text = chatRunner.enqueueMessage.mock.calls[0][0].blocks[0].text;
+      expect(text).toContain("--- output ---");
+      expect(text).toContain("final answer from child");
+      expect(text).not.toContain("Use job_read");
+    });
+
+    it("subagent 输出读取失败 → 通知降级为纯状态（含读取指引，不丢）", async () => {
+      chatRunner.hasActiveStream.mockReturnValue(false);
+      const { spec, done } = makeSpec({
+        kind: "subagent",
+        label: "researcher",
+        handle: "sub-1",
+        read: jest.fn(async () => {
+          throw new Error("child session gone");
+        }),
+      });
+      const id = registry.start(spec);
+      done.resolve({ status: "completed" });
+      await flushAsync();
+
+      await notifier.handleJobSettled({
+        sessionId: "s1",
+        job: registry.get(id, "s1")!,
+        notify: true,
+      });
+
+      expect(chatRunner.enqueueMessage).toHaveBeenCalledTimes(1);
+      const text = chatRunner.enqueueMessage.mock.calls[0][0].blocks[0].text;
+      expect(text).toContain(`Background job ${id}`);
+      expect(text).toContain("Use job_read");
+      expect(text).not.toContain("--- output ---");
+    });
   });
 });

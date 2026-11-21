@@ -8,6 +8,7 @@ import { describe, it, expect } from "vitest";
 import {
   JOB_NOTICE_SOURCE_KINDS,
   isJobNoticeSource,
+  isInTurnJobNoticeBundle,
   resolveNoticeEventType,
 } from "./jobNotice";
 
@@ -50,5 +51,51 @@ describe("resolveNoticeEventType", () => {
     expect(resolveNoticeEventType({ sourceKind: "user" })).toBe("");
     expect(resolveNoticeEventType({})).toBe("");
     expect(resolveNoticeEventType({ declared: "", sourceKind: "" })).toBe("");
+  });
+});
+
+describe("isInTurnJobNoticeBundle", () => {
+  it("回合内 user 形态的通知束命中（工具边界注入的消息）", () => {
+    expect(
+      isInTurnJobNoticeBundle({
+        role: "user",
+        source: { kind: "sub_agent" },
+        metadata: {},
+      }),
+    ).toBe(true);
+    expect(
+      isInTurnJobNoticeBundle({
+        role: "user",
+        source: { kind: "process_monitor" },
+        metadata: {},
+      }),
+    ).toBe(true);
+  });
+
+  it("人类输入 / 隐藏消息 / event 束 / 缺 source 不命中", () => {
+    expect(
+      isInTurnJobNoticeBundle({
+        role: "user",
+        source: { kind: "user" },
+        metadata: {},
+      }),
+    ).toBe(false);
+    expect(
+      isInTurnJobNoticeBundle({
+        role: "user",
+        source: { kind: "sub_agent" },
+        metadata: { hidden: true },
+      }),
+    ).toBe(false);
+    expect(
+      isInTurnJobNoticeBundle({
+        role: "event",
+        source: { kind: "sub_agent" },
+        metadata: {},
+      }),
+    ).toBe(false);
+    expect(
+      isInTurnJobNoticeBundle({ role: "user", metadata: {} }),
+    ).toBe(false);
   });
 });

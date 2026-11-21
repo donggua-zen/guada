@@ -247,7 +247,7 @@ import { useElapsedTicker } from '@/composables/useElapsedTicker';
 import { useTabStore } from '@/stores/tab';
 import { useLayoutStore } from '@/stores/layout';
 import { isHiddenBlock, isCoordinatorMessage, getThinkingPreview, formatDuration as formatThinkingDuration } from '@/utils/messageUtils';
-import { isJobNoticeSource } from '@/utils/jobNotice';
+import { isJobNoticeSource, isInTurnJobNoticeBundle } from '@/utils/jobNotice';
 import { previewFile } from '@/utils/workspacePreview';
 import { getToolFileOpenTarget } from '@/utils/toolWorkspace';
 import type { FilePathDisplay } from '@/utils/pathDisplay';
@@ -312,7 +312,14 @@ const isCoordinatorTurn = computed(() => isCoordinatorMessage(user.value));
 /** 协调者回合的标题文案 */
 const coordinatorLabel = computed(() => t('chat.turn.coordinatorGuidance', '主代理补充指令'));
 
-const events = computed(() => props.turn.messages?.filter((m) => m.role === 'event') ?? []);
+/** 回合内事件束：event 角色消息 + 工具边界注入的作业完成通知（role='user'，非回合头）。
+ *  排除 user 头（通知头回合的 user 就是通知本身，已由 isNotificationTurn 分支渲染，避免双重）。 */
+const events = computed(
+  () =>
+    props.turn.messages?.filter(
+      (m) => m.role === 'event' || (m !== user.value && isInTurnJobNoticeBundle(m)),
+    ) ?? [],
+);
 /**
  * 被 Core Stream Recovery 丢弃的 attempt：只进审计/日志，不进展示流。
  * 实时路径由 finish(stream_recovery_discarded) 打标，历史路径读 assistant metadata。

@@ -1,8 +1,15 @@
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
+import { wrapSystemReminder } from "../../common/utils/system-reminder.util";
+import type {
+  Message,
+  MessageSource,
+} from "../../common/types/conversation.types";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import type { QueueSource } from "../chat/chat-runner.service";
+import { HOOKS, type StepHandoffPayload } from "../chat/types/hooks.contract";
 import { JobRegistryService } from "./job-registry.service";
+import { isByteLogJobKind, JOB_NOTICE_MAX_BYTES } from "./job.types";
 import type { JobId, JobSettledEvent, JobSnapshot } from "./job.types";
 import type { RolePluginConfig } from "../plugins/types/plugin.types";
 
@@ -14,33 +21,25 @@ interface TurnFinishedEvent {
   normalFinish: boolean;
 }
 
-/** 流状态事件（ChatRunner startStream/stop 路径发出） */
-interface StreamStatusEvent {
-  sessionId: string;
-  payload?: {
-    status?: string;
-    reason?: string;
-    sessionType?: string;
-  };
-}
-
 /**
  * 后台作业完成通知的唯一投递点。
  *
  * 投递时机（对齐 zcode 的"投递时判定"思路）：
- * - 会话运行中 → 不投递，只置挂起标记（不在回合中间插用户消息）；
+ * - 会话运行中 → 不打断回合，只置挂起标记；
  * - 会话空闲 → 立即投递（enqueue 后立即 processQueue，近似"投递即消费"）；
- * - 回合正常收尾 → 把挂起通知一次投出（批量由队列的同 source.kind 合并承接）；
- * - 回合开始 → 挂起标记作废（"会话再运行就不投递"，模型可 job_list 自行发现）；
- * - user_cancel / error 收尾 → 不投递（与 processQueue 同一道 NORMAL_FINISH 门）。
+ * - 工具边界（STEP_HANDOFF）→ 挂起通知落库为回合内 user 消息，在下一次 LLM
+ *   请求边界自动送达（对齐 zcode 的 task-notification steer；不结束当前回合）；
+ * - 回合正常收尾 → 仍未投出的挂起通知批量投出（以新回合送达）；
+ * - user_cancel / error 收尾 → 不在该收尾投递；挂起通知留给下一次边界/收尾机会
+ *   （不再在回合开始时作废——通知不能丢，只会在下一机会送达）。
  *
- * 注意 shell / remote-shell 的回合内完成通常走不到这里：它们的输出由 turn.stopping
- * 续跑钩子（shell.plugin.handleTurnStopping）在进程层收割，收割时已 markReported。
- * 本服务覆盖的是 subagent 等没有进程层收割路径的 kind（详见 job.types.ts 头注释）。
+ * 通知正文：内存文本类 kind（subagent 等）直接带最终输出（尾部切片，上限
+ * JOB_NOTICE_MAX_BYTES），模型无需二次 job_read；shell / remote-shell / pty 的输出有
+ * 专用的进程层收割通道（turn.stopping / poll），正文保持状态 + 读取入口，
+ * 避免与收割路径重复投递同一份输出。
  *
- * 去重：投递成功（enqueueMessage 返回）那一刻才 markReported，且用 inFlight 防并发双投。
- * 入队失败时保持 reported=false 并挂回待投递队列，下一回合正常收尾会重试——
- * 通知正文刻意只带状态和读取入口，不带完整输出，模型用 job_read 取输出。
+ * 去重：投递成功（落库 / enqueueMessage 返回）那一刻才 markReported，且用 inFlight
+ * 防并发双投。失败时保持 reported=false 并挂回待投递队列，下一次边界或回合收尾重试。
  */
 @Injectable()
 export class JobNotifierService {
@@ -94,11 +93,89 @@ export class JobNotifierService {
     await this.deliver(event.job);
   }
 
-  /** 回合开始：挂起通知作废（"只要会话再运行就不投递"）。 */
-  @OnEvent("stream.status_changed")
-  handleStreamStatusChanged(event: StreamStatusEvent): void {
-    if (event.payload?.status !== "running") return;
-    this.registry.clearPendingNotices(event.sessionId);
+  /**
+   * 工具边界注入（HOOKS.STEP_HANDOFF，parallel 订阅者：只做副作用，返回 undefined）。
+   *
+   * 会话忙碌期间挂起的通知，在下一次 LLM 请求派发前落库——engine 在钩子后重读
+   * getHistory()，落库消息自然进入本次请求（对齐 zcode 的请求边界通知注入）。
+   * 不返回 handoff 决策：注入不打断当前回合；若同一边界恰好有队列 inject 交接，
+   * 已落库的通知会在新回合首个请求送达，不丢。
+   *
+   * 逐条构建（单条失败挂回、不影响其他）→ 一次性 appendMessages → 成功后统一
+   * markReported（落库失败则全部挂回，reported 未置位，回合收尾重试）→
+   * 逐条发 user_message 实时事件（projector 按 messageId 幂等；失败不影响投递，
+   * 刷新/重放可见）。
+   */
+  @OnEvent(HOOKS.STEP_HANDOFF)
+  async handleStepHandoffBoundary(payload: StepHandoffPayload): Promise<void> {
+    if (payload.abortSignal?.aborted) return;
+    if (this.registry.isShuttingDown()) return;
+    const sessionId = payload.sessionContext.sessionId;
+    const pending = this.registry.takePendingNotices(sessionId);
+    if (pending.length === 0) return;
+
+    const built: Array<{ job: JobSnapshot; message: Message }> = [];
+    for (const job of pending) {
+      // shell / remote-shell / pty 的输出由进程层收割通道（turn.stopping）交付，
+      // 边界不代投：挂回 pending，保持既有收尾兜底语义。
+      if (isByteLogJobKind(job.kind)) {
+        this.registry.markNoticePending(job.id);
+        continue;
+      }
+      if (job.reported || this.inFlight.has(job.id)) continue;
+      this.inFlight.add(job.id);
+      try {
+        const notice = await this.buildNotice(job);
+        built.push({
+          job,
+          message: {
+            id: payload.sessionContext.generateMessageId(),
+            role: "user",
+            kind: "user",
+            source: this.buildMessageSource(job),
+            metadata: {},
+            content: [{ type: "text", text: wrapSystemReminder(notice) }],
+          },
+        });
+      } catch (error: any) {
+        this.logger.error(
+          `边界注入构建作业完成通知失败 (${job.id}): ${error?.message ?? error}`,
+        );
+        this.registry.markNoticePending(job.id);
+      } finally {
+        this.inFlight.delete(job.id);
+      }
+    }
+    if (built.length === 0) return;
+
+    try {
+      await payload.sessionContext.appendMessages(built.map((b) => b.message));
+    } catch (error: any) {
+      // 落库失败：reported 未置位，全部挂回待投递队列，回合收尾重试。
+      this.logger.error(
+        `边界注入落库失败 (session=${sessionId}): ${error?.message ?? error}`,
+      );
+      for (const { job } of built) this.registry.markNoticePending(job.id);
+      return;
+    }
+    for (const { job } of built) this.registry.markReported(job.id);
+
+    // 实时广播：turnId 归属当前回合（与落库的回合括号一致，刷新重放同位）。
+    // 广播失败只影响本窗口的实时展示，不影响模型可见性与重放。
+    for (const { message } of built) {
+      try {
+        await payload.sessionContext.publishStream({
+          type: "user_message",
+          messageId: message.id,
+          turnId: payload.turnId ?? message.id,
+          userMessage: message,
+        });
+      } catch (error: any) {
+        this.logger.warn(
+          `边界注入实时广播失败 (${message.id}): ${error?.message ?? error}`,
+        );
+      }
+    }
   }
 
   /** 回合正常收尾：投出本轮挂起的通知（含 drain 未消费的）。 */
@@ -133,7 +210,7 @@ export class JobNotifierService {
         blocks: [
           {
             type: "text",
-            text: `<system_reminder>\n${notice}\n</system_reminder>`,
+            text: wrapSystemReminder(notice),
           },
         ],
         source: this.buildSource(job),
@@ -181,7 +258,9 @@ export class JobNotifierService {
     return (
       sessionPlugins ?? (session as any)?.agent?.settings?.plugins ?? undefined
     );
-  }  private async buildNotice(job: JobSnapshot): Promise<string> {
+  }
+
+  private async buildNotice(job: JobSnapshot): Promise<string> {
     const exit =
       job.exitCode !== undefined && job.exitCode !== null
         ? `, exit code ${job.exitCode}`
@@ -189,10 +268,48 @@ export class JobNotifierService {
     const detail = job.detail ? ` (${job.detail})` : "";
     const handle = job.handle ? `, handle: ${job.handle}` : "";
     const log = job.logFilePath ? `\nLog file: ${job.logFilePath}` : "";
-    const readHint = (await this.isJobsToolkitVisible(job.sessionId))
-      ? `\nUse job_read ${job.id} to read the output.`
-      : "";
-    return `Background job ${job.id} (${job.kind}: ${job.label}${handle}) finished [status: ${job.status}${exit}]${detail}.${readHint}${log}`;
+    const head = `Background job ${job.id} (${job.kind}: ${job.label}${handle}) finished [status: ${job.status}${exit}]${detail}.`;
+
+    if (isByteLogJobKind(job.kind)) {
+      // shell / remote-shell / pty 的输出走进程层收割通道（turn.stopping / poll），
+      // 正文带全文会在下一回合收尾重复投递同一份输出——保持状态 + 读取入口。
+      const readHint = (await this.isJobsToolkitVisible(job.sessionId))
+        ? `\nUse job_read ${job.id} to read the output.`
+        : "";
+      return `${head}${readHint}${log}`;
+    }
+
+    // 内存文本类（subagent 等）：最终输出随通知直达模型（尾部切片），
+    // 免去二次 job_read。读取失败降级为纯状态通知——读失败绝不能变成通知丢失。
+    let outputSection = "";
+    let outputTruncated = false;
+    try {
+      const { output } = await this.registry.read(
+        job.id,
+        job.sessionId,
+        { maxBytes: JOB_NOTICE_MAX_BYTES },
+        { markReported: false },
+      );
+      const text = (output.text ?? "").trim();
+      if (text) {
+        outputTruncated = output.truncated === true;
+        outputSection = `\n--- output ---\n${text}\n--- end of output ---`;
+      }
+    } catch (error: any) {
+      this.logger.warn(
+        `通知读取作业输出失败，降级为纯状态 (${job.id}): ${error?.message ?? error}`,
+      );
+    }
+    const jobsVisible = await this.isJobsToolkitVisible(job.sessionId);
+    let readHint = "";
+    if (jobsVisible) {
+      if (!outputSection) {
+        readHint = `\nUse job_read ${job.id} to read the output.`;
+      } else if (outputTruncated) {
+        readHint = `\nUse job_read ${job.id} to read earlier output beyond this tail.`;
+      }
+    }
+    return `${head}${outputSection}${readHint}${log}`;
   }
 
   private buildSource(job: JobSnapshot): QueueSource {
@@ -211,6 +328,26 @@ export class JobNotifierService {
       jobId: job.id,
       event: job.status,
       exitCode: job.exitCode,
+    };
+  }
+
+  /**
+   * 边界注入落库用的严格 MessageSource（与 buildSource 的 QueueSource 分开：
+   * MessageSource 的 subSessionId / processId 必填，落库形状必须满足 replayer 契约）。
+   */
+  private buildMessageSource(job: JobSnapshot): MessageSource {
+    if (job.kind === "subagent") {
+      return {
+        kind: "sub_agent",
+        subSessionId: job.handle ?? job.id,
+        agentName: job.label,
+        jobId: job.id,
+      };
+    }
+    return {
+      kind: "process_monitor",
+      processId: job.handle ?? job.id,
+      jobId: job.id,
     };
   }
 }

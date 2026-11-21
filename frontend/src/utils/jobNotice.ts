@@ -35,3 +35,18 @@ export function resolveNoticeEventType(input: {
   if (input.declared) return String(input.declared);
   return isJobNoticeSource(input.sourceKind) ? "job-notice" : "";
 }
+
+/**
+ * 回合内的作业完成通知束：边界注入把通知落库为回合中段的 role='user' 消息
+ * （非回合头），TurnItem 的 events 列表据此把它渲染成 job-notice 卡。
+ * 与 isJobNoticeSource 同源收口，避免词表分叉。
+ */
+export function isInTurnJobNoticeBundle(input: {
+  role?: unknown;
+  source?: { kind?: unknown } | null;
+  metadata?: { hidden?: unknown } | null;
+}): boolean {
+  if (input.role !== "user") return false;
+  if (input.metadata?.hidden === true) return false;
+  return isJobNoticeSource(input.source?.kind);
+}

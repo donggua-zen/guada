@@ -73,6 +73,8 @@ export interface StepHandoffPayload {
   iterationCount: number;
   /** 上一迭代是否真的执行过工具批次（决定是否处于"工具跑完、该发下一次请求"的边界） */
   completedToolBatch: boolean;
+  /** 当前回合 id：订阅者做实时广播（如任务通知的 user_message）时的回合归属 */
+  turnId?: string;
   abortSignal?: AbortSignal;
 }
 
