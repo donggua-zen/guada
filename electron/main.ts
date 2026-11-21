@@ -2843,6 +2843,14 @@ function setupIpcHandlers() {
   // 在资源管理器中显示并选中文件
   ipcMain.handle("show-item-in-folder", async (_, filePath: string) => {
     try {
+      if (typeof filePath !== "string" || !filePath.trim()) {
+        return { success: false, error: "Invalid path" };
+      }
+      // showItemInFolder 对不存在的路径是静默 no-op（也不抛错）；先判存在，
+      // 把失败明确回传给渲染进程，避免用户点了按钮「毫无反应」
+      if (!fs.existsSync(filePath)) {
+        return { success: false, error: `File not found: ${filePath}` };
+      }
       shell.showItemInFolder(filePath);
       return { success: true };
     } catch (error) {

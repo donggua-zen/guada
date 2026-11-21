@@ -15,7 +15,7 @@ import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
 import { useWorkspaceTreeStore } from '@/stores/workspaceTree'
 import { openInExternalBrowser } from '@/utils/browserUtils'
-import { baseNameOf, extensionOf, fileUrlToPath, toWorkspaceRelative } from '@/utils/localPath'
+import { baseNameOf, extensionOf, fileUrlToPath, isAbsoluteLocalPath, toWorkspaceRelative } from '@/utils/localPath'
 import { openModal } from '@/components/ui/modalService'
 import { t } from '@/locales'
 
@@ -141,14 +141,33 @@ async function revealWorkspaceAndOpen(tabInput: {
  *
  * 直接通过 tabStore 操作：添加标签 + 选中 + 进入预览模式。
  * WorkspaceSidebar 的 watch 会自动加载文件内容。
+ *
+ * 入参既可能是工作区相对路径（目录树/文件变更条），也可能是本机绝对路径
+ * （工具行 file_path 允许模型写绝对路径）。绝对路径必须先做归属判定：
+ * 工作区内 → 转相对路径；工作区外 → outsideWorkspace 分支，绝不能拿它当
+ * 相对路径拼到工作目录下（会拼出 `D:/ws/C:/Users/...` 并让后端 403）。
  */
 export async function previewFile(filePath: string): Promise<void> {
     const sessionStore = useSessionStore()
     if (!sessionStore.activeSessionId) return
 
-    const name = baseNameOf(filePath) || filePath
+    let targetPath = filePath
+    if (isAbsoluteLocalPath(filePath)) {
+        const workspaceDir = await useWorkspaceTreeStore().ensureWorkspacePath(sessionStore.activeSessionId)
+        if (workspaceDir) {
+            const relativePath = toWorkspaceRelative(filePath, workspaceDir)
+            // "" / null：指向工作区根目录本身或工作区外，都无法作为文件标签预览
+            if (!relativePath) {
+                await previewExternalFile(filePath)
+                return
+            }
+            targetPath = relativePath
+        }
+    }
+
+    const name = baseNameOf(targetPath) || targetPath
     await revealWorkspaceAndOpen({
-        path: filePath,
+        path: targetPath,
         name,
         extension: extensionOf(name),
         size: 0,
