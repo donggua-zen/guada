@@ -108,4 +108,41 @@ describe('StreamBlockTracker 通道切换闭块', () => {
     const types = chunks.map((c) => c.type);
     expect(types).toEqual(['block_start', 'text_delta', 'block_end']);
   });
+
+  // 对齐 ZCode：开块时不看空白，模型真的只输出空白也要原样保留。
+  it('纯空白文本照常开块并保留内容', () => {
+    const tracker = new StreamBlockTracker();
+    const chunks = [...tracker.textDelta(' '), ...tracker.closeAll()];
+
+    expect(chunks.map((c) => c.type)).toEqual([
+      'block_start',
+      'text_delta',
+      'block_end',
+    ]);
+    expect((chunks[1] as any).text).toBe(' ');
+    expect((chunks[2] as any).block).toEqual({ type: 'text', text: ' ' });
+  });
+
+  // 真实 GPT6 序列：占位空格 → 另一个空格 item → reasoning → 真正文。
+  // 按 item_id 分道后空格自成一块，真正文不再被并进空格块。
+  it('不同 item_id 的文本各自成块，空格不吞并后续正文', () => {
+    const tracker = new StreamBlockTracker();
+    const chunks = [
+      ...tracker.textDelta(' ', 'msg_ft_leading'),
+      ...tracker.reasoningDelta('思考'),
+      ...tracker.textDelta('真正文', 'msg_real'),
+      ...tracker.closeAll(),
+    ];
+
+    const blocks = chunks
+      .filter((c) => c.type === 'block_end')
+      // 按块 index 排序 = BlockAssembler 的组装顺序（block_end 的发射顺序
+      // 取决于通道何时闭合，不等于最终展示顺序）
+      .sort((a: any, b: any) => a.index - b.index)
+      .map((c: any) => c.block);
+    expect(blocks.map((b) => b.type)).toEqual(['text', 'reasoning', 'text']);
+    expect(blocks[0]).toEqual({ type: 'text', text: ' ' });
+    expect(blocks[1]).toEqual({ type: 'reasoning', summary: '思考' });
+    expect(blocks[2]).toEqual({ type: 'text', text: '真正文' });
+  });
 });

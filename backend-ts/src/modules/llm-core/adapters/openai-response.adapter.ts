@@ -223,12 +223,18 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         type: "message",
         role: msg.role === "assistant" ? "assistant" : "user",
       };
+      // 文本 part 类型按角色区分：OpenAI 原生 Responses 只允许 assistant 用
+      // output_text/refusal，用 input_text 会 400（Invalid value: 'input_text'）。
+      // 单文本块时 content 会收敛为字符串、不触发该校验；多文本块（例如上游注入的
+      // 前导空白块 + 真正文）必然走 parts 数组，因此必须按角色取类型。
+      const textPartType =
+        msg.role === "assistant" ? "output_text" : "input_text";
 
       // 按 ContentBlock 块拆分 content
       const contentParts: any[] = [];
       for (const block of msg.content) {
         if (block.type === "text") {
-          if (block.text) contentParts.push({ type: "input_text", text: block.text });
+          if (block.text) contentParts.push({ type: textPartType, text: block.text });
         } else if (block.type === "image") {
           // 统一助手解析字节（本地文件带 LRU 缓存），此处只做协议映射；
           // 传整个附件对象：attachmentToPart 按 refType 分派物理路径。
@@ -250,13 +256,17 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
             });
           }
         } else if (block.type === "file") {
+          // 文件引用投影成文本 part，与普通文本同角色处理——assistant 消息里出现
+          // input_text 一样会被原生 Responses 拒绝。
           contentParts.push({
-            type: "input_text",
+            type: textPartType,
             text: fileBlockToText(block.attachment),
           });
         }
       }
-      if (contentParts.length === 1 && contentParts[0].type === "input_text") {
+      // 收敛判断按本角色实际使用的 part 类型：assistant 的文本 part 是 output_text，
+      // 仍写死 input_text 会让 assistant 单文本块从字符串退化成单元素数组。
+      if (contentParts.length === 1 && contentParts[0].type === textPartType) {
         baseMessage.content = contentParts[0].text;
       } else if (contentParts.length > 0) {
         baseMessage.content = contentParts;
@@ -689,7 +699,10 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       }
       switch (event.type) {
         case "response.output_text.delta":
-          for (const c of tracker.textDelta(event.delta)) yield c;
+          // item_id 区分上游的多个 message item：GPT6 会先发一个只含空格的
+          // message（占位/前导），随后才是 reasoning 与真正文。按 item_id 分道
+          // 后，空格块不会占住正文块（见 block-lifecycle.util 的说明）。
+          for (const c of tracker.textDelta(event.delta, event.item_id)) yield c;
           continue;
 
         case "response.output_text.done":

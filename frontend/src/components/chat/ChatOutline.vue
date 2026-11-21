@@ -46,7 +46,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import type { MessageBundle, Turn } from '@/types/message'
-import { stripSystemReminder, isHiddenBlock } from '@/utils/messageUtils'
+import { stripSystemReminder, isHiddenBlock, hasVisibleText } from '@/utils/messageUtils'
 import { perfStart } from '@/utils/perf'
 import { isResizeActivityActive, useResizeActivity } from '@/composables/useResizeActivity'
 
@@ -154,7 +154,8 @@ function cleanMarkdown(text: string): string {
  * DEFAULT_MAX_PREVIEW_CHARS），再由卡片的 2/3 行裁剪收尾。
  */
 function previewOf(bundle: MessageBundle): string {
-  const blocks = bundle.blocks?.filter(b => b?.content) || []
+  // 纯空白块（上游占位 item）不算内容：跳过它们，取最后一块真正有可见文字的前缀
+  const blocks = bundle.blocks?.filter(b => hasVisibleText(b?.content)) || []
   const content = blocks[blocks.length - 1]?.content || ''
   if (!content) return ''
   const clean = cleanMarkdown(stripSystemReminder(content))
@@ -174,7 +175,7 @@ const outlineItems = computed<OutlineItem[]>(() => {
     const msgs = turn.messages || []
     for (let i = msgs.length - 1; i >= 0; i--) {
       const m = msgs[i]
-      if (m.role === 'assistant' && m.blocks?.some(b => b?.content)) {
+      if (m.role === 'assistant' && m.blocks?.some(b => hasVisibleText(b?.content))) {
         finalReply = m
         break
       }

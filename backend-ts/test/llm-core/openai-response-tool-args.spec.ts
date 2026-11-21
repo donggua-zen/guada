@@ -751,4 +751,174 @@ describe('OpenAIResponseAdapter 流式工具参数', () => {
     ).toBe(false);
     expect(chunks.find((c) => c.type === 'finish')?.finishReason).toBe('stop');
   });
+
+  // 回归：session-3703d705 的「思考倒挂」。GPT6 先发一个带占位标记的空格 item，
+  // 紧接着再发一个**不带标记**、同样只有一个空格的 message item，之后才是
+  // reasoning，最后才是真正文。旧实现把所有文本塞进同一条通道，空格先占住
+  // 正文块，真正文被并进去 → 最终顺序「正文 → 思考」。
+  // 对齐 ZCode：空白块照常保留（内容不丢），只是按 item_id 自成一块。
+  it('前导空格 message 自成一块：真正文排在思考之后，空白原样保留', async () => {
+    const { chunks, error } = await runCollecting([
+      {
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: { type: 'message', id: 'item_placeholder' },
+        sub2api_placeholder: true,
+      },
+      {
+        type: 'response.output_text.delta',
+        item_id: 'item_placeholder',
+        output_index: 0,
+        delta: ' ',
+        sub2api_placeholder: true,
+      },
+      // 第二个空格 item：没有 sub2api_placeholder
+      {
+        type: 'response.output_item.added',
+        output_index: 1,
+        item: { type: 'message', id: 'msg_ft_leading_space' },
+      },
+      {
+        type: 'response.output_text.delta',
+        item_id: 'msg_ft_leading_space',
+        output_index: 1,
+        delta: ' ',
+      },
+      {
+        type: 'response.output_item.added',
+        output_index: 2,
+        item: { type: 'reasoning', id: 'rs_1' },
+      },
+      {
+        type: 'response.reasoning_summary_text.delta',
+        item_id: 'rs_1',
+        output_index: 2,
+        summary_index: 0,
+        delta: '**Thinking**',
+      },
+      {
+        type: 'response.output_item.added',
+        output_index: 3,
+        item: { type: 'message', id: 'msg_real' },
+      },
+      {
+        type: 'response.output_text.delta',
+        item_id: 'msg_real',
+        output_index: 3,
+        delta: '真正文',
+      },
+      completed([], { input_tokens: 1, output_tokens: 2, total_tokens: 3 }),
+    ]);
+
+    expect(error).toBeUndefined();
+    const blocks = chunks
+      .filter((c) => c.type === 'block_end')
+      // 按块 index 排序 = 最终组装顺序
+      .sort((a, b) => a.index - b.index)
+      .map((c) => c.block);
+    // 到达顺序：空格块 → 思考 → 真正文。真正文不再被并进空格块。
+    expect(blocks.map((b) => b.type)).toEqual(['text', 'reasoning', 'text']);
+    expect(blocks[0].text).toBe(' ');
+    expect(blocks[1].summary).toBe('**Thinking**');
+    expect(blocks[2].text).toBe('真正文');
+  });
+});
+
+/**
+ * formatInput 的文本 part 类型按角色区分（真实上游约束）。
+ *
+ * OpenAI 原生 Responses API 对 assistant 角色只接受 output_text / refusal，
+ * 发 input_text 会 400：`Invalid value: 'input_text'. Supported values are:
+ * 'output_text' and 'refusal'.` 这个错误只在 content 是 part 数组时出现——
+ * 单文本块会被收敛成纯字符串，绕开类型校验，所以历史上一直没暴露。
+ *
+ * 多文本块（例如上游注入的前导空白 item + 真正文）现在会常态出现，
+ * 因此 assistant 必须发 output_text，且收敛判断要跟着角色走。
+ */
+describe('OpenAIResponseAdapter formatInput 文本 part 类型', () => {
+  const assistantMsg = (content: any[]): any => ({
+    id: 'm1',
+    role: 'assistant',
+    kind: 'model',
+    source: { kind: 'model', provider: 'p', model: 'm' },
+    metadata: {},
+    content,
+  });
+  const userMsg = (content: any[]): any => ({
+    id: 'u1',
+    role: 'user',
+    kind: 'user',
+    source: { kind: 'user', provider: 'p', model: 'm' },
+    metadata: {},
+    content,
+  });
+
+  async function formatInput(messages: any[]) {
+    const adapter = new OpenAIResponseAdapter(makeCapabilityStub());
+    return (adapter as any).formatInput(messages);
+  }
+
+  it('assistant 多文本块 → output_text（不能是 input_text）', async () => {
+    const items = await formatInput([
+      assistantMsg([
+        { type: 'text', text: ' ' },
+        { type: 'text', text: '真正的正文' },
+      ]),
+    ]);
+
+    const message = items.find((i) => i.role === 'assistant');
+    expect(Array.isArray(message.content)).toBe(true);
+    expect(message.content.map((p: any) => p.type)).toEqual([
+      'output_text',
+      'output_text',
+    ]);
+    expect(message.content.map((p: any) => p.text)).toEqual([' ', '真正的正文']);
+  });
+
+  it('assistant 单文本块仍收敛为字符串（不因类型改动退化成数组）', async () => {
+    const items = await formatInput([assistantMsg([{ type: 'text', text: '正文' }])]);
+
+    const message = items.find((i) => i.role === 'assistant');
+    expect(message.content).toBe('正文');
+  });
+
+  it('user 文本块仍用 input_text', async () => {
+    const items = await formatInput([
+      userMsg([
+        { type: 'text', text: '第一段' },
+        { type: 'text', text: '第二段' },
+      ]),
+    ]);
+
+    const message = items.find((i) => i.role === 'user');
+    expect(message.content.map((p: any) => p.type)).toEqual([
+      'input_text',
+      'input_text',
+    ]);
+  });
+
+  it('user 单文本块同样收敛为字符串', async () => {
+    const items = await formatInput([userMsg([{ type: 'text', text: '问题' }])]);
+
+    const message = items.find((i) => i.role === 'user');
+    expect(message.content).toBe('问题');
+  });
+
+  it('assistant 文本 + 图片：文本是 output_text，图片是 input_image', async () => {
+    const items = await formatInput([
+      assistantMsg([
+        { type: 'text', text: '看图' },
+        {
+          type: 'image',
+          attachment: { url: 'https://example.com/a.png', mediaType: 'image/png' },
+        },
+      ]),
+    ]);
+
+    const message = items.find((i) => i.role === 'assistant');
+    expect(message.content.map((p: any) => p.type)).toEqual([
+      'output_text',
+      'input_image',
+    ]);
+  });
 });

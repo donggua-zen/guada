@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getThinkingPreview, groupContentsForDisplay, stripSystemReminder } from "./messageUtils";
+import { getThinkingPreview, groupContentsForDisplay, stripSystemReminder, hasVisibleText } from "./messageUtils";
 import type { MessageContent } from "@/types/message";
 
 /**
@@ -227,5 +227,92 @@ describe("stripSystemReminder", () => {
   it("无标记原样返回", () => {
     expect(stripSystemReminder("plain text")).toBe("plain text");
     expect(stripSystemReminder("")).toBe("");
+  });
+});
+
+/**
+ * 纯空白文本块不参与展示（GPT6 每轮在正文前注入一个只含空格的 message item）。
+ *
+ * 后端按原文保留该块（对齐 ZCode：存储不删内容），展示层负责不把它渲染成正文、
+ * 不算作"有内容"（大纲摘要 / 首轮标题生成判定），也不能成为复制/编辑锚点。
+ */
+describe("纯空白文本块", () => {
+  it("hasVisibleText：空白/换行/空串都不算可见内容", () => {
+    expect(hasVisibleText(" ")).toBe(false);
+    expect(hasVisibleText("\n\n")).toBe(false);
+    expect(hasVisibleText("\t ")).toBe(false);
+    expect(hasVisibleText("")).toBe(false);
+    expect(hasVisibleText(null)).toBe(false);
+    expect(hasVisibleText(undefined)).toBe(false);
+    expect(hasVisibleText("正文")).toBe(true);
+    expect(hasVisibleText(" 正文 ")).toBe(true);
+  });
+
+  it("单个纯空白块不产生任何展示分组", () => {
+    const groups = groupContentsForDisplay([
+      { id: "ws", content: " ", state: { isStreaming: false } },
+    ]);
+    expect(groups).toHaveLength(0);
+  });
+
+  it("空白块 + 思考 + 正文：只输出思考组与正文组，空白不占正文位", () => {
+    const groups = groupContentsForDisplay([
+      { id: "ws", content: " ", state: { isStreaming: false } },
+      { id: "th", content: null, reasoningContent: "思考", state: { isStreaming: false } },
+      { id: "body", content: "正文", state: { isStreaming: false } },
+    ]);
+
+    expect(groups.map((g) => g.type)).toEqual(["process", "content"]);
+    expect(groups[1].items[0].content).toBe("正文");
+  });
+});
+
+/**
+ * 纯空白思考块不渲染。
+ *
+ * 与正文前的占位 item 同源：上游没有思考内容时会发占位空格，落库后是只有空白的
+ * reasoning 块。渲染它只会在过程组里留下「已思考」空行（一次回复里可能连着好几个）。
+ * 存储原文不动，只在展示投影层过滤。
+ */
+describe("纯空白思考块", () => {
+  const thinkBlock = (id: string, reasoningContent: any, extra: any = {}): MessageContent =>
+    ({
+      id,
+      content: null,
+      reasoningContent,
+      state: { isStreaming: false, isThinking: false },
+      ...extra,
+    }) as MessageContent;
+
+  it("单个纯空白思考不产生展示分组", () => {
+    expect(groupContentsForDisplay([thinkBlock("a", " ")])).toHaveLength(0);
+    expect(groupContentsForDisplay([thinkBlock("b", "\n\n")])).toHaveLength(0);
+    expect(groupContentsForDisplay([thinkBlock("c", "")])).toHaveLength(0);
+  });
+
+  it("多个空思考 + 一个有效思考：只保留有效那一条", () => {
+    const groups = groupContentsForDisplay([
+      thinkBlock("c", " "),
+      thinkBlock("d", " "),
+      thinkBlock("e", " "),
+      thinkBlock("f", "真实思考"),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].items).toHaveLength(1);
+    expect(groups[0].items[0].reasoningContent).toBe("真实思考");
+  });
+
+  it("流式中的空思考也不渲染（底部 ThinkingStatus 承担指示）", () => {
+    const groups = groupContentsForDisplay([
+      thinkBlock("g", " ", { state: { isStreaming: true, isThinking: true } }),
+    ]);
+    expect(groups).toHaveLength(0);
+  });
+
+  it("有效思考照常渲染", () => {
+    const groups = groupContentsForDisplay([thinkBlock("h", "思考内容")]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].items[0].type).toBe("think");
   });
 });

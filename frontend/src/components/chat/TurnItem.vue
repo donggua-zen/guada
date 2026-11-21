@@ -62,9 +62,9 @@
     </template>
 
     <!-- ============================================ -->
-    <!-- Assistant 部分（有回复时） -->
+    <!-- Assistant 部分（有可渲染内容时） -->
     <!-- ============================================ -->
-    <template v-if="activeBlocks.length > 0">
+    <template v-if="hasAssistantDisplay">
       <div class="assistant-section">
         <div class="text-xs text-gray-400 mb-3">
           <div class="flex items-center">
@@ -232,7 +232,7 @@ import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
 import { isVisionImageMediaType } from '@/utils/media-type';
-import { groupContentsForDisplay, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
+import { groupContentsForDisplay, hasVisibleText, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
 import type { Turn, MessageContent, TurnContent, FileAttachment } from '@/types/message';
 import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, getArgsDisplay, hasToolAggregate, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
@@ -483,7 +483,7 @@ const activeBlock = computed<TurnContent | null>(() => {
   if (list.length === 0) return null;
   for (let i = list.length - 1; i >= 0; i--) {
     const b = list[i];
-    if (typeof b.content === "string" && b.content) return b;
+    if (hasVisibleText(b.content)) return b;
   }
   return list[list.length - 1];
 });
@@ -491,6 +491,15 @@ const activeBlock = computed<TurnContent | null>(() => {
 const displayGroups = computed<DisplayGroup[]>(() => {
   return groupContentsForDisplay(activeContents.value);
 });
+
+/**
+ * assistant 区是否有可渲染内容。
+ *
+ * 用分组结果而不是 activeBlocks.length 判定：上游会在正文前注入只含空格的
+ * message item（GPT6 每轮都有），它会被 flattenSingleContent 过滤掉、不产生任何
+ * 分组；若仍按块数开门，就会留下一个只有头像和空卡片的 assistant 区。
+ */
+const hasAssistantDisplay = computed(() => displayGroups.value.length > 0);
 
 // 文件变更记录
 const { fileChanges } = useFileChanges(activeContents);

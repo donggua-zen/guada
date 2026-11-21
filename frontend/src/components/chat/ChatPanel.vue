@@ -247,7 +247,7 @@ import {
 import { useMessageOperations, toPayloadFileRefs } from '@/composables/useMessageOperations'
 import { useSessionSettingsSync } from '@/composables/useSessionSettingsSync'
 import { useSessionTokenStats, applyContextStatsFromEvents } from '@/composables/useSessionTokenStats'
-import { isHiddenBlock, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils'
+import { isHiddenBlock, toUserMessageView, collectReferencedKbs, hasVisibleText } from '@/utils/messageUtils'
 import { getErrorMessage, getApiErrorStatus } from '@/utils/errorMessage'
 import { shouldClearComposerAfterSend } from '@/utils/sendResult'
 import {
@@ -1668,7 +1668,7 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
       visibleTurns.value.length === 1 &&
       !!userOfTurn(firstTurn) &&
       (firstTurn?.messages || []).some(
-        (m) => m.role === 'assistant' && m.blocks?.some((b) => b?.content),
+        (m) => m.role === 'assistant' && m.blocks?.some((b) => hasVisibleText(b?.content)),
       );
     if (firstExchangeDone && !hasGeneratedTitle.value) {
       await generateTitleIfNeeded(currentSessionId.value!, currentSession);
@@ -2054,8 +2054,9 @@ async function copyMessage(block: MessageActionTarget) {
       return;
     }
 
-    if (block.content) {
-      const ok = await writeTextToClipboard(block.content);
+    // 纯空白块（上游占位 item）不当作可复制内容：复制空串而不是一个空格
+    if (hasVisibleText(block.content)) {
+      const ok = await writeTextToClipboard(block.content as string);
       if (ok) toast.success(t('common.copySuccess'));
       else toast.error(t('common.copyFailed'));
     }

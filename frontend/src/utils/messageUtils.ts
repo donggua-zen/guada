@@ -145,31 +145,41 @@ export function getThinkingPreview(reasoningContent: string | null | undefined):
 }
 
 /**
+ * 文本是否含可见内容（纯空白不算）。
+ *
+ * 上游会在正文前注入只含空格/换行的 message item（GPT6 每轮都有），后端按原文保留
+ * 成独立 text 块。展示层统一用这个判定"有内容"，避免空块被当成正文渲染、被选中
+ * 作为复制锚点，或被算进标题生成/大纲摘要。
+ */
+export function hasVisibleText(text?: string | null): boolean {
+  return typeof text === "string" && text.trim().length > 0;
+}
+
+/**
  * 将单个大 content 拆分为 DisplayItem 列表
  */
 function flattenSingleContent(content: MessageContent): DisplayItem[] {
   const items: DisplayItem[] = [];
 
   // 1. think
-  if (content.reasoningContent) {
+  //    纯空白思考块不渲染：上游没有思考内容时会发占位空格（与正文前占位 item 同源），
+  //    落库后是只有空白的 reasoning 块。渲染它只会在过程组里留下「已思考」空行。
+  //    流式期间同理——真在思考但还没出字时，底部的 ThinkingStatus 已经承担指示作用。
+  if (hasVisibleText(content.reasoningContent)) {
     items.push({
       id: `${content.id}-think`,
       type: "think",
-      reasoningContent: content.reasoningContent,
+      reasoningContent: content.reasoningContent || "",
       source: content,
     });
   }
 
   // 2. content（排除 tool-result 块：其结果已挂到 tool-call 的 toolCallsResponse 内联展示，不重复渲染文本）
-  if (
-    content.content &&
-    content.content.trim().length > 0 &&
-    !content.metadata?.toolCallId
-  ) {
+  if (hasVisibleText(content.content) && !content.metadata?.toolCallId) {
     items.push({
       id: `${content.id}-content`,
       type: "content",
-      content: content.content,
+      content: content.content as string,
       source: content,
     });
   }
