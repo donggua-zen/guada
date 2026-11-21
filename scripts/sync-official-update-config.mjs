@@ -29,7 +29,7 @@ import yaml from "js-yaml";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
-const GITCODE_REPO = "https://gitcode.com/donggua_codelab/GuaDaAI";
+const GITCODE_REPO = "https://gitcode.com/donggua_sherlock/GuaDaAI";
 const GITHUB_REPO = "donggua-zen/guada";
 
 function parseArgs(argv) {
