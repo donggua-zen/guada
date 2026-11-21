@@ -102,3 +102,6 @@ pet-market/
 
 # qi-dusk-skin 独立仓库工作区（dev 加载用 junction，见 ../guada_plugins）
 plugins/qi-dusk-skin/
+
+# 本地演示/调试页面（不参与构建与发布）
+/demo/

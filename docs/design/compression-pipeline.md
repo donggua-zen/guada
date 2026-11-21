@@ -340,7 +340,7 @@ v1.2 曾把 agent-engine 私有 `executeLLMStream`（重试壳）抽为 `LlmStre
 ```
 LLMService.completions                    ← 唯一 seam（路由/序列化/流式/超时/purpose）
   ├─ 主对话循环：SessionLlmRequestBuilder 组装 → agent-engine 私有 streamWithRetry
-  │      （重试 5 次 + retry 信号 yield → SSE；对齐 DSH retryPolicy 在 agent 层）
+  │      （重试 10 次 + retry 信号 yield → SSE；对齐 DSH retryPolicy 在 agent 层）
   ├─ 影子轮次：SessionLlmRequestBuilder 组装 → 单次 completions（无重试，fail-open）
   └─ 压缩摘要：自组装 + purpose:'compaction' → 单次 completions（无重试，对齐 DSH）
 ```

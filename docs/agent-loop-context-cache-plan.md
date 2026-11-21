@@ -4,7 +4,6 @@
 > `tsc --noEmit` 零错误；`test/chat` + `test/agent-engine` **15 套件 132 用例全绿**（含新增快照失效契约测试：revision 复用 / 写入重建 / append 增量 / transformKey 切换重建）。
 > 全量测试的既有失败（workspace-watcher TS2554 / browser / skills）与本方案无关。
 > 剩余：P1（S4 invalidateBlocks 精确失效、S5 管线惰性复制）、P2（指标埋点、token 账本持久化）——均非必需。
-> 后续设计（同日）：DSH 式 envelope/surface 分离方案见 `docs/dsh-style-request-envelope-plan.md`（system 独立字段、getMessages 收敛、user_prompt 保留前导不落库）。
 
 > 目标：消除每轮 agent 循环对消息视图的重复投影与重复变换，把「每轮 O(n) 重算 ×N 次」降为「按 seq 增量的 O(Δ) 更新」。
 > 相关文档：`message-pipeline-normalization-plan.md`（L0/L1 分层契约）、`agent-engine.md`（循环结构）

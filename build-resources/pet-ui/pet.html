@@ -807,6 +807,8 @@
   var drag = {
     active: false, moved: false, sx: 0, sy: 0, lastX: 0, lastY: 0, pointerId: null,
     dirName: null,
+    /** 按下时刻：用于识别 NOACTIVATE 窗口的「假 blur」 */
+    startedAt: 0,
     /** 与当前朝向相反的累计位移（px）：换向要先攒够阈值，吸收慢拖时的手抖 */
     dirAccum: 0,
   };
@@ -861,6 +863,7 @@
     drag.active = false;
     drag.pointerId = null;
     drag.noButtonCount = 0;
+    drag.startedAt = 0;
     if (drag.holdTimer) {
       clearInterval(drag.holdTimer);
       drag.holdTimer = null;
@@ -928,6 +931,7 @@
     drag.active = true;
     drag.moved = false;
     drag.noButtonCount = 0;
+    drag.startedAt = Date.now();
     drag.pointerId = e.pointerId;
     drag.sx = drag.lastX = e.screenX;
     drag.sy = drag.lastY = e.screenY;
@@ -1021,9 +1025,22 @@
     }
   });
 
-  // 窗口失焦（比如点了别的应用）→ 收尾，避免卡在交互态
+  // 窗口失焦 → 收尾。
+  //
+  // 坑：桌宠窗口打了 WS_EX_NOACTIVATE（点击不抢焦点），按下时 Chromium 会
+  // 尝试激活窗口却被系统拒绝，随即触发一次**假的 blur**。若在这里无条件
+  // endDrag，就会出现「pointerdown 之后 drag.active 立刻被清空、后续
+  // pointermove 全部被丢弃」—— 正是「按着却拖不动」的原因。
+  //
+  // 区分办法：按下后 400ms 内的 blur 视为假失焦，忽略。
+  // 真实切走窗口（用户点别的应用）不会这么快，仍会正常收尾。
   window.addEventListener('blur', function () {
-    if (drag.active) endDrag();
+    if (!drag.active) return;
+    if (drag.startedAt && Date.now() - drag.startedAt < 400) {
+      window.__petFakeBlur = (window.__petFakeBlur || 0) + 1;
+      return;
+    }
+    endDrag();
   });
 
   // 指针被系统取消（设备切换 / 窗口状态变化）→ 收尾。

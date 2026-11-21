@@ -3515,9 +3515,8 @@ app.whenReady().then(async () => {
     // 比等 bind 失败再退避重试更快，也覆盖了「旧连接僵死但未报错」的情况。
     powerMonitor.on("resume", () => {
       log.info("System resumed from sleep, kicking bridge to rebuild mobile tunnel");
-      // 桌宠：睡眠会吞掉 pointerup 且系统可能重置窗口的鼠标过滤状态，
-      // 必须强制清交互态并重新下发穿透设置，否则唤醒后宠物拖不动。
-      petWindow?.onSystemResume();
+      // 桌宠：休眠期间我们隐藏了窗口，恢复后重新显示
+      petWindow?.restoreAfterSuspend();
       // 等 3s 让网络栈就绪（Wi-Fi 重关联），再断开 bridge；后端会在 1s 内重连
       setTimeout(() => {
         try {
@@ -3526,25 +3525,25 @@ app.whenReady().then(async () => {
           log.warn("kick bridge connections failed:", err);
         }
       }, 3000);
-      // 显示器热插拔/分辨率变化会在 resume 后稍晚到达，补一次自愈
-      setTimeout(() => petWindow?.onSystemResume(), 1500);
     });
 
-    // 锁屏 / 解锁（WIN+L）：Windows 不触发 resume，这是会话切换到安全桌面。
-    // 锁屏后 Chromium/DWM 的窗口鼠标状态会失同步且不会自愈，
-    // 所以解锁时直接重建桌宠窗口（比修补状态可靠）。
+    // 锁屏 / 解锁（WIN+L）。
+    // 锁屏时用户看不见桌宠，也没法拖拽 —— 直接隐藏，省掉动画与轮询开销；
+    // 解锁后重新显示。不需要重建窗口（显示/隐藏本身不会破坏窗口表面）。
     powerMonitor.on("lock-screen", () => {
-      log.info("[pet] screen locked");
-      petWindow?.onSystemResume();
+      log.info("[pet] screen locked → suspend（隐藏省性能）");
+      petWindow?.suspendForSystem();
     });
     powerMonitor.on("unlock-screen", () => {
-      log.info("[pet] screen unlocked, recovering in place");
-      void petWindow?.rebuildAfterUnlock();
+      log.info("[pet] screen unlocked → resume");
+      petWindow?.restoreAfterSuspend();
     });
 
-    // 显示器数量/分辨率变化（息屏常伴随）→ 重新夹位置 + 重算穿透
+    // 显示器省电息屏/恢复：SC_MONITORPOWER 不触发任何 powerMonitor 事件，
+    // display-metrics-changed 是这里唯一能拿到的信号。只用于「补一次显示检查」，
+    // 不做重建（正常插拔副屏也会触发，重建会闪）。
     screen.on("display-metrics-changed", () => {
-      petWindow?.onSystemResume();
+      petWindow?.restoreAfterSuspend();
       petWindow?.persistPosition();
     });
 

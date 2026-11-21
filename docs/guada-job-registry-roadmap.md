@@ -602,6 +602,27 @@ cd guada-agent && go test ./...
 - `waitForComplete`/`getSubAgents` 方法保留（测试与内部诊断仍在用），只是不再有模型工具调用它们。
 - 历史会话回放：旧文案的 processId 仍能解析展示，但新会话不再产生 processId 文案。
 
+### 12.6 后续：`closedAt` 语义降级为「最近一次运行结束时间」（2026-11-19）
+
+第 12 节删掉了 `lifecycle` 参数与 `subagent_manager`，但**冻结语义本身仍在**：每次结果交付都会写 `closedAt`/`closeReason`、发 `subagent.closed`，`sendMessage` 还要先解冻。这套「关闭」概念与 zcode 的做法相反（zcode 只有 stop，没有 close；会话记录里根本没有 `closed_at`），且带来三个问题：前台子代理没有停止入口、解冻对前端不可见、崩溃遗留会话状态错判。
+
+本次把「会话可关闭」这一层彻底去掉，`closedAt` 降级为纯展示字段：
+
+| 概念 | 旧 | 新 |
+|---|---|---|
+| 一次运行结束 | 冻结会话 + 发 `subagent.closed` | 记时间戳 + 发 `subagent.run_ended`，不改会话可交互性 |
+| 停止运行 | `closeSubAgent()`（含冻结） | `stopSubAgent(parentSessionId, subSessionId)`，只停止 |
+| 继续对话 | 先 `closedAt: null` 解冻再跑 | 直接开新回合 |
+| 「活跃 / 已结束」判据 | `closedAt` | **有无活跃流**；`closedAt` 仅作展示时间戳 |
+
+具体改动：
+- `SubAgentStopReason` 的 `"closed"` → `"stopped"`（对齐 zcode `SubagentTaskStatus`）；事件 `subagent.closed` → `subagent.run_ended`，SSE `sub_agent_closed` → `sub_agent_ended`。
+- `disposeSession()` → `recordRunEnd()`，`maybeAutoDispose()` → `markRunEnded()`；`sendMessage` 删除解冻分支。
+- `countByParentId()` 连同配额校验一起删除（生产已零调用，只剩测试引用）——子代理会话数不再设上限。
+- 前端 `subagentDisplay` 的 `frozen` → `ended`，判据从 `closedAt` 改为活跃流（`peekStreamStatus === 'running' || isStreaming`），刷新后失败态由 `closeReason` 还原。
+- `browser-script` 的标签清理钩子从「会话关闭」改挂「运行结束」——标签属于这一次运行，与会话生命周期无关。
+- 数据库列 `closed_at` / `close_reason` **原样保留、不迁移**，继续写入但生命周期逻辑零依赖。
+
 ---
 
 ## 13. job_read 游标化执行记录（2026-10-24）

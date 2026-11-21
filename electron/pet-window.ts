@@ -521,15 +521,17 @@ export class PetWindowController {
   private pollTimer: NodeJS.Timeout | null = null;
   /** 拖动基准：按下时的屏幕光标与窗口位置（绝对坐标拖动用） */
   private dragOrigin: { sx: number; sy: number; wx: number; wy: number } | null = null;
+  /** 重建期间暂停重建（避免同一时刻重复重建） */
+  private visibleRebuildGuardDisabled = false;
+  /** 是否因系统挂起（锁屏/休眠/息屏）而隐藏 —— 恢复时据此决定要不要重新显示 */
+  private suspendedBySystem = false;
+  /** 周期性状态采集（只写日志，用于抓「放一夜后拖不动」的现场） */
+  private stateSamplerTimer: NodeJS.Timeout | null = null;
+  private static readonly STATE_SAMPLE_MS = 5 * 60 * 1000;
   /** 诊断：最近若干次 tick 的命中判定（排查「一直穿透」用） */
   private tickTrace: Array<{ t: number; x: number; y: number; hit: boolean; ignore: boolean }> = [];
   /** 诊断：渲染层最近一次 mousemove 的原始数据 */
   private lastMousemove: unknown = null;
-  /**
-   * 新窗口的首次 show 由我们主动触发（showInactive），
-   * 这一跳不该再触发「重建」，否则会无限递归。
-   */
-  private skipNextShowRebuild = false;
   /** 拖动/按钮交互中：暂停命中判定，保持可交互 */
   private interacting = false;
   /**
@@ -578,37 +580,6 @@ export class PetWindowController {
       this.avatarId = wanted;
     }
     this.format = this.detectFormat();
-  }
-
-  /**
-   * WIN+L 解锁后的恢复。
-   *
-   * 实测结论（网格点击验证）：hide→show 之后窗口表面会失效 ——
-   * 所有像素 alpha 归零，点击全部穿透，命中数 5/15 → 0/15；
-   * setShape / setAlwaysOnTop / setFocusable / setIgnoreMouseEvents 都救不回，
-   * 只有「重建窗口」能恢复（重建后 6/15）。
-   *
-   * 所以这里直接走无缝重建（新旧窗重叠，用户看不到白帧），
-   * 不再尝试原地修补 —— 那条路已经证明无效。
-   */
-  async rebuildAfterUnlock(): Promise<void> {
-    if (!this.enabled) return;
-    await this.seamlessRebuild("unlock");
-  }
-
-  /**
-   * 解锁 / 重新显示后的恢复。
-   *
-   * 现在穿透靠窗口 region（setShape），它不会被锁屏重置，
-   * 所以这里只需清掉形状缓存、让形状重新下发一次，并复位渲染层的 hover 缓存。
-   */
-  private rearmInput(win: BrowserWindow): void {
-    this.interacting = false;
-    this.interactingSince = 0;
-    this.hitHeartbeatAt = 0;
-    win.webContents.send("pet:reset-hover");
-    this.startPoll();
-    this.tick();
   }
 
   /**
@@ -665,13 +636,72 @@ export class PetWindowController {
       return;
     }
     // 新窗的首次 show 是「装载显示」，不该再触发重建
-    this.skipNextShowRebuild = true;
     fresh.showInactive();
     // 新窗已经开始绘制后再移除旧窗，避免中间出现空帧
     setTimeout(() => {
       if (!old.isDestroyed()) old.destroy();
     }, 150);
     log.info(`[pet] 窗口已无缝重建（${reason}）`);
+  }
+
+  /**
+   * 系统挂了起屏幕（锁屏 / 休眠 / 息屏）→ 隐藏窗口。
+   *
+   * 屏幕看不见，桌宠的动画与 40ms 穿透轮询都是白烧 GPU/CPU，直接停掉；
+   * 同时把「因系统挂起而隐藏」记下来，恢复时才知道要不要重新显示。
+   */
+  suspendForSystem(): void {
+    this.suspendedBySystem = true;
+    this.hide();
+  }
+
+  /** 系统恢复（解锁 / 唤醒 / 显示器回来）→ 若之前是被系统隐藏的，重新显示 */
+  restoreAfterSuspend(): void {
+    if (!this.suspendedBySystem) return;
+    this.suspendedBySystem = false;
+    if (!this.enabled) return;
+    const win = this.win;
+    if (!win || win.isDestroyed()) {
+      this.ensureWindow();
+      return;
+    }
+    if (!win.isVisible()) {
+      win.showInactive();
+    }
+    this.startPoll();
+    this.startStateSampler();
+    this.tick();
+  }
+
+  /**
+   * 启动周期性状态采集（只写日志，不改行为）。
+   *
+   * 目的：抓「夜里放一夜后拖不动」的现场 —— 那个故障无法主动复现，
+   * 只能等它发生时日志里已经有前几小时的状态演变。
+   * 每 5 分钟一行，日志量可忽略（一天 288 行）。
+   */
+  private startStateSampler(): void {
+    if (this.stateSamplerTimer) return;
+    this.stateSamplerTimer = setInterval(() => {
+      const st = this.debugState();
+      const trace = this.tickTrace;
+      const last = trace.length > 0 ? trace[trace.length - 1] : null;
+      const hitCount = trace.filter((t) => t.hit).length;
+      log.info(
+        `[pet][sample] visible=${st.visible} ignore=${st.appliedIgnore} ` +
+          `interacting=${st.interacting} poll=${st.pollRunning} ` +
+          `hb=${st.heartbeatAgeMs}ms bbox=${st.hitByBBox} ` +
+          `geo=${st.hasGeometry} cursorLocal=${JSON.stringify(st.cursorLocal)} ` +
+          `traceHit=${hitCount}/${trace.length} last=${last ? `${last.x},${last.y},hit=${last.hit},ignore=${last.ignore}` : "none"}`,
+      );
+    }, PetWindowController.STATE_SAMPLE_MS);
+    this.stateSamplerTimer.unref?.();
+  }
+
+  private stopStateSampler(): void {
+    if (!this.stateSamplerTimer) return;
+    clearInterval(this.stateSamplerTimer);
+    this.stateSamplerTimer = null;
   }
 
   /** 当前形象的素材目录 */
@@ -860,24 +890,28 @@ export class PetWindowController {
       this.stopPoll();
     });
 
-    // 显示时：hide→show 之后窗口表面会失效（点击全部穿透，实测命中 0/15），
-    // 只能重建；用 seamlessRebuild 让新旧窗重叠，避免闪一下。
+    // 显示时：复位输入相关状态。不重建窗口 ——
+    // 重建是「调试：重建窗口」菜单里的手动兜底手段，不该在正常显隐路径上自动触发。
     win.on("show", () => {
-      // 新建窗口的首次 show 不需要重建（内容刚加载，表面是新的）
-      if (this.skipNextShowRebuild) {
-        this.skipNextShowRebuild = false;
-        this.interacting = false;
-        this.interactingSince = 0;
-        this.hitHeartbeatAt = 0;
-        win.webContents.send("pet:reset-hover");
-        this.startPoll();
-        this.tick();
-        return;
-      }
-      void this.seamlessRebuild("show");
+      this.interacting = false;
+      this.interactingSince = 0;
+      this.hitHeartbeatAt = 0;
+      this.appliedIgnore = null;
+      log.info("[pet][event] win.show");
+      win.webContents.send("pet:reset-hover");
+      this.startPoll();
+      this.startStateSampler();
+      this.tick();
     });
     win.on("focus", () => {
       this.appliedIgnore = null;
+      log.info("[pet][event] win.focus");
+    });
+    win.on("blur", () => {
+      log.info("[pet][event] win.blur");
+    });
+    win.on("hide", () => {
+      log.info("[pet][event] win.hide");
     });
 
     // 首帧就绪前保持穿透，避免加载期挡住桌面点击。
@@ -892,6 +926,7 @@ export class PetWindowController {
 
     this.win = win;
     this.startPoll();
+    this.startStateSampler();
     log.info(
       `[pet] 桌宠窗口已创建 pos=(${position.x},${position.y}) size=${size.width}x${size.height} pet=${this.petPx}px`,
     );
@@ -932,11 +967,11 @@ export class PetWindowController {
     const win = this.ensureWindow();
     if (!win) return;
     if (!win.isVisible()) {
-      this.skipNextShowRebuild = true;
       win.showInactive();
       // 重新显示后强制重新判定一次穿透
       this.appliedIgnore = null;
       this.startPoll();
+      this.startStateSampler();
       this.pushClip();
     }
     this.pushSettings();
@@ -964,6 +999,8 @@ export class PetWindowController {
     if (!this.isAlive()) return;
     this.win?.hide();
     this.stopPoll();
+    // 隐藏期间不采集（锁屏一整夜没必要每 5 分钟写一行）
+    this.stopStateSampler();
     this.appliedIgnore = null;
     // 隐藏时清掉交互态，避免下次显示时还以为在拖拽
     this.interacting = false;
@@ -1104,6 +1141,14 @@ export class PetWindowController {
   /** 当前穿透状态（测试/诊断用；null = 尚未下发） */
   getAppliedIgnore(): boolean | null {
     return this.appliedIgnore;
+  }
+
+  /**
+   * 仅供测试：强制窗口进入穿透态。
+   * 用来构造「光标命中却仍穿透」的失效现场，验证看门狗会重建窗口。
+   */
+  setIgnoreMouseEventsForTest(ignore: boolean): void {
+    this.setIgnoreRaw(ignore);
   }
 
   /** 诊断快照：唤醒后从主进程日志或 IPC 读，定位「到底哪一环死了」 */
@@ -1315,6 +1360,7 @@ export class PetWindowController {
 
   destroy(): void {
     this.stopPoll();
+    this.stopStateSampler();
     if (!this.isAlive()) return;
     this.win?.destroy();
     this.win = null;
@@ -1339,7 +1385,7 @@ export class PetWindowController {
     const win = this.win;
     if (!win || win.isDestroyed()) return;
     const now = Date.now();
-    // 交互态超时兜底（锁屏吞事件时避免永远停在整窗形状）
+    // 会话锁超时兜底（锁屏吞事件时避免永远停在整窗形状）
     if (
       this.interacting &&
       now - this.interactingSince > PetWindowController.INTERACT_TIMEOUT_MS
