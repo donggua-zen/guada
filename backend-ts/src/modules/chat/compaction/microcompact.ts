@@ -28,11 +28,11 @@ export const PRUNING_TOOL_RESULT_MAX_LENGTH = 1000;
  * 保证裁剪后必然更短——已裁剪内容不再入候选（幂等），不会写出零收益/变长事件。
  */
 export const MIN_PRUNE_GAIN = 200;
-/** 微压缩触发阈值相对 LLM 阈值的比例（对齐 zcode：min(0.9×auto, auto−buffer)） */
+/** 微压缩触发阈值相对 LLM 阈值的比例（min(0.9×auto, auto−buffer)） */
 export const MICROCOMPACT_THRESHOLD_RATIO = 0.9;
 /** 微压缩触发阈值相对 LLM 阈值的固定回退缓冲（token） */
 export const MICROCOMPACT_BUFFER_TOKENS = 2000;
-/** 最小收益门槛（token）：整批估算节省低于此值则放弃本次微压缩（对齐 zcode 256） */
+/** 最小收益门槛（token）：整批估算节省低于此值则放弃本次微压缩 */
 export const MICROCOMPACT_MIN_TOKEN_SAVINGS = 256;
 /** 思考时间保护窗：窗口内的思考不剥离 */
 export const THINKING_PROTECT_MS = 2 * 60 * 60 * 1000;

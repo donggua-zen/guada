@@ -1,7 +1,7 @@
 /**
  * Windows shell 探测（纯 fs，零子进程）。
  *
- * 优先级（形状对齐 zcode 的 bash-shell-provider，兜底改为 PowerShell）：
+ * 优先级（兜底为 PowerShell）：
  *   0. 设置页手动指定的 shell 后端（preference ≠ auto 时，优先于 env）
  *   0'. GUADA_SHELL 显式覆盖（用户手动指定，限定可识别的 shell 名）
  *   1. Git Bash 固定安装路径
@@ -58,7 +58,7 @@ export function envValue(
 
 /**
  * PATH 各目录 × PATHEXT 展开可执行文件候选。
- * 顺序：裸名优先，然后按 PATHEXT 的小写扩展名（与 zcode windowsExecutableCandidates 一致）。
+ * 顺序：裸名优先，然后按 PATHEXT 的小写扩展名。
  */
 export function pathExecutableCandidates(
   file: string,

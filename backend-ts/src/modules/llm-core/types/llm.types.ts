@@ -22,7 +22,7 @@ export { ToolDefinition, ToolParameterProperty } from "../../tools/interfaces/to
 /**
  * LLM 调用来源（用量统计维度）。
  *
- * 与 zcode 的 query_source 对齐；主对话之外的辅助调用必须在调用点声明 purpose，
+ * 主对话之外的辅助调用必须在调用点声明 purpose，
  * 由 UsageService 映射到本枚举，避免全部落进 main_turn 污染来源分布。
  */
 export type UsageSource =

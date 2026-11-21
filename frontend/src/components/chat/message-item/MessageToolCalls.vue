@@ -17,7 +17,7 @@
           <span class="shrink-0"
             :class="tool.outcome === 'aborted' ? 'text-(--gd-color-text-subtlest)' : ''">{{
               getActionText(tool, toolIndex) }}</span>
-          <!-- 文件类工具：三段式行头（ZCode 同款）——文件名 chip（扩展名图标 + basename，
+          <!-- 文件类工具：三段式行头——文件名 chip（扩展名图标 + basename，
                优先显示、hover 看全路径）+ 目录串（带尾斜杠，次要色，优先被截断） -->
           <template v-if="rowDisplays[toolIndex].file">
             <span v-if="rowDisplays[toolIndex].remoteName" class="shrink-0 ml-2 text-sm">{{ t('chat.toolCalls.remote') }}·</span>
@@ -526,8 +526,7 @@ const formatToolResponse = (response?: ToolCallResponseEntry): string => {
   background: color-mix(in srgb, var(--gd-color-surface) 80%, transparent);
 }
 
-/* 独立渲染工具行（计划卡等）：不套第二层外框与底色——卡片自带边框（ZCode 同款
-   "不再套一层通用工具卡"）。--tool-card-pad-x 归零，避免内部视图的负边距把内容
+/* 独立渲染工具行（计划卡等）：不套第二层外框与底色——卡片自带边框（"不再套一层通用工具卡"）。--tool-card-pad-x 归零，避免内部视图的负边距把内容
    顶出卡片（该变量本是用来抵消本层横向内边距的）。
    margin 也归零：没有工具头部后，22px 左缩进（= 图标 16px + 间距 6px）失去对齐对象，
    卡片左缘与助手正文左缘对齐；4px 顶距同理（它本是头部与结果之间的间隔）。 */

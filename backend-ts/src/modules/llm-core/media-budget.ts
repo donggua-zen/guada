@@ -334,9 +334,9 @@ export function projectMessagesForMediaBudget(
     };
   }
 
-  // 受保护媒体超出全部预算时也不能丢（用户刚发的图），直接放行——由上游错误兜底，
-  // 与 zcode 的「当前附件本身过大 → 明确报错而非静默丢弃」取向一致：这里的取舍是
-  // 让模型看到用户真正关心的图，而不是发出一份没有图的请求。
+  // 受保护媒体超出全部预算时也不能丢（用户刚发的图），直接放行——由上游错误兜底。
+  // 取舍：当前附件本身过大 → 明确报错而非静默丢弃，让模型看到用户真正关心的图，
+  // 而不是发出一份没有图的请求。
   const retained = new Set<string>();
   let remainingBytes = maxMediaBytes;
   for (const ref of refs) {

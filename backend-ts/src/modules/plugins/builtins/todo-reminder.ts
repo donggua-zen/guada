@@ -1,5 +1,5 @@
 /**
- * Todo 周期性提醒（对齐 ZCode 的 todo_reminder）。
+ * Todo 周期性提醒。
  *
  * 模型在长会话里容易忘记维护 todo：这里按 assistant 轮次做 cadence 提醒——
  * 距最近一次 todo 工具调用达到 {@link TODO_REMINDER_TURNS} 轮，且距上一次

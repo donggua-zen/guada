@@ -1,7 +1,7 @@
 /**
  * Core Stream Recovery —— 已越过“可见输出边界”后的唯一恢复层。
  *
- * 与 ZCode 的 streaming-recovery 对齐：
+ * 恢复语义：
  * - 每回合一个 streamRecoveryRetryCount，默认最多 10 次；llmIncompleteOutputAction=error 时为 0。
  * - 没有完整工具：丢弃半截正文/思考，从上一个消息 anchor 重开。
  * - 有完整工具：只提交完整工具调用，执行并落结果，从最后一个工具结果 anchor 重开；
@@ -22,7 +22,7 @@ import {
 } from "../llm-core/utils/upstream-errors";
 import { isUserAbort } from "../llm-core/utils/retry-on-error.util";
 
-/** 每回合流恢复预算（对齐 ZCode 的 STREAM_RECOVERY_MAX_RETRIES=10） */
+/** 每回合流恢复预算 */
 export const STREAM_RECOVERY_MAX_RETRIES = 10;
 
 /** 被丢弃的 assistant 尝试的审计标记（落库 metadata.error.name） */

@@ -335,7 +335,7 @@ export interface ModelThinkingConfig {
 }
 
 /**
- * 档位 → JSON merge patch 映射（对齐 ZCode 的 option map 思路，取其子集）：
+ * 档位 → JSON merge patch 映射：
  *
  * 值是一个 JSON merge patch 对象（RFC 7386 语义：null 删键、对象递归合并、
  * 数组整体替换），在该档位生效时整体打到最后装配完成的请求体上。与平面

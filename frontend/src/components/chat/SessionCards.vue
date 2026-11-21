@@ -30,7 +30,7 @@
             v-tooltip="t('chat.ask.queueTooltip')">
             {{ t('chat.ask.queueMore', { n: waitingCount }) }}
           </span>
-          <!-- 分页器（对齐 ZCode：翻页只走箭头，选完不自动翻；单页为禁用态） -->
+          <!-- 分页器：翻页只走箭头，选完不自动翻；单页为禁用态 -->
           <span class="shrink-0 flex items-center gap-1 text-xs text-gray-400">
             <button class="ask-page-btn" :disabled="pageIdx === 0" @click="prevPage">
               
@@ -66,7 +66,7 @@
             {{ question.detail }}
           </div>
 
-          <!-- 选项 + 常驻自定义输入行：单击/上下键 = 移动选取（移动即选，对齐 ZCode 的选取框语义），
+          <!-- 选项 + 常驻自定义输入行：单击/上下键 = 移动选取（移动即选），
                双击/回车/「提交」= 提交；键盘处理挂在整卡上（见 onOptionsKeydown） -->
           <div ref="optionsEl" class="mt-2 flex flex-col gap-1.5">
             <button v-for="(opt, i) in question.options" :key="opt.label"
@@ -275,7 +275,7 @@ function focusFirstOption() {
   });
 }
 
-/** 卡片键盘（对齐 ZCode 交互、非"移动焦点"）：
+/** 卡片键盘交互（移动"选取"而非"移动焦点"）：
  *  - 上下键 = 移动"选取框"，单选移动即选（移到输入行只落焦点）；
  *  - 回车 = 提交（当前题有选取或自定义输入才提交，都没有时空转，防误触）；
  *  - Tab / 空格 = 按钮原生行为（Tab 移焦点、空格=点击=选取）；
@@ -487,7 +487,7 @@ async function submit() {
   z-index: 2;
 }
 
-/* 卡片限高 + 内部滚动（对齐 ZCode 对话框 max-h-[min(72dvh,42rem)]）：
+/* 卡片限高 + 内部滚动（max-h-[min(72dvh,42rem)]）：
    弹窗顶替输入区位置，绝不超过视口——问题多/选项长时在卡内滚动，而不是把消息区挤没 */
 .ask-card {
   max-height: min(60vh, 32rem);

@@ -88,7 +88,7 @@ const plans = computed<SessionPlanItem[]>(() =>
 )
 
 /** 生成中的计划（尚未落库）：直接读消息树里那份半截 args，正文随流式增长。
- *  它是**面板的当前内容**，不是目录条目——目录是历史（对齐 ZCode：计划目录只收终态行，
+ *  它是**面板的当前内容**，不是目录条目——目录是历史（计划目录只收终态行，
  *  流式计划的入口是流内卡片，从卡片进来时展示的正是这一份）。 */
 const draft = computed(() => (props.sessionId ? findPlanDraft(props.sessionId) : undefined))
 

@@ -454,7 +454,7 @@ export default {
     closeTab: '关闭标签',
     fileTooLarge: '文件过大暂不支持预览',
     loadFileFailed: '加载文件失败',
-    imageLoadFailed: '图片加载失败（格式可能不受浏览器支持）',
+    imageLoadFailed: '图片加载失败（格式不受支持或文件无法访问）',
     mediaPlaybackFailed: '无法播放：格式可能不受浏览器支持',
     mediaNotPlayable: '该媒体格式浏览器无法播放，可用其他播放器打开',
     workspacePathError: '无法获取工作目录路径',

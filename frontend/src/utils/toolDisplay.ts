@@ -316,7 +316,7 @@ function isJsonWhitespace(code: number): boolean {
 
 /**
  * 参数摘要的结构化版本：文件类工具（argsKey = "file_path"）拆成
- * 文件名 + 目录两段（ZCode 同款交互），其余场景与 getArgsText 一致。
+ * 文件名 + 目录两段，其余场景与 getArgsText 一致。
  */
 /**
  * 从参数里读取语义摘要（模型现写的 description）。
@@ -430,7 +430,7 @@ const DEFAULT_RENDERER_FIELDS: Record<
   diff: { file: "file_path", oldValue: "old_text", newValue: "new_text" },
   content: { file: "file_path", content: "content" },
   terminal: { command: "command" },
-  // submit_plan 的计划正文：流式期间半截 JSON 也能提取，首段即渲染（对齐 ZCode）
+  // submit_plan 的计划正文：流式期间半截 JSON 也能提取，首段即渲染
   plan: { content: "plan" },
 };
 

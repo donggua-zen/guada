@@ -9,7 +9,7 @@
  *   // 或整表：useFormValidation(schema, () => form)
  *
  * 错误展示：GdFormField 的 error prop + 控件的 :error（GdInput/GdSelect/GdInputNumber 均支持）。
- * 范式参照：SchedulerTaskEditView 的 errors reactive + field-error 红字、zcode 的 FieldError + aria-invalid。
+ * 范式参照：SchedulerTaskEditView 的 errors reactive + field-error 红字 + aria-invalid。
  */
 import { reactive, unref, type MaybeRef } from 'vue';
 

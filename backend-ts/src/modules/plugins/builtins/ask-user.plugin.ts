@@ -8,7 +8,7 @@ import type { AskAnswerItem, AskQuestion } from "../../../common/types/ask.types
 import langZh from "./ask-user.lang.zh.json";
 import langEn from "./ask-user.lang.en.json";
 
-/** 一次调用允许的问题数上限（对齐 ZCode 的 AskUserQuestion：1–4 题） */
+/** 一次调用允许的问题数上限（1–4 题） */
 const MAX_QUESTIONS = 4;
 /** 每题最少/最多选项（至少 2 个才有"选择"的意义） */
 const MIN_OPTIONS = 2;
@@ -129,7 +129,7 @@ export class AskUserPlugin extends PluginBase {
       description: "%askUser.toolkitDescription%",
       activator: "Ask the user clarifying questions and continue with their answers.",
       // 子代理不可见：交互卡按会话渲染，子会话的卡用户看不到 → 会永久卡死父回合。
-      // （与 plan-mode 工具包同一手法；ZCode 是把子代理的提问路由回父会话，本项目暂无该路由。）
+      // （与 plan-mode 工具包同一手法；子代理没有父会话路由，提问将无人应答。）
       handler: async (ctx) =>
         ctx.session.sessionType === "sub_agent"
           ? { loadMode: "none" as const }

@@ -1,5 +1,5 @@
 /**
- * 微压缩服务（一级编排，对齐 zcode microcompact）
+ * 微压缩服务（一级编排：本地裁剪，无 LLM 调用）
  *
  * 流程：档位门控 → 阈值 → 纯计划（microcompact.ts）→ 最小收益门 → start → 写入 → 占用锚点 → end。
  * - 档位 off（enabled=false）：与自动 LLM 压缩一起关闭（手动压缩仍可走二级）。

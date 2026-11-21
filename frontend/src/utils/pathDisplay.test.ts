@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { splitPathDisplay } from "./pathDisplay";
 
 /**
- * 文件路径行内展示拆分（ZCode 同款三段式行头的数据层）：
+ * 文件路径行内展示拆分（三段式行头的数据层）：
  * 文件名（主识别信息）+ 父目录（保留尾斜杠、次要色、优先截断）。
  */
 describe("splitPathDisplay", () => {

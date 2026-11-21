@@ -10,7 +10,7 @@
  * - 收尾时为剩余未闭合块按序补发 block_end（携带组装完成的权威块），
  *   保证下游拿到的协议形态与 Anthropic 原生 content_block 流一致
  *
- * 文本通道按上游 item_id 分道（对齐 ZCode 的 getOrCreateTextBlock）：
+ * 文本通道按上游 item_id 分道：
  * GPT6 类上游会先发一个只含空格的 message item（有时带 sub2api_placeholder，
  * 有时不带），随后才发 reasoning、最后才是真正的正文。若把所有文本塞进同一条
  * 通道，这个空格会先占住正文块，真正的正文被追加进去，最终顺序变成
@@ -52,7 +52,7 @@ export class StreamBlockTracker {
   /** 交错重开时的通道键序号（避免 key 冲突） */
   private laneSeq = 0;
 
-  /** 下一个块 index；只在块开启时递增（与 ZCode 的 blockIndex 语义一致） */
+  /** 下一个块 index；只在块开启时递增 */
   private nextIndex = 0;
 
   private allocateIndex(): number {
@@ -111,7 +111,7 @@ export class StreamBlockTracker {
    * 只含空格的 message item（占位/前导），随后才是 reasoning 与真正文；
    * 若共用一条通道，空格会先占住正文块并把真正文并进去，导致思考倒挂。
    *
-   * 纯空白内容也照常开块、原样保留（对齐 ZCode：开块时不看空白），
+   * 纯空白内容也照常开块、原样保留（开块时不看空白），
    * 避免模型真的只输出空白时内容被丢弃。
    */
   textDelta(text: string, itemId?: string): StreamChunk[] {
@@ -120,7 +120,7 @@ export class StreamBlockTracker {
     let key = baseKey;
     let lane = this.lanes.get(key);
     // 同一 item_id 在其它块之后再次出现（工具调用后复用 id）时新开通道，
-    // 保持流顺序（对齐 ZCode 的 getOrCreateTextBlock 规则）。
+    // 保持流顺序。
     // 无 item_id 的协议（Chat/Gemini）不启用：它们没有 item 身份，
     // reasoning 与正文交替时按 chunk 拆块会把一段正文碎成多块。
     if (
@@ -227,7 +227,7 @@ export class StreamBlockTracker {
    * 流收尾：按通道创建顺序为所有未闭合块补发 block_end；
    * 空 text/reasoning 不发（与 BlockAssembler 组装规则一致），工具调用始终闭合。
    * 通道切换时已前置闭块的 lane 在此跳过（防重复 block_end）。
-   * 纯空白文本照常成块（对齐 ZCode：开块与收尾都不看空白，内容原样保留）。
+   * 纯空白文本照常成块（开块与收尾都不看空白，内容原样保留）。
    *
    * 工具块显式携带 argumentsComplete：只有 adapter 在终止事件后 finalize 过的
    * 才算完整；流提前结束时未 finalize 的通道一律标记 false，恢复层据此丢弃。

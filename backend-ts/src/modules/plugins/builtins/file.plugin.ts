@@ -34,7 +34,7 @@ import langEn from "./file.lang.en.json";
  * grep 单次调用的运行时硬上限。
  *
  * schema 不再声明 .max()：模型可自由给出想要的条数，参数校验永不因"要得太多"失败。
- * 真正的上限在这里静默 clamp —— 与 glob / zcode 的工具设计一致：超限只截断并提示，
+ * 真正的上限在这里静默 clamp —— 与 glob 的工具设计一致：超限只截断并提示，
  * 不让工具调用失败。调大这个值只影响单次输出预算，不影响任何工具契约。
  */
 const GREP_MAX_RESULTS_CAP = 200;

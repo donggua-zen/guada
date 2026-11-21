@@ -153,7 +153,7 @@ export const useWorkspaceTreeStore = defineStore('workspaceTree', () => {
   }
 
   /**
-   * overflow 后的保守刷新：重载根 + 已展开目录（并发 2，参考 ZCode 的 bulk refresh）。
+   * overflow 后的保守刷新：重载根 + 已展开目录（并发 2 的批量刷新）。
    * 不重置 expandedPaths，用户展开状态保持不变。
    */
   async function refreshLoaded(): Promise<void> {

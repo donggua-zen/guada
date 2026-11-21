@@ -7,7 +7,7 @@ import {
 import type { BaseEvent } from "../../common/persistence/types";
 import { PlanFileService } from "../../common/services/plan-file.service";
 
-/** 计划状态：待审批 / 已批准 / 已拒绝（对齐 ZCode 的 Plans 目录语义，含未决态） */
+/** 计划状态：待审批 / 已批准 / 已拒绝（含未决态） */
 export type PlanStatus = "pending" | "approved" | "rejected";
 
 export interface PlanHistoryItem {
@@ -139,7 +139,7 @@ function parsePlanArgument(args: unknown): string | null {
  *
  * 为什么不从文件系统列目录：计划正文的权威副本在转录（计划工具的 tool-call 参数），
  * 文件只是落盘副本——转录能给出状态（待审/已批/被拒）、标题与顺序，且不受文件被清理影响
- * （对齐 ZCode：计划身份 = toolCallId，Plans 目录来自会话数据）。
+ * （计划身份 = toolCallId，与转录天然对应）。
  */
 @Injectable()
 export class PlanHistoryService {

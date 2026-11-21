@@ -313,7 +313,7 @@ export class LLMSummaryProvider implements SummaryProvider {
       ? `<compacted-summary>\n${previousSummary}\n</compacted-summary>\n\n`
       : '';
     // 手动命令的附加指令（/compact <instructions>）：只作为本次摘要请求的临时指令，
-    // 不写用户消息、不落库、不进对话历史（对齐 zcode 的 Additional Instructions）。
+    // 不写用户消息、不落库、不进对话历史。
     const additionalBlock = instructions?.trim()
       ? `\n\nAdditional Instructions:\n${instructions.trim()}`
       : '';

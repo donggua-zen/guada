@@ -1,6 +1,6 @@
 <template>
     <!--
-      submit_plan 计划正文卡（样式对齐 ZCode SwitchModeToolCallBlock）：
+      submit_plan 计划正文卡：
       头部＝记事本图标 + 「计划」+ 复制按钮（无分隔线）；正文＝限高遮罩预览
       （遮罩与限高必须落在同一个裁切节点，否则渐变按完整内容高度计算、可见区反而不渐隐）；
       底部居中胶囊按钮 → 完整计划面板。计划正文仍是流内唯一内联阅读落点
@@ -94,7 +94,7 @@ async function copyPlan(): Promise<void> {
 }
 
 // ── 遮罩只在内容真溢出时应用 ──
-// ZCode 无条件上遮罩（短计划底部也会发虚）；这里按"是否超出预览限高"开关，
+// 遮罩按"是否超出预览限高"开关（无条件上遮罩会让短计划底部发虚），
 // 溢出判定随内容增长与 markdown 落地（异步渲染）重算。
 
 const clipEl = ref<HTMLElement | null>(null)
@@ -137,7 +137,7 @@ watch(previewContent, () => {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* 头部：图标 + 「计划」+ 复制（无分隔线；高度与内边距对齐 ZCode h-10 + px-4/pt-4） */
+/* 头部：图标 + 「计划」+ 复制（无分隔线；高度与内边距 h-10 + px-4/pt-4） */
 .plan-header {
     display: flex;
     align-items: flex-start;
@@ -165,7 +165,7 @@ watch(previewContent, () => {
     line-height: 16px;
 }
 
-/* 流式生成提示：占 ZCode 头部"计划文件路径"的同槽位（我们没有路径可显） */
+/* 流式生成提示：占头部右侧槽位（我们没有计划文件路径可显） */
 .plan-status {
     font-size: 12px;
     color: var(--gd-color-text-gray);
@@ -195,20 +195,20 @@ watch(previewContent, () => {
     position: relative;
 }
 
-/* 限高与遮罩必须同一裁切节点；pb 3rem 给胶囊按钮留出压边空间（ZCode pb-12） */
+/* 限高与遮罩必须同一裁切节点；pb 3rem 给胶囊按钮留出压边空间 */
 .plan-preview-clip {
     max-height: 16rem;
     overflow: hidden;
     padding: 8px 16px 48px;
 }
 
-/* 内容超出限高才上遮罩：ZCode 无条件上，短计划底部会发虚——刻意偏差 */
+/* 内容超出限高才上遮罩：短计划无条件上遮罩底部会发虚 */
 .plan-preview-clip.is-overflowing {
     -webkit-mask-image: linear-gradient(to bottom, black 0%, black 30%, transparent 100%);
     mask-image: linear-gradient(to bottom, black 0%, black 30%, transparent 100%);
 }
 
-/* 正文与列表压暗一档、标题保持正文色（对齐 ZCode 卡片内排版层级） */
+/* 正文与列表压暗一档、标题保持正文色（卡片内排版层级） */
 .plan-markdown :deep(p),
 .plan-markdown :deep(li) {
     color: var(--gd-md-text-secondary);
@@ -219,7 +219,7 @@ watch(previewContent, () => {
     color: var(--gd-color-text-gray);
 }
 
-/* 底部居中胶囊：h-10 / rounded-full / bottom-6（ZCode），主色沿用应用主按钮 */
+/* 底部居中胶囊：h-10 / rounded-full / bottom-6，主色沿用应用主按钮 */
 .plan-open-btn {
     position: absolute;
     bottom: 24px;

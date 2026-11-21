@@ -40,8 +40,7 @@ export const DEFAULT_IMAGE_TARGET_KB = 384;
 /**
  * 工具产出图片的目标体积（KB）——引擎物化的落盘副本（MCP 图、浏览器截图、
  * image_view 查看的外部图）。比上传预算收紧一档：工具图多为一次性信息载体，
- * 一次会话可能积累很多张，token 成本的优先级高于画质。
- * 参考：ZCode 工具图预算 ≈200KB base64（raw ≈150KB）；Qoder 上传取 100KB。
+ * 一次会话可能积累很多张，token 成本的优先级高于画质（目标 ≈200KB base64，raw ≈150KB）。
  */
 export const DEFAULT_TOOL_IMAGE_TARGET_KB = 150;
 

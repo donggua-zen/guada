@@ -1,8 +1,7 @@
 /**
  * 目录浏览器的纯逻辑（路径处理 + 请求守卫），与 DirectoryBrowserDialog.vue 分离。
  *
- * 前端测试约定为 node 环境纯逻辑单测（无 @vue/test-utils），这里照 zcode
- * DirectoryBrowser 的做法把可测部分拆出：createDirectoryBrowserRequestGuard、
+ * 前端测试约定为 node 环境纯逻辑单测（无 @vue/test-utils），把可测部分拆出：createDirectoryBrowserRequestGuard、
  * joinPath / parentPath / isFsRoot。
  */
 

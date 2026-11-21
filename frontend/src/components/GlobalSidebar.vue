@@ -1154,7 +1154,7 @@ const handleDropdownSelect = (command: string, session: Session) => {
  * 乐观更新：先本地改（侧边栏「已置顶」分区立即响应），再落后端；失败回滚 + 报错。
  * 本窗口自己发起的变更不会被自身 SSE 回环覆盖（useSessionEvents 过滤 source===self），
  * 因此本地更新是必需的而非可选优化。
- * 无二次确认——与 zcode 的 pin 语义一致（归档才有确认）。
+ * 无二次确认（归档才有确认）。
  */
 const handlePinSession = async (session: Session) => {
   const next = !session.pinned

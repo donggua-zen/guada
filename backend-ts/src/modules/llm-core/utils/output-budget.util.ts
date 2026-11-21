@@ -1,5 +1,5 @@
 /**
- * 主请求输出预算 preflight（对齐 zcode model-token-limits.ts）
+ * 主请求输出预算 preflight
  *
  * provider 的 contextWindow 是输入 + 输出共享窗口。请求里的 max_tokens 是**预留输出**，
  * 上游会把它计入总长（实测：输入 669,530 + max_tokens 384,000 = 1,053,530 > 1,048,576）。
@@ -16,7 +16,7 @@ export const REQUEST_OUTPUT_SAFETY_TOKENS = 2_000;
  * 计算本次主请求实际可用的 max_tokens。
  *
  * - 未配置 maxOutputTokens → 返回 undefined（保持 provider 默认，不做额外限制）
- * - 剩余窗口 ≤ 0 → 返回配置值（与 zcode 一致：交给 overflow 压缩/错误恢复，不发 0）
+ * - 剩余窗口 ≤ 0 → 返回配置值（交给 overflow 压缩/错误恢复，不发 0）
  * - 否则返回 `min(配置值, 总窗口 − 估算输入 − 安全余量)`
  */
 export function resolvePreflightMaxTokens(input: {

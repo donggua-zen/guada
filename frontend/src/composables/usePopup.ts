@@ -67,7 +67,7 @@ export interface UsePopupReturn {
  * 常用弹窗 Hook
  *
  * 命令式弹窗统一委托给 GdDialogHost（底层 GdDialog + modalService），保证与声明式弹窗同源。
- * 职责边界（照 zcode 对照评估的结论）：
+ * 职责边界：
  * - 零状态一次性确认/输入 → 本门面（confirm/prompt/editText）
  * - 有状态、表单校验、自定义插槽内容 → 声明式 <GdDialog>
  * - 轻提示 → 直连 toastService（toast/notify）

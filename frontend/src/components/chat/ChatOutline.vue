@@ -66,7 +66,7 @@ const emit = defineEmits<{
 
 /** 山峰焦点所在条目（pointerenter 或键盘 focus 都会写入；驱动横线的长度与透明度） */
 const interactionIndex = ref(-1)
-/** 卡片所在条目：冷启动 120ms 才显示、离开 80ms 才收起（对齐 ZCode HoverCard 的 open/closeDelay） */
+/** 卡片所在条目：冷启动 120ms 才显示、离开 80ms 才收起 */
 const popoverIndex = ref(-1)
 const activeId = ref<string | null>(null)
 
@@ -150,8 +150,7 @@ function cleanMarkdown(text: string): string {
 }
 
 /**
- * 摘要文本：剥 system_reminder、清洗 Markdown，最多 220 字（对齐 ZCode
- * DEFAULT_MAX_PREVIEW_CHARS），再由卡片的 2/3 行裁剪收尾。
+ * 摘要文本：剥 system_reminder、清洗 Markdown，最多 220 字，再由卡片的 2/3 行裁剪收尾。
  */
 function previewOf(bundle: MessageBundle): string {
   // 纯空白块（上游占位 item）不算内容：跳过它们，取最后一块真正有可见文字的前缀
@@ -190,7 +189,7 @@ const outlineItems = computed<OutlineItem[]>(() => {
         : ''
     })
   }
-  // 尾条且仍在流式：摘要位显示「正在生成」，与 ZCode 只强调当前工作 query 的做法一致
+  // 尾条且仍在流式：摘要位显示「正在生成」，突出当前工作
   if (props.chatPanelRef?.isStreaming === true) {
     const tail = items[items.length - 1]
     if (tail && tail.assistantKind === 'empty') {
@@ -211,7 +210,7 @@ const popoverItem = computed(() =>
 )
 
 /**
- * 山峰梯度：按到焦点条目的距离给「长度 + 透明度」双衰减（ZCode 的 idle/mid/near/peak 四档）。
+ * 山峰梯度：按到焦点条目的距离给「长度 + 透明度」双衰减（idle/mid/near/peak 四档）。
  * 静默态不是换成弱化色，而是前景色压到 0.58 —— 同一色阶才能读出质地的深浅层次。
  */
 const IDLE_OPACITY = 0.58
@@ -245,7 +244,7 @@ const panelRef = ref<HTMLElement | null>(null)
 const panelScrollTop = ref(0)
 /**
  * 本组件自己写入的 scrollTop（把阅读位滚进可视窗触发）。rail 滚动清除交互态只该认用户的滚动，
- * 否则流式期间阅读位一变、卡片就在用户指针下闪断——这一点刻意偏离 ZCode。
+ * 否则流式期间阅读位一变、卡片就在用户指针下闪断——因此只认用户滚动。
  */
 let programmaticPanelTop = -1
 
@@ -458,7 +457,7 @@ function handleItemClick(messageId: string) {
 </script>
 
 <style scoped>
-/* —— 外壳：聊天列左缘 48px 预留带（对齐 ZCode 的 w-12 外壳）。外壳不吃指针事件，
+/* —— 外壳：聊天列左缘 48px 预留带。外壳不吃指针事件，
       只有内部 rail 可交互；窄容器下整块淡出，避免刻度压在正文上 —— */
 .chat-outline-container {
   position: absolute;
@@ -472,7 +471,7 @@ function handleItemClick(messageId: string) {
   transition: opacity 0.15s ease-out, transform 0.15s ease-out, visibility 0.15s ease-out;
 }
 
-/* 显示门槛与 ZCode 同口径：容器宽 ≥ 864px（composer 左侧要容下 48px rail + 16px 安全距） */
+/* 显示门槛：容器宽 ≥ 864px（composer 左侧要容下 48px rail + 16px 安全距） */
 @container conversation (min-width: 864px) {
   .chat-outline-container {
     visibility: visible;
@@ -514,7 +513,7 @@ function handleItemClick(messageId: string) {
 }
 
 /* —— 条目：固定 12px 高、无缝连续（无 gap/margin），热区无盲区。
-   行高没有照抄 ZCode 的 10px：12px 在 100%/125%/150%/175% 缩放下是 15/18/21/24 整数
+   行高取 12px：在 100%/125%/150%/175% 缩放下是 15/18/21/24 整数
    设备像素，10px 会得到 12.5/15/17.5/21 —— 半像素行距让相邻刻度粗细不一 —— */
 .outline-item {
   display: flex;
@@ -539,7 +538,7 @@ function handleItemClick(messageId: string) {
 
 /* —— 短横线：长度与透明度由 :style 按到焦点项的距离给出（山峰梯度）。
       颜色统一前景色，静默态靠 opacity 0.58 压暗而不是换弱化色——同一色阶才读得出深浅。
-      transition 属性集对齐 ZCode（含 height，为以后按层级变粗留位）—— */
+      transition 属性集含 height（为以后按层级变粗留位）—— */
 .outline-line {
   width: 12px;
   height: 2px;
@@ -549,7 +548,7 @@ function handleItemClick(messageId: string) {
   transition: transform 0.15s ease-out, opacity 0.15s ease-out, background-color 0.15s ease-out, height 0.15s ease-out;
 }
 
-/* —— hover 卡片：宽 320、内边距 12、距 rail 右 8px（= 12 + 36 + 8，与 ZCode 的 sideOffset 8 同位）。
+/* —— hover 卡片：宽 320、内边距 12、距 rail 右 8px（= 12 + 36 + 8）。
       两段摘要：用户问题 2 行中等字重 + 助手摘要 3 行 —— */
 .outline-popover {
   position: absolute;

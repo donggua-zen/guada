@@ -10,7 +10,7 @@
  * 两个刻意的设计：
  * - 追加到 PATH 末尾而不是前置：用户装了 node 就用用户的，没装才回落到内置 Node，不改变现有行为。
  * - ELECTRON_RUN_AS_NODE 只在 shim 进程内部设置，不写进命令的 env：一旦写进 env，命令里启动的任何
- *   Electron 可执行文件都会退化成 Node 模式。zcode 同样为此把该变量从运行环境里剔除。
+ *   Electron 可执行文件都会退化成 Node 模式，因此该变量必须从下游运行环境里剔除。
  *
  * shim 在运行时按需写入用户数据目录，而不是随包分发：git 在 Windows 检出（core.filemode=false）保留不了
  * POSIX 可执行位，随包脚本在 macOS 上会因缺少 +x 而无法被 bash 命中；运行时写入可以自己 chmod。
@@ -57,7 +57,7 @@ set "ELECTRON_RUN_AS_NODE=1"
  * 解析可用于执行 JS 的 Electron 可执行文件。
  *
  * 打包态：后端是被 Electron 以 ELECTRON_RUN_AS_NODE 启动的，process.versions.electron 有值、
- * execPath 就是 GuaDa 可执行文件本身（zcode 用同一个门控）。
+ * execPath 就是 GuaDa 可执行文件本身（打包态与开发态用同一个门控判断）。
  * 开发态：跑在纯 Node 上，execPath 是 node.exe，改从 electron 包取二进制路径；取不到就整体不启用
  * （开发机本来就装了 node，没有回落需求）。
  */

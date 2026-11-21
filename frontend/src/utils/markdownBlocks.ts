@@ -1,7 +1,7 @@
 import type { Marked, Token } from 'marked'
 
 /**
- * 流式 Markdown 的块级渲染缓存（对齐 zcode 的 "Block memo" 思路）。
+ * 流式 Markdown 的块级渲染缓存（Block memo）。
  *
  * 背景：MarkdownContent 对 content 的每次变化都会整篇 parse + 全树 diff。流式追加时
  * 正文只有尾部块在增长，稳定块（历史段落/列表/表格/代码块）的 HTML 完全不变。

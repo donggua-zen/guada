@@ -121,7 +121,7 @@ const userSelectedKnowledgeBaseIds = useStorage<string[]>('userSelectedKnowledge
 
 // 沙盒模式：记住上次选择，新会话草稿默认沿用（与上面几处偏好同构的本地记忆）。
 // 词表校验由 capabilities 负责：Windows 后端已取消 read-only，历史本地值会被收敛。
-// 计划模式刻意不随此记忆（任务级意图、默认关；对齐 ZCode 新任务 plan→build 归零）。
+// 计划模式刻意不随此记忆（任务级意图、默认关；新任务 plan→build 归零）。
 const userSelectedSandboxMode = useStorage<string>('userSelectedSandboxMode', 'workspace-write');
 const rememberedSandboxMode = computed(() =>
   capabilities.normalize(userSelectedSandboxMode.value)

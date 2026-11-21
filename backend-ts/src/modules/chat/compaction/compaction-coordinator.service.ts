@@ -82,7 +82,7 @@ export class CompactionCoordinatorService {
    */
   private readonly mediaBudgetRetries = new Map<string, number>();
   private static readonly MAX_MEDIA_BUDGET_RETRIES = 3;
-  /** auto 压缩连续失败计数（成功/无须压缩时清零；达上限后停用 auto 压缩，对齐 zcode 熔断） */
+  /** auto 压缩连续失败计数（成功/无须压缩时清零；达上限后熔断停用 auto 压缩） */
   private readonly autoCompactFailures = new Map<string, number>();
   private static readonly MAX_AUTO_COMPACT_FAILURES = 3;
   /**
@@ -120,7 +120,7 @@ export class CompactionCoordinatorService {
    * 只做副作用（压力压缩原地改写会话存储），返回 void 放行——
    * agent-engine 在钩子后重读 getMessages() 即得压缩后消息（对齐 DSH：请求消息派生自会话 surface）。
    *
-   * 顺序（对齐 zcode）：微压缩（本地、便宜）先跑——生效后占用通常降到 LLM 阈值以下，
+   * 顺序：微压缩（本地、便宜）先跑——生效后占用通常降到 LLM 阈值以下，
    * LLM 压缩自然 didRun=false 跳过；微压缩收益不足时 LLM 同一步照常评估。
    * 手动/溢出路径不经过本钩子，只走二级。
    */

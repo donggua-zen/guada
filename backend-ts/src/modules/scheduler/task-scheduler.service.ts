@@ -9,7 +9,7 @@ import { ID_PREFIXES, mintId } from "../../common/utils/id.util";
 /**
  * 错过窗口的宽限：计划时刻比「现在」早出这个量，才算错过，不补跑。
  *
- * 取值参考同类实现（zcode 的 misfire 宽限同为 5 分钟）：明显大于一次正常 tick 延迟，
+ * 取值：明显大于一次正常 tick 延迟，
  * 又能容忍短暂卡顿。注意 node-cron 的补跑上限还会被槽位间隔进一步压住
  * （槽位间隔 < 宽限时以间隔为准），所以「每分钟」任务最多只会晚 1 分钟补跑，
  * 不会出现漏几拍后连跑多次。
@@ -346,7 +346,7 @@ export class TaskSchedulerService implements OnModuleInit, OnModuleDestroy {
    *
    * 一次长休眠会连着丢多个槽位，这里按 MISSED_BURST_FLUSH_MS 窗口合并成一条含次数的日志；
    * 否则「每分钟」类任务睡一小时就会刷出 60 条。不补跑是刻意的：错过 5 分钟以上的
-   * 任务在醒来后立刻执行往往已无意义（zcode 的 misfire 策略同样是不补跑、只留痕）。
+   * 任务在醒来后立刻执行往往已无意义（misfire 策略：不补跑、只留痕）。
    */
   private recordMissedSlot(task: ScheduledTask, slot: Date): void {
     const existing = this.missedBursts.get(task.id);

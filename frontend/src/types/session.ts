@@ -154,8 +154,8 @@ export interface UserQueueSnapshot {
 }
 
 /**
- * 队列暂停原因：用户停止/出错/手动暂停后保留队列但不再自动补发，等用户显式继续。
- * 与 ZCode 的 pauseReason、本项目后端 ChatRunner 的"user_cancel 不自动重开"对齐。
+ * 队列暂停原因：用户停止/出错/手动暂停后保留队列但不再自动补发，等用户显式继续
+ * （后端 ChatRunner 的"user_cancel 不自动重开"）。
  */
 export type QueuePauseReason = 'stopped' | 'error' | 'manual'
 

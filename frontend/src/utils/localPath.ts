@@ -146,6 +146,58 @@ export function isPathInside(
 }
 
 /**
+ * 是否为本地绝对路径。
+ *
+ * 用途：预览入口收到的路径既可能是工作区相对路径，也可能是模型/工具给出的
+ * 本机绝对路径（Windows 盘符、UNC、POSIX 前导斜杠）。后者不能当相对路径拼到
+ * 工作目录下，否则会拼出 `D:/ws/C:/Users/...` 这种无效路径。
+ */
+export function isAbsoluteLocalPath(
+  value: string,
+  isWindows: boolean = IS_WINDOWS_PATH_STYLE,
+): boolean {
+  if (!value) return false;
+  if (WINDOWS_DRIVE_RE.test(value)) return true;
+  // UNC：原始形态 \\server\share，归一形态 //server/share
+  if (value.startsWith("\\\\") || value.startsWith("//")) return true;
+  if (!isWindows && value.startsWith("/")) return true;
+  return false;
+}
+
+/**
+ * 绝对路径 → 会话附件存储引用（`sessions/<id>/<rel>`），不属于该会话目录返回 null。
+ *
+ * 会话图片/预览图落在 `<sessionsBase>/<sessionId>/images|previews/...`，取图走
+ * 鉴权端点（见 utils/url 的 toResourceUrl）。工具行给出的是拼好的本机绝对路径，
+ * 这里把它还原成自包含存储引用，避免再交给工作区 raw-file（工作区外必然 403）。
+ */
+export function toSessionAttachmentStoragePath(
+  absolutePath: string,
+  sessionId: string,
+  isWindows: boolean = IS_WINDOWS_PATH_STYLE,
+): string | null {
+  if (!absolutePath || !sessionId) return null;
+
+  const normalized = absolutePath.replace(/\\/g, "/");
+  const marker = `/sessions/${sessionId}/`;
+  const haystack = isWindows ? normalized.toLowerCase() : normalized;
+  const needle = isWindows ? marker.toLowerCase() : marker;
+  const index = haystack.lastIndexOf(needle);
+  if (index < 0) return null;
+
+  // 用原始坐标切片，保留真实大小写
+  const rel = normalized.slice(index + marker.length);
+  if (!rel) return null;
+
+  // 附件相对路径只允许普通段：挡掉空段、`.`/`..` 上跳与盘符冒号
+  const segments = rel.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === ".." || segment.includes(":"))) {
+    return null;
+  }
+  return `sessions/${sessionId}/${rel}`;
+}
+
+/**
  * 绝对路径 → 相对工作区根目录的路径（工作区外返回 null）。
  *
  * 返回值统一用 "/" 且不带前导分隔符，可直接作为 workspace 接口的 path 参数。

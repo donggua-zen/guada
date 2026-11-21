@@ -24,7 +24,7 @@ import {
  * 本服务只负责状态与事件，不启动回合；ChatRunner 监听 chat.user_queue_changed
  * 与 chat.turn_finished 来消费。
  *
- * 持久化：本阶段仅内存，进程重启即丢（与 ZCode 现状一致）。
+ * 持久化：本阶段仅内存，进程重启即丢。
  */
 
 export type UserQueuePauseReason = "stopped" | "error" | "manual";

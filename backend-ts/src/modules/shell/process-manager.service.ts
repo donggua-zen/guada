@@ -156,7 +156,7 @@ const POWERSHELL_UTF8_PREAMBLE =
   "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); " +
   "$OutputEncoding = [System.Text.UTF8Encoding]::new($false); ";
 
-/** Windows：终止后迟迟收不到进程退出信号的兜底结算时限（对齐 zcode 的 FORCE_EXIT_AFTER_KILL_MS） */
+/** Windows：终止后迟迟收不到进程退出信号的兜底结算时限 */
 const KILL_FINALIZE_MS = 5_000;
 /** 已完成但未被通知消费的 entry 保留时长（给 read/list 留观察窗口，避免无限增长） */
 const COMPLETED_ENTRY_TTL_MS = 10 * 60 * 1000;

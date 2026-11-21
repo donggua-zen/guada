@@ -83,7 +83,7 @@ const MAX_STATUS_FILES = 2000;
 const UNTRACKED_SCAN_MAX_FILES = 2000;
 const UNTRACKED_SCAN_MAX_DIRS = 20;
 const UNTRACKED_SCAN_MAX_DEPTH = 8;
-/** 未跟踪行数统计预算（对齐 ZCode）：4 个 worker、每个复用 64KB buffer */
+/** 未跟踪行数统计预算：4 个 worker、每个复用 64KB buffer */
 const STAT_CHUNK_BYTES = 64 * 1024;
 const STAT_CONCURRENCY = 4;
 const MAX_UNTRACKED_LINE_COUNTS = 500;
@@ -222,14 +222,13 @@ export class GitService {
   constructor() {
     // 进程级 git 策略：读命令（status/diff/show）在 stat 缓存过期时会刷新并写 .git/index，
     // 被 .git watcher 捕获后推送 → 前端刷新 → 再读命令，形成自激循环。GIT_OPTIONAL_LOCKS=0
-    // 让 git 不做这类 optional 的 index 落盘，从源头断掉该循环（借鉴 ZCode：其
-    // packages/services/src/git/config.ts 给每个 git 子进程都注入该变量）。
+    // 让 git 不做这类 optional 的 index 落盘，从源头断掉该循环（给每个 git 子进程注入该变量）。
     //
     // 写在 process.env 而不是 simple-git 的 .env()：simple-git 的 block-unsafe-operations
     // 插件会扫描「显式传入的 env」，EDITOR / PAGER / GIT_PAGER / GIT_SSH_COMMAND 等键命中即
     // 抛错（Use of "EDITOR" is not permitted without enabling allowUnsafeEditor），而
     // .env(对象) 又是**整体替换**子进程环境、必须展开 process.env —— 于是所有 git 命令 500。
-    // 该限制是 simple-git 自身的策略（git 本身没有，这也是 ZCode 能直接传 PAGER 的原因）；
+    // 该限制是 simple-git 自身的策略（git 本身没有）；
     // 走 process.env 时 simple-git 不传 env，插件只看到空对象，不做任何检查。
     process.env.GIT_OPTIONAL_LOCKS = "0";
   }
@@ -355,7 +354,7 @@ export class GitService {
 
     // 行数统计（顶部聚合 +N -M 用）：
     // - tracked 文件：git diff HEAD --numstat -z（HEAD vs 工作区，一次命令覆盖暂存+未暂存）
-    // - 未跟踪文件：直接数文件行数（ZCode 的 4×64KB 预算）
+    // - 未跟踪文件：直接数文件行数（4×64KB 预算）
     // - 二进制（numstat 为 "-\t-"）计 0/0
     // 条目超限时跳过 numstat：继续跑只会在超大仓库上重复一次大输出。
     const numstatMap = truncated
@@ -603,7 +602,7 @@ export class GitService {
   }
 
   /**
-   * 未跟踪文件行数统计（对齐 ZCode 的读取预算）：
+   * 未跟踪文件行数统计：
    * - 先 stat：非普通文件或 >1MB 直接 0，不打开；
    * - 4 个 worker，各自复用 64KB buffer；
    * - 任意块含 NUL 按二进制返回 0；超过 1MB+1 字节返回 0，不返回部分计数；

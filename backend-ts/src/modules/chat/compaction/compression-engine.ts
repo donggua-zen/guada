@@ -40,11 +40,11 @@ export const SUMMARY_INPUT_SAFETY_MARGIN_TOKENS = 8_000;
 export const SUMMARY_INPUT_SAFETY_MARGIN_RATIO = 0.05;
 /** COMPACTION_INSTRUCTION（约 1863 字符）的 token 估算，留裕量取 600 */
 export const SUMMARY_INSTRUCTION_TOKENS_EST = 600;
-/** provider 仍拒绝时"收紧预算 + 抬高边界"的重试上限（zcode 同款 3） */
+/** provider 仍拒绝时"收紧预算 + 抬高边界"的重试上限 */
 const MAX_SUMMARY_INPUT_RETRIES = 3;
 /** 摘要输入极致剥离的层级数（一次完整剥离：工具结果/思考/图片/文件） */
 const MAX_STRIP_ATTEMPTS = 1;
-/** 从最旧端按轮丢弃的最多次数（zcode 同款 3；auto/manual/overflow 共用） */
+/** 从最旧端按轮丢弃的最多次数（auto/manual/overflow 共用） */
 const MAX_SUMMARY_TRUNCATION_ATTEMPTS = 3;
 /** 摘要输入外循环的硬上限（收紧 ×（剥离+截断）叠加的防御性上界） */
 const MAX_SUMMARY_INPUT_LOOP_ATTEMPTS =
@@ -52,7 +52,7 @@ const MAX_SUMMARY_INPUT_LOOP_ATTEMPTS =
   MAX_STRIP_ATTEMPTS +
   MAX_SUMMARY_TRUNCATION_ATTEMPTS +
   1;
-/** 截断标记（与 zcode COMPACT_PROMPT_TOO_LONG_RETRY_MARKER 同款文案） */
+/** 截断标记（附在摘要输入尾部，向模型说明更早内容被临时截断以重试） */
 export const SUMMARY_TRUNCATION_MARKER = '[earlier conversation truncated for compaction retry]';
 
 /**
@@ -148,7 +148,7 @@ function parseProviderContextLimit(error: unknown): number | undefined {
   return numbers.length > 0 ? Math.max(...numbers) : undefined;
 }
 
-/** 摘要输入超窗终结错误（带实测数字；文案对齐 zcode 的"缩小上下文后重试"指引） */
+/** 摘要输入超窗终结错误（带实测数字与"缩小上下文后重试"指引） */
 function createSummaryInputOverBudgetError(input: {
   needTokens: number;
   budget: number | undefined;
@@ -178,7 +178,7 @@ function createSummaryTruncationMarker(): Message {
   };
 }
 
-/** 按 assistant 起始轮分组（截断的最小单位；与 zcode compact rounds 分组同构） */
+/** 按 assistant 起始轮分组（截断的最小单位） */
 function groupByAssistantStartedRounds<T extends { role: string }>(
   items: readonly T[],
 ): T[][] {
@@ -984,7 +984,7 @@ export class CompressionEngine {
   }
 
   /**
-   * 收紧摘要输入预算：provider 只报上限不报 actual（zcode 的 token gap 不可得），
+   * 收紧摘要输入预算：provider 只报上限不报 actual（token gap 不可得），
    * 故按 10% 递减，并以解析到的上限（减去输出预留与安全余量）封顶；无法收紧时返回 undefined。
    */
   private tightenSummaryInputBudget(

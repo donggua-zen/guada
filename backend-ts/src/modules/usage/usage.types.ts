@@ -212,7 +212,7 @@ export interface UsageSnapshot {
   range: UsageRange;
   generatedAt: number;
   timeZone: string;
-  /** 数据来源标识：本地账本（区别于 zcode 的 monitor 接口） */
+  /** 数据来源标识：本地账本 */
   source: "local-usage-db";
   summary: UsageSummary;
   daily: UsageDailyPoint[];

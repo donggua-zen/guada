@@ -197,7 +197,7 @@ export class AgentEngine {
   /**
    * 传输层重试（只负责“可见输出边界之前”的失败）。
    *
-   * 对齐 ZCode 的分层：一旦流里已经产生非空正文/思考、工具参数或 block_end，
+   * 分层约束：一旦流里已经产生非空正文/思考、工具参数或 block_end，
    * 传输层不再重试；错误原样抛给 executeAgentLoop 的 Core Stream Recovery。
    * 这样截断/response.failed 不会被 stream wrapper 和恢复层同时认领。
    */
@@ -225,8 +225,7 @@ export class AgentEngine {
     );
 
     while (true) {
-      // 可见输出边界：与 ZCode 的 emittedRetryBoundaryEvent 对齐。
-      // block_start / 空 delta / usage 不算；非空文本/思考、工具参数、block_end 算。
+      // 可见输出边界：block_start / 空 delta / usage 不算；非空文本/思考、工具参数、block_end 算。
       let hasVisibleOutput = false;
       let sawFinish = false;
 
@@ -1046,7 +1045,7 @@ export class AgentEngine {
         | { attempt: number; maxAttempts: number }
         | undefined;
 
-      // 主请求输出预算 preflight（对齐 zcode model-token-limits）：
+      // 主请求输出预算 preflight：
       // 上游把请求的 max_tokens 计入共享总窗口（实测 input 669,530 + max_tokens 384,000 > 1,048,576）。
       // 输入接近窗口时把 max_tokens 收缩到"总窗口 − 估算输入 − 安全余量"；
       // 压缩决策仍用 effectiveContextWindow（只扣 21K 封顶预留），不按最大输出浪费输入预算。
@@ -1317,7 +1316,7 @@ export class AgentEngine {
             recovery.outcome === "committed"
           ) {
             if (recovery.outcome === "committed") {
-              // 工具已结算/执行：输出长度续写链重新起算（与 ZCode 一致），
+              // 工具已结算/执行：输出长度续写链重新起算，
               // 且下一次迭代处于真实的工具批次边界（inject 交接唯一合法时机）。
               outputTokenContinuationCount = 0;
               completedToolBatch = true;

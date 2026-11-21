@@ -91,7 +91,7 @@ export const useGitStore = defineStore("git", () => {
 
   /**
    * 大工作区降级标记：后端超时/截断，或存在未逐文件展开的未跟踪目录。
-   * 用于把事件驱动的自动刷新从 5s 拉长到 60s（对齐 ZCode 的大仓库策略）。
+   * 用于把事件驱动的自动刷新从 5s 拉长到 60s（大仓库策略）。
    */
   const largeWorkspace = computed<boolean>(() => {
     const st = status.value;
@@ -143,7 +143,7 @@ export const useGitStore = defineStore("git", () => {
    * 刷新 git 状态。
    * @param opts.withBranches 是否同时拉取分支列表（默认 true）。事件驱动的自动刷新传 false：
    *   分支列表只有下拉框用、极少变化，而自动刷新会随工作树文件变化频繁触发，省掉这组 git 进程
-   *   （对齐 ZCode「只取需要的数据」的取舍）；branches 保持原值不闪空，selectedBranch 仍来自 status。
+   *   （只取需要的数据的取舍）；branches 保持原值不闪空，selectedBranch 仍来自 status。
    */
   async function refresh(opts: { withBranches?: boolean } = {}): Promise<void> {
     const sid = sessionId.value;
@@ -205,7 +205,7 @@ export const useGitStore = defineStore("git", () => {
   const OWN_GIT_WRITE_SUPPRESS_MS = 1000;
   /**
    * 事件驱动刷新防抖：普通仓库 5s；大工作区 60s。
-   * ZCode 的取舍是统一 60s —— agent 批量写文件时，短防抖会把一个批次拆成多轮
+   * agent 批量写文件时，短防抖会把一个批次拆成多轮
    * `git status`。我们保留普通仓库的 5s 体感，只对已降级的大工作区拉长到 60s。
    */
   const GIT_AUTO_REFRESH_DEBOUNCE_MS = 5_000;

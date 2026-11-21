@@ -122,8 +122,8 @@ const SCOPE_UNSUBSCRIBE_GRACE_MS = 5_000;
 const GIT_DEBOUNCE_MS = 300;
 /**
  * 工作树文件变化防抖（刻意长于 GIT_DEBOUNCE_MS）：保存文件 / agent 批量写文件会连续产生大量
- * 事件，300ms 窗口仍会把一个批次拆成多轮 git status。参考成熟实现（ZCode）的取舍 —— 它的 git
- * 自动刷新防抖远长于文件 watcher 防抖，正是为了压低大工作区里的重复 Git I/O。
+ * 事件，300ms 窗口仍会把一个批次拆成多轮 git status。git 自动刷新防抖刻意长于
+ * 文件 watcher 防抖，正是为了压低大工作区里的重复 Git I/O。
  */
 const GIT_WORKTREE_DEBOUNCE_MS = 1000;
 /** .git 内部需要忽略的路径：loose objects 每次提交大量写入（refs/HEAD 已足以触发）；

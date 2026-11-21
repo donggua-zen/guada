@@ -136,7 +136,7 @@
               </div>
 
               <!-- 弹窗待答时 v-show 隐藏：保持挂载，草稿与编辑器内部状态不丢；
-                   display:none 同时退出视觉与可访问树（对齐 ZCode 的 composer 隐藏做法） -->
+                   display:none 同时退出视觉与可访问树 -->
               <div v-show="!hasPendingAsk" class="w-full flex items-center relative">
 
                 <ChatInput ref="chatInputRef" :key="composerKey" v-model:value="inputMessage.content" v-model:files="inputMessage.files"
@@ -409,7 +409,7 @@ const effectiveSessionId = computed(() => {
 
 /**
  * 弹窗（审批/询问卡）待答中：隐藏输入区，让卡片占据原输入区位置。
- * 对齐 ZCode：pending 交互期间 composer 整体隐藏但**保持挂载**（草稿/编辑器状态不丢），
+ * pending 交互期间 composer 整体隐藏但**保持挂载**（草稿/编辑器状态不丢），
  * 而非变暗/禁用——询问时输入框本就没有有效用途（自定义回复走卡片自己的输入框）。
  */
 const hasPendingAsk = computed(() =>
@@ -478,7 +478,7 @@ watch(scrollContainerRef, (ref) => {
 
 // ── 关于对话列的亚像素（决策记录） ──
 /* 消息列/输入列上曾有一版 JS 吸附（把居中小数与 sticky 自然位置的小数用 transform
-   拉回像素网格），已整体移除，对齐 ZCode 基线：整数设计值 + 浏览器默认渲染
+   拉回像素网格），已整体移除，基线：整数设计值 + 浏览器默认渲染
    （未变换元素的盒边与文字基线由绘制期像素吸附保证清晰）。
    原因：a) 模糊的主力是 CSS 整数化修复（行高/图标/边框取整），吸附只覆盖
    居中与 sticky 两类残余；b) 列上常驻 transform 在非整数 dpr（125%/150%）下
@@ -2591,7 +2591,7 @@ defineExpose({
  */
 const SCROLL_TO_MESSAGE_MAX_CORRECTIONS = 4
 
-/** 系统「减少动态效果」：跳转不做平滑滚动（对齐 ZCode 的 behavior 回落 auto） */
+/** 系统「减少动态效果」：跳转不做平滑滚动（behavior 回落 auto） */
 const prefersReducedMotion = () =>
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
 

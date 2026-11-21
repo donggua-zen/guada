@@ -12,8 +12,7 @@ import { WorkspaceService } from '../../common/services/workspace.service';
  * 目录分组一次性注册（启动期脚手架）。
  *
  * 为什么只做一次：如果每次启动都把新出现的目录注册成分组，用户删掉的分组会
- * 反复复活、自动生成目录会让侧栏无限膨胀（参考 zcode v3.14.3 的
- * `__zcode_internal_grouped_workspace_bootstrap_once__` 教训）。本类的做法是：
+ * 反复复活、自动生成目录会让侧栏无限膨胀。本类的做法是：
  *
  * - 首次启动扫描历史 `workspace_key`，把**合格**目录注册成 `project_groups` 行；
  * - 写入一次性注册标记后永不再扫；

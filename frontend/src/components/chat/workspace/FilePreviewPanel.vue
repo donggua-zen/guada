@@ -89,8 +89,10 @@
             <iframe v-else-if="previewType === 'pdf' && assetPreviewUrl && !previewError" :src="assetPreviewUrl"
                 class="w-full border-0" style="height: 100%;" />
 
-            <!-- 工作区外的本地文件（file:// 绝对路径）：不做内容预览，只给「用系统程序打开」 -->
-            <div v-else-if="props.tab.outsideWorkspace"
+            <!-- 工作区外的本地文件（file:// 绝对路径）：不做内容预览，只给「用系统程序打开」。
+                 图片/音视频/pdf 由上面的直出分支接管；直出失败（previewError）时让位给
+                 下方统一错误态，才能给出「在资源管理器中打开」的修复入口 -->
+            <div v-else-if="props.tab.outsideWorkspace && !previewError"
                 class="w-full h-full flex items-center justify-center">
                 <div class="text-center px-4">
                     <p class="text-gray-400 dark:text-gray-500 text-sm">{{ t('chat.workspace.outsideWorkspace') }}</p>
@@ -197,6 +199,8 @@ import { Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise2
 import { useStorage } from '@vueuse/core'
 import { Finder, WindowsExplorer } from '@/components/icons'
 import { writeTextToClipboard } from '@/utils/clipboard'
+import { toResourceUrl } from '@/utils/url'
+import { isAbsoluteLocalPath, toSessionAttachmentStoragePath, toWorkspaceRelative } from '@/utils/localPath'
 import { usePreviewMarkdown, buildMarkdownSrcDoc } from '@/composables/useMarkdown'
 import { useTheme } from '@/composables/useTheme'
 import { getPreviewKind, isUnplayableMediaFile, type FilePreviewKind } from '@/composables/useHighlight'
@@ -421,21 +425,43 @@ async function ensureWorkspacePath(): Promise<string | null> {
 }
 
 /**
- * 直出资源 URL：Electron 生产（file:）走本地路径，其余走带 token 的 raw-file 端点。
+ * 直出资源 URL：绝对路径按「本会话附件 / Electron 本地文件」解析；相对路径走
+ * 工作区接口——Electron 生产（file:）拼本地路径，其余走带 token 的 raw-file 端点。
  * 端点侧用 sendFile 提供 Range/206，故音视频可拖进度条、大文件按块加载；
  * `_v=` 版本参数用于外部变更/手动刷新后真正重新请求（URL 不变则元素不会重新加载）。
  */
+function withVersion(url: string): string {
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}_v=${props.contentVersion}.${localRefreshCount.value}`
+}
+
 async function resolveAssetUrl(filePath: string): Promise<string | null> {
+    if (isAbsoluteLocalPath(filePath)) {
+        // 绝对路径的前提是「已经拼好的本机路径」，再交给工作区接口只会拼出
+        // `工作区/C:/...` 并被路径牢笼 403；直接按文件来源取字节。
+        if (isElectron && window.location.protocol === 'file:') {
+            return withVersion(toLocalFileUrl(filePath))
+        }
+        // 工作区内的绝对路径（预览入口未能转相对的兜底）：先还原成相对路径
+        const wsPath = await ensureWorkspacePath()
+        const workspaceRelative = wsPath ? toWorkspaceRelative(filePath, wsPath) : null
+        if (workspaceRelative) {
+            return withVersion(apiService.getWorkspaceRawFileUrl(props.sessionId, workspaceRelative))
+        }
+        // 会话附件（sessions/<id>/images|previews/...）走鉴权取图端点；
+        // 其余本机路径在 Web/开发态下浏览器无权访问，返回 null 落回提示。
+        const storagePath = toSessionAttachmentStoragePath(filePath, props.sessionId)
+        return storagePath ? withVersion(toResourceUrl(storagePath)) : null
+    }
     if (isElectron && window.location.protocol === 'file:') {
         const wsPath = await ensureWorkspacePath()
         if (!wsPath) {
             previewError.value = t('chat.workspace.workspacePathError')
             return null
         }
-        return toLocalFileUrl(joinWorkspacePath(wsPath, filePath))
+        return withVersion(toLocalFileUrl(joinWorkspacePath(wsPath, filePath)))
     }
-    const rawUrl = apiService.getWorkspaceRawFileUrl(props.sessionId, filePath)
-    return `${rawUrl}&_v=${props.contentVersion}.${localRefreshCount.value}`
+    return withVersion(apiService.getWorkspaceRawFileUrl(props.sessionId, filePath))
 }
 
 // ── 文件加载 ──
@@ -463,8 +489,10 @@ async function loadFilePreview(): Promise<void> {
         return
     }
 
-    // 工作区外的本地文件（markdown 里的 file:// 绝对路径）：
-    // 后端工作区接口必定 403，直接落到「用系统程序打开」提示，不发请求
+    // 工作区外的本地文件（工具行绝对路径 / markdown 里的 file:// 绝对路径）：
+    // 后端工作区接口必定 403，不发内容请求。图片/音视频/pdf 仍可直出预览——
+    // 会话附件走鉴权端点，Electron 生产态任意本机路径走 file://；解析不出 URL
+    // （如 Web 下的任意本机路径）才落回「无法预览」提示 + 用系统程序打开。
     if (props.tab.outsideWorkspace) {
         selectedFile.value = {
             name: props.tab.name!,
@@ -478,8 +506,14 @@ async function loadFilePreview(): Promise<void> {
         previewError.value = ''
         fileNotFound.value = false
         binaryNotPreviewable.value = false
-        previewType.value = null
-        assetPreviewUrl.value = ''
+        const kind = getPreviewKind(props.tab.extension ?? '')
+        const assetKind = kind === 'image' || kind === 'audio' || kind === 'video' || kind === 'pdf'
+            ? kind
+            : null
+        previewType.value = assetKind
+        assetPreviewUrl.value = assetKind ? (await resolveAssetUrl(props.tab.path!)) ?? '' : ''
+        // 拿不到可访问 URL：保持 previewType 为空，模板落到「无法预览」提示
+        if (!assetPreviewUrl.value) previewType.value = null
         return
     }
 
@@ -681,8 +715,6 @@ async function loadHtmlPreviewLocal(filePath: string): Promise<void> {
 
 function handleManualRefresh(): void {
     if (!selectedFile.value) return
-    // 工作区外文件没有可刷新的内容（预览就是一句提示），避免白发一次必然 403 的请求
-    if (props.tab.outsideWorkspace) return
     // 有未保存编辑：先标记冲突，不覆盖用户内容（与外部变更路径一致）
     if (saveStatus.value === 'unsaved') {
         externalConflict.value = true
@@ -693,6 +725,9 @@ function handleManualRefresh(): void {
         void refreshAssetUrl()
         return
     }
+    // 工作区外文件的文本分支只有提示，没有可刷新的内容接口（避免白发一次必然 403 的请求）；
+    // 图片/音视频/pdf 已在上面的直出分支处理
+    if (props.tab.outsideWorkspace) return
     loadFileContent(selectedFile.value.path, true, false)
 }
 
@@ -741,8 +776,13 @@ function onMediaError(): void {
     previewError.value = t('chat.workspace.mediaPlaybackFailed')
 }
 
-/** 相对路径 → 工作区绝对路径（复制路径 / 在文件管理器中打开需要）；失败返回 null 并提示 */
+/** 标签路径 → 本机绝对路径（复制路径 / 在文件管理器中打开需要）；失败返回 null 并提示。
+ *  入参可能已是绝对路径（工作区外文件 / 会话附件），此时原样返回、不再拼工作目录。 */
 async function resolveAbsolutePath(relativePath: string): Promise<string | null> {
+    // 标签路径本身可能已是绝对路径（工作区外文件 / 会话附件）：原样返回。
+    // 若再拼一次工作目录会得到 `D:/ws/C:/Users/...` 这种不存在的路径，
+    // shell.showItemInFolder 对它静默无操作，表现为点按钮毫无反应。
+    if (isAbsoluteLocalPath(relativePath)) return relativePath.replace(/\\/g, '/')
     if (!props.sessionId) return null
     const wsPath = await treeStore.ensureWorkspacePath(props.sessionId)
     if (!wsPath) {
@@ -770,7 +810,12 @@ async function handleOpenInFileManager(): Promise<void> {
     const fullPath = await resolveAbsolutePath(selectedFile.value.path)
     if (!fullPath) return
     try {
-        await window.electronAPI!.showItemInFolder(fullPath)
+        // IPC 会校验文件是否存在：showItemInFolder 对不存在的路径静默无操作，
+        // 必须把失败回传成 toast，否则用户看到的就是「点了没反应」
+        const result = await window.electronAPI!.showItemInFolder(fullPath)
+        if (!result?.success) {
+            toast.error(result?.error || t('chat.workspace.openFailed'))
+        }
     } catch (error) {
         console.error('[FilePreviewPanel] Open in file manager failed:', error)
         toast.error(t('chat.workspace.openFailed'))

@@ -1,7 +1,7 @@
 /**
  * 聊天输入框的粘贴分流（纯逻辑，便于单测）。
  *
- * 规则与 zcode 的 useComposerAttachments 对齐：
+ * 粘贴规则：
  * - 剪贴板里有文件（图片等）时文件优先，附带的 text/plain、text/html 一律丢弃。
  *   网页「复制图片」通常同时写 image/png 和 text/html，两边都处理会出现
  *   「附件有图片、正文又插了一段代码/标记」的双份内容。

@@ -117,7 +117,7 @@ const error = ref('')
 
 /**
  * 请求守卫：自增代次淘汰迟到响应（快速连点目录/切路径时旧请求后到，
- * 不作废会覆盖最新目录的状态）——模式同 zcode DirectoryBrowser 的 requestGuard。
+ * 不作废会覆盖最新目录的状态）。
  */
 const guard = createBrowseRequestGuard()
 

@@ -1099,7 +1099,7 @@ const TRANSIENT_RESPONSE_FAILURE_RE =
 /**
  * response.failed 是否允许传输层/Core Stream Recovery 重试。
  *
- * 与 ZCode 的 isRetryableStreamRecoveryFailure 对齐：结构化 code 优先，
+ * 重试判定规则：结构化 code 优先，
  * message 兜底。`invalid_value/param=url` 这类错误如果上游 message 明确写了
  * timeout，仍视为可重试（URL 拉取可能是瞬时超时）；想 fail-fast 的用户把
  * llmIncompleteOutputAction 设为 error。

@@ -201,7 +201,7 @@ export interface StepStartData {
  * 必须与 step/start 配对闭合（记录器 finally 兜底）；失败也要落 end（error 语义），
  * step/end 的收口纪律：agent-loop 在 finally 里收口。
  */
-/** 流恢复摘要（step/end 审计；对齐 ZCode StreamRecovery* 事件的关键字段） */
+/** 流恢复摘要（step/end 审计） */
 export interface StepStreamRecoverySummary {
   branch: "no_tool_committed" | "tool_settlement";
   attempt: number;

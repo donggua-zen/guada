@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs/promises";
 import * as path from "path";
 
-/** 计划正文长度上限（对齐 ZCode 的 PLAN_MODE_MAX_PLAN_CHARS） */
+/** 计划正文长度上限 */
 export const PLAN_MAX_CHARS = 20_000;
 
 /** 路径段净化（会话 id / 计划 id 共用；id 为 ULID/uuid/toolCallId，正常无需替换，仅作防御） */

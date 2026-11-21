@@ -403,7 +403,7 @@ const isGroupInstant = (group: DisplayGroup): boolean =>
 /**
  * 正在播放展开/收起动画的分组：这段时间内内容必须保持挂载，
  * 动画结束后（GROUP_EXPAND_ANIMATION_MS + 余量）才允许卸载。
- * 语义对齐 zcode 的 TOOL_CONTENT_COLLAPSE_UNMOUNT_DELAY_MS：先让高度动画走完，再摘子树。
+ * 语义：先让高度动画走完，再摘子树。
  */
 const animatingGroupIds = ref<Set<string>>(new Set());
 const animatingTimers = new Map<string, ReturnType<typeof setTimeout>>();

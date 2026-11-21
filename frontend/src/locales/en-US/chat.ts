@@ -454,7 +454,7 @@
     closeTab: 'Close Tab',
     fileTooLarge: 'File is too large to preview',
     loadFileFailed: 'Failed to load file',
-    imageLoadFailed: 'Failed to load image (format may be unsupported)',
+    imageLoadFailed: 'Failed to load image (unsupported format or file inaccessible)',
     mediaPlaybackFailed: 'Cannot play: the format may be unsupported by the browser',
     mediaNotPlayable: 'This media format cannot be played in the browser — try another player',
     workspacePathError: 'Unable to get working directory path',

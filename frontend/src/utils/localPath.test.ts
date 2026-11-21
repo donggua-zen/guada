@@ -4,7 +4,9 @@ import {
   baseNameOf,
   extensionOf,
   fileUrlToPath,
+  isAbsoluteLocalPath,
   isPathInside,
+  toSessionAttachmentStoragePath,
   toWorkspaceRelative,
 } from './localPath'
 
@@ -138,6 +140,87 @@ describe('toWorkspaceRelative', () => {
   it('工作区外 → null', () => {
     expect(toWorkspaceRelative('C:/other/a.ts', 'C:/ws', win)).toBeNull()
     expect(toWorkspaceRelative('/home/u/a.ts', '/home/other', false)).toBeNull()
+  })
+})
+
+describe('isAbsoluteLocalPath', () => {
+  it('Windows 盘符 / UNC 视为绝对路径', () => {
+    expect(isAbsoluteLocalPath('C:/ws/a.ts', true)).toBe(true)
+    expect(isAbsoluteLocalPath('C:\\ws\\a.ts', true)).toBe(true)
+    expect(isAbsoluteLocalPath('D:', true)).toBe(true)
+    expect(isAbsoluteLocalPath('\\\\server\\share\\a.ts', true)).toBe(true)
+    expect(isAbsoluteLocalPath('//server/share/a.ts', true)).toBe(true)
+  })
+
+  it('工作区相对路径不算绝对路径', () => {
+    expect(isAbsoluteLocalPath('src/index.ts', true)).toBe(false)
+    expect(isAbsoluteLocalPath('./src/index.ts', true)).toBe(false)
+    expect(isAbsoluteLocalPath('../a.ts', true)).toBe(false)
+    expect(isAbsoluteLocalPath('', true)).toBe(false)
+  })
+
+  it('Windows 下前导斜杠是驱动器相对路径，不算绝对路径；POSIX 下算', () => {
+    expect(isAbsoluteLocalPath('/ws/a.ts', true)).toBe(false)
+    expect(isAbsoluteLocalPath('/home/u/a.ts', false)).toBe(true)
+  })
+})
+
+describe('toSessionAttachmentStoragePath', () => {
+  const sid = 'session-3703d705-72fc-4ed2-9c65-bc85d5f31c47'
+
+  it('本会话附件绝对路径 → 自包含存储引用（正/反斜杠都吃）', () => {
+    expect(
+      toSessionAttachmentStoragePath(
+        `C:\\Users\\u\\.guada\\sessions\\${sid}\\images\\20261121\\image_1.jpg`,
+        sid,
+        true,
+      ),
+    ).toBe(`sessions/${sid}/images/20261121/image_1.jpg`)
+    expect(
+      toSessionAttachmentStoragePath(
+        `/home/u/.guada/sessions/${sid}/previews/20261121/a.png`,
+        sid,
+        false,
+      ),
+    ).toBe(`sessions/${sid}/previews/20261121/a.png`)
+  })
+
+  it('Windows 下盘符/目录大小写不同仍能命中，返回保留原始大小写', () => {
+    expect(
+      toSessionAttachmentStoragePath(
+        `c:\\users\\u\\.guada\\SESSIONS\\${sid}\\images\\A.JPG`,
+        sid,
+        true,
+      ),
+    ).toBe(`sessions/${sid}/images/A.JPG`)
+  })
+
+  it('其他会话 / 工作区普通文件 → null', () => {
+    expect(
+      toSessionAttachmentStoragePath(`C:/data/sessions/other-session/images/a.jpg`, sid, true),
+    ).toBeNull()
+    expect(toSessionAttachmentStoragePath(`C:/ws/sessions/${sid}/images/a.jpg`, sid, true)).toBe(
+      `sessions/${sid}/images/a.jpg`,
+    )
+    expect(toSessionAttachmentStoragePath(`C:/ws/src/a.ts`, sid, true)).toBeNull()
+  })
+
+  it('路径穿越 / 盘符段 → null', () => {
+    expect(
+      toSessionAttachmentStoragePath(`C:/x/sessions/${sid}/images/../../secret.key`, sid, true),
+    ).toBeNull()
+    expect(
+      toSessionAttachmentStoragePath(`C:/x/sessions/${sid}/images//a.jpg`, sid, true),
+    ).toBeNull()
+    expect(
+      toSessionAttachmentStoragePath(`C:/x/sessions/${sid}/C:/windows/a.jpg`, sid, true),
+    ).toBeNull()
+  })
+
+  it('空参数 / 缺少相对段 → null', () => {
+    expect(toSessionAttachmentStoragePath('', sid, true)).toBeNull()
+    expect(toSessionAttachmentStoragePath(`C:/x/sessions/${sid}`, sid, true)).toBeNull()
+    expect(toSessionAttachmentStoragePath(`C:/x/sessions/${sid}/`, sid, true)).toBeNull()
   })
 })
 

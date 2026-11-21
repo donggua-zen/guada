@@ -4,7 +4,7 @@ import { StringDecoder } from "string_decoder";
 /**
  * 带输出上限的 git 命令执行器。
  *
- * 背景（对齐 ZCode `gitCommandProvider`）：超大仓库的 `git status -u all` 可能输出
+ * 背景：超大仓库的 `git status -u all` 可能输出
  * 20MB/25 万条。如果先让 simple-git 把 stdout 全量缓冲，再在 JS 层截断，内存峰值
  * 已经发生。这里在 stdout/stderr 累计到上限时立刻 kill 子进程，截断结果由调用方
  * 丢弃，绝不解析。

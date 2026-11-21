@@ -55,7 +55,7 @@ export function useSessionEvents() {
   // 那一刻对在线连接广播一次，stopStream 随即删除缓冲 → 重连补发（buildCatchupEvents
   // 只重放仍在运行的流）不含已完成会话的任何帧。本地若仍自认 isStreaming=true 就会
   // 永久卡 running（补拉判断 server.isStreaming 曾因详情端点不注入该字段而永不生效）。
-  // 借鉴 zcode 的"恢复即查状态"：恢复时对本地所有 running 会话探测服务端真实状态，
+  // 恢复策略"恢复即查状态"：恢复时对本地所有 running 会话探测服务端真实状态，
   // 已终态则复位瞬态并重载历史，不等事件。
 
   /** 每会话最后收到流帧的时间（watchdog 判静默用） */
@@ -156,8 +156,7 @@ export function useSessionEvents() {
         sessionStore.setSidebarFlag(currentSessionId.value, "unread", false);
       }
       // 切回前台即校准：覆盖"连接假活"（socket 看似 OPEN 实际半开，既不会触发
-      // onConnected 重连补拉，也可能未达 15s 强制重建阈值）——借鉴 zcode 的
-      // visible/resume 恢复先探测原状态再收敛。
+      // onConnected 重连补拉，也可能未达 15s 强制重建阈值）——先探测原状态再收敛。
       resyncStreamingSessions();
     }
   }

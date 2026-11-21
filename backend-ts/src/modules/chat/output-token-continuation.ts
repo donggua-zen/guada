@@ -1,5 +1,5 @@
 /**
- * Output Token Continuation —— 输出长度截断的续写层（对齐 ZCode）。
+ * Output Token Continuation —— 输出长度截断的续写层。
  *
  * 与“流失败恢复”严格分开：
  * - finishReason=length 且没有工具调用 → 保留已输出正文，追加隐藏续写提示，继续生成；
@@ -8,7 +8,7 @@
  */
 import type { Message } from "../../common/types/conversation.types";
 
-/** 隐藏续写提示（ZCode 原文；要求模型接着写，不要重述） */
+/** 隐藏续写提示（要求模型接着写，不要重述） */
 export const OUTPUT_TOKEN_CONTINUE_PROMPT =
   "Output token limit hit. Resume directly — no apology, no recap of what you were doing. Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.";
 

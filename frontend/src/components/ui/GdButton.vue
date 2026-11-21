@@ -139,7 +139,7 @@ const colorMap: Record<string, ButtonTheme> = {
 // error 是 danger 的别名（插件契约沿用旧名）
 colorMap.error = colorMap.danger;
 
-// 尺寸映射 - 类型化（对齐 zcode：所有档位统一 14px 字号，只变高度/内边距/图标）
+// 尺寸映射 - 类型化（所有档位统一 14px 字号，只变高度/内边距/图标）
 interface SizeClasses {
     icon: string;
     iconPadding: string;
