@@ -848,9 +848,9 @@ export class SubAgentManager implements OnModuleInit {
         async (result) => {
           try {
             // 结算静默门：子会话队列里还有接续投递（inject 消息将驱动新回合）时，
-            // 等「队列排空 + 流空闲」再结算。Job 终态、完成通知与 closedAt 全部顺延，
-            // 主代理不会在子代理仍在处理补充指令时提前收到"已完成"（zcode 同语义：
-            // 通知挂任务终态，不挂单次回合）。
+            // 等「队列排空 + 流空闲」再结算。Job 终态、完成通知与 closedAt 全部顺延：
+            // 通知挂在任务终态而非单次回合——主代理只会在子代理真正处理完
+            // 全部补充指令后收到一次"已完成"，期间可随时 job_read 看进度。
             await this.waitForSubAgentQuiesce(subSessionId);
             await this.settle(subSessionId, result, parentSessionId, lifecycle);
           } catch (error) {
@@ -1292,8 +1292,9 @@ export class SubAgentManager implements OnModuleInit {
   /**
    * 停止子 Agent 的当前运行（不关闭会话）。
    *
-   * 对齐 zcode TaskStop：只终止「这一次 execution」，会话本身、历史与
-   * 后续可续聊能力全部保留。停止后 closedAt 记下结束时间，仅作展示。
+   * 只终止「这一次执行」：会话本身、历史与后续可续聊能力全部保留，
+   * 再次 job_send / sendMessage 会直接开新回合。停止后 closedAt 记下
+   * 结束时间，仅作展示。
    *
    * @param parentSessionId 父会话 ID
    * @param subSessionId 子 Agent 会话 ID

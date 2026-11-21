@@ -140,7 +140,7 @@ export interface JobOutcome {
 }
 
 /**
- * send 的投递语义（对齐 zcode SendMessage 的 delivery）
+ * send 的投递回执词汇
  *
  * - delivered：已原样投递（字节流类写 stdin；hook 未返回结构化结果时的缺省）
  * - queued：目标正运行（子代理），消息入其会话队列，当前工具批次结束后

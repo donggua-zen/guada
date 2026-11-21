@@ -24,11 +24,11 @@ interface TurnFinishedEvent {
 /**
  * 后台作业完成通知的唯一投递点。
  *
- * 投递时机（对齐 zcode 的"投递时判定"思路）：
+ * 投递时机（投递时判定，不抢占正在运行的回合）：
  * - 会话运行中 → 不打断回合，只置挂起标记；
  * - 会话空闲 → 立即投递（enqueue 后立即 processQueue，近似"投递即消费"）；
  * - 工具边界（STEP_HANDOFF）→ 挂起通知落库为回合内 user 消息，在下一次 LLM
- *   请求边界自动送达（对齐 zcode 的 task-notification steer；不结束当前回合）；
+ *   请求边界自动送达（不结束当前回合）；
  * - 回合正常收尾 → 仍未投出的挂起通知批量投出（以新回合送达）；
  * - user_cancel / error 收尾 → 不在该收尾投递；挂起通知留给下一次边界/收尾机会
  *   （不再在回合开始时作废——通知不能丢，只会在下一机会送达）。
@@ -97,7 +97,7 @@ export class JobNotifierService {
    * 工具边界注入（HOOKS.STEP_HANDOFF，parallel 订阅者：只做副作用，返回 undefined）。
    *
    * 会话忙碌期间挂起的通知，在下一次 LLM 请求派发前落库——engine 在钩子后重读
-   * getHistory()，落库消息自然进入本次请求（对齐 zcode 的请求边界通知注入）。
+   * getHistory()，落库消息自然进入本次请求。
    * 不返回 handoff 决策：注入不打断当前回合；若同一边界恰好有队列 inject 交接，
    * 已落库的通知会在新回合首个请求送达，不丢。
    *
