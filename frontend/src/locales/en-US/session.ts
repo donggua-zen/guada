@@ -69,6 +69,7 @@
     requestFailed: 'Request failed',
     responseFailed: 'Failed to get response: {status}',
     sendFailed: 'Send failed: {status}',
+    invalidJsonBody: 'Response is not valid JSON (may be replaced or truncated by a network middle layer)',
   },
 
   // ── 会话搜索 (SessionSearchDialog.vue) ──

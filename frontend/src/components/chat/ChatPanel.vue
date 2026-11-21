@@ -1696,6 +1696,39 @@ async function loadSession(sessionId: string) {
 }
 
 /**
+ * 拉取事件页并校验形状：2xx 但 body 无 events（中间层注入 HTML / 响应截断 / 空 body）
+ * 时，直接展开会抛 "x.events is not iterable" 且 toast 无诊断信息。此类坏响应多为
+ * 瞬时（半开连接/代理抖动，移动端后台唤醒后高频）→ 自动重试一次，仍失败才走外层 catch。
+ */
+async function fetchEventsPageValidated(
+  sessionId: string,
+  options: { beforeSeq?: number; turns: number },
+): Promise<Awaited<ReturnType<typeof apiService.fetchSessionEvents>>> {
+  for (let attempt = 1; ; attempt += 1) {
+    const page = await apiService.fetchSessionEvents(sessionId, options);
+    if (page && Array.isArray(page.events)) return page;
+    const summary = describeInvalidEventsPage(page);
+    console.error("事件页格式异常:", summary);
+    if (attempt >= 2) {
+      throw new Error(`事件页格式异常（响应体: ${summary}）`);
+    }
+  }
+}
+
+/** 坏响应摘要（进 toast/console，便于区分 HTML 注入 / 空 body / 异形 JSON） */
+function describeInvalidEventsPage(page: unknown): string {
+  if (page == null) return "空响应";
+  if (typeof page === "string") return `非 JSON 文本: ${page.slice(0, 60)}`;
+  if (typeof page === "object") {
+    const keys = Object.keys(page as Record<string, unknown>)
+      .slice(0, 5)
+      .join(",");
+    return `对象{${keys}}`;
+  }
+  return `unexpected ${typeof page}`;
+}
+
+/**
  * 加载会话消息（前端自折叠：拉事件页 → foldEvents 重建树）
  * @param sessionId - 会话 ID
  * @param options - 加载选项
@@ -1737,7 +1770,7 @@ async function loadMessages(
     const oldScrollHeight = !isInitial ? scrollElement?.scrollHeight || 0 : 0;
 
     const fetchSpan = perfStart('replay.fetch');
-    const page = await apiService.fetchSessionEvents(sessionId, {
+    const page = await fetchEventsPageValidated(sessionId, {
       beforeSeq: isInitial ? undefined : options.beforeSeq,
       turns: isInitial ? INITIAL_PAGE_SIZE : MESSAGES_PAGE_SIZE,
     });

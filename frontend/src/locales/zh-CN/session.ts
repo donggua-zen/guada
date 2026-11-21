@@ -69,6 +69,7 @@ export default {
     requestFailed: '请求失败',
     responseFailed: '获取响应失败：{status}',
     sendFailed: '发送失败: {status}',
+    invalidJsonBody: '响应不是有效 JSON（可能被网络中间层替换或截断）',
   },
 
   // ── 会话搜索 (SessionSearchDialog.vue) ──

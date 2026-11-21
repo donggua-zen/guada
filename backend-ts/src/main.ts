@@ -167,6 +167,15 @@ async function bootstrap() {
   // 设置全局 API 前缀
   app.setGlobalPrefix("api/v1");
 
+  // JSON API 一律禁止浏览器/中间层缓存：移动端浏览器会对无 Cache-Control 的 GET 做
+  // 启发式缓存，坏响应（中间层注入/截断）被缓存后用户刷新也无法自愈（曾致
+  // "加载消息失败 Se.events is not iterable" 刷新无效）。controller 内后执行的
+  // setHeader（资源 immutable / git no-cache 等）会覆盖此值，不受影响。
+  app.use("/api/v1", (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
+
   // 增强对中文文件名的支持
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
   app.use(express.json({ limit: "50mb" }));

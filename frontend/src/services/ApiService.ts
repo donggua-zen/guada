@@ -68,6 +68,22 @@ export type { SessionEvent, SessionEventType };
 export type { UiJobInfo, UiJobOutput } from "./modules/session.api";
 
 /**
+ * JSON body 解析器（axios transformResponse）：JSON.parse 失败返回标记对象（含 body
+ * 摘要）而非 axios 默认的"静默降级为原始字符串"——后者曾让调用方把 string 当解析
+ * 结果用（移动端"加载消息失败 Se.events is not iterable"）。空 body 归一为 null。
+ */
+export function parseJsonBody(data: unknown): unknown {
+  if (typeof data !== "string") return data;
+  const trimmed = data.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return { __invalidJson: true, snippet: trimmed.slice(0, 160) };
+  }
+}
+
+/**
  * 通过 interface 声明合并，让 ApiService 类型包含所有领域方法。
  */
 interface ApiService
@@ -160,11 +176,28 @@ class ApiService {
       headers: {
         "Content-Type": "application/json",
       },
+      // 默认 transformResponse 在 JSON.parse 失败时静默返回原始字符串：移动端弱网/
+      // 后台唤醒后的半开连接、或网络中间层注入 200+HTML 时，业务代码会把 string 当
+      // 解析结果用（曾致“加载消息失败 Se.events is not iterable”）。这里显式标记
+      // 解析失败，由响应拦截器统一 reject；空 body 归一为 null。
+      transformResponse: [parseJsonBody],
     });
 
     // 添加响应拦截器处理通用错误
     this.axiosInstance.interceptors.response.use(
       (response: AxiosResponse) => {
+        // transformResponse 标记的解析失败：2xx 但 body 不是 JSON（中间层注入/响应截断）
+        const body = response.data as
+          | { __invalidJson?: boolean; snippet?: string }
+          | null
+          | undefined;
+        if (body && typeof body === "object" && body.__invalidJson) {
+          console.error("API 返回非 JSON 响应体:", body.snippet);
+          throw new ApiError(
+            `${t("session.api.invalidJsonBody")}: ${body.snippet}`,
+            response.status,
+          );
+        }
         // Web（局域网访问）模式：后端 auto BASE_URL 把资源 URL 定格成
         // http://localhost:<port>/uploads/...，手机浏览器解析不了 localhost，
         // 改写为相对路径
@@ -175,7 +208,9 @@ class ApiService {
         ) {
           rewriteLocalhostUrls(response.data);
         }
-        return response.data ? response.data : response;
+        // 空 body（204/空串）归一为 null：原来 `data ? data : response` 会把整个
+        // AxiosResponse 对象当业务结果返回（无业务字段 → 调用方解构报错）
+        return response.data ?? null;
       },
       (error) => {
         console.error("API 请求失败:", error);
