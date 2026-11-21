@@ -46,7 +46,7 @@ export type QueueSource =
   | { kind: "scheduler"; schedulerId?: string; dryRun?: boolean; [key: string]: any }
   | { kind: "process_monitor"; processId?: string; event?: string; [key: string]: any }
   /**
-   * 计划审批反馈（工具转交的用户输入）：ExitPlanMode 被拒且用户留下文字时，
+   * 计划审批反馈（工具转交的用户输入）：submit_plan 被拒且用户留下文字时，
    * 引擎终止本轮并把文字随 run() 返回值交回，这里作为**真实用户消息**入队开启新轮次。
    * 刻意不进 toMessageSource 映射——折叠时走默认 kind='user'，渲染与手打消息无异。
    */

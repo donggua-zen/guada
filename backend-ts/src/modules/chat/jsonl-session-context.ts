@@ -822,7 +822,7 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
 
   /**
    * 设置计划模式并**持久化**（重启后据此恢复；与 sandboxMode 不同——后者只由界面写设置，
-   * 而计划模式还会被模型经 ExitPlanMode 审批通过后关闭，那条路径必须自己落库）。
+   * 而计划模式还会被模型经 submit_plan 审批通过后关闭，那条路径必须自己落库）。
    *
    * 进入计划模式时生成新的 epoch：完整提醒按周期只落一份，重进不会复用旧周期。
    * 退出时保留 epoch，供 provider 判定是否需要落一条退出说明。
@@ -1592,8 +1592,8 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
       narrations.push(
         this.planEnabled
           ? process.platform === 'win32'
-            ? 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command only allows verified read-only commands. Investigate the codebase, then present your plan with ExitPlanMode for approval. Do not ask for plan approval in plain text.'
-            : 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command executes in a read-only sandbox. Investigate the codebase, then present your plan with ExitPlanMode for approval. Do not ask for plan approval in plain text.'
+            ? 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command only allows verified read-only commands. Investigate the codebase, then present your plan with submit_plan for approval. Do not ask for plan approval in plain text.'
+            : 'The user has enabled plan mode. You are in a read-only planning phase: write/edit and other state-changing tools are blocked, and run_command executes in a read-only sandbox. Investigate the codebase, then present your plan with submit_plan for approval. Do not ask for plan approval in plain text.'
           : 'The user has disabled plan mode. The earlier plan-mode instructions no longer apply. You can make edits and run commands again.',
       );
     }

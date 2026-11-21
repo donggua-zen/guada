@@ -47,7 +47,7 @@
         </div>
 
         <!-- 工具行：其它询问/审批保留工具名便于辨认；计划审批不显示
-             （标题已说明来意，ExitPlanMode 对用户是噪音） -->
+             （标题已说明来意，submit_plan 对用户是噪音） -->
         <div v-if="askCtx.toolName && !isPlanApproval"
           class="mt-1.5 flex flex-wrap items-center gap-1.5">
           <span class="rounded px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-xs font-mono">
@@ -58,7 +58,7 @@
         <!-- 当前问题 -->
         <div v-if="question" class="mt-2">
           <div class="text-sm text-(--gd-color-text)">{{ question.question }}</div>
-          <!-- 计划审批（ExitPlanMode）的 detail 是计划全文，刻意不在弹窗内渲染：
+          <!-- 计划审批（submit_plan）的 detail 是计划全文，刻意不在弹窗内渲染：
                计划本体在流内计划卡（随消息滚动），完整文档从那里打开工作区计划面板；
                此处仅按 isPlanApproval 门控，避免全文落进下方纯文本分支铺开 -->
           <div v-if="question.detail && !isPlanApproval"

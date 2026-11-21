@@ -533,7 +533,7 @@ export interface SessionModeChangedData {
   previousPlanEnabled: boolean;
   /** 变更时的安全档位快照（本事件不改变它，仅记录） */
   sandboxMode: import("../services/sandbox-policy").SandboxMode;
-  /** 变更来源：user=界面开关 / tool=ExitPlanMode 审批通过 */
+  /** 变更来源：user=界面开关 / tool=submit_plan 审批通过 */
   source: 'user' | 'tool';
   /** source='tool' 时的关联工具调用 id */
   toolCallId?: string;

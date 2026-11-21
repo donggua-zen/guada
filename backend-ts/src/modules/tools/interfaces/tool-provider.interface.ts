@@ -57,7 +57,7 @@ export interface ToolCallResponse {
    * 文字随 run() 返回值交回 chat-runner，作为**真实用户消息入队开启新轮次**（与手打消息同一条
    * 准入路径：可见、独立回合壳、成为模式切换检测的新基准）。
    *
-   * 生产者：ExitPlanMode 被拒且用户留下文字反馈。想往**当前轮**注入模型可见内容的场景
+   * 生产者：submit_plan 被拒且用户留下文字反馈。想往**当前轮**注入模型可见内容的场景
    * 不该用本字段——那是 injectUserPrompt / TURN_STOPPING 拦截器的职责。
    */
   followUpUserInput?: string;

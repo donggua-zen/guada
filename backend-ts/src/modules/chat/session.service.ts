@@ -1029,7 +1029,7 @@ export class SessionService {
 
     const updatedSession = await this.sessionStore.update(sessionId, updateData);
 
-    // 用户开关的审计事件：模型退出由 ExitPlanMode 自己写（source='tool'）
+    // 用户开关的审计事件：模型退出由 submit_plan 自己写（source='tool'）
     if (planTransition) {
       try {
         await this.contextManager.appendSessionModeChanged(sessionId, {

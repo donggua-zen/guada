@@ -60,13 +60,13 @@ describe("refreshSessionPlans 在途合并", () => {
 });
 
 // ── 生成中的计划草稿 ──
-// 面板读的持久化列表来自后端对**已落库转录**的解析，ExitPlanMode 的参数要等 LLM 流结束才落库，
+// 面板读的持久化列表来自后端对**已落库转录**的解析，submit_plan 的参数要等 LLM 流结束才落库，
 // 所以"正文正在写"这段只能靠消息树里的半截 args 供面板展示。pickPlanDraft 是这条链路的选源规则：
 // 挑错了要么生成中看不到，要么和落库后的条目重复。
 describe("pickPlanDraft 选源", () => {
   const planTool = (over: Record<string, unknown> = {}) => ({
     id: "call_1",
-    name: "ExitPlanMode",
+    name: "submit_plan",
     // 流式中：JSON 只写了一半
     arguments: '{"plan":"# 标题\\n正文第一段',
     ...over,

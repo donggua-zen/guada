@@ -25,7 +25,7 @@ describe("buildPlanModeTurnInjection", () => {
     subAgentTool?: boolean;
   }) {
     const tools = options.tools ?? [
-      "ExitPlanMode",
+      "submit_plan",
       ...(options.askUser === false ? [] : ["ask_user"]),
       ...(options.subAgentTool === false ? [] : ["subagent_spawn"]),
     ];
@@ -103,7 +103,7 @@ describe("buildPlanModeTurnInjection", () => {
     );
     expect(textOf(message)).toContain("do not also run it yourself");
     expect(textOf(message)).toContain("Phase 1");
-    expect(textOf(message)).toContain("ExitPlanMode");
+    expect(textOf(message)).toContain("submit_plan");
     expect(message.kind).toBe("model");
     expect(message.metadata?.hidden).toBe(true);
     expect(message.metadata?.planModeReminder).toBe("full");
@@ -219,7 +219,7 @@ describe("buildPlanModeTurnInjection", () => {
     expect(result.transient ?? []).toHaveLength(0);
   });
 
-  it("ExitPlanMode 不在册时不引导计划态（提示词与工具面一致）", () => {
+  it("submit_plan 不在册时不引导计划态（提示词与工具面一致）", () => {
     const result = buildPlanModeTurnInjection(
       createContext({ planEnabled: true, tools: ["ask_user", "subagent_spawn"] }),
       1,
@@ -251,7 +251,7 @@ describe("buildPlanModeTurnInjection", () => {
 
   // ── 工具面文案分支 ──
 
-  it("ask_user 在册：Phase 1/3/4 引导使用 ask_user，且批准只走 ExitPlanMode", () => {
+  it("ask_user 在册：Phase 1/3/4 引导使用 ask_user，且批准只走 submit_plan", () => {
     const result = buildPlanModeTurnInjection(
       createContext({ planEnabled: true, askUser: true }),
       1,
@@ -262,7 +262,7 @@ describe("buildPlanModeTurnInjection", () => {
     expect(text).toContain(
       "Use the ask_user tool to clarify any remaining questions with the user before finalizing your plan.",
     );
-    expect(text).toContain("Ask for plan approval ONLY via ExitPlanMode");
+    expect(text).toContain("Ask for plan approval ONLY via submit_plan");
   });
 
   it("ask_user 不在册：退回文本提问，且全篇不提 ask_user", () => {

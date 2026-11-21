@@ -35,7 +35,7 @@ const ASK_USER_DESCRIPTION = [
   "## Example",
   '{"questions":[{"question":"Which database should we use?","options":["Postgres (Recommended)","SQLite","MySQL"],"multiSelect":false}]}',
   "",
-  'Plan mode note: To enter plan mode use EnterPlanMode (not this tool). Once in plan mode, use this tool to clarify requirements or choose between approaches BEFORE finalizing your plan. Do NOT use this tool to ask "Is my plan ready?", "Should I proceed?", or otherwise reference "the plan" in questions — the user cannot see the plan until you call ExitPlanMode for approval.',
+  'Plan mode note: Once in plan mode, use this tool to clarify requirements or choose between approaches BEFORE finalizing your plan. Do NOT use this tool to ask "Is my plan ready?", "Should I proceed?", or otherwise reference "the plan" in questions — the user cannot see the plan until you call submit_plan for approval.',
   "",
   "Reserve this for decisions where the user's answer changes what you do next — not for choices with a conventional default, or facts you can verify in the codebase yourself. In those cases pick the obvious option, mention it in your response, and proceed.",
 ].join("\n");
@@ -99,7 +99,7 @@ export type AskUserInputQuestion = AskUserInput["questions"][number];
  *
  * 复用统一 Ask 交互层（`AskService.ask` + `kind:'ask'`）：卡片、应答端点、重连补拉、
  * 审计与流帧全部沿用既有链路，本插件只负责"发起 + 把答案组织回模型"。
- * 与审批的区别：审批（ExitPlanMode / 命令 / 写入）走 `kind:'approval'`，且"自定义回复"
+ * 与审批的区别：审批（submit_plan / 命令 / 写入）走 `kind:'approval'`，且"自定义回复"
  * 语义为**拒绝 + 反馈**；本工具是纯询问，用户的自定义文本就是**正常答案**。
  */
 @Injectable()

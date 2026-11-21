@@ -1,7 +1,7 @@
 /**
  * 计划历史（计划模式产物）：列表刷新、生成中草稿、打开计划面板。
  *
- * 计划身份 = 提交它的 ExitPlanMode toolCallId；列表由后端从**转录**构建
+ * 计划身份 = 提交它的计划工具 toolCallId；列表由后端从**转录**构建
  * （`GET /sessions/:id/plans`，含待审/已批/被拒状态与正文），不依赖文件系统——
  * `.guada/plans/<sessionId>/<planId>.md` 只是落盘副本（文件树可见 + 压缩后重注入）。
  *
@@ -77,14 +77,14 @@ export async function openSessionPlanPanel(sessionId: string): Promise<void> {
 }
 
 // ─── 生成中的计划草稿 ───
-// 面板读的 sessionPlans 来自后端对**已落库转录**的解析，而 ExitPlanMode 的参数要等 LLM 流结束、
+// 面板读的 sessionPlans 来自后端对**已落库转录**的解析，而 submit_plan 的参数要等 LLM 流结束、
 // assistant 消息落库之后才进转录。所以"正文正在写"这段里，计划正文的唯一副本是消息树里
 // tool-call 的半截 arguments（流内卡片预览正是这么渲染的）。这里把它挖出来给面板用：
 // 不新增请求、不扩持久化字段、不加接口。
 
 /** 生成中的计划草稿：args 里已能解析出正文、但还没进持久化列表的那一份 */
 export interface PlanDraft {
-    /** = ExitPlanMode 的 toolCallId（与落库后的 planId 同一个）→ 落库后按同一 id 无缝交接 */
+    /** = submit_plan 的 toolCallId（与落库后的 planId 同一个）→ 落库后按同一 id 无缝交接 */
     planId: string
     content: string
     /** args 还没写完（严格 JSON 解析失败）= 正文仍在增长 */

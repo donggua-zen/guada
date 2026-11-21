@@ -1292,7 +1292,7 @@ export function applyChunkToStore(
   }
   if (chunk.type === "plan_mode_changed") {
     // 计划模式变更（协作状态）。用户从界面开关时前端已乐观写入，此处幂等覆盖；
-    // 模型经 ExitPlanMode 审批通过后关闭时，本帧是前端的唯一知情渠道——必须同时更新
+    // 模型经 submit_plan 审批通过后关闭时，本帧是前端的唯一知情渠道——必须同时更新
     // 会话设置（事实源），否则刷新后指示器按旧设置回退。
     // 这条是纯状态写（无 IO），重放时同样要执行：刷新后指示器正是靠它从转录恢复。
     sessionStore.applyRemotePlanEnabled?.(sessionId, chunk.planEnabled);

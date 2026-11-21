@@ -202,9 +202,13 @@ describe("isStandaloneTool / isStandaloneRendererKind", () => {
     setPluginToolDisplays({});
   });
 
-  it("内置映射：ExitPlanMode 按 kind 独立成块", () => {
-    expect(isStandaloneTool({ name: "ExitPlanMode" })).toBe(true);
+  it("内置映射：submit_plan 按 kind 独立成块", () => {
+    expect(isStandaloneTool({ name: "submit_plan" })).toBe(true);
     expect(isStandaloneRendererKind("plan")).toBe(true);
+  });
+
+  it("内置映射：ExitPlanMode（旧转录名）同样独立成块（兜底双名兼容）", () => {
+    expect(isStandaloneTool({ name: "ExitPlanMode" })).toBe(true);
   });
 
   it("普通工具不独立（回归）", () => {
@@ -241,7 +245,7 @@ describe("isStandaloneTool / isStandaloneRendererKind", () => {
   it("tool_use 懒加载二跳后同样按真实工具名判定", () => {
     const tool: ToolCall = {
       name: "tool_use",
-      arguments: JSON.stringify({ tool_name: "ExitPlanMode" }),
+      arguments: JSON.stringify({ tool_name: "submit_plan" }),
     };
     expect(isStandaloneTool(tool)).toBe(true);
   });

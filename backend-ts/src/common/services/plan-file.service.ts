@@ -14,7 +14,7 @@ function sanitizeSegment(value: string): string {
  * 计划产物读写（计划模式的持久化载体）。
  *
  * 路径：`<workspace>/.guada/plans/<sessionId>/<planId>.md` —— **每份计划一个文件**，
- * 不再会话级整文件覆盖；planId = ExitPlanMode 的 toolCallId（计划身份与转录对齐，
+ * 不再会话级整文件覆盖；planId = submit_plan 的 toolCallId（计划身份与转录对齐，
  * 历史列表由 PlanHistoryService 扫转录构建，文件是"文件树可见 + 压缩后重注入"的落盘副本）。
  *
  * 路径由 workspacePath + sessionId + planId **推导**，不存路径状态字段——少一个状态就少一处不一致。
@@ -71,7 +71,7 @@ export class PlanFileService {
    * 原子写入一份计划正文。
    *
    * 空白计划直接抛错——不落空文件，否则压缩后的重注入会读到无意义的空壳。
-   * 写临时文件再 rename，避免半截内容被下游读到（计划落盘即代表该次 ExitPlanMode 已定稿）。
+   * 写临时文件再 rename，避免半截内容被下游读到（计划落盘即代表该次 submit_plan 已定稿）。
    */
   async writeApprovedPlan(input: {
     workspacePath: string;
@@ -81,11 +81,11 @@ export class PlanFileService {
   }): Promise<string> {
     const content = input.plan ?? "";
     if (!content.trim()) {
-      throw new Error("ExitPlanMode plan cannot be empty");
+      throw new Error("submit_plan cannot be empty");
     }
     if (content.length > PLAN_MAX_CHARS) {
       throw new Error(
-        `ExitPlanMode plan exceeds ${PLAN_MAX_CHARS} characters (got ${content.length})`,
+        `submit_plan plan exceeds ${PLAN_MAX_CHARS} characters (got ${content.length})`,
       );
     }
 

@@ -438,7 +438,7 @@ describe('AgentEngine - completions', () => {
         toolCallsResponse: [
           {
             toolCallId: 'call_exit_plan',
-            name: 'ExitPlanMode',
+            name: 'submit_plan',
             content: 'The plan was not approved by the user.',
             isError: true,
             followUpUserInput: '把第二步拆成两步',

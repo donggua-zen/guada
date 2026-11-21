@@ -447,14 +447,14 @@ export interface SubAgentStatusEvent {
 
 /**
  * 计划模式变更（协作状态，正交于安全档位）。
- * 事实源是会话设置；本帧驱动指示器与多窗口同步。模型经 ExitPlanMode 审批通过后
+ * 事实源是会话设置；本帧驱动指示器与多窗口同步。模型经 submit_plan 审批通过后
  * 关闭计划模式时，本帧是前端的唯一知情渠道。
  */
 export interface PlanModeChangedEvent {
   type: "plan_mode_changed";
   planEnabled: boolean;
   previousPlanEnabled: boolean;
-  /** 变更来源：user=界面开关 / tool=ExitPlanMode 审批通过 */
+  /** 变更来源：user=界面开关 / tool=submit_plan 审批通过 */
   source: "user" | "tool";
   toolCallId?: string;
 }

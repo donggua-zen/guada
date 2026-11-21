@@ -175,7 +175,7 @@ export type StreamStatus = "idle" | "pending" | "running" | "completed" | "error
 /** 计划状态：待审批 / 已批准 / 已拒绝 */
 export type SessionPlanStatus = 'pending' | 'approved' | 'rejected'
 
-/** 计划历史条目（GET /sessions/:id/plans；计划身份 = 提交它的 ExitPlanMode toolCallId） */
+/** 计划历史条目（GET /sessions/:id/plans；计划身份 = 提交它的计划工具 toolCallId） */
 export interface SessionPlanItem {
     planId: string
     /** 所属回合（可在对话里定位；回合被删除的条目不返回） */
@@ -267,7 +267,7 @@ export interface SessionState {
     pendingAsks?: Record<string, PendingAsk>
     /**
      * 计划模式（协作状态，正交于安全档位）。事实源是会话设置；
-     * 本字段是 UI 投影——用户从界面开关时乐观写入，模型经 ExitPlanMode 审批通过后
+     * 本字段是 UI 投影——用户从界面开关时乐观写入，模型经 submit_plan 审批通过后
      * 由 plan_mode_changed 流帧写入（此时前端是唯一知情方）。
      */
     planEnabled?: boolean

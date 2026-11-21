@@ -332,13 +332,13 @@ export interface SubAgentStatusEvent {
  *
  * 事实源是 session.settings.planEnabled（持久化）；本事件是流内 UI 信号，用于驱动
  * 前端指示器与多窗口同步。用户从界面开关时前端已自知，但仍会收到本帧以统一路径；
- * 模型经 ExitPlanMode 审批通过后关闭时，本帧是前端唯一的知情渠道。
+ * 模型经 submit_plan 审批通过后关闭时，本帧是前端唯一的知情渠道。
  */
 export interface PlanModeChangedEvent {
   type: "plan_mode_changed";
   planEnabled: boolean;
   previousPlanEnabled: boolean;
-  /** 变更来源：user=界面开关 / tool=ExitPlanMode 审批通过 */
+  /** 变更来源：user=界面开关 / tool=submit_plan 审批通过 */
   source: "user" | "tool";
   /** source='tool' 时的关联工具调用 id */
   toolCallId?: string;

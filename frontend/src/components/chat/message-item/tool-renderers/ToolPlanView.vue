@@ -1,6 +1,6 @@
 <template>
     <!--
-      ExitPlanMode 计划正文卡（样式对齐 ZCode SwitchModeToolCallBlock）：
+      submit_plan 计划正文卡（样式对齐 ZCode SwitchModeToolCallBlock）：
       头部＝记事本图标 + 「计划」+ 复制按钮（无分隔线）；正文＝限高遮罩预览
       （遮罩与限高必须落在同一个裁切节点，否则渐变按完整内容高度计算、可见区反而不渐隐）；
       底部居中胶囊按钮 → 完整计划面板。计划正文仍是流内唯一内联阅读落点

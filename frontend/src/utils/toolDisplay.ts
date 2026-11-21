@@ -430,7 +430,7 @@ const DEFAULT_RENDERER_FIELDS: Record<
   diff: { file: "file_path", oldValue: "old_text", newValue: "new_text" },
   content: { file: "file_path", content: "content" },
   terminal: { command: "command" },
-  // ExitPlanMode 的计划正文：流式期间半截 JSON 也能提取，首段即渲染（对齐 ZCode）
+  // submit_plan 的计划正文：流式期间半截 JSON 也能提取，首段即渲染（对齐 ZCode）
   plan: { content: "plan" },
 };
 
@@ -447,6 +447,9 @@ const BUILTIN_RENDERERS: Record<string, ToolRendererConfig> = {
   run_command: { kind: "terminal", fields: DEFAULT_RENDERER_FIELDS.terminal },
   remote_bash: { kind: "terminal", fields: DEFAULT_RENDERER_FIELDS.terminal },
   // 计划提交：正文边流边渲染（不必等整份计划输出完才可见）
+  // submit_plan 是当前名；ExitPlanMode 是改名前的历史名——旧会话转录里的
+  // 工具调用块仍是旧名，渲染兜底两个都收，否则旧计划卡会退化为通用渲染。
+  submit_plan: { kind: "plan", fields: DEFAULT_RENDERER_FIELDS.plan },
   ExitPlanMode: { kind: "plan", fields: DEFAULT_RENDERER_FIELDS.plan },
 };
 
@@ -529,9 +532,9 @@ export type PlanCardStatus = "approved" | "rejected" | "aborted" | "error";
 /**
  * 计划卡终态：undefined = 仍在执行（卡片走流式提示，不出徽标）。
  *
- * 批准/拒绝优先看结果 meta.planApproved——后端 ExitPlanMode 明确写入，是权威口径；
+ * 批准/拒绝优先看结果 meta.planApproved——后端 submit_plan 明确写入，是权威口径；
  * 其余才回落到 outcome：aborted 是用户中断，error 是没有 meta 的真失败
- * （例如不在计划态时误调 ExitPlanMode）。
+ * （例如不在计划态时误调 submit_plan）。
  */
 export function resolvePlanCardStatus(
   outcome: ToolCall["outcome"],

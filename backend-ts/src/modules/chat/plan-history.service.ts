@@ -11,7 +11,7 @@ import { PlanFileService } from "../../common/services/plan-file.service";
 export type PlanStatus = "pending" | "approved" | "rejected";
 
 export interface PlanHistoryItem {
-  /** 计划身份 = 提交它的 ExitPlanMode 工具调用 id（与转录天然对应） */
+  /** 计划身份 = 提交它的计划工具（submit_plan / 旧名 ExitPlanMode）调用 id（与转录天然对应） */
   planId: string;
   /** 所属回合（可据此在对话里定位；回合被删除的条目会被过滤） */
   turnId: string | null;
@@ -27,6 +27,13 @@ export interface PlanHistoryItem {
 }
 
 const TITLE_MAX_CHARS = 60;
+
+/**
+ * 计划提交工具名（转录过滤用）。
+ * submit_plan 是当前名；ExitPlanMode 是改名前的历史名——旧会话转录里的工具调用块
+ * 已落库为旧名，过滤器必须两个都收，否则改名后历史计划列表会整体消失。
+ */
+const PLAN_TOOL_NAMES = new Set(["submit_plan", "ExitPlanMode"]);
 
 /** 列表标题：首个 Markdown 标题行（# …），否则首个非空行；超长截断 */
 function deriveTitle(content: string): string {
@@ -44,7 +51,7 @@ function deriveTitle(content: string): string {
 /**
  * 事件流 → 计划列表（纯函数，便于单测）。
  *
- * 计划正文的权威副本是转录里的 ExitPlanMode 工具调用参数（model 产出即落库）；
+ * 计划正文的权威副本是转录里的计划工具（submit_plan / 旧名 ExitPlanMode）调用参数（model 产出即落库）；
  * 状态来自配对的 tool/result（meta.planApproved / isError）；被删除回合（turn/delete）
  * 的计划整体剔除——用户删掉那一轮，计划也不再算历史。
  */
@@ -69,7 +76,7 @@ export function collectPlansFromEvents(events: BaseEvent[]): PlanHistoryItem[] {
           ? (data.content as ContentBlock[])
           : [];
         for (const block of blocks) {
-          if (block?.type !== "tool-call" || block.name !== "ExitPlanMode") continue;
+          if (block?.type !== "tool-call" || !PLAN_TOOL_NAMES.has(block.name)) continue;
           const plan = parsePlanArgument(block.arguments);
           if (!plan) continue;
           indexByPlanId.set(block.toolCallId, items.length);
@@ -130,7 +137,7 @@ function parsePlanArgument(args: unknown): string | null {
 /**
  * 会话计划历史服务。
  *
- * 为什么不从文件系统列目录：计划正文的权威副本在转录（ExitPlanMode 的 tool-call 参数），
+ * 为什么不从文件系统列目录：计划正文的权威副本在转录（计划工具的 tool-call 参数），
  * 文件只是落盘副本——转录能给出状态（待审/已批/被拒）、标题与顺序，且不受文件被清理影响
  * （对齐 ZCode：计划身份 = toolCallId，Plans 目录来自会话数据）。
  */

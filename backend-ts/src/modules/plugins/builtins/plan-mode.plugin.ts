@@ -13,21 +13,13 @@ import {
 import { createPlanModeReminderProvider } from "./plan-mode-reminder.provider";
 import { wrapSystemReminder } from "../../../common/utils/system-reminder.util";
 
+/** 本插件的唯一工具名（下划线命名，与 ask_user / run_command 等内置工具约定一致） */
+export const SUBMIT_PLAN_TOOL_NAME = "submit_plan";
+
 /** 审批问题的稳定 id（前端按 id 回显答案） */
 const PLAN_QUESTION_ID = "plan";
 const PLAN_APPROVE = "批准";
 const PLAN_REJECT = "拒绝";
-
-const NOT_IN_PLAN_MODE =
-  "Not in plan mode. This tool is only for exiting plan mode after writing a plan. " +
-  "If your plan was already approved, continue with implementation.";
-
-/**
- * 两条拒绝路径共用同一工具结果文本：拒绝即终止当前轮（finishReason=plan_rejected），
- * 工具结果是回合最后一条消息；有无反馈的差别只在"是否随后开启一条真实用户消息的新轮次"，
- * 与工具结果本身无关。（原"不要立即重新提交"指令是给"轮次继续"场景写的，已随语义删除。）
- */
-const REJECTED = "The plan was not approved by the user.";
 
 /**
  * 并发提交被拒（同一会话已有一份计划在等待审批）。
@@ -38,10 +30,18 @@ const PLAN_CONCURRENT_REJECTED =
   "Do not submit plans concurrently: wait for that one to be resolved, or merge both into a single plan and submit it once.";
 
 /**
+ * 两条拒绝路径共用同一工具结果文本：拒绝即终止当前轮（finishReason=plan_rejected），
+ * 工具结果是回合最后一条消息；有无反馈的差别只在"是否随后开启一条真实用户消息的新轮次"，
+ * 与工具结果本身无关。（原"不要立即重新提交"指令是给"轮次继续"场景写的，已随语义删除。）
+ */
+const REJECTED = "The plan was not approved by the user.";
+
+/**
  * 计划模式插件。
  *
- * 提供 `ExitPlanMode`：模型在计划阶段写完方案后，用它请求用户批准。
- * 批准 → 计划落盘 + 退出计划模式（持久化 + 审计事件 + 流帧）；拒绝 → 保持只读。
+ * 提供 `submit_plan`：模型写完实施方案后，用它请求用户批准。
+ * 批准 → 计划落盘（若处于计划模式则同时退出：持久化 + 审计事件 + 流帧）；拒绝 → 终止当前轮。
+ * 工具本身模式无关：普通模式同样可提交方案征求批准，只是批准后不会翻转模式状态。
  *
  * 为什么没有 `EnterPlanMode`：本期计划模式**只由用户开启**（界面开关写会话设置）。
  * 主动进入能力是刻意的预留——补一个 EnterPlanMode 工具 + 计划门放行转换类工具即可，
@@ -72,7 +72,7 @@ export class PlanModePlugin extends PluginBase {
   /**
    * 压缩后重注入计划正文。
    *
-   * 压缩会把头部消息遮蔽——已批准计划的 ExitPlanMode 工具调用可能已被压掉，
+   * 压缩会把头部消息遮蔽——已批准计划的 submit_plan 工具调用可能已被压掉，
    * 模型随后就"忘了"计划内容。落盘文件是稳定来源，据此重新注入一条隐藏 user 消息。
    *
    * 注入条件只看"计划文件是否存在"，**不看计划模式开关**：批准后计划模式已关闭，
@@ -86,7 +86,7 @@ export class PlanModePlugin extends PluginBase {
   }): Promise<void> {
     try {
       const ctx = payload.sessionContext;
-      // 每份计划一个文件（planId = 当次 ExitPlanMode 的 toolCallId），重注入取最近一份
+      // 每份计划一个文件（planId = 当次 submit_plan 的 toolCallId），重注入取最近一份
       const found = await this.planFile.readLatestPlan({
         workspacePath: ctx.getWorkspacePath(),
         sessionId: ctx.sessionId,
@@ -117,9 +117,9 @@ export class PlanModePlugin extends PluginBase {
     const kit = api.registerToolKit({
       id: "plan-mode",
       name: "计划模式",
-      description: "只读调研后产出方案，经用户批准再实施",
-      activator: "Present an implementation plan for approval while in plan mode.",
-      // 计划模式对子代理不可见：整个工具包连同 ExitPlanMode 都不进子代理的 enabledTools
+      description: "产出实施方案，经用户批准后再实施",
+      activator: "Present an implementation plan for user approval.",
+      // 计划模式对子代理不可见：整个工具包连同 submit_plan 都不进子代理的 enabledTools
       // （与 subagent / workflow 工具包同一手法）。子代理既不该产出计划，也不该看到这个工具；
       // 提示词面由 plan-mode-reminder.util 的 sessionType 前置条件对应收口。
       handler: async (ctx) =>
@@ -129,8 +129,8 @@ export class PlanModePlugin extends PluginBase {
     });
 
     kit.registerTool({
-      name: "ExitPlanMode",
-      description: `Use this tool when you are in plan mode and have finished writing your plan and are ready for user approval.
+      name: SUBMIT_PLAN_TOOL_NAME,
+      description: `Use this tool when you have finished writing an implementation plan and are ready for user approval before starting to code. It works in any session mode — present the complete plan via this tool instead of asking "Is this plan okay?" in plain text.
 
 ## How This Tool Works
 - You should have already explored the codebase and finalized the plan you want the user to review.
@@ -139,18 +139,18 @@ export class PlanModePlugin extends PluginBase {
 - The user will see the contents of the \`plan\` parameter when they review it.
 
 ## When to Use This Tool
-Only use this tool when the task requires planning the implementation steps of a coding task. For pure research tasks — gathering information, searching files, reading files, or generally understanding the codebase — do NOT use this tool.
+Use this tool for complex tasks that benefit from an approved implementation plan. For pure research tasks — gathering information, searching files, reading files, or generally understanding the codebase — do NOT use this tool. For simple tasks, just proceed with the implementation directly.
 
 ## Before Using This Tool
 Ensure your plan is complete and unambiguous:
 - If you have unresolved questions about requirements or approach, use the ask_user tool before finalizing your plan.
 - Once your plan is finalized, use THIS tool to request approval.
 
-**Important:** Do NOT use ask_user to ask "Is this plan okay?" or "Should I proceed?" — that is exactly what THIS tool does. ExitPlanMode inherently requests user approval of your plan. ask_user is only for clarifying requirements or choosing between approaches.
+**Important:** Do NOT use ask_user to ask "Is this plan okay?" or "Should I proceed?" — that is exactly what THIS tool does. submit_plan inherently requests user approval of your plan. ask_user is only for clarifying requirements or choosing between approaches.
 
 ## What Happens Next
-- Approved → plan mode ends, the plan is saved to a file, and you may start implementing.
-- Rejected → plan mode stays on. If the user left feedback, it arrives as their message; otherwise wait for them to explain.`,
+- Approved → the plan is saved to a file, and you may start implementing. If plan mode is active, plan mode ends automatically upon approval.
+- Rejected → the turn ends. If the user left feedback, it arrives as their message; otherwise wait for them to explain.`,
       inputSchema: z.object({
         plan: z
           .string()
@@ -164,7 +164,7 @@ Ensure your plan is complete and unambiguous:
           ),
       }),
       execute: async (args, ctx, signal) =>
-        this.handleExitPlanMode(args, ctx, signal),
+        this.handleSubmitPlan(args, ctx, signal),
       display: {
         actionType: "plan",
         text: { executing: "提交计划待批准", completed: "计划已处理" },
@@ -179,17 +179,14 @@ Ensure your plan is complete and unambiguous:
     });
   }
 
-  private async handleExitPlanMode(
+  private async handleSubmitPlan(
     args: { plan: string },
     ctx?: PluginContext,
     signal?: AbortSignal,
   ): Promise<ToolResultObject> {
     const session = ctx?.session;
     if (!session) {
-      throw new Error("ExitPlanMode requires a session context");
-    }
-    if (!session.getPlanEnabled()) {
-      return { content: NOT_IN_PLAN_MODE, isError: true };
+      throw new Error("submit_plan requires a session context");
     }
 
     // 并发守卫（按会话）：一个助手消息里的多个工具调用是并发执行的，但"同时提交两份计划"
@@ -206,15 +203,15 @@ Ensure your plan is complete and unambiguous:
     }
   }
 
-  /** 真正提交计划（写盘 → 审批 → 退出计划模式）；并发串行化由 handleExitPlanMode 负责 */
+  /** 真正提交计划（写盘 → 审批 → 若处于计划模式则退出）；并发串行化由 handleSubmitPlan 负责 */
   private async submitPlan(
     args: { plan: string },
     session: NonNullable<PluginContext["session"]>,
     ctx?: PluginContext,
     signal?: AbortSignal,
   ): Promise<ToolResultObject> {
-    // 先落盘、后翻转状态：写失败即中止本次退出（审批通过即代表计划已定稿，
-    // 不能出现"已退出但没有计划文件"的半截状态）。
+    // 先落盘、后翻转状态：写失败即中止本次提交（审批通过即代表计划已定稿，
+    // 不能出现"已批准但没有计划文件"的半截状态）。
     // planId = 本次工具调用 id（计划身份与转录对齐；每份计划一个文件，历史计划互不覆盖）
     const planId = ctx?.toolCallId ?? `plan-${Date.now().toString(36)}`;
     const planPath = await this.planFile.writeApprovedPlan({
@@ -232,15 +229,15 @@ Ensure your plan is complete and unambiguous:
         cardKind: "plan-approval",
         title: "计划审批",
         toolCallId: ctx?.toolCallId,
-        toolName: "ExitPlanMode",
+        toolName: SUBMIT_PLAN_TOOL_NAME,
         questions: [
           {
             id: PLAN_QUESTION_ID,
             question: "是否批准该计划并开始实施？",
             detail: args.plan,
             options: [
-              { label: PLAN_APPROVE, description: "退出计划模式并开始实施。" },
-              { label: PLAN_REJECT, description: "不批准，保持只读。" },
+              { label: PLAN_APPROVE, description: "批准该计划并开始实施。" },
+              { label: PLAN_REJECT, description: "不批准。" },
             ],
           },
         ],
@@ -255,6 +252,8 @@ Ensure your plan is complete and unambiguous:
     const feedback = answer?.custom?.trim();
 
     if (approved && !feedback) {
+      // exitPlanMode 内部有开关守卫：普通模式下（计划模式未开启）批准不会翻转任何
+      // 模式状态、不发 plan_mode_changed 帧，仅落盘计划文件——"自动退出"只发生在计划模式。
       await this.exitPlanMode(session, ctx?.toolCallId);
       return {
         content:
@@ -286,7 +285,7 @@ Ensure your plan is complete and unambiguous:
     };
   }
 
-  /** 退出计划模式：持久化开关 + 写审计事件 + 发流帧（三处缺一不可） */
+  /** 退出计划模式（仅计划模式开启时生效）：持久化开关 + 写审计事件 + 发流帧（三处缺一不可） */
   private async exitPlanMode(
     session: PluginContext["session"],
     toolCallId?: string,

@@ -190,7 +190,7 @@ export class ToolExecutor {
    *  2. `allowedInPlanMode` 逃生舱（浏览器调研、只读子代理、计划审批工具等）。
    *
    * 子会话对"需要人类应答"的逃生舱工具不享受豁免：子代理没有独立的应答面，
-   * 放行 ExitPlanMode 这类工具会把交互卡挂到用户看不见的子会话上、卡死父回合。
+   * 放行 submit_plan 这类工具会把交互卡挂到用户看不见的子会话上、卡死父回合。
    * 只收窄这一条，是为了不连带禁掉子代理的只读命令调研。
    */
   private static checkPlanMode(

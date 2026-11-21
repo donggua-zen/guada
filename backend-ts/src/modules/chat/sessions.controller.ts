@@ -348,7 +348,7 @@ export class SessionsController {
   /**
    * 会话计划历史（计划模式产物）。
    *
-   * 列表来自转录（计划身份 = ExitPlanMode 的 toolCallId），每项含状态（待审/已批准/已拒绝）
+   * 列表来自转录（计划身份 = submit_plan 的 toolCallId），每项含状态（待审/已批准/已拒绝）
    * 与正文；item.path 为已落盘文件的工作区相对路径（未落盘为 null）——前端打开文件走
    * workspace/file 接口，绝对路径会被路径牢笼拒绝，故只回传相对路径。
    */

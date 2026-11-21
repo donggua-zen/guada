@@ -1,7 +1,10 @@
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { PlanModePlugin } from "../../src/modules/plugins/builtins/plan-mode.plugin";
+import {
+  PlanModePlugin,
+  SUBMIT_PLAN_TOOL_NAME,
+} from "../../src/modules/plugins/builtins/plan-mode.plugin";
 import { PlanFileService } from "../../src/common/services/plan-file.service";
 import { AskService } from "../../src/common/services/ask.service";
 import { AskDeniedError } from "../../src/common/types/ask.types";
@@ -12,7 +15,8 @@ import { ToolHandlerDef, ToolKitDef } from "../../src/modules/plugins/types/plug
  * 计划模式插件：审批三条路径的语义 + 工具包可见性。
  *
  * 重点不是"工具能跑通"，而是三条路径各自的状态后果：
- * 批准 → 退出计划态 + 落盘 + 审计 + 流帧；拒绝 → 计划态保持；有反馈 → 反馈作为真实 user 消息。
+ * 批准 → 落盘（计划态下同时退出计划态）+ 审计 + 流帧；拒绝 → 终止当前轮；有反馈 → 反馈作为真实 user 消息。
+ * 工具本身模式无关：普通模式同样可提交，只是批准后不翻转模式状态。
  */
 describe("PlanModePlugin", () => {
   let workspaceDir: string;
@@ -45,8 +49,8 @@ describe("PlanModePlugin", () => {
   }
 
   function exitTool(): ToolHandlerDef {
-    const found = registered.find((t) => t.name === "ExitPlanMode");
-    if (!found) throw new Error("ExitPlanMode not registered");
+    const found = registered.find((t) => t.name === SUBMIT_PLAN_TOOL_NAME);
+    if (!found) throw new Error("submit_plan not registered");
     return found;
   }
 
@@ -84,8 +88,8 @@ describe("PlanModePlugin", () => {
       plugin: created,
       askService,
       exitTool: (): ToolHandlerDef => {
-        const found = registered.find((t) => t.name === "ExitPlanMode");
-        if (!found) throw new Error("ExitPlanMode not registered");
+        const found = registered.find((t) => t.name === SUBMIT_PLAN_TOOL_NAME);
+        if (!found) throw new Error("submit_plan not registered");
         return found;
       },
     };
@@ -113,7 +117,7 @@ describe("PlanModePlugin", () => {
     await fs.rm(workspaceDir, { recursive: true, force: true });
   });
 
-  it("注册了 ExitPlanMode，且带逃生舱与需人类应答两个能力声明", () => {
+  it("注册了 submit_plan，且带逃生舱与需人类应答两个能力声明", () => {
     const tool = exitTool();
     expect(tool.allowedInPlanMode).toBe(true);
     expect(tool.requiresUserInteraction).toBe(true);
@@ -121,18 +125,46 @@ describe("PlanModePlugin", () => {
     expect(tool.readOnly).toBeUndefined();
   });
 
-  it("不在计划态：返回错误且不落盘", async () => {
+  it("普通模式提交 + 批准：落盘计划，但不翻转模式状态、不发模式帧", async () => {
+    askResult = [{ id: "plan", selected: ["批准"] }];
+    const session = createSession({ planEnabled: false });
+
+    const result = (await exitTool().handler({ plan: "# 普通模式计划\n\n步骤一" }, { session, toolCallId: "tc-normal" } as any)) as any;
+
+    // 卡片契约不变（前端主判定 cardKind，与模式无关）
+    expect(askMock.mock.calls[0][1].cardKind).toBe("plan-approval");
+
+    // 计划照样落盘（每份计划一个文件，planId = toolCallId）
+    const found = await planFile.readPlan({
+      workspacePath: workspaceDir,
+      sessionId: session.sessionId,
+      planId: "tc-normal",
+    });
+    expect(found?.content).toContain("普通模式计划");
+
+    // 模式状态零翻转：无 setPlanEnabled、无审计事件、无 plan_mode_changed 流帧
+    expect(session.setPlanEnabled).not.toHaveBeenCalled();
+    expect(session.appendSessionModeChanged).not.toHaveBeenCalled();
+    expect(session.publishStream).not.toHaveBeenCalled();
+
+    // 回给模型的正文同样告知批准与落盘位置
+    expect(result.isError).toBeUndefined();
+    expect(result.content).toContain("User has approved your plan");
+    expect(result.meta).toMatchObject({ planApproved: true });
+  });
+
+  it("普通模式提交 + 拒绝带反馈：followUpUserInput 语义与计划模式一致", async () => {
+    askResult = [{ id: "plan", selected: ["拒绝"], custom: "先调研依赖再写" }];
     const session = createSession({ planEnabled: false });
 
     const result = (await exitTool().handler({ plan: "# 计划" }, { session } as any)) as any;
 
     expect(result.isError).toBe(true);
-    expect(result.content).toContain("Not in plan mode");
-    const found = await planFile.readLatestPlan({
-      workspacePath: workspaceDir,
-      sessionId: session.sessionId,
-    });
-    expect(found).toBeNull();
+    expect(result.followUpUserInput).toBe("先调研依赖再写");
+    expect(result.meta).toMatchObject({ planApproved: false });
+    // 模式状态零翻转
+    expect(session.setPlanEnabled).not.toHaveBeenCalled();
+    expect(session.publishStream).not.toHaveBeenCalled();
   });
 
   it("批准：落盘 + 退出计划态 + 写审计事件 + 发流帧", async () => {
@@ -334,7 +366,7 @@ describe("PlanModePlugin", () => {
   });
 
   describe("工具包可见性：计划模式对子代理不可见", () => {
-    // 整个工具包（连同 ExitPlanMode）都不该进子代理的 enabledTools。与 subagent / workflow
+    // 整个工具包（连同 submit_plan）都不该进子代理的 enabledTools。与 subagent / workflow
     // 工具包同一手法（handler 返回 loadMode:none）。提示词面由 plan-mode-reminder.util 的
     // 会话类型前置条件对应收口——两处必须同时成立，只做一处就会出现"引导模型调一个它看不见的工具"。
     const kitHandler = () => {

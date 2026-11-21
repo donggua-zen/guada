@@ -1471,7 +1471,7 @@ const chatInputConfig = computed(() => {
     knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || settings?.referencedKbs || [],
     workspacePath: currentSession.value?.workspacePath || null,
     sandboxMode: capabilities.normalize(settings?.sandboxMode),
-    // 计划模式读 UI 投影（不是设置直读）：模型经 ExitPlanMode 退出时流帧只更新投影与会话对象，
+    // 计划模式读 UI 投影（不是设置直读）：模型经 submit_plan 退出时流帧只更新投影与会话对象，
     // 由下方 watcher 与设置收敛，这里始终取当前生效值。
     planEnabled: currentSessionId.value
       ? sessionStore.sessionPlanEnabled(currentSessionId.value)
@@ -1646,7 +1646,7 @@ watch(() => props.session?.id || props.sessionId, async (newSessionId: string | 
 /**
  * 计划模式 UI 投影：从会话设置（事实源）单向同步。
  *
- * 覆盖三个来源——会话切换/刷新加载、用户开关（写设置后回流）、模型经 ExitPlanMode 退出
+ * 覆盖三个来源——会话切换/刷新加载、用户开关（写设置后回流）、模型经 submit_plan 退出
  * （流帧写设置后回流）。收敛成"设置 → 投影"一条方向，避免两处各写一半导致刷新后回退。
  */
 watch(

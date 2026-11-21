@@ -8,7 +8,7 @@ export interface SessionApi {
   branchSession(sessionId: string, data: { turnId: string; title?: string }): Promise<SessionCreatedResponse>;
   deleteSession(sessionId: string, deleteWorkspace?: boolean): Promise<{ success: boolean }>;
   fetchSession(sessionId: string): Promise<Session>;
-  /** 计划历史（转录构建：身份 = ExitPlanMode toolCallId，含状态与正文；「计划」面板用） */
+  /** 计划历史（转录构建：身份 = submit_plan toolCallId，含状态与正文；「计划」面板用） */
   fetchSessionPlans(sessionId: string): Promise<{ plans: SessionPlanItem[] }>;
   fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean, projectGroupId?: string): Promise<SessionListResponse>;
   /** 侧边栏批量加载；groupBy='workspace' 时返回目录分组（含虚拟「通用」桶） */

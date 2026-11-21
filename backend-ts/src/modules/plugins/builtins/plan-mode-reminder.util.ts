@@ -13,6 +13,7 @@
  */
 import type { Message } from "../../../common/types/conversation.types";
 import { wrapSystemReminder } from "../../../common/utils/system-reminder.util";
+import { SUBMIT_PLAN_TOOL_NAME } from "./plan-mode.plugin";
 import type { ISessionContext } from "../../chat/session-context";
 import type { ResolvedPluginInfo } from "../types/plugin.types";
 import type { TurnReminderInjection } from "../turn-reminders/turn-reminder.types";
@@ -33,7 +34,7 @@ const PLAN_MODE_PLUGIN_ID = "plan-mode";
  * 提醒文案版本。
  * 内容变更时递增：已落库的旧版本完整提醒会被视为过期，下次运行补一份新版本。
  */
-export const PLAN_MODE_REMINDER_VERSION = 2;
+export const PLAN_MODE_REMINDER_VERSION = 3;
 
 export type PlanModeReminderKind = "full" | "exit";
 
@@ -74,14 +75,14 @@ ${phase1Goal}
     : "3. If anything is genuinely ambiguous, end your turn with your question.";
 
   const phase4Tail = hasAskTool
-    ? " This is critical — your turn must only end with either the ask_user tool (to clarify requirements) or ExitPlanMode (to request plan approval)."
+    ? " This is critical — your turn must only end with either the ask_user tool (to clarify requirements) or submit_plan (to request plan approval)."
     : "";
 
   const important = hasAskTool
     ? "**Important:** Use ask_user ONLY to clarify requirements or choose between approaches. " +
-      "Ask for plan approval ONLY via ExitPlanMode — never via plain text, and never via ask_user. " +
-      'Phrases like "Is this plan okay?", "Should I proceed?", "How does this plan look?", or similar MUST use ExitPlanMode.'
-    : "**Important:** Do NOT ask for plan approval in plain text. ExitPlanMode is what requests approval.";
+      "Ask for plan approval ONLY via submit_plan — never via plain text, and never via ask_user. " +
+      'Phrases like "Is this plan okay?", "Should I proceed?", "How does this plan look?", or similar MUST use submit_plan.'
+    : "**Important:** Do NOT ask for plan approval in plain text. submit_plan is what requests approval.";
 
   return `Plan mode is active. The user does not want you to execute yet — you MUST NOT make any edits, run any non-readonly tools, or otherwise make any changes to the system. This supersedes any other instructions you have received.
 
@@ -104,8 +105,8 @@ Goal: Design an implementation approach.
 2. Make sure the plan matches the user's original request.
 ${phase3Step3}
 
-### Phase 4: Call ExitPlanMode
-At the very end of your turn, once you are happy with your final plan, call ExitPlanMode to present it for approval. Do not stop for any other reason.${phase4Tail}
+### Phase 4: Call submit_plan
+At the very end of your turn, once you are happy with your final plan, call submit_plan to present it for approval. Do not stop for any other reason.${phase4Tail}
 
 ${important}`;
 }
@@ -116,8 +117,8 @@ function buildSparseReminder(
   hasSubAgentTool: boolean,
 ): string {
   const ending = hasAskTool
-    ? "End your turn with either the ask_user tool (for clarifications) or ExitPlanMode (for plan approval)."
-    : "End your turn with ExitPlanMode when the plan is ready.";
+    ? "End your turn with either the ask_user tool (for clarifications) or submit_plan (for plan approval)."
+    : "End your turn with submit_plan when the plan is ready.";
   const delegation = hasSubAgentTool
     ? "For broad exploration, delegate to read-only research sub-agents in parallel; do not repeat their searches. "
     : "";
@@ -255,8 +256,8 @@ export function buildPlanModeTurnInjection(
     return {};
   }
 
-  // 提示词与工具面一致：ExitPlanMode 不在册时不再引导模型去调它
-  if (!hasTool(resolved, "ExitPlanMode")) return {};
+  // 提示词与工具面一致：submit_plan 不在册时不再引导模型去调它
+  if (!hasTool(resolved, SUBMIT_PLAN_TOOL_NAME)) return {};
 
   const hasAskTool = hasTool(resolved, ASK_USER_TOOL_NAME);
   const hasSubAgentTool = hasTool(resolved, "subagent_spawn");

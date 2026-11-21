@@ -57,14 +57,14 @@ function toolBlock(id: string, names: string[]): MessageContent {
 /**
  * 分组规则：content 与「独立渲染工具」（isStandaloneTool，如计划卡）是两类分隔符。
  * 独立工具单独成组且不可折叠——折进"已执行 N 个步骤"标题后计划正文默认不可见。
- * 测试环境 pluginToolDisplays 为空 → 计划卡判定走 BUILTIN_RENDERERS 兜底（ExitPlanMode → plan），
+ * 测试环境 pluginToolDisplays 为空 → 计划卡判定走 BUILTIN_RENDERERS 兜底（submit_plan/ExitPlanMode → plan），
  * 子代理派生行走按工具名的独立集合（subagent_spawn）。
  */
 describe("groupContentsForDisplay：独立渲染工具分组", () => {
-  it("ExitPlanMode 单独成组且不可折叠（不并入过程组）", () => {
+  it("submit_plan 单独成组且不可折叠（不并入过程组）", () => {
     const groups = groupContentsForDisplay([
       { id: "th1", content: null, reasoningContent: "调研", state: { isStreaming: false } },
-      toolBlock("t1", ["ExitPlanMode"]),
+      toolBlock("t1", ["submit_plan"]),
     ]);
 
     expect(groups).toHaveLength(2);
@@ -74,10 +74,21 @@ describe("groupContentsForDisplay：独立渲染工具分组", () => {
     expect(groups[1].items[0].type).toBe("tool");
   });
 
+  it("ExitPlanMode（旧转录名）同样单独成组（兜底双名兼容）", () => {
+    const groups = groupContentsForDisplay([
+      { id: "th1", content: null, reasoningContent: "调研", state: { isStreaming: false } },
+      toolBlock("t1", ["ExitPlanMode"]),
+    ]);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[1]).toMatchObject({ type: "process", isCollapsible: false });
+    expect(groups[1].id).toBe("standalone-t1-tool");
+  });
+
   it("计划卡切断过程分组：前后普通工具各自聚成可折叠组，顺序保持", () => {
     const groups = groupContentsForDisplay([
       toolBlock("t1", ["read"]),
-      toolBlock("t2", ["ExitPlanMode"]),
+      toolBlock("t2", ["submit_plan"]),
       toolBlock("t3", ["glob"]),
     ]);
 
@@ -92,7 +103,7 @@ describe("groupContentsForDisplay：独立渲染工具分组", () => {
 
   it("同块并行调用含计划工具：整项独立、不拆行", () => {
     const groups = groupContentsForDisplay([
-      toolBlock("t1", ["read", "ExitPlanMode"]),
+      toolBlock("t1", ["read", "submit_plan"]),
     ]);
 
     expect(groups).toHaveLength(1);
@@ -189,7 +200,7 @@ describe("groupContentsForDisplay：独立渲染工具分组", () => {
   it("content 与独立工具并存：两类分隔符各自生效", () => {
     const groups = groupContentsForDisplay([
       { id: "c1", content: "正文", state: { isStreaming: false } },
-      toolBlock("t1", ["ExitPlanMode"]),
+      toolBlock("t1", ["submit_plan"]),
     ]);
 
     expect(groups.map((g) => g.type)).toEqual(["content", "process"]);

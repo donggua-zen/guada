@@ -275,7 +275,7 @@ function doGrouping(items: DisplayItem[]): DisplayGroup[] {
  *
  * 示例：
  *   单个大 content [think + content + tool] → 【process: think】→【content】→【process: tool】
- *   tool → ExitPlanMode → tool → content
+ *   tool → submit_plan → tool → content
  *   分组：【process: tool】→【standalone: plan】→【process: tool】→【content】
  *
  * @param contents - 消息内容数组
