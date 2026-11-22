@@ -404,13 +404,6 @@ export function useSessionEvents() {
         // 导致打开每个会话都显示流式当中):running → true,completed/error → false。
         sessionStore.setSessionIsStreaming(sessionId, status === "running");
 
-        // 流类型（chat=对话回合；maintenance=维护任务如手动压缩伪流）：
-        // loadSession 据此决定是否跳过事件页拉取（maintenance 流 buffer 无回合历史）
-        sessionStore.setSessionStreamKind(
-          sessionId,
-          payload?.kind === "maintenance" ? "maintenance" : "chat",
-        );
-
         // 回合级瞬态兜底复位（必须在 isSubOrBot return 之前）：流终止(completed/user_cancel/error)时,
         // 即使 turn_end 事件因连接中断丢失,也确保回合不卡在"正在流式中"。会话级 isStreaming
         // 已在上面统一复位(输入框恢复),子代理/bot 的回合级瞬态若不在此一并复位,

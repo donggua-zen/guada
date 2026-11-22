@@ -24,6 +24,7 @@ import {
 } from './types';
 import type {
   EventLogMaintenance,
+  EventLogPageIndex,
   EventLogSnapshot,
   MessageEventLog,
   PendingEvent,
@@ -32,6 +33,7 @@ import { CorruptSessionLogError } from './errors';
 // 会话数据根解析（sessions/ 的父级选择）见 common/utils/session-path.util.ts（单一真相）
 import { resolveSessionsBasePath } from '../utils/session-path.util';
 import { withTransientFsRetry } from '../utils/transient-fs-retry.util';
+import { JsonlBlockIndex } from './jsonl-block-index';
 
 interface ActiveSegment {
   file: string;
@@ -45,6 +47,7 @@ interface ActiveSegment {
 export class JsonlBackend implements MessageEventLog {
   private readonly logger = new Logger(JsonlBackend.name);
   private basePath: string;
+  private readonly blockIndex: JsonlBlockIndex;
 
   // 内存缓存活跃段信息（避免频繁读 manifest）
   private activeSegments = new Map<string, ActiveSegment>();
@@ -64,8 +67,21 @@ export class JsonlBackend implements MessageEventLog {
       this.truncateActiveSegment(sessionId, truncateTo, lastSeq, bytes),
   };
 
+  /** 页索引能力（可选端口能力）：尾部事件页读加速（块级位置索引倒序流） */
+  readonly index: EventLogPageIndex = {
+    readChunksBackward: (sessionId, opts) =>
+      this.blockIndex.readChunksBackward(sessionId, opts),
+    invalidate: (sessionId) => this.blockIndex.invalidate(sessionId),
+  };
+
+  /** 索引读取统计（诊断/基准用）：累计读取字节数、块命中、窗口扫描 */
+  get indexStats() {
+    return this.blockIndex.stats;
+  }
+
   constructor() {
     this.basePath = resolveSessionsBasePath();
+    this.blockIndex = new JsonlBlockIndex(this.basePath);
   }
 
   // ─── 路径工具 ───
@@ -553,6 +569,10 @@ export class JsonlBackend implements MessageEventLog {
       seg.endSeq = lastSeq;
       seg.bytes = bytes;
     }
+    // 物理改写旧字节 → 主动作废块索引（截断点后的块 hash 必失配,提前失效省一次失配读)
+    await this.blockIndex.invalidate(sessionId).catch(() => {
+      /* 索引失效失败 = 下次失配回退,不影响正确性 */
+    });
     this.logger.warn(
       `[jsonl] truncated active segment ${file} of ${sessionId} to ${truncateTo} bytes (torn tail repair, lastSeq=${lastSeq})`,
     );

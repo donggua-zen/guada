@@ -585,19 +585,6 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
-     * 会话流类型（chat=对话回合；maintenance=维护任务如手动压缩伪流）
-     * 由 stream_status_changed 事件写入；loadSession 据此决定是否跳过事件页拉取
-     * （maintenance 流 buffer 无回合历史，跳过会导致消息列表空白）。
-     */
-    const setSessionStreamKind = (sessionId: string, kind: 'chat' | 'maintenance'): void => {
-        getSessionState(sessionId).streamKind = kind
-    }
-
-    const sessionStreamKind = (sessionId: string): 'chat' | 'maintenance' => {
-        return getSessionState(sessionId).streamKind ?? 'chat'
-    }
-
-    /**
      * 设置统一流状态(统一订阅器写入)
      *
      * 仅更新 streamStatus 字段。侧边栏 working 由 useSessionEvents 显式设置(仅主会话),
@@ -974,7 +961,6 @@ export const useSessionStore = defineStore('session', () => {
             state.loaded = false
             state.isStreaming = false
             state.isCompressing = false
-            state.streamKind = 'chat'
             state.pendingAsks = undefined
             state.inputMessage = {
                 content: '',
@@ -1005,8 +991,6 @@ export const useSessionStore = defineStore('session', () => {
         sessionIsStreaming,
         setSessionIsStreaming,
         streamingSessionIds,
-        setSessionStreamKind,
-        sessionStreamKind,
         setStreamStatus,
         applyStreamSnapshot,
         peekStreamStatus,

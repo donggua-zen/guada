@@ -498,8 +498,10 @@ watch(scrollContainerRef, (ref) => {
    它是布局变化，按状态机语义本就动不了 following。 */
 
 // 消息分页加载相关状态
-const INITIAL_PAGE_SIZE = 30 // 首次加载消息数量
-const MESSAGES_PAGE_SIZE = 15 // 后续每次加载消息数量
+// turns 单位 = 配对闭合轮次(turn/start..finish);后端配对凑页,delete 原样下发,
+// 投影消解后可见轮次不足由初始加载补拉循环补足(上限 MAX_REFETCH_PAGES)
+const INITIAL_PAGE_SIZE = 15 // 首次加载轮次
+const MESSAGES_PAGE_SIZE = 15 // 后续每次加载轮次(load-more)
 const isLoadingMore = ref(false)
 const hasMoreMessages = ref(true)
 
@@ -1778,23 +1780,48 @@ async function loadMessages(
 
     // 事件数组：初始替换 / load-more 前插（live 终态事件已由 applyLiveChunk 追加进 eventLog）
     const prevLog = sessionState.eventLog || [];
+    const headPage = page; // 初始页 = 最新页（订阅基线/endSeq 以它为准，补拉不改变）
+    let cursorPage = page; // 分页游标推进页（补拉向左更新）
     sessionState.eventLog = isInitial
       ? [...page.events]
       : [...page.events, ...prevLog];
 
     // 记录历史快照最后入库 seq,作订阅游标(订阅时按 prevSeq >= lastSeq 取增量)
     if (isInitial) {
-      lastSeqBySession.set(sessionId, page.endSeq ?? null);
+      lastSeqBySession.set(sessionId, headPage.endSeq ?? null);
       // 时序:历史拉取完成后,通知唯一 receiver 设置基线,
       // receiver 对该会话才处理 prevSeq >= lastSeq 的增量(历史未拉取前不处理)
-      streamReceiver.setHistoryBaseline(sessionId, page.endSeq ?? 0);
+      streamReceiver.setHistoryBaseline(sessionId, headPage.endSeq ?? 0);
     }
 
     // 折叠：清树后全量重建（eventLog 含 live 终态事件，re-fold 天然保留实时尾部）
     foldEvents(sessionStore, sessionId, sessionState.eventLog, isInitial ? 'initial' : 'load-more');
 
+    // 初始加载补拉循环（块索引配对语义）：页内 turn/delete 原样下发，投影消解后
+    // 可见轮次可能不足 INITIAL_PAGE_SIZE → 继续向前补拉并全量重建投影，直到补足/
+    // 无更多/达上限（剩余由用户滚动 load-more 继续接）。补拉页全部前插、每轮
+    // re-fold（30 轮级页 × ≤3 轮，fold 成本可忽略）；游标/hasMore 以最后页为准。
+    const MAX_REFETCH_PAGES = 3;
+    let refetched = 0;
+    while (
+      isInitial &&
+      cursorPage.hasMore &&
+      cursorPage.nextBeforeSeq != null &&
+      refetched < MAX_REFETCH_PAGES &&
+      sessionState.turns.length < INITIAL_PAGE_SIZE
+    ) {
+      refetched += 1;
+      const morePage = await fetchEventsPageValidated(sessionId, {
+        beforeSeq: cursorPage.nextBeforeSeq,
+        turns: INITIAL_PAGE_SIZE,
+      });
+      sessionState.eventLog = [...morePage.events, ...sessionState.eventLog];
+      cursorPage = morePage;
+      foldEvents(sessionStore, sessionId, sessionState.eventLog, 'initial');
+    }
+
     // 分页游标：下一页 = 页首前一 seq（null = 无更早内容）
-    sessionState.eventCursor = page.nextBeforeSeq;
+    sessionState.eventCursor = cursorPage.nextBeforeSeq;
 
     // 消费暂存:把"无缓存期间暂存的事件"按 seq 对齐后应用进 store。
     // prevSeq 是"先入库后发事件"的入库游标:prevSeq < endSeq 的事件必已包含在历史页内
@@ -1802,7 +1829,8 @@ async function loadMessages(
     // 在飞 chunk 恰属此类(chunk 不入库,prevSeq == 最后在库事件 seq),必须应用,
     // 否则刷新后已流出的增量丢失、只能等 finish 重建。边界上重复应用的已入库事件
     // (user_message 等)由 projector 按 messageId/turnId 幂等吸收。prevSeq 缺失照旧应用(fail-open)。
-    const endSeq = page.endSeq ?? 0;
+    // endSeq 用初始页(最新页)尾:补拉向左扩展历史,不改变订阅基线。
+    const endSeq = headPage.endSeq ?? 0;
     const projectorStash = takeProjectorStash(sessionId);
     const stashSpan = perfStart('replay.stashApply');
     let appliedStash = 0;
@@ -1814,14 +1842,14 @@ async function loadMessages(
     }
     stashSpan?.end({ events: appliedStash });
 
-    hasMoreMessages.value = page.hasMore;
+    hasMoreMessages.value = cursorPage.hasMore;
     // 分页游标状态按会话记忆(切会话回来时恢复)
-    sessionStore.getSessionState(sessionId).turnsHasMore = page.hasMore;
+    sessionStore.getSessionState(sessionId).turnsHasMore = cursorPage.hasMore;
 
     // 标记会话内容已缓存(二次打开不再向后端拉取)
     if (isInitial) {
       sessionStore.getSessionState(sessionId).loaded = true;
-    } else if (page.events.length > 0) {
+    } else if (cursorPage.events.length > 0) {
       // 恢复滚动位置，避免跳到顶部（rebuild 替换整树，需补偿高度差）
       nextTick(() => {
         const el = scrollContainerRef.value?.getScrollElement?.();

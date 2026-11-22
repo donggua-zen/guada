@@ -169,7 +169,8 @@ export interface MessageApi {
   /**
    * 获取会话事件页（前端自折叠的加载源）
    * @param options.beforeSeq 页尾上限（含）；缺省 = 当前最后 seq（初始加载）
-   * @param options.turns 本页有效回合数
+   * @param options.turns 本页配对闭合轮次数（turn/start 与右侧 finish 配对；
+   *   turn/delete 原样下发不参与计数——投影消解后可见轮次不足由调用方补拉）
    * @returns { events, endSeq, nextBeforeSeq, hasMore }——events 为 JSONL 领域事件原样（前端折叠器消费）
    */
   fetchSessionEvents(
