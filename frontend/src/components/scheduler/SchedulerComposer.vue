@@ -502,10 +502,9 @@ onMounted(() => {
 }
 
 /* 指令输入框：跟随 composer-shell 底色（浅色主题即白底），不用表单默认灰底；
-   聚焦描边也交给外层 .composer-shell:focus-within，内层不再重复画一圈主色边框。
-   仅覆盖本处实例——GdInput 的 filled 默认风格保持不变。
-   hover 一并锁成透明：GdInput 自带的 md:hover:bg-* 与本规则同为 0,2,0，
-   显式列出可避免依赖样式注入顺序 */
+   聚焦描边也交给外层 .composer-shell:focus-within，内层不再重复画一圈描边。
+   仅覆盖本处实例——GdInput 默认 outline 的描边在本壳内由外层统一绘制，内层锁透明。
+   hover/focus-within 一并锁成透明（显式列出，避免依赖样式注入顺序） */
 .composer-shell :deep(.composer-textarea),
 .composer-shell :deep(.composer-textarea:hover),
 .composer-shell :deep(.composer-textarea:focus-within) {

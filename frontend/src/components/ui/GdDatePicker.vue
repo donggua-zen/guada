@@ -1,8 +1,8 @@
 <template>
-    <!-- 触发器：与 GdSelect/GdInput 同一视觉壳（filled 灰底无边框），胶囊圆角由消费方按需覆盖 -->
+    <!-- 触发器：与 GdSelect/GdInput 同一视觉壳（outline 白底灰边），胶囊圆角由消费方按需覆盖 -->
     <!-- v-bind="$attrs"：fragment 根（触发器 + Teleport 面板）不会自动继承外部 class/style，
          缺这一句消费方的 class="sched-date" / "setting-control wide" 会被静默丢弃 -->
-    <div ref="triggerRef" v-bind="$attrs" :class="triggerClasses" :data-open="show" data-variant="filled" :data-size="resolvedSize"
+    <div ref="triggerRef" v-bind="$attrs" :class="triggerClasses" :data-open="show" data-variant="outline" :data-size="resolvedSize"
         role="combobox" :aria-expanded="show" aria-haspopup="dialog" tabindex="0"
         @click="togglePanel" @keydown="handleTriggerKeydown" @mouseenter="hovered = true" @mouseleave="hovered = false">
         <CalendarLtr16Regular class="shrink-0 text-[var(--gd-color-field-text-placeholder)]" :class="sizeSpec.icon" />
@@ -244,10 +244,9 @@ const triggerClasses = computed((): string => {
         s.height,
         s.paddingX,
         props.clearable && hasValue.value ? "" : "gap-1.5",
-        // filled 变体；打开态用 data-open 替换 GdSelect 的 focus-within 套路
-        "bg-[var(--gd-color-field-bg)] border-transparent",
-        "md:hover:bg-[var(--gd-color-field-bg-hover)]",
-        show.value ? "bg-[var(--gd-color-field-bg-focus)] border-[var(--gd-color-field-focus-border)]" : "",
+        // outline 变体（与 GdInput/GdSelect 默认形态一致）；打开态用 data-open 替换 focus-within 套路（不做 hover 反馈）
+        "bg-[var(--gd-color-field-outline-bg)] border-[var(--gd-color-field-outline-border)]",
+        show.value ? "border-[var(--gd-color-field-focus-border)]" : "",
     ].filter(Boolean).join(" ");
 });
 

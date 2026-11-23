@@ -7,9 +7,9 @@
         <div v-for="size in sizes" :key="`i-${size}`" class="mb-4">
             <h3 class="mb-1 text-[13px] text-[var(--gd-color-text-gray)]">{{ size }}</h3>
             <div class="grid grid-cols-2 gap-3">
-                <GdInput v-model="inputVal" :size="size" placeholder="filled（默认）灰底无边框" clearable />
-                <GdInput v-model="inputVal" :size="size" variant="outline" placeholder="outline 白底描边" clearable />
-                <GdInput v-model="inputVal" :size="size" placeholder="禁用" disabled />
+                <GdInput v-model="inputVal" :size="size" variant="filled" placeholder="filled 灰底无边框" clearable />
+                <GdInput v-model="inputVal" :size="size" placeholder="outline（默认）白底描边" clearable />
+                <GdInput v-model="inputVal" :size="size" variant="filled" placeholder="禁用" disabled />
                 <GdInput v-model="inputVal" :size="size" variant="outline" placeholder="禁用" disabled />
                 <GdInput v-model="inputVal" :size="size" placeholder="错误态" error />
                 <GdInput v-model="inputVal" :size="size" placeholder="readonly" readonly />

@@ -1,5 +1,5 @@
 <template>
-    <!-- 触发器：与 GdInput 同一视觉壳（filled 默认灰底无边框），filterable 时内嵌原生输入。
+    <!-- 触发器：与 GdInput 同一视觉壳（outline 默认白底灰边），filterable 时内嵌原生输入。
          v-bind="$attrs"：fragment 根（触发器 + Teleport 面板）不会自动继承外部 class/style，
          必须显式落到触发器上 -->
     <div ref="triggerRef" v-bind="$attrs" :class="triggerClasses" :data-variant="variant" :data-size="resolvedSize"
@@ -155,6 +155,7 @@ const props = withDefaults(defineProps<{
     /** Enter 选中当前高亮项（配 allowCreate 使用） */
     defaultFirstOption?: boolean;
     loading?: boolean;
+    /** outline：白底描边（默认，与 GdInput 一致）；filled：灰底无边框 */
     variant?: "filled" | "outline";
     size?: "tiny" | "small" | "medium" | "default" | "large";
     noDataText?: string;
@@ -166,7 +167,7 @@ const props = withDefaults(defineProps<{
     modelValue: "",
     options: () => [],
     size: "medium",
-    variant: "filled",
+    variant: "outline",
     noDataText: "无数据",
     shape: "rounded",
 });
@@ -432,21 +433,21 @@ const triggerClasses = computed((): string => {
             ? "bg-[var(--gd-color-field-outline-bg)] border-[var(--gd-color-field-outline-border)] opacity-60"
             : "bg-[var(--gd-color-field-bg-disabled)] border-transparent");
     } else if (props.error) {
+        // error 态背景随 variant（outline 白底红描边），避免白底常态突然闪回灰底
         classes.push(
-            "bg-[var(--gd-color-field-bg)]",
+            props.variant === "outline"
+                ? "bg-[var(--gd-color-field-outline-bg)]"
+                : "bg-[var(--gd-color-field-bg)]",
             "border-[var(--gd-color-danger)]",
-            "md:hover:bg-[var(--gd-color-field-bg-hover)]",
         );
     } else if (props.variant === "outline") {
         classes.push(
             "cursor-pointer bg-[var(--gd-color-field-outline-bg)] border-[var(--gd-color-field-outline-border)]",
-            "md:hover:border-[var(--gd-color-field-outline-border-hover)]",
             show.value ? "border-[var(--gd-color-field-focus-border)]" : "",
         );
     } else {
         classes.push(
             "cursor-pointer bg-[var(--gd-color-field-bg)] border-transparent",
-            "md:hover:bg-[var(--gd-color-field-bg-hover)]",
             show.value
                 ? "bg-[var(--gd-color-field-bg-focus)] border-[var(--gd-color-field-focus-border)]"
                 : "",

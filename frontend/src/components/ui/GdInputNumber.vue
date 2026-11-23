@@ -49,6 +49,7 @@ const props = withDefaults(defineProps<{
     step?: number;
     /** true = 右排上下步进钮（默认）；false = 纯数字输入 */
     controls?: boolean;
+    /** outline：白底描边（默认，与 GdInput 一致）；filled：灰底无边框 */
     variant?: "filled" | "outline";
     size?: "tiny" | "small" | "medium" | "default" | "large";
     /** 圆角形态：rounded 矩形圆角（默认）；pill 全圆角胶囊（透传给 GdInput） */
@@ -63,7 +64,7 @@ const props = withDefaults(defineProps<{
     step: 1,
     controls: true,
     shape: "rounded",
-    variant: "filled",
+    variant: "outline",
     size: "medium",
 });
 

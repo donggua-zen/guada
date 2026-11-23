@@ -54,7 +54,7 @@ const attrs = useAttrs();
 const props = withDefaults(defineProps<{
     modelValue?: string | number | null;
     type?: "text" | "textarea" | "password" | "number";
-    /** filled：灰底无边框（默认）；outline：白底描边（视觉=原 el-input，引用 --gd-color-input-* token，主题覆盖即换肤） */
+    /** outline：白底描边（默认，视觉=原 el-input，引用 --gd-color-input-* token，主题覆盖即换肤）；filled：灰底无边框（禁用态与常态灰底区分度低，不再作为默认） */
     variant?: "filled" | "outline";
     size?: "tiny" | "small" | "medium" | "default" | "large";
     placeholder?: string;
@@ -77,7 +77,7 @@ const props = withDefaults(defineProps<{
 }>(), {
     modelValue: "",
     type: "text",
-    variant: "filled",
+    variant: "outline",
     size: "medium",
     rows: undefined,
     autosize: false,
@@ -238,24 +238,24 @@ const wrapperClasses = computed((): string => {
             ? "bg-[var(--gd-color-field-outline-bg)] border-[var(--gd-color-field-outline-border)] opacity-60"
             : "bg-[var(--gd-color-field-bg-disabled)] border-transparent");
     } else if (props.error) {
+        // error 态背景随 variant（outline 白底红描边），避免白底常态突然闪回灰底
         classes.push(
-            "bg-[var(--gd-color-field-bg)]",
+            props.variant === "outline"
+                ? "bg-[var(--gd-color-field-outline-bg)]"
+                : "bg-[var(--gd-color-field-bg)]",
             "border-[var(--gd-color-danger)]",
-            "md:hover:bg-[var(--gd-color-field-bg-hover)]",
         );
     } else if (props.variant === "outline") {
         classes.push(
             "bg-[var(--gd-color-field-outline-bg)]",
             "border-[var(--gd-color-field-outline-border)]",
-            "md:hover:border-[var(--gd-color-field-outline-border-hover)]",
             "focus-within:border-[var(--gd-color-field-focus-border)]",
         );
     } else {
-        // filled：灰底无边框，hover 加深一档，focus 回到 surface 底 + 主色描边
+        // filled：灰底无边框，focus 描边加重（表单控件不做 hover 反馈）
         classes.push(
             "bg-[var(--gd-color-field-bg)]",
             "border-transparent",
-            "md:hover:bg-[var(--gd-color-field-bg-hover)]",
             "focus-within:bg-[var(--gd-color-field-bg-focus)]",
             "focus-within:border-[var(--gd-color-field-focus-border)]",
         );

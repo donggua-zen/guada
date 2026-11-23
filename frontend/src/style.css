@@ -145,12 +145,13 @@
 
   /* ====================
        表单控件 token（GdInput / GdSelect 触发器）
-       filled 灰底无边框为默认形态，全部由 text/surface 派生（亮暗主题自动跟随）；
-       outline 白底描边形态引用 --gd-color-input-*，主题覆盖 input token 即换肤
+       outline 白底描边为默认形态（与禁用灰底可区分），引用 --gd-color-input-*，
+       主题覆盖 input token 即换肤；filled 灰底无边框为可选形态，
+       全部由 text/surface 派生（亮暗主题自动跟随）
        ==================== */
   --gd-color-field-bg: color-mix(in srgb, var(--gd-color-text) 4%, var(--gd-color-surface));
   --gd-color-field-bg-hover: color-mix(in srgb, var(--gd-color-text) 7%, var(--gd-color-surface));
-  /* 聚焦不跳白底：与常态同底，只靠主色描边表达聚焦（hover 离开后不再闪回白色） */
+  /* 聚焦不跳底：与常态同底，只靠加重描边表达聚焦 */
   --gd-color-field-bg-focus: var(--gd-color-field-bg);
   --gd-color-field-bg-disabled: color-mix(in srgb, var(--gd-color-text) 2.5%, var(--gd-color-surface));
   --gd-color-field-text: var(--gd-color-text);
@@ -158,8 +159,10 @@
   --gd-color-field-text-disabled: var(--gd-color-text-disabled);
   --gd-color-field-outline-bg: var(--gd-color-input-bg);
   --gd-color-field-outline-border: var(--gd-color-input-border);
+  /* 加重描边：checkbox/radio 选中态与表单控件聚焦态共用（表单不做 hover 反馈） */
   --gd-color-field-outline-border-hover: color-mix(in srgb, var(--gd-color-text) 24%, var(--gd-color-input-border));
-  --gd-color-field-focus-border: var(--gd-color-primary);
+  /* 聚焦描边走中性加重色，与主色解耦（避免聚焦/悬停级联顺序问题） */
+  --gd-color-field-focus-border: var(--gd-color-field-outline-border-hover);
   /* GdSelect 下拉面板列表项 */
   --gd-color-field-option-bg-hover: color-mix(in srgb, var(--gd-color-text) 7%, var(--gd-color-surface));
   --gd-color-field-option-bg-selected: var(--gd-color-primary-100);
