@@ -26,6 +26,15 @@ export interface StreamStatusChangedEvent {
     error?: string;
     /** 流类型：chat=对话回合；maintenance=维护任务（手动压缩伪流）。缺省按 chat 处理 */
     kind?: "chat" | "maintenance";
+    /**
+     * 终态帧稳定标识（后端在广播前生成；连接补发的重放沿用同一 id）。
+     * 前端据此对"实时终态 + 重连重放"去重，避免桌宠动画/列表重拉/历史校准重复触发。
+     */
+    terminalId?: string;
+    /** 最后入库 seq 的保守下界（prevSeq 聚合；诊断/增量补拉用） */
+    lastSeq?: number | null;
+    /** true = 连接补发重放的终态快照（非完成当刻的实时帧） */
+    replayed?: boolean;
   };
 }
 

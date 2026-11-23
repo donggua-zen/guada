@@ -92,8 +92,9 @@ vi.mock("vue-router", () => ({
 
 import { useSessionEvents } from "./useSessionEvents";
 import { apiService } from "@/services/ApiService";
-import { SESSION_RESYNC_EVENT } from "@/utils/sessionResync";
+import { SESSION_RESYNC_EVENT, clearSessionHistoryStale } from "@/utils/sessionResync";
 import type { UserQueueSnapshot } from "@/types/session";
+import type { Turn } from "@/types/message";
 
 /** 服务端队列快照工厂 */
 function queueSnapshot(
@@ -141,6 +142,9 @@ describe("useSessionEvents 统一订阅器", () => {
     visibilityHandlers.length = 0;
     afterEachHandlers.length = 0;
     routeParams.sessionId = "s1";
+    // 模块级 stale 标记跨测试共享：清掉，避免"已待重拉"跳过 resync 派发
+    clearSessionHistoryStale("s1");
+    clearSessionHistoryStale("s2");
     (document as any).hidden = false;
     vi.clearAllMocks();
     vi.mocked(apiService.fetchPendingAsks).mockResolvedValue({ pending: [] });
@@ -300,6 +304,62 @@ describe("useSessionEvents 统一订阅器", () => {
     emitStreamStatus({ sessionId: "s1", status: "completed" });
 
     expect(store.sessionPendingAsk("s1")).toBeUndefined();
+  });
+
+  it("重放终态 + 本地未闭合回合 → 校准并派发强制重拉(帧缺失)", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    const turn = {
+      id: "t1",
+      state: { isWorking: true },
+      messages: [],
+    } as unknown as Turn;
+    store.setTurns("s1", [turn]);
+    store.getSessionState("s1").loaded = true;
+    store.setSessionIsStreaming("s1", true);
+
+    const resyncs: string[] = [];
+    const off = trackSessionResync(resyncs);
+    emitStreamStatus({
+      sessionId: "s1",
+      status: "completed",
+      replayed: true,
+      terminalId: "tid-1",
+    });
+    off();
+
+    expect(store.sessionIsStreaming("s1")).toBe(false);
+    expect(store.getSessionState("s1").loaded).toBe(false);
+    expect(turn.state?.isWorking).toBe(false);
+    expect(resyncs).toEqual(["s1"]);
+  });
+
+  it("重放终态 + 无未闭合回合(已收敛) → 只写状态，不触发重拉", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    const turn = {
+      id: "t1",
+      state: { isWorking: false },
+      messages: [],
+    } as unknown as Turn;
+    store.setTurns("s1", [turn]);
+    store.getSessionState("s1").loaded = true;
+
+    const resyncs: string[] = [];
+    const off = trackSessionResync(resyncs);
+    emitStreamStatus({
+      sessionId: "s1",
+      status: "completed",
+      replayed: true,
+      terminalId: "tid-2",
+    });
+    off();
+
+    expect(store.sessionIsStreaming("s1")).toBe(false);
+    expect(store.getSessionState("s1").loaded).toBe(true);
+    expect(resyncs).toEqual([]);
   });
 
   it("running 事件不清交互卡:ask 阻塞期间流保持 running", () => {
@@ -727,6 +787,105 @@ describe("useSessionEvents 统一订阅器", () => {
     expect(apiService.getStreamStatus).toHaveBeenCalledWith("s1");
     expect(store.sessionIsStreaming("s1")).toBe(false);
     expect(store.getSidebarState("s1").working).toBe(false);
+  });
+
+  it("探测在飞时详情快照先把 isStreaming 写回 false → 仍须校准并派发重载", async () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    emitStreamStatus({ sessionId: "s1", status: "running" }, "client-other");
+    expect(store.sessionIsStreaming("s1")).toBe(true);
+
+    let resolveStatus!: (value: any) => void;
+    vi.mocked(apiService.getStreamStatus).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStatus = resolve;
+        }) as any,
+    );
+
+    const resyncs: string[] = [];
+    const off = trackSessionResync(resyncs);
+    (document as any).hidden = false;
+    for (const cb of visibilityHandlers) cb();
+    await flushMicrotasks();
+
+    // 并发快照路径（ChatPage.applySessionSnapshot）先落地：只写标志、不重载历史。
+    // 旧实现这里会让探测的 isStreaming 门控失败 → 校准被吞掉。
+    store.applyStreamSnapshot("s1", false, null);
+    expect(store.sessionIsStreaming("s1")).toBe(false);
+
+    resolveStatus({ isRunning: false, subscriberCount: 0, bufferedEventCount: 0 });
+    await flushMicrotasks();
+    off();
+
+    expect(resyncs).toEqual(["s1"]);
+    expect(store.peekStreamStatus("s1")).toBe("completed");
+  });
+
+  it("探测期间开了新回合(epoch 变化) → 旧响应不复位", async () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    emitStreamStatus({ sessionId: "s1", status: "running" }, "client-other");
+    let resolveStatus!: (value: any) => void;
+    vi.mocked(apiService.getStreamStatus).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStatus = resolve;
+        }) as any,
+    );
+
+    const resyncs: string[] = [];
+    const off = trackSessionResync(resyncs);
+    (document as any).hidden = false;
+    for (const cb of visibilityHandlers) cb();
+    await flushMicrotasks();
+
+    // 探测在飞期间：回合结束又重新开跑（其它窗口 / 队列续跑）
+    emitStreamStatus({ sessionId: "s1", status: "completed" }, "client-other");
+    emitStreamStatus({ sessionId: "s1", status: "running" }, "client-other");
+
+    resolveStatus({ isRunning: false, subscriberCount: 0, bufferedEventCount: 0 });
+    await flushMicrotasks();
+    off();
+
+    expect(store.sessionIsStreaming("s1")).toBe(true);
+    expect(resyncs).toEqual([]);
+  });
+
+  it("回前台(隐藏≥15s)存在未闭合回合 → 强制重拉(不依赖 isStreaming)", async () => {
+    vi.useFakeTimers();
+    try {
+      useSessionEvents().init();
+      const store = useSessionStore();
+
+      // 本地 isStreaming 已被快照清掉，但回合仍停在未闭合工作态
+      const turn = {
+        id: "t1",
+        state: { isWorking: true },
+        messages: [],
+      } as unknown as Turn;
+      store.setTurns("s1", [turn]);
+      store.getSessionState("s1").loaded = true;
+      expect(store.sessionIsStreaming("s1")).toBe(false);
+
+      (document as any).hidden = true;
+      for (const cb of visibilityHandlers) cb();
+      await vi.advanceTimersByTimeAsync(16_000);
+      (document as any).hidden = false;
+
+      const resyncs: string[] = [];
+      const off = trackSessionResync(resyncs);
+      for (const cb of visibilityHandlers) cb();
+      await flushMicrotasks();
+      off();
+
+      expect(store.getSessionState("s1").loaded).toBe(false);
+      expect(resyncs).toEqual(["s1"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("watchdog:本地 running 静默超阈值 → 探测服务端并复位;已收敛后不再探测", async () => {

@@ -253,6 +253,11 @@ export interface SessionState {
     /** 统一流状态(发送中/运行中/结束),取代分散的 isStreaming + sidebar.working */
     streamStatus: StreamStatus
     /**
+     * 流回合代数：仅在 isStreaming false→true 时自增（不持久化）。
+     * 用于探测/详情快照的异步校准判断"响应期间是否又开了新回合"，避免旧响应覆盖新流。
+     */
+    streamEpoch?: number
+    /**
      * 会话级统一交互卡**队列**（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合
      * ——ask_requested 事件按 requestId 入队，ask_resolved 只摘对应那一个）。
      *

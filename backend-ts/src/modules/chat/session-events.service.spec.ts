@@ -237,6 +237,127 @@ describe("SessionEventsService 连接补发", () => {
     });
     expect(received[1].payload.action).toBe("updated");
   });
+
+  // === 终态墓碑（P1）：stopStream 删流后仍能在重连补发终态快照 ===
+
+  describe("终态墓碑", () => {
+    const TERMINAL_TS = "2026-01-01T00:00:00.000Z";
+
+    function emitTerminal(
+      sessionId: string,
+      status: "completed" | "user_cancel" | "error" = "completed",
+      timestamp = TERMINAL_TS,
+    ) {
+      service.handleStreamStatusChanged({
+        sessionId,
+        timestamp,
+        source: "client-1",
+        payload: { status, reason: status, sessionType: "web" },
+      });
+    }
+
+    function collectCatchup(clientId: string): any[] {
+      const received: any[] = [];
+      service
+        .subscribe(clientId)
+        .observable.subscribe((e) => received.push(parse(e)));
+      return received;
+    }
+
+    it("终态写入墓碑：重连补发原帧（replayed + terminalId + lastSeq）", () => {
+      streamManager.startStream("s1", new AbortController(), "chat");
+      streamManager.publish("s1", {
+        type: "text_delta",
+        messageId: "m1",
+        text: "x",
+        prevSeq: 7,
+      } as any);
+      streamManager.stopStream("s1", "completed");
+
+      emitTerminal("s1", "completed");
+
+      const terminal = collectCatchup("client-2").find(
+        (e) => e.type === "stream_status_changed",
+      );
+      expect(terminal).toBeDefined();
+      expect(terminal.payload).toMatchObject({
+        status: "completed",
+        replayed: true,
+        lastSeq: 7,
+        kind: "chat",
+      });
+      expect(typeof terminal.payload.terminalId).toBe("string");
+      expect(terminal.payload.terminalId).toContain("s1");
+    });
+
+    it("running 事件清除墓碑：新回合开始后不再补发旧终态", () => {
+      emitTerminal("s1");
+      service.handleStreamStatusChanged({
+        sessionId: "s1",
+        timestamp: "2026-01-01T00:00:01.000Z",
+        payload: { status: "running", sessionType: "web" },
+      });
+
+      const replays = collectCatchup("client-2").filter(
+        (e) => e.type === "stream_status_changed" && e.payload?.replayed,
+      );
+      expect(replays).toEqual([]);
+    });
+
+    it("同一会话已有活跃流时跳过墓碑（队列续跑不覆盖 running）", () => {
+      emitTerminal("s1");
+      streamManager.startStream("s1", new AbortController(), "chat");
+
+      const statuses = collectCatchup("client-2").filter(
+        (e) => e.type === "stream_status_changed",
+      );
+      expect(statuses).toHaveLength(1);
+      expect(statuses[0].payload.status).toBe("running");
+      expect(statuses[0].payload.replayed).toBeUndefined();
+    });
+
+    it("TTL 过期后不再补发", () => {
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date(TERMINAL_TS));
+        emitTerminal("s1");
+        jest.setSystemTime(
+          new Date(Date.parse(TERMINAL_TS) + 10 * 60_000 + 1),
+        );
+
+        const replays = collectCatchup("client-2").filter(
+          (e) => e.type === "stream_status_changed" && e.payload?.replayed,
+        );
+        expect(replays).toEqual([]);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("超过上限淘汰最旧（保留最近结束的 200 条）", () => {
+      const total = 205;
+      for (let i = 0; i < total; i += 1) {
+        emitTerminal(
+          `s-${i}`,
+          "completed",
+          `2026-01-01T00:00:00.${String(i).padStart(3, "0")}Z`,
+        );
+      }
+
+      const replays = collectCatchup("client-2").filter(
+        (e) => e.type === "stream_status_changed" && e.payload?.replayed,
+      );
+      expect(replays).toHaveLength(200);
+      expect(replays.some((e) => e.sessionId === "s-0")).toBe(false);
+      expect(replays.some((e) => e.sessionId === `s-${total - 1}`)).toBe(true);
+    });
+
+    it("onModuleDestroy 清空墓碑", () => {
+      emitTerminal("s1");
+      service.onModuleDestroy();
+      expect((service as any).recentTerminals.size).toBe(0);
+    });
+  });
 });
 
 describe("SessionStreamManager 事件盖戳", () => {

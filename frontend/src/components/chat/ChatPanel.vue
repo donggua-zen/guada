@@ -220,14 +220,18 @@ import { useSessionGroupStore } from "../../stores/sessionGroup";
 import { useAuthStore } from "../../stores/auth"
 import { useLayoutStore } from "@/stores/layout"
 import { useCapabilitiesStore } from "@/stores/capabilities"
-import { streamReceiver } from "@/services/modules/StreamReceiver"
+import { streamEventHub } from "@/services/modules/StreamEventHub"
 import { writeTextToClipboard } from "@/utils/clipboard"
-import { SESSION_RESYNC_EVENT } from "@/utils/sessionResync"
+import {
+  SESSION_RESYNC_EVENT,
+  clearSessionHistoryStale,
+} from "@/utils/sessionResync"
 import {
   applyLiveChunk,
   foldEvents,
   takeStash as takeProjectorStash,
 } from "@/services/modules/streamProjector"
+import { replayStreamTailAfterReload } from "@/services/modules/streamTailReplay"
 import type { InputMessageState, Session, QueuedMessage, QueuePauseReason, ChatFileView } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { Turn, TurnContent, MessageBundle } from '@/types/message';
@@ -392,8 +396,6 @@ const currentSession = computed(() => props.session);
 
 const userAvater = computed(() => authStore.user?.avatarUrl);
 const currentSessionId = ref<string | null>(null);
-/** 各会话历史快照最后入库 seq(loadSession 返回,作订阅游标用) */
-const lastSeqBySession = new Map<string, number | null>();
 
 // 共享的 Token 统计（环形指示器：事件锚点逆向扫描填充；REST 仅记忆弹窗按需拉取）
 const currentSessionIdRef = computed(() => currentSessionId.value);
@@ -498,8 +500,8 @@ watch(scrollContainerRef, (ref) => {
    它是布局变化，按状态机语义本就动不了 following。 */
 
 // 消息分页加载相关状态
-// turns 单位 = 配对闭合轮次(turn/start..finish);后端配对凑页,delete 原样下发,
-// 投影消解后可见轮次不足由初始加载补拉循环补足(上限 MAX_REFETCH_PAGES)
+// turns 单位 = 有效 turn/start（turn/delete 目标排除、未闭合计入）；后端页语义
+// 保证 hasMore=true 时恰好返回 N 个有效轮次，因此初始加载只需一次 fold。
 const INITIAL_PAGE_SIZE = 15 // 首次加载轮次
 const MESSAGES_PAGE_SIZE = 15 // 后续每次加载轮次(load-more)
 const isLoadingMore = ref(false)
@@ -1486,14 +1488,37 @@ const chatInputConfig = computed(() => {
  * SSE 重连后的状态重同步：本地认为仍在流式、但服务端已结束（息屏期间回合跑完）
  * 时，useSessionEvents 会派发该事件，这里强制重载当前会话历史。
  */
-function handleSessionResync(event: Event) {
+/** 同一会话并发 resync 的代数：新事件取消旧的重试循环 */
+const resyncLoadGeneration = new Map<string, number>()
+
+/** resync 重试间隔：移动端唤醒后事件页坏响应/弱网高发，首次失败不代表会话不可用 */
+const RESYNC_RETRY_DELAYS_MS = [500, 1500]
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function handleSessionResync(event: Event) {
   const sessionId = (event as CustomEvent<{ sessionId?: string }>).detail?.sessionId
   if (!sessionId || sessionId !== effectiveSessionId.value) return
   const state = sessionStore.getSessionState(sessionId)
   if (!state) return
   // 绕过 loadMessages 的 loaded 缓存门禁，按服务端最新事件重建消息树
   state.loaded = false
-  void loadSession(sessionId)
+  const generation = (resyncLoadGeneration.get(sessionId) ?? 0) + 1
+  resyncLoadGeneration.set(sessionId, generation)
+  for (let attempt = 0; attempt <= RESYNC_RETRY_DELAYS_MS.length; attempt += 1) {
+    if (attempt > 0) await delay(RESYNC_RETRY_DELAYS_MS[attempt - 1])
+    if (resyncLoadGeneration.get(sessionId) !== generation) return
+    if (effectiveSessionId.value !== sessionId) return
+    try {
+      await loadSession(sessionId)
+    } catch {
+      // loadSession 主路径自带 toast；这里只负责有界重试
+    }
+    if (resyncLoadGeneration.get(sessionId) !== generation) return
+    if (sessionStore.getSessionState(sessionId).loaded === true) return
+  }
 }
 
 onMounted(() => {
@@ -1504,6 +1529,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener(SESSION_RESYNC_EVENT, handleSessionResync)
+  resyncLoadGeneration.clear()
   clearSkeletonTimers();
   chatResizeObserver?.disconnect();
   chatResizeObserver = null;
@@ -1700,18 +1726,24 @@ async function loadSession(sessionId: string) {
 /**
  * 拉取事件页并校验形状：2xx 但 body 无 events（中间层注入 HTML / 响应截断 / 空 body）
  * 时，直接展开会抛 "x.events is not iterable" 且 toast 无诊断信息。此类坏响应多为
- * 瞬时（半开连接/代理抖动，移动端后台唤醒后高频）→ 自动重试一次，仍失败才走外层 catch。
+ * 瞬时（半开连接/代理抖动，移动端后台唤醒后高频）→ 退避重试 2 次（共 3 次尝试），
+ * 仍失败才走外层 catch。
  */
+const EVENTS_PAGE_RETRY_DELAYS_MS = [300, 800]
+
 async function fetchEventsPageValidated(
   sessionId: string,
   options: { beforeSeq?: number; turns: number },
 ): Promise<Awaited<ReturnType<typeof apiService.fetchSessionEvents>>> {
-  for (let attempt = 1; ; attempt += 1) {
+  for (let attempt = 0; ; attempt += 1) {
+    if (attempt > 0) {
+      await delay(EVENTS_PAGE_RETRY_DELAYS_MS[attempt - 1] ?? 800);
+    }
     const page = await apiService.fetchSessionEvents(sessionId, options);
     if (page && Array.isArray(page.events)) return page;
     const summary = describeInvalidEventsPage(page);
     console.error("事件页格式异常:", summary);
-    if (attempt >= 2) {
+    if (attempt >= EVENTS_PAGE_RETRY_DELAYS_MS.length) {
       throw new Error(`事件页格式异常（响应体: ${summary}）`);
     }
   }
@@ -1767,6 +1799,12 @@ async function loadMessages(
 
   try {
     const sessionState = sessionStore.getSessionState(sessionId);
+    // 本次加载前是否已有缓存树（与 projectChunk 的 hasCache 同一谓词）。
+    // true 仅出现在"强制重拉"场景（loaded 被 markSessionHistoryStale 置 false 而树还在）：
+    // 此时 live chunk 之前是直接写树的（没进 stash），fold 会抹掉在飞块 →
+    // 加载后需从 StreamEventHub 邮箱重放尾部。无缓存路径由既有 stash 机制承担，二者互斥。
+    const hadCache =
+      sessionState.loaded === true || (sessionState.turns?.length ?? 0) > 0;
     // 记录 load-more 前的滚动位置（内容高度），rebuild 后恢复
     const scrollElement = scrollContainerRef.value?.getScrollElement?.();
     const oldScrollHeight = !isInitial ? scrollElement?.scrollHeight || 0 : 0;
@@ -1780,48 +1818,24 @@ async function loadMessages(
 
     // 事件数组：初始替换 / load-more 前插（live 终态事件已由 applyLiveChunk 追加进 eventLog）
     const prevLog = sessionState.eventLog || [];
-    const headPage = page; // 初始页 = 最新页（订阅基线/endSeq 以它为准，补拉不改变）
-    let cursorPage = page; // 分页游标推进页（补拉向左更新）
+    const headPage = page; // 初始页 = 最新页（订阅基线/endSeq 以它为准）
     sessionState.eventLog = isInitial
       ? [...page.events]
       : [...page.events, ...prevLog];
 
-    // 记录历史快照最后入库 seq,作订阅游标(订阅时按 prevSeq >= lastSeq 取增量)
-    if (isInitial) {
-      lastSeqBySession.set(sessionId, headPage.endSeq ?? null);
-      // 时序:历史拉取完成后,通知唯一 receiver 设置基线,
-      // receiver 对该会话才处理 prevSeq >= lastSeq 的增量(历史未拉取前不处理)
-      streamReceiver.setHistoryBaseline(sessionId, headPage.endSeq ?? 0);
-    }
+    // 历史快照最后入库 seq 由 headPage.endSeq 承载：订阅基线已由下方 stash 消费
+    // 与邮箱尾部重放的 prevSeq >= endSeq 过滤表达，不再单独维护游标。
 
     // 折叠：清树后全量重建（eventLog 含 live 终态事件，re-fold 天然保留实时尾部）
     foldEvents(sessionStore, sessionId, sessionState.eventLog, isInitial ? 'initial' : 'load-more');
 
-    // 初始加载补拉循环（块索引配对语义）：页内 turn/delete 原样下发，投影消解后
-    // 可见轮次可能不足 INITIAL_PAGE_SIZE → 继续向前补拉并全量重建投影，直到补足/
-    // 无更多/达上限（剩余由用户滚动 load-more 继续接）。补拉页全部前插、每轮
-    // re-fold（30 轮级页 × ≤3 轮，fold 成本可忽略）；游标/hasMore 以最后页为准。
-    const MAX_REFETCH_PAGES = 3;
-    let refetched = 0;
-    while (
-      isInitial &&
-      cursorPage.hasMore &&
-      cursorPage.nextBeforeSeq != null &&
-      refetched < MAX_REFETCH_PAGES &&
-      sessionState.turns.length < INITIAL_PAGE_SIZE
-    ) {
-      refetched += 1;
-      const morePage = await fetchEventsPageValidated(sessionId, {
-        beforeSeq: cursorPage.nextBeforeSeq,
-        turns: INITIAL_PAGE_SIZE,
-      });
-      sessionState.eventLog = [...morePage.events, ...sessionState.eventLog];
-      cursorPage = morePage;
-      foldEvents(sessionStore, sessionId, sessionState.eventLog, 'initial');
-    }
+    // 不再有初始补页循环：后端两条读页路径（锚点索引快路径 / 全量兜底）在
+    // hasMore=true 时都恰好返回 N 个有效 turn/start，投影后 turns.length 不会不足；
+    // 历史欠载由用户滚动 load-more 继续接。原循环每页都会全量 re-fold，
+    // 且无法修复锚点索引 delete 集滞后这类竞态，故删除（残留竞态见下方诊断日志）。
 
     // 分页游标：下一页 = 页首前一 seq（null = 无更早内容）
-    sessionState.eventCursor = cursorPage.nextBeforeSeq;
+    sessionState.eventCursor = page.nextBeforeSeq;
 
     // 消费暂存:把"无缓存期间暂存的事件"按 seq 对齐后应用进 store。
     // prevSeq 是"先入库后发事件"的入库游标:prevSeq < endSeq 的事件必已包含在历史页内
@@ -1829,7 +1843,7 @@ async function loadMessages(
     // 在飞 chunk 恰属此类(chunk 不入库,prevSeq == 最后在库事件 seq),必须应用,
     // 否则刷新后已流出的增量丢失、只能等 finish 重建。边界上重复应用的已入库事件
     // (user_message 等)由 projector 按 messageId/turnId 幂等吸收。prevSeq 缺失照旧应用(fail-open)。
-    // endSeq 用初始页(最新页)尾:补拉向左扩展历史,不改变订阅基线。
+    // endSeq 用初始页(最新页)尾:load-more 向左扩展历史,不改变订阅基线。
     const endSeq = headPage.endSeq ?? 0;
     const projectorStash = takeProjectorStash(sessionId);
     const stashSpan = perfStart('replay.stashApply');
@@ -1842,14 +1856,43 @@ async function loadMessages(
     }
     stashSpan?.end({ events: appliedStash });
 
-    hasMoreMessages.value = cursorPage.hasMore;
+    // 强制重拉 = 整页刷新等价：事件页只含已落盘内容，fold 之后把邮箱里
+    // "最后一个 checkpoint（finish/turn_end）之后的在飞尾部"重放回来——
+    // delta 不在 eventLog，不重放会让正在输出的块消失到 block_end 才恢复。
+    // 必须在 fold 之后执行，且整段同步完成，
+    // 期间到达的 live 事件已进邮箱，不会漏。无缓存路径（首次打开）由 stash 承担。
+    if (isInitial && hadCache) {
+      const tail = streamEventHub.getTailAfterLastCheckpoint(sessionId);
+      if (tail.length > 0) {
+        const appliedTail = replayStreamTailAfterReload(
+          sessionStore,
+          sessionId,
+          tail,
+          endSeq,
+        );
+        traceSessionOpen(sessionId, 'panel:tail-replay', { events: appliedTail });
+      }
+    }
+
+    // 诊断：后端页语义保证 hasMore=true 时恰好 N 个有效轮次；这里只应在锚点索引
+    // delete 集滞后/重复 turnId 等罕见竞态下触发（供线上发现，不阻塞加载）。
+    if (isInitial && page.hasMore && sessionState.turns.length < INITIAL_PAGE_SIZE) {
+      console.warn(
+        `[ChatPanel] 初始页轮次不足: session=${sessionId} turns=${sessionState.turns.length}/${INITIAL_PAGE_SIZE} hasMore=${page.hasMore}`,
+      );
+    }
+
+    hasMoreMessages.value = page.hasMore;
     // 分页游标状态按会话记忆(切会话回来时恢复)
-    sessionStore.getSessionState(sessionId).turnsHasMore = cursorPage.hasMore;
+    sessionStore.getSessionState(sessionId).turnsHasMore = page.hasMore;
 
     // 标记会话内容已缓存(二次打开不再向后端拉取)
     if (isInitial) {
       sessionStore.getSessionState(sessionId).loaded = true;
-    } else if (cursorPage.events.length > 0) {
+      // 任何路径成功拉到最新页即视为历史已新鲜：清掉待重拉标记，
+      // 下次回前台不再重复强制重拉（除非又出现未闭合回合）。
+      clearSessionHistoryStale(sessionId);
+    } else if (page.events.length > 0) {
       // 恢复滚动位置，避免跳到顶部（rebuild 替换整树，需补偿高度差）
       nextTick(() => {
         const el = scrollContainerRef.value?.getScrollElement?.();
@@ -1993,8 +2036,8 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   if (newSessionId === oldSessionId) return;
 
   resetTitleFlag();
-  // 接收唯一链路是 useSessionEvents 的 streamReceiver.subscribeAll（常驻、按 sessionId 路由），
-  // 本组件不再触碰 receiver 的 activeSession 指针——多实例（中央 + 侧边栏子代理）并存时互不干扰。
+  // 接收唯一链路是 useSessionEvents 的 streamEventHub.subscribeAll（常驻、按 sessionId 路由），
+  // 本组件不直接消费全局流事件——多实例（中央 + 侧边栏子代理）并存时互不干扰。
   if (newSessionId === null) {
     currentSessionId.value = null;
     return;
@@ -2589,7 +2632,7 @@ function regenerateResponse(turn: Turn) {
 
 // 将方法暴露给父组件
 // （旧 subscribeToActiveStream 已删：接收唯一链路是 useSessionEvents 的
-//   streamReceiver.subscribeAll——常驻、按 sessionId 路由，本组件无需再"订阅活跃流"）
+//   streamEventHub.subscribeAll——常驻、按 sessionId 路由，本组件无需再"订阅活跃流"）
 defineExpose({
   sendMessage: handleSendMessage,
   loadMessages,

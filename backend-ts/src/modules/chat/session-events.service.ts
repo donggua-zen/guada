@@ -24,6 +24,7 @@ import {
 } from "../../common/events/unified-event.types";
 import type { SessionStreamEvent } from "./types/event-chunk.types";
 import { SessionStreamManager } from "./session-stream.manager";
+import { APP_BOOT_ID } from "../../common/utils/boot-id.util";
 import { SESSION_STORE_TOKEN } from './session-store.facade';
 import type { SessionStoreFacade } from './session-store.facade';
 import { HOOKS } from "./types/hooks.contract";
@@ -65,6 +66,24 @@ export interface SessionEvent {
   source?: string;
 }
 
+/** 终态墓碑保留时长：覆盖移动端切后台的典型时长；更久由 status 探测/详情快照兜底 */
+const RECENT_TERMINAL_TTL_MS = 10 * 60_000;
+/** 终态墓碑上限（单账户、每会话一条；超限淘汰最旧） */
+const MAX_RECENT_TERMINALS = 200;
+
+/**
+ * 终态墓碑：最近结束的流。
+ *
+ * stopStream 会删除 ActiveStream + eventBuffer，而终态帧只在完成那一刻广播一次；
+ * 客户端后台/断线期间跑完的回合拿不到任何终态信号，只能靠 status 探测/详情快照猜。
+ * 保留短 TTL 的终态快照，在 SSE 连接建立时补发，客户端即可直接收敛。
+ */
+interface RecentTerminal {
+  event: SessionEvent;
+  terminalId: string;
+  endedAt: number;
+}
+
 /**
  * 用户事件订阅者
  */
@@ -100,6 +119,8 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly subscribers = new Map<string, UserEventSubscriber>();
   /** 连接序号：生成 connectionId 用 */
   private connectionSeq = 0;
+  /** 终态墓碑（按会话一条；running 事件与新终态都会覆盖/失效） */
+  private readonly recentTerminals = new Map<string, RecentTerminal>();
 
   constructor(
     private readonly streamManager: SessionStreamManager,
@@ -260,6 +281,25 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       } as MessageEvent);
     }
 
+    // 终态墓碑：对"最近结束且当前没有活跃流"的会话补发终态快照。
+    // 后台/断线期间跑完的回合，stopStream 已删活跃流、终态帧也早已广播过一次——
+    // 这里补发带 terminalId 的同一帧，客户端按 id 去重后即可直接收敛。
+    const now = Date.now();
+    for (const [sessionId, terminal] of this.recentTerminals) {
+      if (now - terminal.endedAt > RECENT_TERMINAL_TTL_MS) {
+        this.recentTerminals.delete(sessionId);
+        continue;
+      }
+      // 队列续跑：同一会话已有新活跃流时，旧终态不得重放（会覆盖 running）
+      if (this.streamManager.hasActiveStream(sessionId)) continue;
+      events.push({
+        data: JSON.stringify({
+          ...terminal.event,
+          payload: { ...terminal.event.payload, replayed: true },
+        }),
+      } as MessageEvent);
+    }
+
     return events;
   }
 
@@ -298,9 +338,57 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent("stream.status_changed")
   handleStreamStatusChanged(event: StreamStatusChangedEvent) {
-    this.broadcastToAllClients(
-      toSessionEvent("stream_status_changed", event),
-    );
+    const status = event.payload?.status;
+
+    // 新回合开始：旧终态墓碑作废（重连补发不得用旧终态覆盖运行中的新回合）
+    if (status === "running") {
+      this.recentTerminals.delete(event.sessionId);
+      this.broadcastToAllClients(
+        toSessionEvent("stream_status_changed", event),
+      );
+      return;
+    }
+
+    // 终态：生成稳定 id（跨"实时帧 + 重放"去重）+ 最后入库 seq 下界，写墓碑后再广播。
+    // 广播早退（无在线连接）不影响墓碑：墓碑正是在"没人连着"时才有价值。
+    const terminalId = `${APP_BOOT_ID}:${event.sessionId}:${event.timestamp}:${status}`;
+    const enriched: StreamStatusChangedEvent = {
+      ...event,
+      payload: {
+        ...event.payload,
+        terminalId,
+        lastSeq: this.streamManager.getLastPersistedSeq(event.sessionId),
+        kind: event.payload?.kind ?? "chat",
+      },
+    };
+    const sessionEvent = toSessionEvent("stream_status_changed", enriched);
+
+    // 先删后 set：刷新插入序，超上限淘汰时保留最近结束的
+    this.recentTerminals.delete(event.sessionId);
+    this.recentTerminals.set(event.sessionId, {
+      event: sessionEvent,
+      terminalId,
+      endedAt: Date.now(),
+    });
+    this.pruneRecentTerminals();
+
+    this.broadcastToAllClients(sessionEvent);
+  }
+
+  /** 惰性过期 + 超上限淘汰最旧（Map 插入序 = 结束时间序） */
+  private pruneRecentTerminals(now: number = Date.now()): void {
+    for (const [sessionId, terminal] of this.recentTerminals) {
+      if (now - terminal.endedAt > RECENT_TERMINAL_TTL_MS) {
+        this.recentTerminals.delete(sessionId);
+      }
+    }
+    while (this.recentTerminals.size > MAX_RECENT_TERMINALS) {
+      const oldest = this.recentTerminals.keys().next().value as
+        | string
+        | undefined;
+      if (oldest === undefined) break;
+      this.recentTerminals.delete(oldest);
+    }
   }
 
   /**
@@ -328,6 +416,8 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   @OnEvent("session.deleted")
   handleSessionDeleted(event: SessionDeletedEvent) {
+    // 已删除会话的终态墓碑不再补发（否则重连会给不存在的会话发终态帧）
+    this.recentTerminals.delete(event.sessionId);
     this.broadcastToAllClients(
       toSessionEvent("session_deleted", event),
     );
@@ -568,5 +658,6 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       subscriber.subject.complete();
     }
     this.subscribers.clear();
+    this.recentTerminals.clear();
   }
 }

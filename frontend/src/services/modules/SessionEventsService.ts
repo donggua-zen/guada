@@ -79,6 +79,14 @@ export class SessionEventsService {
   private listeners: Map<SessionEventType | "*", Set<SessionEventListener>> =
     new Map();
   private clientId: string;
+  /**
+   * 已分发过的终态帧（sessionId → terminalId）。
+   *
+   * 终态只在完成那一刻广播一次，连接补发会重放同一帧（terminalId 相同）。
+   * 在分发前丢弃重复，确保桌宠动画/列表重拉/历史校准等所有消费方都不会被重复触发；
+   * 页面刷新后本表为空，重放会作为"首次送达"正常分发一次。
+   */
+  private readonly deliveredTerminalIds = new Map<string, string>();
 
   /** 是否处于期望连接状态（disconnect 后为 false，阻止定时器复活连接） */
   private active = false;
@@ -326,6 +334,22 @@ export class SessionEventsService {
    * 处理接收到的 SSE 事件
    */
   private handleEvent(event: SessionEvent): void {
+    // 终态帧入口去重（实时帧 + 重连补发共享同一 terminalId）
+    if (event.type === "stream_status_changed") {
+      const status = event.payload?.status;
+      const terminalId = event.payload?.terminalId;
+      if (
+        status !== "running" &&
+        typeof terminalId === "string" &&
+        terminalId.length > 0
+      ) {
+        if (this.deliveredTerminalIds.get(event.sessionId) === terminalId) {
+          return;
+        }
+        this.deliveredTerminalIds.set(event.sessionId, terminalId);
+      }
+    }
+
     // 广播给所有注册的监听器
     const typeListeners = this.listeners.get(event.type);
     if (typeListeners) {
@@ -392,6 +416,7 @@ export class SessionEventsService {
     }
     this.lastActivityAt = 0;
     this.hiddenAt = null;
+    this.deliveredTerminalIds.clear();
     this.listeners.clear();
   }
 }

@@ -1,7 +1,7 @@
 /**
  * StreamProjector:模块级流式事件投影器(接收链路独立的核心)
  *
- * 接收链路:全局 SSE → streamEventHub.route → streamReceiver.subscribeAll(常驻)
+ * 接收链路:全局 SSE → streamEventHub.route → streamEventHub.subscribeAll(常驻)
  *   → projectChunk(本模块):按 sessionId 路由
  *       - 有缓存会话 → 定位写 store(事件到达即改缓存)
  *       - 无缓存会话 → 暂存 finish 后事件(打开会话时应用)
@@ -86,7 +86,7 @@ export type ProjectorChunk = WireStreamEvent | DomainEvent;
  * ① 每个历史 turn/finish 打一次 GET /plans（首屏 30 回合即数十次，load-more 重折还会累加），
  * ② 把实时补发回来的待批卡片清掉（与"刷新后待批状态不丢"的 SSE 补发设计直接矛盾）。
  */
-export type FoldMode = "live" | "replay";
+type FoldMode = "live" | "replay";
 
 /** 领域事件判别（type 含 '/'，如 turn/start；live 事件为 turn_start 等无斜杠） */
 function isDomainEvent(chunk: ProjectorChunk): chunk is DomainEvent {
@@ -167,7 +167,7 @@ function findBlockByToolCallId(turns: Turn[], toolCallId: string): TurnContent |
  * 暂存事件:finish/turn_end 表示该轮已落盘(后端快照包含),清空旧暂存;
  * 其余事件追加(打开会话时应用)。
  */
-export function stashEvent(sessionId: string, chunk: ProjectorChunk): void {
+function stashEvent(sessionId: string, chunk: ProjectorChunk): void {
   if (chunk.type === "finish" || chunk.type === "turn_end") {
     stashBySession.delete(sessionId);
     return;
@@ -974,7 +974,7 @@ function toPendingAsk(
 /** 按事件类型定位更新 store(无闭包,直接改响应式 store)。
  *  `mode` 必填：两个入口（applyLiveChunk / foldEvents）都必须显式声明自己是实时还是重放，
  *  漏改会在编译期暴露，不会静默保留重放期的实时副作用。 */
-export function applyChunkToStore(
+function applyChunkToStore(
   sessionStore: ProjectorSessionStore,
   sessionId: string,
   chunk: ProjectorChunk,

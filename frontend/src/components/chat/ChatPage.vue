@@ -251,6 +251,7 @@ import { beginSessionOpenTrace, traceSessionOpen, perfStart } from '@/utils/perf
 import type { Session, CreateSessionRequest, InputMessageState } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { SessionEvent } from '@/services/modules/SessionEventsService';
+import { applySessionSnapshotStreamState } from '@/services/modules/streamReconcile';
 import type { SnipData } from './workspace/FilePreviewPanel.vue';
 import { GdSplitpanes } from "../ui";
 import ChatPanel from "./ChatPanel.vue";
@@ -653,18 +654,37 @@ let lastFetchedSessionId: string | null = null;
 /**
  * 根据会话 ID 从 API 获取会话详情
  */
-const applySessionSnapshot = (session: Session) => {
+const applySessionSnapshot = (
+  session: Session,
+  epochsAtRequest?: Map<string, number>,
+) => {
   sessionStore.mergeSession(session);
-  sessionStore.applyStreamSnapshot(session.id, session.isStreaming === true, session.closeReason);
+  // 本地 running → 快照 not-running = 后台期间回合已结束：走统一校准
+  // （复位瞬态/侧栏/待答卡 + 失效历史触发强制重拉），不能只写标志。
+  applySessionSnapshotStreamState(
+    sessionStore,
+    session,
+    epochsAtRequest?.get(session.id),
+  );
   for (const child of session.subSessions || []) {
     sessionStore.mergeSession(child);
-    sessionStore.applyStreamSnapshot(child.id, child.isStreaming === true, child.closeReason);
+    applySessionSnapshotStreamState(
+      sessionStore,
+      child,
+      epochsAtRequest?.get(child.id),
+    );
   }
   subSessions.value = session.subSessions || [];
 };
 
 const fetchSession = async (sessionId: string) => {
   const generation = ++sessionFetchGeneration;
+  // 请求发出时的回合代数快照：响应落地时据此判断"期间是否又开了新回合"，
+  // 避免把已过期的 not-running 写成终态。
+  const epochsAtRequest = new Map<string, number>();
+  for (const sid of sessionStore.streamingSessionIds()) {
+    epochsAtRequest.set(sid, sessionStore.streamEpoch(sid));
+  }
   try {
     const session = await apiService.fetchSession(sessionId);
     // 期间路由已再次变化 → 丢弃，避免旧会话覆盖新会话

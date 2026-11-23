@@ -71,6 +71,13 @@ export class SessionStreamManager {
    * 仅按会话累积一个数字，无清理钩子（量级可忽略）。
    */
   private readonly streamSeqBySession = new Map<string, number>();
+  /**
+   * 每会话最后已入库 seq 的保守下界（publish 时取 max(prevSeq)）。
+   *
+   * prevSeq 是发布时刻的入库游标（只会低估不会高估），供终态墓碑携带，作为
+   * "客户端可能缺到哪"的下界；与 streamSeqBySession 同策略不随 stopStream 清理。
+   */
+  private readonly lastPersistedSeqBySession = new Map<string, number>();
 
   /**
    * SSE 直投回调（SessionEventsService 启动时注入）
@@ -204,6 +211,14 @@ export class SessionStreamManager {
     // 收到 finish 事件时，清理该 content 的中间事件
     if (event.type === "finish" && event.messageId) {
       this.cleanupIntermediateEvents(stream, event.messageId);
+    }
+
+    // 最后入库 seq 下界（终态墓碑携带；prevSeq 缺失/非数字的运行时帧忽略）
+    if (typeof event.prevSeq === "number" && Number.isFinite(event.prevSeq)) {
+      const prev = this.lastPersistedSeqBySession.get(sessionId);
+      if (prev === undefined || event.prevSeq > prev) {
+        this.lastPersistedSeqBySession.set(sessionId, event.prevSeq);
+      }
     }
 
     // 盖戳：每会话单调 streamSeq + 进程 bootId。前端 StreamEventHub 据此做入口幂等——
@@ -366,6 +381,14 @@ export class SessionStreamManager {
       bufferedEventCount: stream.eventBuffer.length,
       startedAt: stream.startedAt,
     };
+  }
+
+  /**
+   * 最后已入库 seq（保守下界；无记录返回 null）。
+   * 终态墓碑用它告诉客户端"日志至少到这里"，供诊断与后续增量补拉。
+   */
+  getLastPersistedSeq(sessionId: string): number | null {
+    return this.lastPersistedSeqBySession.get(sessionId) ?? null;
   }
 
   /**

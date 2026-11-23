@@ -17,10 +17,18 @@ import { useSessionStore } from "@/stores/session";
 import { useSessionGroupStore } from "@/stores/sessionGroup";
 import { useAuthStore } from "@/stores/auth";
 import { apiService } from "@/services/ApiService";
-import { streamReceiver } from "@/services/modules/StreamReceiver";
-import { projectChunk, resetSessionTurnsTransientState } from "@/services/modules/streamProjector";
+import { streamEventHub } from "@/services/modules/StreamEventHub";
+import {
+  projectChunk,
+  resetSessionTurnsTransientState,
+} from "@/services/modules/streamProjector";
+import { reconcileStoppedStream } from "@/services/modules/streamReconcile";
 import { toast } from '@/components/ui/toastService';
-import { emitSessionResync } from "@/utils/sessionResync";
+import {
+  clearSessionHistoryStale,
+  isSessionHistoryStale,
+  markSessionHistoryStale,
+} from "@/utils/sessionResync";
 import type { UserQueueSnapshot } from "@/types/session";
 
 export function useSessionEvents() {
@@ -55,8 +63,11 @@ export function useSessionEvents() {
   // 那一刻对在线连接广播一次，stopStream 随即删除缓冲 → 重连补发（buildCatchupEvents
   // 只重放仍在运行的流）不含已完成会话的任何帧。本地若仍自认 isStreaming=true 就会
   // 永久卡 running（补拉判断 server.isStreaming 曾因详情端点不注入该字段而永不生效）。
-  // 恢复策略"恢复即查状态"：恢复时对本地所有 running 会话探测服务端真实状态，
-  // 已终态则复位瞬态并重载历史，不等事件。
+  //
+  // 恢复策略（整页刷新等价）：
+  // - 回前台(隐藏≥15s)/真实重连：当前会话仍有未闭合回合或仍在流式 → 直接强制重拉
+  //   最新事件页（loadMessages 会重放邮箱尾部，流式中也安全）；
+  // - 对所有本地 running 会话探测 /status，服务端确认停止 → 统一收敛瞬态 + 失效历史。
 
   /** 每会话最后收到流帧的时间（watchdog 判静默用） */
   const lastStreamChunkAt = new Map<string, number>();
@@ -66,55 +77,73 @@ export function useSessionEvents() {
   const STREAM_SILENCE_PROBE_AFTER_MS = 60_000;
   /** 同一会话两次探测的最小间隔（长思考静默期间不至于每 10s 打一次 status 接口） */
   const STREAM_PROBE_MIN_INTERVAL_MS = 60_000;
+  /** 页面隐藏超过该时长再回前台 → 强制重拉当前会话（与 SessionEventsService 重连阈值一致） */
+  const RESUME_RELOAD_AFTER_HIDDEN_MS = 15_000;
+  /** 同一会话两次强制重拉的最小间隔（visibility + onConnected 双触发去抖） */
+  const FORCE_RELOAD_MIN_INTERVAL_MS = 5_000;
 
   let streamWatchdogTimer: ReturnType<typeof setInterval> | null = null;
-  /** 正在探测的会话代数，旧响应不能覆盖探测期间已开启的新回合 */
-  const probeGeneration = new Map<string, number>();
   const lastProbeAt = new Map<string, number>();
-  /** 已知终态的历史需要重新拉取；ChatPanel 挂载时也会消费该标记 */
-  const staleSessionHistory = new Set<string>();
+  /** 页面进入隐藏的时刻（回前台据此判断"隐藏了多久"） */
+  let hiddenAt: number | null = null;
+  /** 每会话最后一次强制重拉时间（双触发去抖） */
+  const lastForceReloadAt = new Map<string, number>();
 
-  function markSessionHistoryStale(sessionId: string): void {
-    staleSessionHistory.add(sessionId);
+  /** 本地是否仍有未闭合回合（快照把 isStreaming 清掉后，回合级工作态仍在） */
+  function hasOpenTurn(sessionId: string): boolean {
+    const turns = sessionStore.getTurns(sessionId) ?? [];
+    return turns.some((turn) => turn.state?.isWorking === true);
+  }
+
+  /**
+   * 回前台/真实重连后强制重拉当前会话历史（整页刷新等价）。
+   *
+   * 后台期间回合可能已结束：终态帧只在完成那一刻广播一次、stopStream 随即删补发缓冲，
+   * 唯一完整源是持久化事件页。这里不做"判停"前置——重拉路径本身会重放邮箱尾部
+   * （见 loadMessages），流式中也安全；只在本地仍有未闭合回合/自认流式时触发，
+   * 空闲会话不产生额外请求。
+   */
+  function forceReloadCurrentSession(reason: string): void {
+    const sessionId = currentSessionId.value;
+    if (!sessionId) return;
     const state = sessionStore.getSessionState(sessionId);
-    state.loaded = false;
-    emitSessionResync(sessionId);
-  }
-
-  function isSessionHistoryStale(sessionId: string): boolean {
-    return staleSessionHistory.has(sessionId);
-  }
-
-  function clearSessionHistoryStale(sessionId: string): void {
-    staleSessionHistory.delete(sessionId);
+    // 有树即值得重拉：loaded=false 也可能是上一次重拉失败（下次触发点必须能继续重试）
+    const hasTree =
+      state.loaded === true || (sessionStore.getTurns(sessionId)?.length ?? 0) > 0;
+    if (!hasTree) return; // 无缓存树：正常打开/加载会拉
+    if (!sessionStore.sessionIsStreaming(sessionId) && !hasOpenTurn(sessionId)) {
+      return;
+    }
+    const now = Date.now();
+    if (now - (lastForceReloadAt.get(sessionId) ?? 0) < FORCE_RELOAD_MIN_INTERVAL_MS) {
+      return;
+    }
+    lastForceReloadAt.set(sessionId, now);
+    console.log(`[SessionEvents] 强制重拉会话历史（${reason}）: ${sessionId}`);
+    markSessionHistoryStale(sessionStore, sessionId);
   }
 
   async function probeStreamingSession(sessionId: string): Promise<void> {
-    const generation = (probeGeneration.get(sessionId) ?? 0) + 1;
-    probeGeneration.set(sessionId, generation);
+    // 触发时刻的本地状态才是"是否需要校准"的依据：await 之后它可能已被详情快照
+    // 写回 false（那正是需要校准的场景），不能拿它当异步门控。
+    if (!sessionStore.sessionIsStreaming(sessionId)) return;
+    const epoch = sessionStore.streamEpoch(sessionId);
+    lastProbeAt.set(sessionId, Date.now());
     try {
       const status = await apiService.getStreamStatus(sessionId);
-      if (probeGeneration.get(sessionId) !== generation) return;
       if (status?.isRunning !== false) return;
-      if (!sessionStore.sessionIsStreaming(sessionId)) return;
+      // 探测期间开了新回合（其它窗口/队列续跑）→ 本响应已过期
+      if (sessionStore.streamEpoch(sessionId) !== epoch) return;
       // 状态端点只说明流已停止；有会话快照时用持久化 closeReason 保留失败态。
-      let finalStatus: "completed" | "error" = "completed";
+      let closeReason: string | null = null;
       try {
         const session = await apiService.fetchSession(sessionId);
-        if (probeGeneration.get(sessionId) !== generation) return;
-        if (session?.closeReason && session.closeReason !== "completed") {
-          finalStatus = "error";
-        }
+        if (sessionStore.streamEpoch(sessionId) !== epoch) return;
+        closeReason = session?.closeReason ?? null;
       } catch {
         // status 仍是权威的运行态；详情暂时不可用时按 completed 收敛。
       }
-      if (probeGeneration.get(sessionId) !== generation) return;
-      if (!sessionStore.sessionIsStreaming(sessionId)) return;
-      sessionStore.syncStreamingState(sessionId, false);
-      sessionStore.setStreamStatus(sessionId, finalStatus);
-      resetSessionTurnsTransientState(sessionStore, sessionId);
-      sessionStore.clearSessionPendingAsks(sessionId);
-      markSessionHistoryStale(sessionId);
+      reconcileStoppedStream(sessionStore, sessionId, closeReason);
     } catch {
       /* 探测失败静默：下一个触发点（重连/切前台/watchdog）再试 */
     }
@@ -141,7 +170,6 @@ export function useSessionEvents() {
         if (now - (lastProbeAt.get(sid) ?? 0) < STREAM_PROBE_MIN_INTERVAL_MS) {
           continue;
         }
-        lastProbeAt.set(sid, now);
         void probeStreamingSession(sid);
       }
     }, STREAM_WATCHDOG_INTERVAL_MS);
@@ -149,16 +177,27 @@ export function useSessionEvents() {
 
   function handleVisibilityChange() {
     windowHidden.value = document.hidden;
-    // 回到前台即视为已读（阅后即焚）；只清当前会话，其他会话的未读保留。
     // 隐藏时不做任何补亮：已看过的待答卡不重复提醒，避免红点与真正的未读混淆。
-    if (!document.hidden) {
-      if (currentSessionId.value) {
-        sessionStore.setSidebarFlag(currentSessionId.value, "unread", false);
-      }
-      // 切回前台即校准：覆盖"连接假活"（socket 看似 OPEN 实际半开，既不会触发
-      // onConnected 重连补拉，也可能未达 15s 强制重建阈值）——先探测原状态再收敛。
-      resyncStreamingSessions();
+    if (document.hidden) {
+      hiddenAt = Date.now();
+      return;
     }
+    const hiddenFor = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = null;
+    // 回到前台即视为已读（阅后即焚）；只清当前会话，其他会话的未读保留。
+    if (currentSessionId.value) {
+      sessionStore.setSidebarFlag(currentSessionId.value, "unread", false);
+    }
+    // 隐藏够久（连接可能已假死、事件可能已丢）→ 强制重拉当前会话历史；
+    // 短时间切换不动，仍由 live/SSE 补发接管。
+    if (hiddenFor >= RESUME_RELOAD_AFTER_HIDDEN_MS) {
+      forceReloadCurrentSession(
+        `visible after ${Math.round(hiddenFor / 1000)}s hidden`,
+      );
+    }
+    // 切回前台即校准：覆盖"连接假活"（socket 看似 OPEN 实际半开，既不会触发
+    // onConnected 重连补拉，也可能未达 15s 强制重建阈值）——先探测原状态再收敛。
+    resyncStreamingSessions();
   }
 
   function init() {
@@ -177,10 +216,13 @@ export function useSessionEvents() {
     // 与发送链路(handleSendMessage → apiService.chat)完全独立。
     // 后端进程标识（streamBootId）：变化 = 后端重启，旧进程的内存等待表已清空。
     let lastStreamBootId: string | undefined;
+    // 首次建连不做强制重拉（初始加载本身会拉页 + 消费暂存）；之后的重连才代表
+    // "可能错过了一段事件"。
+    let hasConnectedOnce = false;
 
     unsubscribers.push(
       // subscribeAll 已声明 HubStreamEvent（WireStreamEvent），chunk 按判别联合收窄
-      streamReceiver.subscribeAll((chunk) => {
+      streamEventHub.subscribeAll((chunk) => {
         const sid = chunk.sessionId;
         if (!sid) return;
 
@@ -235,6 +277,8 @@ export function useSessionEvents() {
     // 会被 hub 按 streamSeq 去重丢弃，清空会把仍可应答的卡片弄丢（与 streamBootId 分支同一约束）。
     unsubscribers.push(
       apiService.onConnected?.(() => {
+        const firstConnect = !hasConnectedOnce;
+        hasConnectedOnce = true;
         void apiService
           .fetchPendingAsks()
           .then((res) => {
@@ -269,6 +313,10 @@ export function useSessionEvents() {
         }
 
         resyncStreamingSessions();
+        // 真实重连（非首次建连）：后台/断网期间可能整段事件丢失，强制重拉当前会话。
+        if (!firstConnect) {
+          forceReloadCurrentSession("stream reconnect");
+        }
       }) ?? (() => {}),
     );
 
@@ -312,6 +360,8 @@ export function useSessionEvents() {
         const { sessionId } = event;
         sessionStore.removeSession(sessionId);
         sessionStore.clearSidebarState(sessionId);
+        // 释放该会话的邮箱与去重游标（会话删除后不会再收到流事件）
+        streamEventHub.cleanup(sessionId);
 
         if (currentSessionId.value === sessionId) {
           const remainingSessions = Array.from(
@@ -404,15 +454,25 @@ export function useSessionEvents() {
         // 导致打开每个会话都显示流式当中):running → true,completed/error → false。
         sessionStore.setSessionIsStreaming(sessionId, status === "running");
 
+        // 终态 + 本地仍有未闭合回合 = 终态到达但内容帧缺失（后台/断线期间完成，
+        // 或连接补发重放的终态）。此时除了复位瞬态，还必须校准并失效历史触发整页重拉。
+        // 不用 isStreaming 判据：正常实时终态到达时它仍为 true，会误触发重拉。
+        const hadOpenTurn = status !== "running" && hasOpenTurn(sessionId);
+
         // 回合级瞬态兜底复位（必须在 isSubOrBot return 之前）：流终止(completed/user_cancel/error)时,
         // 即使 turn_end 事件因连接中断丢失,也确保回合不卡在"正在流式中"。会话级 isStreaming
         // 已在上面统一复位(输入框恢复),子代理/bot 的回合级瞬态若不在此一并复位,
         // 其 TurnItem 会与输入框状态脱节——永久显示流式中、动画不消失。
         if (status !== "running") {
-          resetSessionTurnsTransientState(sessionStore, sessionId);
-          // 会话级交互卡兜底：流已终止 → 不可能仍有等待中的 ask（ask 阻塞期间流保持 running），
-          // 防 SSE 掉线期间错过 ask_resolved 后卡片残留。
-          sessionStore.clearSessionPendingAsks(sessionId);
+          if (hadOpenTurn) {
+            // 统一校准：瞬态/侧栏/待答卡 + 历史失效（ChatPanel 立即强制重拉）
+            reconcileStoppedStream(sessionStore, sessionId, status);
+          } else {
+            resetSessionTurnsTransientState(sessionStore, sessionId);
+            // 会话级交互卡兜底：流已终止 → 不可能仍有等待中的 ask（ask 阻塞期间流保持 running），
+            // 防 SSE 掉线期间错过 ask_resolved 后卡片残留。
+            sessionStore.clearSessionPendingAsks(sessionId);
+          }
         }
 
         // 子代理/机器人:tab 状态由 ChatPage watch store 派生,不处理侧边栏/队列/会话对象
@@ -490,8 +550,8 @@ export function useSessionEvents() {
     }
     lastStreamChunkAt.clear();
     lastProbeAt.clear();
-    probeGeneration.clear();
-    staleSessionHistory.clear();
+    lastForceReloadAt.clear();
+    hiddenAt = null;
     for (const unsub of unsubscribers) {
       try {
         unsub();

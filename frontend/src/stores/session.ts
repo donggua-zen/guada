@@ -561,12 +561,34 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
+     * 流回合代数自增（仅 false→true 视为新回合开始）。
+     *
+     * 异步校准（status 探测/详情快照）据此判断"请求发出后是否又开了新回合"：
+     * 旧响应不能覆盖期间已开启的新流。
+     */
+    const bumpStreamEpochOnStart = (state: SessionState, isStreaming: boolean): void => {
+        if (isStreaming && !state.isStreaming) {
+            state.streamEpoch = (state.streamEpoch ?? 0) + 1
+        }
+    }
+
+    /**
      * 设置会话流式状态
      * @param sessionId - 会话 ID
      * @param isStreaming - 是否正在流式响应
      */
     const setSessionIsStreaming = (sessionId: string, isStreaming: boolean): void => {
-        getSessionState(sessionId).isStreaming = isStreaming
+        const state = getSessionState(sessionId)
+        bumpStreamEpochOnStart(state, isStreaming)
+        state.isStreaming = isStreaming
+    }
+
+    /**
+     * 纯读流回合代数（不创建缓存；未缓存 = 0）
+     * 供探测/快照校准判断"响应期间是否开了新回合"。
+     */
+    const streamEpoch = (sessionId: string): number => {
+        return sessions.value.get(sessionId)?.streamEpoch ?? 0
     }
 
     /**
@@ -600,6 +622,7 @@ export const useSessionStore = defineStore('session', () => {
     /** 对父详情/子会话详情中的权威流状态做校准，不写主会话侧栏标记。 */
     const applyStreamSnapshot = (sessionId: string, isStreaming: boolean, closeReason?: string | null): void => {
         const state = getSessionState(sessionId)
+        bumpStreamEpochOnStart(state, isStreaming)
         state.isStreaming = isStreaming
         state.streamStatus = isStreaming
             ? 'running'
@@ -933,7 +956,9 @@ export const useSessionStore = defineStore('session', () => {
      */
     const syncStreamingState = (sessionId: string, isStreaming: boolean): void => {
         getSidebarState(sessionId).working = isStreaming
-        getSessionState(sessionId).isStreaming = isStreaming
+        const state = getSessionState(sessionId)
+        bumpStreamEpochOnStart(state, isStreaming)
+        state.isStreaming = isStreaming
     }
 
     /**
@@ -991,6 +1016,7 @@ export const useSessionStore = defineStore('session', () => {
         sessionIsStreaming,
         setSessionIsStreaming,
         streamingSessionIds,
+        streamEpoch,
         setStreamStatus,
         applyStreamSnapshot,
         peekStreamStatus,

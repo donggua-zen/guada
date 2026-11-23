@@ -195,3 +195,68 @@ describe("SessionEventsService 连接监督", () => {
     service.disconnect();
   });
 });
+
+describe("SessionEventsService 终态帧去重", () => {
+  function push(message: any) {
+    lastSource().onmessage?.({ data: JSON.stringify(message) });
+  }
+
+  const terminal = {
+    type: "stream_status_changed",
+    sessionId: "s1",
+    timestamp: "t",
+    payload: { status: "completed", terminalId: "tid-1" },
+  };
+
+  it("同一 terminalId 的补发重放只分发一次；新 terminalId 正常分发", () => {
+    const service = createService();
+    service.connect();
+    openLastSource();
+    const seen: any[] = [];
+    service.on("stream_status_changed", (e) => seen.push(e));
+
+    push(terminal);
+    push({ ...terminal, payload: { ...terminal.payload, replayed: true } });
+    expect(seen).toHaveLength(1);
+
+    push({
+      ...terminal,
+      payload: { status: "completed", terminalId: "tid-2" },
+    });
+    expect(seen).toHaveLength(2);
+    service.disconnect();
+  });
+
+  it("running 帧不受去重影响（可重复到达）", () => {
+    const service = createService();
+    service.connect();
+    openLastSource();
+    const seen: any[] = [];
+    service.on("stream_status_changed", (e) => seen.push(e));
+
+    const running = {
+      ...terminal,
+      payload: { status: "running", terminalId: "tid-r" },
+    };
+    push(running);
+    push(running);
+    expect(seen).toHaveLength(2);
+    service.disconnect();
+  });
+
+  it("disconnect 清空去重表：重连后同一 terminalId 会再分发一次", () => {
+    const service = createService();
+    service.connect();
+    openLastSource();
+    push(terminal);
+    service.disconnect();
+
+    service.connect();
+    openLastSource();
+    const seen: any[] = [];
+    service.on("stream_status_changed", (e) => seen.push(e));
+    push(terminal);
+    expect(seen).toHaveLength(1);
+    service.disconnect();
+  });
+});

@@ -86,3 +86,37 @@ describe('SessionStreamManager publish（唯一发布入口）', () => {
     expect(mgr.getStreamStatus('s1')?.bufferedEventCount).toBeLessThanOrEqual(2000);
   });
 });
+
+describe('SessionStreamManager 最后入库 seq（终态墓碑用）', () => {
+  let mgr: SessionStreamManager;
+
+  beforeEach(() => {
+    mgr = new SessionStreamManager();
+  });
+
+  it('publish 取 prevSeq 最大值；缺失/非数字忽略，落后值不回退', () => {
+    startStream(mgr, 's1');
+    expect(mgr.getLastPersistedSeq('s1')).toBeNull();
+
+    mgr.publish('s1', chunkEvent({ type: 'text_delta', messageId: 'm1', text: 'a' })); // prevSeq 0
+    expect(mgr.getLastPersistedSeq('s1')).toBe(0);
+
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'b', prevSeq: 7 } as StreamEvent);
+    expect(mgr.getLastPersistedSeq('s1')).toBe(7);
+
+    // 落后的 prevSeq 不回退（并发 publish 可能读到同一入库游标）
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'c', prevSeq: 3 } as StreamEvent);
+    expect(mgr.getLastPersistedSeq('s1')).toBe(7);
+
+    // 运行时帧可能没有 prevSeq（如 chat-runner 的裸 error 帧）
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'd', prevSeq: undefined } as StreamEvent);
+    expect(mgr.getLastPersistedSeq('s1')).toBe(7);
+  });
+
+  it('stopStream 后保留（下一回合在同一水位上继续单调）', () => {
+    startStream(mgr, 's1');
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'a', prevSeq: 5 } as StreamEvent);
+    mgr.stopStream('s1', 'completed');
+    expect(mgr.getLastPersistedSeq('s1')).toBe(5);
+  });
+});
