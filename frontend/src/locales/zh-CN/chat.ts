@@ -525,6 +525,15 @@ export default {
     // 输入区胶囊「后台任务」段：shell 后台进程与后台子代理已统一为 job 托管
     backgroundJobs: '后台任务',
     jobStopping: '停止中',
+    // 胶囊 hover 面板里每条任务的「已运行 X」与分档时长（数字带单位，读起来比等宽的 1m 05s 自然）
+    jobElapsed: '已运行 {duration}',
+    jobDurationSeconds: '{seconds} 秒',
+    jobDurationMinutes: '{minutes} 分 {seconds} 秒',
+    jobDurationHours: '{hours} 小时 {minutes} 分',
+    // 每条任务右侧常显的停止按钮文案（与浏览器预览栏的 workspace.stop 解耦）
+    jobStop: '停止',
+    // 子代理行的终止按钮：语义是停子代理而非杀进程
+    stopSubagent: '停止子代理',
     processLogTab: '进程日志',
     subagentTab: '子代理',
     // 子代理列表面板（活跃 + 已结束回放；对话流子代理行与输入区胶囊的「详情」入口）

@@ -6,7 +6,7 @@ import { useJobsStore } from "@/stores/jobs";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
 import { getApiErrorStatus } from "@/utils/errorMessage";
-import { formatProcessDuration } from "@/utils/processDisplay";
+import { durationParts, type DurationParts } from "@/utils/processDisplay";
 import { t } from "@/locales";
 import { toast } from '@/components/ui/toastService';
 
@@ -48,7 +48,7 @@ export function useBackgroundJobs(sessionId: MaybeRefOrGetter<string | undefined
       .filter((job) => SUBAGENT_JOB_KINDS.has(job.kind));
   });
 
-  /** 时长显示的秒级心跳（仅在列表非空时持有定时器，驱动 elapsedText 重算） */
+  /** 时长显示的秒级心跳（仅在列表非空时持有定时器，驱动 elapsedParts 重算） */
   const nowTick = ref(Date.now());
 
   async function load(force = false): Promise<void> {
@@ -57,9 +57,10 @@ export function useBackgroundJobs(sessionId: MaybeRefOrGetter<string | undefined
     await jobsStore.ensureLoaded(sid, force);
   }
 
-  function elapsedText(startedAt: number): string {
-    if (!Number.isFinite(startedAt)) return "";
-    return formatProcessDuration(nowTick.value - startedAt);
+  /** 已运行时长的分档拆解（胶囊 hover 面板按语言自行拼文案）；非法时间戳返回 null */
+  function elapsedParts(startedAt: number): DurationParts | null {
+    if (!Number.isFinite(startedAt)) return null;
+    return durationParts(nowTick.value - startedAt);
   }
 
   /** 停止后台任务（进程与子代理同一条 kill 协议；subagent 的 cancel 钩子 = stopSubAgent） */
@@ -125,5 +126,5 @@ export function useBackgroundJobs(sessionId: MaybeRefOrGetter<string | undefined
     onCleanup(() => clearInterval(timer));
   });
 
-  return { processJobs, subagentJobs, elapsedText, killJob, openProcessLog };
+  return { processJobs, subagentJobs, elapsedParts, killJob, openProcessLog };
 }

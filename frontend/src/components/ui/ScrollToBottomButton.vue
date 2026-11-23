@@ -75,6 +75,14 @@ defineExpose({
     height: 16px;
 }
 
+/* 移动端：与运行时状态胶囊同形同步放大（36px / 10px 圆角，见 ComposerStatusBar 的
+   html.mobile 段）。同一行两个 chip 高度不一致会一高一低，视觉上像没对齐。 */
+html.mobile .scroll-to-bottom-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+}
+
 /* 淡入淡出 */
 .fade-enter-active,
 .fade-leave-active {

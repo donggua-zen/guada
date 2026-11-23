@@ -3032,6 +3032,22 @@ async function scrollToMessage(messageId: string) {
   height: 28px;
 }
 
+/* 移动端：胶囊与回到底部按钮同步放大到 36px（见 ComposerStatusBar / ScrollToBottomButton
+   的 html.mobile 段），插槽高度跟着变，否则绝对定位的按钮会以 28px 插槽为基准、上下错位。
+   行的左右预留同步从 36px（8 + 28）放到 44px（8 + 36）——否则按钮右缘会撑出内容盒。
+   无胶囊时的左移量也从 −14px 变成 −18px（半个 36px 身位）。 */
+html.mobile .composer-status-row {
+  padding-inline: 44px;
+}
+
+html.mobile .scroll-btn-slot {
+  height: 36px;
+}
+
+html.mobile .composer-status-row:not(:has(.composer-status-bar)) .scroll-btn-slot > :deep(*) {
+  margin-left: -18px;
+}
+
 .scroll-btn-slot > :deep(*) {
   position: absolute;
   top: 0;
@@ -3043,7 +3059,7 @@ async function scrollToMessage(messageId: string) {
 /* 无运行时胶囊时，按钮是状态行里唯一可见的元素：插槽锚点被居中在行中轴，而按钮画在锚点
    右侧 → 不修正就整体偏右 14px（半个按钮宽，28 / 2）。左移半个身位让它自身居中。
    有胶囊时这条不生效，间距仍是上面的 8px（:has 匹配 ComposerStatusBar 的根节点，
-   四段全空时该节点不渲染）。 */
+   四段全空时该节点不渲染）。移动端的 36px 版本见上方 html.mobile 段。 */
 .composer-status-row:not(:has(.composer-status-bar)) .scroll-btn-slot > :deep(*) {
   margin-left: -14px;
 }

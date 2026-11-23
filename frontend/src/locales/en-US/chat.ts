@@ -525,6 +525,15 @@
     // Composer capsule "Background jobs" segment: shell processes & background subagents are unified under job registry
     backgroundJobs: 'Background Jobs',
     jobStopping: 'Stopping',
+    // Capsule hover panel: elapsed time per task, in natural phrasing rather than monospace "1m 05s"
+    jobElapsed: 'Running {duration}',
+    jobDurationSeconds: '{seconds}s',
+    jobDurationMinutes: '{minutes}m {seconds}s',
+    jobDurationHours: '{hours}h {minutes}m',
+    // Always-visible stop label on each task (kept separate from the browser toolbar's workspace.stop)
+    jobStop: 'Stop',
+    // Terminate button on subagent rows (stop the subagent, not kill a process)
+    stopSubagent: 'Stop subagent',
     processLogTab: 'Process Log',
     subagentTab: 'Sub-agent',
     // Subagent list panel (active + ended replay; detail entry of the chat row and the composer capsule)

@@ -9,14 +9,23 @@ export function shortCommand(command: string, max = 42): string {
 }
 
 /**
- * 已运行时长（整数秒档：<60s → "12s"，<60m → "3m 05s"，其余 → "1h 20m"）。
- * 秒级跳动由调用方的 now tick 驱动。
+ * 已运行时长的分档拆解（非有限值/负数按 0 处理：时钟回拨防御）。
+ *
+ * 返回原始数值而不是拼好的字符串：胶囊 hover 面板要按语言输出「已运行 1 分 18 秒」，
+ * 将来若要紧凑的等宽形态（1m 05s）也只需另写一个拼装函数——分档与取整只有这一处真相。
  */
-export function formatProcessDuration(ms: number): string {
-  const sec = Math.floor(Math.max(0, ms) / 1000);
-  if (sec < 60) return `${sec}s`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ${String(sec % 60).padStart(2, "0")}s`;
-  const hour = Math.floor(min / 60);
-  return `${hour}h ${String(min % 60).padStart(2, "0")}m`;
+export interface DurationParts {
+  hours: number;
+  minutes: number;
+  seconds: number;
+}
+
+export function durationParts(ms: number): DurationParts {
+  const total = Number.isFinite(ms) ? Math.max(0, ms) : 0;
+  const sec = Math.floor(total / 1000);
+  return {
+    hours: Math.floor(sec / 3600),
+    minutes: Math.floor(sec / 60) % 60,
+    seconds: sec % 60,
+  };
 }

@@ -253,7 +253,7 @@ describe("useBackgroundJobs", () => {
     scope.stop();
   });
 
-  it("elapsedText 按整数秒档格式化（m + 补零秒）", async () => {
+  it("elapsedParts 拆成分档数值（非法时间戳返回 null）", async () => {
     const startedAt = Date.now() - 65_400;
     apiMocks.getSessionJobs.mockResolvedValue({
       revision: 1,
@@ -264,8 +264,8 @@ describe("useBackgroundJobs", () => {
     const api = scope.run(() => useBackgroundJobs(sid))!;
     await flush();
 
-    expect(api.elapsedText(startedAt)).toBe("1m 05s");
-    expect(api.elapsedText(Number.NaN)).toBe("");
+    expect(api.elapsedParts(startedAt)).toEqual({ hours: 0, minutes: 1, seconds: 5 });
+    expect(api.elapsedParts(Number.NaN)).toBeNull();
 
     scope.stop();
   });
