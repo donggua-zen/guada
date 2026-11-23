@@ -33,7 +33,7 @@ import { CorruptSessionLogError } from './errors';
 // 会话数据根解析（sessions/ 的父级选择）见 common/utils/session-path.util.ts（单一真相）
 import { resolveSessionsBasePath } from '../utils/session-path.util';
 import { withTransientFsRetry } from '../utils/transient-fs-retry.util';
-import { JsonlBlockIndex } from './jsonl-block-index';
+import { TurnAnchorIndex, type AnchorRow } from './turn-anchor-index';
 
 interface ActiveSegment {
   file: string;
@@ -47,7 +47,7 @@ interface ActiveSegment {
 export class JsonlBackend implements MessageEventLog {
   private readonly logger = new Logger(JsonlBackend.name);
   private basePath: string;
-  private readonly blockIndex: JsonlBlockIndex;
+  private readonly anchorIndex: TurnAnchorIndex;
 
   // 内存缓存活跃段信息（避免频繁读 manifest）
   private activeSegments = new Map<string, ActiveSegment>();
@@ -69,19 +69,18 @@ export class JsonlBackend implements MessageEventLog {
 
   /** 页索引能力（可选端口能力）：尾部事件页读加速（块级位置索引倒序流） */
   readonly index: EventLogPageIndex = {
-    readChunksBackward: (sessionId, opts) =>
-      this.blockIndex.readChunksBackward(sessionId, opts),
-    invalidate: (sessionId) => this.blockIndex.invalidate(sessionId),
+    readPage: (sessionId, opts) => this.anchorIndex.readPage(sessionId, opts),
+    invalidate: (sessionId, segFile) => this.anchorIndex.invalidate(sessionId, segFile),
   };
 
   /** 索引读取统计（诊断/基准用）：累计读取字节数、块命中、窗口扫描 */
   get indexStats() {
-    return this.blockIndex.stats;
+    return this.anchorIndex.stats;
   }
 
   constructor() {
     this.basePath = resolveSessionsBasePath();
-    this.blockIndex = new JsonlBlockIndex(this.basePath);
+    this.anchorIndex = new TurnAnchorIndex(this.basePath);
   }
 
   // ─── 路径工具 ───
@@ -145,7 +144,9 @@ export class JsonlBackend implements MessageEventLog {
       file: active.file,
       startSeq: active.startSeq,
       endSeq,
-      bytes: Buffer.byteLength(content, 'utf-8'),
+      // 字节数必须取磁盘真实大小:utf-8 解码长度在 torn 尾截断于多字节字符中间时会失真
+      // (U+FFFD 3 字节替换),会让后续 append 的偏移基线(seg.bytes)漂移
+      bytes: (await fs.stat(segPath)).size,
     };
     this.activeSegments.set(sessionId, seg);
     this.logger.debug(
@@ -317,15 +318,67 @@ export class JsonlBackend implements MessageEventLog {
   ): Promise<void> {
     if (events.length === 0) return;
     const seg = await this.ensureActiveSegment(sessionId);
+    if (!seg) {
+      // 异常态（manifest 缺失/无 active 段）：历史行为是回退 seg-0000 继续写，
+      // 但偏移基线（seg.bytes）不会维护——基于偏移的索引不能在该分支上工作。
+      // 保留写入行为，显式告警便于发现异常会话。
+      this.logger.warn(
+        `[jsonl] writeEvents without active segment for ${sessionId}, falling back to seg-0000.jsonl (byte-offset baseline not tracked)`,
+      );
+    }
     const file = seg ? seg.file : 'seg-0000.jsonl';
     const filePath = this.getSegmentPath(sessionId, file);
 
-    const lines = events.map((e) => JSON.stringify(e) + '\n').join('');
-    await withTransientFsRetry(() => fs.appendFile(filePath, lines, 'utf-8'));
+    // 批起始字节偏移 = append 前的 seg.bytes；单次序列化时同步记录每行偏移，
+    // 供事件落盘后追加 turn 锚点索引行（先事件、后索引；单写者互斥保证顺序）
+    const startOffset = seg ? seg.bytes : null;
+    const lines: string[] = [];
+    const lineOffsets: number[] = [];
+    let off = startOffset ?? 0;
+    for (const e of events) {
+      const line = JSON.stringify(e) + '\n';
+      lineOffsets.push(off);
+      off += Buffer.byteLength(line, 'utf-8');
+      lines.push(line);
+    }
+    const payload = lines.join('');
+    await withTransientFsRetry(() => fs.appendFile(filePath, payload, 'utf-8'));
 
     if (seg) {
       seg.endSeq = events[events.length - 1].seq;
-      seg.bytes += Buffer.byteLength(lines, 'utf-8');
+      seg.bytes += Buffer.byteLength(payload, 'utf-8');
+    }
+
+    // 索引维护：提取本批 turn/start(s)、turn/finish(f, 冗余)、turn/delete(d) 行
+    if (startOffset !== null) {
+      const rows: AnchorRow[] = [];
+      for (let i = 0; i < events.length; i += 1) {
+        const e = events[i];
+        const kind =
+          e.type === 'turn/start'
+            ? 's'
+            : e.type === 'turn/finish'
+              ? 'f'
+              : e.type === 'turn/delete'
+                ? 'd'
+                : null;
+        if (!kind) continue;
+        const tid = (e.data as { turnId?: string } | undefined)?.turnId;
+        // start/delete 必须带 turnId（delete 按 turnId 匹配；start 用于页首定位）
+        if (kind !== 'f' && !tid) continue;
+        rows.push({ seq: e.seq, off: lineOffsets[i], kind, turnId: tid });
+      }
+      try {
+        await this.anchorIndex.appendBatchRows(sessionId, file, rows);
+      } catch (err) {
+        // 索引写失败不影响事件权威：作废该卷索引，读时缺失重建兜底
+        this.logger.warn(
+          `[jsonl] index append failed for ${sessionId}/${file}, invalidating: ${err instanceof Error ? err.message : err}`,
+        );
+        await this.anchorIndex.invalidate(sessionId, file).catch(() => {
+          /* 删除失败 = 读时校验兜底 */
+        });
+      }
     }
   }
 
@@ -570,7 +623,7 @@ export class JsonlBackend implements MessageEventLog {
       seg.bytes = bytes;
     }
     // 物理改写旧字节 → 主动作废块索引（截断点后的块 hash 必失配,提前失效省一次失配读)
-    await this.blockIndex.invalidate(sessionId).catch(() => {
+    await this.anchorIndex.invalidate(sessionId, file).catch(() => {
       /* 索引失效失败 = 下次失配回退,不影响正确性 */
     });
     this.logger.warn(

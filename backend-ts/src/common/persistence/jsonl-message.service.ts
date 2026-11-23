@@ -961,6 +961,9 @@ export class JsonlMessageService implements IMessageStore {
    */
   async deleteTurn(sessionId: string, turnId: string): Promise<void> {
     return this.runExclusive(sessionId, async () => {
+      // 冷加载守卫：重启后首个写若是 deleteTurn，torn 尾未修复时追加会拼接半行
+      // （行损坏 + 字节偏移不可信）；与其它写方法一致先走恢复/修复路径
+      await this.ensureReplayReady(sessionId);
       await this.append(sessionId, {
         type: 'turn/delete',
         time: Date.now(),

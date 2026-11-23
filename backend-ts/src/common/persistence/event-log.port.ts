@@ -72,22 +72,31 @@ export interface EventLogMaintenance {
 }
 
 /**
- * 页索引能力（可选）：为「尾部事件页」读路径提供块级位置索引加速
- * （倒序按块读取 + seq↔字节范围映射 + 指纹校验），免去每次全量解析所有分卷。
- * 与 snapshot 同理只是**加速**：任何失效都由实现内部作废索引并抛错，消费方
- * 应回退 `getAllEvents` 全量组装（JSONL 为权威），不得假设它一定存在。
+ * 页索引能力（可选）：为「尾部事件页」读路径提供 turn 锚点索引加速
+ * （每个 turn/start 一行 {seq, 段内字节偏移, turnId}，读时直接 seek 到
+ * "倒数第 N 个有效 turn_start"的偏移读区间），免去全量解析所有分卷。
+ * 索引由介质侧的**唯一写者**在事件 append 后维护；与 snapshot 同理只是
+ * **加速**——索引缺失/校验失败时实现回退全量组装（JSONL 为权威），
+ * 调用方不得假设它一定存在。
  *
- * 产出语义：从 fromSeq（缺省 = 日志末尾）所在的块开始，向左逐块产出事件批
- * （块内 seq 升序、批序从新到旧），直到覆盖日志起点；何时停由消费方决定
- * （提前 break 即截断）。轮次语义不在本层——由消费方在事件流上自行配对。
+ * 页语义（`turns`，与全量组装一致）：从 beforeSeq（或末尾）反向数 N 个
+ * turn/start（turn/delete 目标排除，未闭合轮次也计入）；delete 事件原样下发。
  */
 export interface EventLogPageIndex {
-  readChunksBackward(
+  readPage(
     sessionId: string,
-    opts?: { fromSeq?: number },
-  ): AsyncGenerator<BaseEvent[]>;
-  /** 主动作废某会话的索引（介质侧内容被改写时调用，避免一次失配读） */
-  invalidate(sessionId: string): Promise<void>;
+    opts: { beforeSeq?: number; turns: number },
+  ): Promise<{
+    events: BaseEvent[];
+    endSeq: number;
+    nextBeforeSeq: number | null;
+    hasMore: boolean;
+  }>;
+  /**
+   * 作废索引（删除文件，读时缺失 → 单卷重建兜底）。
+   * @param segFile 缺省 = 全部卷（如会话重写）；指定则只失效该卷（如 truncate）
+   */
+  invalidate(sessionId: string, segFile?: string): Promise<void>;
 }
 
 export interface MessageEventLog {

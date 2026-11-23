@@ -32,33 +32,30 @@ export interface EventPageResult {
 const MAX_PAGE_TURNS = 100;
 
 /**
- * 反向配对计数（页定位核心）：从 fromIdx 向前扫，turn/start 遇到其右侧已见的
- * turn/finish → 闭合轮次（按 turnId 去重）。turn/delete 不参与；进行中回合
- * （无 finish）不计入。与块流快路径、全量兜底路径共用，保证两路径页语义一致。
+ * 反向 start 计数（页定位核心）：从 fromIdx 向前数 N 个有效 turn/start。
+ * turn/delete 目标按 turnId 排除；未闭合轮次（无 finish）也计入（前端显示即算数，
+ * 稳态下修复会补 turn/finish）。与锚点索引快路径、全量兜底路径共用，保证语义一致。
  */
-function pairCountBackward(
+function countStartsBackward(
   events: BaseEvent[],
   fromIdx: number,
   turns: number,
 ): { enough: boolean; pageStartIdx: number } {
-  const open = new Set<string>(); // 已见 finish、等待 start 的回合
-  const counted = new Set<string>();
+  const deleted = new Set<string>();
+  for (const e of events) {
+    if (e.type === 'turn/delete') {
+      const tid = (e.data as { turnId?: string } | undefined)?.turnId;
+      if (tid) deleted.add(tid);
+    }
+  }
   let valid = 0;
   for (let i = fromIdx; i >= 0; i -= 1) {
     const e = events[i];
-    if (e.type === "turn/finish") {
-      const tid = (e.data as { turnId?: string } | undefined)?.turnId;
-      if (tid) open.add(tid);
-      continue;
-    }
-    if (e.type === "turn/start") {
-      const tid = (e.data as { turnId?: string } | undefined)?.turnId;
-      if (tid && open.has(tid) && !counted.has(tid)) {
-        counted.add(tid);
-        valid += 1;
-        if (valid === turns) return { enough: true, pageStartIdx: i };
-      }
-    }
+    if (e.type !== 'turn/start') continue;
+    const tid = (e.data as { turnId?: string } | undefined)?.turnId;
+    if (tid && deleted.has(tid)) continue;
+    valid += 1;
+    if (valid === turns) return { enough: true, pageStartIdx: i };
   }
   return { enough: false, pageStartIdx: 0 };
 }
@@ -90,18 +87,18 @@ export class SessionReplayService {
   /**
    * 获取尾部事件页（领域事件原样返回）。
    *
-   * 读路径分层（接入块索引）：
-   * - 快路径：消费 EventLogPageIndex.readChunksBackward 倒序块流，块内反向扫、
-   *   简单 turn 配对（start 遇到右侧已见 finish → 闭合轮次）凑够 N 轮 → 页首=
-   *   该 start；turn/delete 不参与计数、原样下发（前端投影消解）；进行中回合
-   *   （无 finish）不计轮次，事件保留在页尾。
-   * - 兜底：端口无 index 能力（非 JSONL 驱动）或块流抛非损坏异常（索引失效/
-   *   fs 错误等）→ 落 getAllEvents 全量组装（权威路径）；损坏
-   *   （CorruptSessionLogError）保持原语义直接上抛。
+   * 读路径（turn 锚点索引接入）：
+   * - 快路径：`backend.index.readPage` —— 索引定位"倒数第 N 个有效 turn_start"
+   *   的字节偏移读区间（turn/delete 目标排除，未闭合轮次计入），读放大 = 页实际
+   *   字节 + 索引体积；索引由写入方唯一维护，读端纯只读。
+   * - 兜底：端口无 index 能力（非 JSONL 驱动）或索引读抛非损坏异常（索引失效
+   *   残留/fs 错误）→ getAllEvents 全量组装（同款 start 计数语义，权威路径）；
+   *   损坏（CorruptSessionLogError）保持原语义直接上抛。
+   * - 前端补拉循环保留为兜底（正常路径一次到位）。
    *
    * @param sessionId 会话 id
    * @param opts.beforeSeq 页尾上限（含）；缺省 = 当前最后 seq（初始加载）
-   * @param opts.turns 本页包含的配对闭合轮次数（钳制 [1,100]）
+   * @param opts.turns 本页包含的轮次数（turn/start 计数，钳制 [1,100]）
    */
   async getEventPage(
     sessionId: string,
@@ -110,69 +107,19 @@ export class SessionReplayService {
     const pageIndex = this.backend.index;
     if (pageIndex) {
       try {
-        return await this.assemblePageViaChunks(sessionId, pageIndex, opts);
+        return await pageIndex.readPage(sessionId, opts);
       } catch (e) {
         // 真实损坏（全量校验语义）保持 fail-fast；其它异常（索引失效残留/fs 错误）回退全量
         if (e instanceof CorruptSessionLogError) throw e;
         this.logger.warn(
-          `[session-replay] 块索引读失败，回退全量扫描: ${e instanceof Error ? e.message : e}`,
+          `[session-replay] 锚点索引读失败，回退全量扫描: ${e instanceof Error ? e.message : e}`,
         );
       }
     }
     return this.getEventPageViaAllEvents(sessionId, opts);
   }
 
-  /**
-   * 快路径：消费倒序块流 + 配对凑页。
-   * 页尾锚（beforeSeq/末尾 seq）固定，头部逐块前插不受影响；每块到达后检查
-   * 「配对凑够 或 已覆盖日志起点」即停。
-   */
-  private async assemblePageViaChunks(
-    sessionId: string,
-    pageIndex: NonNullable<MessageEventLog["index"]>,
-    opts: { beforeSeq?: number; turns: number },
-  ): Promise<EventPageResult> {
-    const turns = Math.min(Math.max(1, opts.turns), MAX_PAGE_TURNS);
-    const acc: BaseEvent[] = []; // 从右向左增长的连续事件区间（seq 升序）
-    let endSeqVal: number | null = opts.beforeSeq ?? null; // 页尾锚固定
-
-    for await (const chunkEvents of pageIndex.readChunksBackward(sessionId, {
-      fromSeq: opts.beforeSeq,
-    })) {
-      acc.unshift(...chunkEvents);
-      if (endSeqVal === null && acc.length > 0) endSeqVal = acc[acc.length - 1].seq;
-      const endIdx = acc.findIndex((e) => e.seq === endSeqVal);
-      if (endIdx >= 0) {
-        const coveredToStart = acc[0].seq === 0;
-        const { enough } = pairCountBackward(acc, endIdx, turns);
-        if (enough || coveredToStart) break;
-      }
-    }
-
-    if (acc.length === 0) {
-      return { events: [], endSeq: -1, nextBeforeSeq: null, hasMore: false };
-    }
-    const endIdx = acc.findIndex((e) => e.seq === endSeqVal);
-    if (endIdx < 0) {
-      // 游标超日志尾（翻页越界）→ 空页，与全量路径同语义
-      return { events: [], endSeq: opts.beforeSeq ?? -1, nextBeforeSeq: null, hasMore: false };
-    }
-    const { enough, pageStartIdx } = pairCountBackward(acc, endIdx, turns);
-    const start = enough ? pageStartIdx : 0;
-    const pageEvents = acc.slice(start, endIdx + 1);
-    // 覆盖判断：块流提前 break（凑够）时 acc[0] 未必是日志起点 → seq===0 才算覆盖
-    const coveredToStart = acc[0].seq === 0;
-    const hasMore = enough ? start > 0 || !coveredToStart : false;
-    const nextBeforeSeq = start > 0 || hasMore ? pageEvents[0].seq - 1 : null;
-    return {
-      events: pageEvents,
-      endSeq: pageEvents[pageEvents.length - 1]?.seq ?? opts.beforeSeq ?? -1,
-      nextBeforeSeq,
-      hasMore,
-    };
-  }
-
-  /** 兜底路径：getAllEvents 全量 + 同款配对组装（权威实现，页语义与快路径一致） */
+  /** 兜底路径：getAllEvents 全量 + 同款 start 计数组装（权威实现，页语义与快路径一致） */
   private async getEventPageViaAllEvents(
     sessionId: string,
     opts: { beforeSeq?: number; turns: number },
@@ -193,10 +140,9 @@ export class SessionReplayService {
       }
     }
 
-    // 反向配对计数：从 endIdx 向前数 N 个闭合回合（start 与右侧 finish 配对），
-    // 页首 = 第 N 个闭合回合的 turn/start。turn/delete 不参与计数（原样下发，
-    // 由前端投影消解）；不足 N 个闭合回合 → 页首 = 日志起点（全量页）。
-    const { enough, pageStartIdx } = pairCountBackward(events, endIdx, turns);
+    // 反向 start 计数：从 endIdx 向前数 N 个有效 turn/start（turn/delete 目标排除，
+    // 未闭合轮次计入）。页首 = 第 N 个有效回合的 turn/start；不足 N → 日志起点（全量页）。
+    const { enough, pageStartIdx } = countStartsBackward(events, endIdx, turns);
     const start = enough ? pageStartIdx : 0;
 
     // 领域事件原样返回（seq 序；前端折叠器自行消费/消解删除与压缩，零转码）
