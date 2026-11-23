@@ -7,7 +7,7 @@
  * - 消息级事件（StreamChunk 直通 + user_message/tool_calls_response）：
  *   携带 messageId 关联所属 assistant 消息，消息内容完全由这一层承载
  *
- * 传输层信封：WireStreamEvent = SessionStreamEvent & { sessionId?, prevSeq? }
+ * 传输层信封：WireStreamEvent = SessionStreamEvent & { sessionId?, prevSeq?, chunkSeq?, streamBootId? }
  * （chat-runner 注入 prevSeq 续传游标，session-events 注入 sessionId 后经 SSE 下发）
  */
 
@@ -388,13 +388,16 @@ export type SessionStreamEvent =
   | ToolImagePruneEvent
   | MessageChunkEvent;
 
-/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */
+/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 chunkSeq/streamBootId） */
 export type WireStreamEvent = SessionStreamEvent & {
   sessionId?: string;
-  /** 续传游标：广播那一刻该会话最后一条已入库事件的 seq（先入库后发事件的契约下精确） */
+  /** 落库区间：广播那一刻该会话最后一条已入库事件的 seq（先入库后发事件的契约下精确） */
   prevSeq?: number;
-  /** 幂等序号：每会话单调递增（SessionStreamManager.publish 唯一盖戳点；前端重放去重游标） */
-  streamSeq?: number;
-  /** 后端进程启动标识：重启后 streamSeq 归零，前端据此重置幂等游标 */
+  /**
+   * 区间内帧序号：同一 prevSeq 下第 n 个帧（1 起，prevSeq 前进时归零）。
+   * 与 prevSeq 组成传输位置 `(prevSeq, chunkSeq)`，前端据此做重放去重与区间归属。
+   */
+  chunkSeq?: number;
+  /** 后端进程启动标识：重启后传输位置重置（chunkSeq 从 1 起），前端据此重置幂等游标 */
   streamBootId?: string;
 };

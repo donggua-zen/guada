@@ -127,8 +127,8 @@ describe("StreamEventHub 在飞尾部(getTailAfterLastCheckpoint)", () => {
   it("只读：不推进去重游标、不清邮箱", () => {
     const onEvent = vi.fn();
     hub.subscribeAll(onEvent);
-    const seqEv = (type: string, streamSeq: number): HubStreamEvent =>
-      ({ type, sessionId: "s1", prevSeq: 1, streamSeq, streamBootId: "boot1" } as HubStreamEvent);
+    const seqEv = (type: string, ord: number): HubStreamEvent =>
+      ({ type, sessionId: "s1", prevSeq: 1, chunkSeq: ord, streamBootId: "boot1" } as HubStreamEvent);
 
     hub.route(seqEv("turn_end", 1)); // checkpoint（已落盘边界）
     hub.route(seqEv("turn_start", 2));
@@ -151,84 +151,138 @@ describe("StreamEventHub 在飞尾部(getTailAfterLastCheckpoint)", () => {
 });
 
 /**
- * 入口幂等:后端 publish 为事件盖戳 streamSeq(每会话单调)+ streamBootId(进程标识)。
+ * 入口幂等:后端 publish 为每条帧盖戳 (prevSeq, chunkSeq) + streamBootId(进程标识)。
  * SSE 重连时连接补发会重放整个 eventBuffer——已路由过的事件必须丢弃,
  * 否则已加载会话的 live 路径会把 delta 重复追加(文本翻倍)。
  */
-describe("StreamEventHub 入口幂等(streamSeq 去重)", () => {
+describe("StreamEventHub 入口幂等((prevSeq, chunkSeq) 元组去重)", () => {
   let hub: StreamEventHub;
 
   beforeEach(() => {
     hub = new StreamEventHub();
   });
 
-  /** 带盖戳序号的合成事件(prevSeq 带上,便于 subscribe 增量断言) */
+  /** 带传输位置的合成事件 */
   function seqEv(
     type: string,
     sessionId: string,
-    streamSeq: number,
+    logSeq: number,
+    ord: number,
     bootId = "boot1",
   ): HubStreamEvent {
-    return { type, sessionId, prevSeq: 1, streamSeq, streamBootId: bootId } as HubStreamEvent;
+    return {
+      type,
+      sessionId,
+      prevSeq: logSeq,
+      chunkSeq: ord,
+      streamBootId: bootId,
+    } as HubStreamEvent;
   }
 
-  it("重连补发的重放事件(streamSeq <= 游标)丢弃,窗口期新到事件保留", () => {
+  it("重连补发的重放事件(位置 <= 游标)丢弃,窗口期新到事件保留", () => {
     const onEvent = vi.fn();
     hub.subscribeAll(onEvent);
 
-    // 首次连接:live 1..3
-    hub.route(seqEv("turn_start", "s1", 1));
-    hub.route(seqEv("text_delta", "s1", 2));
-    hub.route(seqEv("text_delta", "s1", 3));
+    // 首次连接:live (0,1)..(0,3)
+    hub.route(seqEv("turn_start", "s1", 0, 1));
+    hub.route(seqEv("text_delta", "s1", 0, 2));
+    hub.route(seqEv("text_delta", "s1", 0, 3));
     expect(onEvent).toHaveBeenCalledTimes(3);
 
-    // SSE 重连:后端补发重放 buffer 1..3,另含断连窗口期新到的 4
-    hub.route(seqEv("turn_start", "s1", 1));
-    hub.route(seqEv("text_delta", "s1", 2));
-    hub.route(seqEv("text_delta", "s1", 3));
-    hub.route(seqEv("text_delta", "s1", 4));
+    // SSE 重连:后端补发重放 buffer (0,1)..(0,3),另含断连窗口期新到的 (0,4)
+    hub.route(seqEv("turn_start", "s1", 0, 1));
+    hub.route(seqEv("text_delta", "s1", 0, 2));
+    hub.route(seqEv("text_delta", "s1", 0, 3));
+    hub.route(seqEv("text_delta", "s1", 0, 4));
 
-    // 只有 4 是新事件
+    // 只有 (0,4) 是新事件
     expect(onEvent).toHaveBeenCalledTimes(4);
-    expect(onEvent.mock.calls[3][0].streamSeq).toBe(4);
+    expect(onEvent.mock.calls[3][0].chunkSeq).toBe(4);
     // 邮箱无重复
     expect(hub.getMailboxSize("s1")).toBe(4);
   });
 
-  it("bootId 变化(后端重启)重置游标:序号归零的新流事件照常接收", () => {
+  it("元组边界:同区间递增通过、同元组与低区间丢弃、区间前进接受", () => {
     const onEvent = vi.fn();
     hub.subscribeAll(onEvent);
 
-    hub.route(seqEv("text_delta", "s1", 5, "boot1"));
-    // 后端重启:序号从 1 重新开始,bootId 不同 → 接受并重置游标
-    hub.route(seqEv("turn_start", "s1", 1, "boot2"));
-    hub.route(seqEv("text_delta", "s1", 2, "boot2"));
+    hub.route(seqEv("text_delta", "s1", 3, 1));
+    hub.route(seqEv("text_delta", "s1", 3, 2)); // 同区间递增 → 通过
+    hub.route(seqEv("text_delta", "s1", 3, 2)); // 同元组 → 丢弃
+    hub.route(seqEv("text_delta", "s1", 2, 9)); // 低区间 → 丢弃
+    hub.route(seqEv("text_delta", "s1", 4, 1)); // 区间前进,ord 归零 → 通过
+    hub.route(seqEv("text_delta", "s1", 4, 1)); // 同元组 → 丢弃
+
     expect(onEvent).toHaveBeenCalledTimes(3);
-    // 重置后在新 bootId 下继续按序号去重
-    hub.route(seqEv("turn_start", "s1", 1, "boot2"));
+    expect(hub.getCursor("s1")).toEqual({
+      bootId: "boot1",
+      prevSeq: 4,
+      chunkSeq: 1,
+    });
+  });
+
+  it("bootId 变化(后端重启)重置游标:位置归零的新流事件照常接收", () => {
+    const onEvent = vi.fn();
+    hub.subscribeAll(onEvent);
+
+    hub.route(seqEv("text_delta", "s1", 0, 5, "boot1"));
+    // 后端重启:位置从 (0,1) 重新开始,bootId 不同 → 接受并重置游标
+    hub.route(seqEv("turn_start", "s1", 0, 1, "boot2"));
+    hub.route(seqEv("text_delta", "s1", 0, 2, "boot2"));
+    expect(onEvent).toHaveBeenCalledTimes(3);
+    // 重置后在新 bootId 下继续按元组去重
+    hub.route(seqEv("turn_start", "s1", 0, 1, "boot2"));
     expect(onEvent).toHaveBeenCalledTimes(3);
   });
 
-  it("无 streamSeq 的事件放行(fail-open),不影响游标", () => {
+  it("缺位置字段的事件放行(fail-open),不影响游标", () => {
     const onEvent = vi.fn();
     hub.subscribeAll(onEvent);
     const plain = (type: string): HubStreamEvent =>
-      ({ type, sessionId: "s1", prevSeq: 1 } as HubStreamEvent);
+      ({ type, sessionId: "s1", prevSeq: 1 } as HubStreamEvent); // 无 chunkSeq
 
-    hub.route(plain("text_delta")); // 无序号 → 放行
-    hub.route(seqEv("text_delta", "s1", 1)); // 建立游标
-    hub.route(seqEv("text_delta", "s1", 1)); // 重复 → 丢弃
-    hub.route(plain("text_delta")); // 无序号 → 放行
+    hub.route(plain("text_delta")); // 缺字段 → 放行
+    hub.route(seqEv("text_delta", "s1", 1, 1)); // 建立游标
+    hub.route(seqEv("text_delta", "s1", 1, 1)); // 重复 → 丢弃
+    hub.route(plain("text_delta")); // 缺字段 → 放行
     expect(onEvent).toHaveBeenCalledTimes(3);
+    expect(hub.getCursor("s1")).toEqual({
+      bootId: "boot1",
+      prevSeq: 1,
+      chunkSeq: 1,
+    });
   });
 
-  it("cleanup 一并清掉幂等游标", () => {
+  it("cleanup 一并清掉幂等游标与缺口", () => {
     const onEvent = vi.fn();
     hub.subscribeAll(onEvent);
-    hub.route(seqEv("text_delta", "s1", 5));
+    hub.route(seqEv("text_delta", "s1", 5, 1));
+    hub.noteCatchupPositions([{ sessionId: "s1", prevSeq: 6, chunkSeq: 1 }]);
+    expect(hub.hasPendingGap("s1")).toBe(true);
+
     hub.cleanup("s1");
     expect(hub.getMailboxSize("s1")).toBe(0);
-    hub.route(seqEv("text_delta", "s1", 3)); // 游标已清 → 接受
+    expect(hub.getCursor("s1")).toBeUndefined();
+    expect(hub.hasPendingGap("s1")).toBe(false);
+
+    hub.route(seqEv("text_delta", "s1", 3, 1)); // 游标已清 → 接受
     expect(onEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it("补发起点越过游标区间 → 标记缺口；同区间跳跃不标记", () => {
+    // 无游标 → 不判定
+    hub.noteCatchupPositions([{ sessionId: "s1", prevSeq: 5, chunkSeq: 1 }]);
+    expect(hub.hasPendingGap("s1")).toBe(false);
+
+    hub.route(seqEv("text_delta", "s1", 3, 2));
+    // 同区间内起点更靠后（cleanup 删过 delta）→ 合法空洞,不标记
+    hub.noteCatchupPositions([{ sessionId: "s1", prevSeq: 3, chunkSeq: 9 }]);
+    expect(hub.hasPendingGap("s1")).toBe(false);
+    // 起点落在更晚的落库区间 → 中间可能有本地没收到的事件 → 标记
+    hub.noteCatchupPositions([{ sessionId: "s1", prevSeq: 4, chunkSeq: 1 }]);
+    expect(hub.hasPendingGap("s1")).toBe(true);
+
+    hub.clearStreamGap("s1");
+    expect(hub.hasPendingGap("s1")).toBe(false);
   });
 });

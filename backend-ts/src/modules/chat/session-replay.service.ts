@@ -30,6 +30,10 @@ export interface EventPageResult {
 
 /** 页容量上限（防超大拉取） */
 const MAX_PAGE_TURNS = 100;
+/** 增量读单批上限：超过即让客户端整页重拉（避免无界追补） */
+const MAX_TAIL_EVENTS = 2000;
+/** 增量读默认批量 */
+const MAX_TAIL_EVENTS_DEFAULT = 500;
 
 /**
  * 反向 start 计数（页定位核心）：从 fromIdx 向前数 N 个有效 turn/start。
@@ -117,6 +121,58 @@ export class SessionReplayService {
       }
     }
     return this.getEventPageViaAllEvents(sessionId, opts);
+  }
+
+  /**
+   * 前向增量读（`seq > afterSeq`）——客户端断点续传的唯一数据源。
+   *
+   * 快路径走锚点索引的段级定位（只读含缺口的段 + 锚点收窄起点），失败回退
+   * 全量过滤（权威语义）；真实损坏照旧 fail-fast。返回附带 `tailSeq`，客户端
+   * 据此判断"是否已追平"，不必再单独请求。
+   *
+   * @param opts.afterSeq 客户端已应用到的最高 seq（缺省 -1 = 全量）
+   * @param opts.limit 单批上限（钳制 [1,2000]，缺省 500）——超过即让客户端整页重拉
+   */
+  async getEventsAfter(
+    sessionId: string,
+    opts: { afterSeq?: number; limit?: number } = {},
+  ): Promise<{
+    events: BaseEvent[];
+    endSeq: number;
+    tailSeq: number;
+    hasMoreAfter: boolean;
+  }> {
+    const afterSeq =
+      typeof opts.afterSeq === "number" && Number.isFinite(opts.afterSeq)
+        ? opts.afterSeq
+        : -1;
+    const limit = Math.min(Math.max(1, opts.limit ?? MAX_TAIL_EVENTS_DEFAULT), MAX_TAIL_EVENTS);
+
+    const pageIndex = this.backend.index;
+    if (pageIndex?.readTail) {
+      try {
+        const tail = await pageIndex.readTail(sessionId, { afterSeq, limit });
+        return {
+          ...tail,
+          tailSeq: await this.backend.tailSeq(sessionId),
+        };
+      } catch (e) {
+        if (e instanceof CorruptSessionLogError) throw e;
+        this.logger.warn(
+          `[session-replay] 增量读失败，回退全量扫描: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    }
+
+    const events = await this.backend.getAllEvents(sessionId);
+    const after = events.filter((e) => e.seq > afterSeq);
+    const page = after.slice(0, limit);
+    return {
+      events: page,
+      endSeq: page.length > 0 ? page[page.length - 1].seq : afterSeq,
+      tailSeq: events.length > 0 ? events[events.length - 1].seq : -1,
+      hasMoreAfter: after.length > limit,
+    };
   }
 
   /** 兜底路径：getAllEvents 全量 + 同款 start 计数组装（权威实现，页语义与快路径一致） */

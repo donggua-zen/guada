@@ -60,22 +60,30 @@ export class SessionStreamManager {
   private readonly activeStreams = new Map<string, ActiveStream>();
   private readonly DEFAULT_MAX_BUFFER_SIZE = 2000;
   /**
-   * 进程启动标识：随每条事件下发（streamBootId）。进程重启后计数器归零，
-   * 前端幂等游标据此识别"序号已重置"，避免把新流的首批事件误判为重复。
-   * 取值来自全局 APP_BOOT_ID（与 jobs 快照的 bootId 同一真相）。
+   * 进程启动标识：随每条事件下发（streamBootId）。进程重启后传输位置重置
+   * （chunkSeq 从 1 起），前端幂等游标据此识别"位置已重置"，
+   * 避免把新进程的首批事件误判为重复。取值来自全局 APP_BOOT_ID（与 jobs 快照同一真相）。
    */
   private readonly bootId = APP_BOOT_ID;
   /**
-   * 每会话单调流序号（publish 唯一盖戳点）。不随 ActiveStream 销毁重置——
-   * 回合结束 stopStream 后下一回合序号继续递增，否则前端会把新回合事件误判为已消费。
-   * 仅按会话累积一个数字，无清理钩子（量级可忽略）。
+   * 每会话传输位置（publish 唯一盖戳点）：`{ base: 落库区间, ord: 区间内帧序号 }`。
+   *
+   * - 不随 ActiveStream 销毁重置：回合结束 stopStream 后下一回合继续在上一位置之上递增，
+   *   否则新回合首帧会与前端旧游标冲突而被判为重复。
+   * - `base` 前进（有新事件落库）时 `ord` 归零；`base` 必须单调——publishStream 先
+   *   await 存储读、并发缓存重建可能让 prevSeq 乱序，回退帧沿用当前 base 并递增 ord
+   *   （只影响区间标注，不影响帧的顺序与去重）。
+   * - 仅按会话累积，无清理钩子（量级与会话数同阶）。
    */
-  private readonly streamSeqBySession = new Map<string, number>();
+  private readonly chunkPosBySession = new Map<
+    string,
+    { base: number; ord: number }
+  >();
   /**
    * 每会话最后已入库 seq 的保守下界（publish 时取 max(prevSeq)）。
    *
    * prevSeq 是发布时刻的入库游标（只会低估不会高估），供终态墓碑携带，作为
-   * "客户端可能缺到哪"的下界；与 streamSeqBySession 同策略不随 stopStream 清理。
+   * "客户端可能缺到哪"的下界；与 chunkPosBySession 同策略不随 stopStream 清理。
    */
   private readonly lastPersistedSeqBySession = new Map<string, number>();
 
@@ -142,7 +150,7 @@ export class SessionStreamManager {
 
   /**
    * 订阅已存在的流（内部订阅：事件实时经 subject 转发，无游标补发——
-   * 增量续传由 SSE 全局广播 + 前端 StreamEventHub(prevSeq>=lastSeq) 承担）
+   * 增量续传由 SSE 全局广播 + 前端 StreamEventHub((prevSeq, chunkSeq) 元组去重) 承担）
    *
    * @param sessionId 会话 ID
    * @param subscriberId 订阅者唯一标识
@@ -221,14 +229,24 @@ export class SessionStreamManager {
       }
     }
 
-    // 盖戳：每会话单调 streamSeq + 进程 bootId。前端 StreamEventHub 据此做入口幂等——
-    // SSE 重连时连接补发会重放整个 eventBuffer，已消费过的事件（序号 <= 游标）直接丢弃，
-    // 防止 delta 重复追加导致文本翻倍。
-    const streamSeq = (this.streamSeqBySession.get(sessionId) ?? 0) + 1;
-    this.streamSeqBySession.set(sessionId, streamSeq);
+    // 传输位置 = 落库区间(base) + 区间内帧序号(ord)。
+    // base 取 prevSeq（发布时刻的入库游标）；并发 publishStream 可能乱序，回退时
+    // 钳制到当前 base 并递增 ord，保证 (base, ord) 字典序严格单调。
+    const prevPos = this.chunkPosBySession.get(sessionId);
+    const rawBase =
+      typeof event.prevSeq === "number" && Number.isFinite(event.prevSeq)
+        ? event.prevSeq
+        : prevPos?.base ?? 0;
+    const base = prevPos ? Math.max(rawBase, prevPos.base) : rawBase;
+    const ord = prevPos && base === prevPos.base ? prevPos.ord + 1 : 1;
+    this.chunkPosBySession.set(sessionId, { base, ord });
+
+    // 前端 StreamEventHub 按同 bootId 下的 (prevSeq, chunkSeq) 元组做入口幂等——
+    // SSE 重连补发重放 eventBuffer 时，已消费过的帧直接丢弃，防止 delta 重复累加。
     const stamped: StreamEvent = {
       ...event,
-      streamSeq,
+      prevSeq: base,
+      chunkSeq: ord,
       streamBootId: this.bootId,
     };
 

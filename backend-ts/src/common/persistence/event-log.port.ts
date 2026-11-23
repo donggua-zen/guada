@@ -93,6 +93,21 @@ export interface EventLogPageIndex {
     hasMore: boolean;
   }>;
   /**
+   * 可选：前向增量读（`seq > afterSeq`，按 seq 序）。
+   *
+   * 用于客户端断点续传：只读缺失的尾部，而不是重拉整页。实现应尽量跳读
+   * （段级定位 + 锚点收窄），失败时由调用方回退全量过滤。
+   * 未实现（如测试替身/非 JSONL 驱动）时调用方直接走全量路径。
+   */
+  readTail?(
+    sessionId: string,
+    opts: { afterSeq: number; limit: number },
+  ): Promise<{
+    events: BaseEvent[];
+    endSeq: number;
+    hasMoreAfter: boolean;
+  }>;
+  /**
    * 作废索引（删除文件，读时缺失 → 单卷重建兜底）。
    * @param segFile 缺省 = 全部卷（如会话重写）；指定则只失效该卷（如 truncate）
    */

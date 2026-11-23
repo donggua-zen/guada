@@ -459,11 +459,18 @@ function applyDomainEvent(
       if (!turn) return;
       if (!Array.isArray(turn.messages)) turn.messages = [];
       const msgId = data.messageId;
-      if (turn.messages.some((m) => m.messageId === msgId)) return; // 幂等
-      const bundle = ensureBundle(turn, msgId, "assistant");
-      // 消息级元数据（usage/finishReason 等）归 bundle；块不再挂消息级字段
-      bundle.metadata = { ...(data.metadata ?? {}) };
+      const existing = turn.messages.find((m) => m.messageId === msgId);
+      // 增量补拉的关键：live 期间已建出（可能被截断的）bundle 时，落盘事件必须能**修复**它，
+      // 而不是整条跳过（旧实现直接 return，截断内容永远补不回来）。
+      // 修复策略：事件覆盖到的每个 blockIndex 先摘掉旧块再按完整块重建——避免
+      // reasoning 时长这类"累加型"字段在重复应用时翻倍；metadata 合并而非整体替换。
+      const bundle = existing ?? ensureBundle(turn, msgId, "assistant");
+      bundle.metadata = { ...(bundle.metadata || {}), ...(data.metadata ?? {}) };
       (data.content ?? []).forEach((block: ContentBlock, index: number) => {
+        if (existing && Array.isArray(bundle.blocks)) {
+          const dupIdx = bundle.blocks.findIndex((b) => b.blockIndex === index);
+          if (dupIdx !== -1) bundle.blocks.splice(dupIdx, 1);
+        }
         const content = ensureBlockInBundle(bundle, index);
         applyCompleteBlock(content, block);
         content.state.isStreaming = false;
@@ -1162,12 +1169,17 @@ function applyChunkToStore(
       };
       turns.push(turn);
     }
-    // 回合级工作态：turn_start 开括号 → 进入"工作中"（纯前端瞬态，不落库）
+    // 回合级工作态：turn_start 开括号 → 进入"工作中"（纯前端瞬态，不落库）。
+    // 增量补拉会把历史 turn/start 再应用一遍：已收尾（有 finishReason）的回合
+    // 不得被重新标成工作中，否则已完成回合会永久转圈。
+    const alreadyFinished = turn.metadata?.finishReason != null;
     if (!turn.state) turn.state = {};
-    turn.state.isWorking = true;
-    // 工作时长秒表锚点（前端瞬态，与 isWorking 同层）：流式期间由该锚点跳动显示已耗时；
-    // 回合结束以服务端 totalDurationMs 为准覆盖（本地时钟仅用于期间的实时展示）。
-    if (turn.state.startedAt == null) turn.state.startedAt = Date.now();
+    if (!alreadyFinished) {
+      turn.state.isWorking = true;
+      // 工作时长秒表锚点（前端瞬态，与 isWorking 同层）：流式期间由该锚点跳动显示已耗时；
+      // 回合结束以服务端 totalDurationMs 为准覆盖（本地时钟仅用于期间的实时展示）。
+      if (turn.state.startedAt == null) turn.state.startedAt = Date.now();
+    }
     // 回合级 modelName（与历史 turn/finish 合并的 modelName 同字段，assistantMetadata 统一读 turn.metadata）
     if (chunk.modelName) {
       if (!turn.metadata) turn.metadata = {};
@@ -1563,6 +1575,64 @@ export function foldEvents(
       events: chunks.length,
       turns: sessionStore.getTurns(sessionId)?.length ?? 0,
     });
+  }
+}
+
+/**
+ * 增量应用一批持久化领域事件（断点续传）：**不清树、不 fold**，直接并入现有树。
+ *
+ * 与 foldEvents 的区别：
+ * - foldEvents 是"清空 + 全量重建"（首屏/load-more）；本函数只补缺失尾部。
+ * - 走 `replay` 模式：不触发 turn_end 的 `clearSessionPendingAsks` / `refreshPlans`
+ *   这类实时副作用（否则会把在线待答卡清掉、为每个历史回合打一次计划接口）。
+ *
+ * 游标播种：批次可能从回合中间开始（缺 turn/start），此时 `assistant/message`
+ * 会因找不到当前回合被丢弃。调用方通过 `startTurnId` 显式给出该回合，避免丢内容
+ * 或让 `user/message` 造出假回合。
+ *
+ * 幂等：领域事件按 messageId/blockIndex/turnId 幂等（见 applyDomainEvent），
+ * 因此重复应用同一批不会产生重复内容（reasoning 时长按块重建，不再累加）。
+ */
+export function applyEventsIncremental(
+  sessionStore: ProjectorSessionStore,
+  sessionId: string,
+  events: readonly ProjectorChunk[],
+  opts: { startTurnId?: string } = {},
+): void {
+  const span = perfStart("replay.incrementalApply");
+  try {
+    // 游标播种优先级：调用方显式给出 > 本地唯一的未闭合回合（批次从回合中间开始）。
+    // 不播种时 `assistant/message` 会因找不到当前回合被丢弃。
+    const startTurnId =
+      opts.startTurnId ??
+      (sessionStore.getTurns(sessionId) ?? []).filter(
+        (t) => t.state?.isWorking === true,
+      ).slice(-1)[0]?.id;
+    currentTurnBySession.set(sessionId, startTurnId);
+    // 同步进事件数组：load-more 会 re-fold 整个 eventLog，增量批不记账会被"折没"。
+    // 按 seq 去重（水位保证本批 seq 均 > 已应用，但并发路径可能已追加过同一条）。
+    const state = sessionStore.getSessionState(sessionId);
+    if (!state.eventLog) state.eventLog = [];
+    const knownSeqs = new Set(
+      state.eventLog
+        .map((e) => (e as { seq?: number }).seq)
+        .filter((s): s is number => typeof s === "number"),
+    );
+    for (const ev of events) {
+      const seq = (ev as { seq?: number }).seq;
+      if (typeof seq === "number") {
+        if (knownSeqs.has(seq)) continue;
+        knownSeqs.add(seq);
+      }
+      state.eventLog.push(ev);
+    }
+    for (const ev of events) {
+      applyChunkToStore(sessionStore, sessionId, ev, "replay");
+    }
+  } finally {
+    // 批次结束不保留游标：后续 live 事件由 turn_start/turn_end 自行维护
+    currentTurnBySession.set(sessionId, undefined);
+    span?.end({ events: events.length });
   }
 }
 

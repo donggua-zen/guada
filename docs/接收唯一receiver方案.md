@@ -2,6 +2,30 @@
 
 > 目标:前端**发送与接收分离**。发送是发送(独立入口,只调后端),接收是接收(**全局唯一 receiver**,消费全局 SSE 通道)。所有流式事件——无论自己发起、其他窗口发起、刷新后订阅——都进唯一 receiver 处理。
 
+## 现行实现（2026-11 更新，以本节为准）
+
+> 下文"目标架构 / DSH 对照 / 改造计划"保留为设计沿革。其中 `subscribe(sid, lastSeq)`、
+> `setHistoryBaseline`、按会话注销/基线等描述已在清理中删除，不再存在于代码。
+
+- **接收链路**：`SessionEventsService`（单条全局 SSE）→ `method` 以 `stream/*` 开头的帧进
+  `StreamEventHub.route`；其余会话事件按 `type` 分发给 `onSessionEvent` 监听器。
+- **唯一消费入口**：`StreamEventHub.subscribeAll`（由 `useSessionEvents` 常驻消费）。
+  按会话 `subscribe` / 历史基线 API 已删除。
+- **重放去重（传输位置）**：每条流帧带 `(prevSeq, chunkSeq)` + `streamBootId`。
+  - `prevSeq` = 发布时刻最后一条已落库事件的 seq（落库区间，整数）；
+  - `chunkSeq` = 同一区间内第 n 个帧（1 起；区间前进时归零；按会话连续、跨回合不重置）；
+  - 同 `bootId` 下位置 ≤ 本会话去重游标 → 判定为重放重复，丢弃；`bootId` 变化 → 重置游标；
+  - 缺任一位置字段的帧 fail-open（不去重，兼容异常/旧帧）。
+  - 同区间内的 `chunkSeq` 空洞是合法的：`cleanupIntermediateEvents` 会删掉已完成的 delta
+    （由 `block_end` 携带完整块替代），因此**不能用 `chunkSeq` 连续性判断丢帧**。
+- **补发覆盖度**：SSE 建连补发的第一帧 `connected` 带 `payload.streamPositions`
+  （各活跃流 `eventBuffer[0]` 的位置）。若起点 `prevSeq` 越过本地游标 `prevSeq`，
+  说明本次补发没覆盖缺口 → 前端标记 gap，冻结已应用水位的推进，恢复走整页重拉；
+  整页重拉成功后清除标记。
+- **历史与增量**：历史用事件页（Turn 锚点索引，`beforeSeq` 反向翻页）；
+  断点续传用 `GET /chat/sessions/:id/events/tail?afterSeq=...`（`seq > afterSeq` 前向增量）。
+  前者 fold 重建，后者就地应用。
+
 ## 一、目标架构
 
 ```

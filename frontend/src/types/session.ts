@@ -298,6 +298,12 @@ export interface SessionState {
     >
     /** 分页游标：下一页事件页的 beforeSeq（页首前一 seq）；null = 无更早内容 */
     eventCursor?: number | null
+    /**
+     * 已应用水位：本地树已反映到的最高持久化事件 seq（不持久化）。
+     * 断点续传据此只拉缺失尾部（`seq > appliedSeq`）；未加载过内容时缺省。
+     * 只由"实际应用进树的持久化事件"推进（初始页 endSeq / 增量批 endSeq / live prevSeq）。
+     */
+    appliedSeq?: number
     inputMessage: InputMessageState
     lastUpdated: number
     settings: SessionSettings

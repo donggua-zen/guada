@@ -962,6 +962,23 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
+     * 已应用水位（本地树已反映到的最高持久化 seq）
+     *
+     * 单调递增：并发路径（live prevSeq / 增量批 endSeq / 整页 endSeq）谁先到都不会回退，
+     * 避免"回退水位 → 重复拉取同一段"或"跳过缺口"。
+     */
+    const setAppliedSeq = (sessionId: string, seq: number): void => {
+        if (!Number.isFinite(seq) || seq < 0) return
+        const state = getSessionState(sessionId)
+        state.appliedSeq = Math.max(state.appliedSeq ?? -1, seq)
+    }
+
+    /** 纯读已应用水位（不创建缓存；未加载返回 undefined） */
+    const getAppliedSeq = (sessionId: string): number | undefined => {
+        return sessions.value.get(sessionId)?.appliedSeq
+    }
+
+    /**
      * 清理侧边栏状态（删除会话时调用）
      * @param sessionId - 会话 ID
      */
@@ -984,6 +1001,8 @@ export const useSessionStore = defineStore('session', () => {
             state.turns.splice(0, state.turns.length)
             state.eventLog = []
             state.loaded = false
+            // 水位随内容一起清空：否则后续断点续传会认为"已追平"而跳过全部历史
+            state.appliedSeq = undefined
             state.isStreaming = false
             state.isCompressing = false
             state.pendingAsks = undefined
@@ -1076,6 +1095,8 @@ export const useSessionStore = defineStore('session', () => {
         setSidebarFlag,
         getSidebarFlag,
         syncStreamingState,
+        setAppliedSeq,
+        getAppliedSeq,
         clearSidebarState
     }
 })

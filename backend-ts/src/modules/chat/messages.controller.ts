@@ -57,6 +57,38 @@ export class MessagesController {
   }
 
   /**
+   * 前向增量读（断点续传）：返回 `seq > afterSeq` 的领域事件。
+   *
+   * 与事件页的区别：不按回合对齐、不重拉已加载历史，只补缺失尾部；客户端据此
+   * 就地应用到现有树（无需全量 fold）。`hasMoreAfter` 为 true 表示缺口超过单批
+   * 上限，调用方应改为整页重拉。
+   *
+   * @param afterSeq 客户端已应用到的最高 seq（缺省 -1 = 全量）
+   * @param limit 单批上限（缺省 500，上限 2000）
+   * @returns { events, endSeq, tailSeq, hasMoreAfter }
+   */
+  @Get("sessions/:sessionId/events/tail")
+  async getEventsTail(
+    @Param("sessionId") sessionId: string,
+    @Query("afterSeq") afterSeq?: string,
+    @Query("limit") limit?: string,
+  ) {
+    await this.ensureSession(sessionId);
+    const parsedAfter = afterSeq !== undefined ? parseInt(afterSeq, 10) : undefined;
+    const parsedLimit = limit !== undefined ? parseInt(limit, 10) : undefined;
+    return this.replayService.getEventsAfter(sessionId, {
+      afterSeq:
+        parsedAfter !== undefined && Number.isFinite(parsedAfter)
+          ? parsedAfter
+          : undefined,
+      limit:
+        parsedLimit !== undefined && Number.isFinite(parsedLimit)
+          ? parsedLimit
+          : undefined,
+    });
+  }
+
+  /**
    * 删除本轮对话（按回合 id 整轮遮蔽）
    */
   @Delete("sessions/:sessionId/turns/:turnId")

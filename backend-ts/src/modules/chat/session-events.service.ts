@@ -212,12 +212,40 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    */
   private buildCatchupEvents(): MessageEvent[] {
     const events: MessageEvent[] = [];
+    const activeStreams = this.streamManager.getActiveStreams();
 
-    // 连接成功事件
+    // 连接成功事件 + 各活跃流的"补发起点位置"。
+    //
+    // 位置 = eventBuffer[0] 的 (prevSeq, chunkSeq)：即本次补发会从哪一帧开始重放。
+    // 客户端拿自己的去重游标与之比较，可判断"这次补发是否覆盖了我缺的部分"：
+    // 起点 prevSeq > 游标 prevSeq ⇒ 中间跨过了落库区间，可能丢了内容 → 回退整页重拉。
+    // 该帧先于所有重放帧到达（补发是返回流的前缀），因此客户端能在处理重放前先立标记。
+    const streamPositions = activeStreams
+      .map((stream) => {
+        const first = stream.eventBuffer[0];
+        if (
+          !first ||
+          typeof first.prevSeq !== "number" ||
+          typeof first.chunkSeq !== "number"
+        ) {
+          return null;
+        }
+        return {
+          sessionId: stream.sessionId,
+          prevSeq: first.prevSeq,
+          chunkSeq: first.chunkSeq,
+        };
+      })
+      .filter(
+        (p): p is { sessionId: string; prevSeq: number; chunkSeq: number } =>
+          p !== null,
+      );
+
     events.push({
       data: JSON.stringify({
         type: "connected",
         timestamp: new Date().toISOString(),
+        payload: { streamPositions },
       }),
     } as MessageEvent);
 
@@ -235,11 +263,9 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       }),
     } as MessageEvent);
 
-    const activeStreams = this.streamManager.getActiveStreams();
-
     // 统一 SSE:连接建立时补发全部活跃流的 eventBuffer 增量。
     // 替代前端 catchup HTTP 拉取——刷新/多窗口重连时,连接前已产生的流式事件在此补发,
-    // 前端按 payload.sessionId 归会话、按 streamSeq 入口幂等去重后消费。
+    // 前端按 payload.sessionId 归会话、按 (prevSeq, chunkSeq) 元组做入口幂等去重后消费。
     for (const stream of activeStreams) {
       for (const chunk of stream.eventBuffer) {
         const unified = createUnifiedEvent(

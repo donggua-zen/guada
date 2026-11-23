@@ -70,6 +70,7 @@ export class JsonlBackend implements MessageEventLog {
   /** 页索引能力（可选端口能力）：尾部事件页读加速（块级位置索引倒序流） */
   readonly index: EventLogPageIndex = {
     readPage: (sessionId, opts) => this.anchorIndex.readPage(sessionId, opts),
+    readTail: (sessionId, opts) => this.anchorIndex.readTail(sessionId, opts),
     invalidate: (sessionId, segFile) => this.anchorIndex.invalidate(sessionId, segFile),
   };
 

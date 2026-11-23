@@ -171,7 +171,7 @@ describe("useSessionEvents 统一订阅器", () => {
     // 旧进程的流事件：建立 bootId 基线
     streamEventHub.route({
       type: "turn_start", sessionId: "boot-s1", turnId: "T1",
-      streamSeq: 1, streamBootId: "boot-A",
+      prevSeq: 0, chunkSeq: 1, streamBootId: "boot-A",
     } as any);
 
     store.upsertSessionPendingAsk("boot-s1", { requestId: "req1", kind: "approval", questions: [] });
@@ -179,7 +179,7 @@ describe("useSessionEvents 统一订阅器", () => {
     // 新进程事件（bootId 变化）→ 残留待批被清
     streamEventHub.route({
       type: "turn_start", sessionId: "boot-s1", turnId: "T2",
-      streamSeq: 1, streamBootId: "boot-B",
+      prevSeq: 0, chunkSeq: 1, streamBootId: "boot-B",
     } as any);
 
     expect(store.sessionPendingAsk("boot-s1")).toBeUndefined();
@@ -191,7 +191,7 @@ describe("useSessionEvents 统一订阅器", () => {
 
     streamEventHub.route({
       type: "turn_start", sessionId: "boot-s2", turnId: "T1",
-      streamSeq: 1, streamBootId: "boot-C",
+      prevSeq: 0, chunkSeq: 1, streamBootId: "boot-C",
     } as any);
 
     store.upsertSessionPendingAsk("boot-s2", { requestId: "req1", kind: "approval", questions: [] });
@@ -199,10 +199,85 @@ describe("useSessionEvents 统一订阅器", () => {
     // 同进程的后续事件（重连补发的连续帧）：不得触发全清
     streamEventHub.route({
       type: "turn_start", sessionId: "boot-s2", turnId: "T2",
-      streamSeq: 2, streamBootId: "boot-C",
+      prevSeq: 0, chunkSeq: 2, streamBootId: "boot-C",
     } as any);
 
     expect(store.sessionPendingAsk("boot-s2")?.requestId).toBe("req1");
+  });
+
+  it("补发缺口未清前，live 帧不推进已应用水位", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    streamEventHub.route({
+      type: "text_delta",
+      sessionId: "gap-s1",
+      text: "a",
+      prevSeq: 5,
+      chunkSeq: 1,
+      streamBootId: "boot-gap",
+    } as any);
+    expect(store.getAppliedSeq("gap-s1")).toBe(5);
+
+    // 连接补发起点落在更晚的落库区间 → 中间可能有没收到的事件
+    streamEventHub.noteCatchupPositions([
+      { sessionId: "gap-s1", prevSeq: 6, chunkSeq: 1 },
+    ]);
+    expect(streamEventHub.hasPendingGap("gap-s1")).toBe(true);
+
+    streamEventHub.route({
+      type: "text_delta",
+      sessionId: "gap-s1",
+      text: "b",
+      prevSeq: 6,
+      chunkSeq: 1,
+      streamBootId: "boot-gap",
+    } as any);
+    expect(store.getAppliedSeq("gap-s1")).toBe(5); // 冻结
+
+    // 整页重拉后缺口清除，水位恢复推进
+    streamEventHub.clearStreamGap("gap-s1");
+    streamEventHub.route({
+      type: "text_delta",
+      sessionId: "gap-s1",
+      text: "c",
+      prevSeq: 7,
+      chunkSeq: 1,
+      streamBootId: "boot-gap",
+    } as any);
+    expect(store.getAppliedSeq("gap-s1")).toBe(7);
+  });
+
+  it("connected 携带补发起点且当前会话存在缺口 → 派发强制重拉", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    // 建立本地游标
+    streamEventHub.route({
+      type: "text_delta",
+      sessionId: "s1",
+      text: "a",
+      prevSeq: 3,
+      chunkSeq: 1,
+      streamBootId: "boot-conn",
+    } as any);
+    store.getSessionState("s1").loaded = true;
+
+    const resyncs: string[] = [];
+    const off = trackSessionResync(resyncs);
+    emitSessionEvent("connected", {
+      type: "connected",
+      sessionId: "",
+      timestamp: "t",
+      payload: {
+        streamPositions: [{ sessionId: "s1", prevSeq: 4, chunkSeq: 1 }],
+      },
+    });
+    off();
+
+    expect(streamEventHub.hasPendingGap("s1")).toBe(true);
+    expect(store.getSessionState("s1").loaded).toBe(false);
+    expect(resyncs).toEqual(["s1"]);
   });
 
   it("（重）建连补拉挂起中的交互卡:刷新/丢帧后卡片自愈，且只补写不清空", async () => {
@@ -384,7 +459,7 @@ describe("useSessionEvents 统一订阅器", () => {
       kind: "approval",
       cardKind: "command-approval",
       questions: [],
-      streamSeq: 1,
+      prevSeq: 0, chunkSeq: 1,
       streamBootId: "boot-ask",
     } as any);
 
@@ -403,7 +478,7 @@ describe("useSessionEvents 统一订阅器", () => {
       kind: "ask",
       cardKind: "question",
       questions: [],
-      streamSeq: 1,
+      prevSeq: 0, chunkSeq: 1,
       streamBootId: "boot-ask",
     } as any);
 

@@ -90,8 +90,9 @@ describe("SessionEventsService 连接补发", () => {
       kind: "chat",
       sessionType: "web",
     });
-    // 重放事件携带 publish 盖戳（前端入口幂等的游标依据）
-    expect(received[3].payload.streamSeq).toBe(2);
+    // 重放事件携带 publish 盖戳（前端入口幂等的游标依据：同 bootId 下的 (prevSeq, chunkSeq)）
+    expect(received[3].payload.chunkSeq).toBe(2);
+    expect(received[3].payload.prevSeq).toBe(0);
     expect(received[3].payload.streamBootId).toBeTruthy();
   });
 
@@ -149,7 +150,39 @@ describe("SessionEventsService 连接补发", () => {
       "stream_status_changed",
       "stream/text_delta",
     ]);
-    expect(received[4].payload.streamSeq).toBe(2);
+    expect(received[4].payload.chunkSeq).toBe(2);
+  });
+
+  it("connected 帧下发活跃流的补发起点（buffer 首帧位置）", () => {
+    streamManager.startStream("s1", new AbortController(), "chat");
+    streamManager.publish("s1", { type: "turn_start", turnId: "t1" } as any);
+    streamManager.publish("s1", {
+      type: "text_delta",
+      messageId: "m1",
+      turnId: "t1",
+      index: 0,
+      text: "a",
+    } as any);
+
+    const { observable } = service.subscribe("client-1");
+    const received: any[] = [];
+    observable.subscribe((e) => received.push(parse(e)));
+
+    expect(received[0].type).toBe("connected");
+    expect(received[0].payload.streamPositions).toEqual([
+      { sessionId: "s1", prevSeq: 0, chunkSeq: 1 },
+    ]);
+  });
+
+  it("活跃流尚未发布任何帧 → streamPositions 为空", () => {
+    streamManager.startStream("s1", new AbortController(), "chat");
+
+    const { observable } = service.subscribe("client-1");
+    const received: any[] = [];
+    observable.subscribe((e) => received.push(parse(e)));
+
+    expect(received[0].type).toBe("connected");
+    expect(received[0].payload.streamPositions).toEqual([]);
   });
 
   it("连接窗口内（订阅前）到达的 chunk 经补发快照送达，不丢失", () => {
@@ -361,7 +394,7 @@ describe("SessionEventsService 连接补发", () => {
 });
 
 describe("SessionStreamManager 事件盖戳", () => {
-  it("streamSeq 每会话单调递增、跨流（回合）不重置，bootId 恒定", () => {
+  it("(prevSeq, chunkSeq) 跨流（回合）连续：同一区间 ord 递增，base 不变", () => {
     const mgr = new SessionStreamManager();
     const relay = jest.fn();
     mgr.setStreamRelay(relay);
@@ -377,20 +410,23 @@ describe("SessionStreamManager 事件盖戳", () => {
     } as any);
     mgr.stopStream("s1", "completed");
 
-    // 新回合（新 ActiveStream）：序号继续递增而非归零——
+    // 新回合（新 ActiveStream）：位置继续递增而非归零——
     // 否则前端幂等游标会把新回合首批事件误判为重复而丢弃
     mgr.startStream("s1", new AbortController(), "chat");
     mgr.publish("s1", { type: "turn_start", turnId: "t2" } as any);
 
-    expect(relay.mock.calls.map((c) => c[1].streamSeq)).toEqual([1, 2, 3]);
+    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq])).toEqual([
+      [0, 1],
+      [0, 2],
+      [0, 3],
+    ]);
     expect(new Set(relay.mock.calls.map((c) => c[1].streamBootId)).size).toBe(1);
     // 盖戳后的同一对象进 buffer（补发与 live 一致）
-    expect(mgr.getActiveStreams()[0].eventBuffer.map((e) => e.streamSeq)).toEqual([
-      3,
-    ]);
+    const buffer = mgr.getActiveStreams()[0].eventBuffer;
+    expect(buffer.map((e) => [e.prevSeq, e.chunkSeq])).toEqual([[0, 3]]);
   });
 
-  it("会话之间序号相互独立", () => {
+  it("会话之间位置相互独立", () => {
     const mgr = new SessionStreamManager();
     const relay = jest.fn();
     mgr.setStreamRelay(relay);
@@ -407,10 +443,60 @@ describe("SessionStreamManager 事件盖戳", () => {
     } as any);
     mgr.publish("s2", { type: "turn_start", turnId: "t9" } as any);
 
-    expect(relay.mock.calls.map((c) => [c[0], c[1].streamSeq])).toEqual([
-      ["s1", 1],
-      ["s1", 2],
-      ["s2", 1],
+    expect(relay.mock.calls.map((c) => [c[0], c[1].prevSeq, c[1].chunkSeq])).toEqual([
+      ["s1", 0, 1],
+      ["s1", 0, 2],
+      ["s2", 0, 1],
+    ]);
+  });
+
+  it("base 前进（有新事件落库）→ ord 归零为 1", () => {
+    const mgr = new SessionStreamManager();
+    const relay = jest.fn();
+    mgr.setStreamRelay(relay);
+    mgr.startStream("s1", new AbortController(), "chat");
+
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", prevSeq: 7 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "b", prevSeq: 7 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "c", prevSeq: 8 } as any);
+
+    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq])).toEqual([
+      [7, 1],
+      [7, 2],
+      [8, 1],
+    ]);
+  });
+
+  it("prevSeq 回退（并发 publish 乱序）→ 钳制到当前 base 并递增 ord", () => {
+    const mgr = new SessionStreamManager();
+    const relay = jest.fn();
+    mgr.setStreamRelay(relay);
+    mgr.startStream("s1", new AbortController(), "chat");
+
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", prevSeq: 8 } as any);
+    // 后到的帧读到更旧的 prevSeq：不能让它把位置拉回去，否则前端会当成已消费
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "b", prevSeq: 7 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "c", prevSeq: 9 } as any);
+
+    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq])).toEqual([
+      [8, 1],
+      [8, 2],
+      [9, 1],
+    ]);
+  });
+
+  it("缺 prevSeq 的运行时帧（chat-runner 裸 error）沿用上次 base 并递增 ord", () => {
+    const mgr = new SessionStreamManager();
+    const relay = jest.fn();
+    mgr.setStreamRelay(relay);
+    mgr.startStream("s1", new AbortController(), "chat");
+
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", prevSeq: 5 } as any);
+    mgr.publish("s1", { type: "error", error: "boom" } as any);
+
+    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq])).toEqual([
+      [5, 1],
+      [5, 2],
     ]);
   });
 });

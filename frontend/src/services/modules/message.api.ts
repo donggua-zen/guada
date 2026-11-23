@@ -182,6 +182,19 @@ export interface MessageApi {
     nextBeforeSeq: number | null;
     hasMore: boolean;
   }>;
+  /**
+   * 前向增量读（断点续传）：只取 `seq > afterSeq` 的领域事件。
+   * `hasMoreAfter=true` 表示缺口超过单批上限，调用方应改为整页重拉。
+   */
+  fetchSessionEventsTail(
+    sessionId: string,
+    options: { afterSeq: number; limit?: number },
+  ): Promise<{
+    events: DomainEvent[];
+    endSeq: number;
+    tailSeq: number;
+    hasMoreAfter: boolean;
+  }>;
   importMessages(sessionId: string, messages: Array<Record<string, unknown>>): Promise<{ imported: number }>;
   createMessage(
     sessionId: string,
@@ -238,6 +251,22 @@ export const messageApi: MessageApi = {
       nextBeforeSeq: number | null;
       hasMore: boolean;
     }>(url);
+  },
+
+  async fetchSessionEventsTail(
+    this: ApiContext,
+    sessionId: string,
+    options: { afterSeq: number; limit?: number },
+  ) {
+    const params = new URLSearchParams();
+    params.append("afterSeq", options.afterSeq.toString());
+    if (options.limit !== undefined) params.append("limit", options.limit.toString());
+    return await this._request<{
+      events: DomainEvent[];
+      endSeq: number;
+      tailSeq: number;
+      hasMoreAfter: boolean;
+    }>(`/sessions/${sessionId}/events/tail?${params.toString()}`);
   },
 
   async importMessages(this: ApiContext, sessionId: string, messages: Array<Record<string, unknown>>) {

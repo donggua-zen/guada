@@ -231,6 +231,7 @@ import {
   foldEvents,
   takeStash as takeProjectorStash,
 } from "@/services/modules/streamProjector"
+import { catchUpIncrementally } from "@/services/modules/streamIncremental"
 import { replayStreamTailAfterReload } from "@/services/modules/streamTailReplay"
 import type { InputMessageState, Session, QueuedMessage, QueuePauseReason, ChatFileView } from '@/types/session';
 import type { Agent } from '@/types/agent';
@@ -1503,10 +1504,43 @@ async function handleSessionResync(event: Event) {
   if (!sessionId || sessionId !== effectiveSessionId.value) return
   const state = sessionStore.getSessionState(sessionId)
   if (!state) return
-  // 绕过 loadMessages 的 loaded 缓存门禁，按服务端最新事件重建消息树
-  state.loaded = false
+
   const generation = (resyncLoadGeneration.get(sessionId) ?? 0) + 1
   resyncLoadGeneration.set(sessionId, generation)
+
+  // 1) 优先增量：只拉缺失尾部并就地并入现有树（不 fold、不丢滚动深度）。
+  //    水位不可信/缺口过大/应用失败时返回 needs-full-reload，走下方整页重载。
+  if (state.turns?.length) {
+    const incremental = await catchUpIncrementally({
+      store: sessionStore,
+      sessionId,
+      fetchTail: (opts) => apiService.fetchSessionEventsTail(sessionId, opts),
+      hasStreamGap: (sid) => streamEventHub.hasPendingGap(sid),
+    })
+    if (resyncLoadGeneration.get(sessionId) !== generation) return
+    if (incremental.status === "applied") {
+      state.loaded = true
+      clearSessionHistoryStale(sessionId)
+      traceSessionOpen(sessionId, 'panel:incremental-apply', {
+        events: incremental.events?.length ?? 0,
+      })
+      // 上下文占用环形指示器：用本批事件里的锚点即时刷新（无需整页重扫）
+      if (incremental.events?.length) {
+        try {
+          applyContextStatsFromEvents(sessionId, incremental.events)
+        } catch {
+          /* 统计刷新失败不影响内容正确性 */
+        }
+      }
+      return
+    }
+    console.log(
+      `[ChatPanel] 增量补拉回退整页重载（${incremental.reason ?? "unknown"}）: ${sessionId}`,
+    )
+  }
+
+  // 2) 兜底：绕过 loadMessages 的 loaded 缓存门禁，按服务端最新事件重建消息树
+  state.loaded = false
   for (let attempt = 0; attempt <= RESYNC_RETRY_DELAYS_MS.length; attempt += 1) {
     if (attempt > 0) await delay(RESYNC_RETRY_DELAYS_MS[attempt - 1])
     if (resyncLoadGeneration.get(sessionId) !== generation) return
@@ -1889,6 +1923,10 @@ async function loadMessages(
     // 标记会话内容已缓存(二次打开不再向后端拉取)
     if (isInitial) {
       sessionStore.getSessionState(sessionId).loaded = true;
+      // 已应用水位 = 本次页尾 seq：后续断点续传只拉 `seq > appliedSeq` 的缺失尾部
+      sessionStore.setAppliedSeq(sessionId, page.endSeq ?? -1);
+      // 整页重拉成功 = 内容已按服务端权威页重建，补发缺口随之消解
+      streamEventHub.clearStreamGap(sessionId);
       // 任何路径成功拉到最新页即视为历史已新鲜：清掉待重拉标记，
       // 下次回前台不再重复强制重拉（除非又出现未闭合回合）。
       clearSessionHistoryStale(sessionId);
@@ -2048,8 +2086,8 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   traceSessionOpen(newSessionId, 'panel:start');
   try {
     currentSessionId.value = newSessionId;
-    // 打开会话:直接拉历史快照(loadSession 返回 lastSeq 作为订阅游标)。
-    // StreamEventHub 邮箱常驻收事件,无需 startBuffering——订阅时按 prevSeq >= lastSeq 取增量。
+    // 打开会话:直接拉历史快照(事件页 endSeq 作为已应用水位)。
+    // StreamEventHub 邮箱常驻收事件,无需 startBuffering——消费方按 (prevSeq, chunkSeq) 去重。
     await loadSession(newSessionId);
     if (token !== sessionChangeToken) return;
     traceSessionOpen(newSessionId, 'panel:load-done');

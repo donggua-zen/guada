@@ -498,12 +498,16 @@ export type SessionStreamEvent =
   | ToolImagePruneEvent
   | MessageChunkEvent;
 
-/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 streamSeq/streamBootId） */
+/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 chunkSeq/streamBootId） */
 export type WireStreamEvent = SessionStreamEvent & {
   sessionId?: string;
+  /** 落库区间：广播那一刻该会话最后一条已入库事件的 seq */
   prevSeq?: number;
-  /** 幂等序号：每会话单调递增（后端 publish 唯一盖戳点；hub 入口重放去重游标） */
-  streamSeq?: number;
-  /** 后端进程启动标识：重启后 streamSeq 归零，hub 据此重置幂等游标 */
+  /**
+   * 区间内帧序号：同一 prevSeq 下第 n 个帧（1 起，prevSeq 前进时归零）。
+   * 与 prevSeq 组成传输位置 `(prevSeq, chunkSeq)`，hub 据此做重放去重与区间归属。
+   */
+  chunkSeq?: number;
+  /** 后端进程启动标识：重启后传输位置重置（chunkSeq 从 1 起），hub 据此重置幂等游标 */
   streamBootId?: string;
 };

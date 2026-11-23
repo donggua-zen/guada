@@ -210,6 +210,88 @@ export class TurnAnchorIndex {
     }
   }
 
+  /**
+   * 前向增量读（`seq > afterSeq`）：断点续传用，只读缺失尾部。
+   *
+   * 读放大控制（相对全量扫描）：
+   * - 段级定位：manifest 的 `startSeq/endSeq` 已按 seq 递增，据此找到**含 afterSeq+1
+   *   的段**，更早的段完全不读（不碰其字节、不解析）；
+   * - 锚点收窄：该段 `.idx` 里取 `seq <= afterSeq` 的最后一个锚点行作为保守起点
+   *   （无锚点 → 段首），把段内前导部分也跳过；
+   * - 从起点按字节区间读到日志末尾，过滤 `seq > afterSeq`，按 limit 截断。
+   *
+   * 段内没有逐事件偏移索引（`.idx` 只存 turn 锚点），因此最坏多读"一个回合"的字节。
+   * 索引缺失/损坏时抛错，由调用方（SessionReplayService）回退全量过滤。
+   */
+  async readTail(
+    sessionId: string,
+    opts: { afterSeq: number; limit: number },
+  ): Promise<{ events: BaseEvent[]; endSeq: number; hasMoreAfter: boolean }> {
+    const limit = Math.min(Math.max(1, opts.limit), 2000);
+    const afterSeq = Number.isFinite(opts.afterSeq) ? opts.afterSeq : -1;
+    const manifest = await this.readManifest(sessionId).catch(() => null);
+    if (!manifest || manifest.segments.length === 0) {
+      return { events: [], endSeq: afterSeq, hasMoreAfter: false };
+    }
+
+    // 1) 段级定位：第一个可能含 seq > afterSeq 的段。
+    //    归档段有确定的 endSeq；最后一段（active）endSeq 为 null = 尾部无限延伸。
+    const segments = manifest.segments;
+    const lastSegFile = segments[segments.length - 1].file;
+    let targetIdx = segments.length - 1;
+    for (let i = 0; i < segments.length; i += 1) {
+      const seg = segments[i];
+      const isLast = i === segments.length - 1;
+      if (isLast) {
+        targetIdx = i;
+        break;
+      }
+      if (seg.endSeq !== null && seg.endSeq > afterSeq) {
+        targetIdx = i;
+        break;
+      }
+    }
+
+    // 2) 只为 target 段及之后加载索引（更早段不读）
+    const loaded: LoadedSegment[] = [];
+    for (let i = targetIdx; i < segments.length; i += 1) {
+      const seg = segments[i];
+      const segPath = this.getSegmentPath(sessionId, seg.file);
+      if (!existsSync(segPath)) continue;
+      const isLastSeg = i === segments.length - 1;
+      loaded.push({
+        segIdx: i,
+        file: seg.file,
+        rows: await this.loadOrRebuild(sessionId, seg.file, isLastSeg),
+      });
+    }
+    if (loaded.length === 0) {
+      return { events: [], endSeq: afterSeq, hasMoreAfter: false };
+    }
+
+    // 3) 锚点收窄：target 段内最后一个 seq <= afterSeq 的锚点行（含 f/d 行——
+    //    它们同样是"该 seq 已落盘"的定位点，比只认 start 更贴近真实缺口）。
+    const target = loaded[0];
+    let startPos: RowPos | null = { segIdx: target.segIdx, row: { seq: 0, off: 0, kind: 's' } };
+    for (const row of target.rows) {
+      if (row.seq <= afterSeq) {
+        startPos = { segIdx: target.segIdx, row };
+      } else {
+        break; // rows 按 seq 升序（写入/重建均按文件序）
+      }
+    }
+
+    // 4) 读到日志末尾并过滤
+    const raw = await this.readEventRange(sessionId, loaded, startPos, null, lastSegFile);
+    const after = raw.events.filter((e) => e.seq > afterSeq);
+    const page = after.slice(0, limit);
+    return {
+      events: page,
+      endSeq: page.length > 0 ? page[page.length - 1].seq : afterSeq,
+      hasMoreAfter: after.length > limit,
+    };
+  }
+
   private async pageViaAnchors(
     sessionId: string,
     opts: { beforeSeq?: number; turns: number },
