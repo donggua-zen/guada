@@ -388,16 +388,30 @@ export type SessionStreamEvent =
   | ToolImagePruneEvent
   | MessageChunkEvent;
 
-/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 chunkSeq/streamBootId） */
+/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 chunkSeq/logSeq/streamBootId） */
 export type WireStreamEvent = SessionStreamEvent & {
   sessionId?: string;
-  /** 落库区间：广播那一刻该会话最后一条已入库事件的 seq（先入库后发事件的契约下精确） */
+  /**
+   * 传输区间基座：与 chunkSeq 组成去重位置 `(prevSeq, chunkSeq)`。
+   *
+   * 注意：为抵御并发 publish 乱序（publishStream 先 await 存储读），manager 会做单调钳制
+   * （base = max(raw, 上次 base)），因此它**可能不等于**真实落库游标。
+   * 客户端推进"已应用水位"必须用 logSeq；prevSeq 只用于重放去重与区间归属。
+   */
   prevSeq?: number;
   /**
    * 区间内帧序号：同一 prevSeq 下第 n 个帧（1 起，prevSeq 前进时归零）。
    * 与 prevSeq 组成传输位置 `(prevSeq, chunkSeq)`，前端据此做重放去重与区间归属。
    */
   chunkSeq?: number;
+  /**
+   * 发布时刻真实最后已落库事件的 seq（**未做传输钳制**）。
+   *
+   * 与 prevSeq 的区别：日志回绕（torn 尾截断后 seq 复用、清空记录后重建）时它会随真实
+   * 日志尾下降，而 prevSeq（传输基座，只增）仍停在旧高值。客户端只用它推进
+   * appliedSeq 水位；裸运行时帧（无 prevSeq）不携带本字段，水位不动。
+   */
+  logSeq?: number;
   /** 后端进程启动标识：重启后传输位置重置（chunkSeq 从 1 起），前端据此重置幂等游标 */
   streamBootId?: string;
 };

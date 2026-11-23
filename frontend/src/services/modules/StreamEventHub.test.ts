@@ -6,8 +6,6 @@ import { StreamEventHub, type HubStreamEvent } from "./StreamEventHub";
  *
  * 覆盖"打开正在流会话/刷新续传"的竞态核心:
  * - route 无订阅者时事件进邮箱不丢(供打开会话后订阅取增量)
- * - subscribe(lastSeq) 按 prevSeq >= lastSeq 精确切增量(历史之后发生的)
- * - lastSeq = null(无历史)取全部带 prevSeq 的事件
  * - 订阅建立后的实时事件推给 onEvent
  * - unsubscribe 后不再接收实时事件
  * - 邮箱滚动上限(MAX_BUFFERED = 2000)
@@ -151,7 +149,7 @@ describe("StreamEventHub 在飞尾部(getTailAfterLastCheckpoint)", () => {
 });
 
 /**
- * 入口幂等:后端 publish 为每条帧盖戳 (prevSeq, chunkSeq) + streamBootId(进程标识)。
+ * 入口幂等:后端 publish 为每条帧盖戳 (prevSeq=传输基座, chunkSeq) + streamBootId(进程标识)。
  * SSE 重连时连接补发会重放整个 eventBuffer——已路由过的事件必须丢弃,
  * 否则已加载会话的 live 路径会把 delta 重复追加(文本翻倍)。
  */
@@ -166,14 +164,14 @@ describe("StreamEventHub 入口幂等((prevSeq, chunkSeq) 元组去重)", () => 
   function seqEv(
     type: string,
     sessionId: string,
-    logSeq: number,
+    baseSeq: number,
     ord: number,
     bootId = "boot1",
   ): HubStreamEvent {
     return {
       type,
       sessionId,
-      prevSeq: logSeq,
+      prevSeq: baseSeq,
       chunkSeq: ord,
       streamBootId: bootId,
     } as HubStreamEvent;
@@ -216,7 +214,7 @@ describe("StreamEventHub 入口幂等((prevSeq, chunkSeq) 元组去重)", () => 
     expect(onEvent).toHaveBeenCalledTimes(3);
     expect(hub.getCursor("s1")).toEqual({
       bootId: "boot1",
-      prevSeq: 4,
+      baseSeq: 4,
       chunkSeq: 1,
     });
   });
@@ -248,7 +246,7 @@ describe("StreamEventHub 入口幂等((prevSeq, chunkSeq) 元组去重)", () => 
     expect(onEvent).toHaveBeenCalledTimes(3);
     expect(hub.getCursor("s1")).toEqual({
       bootId: "boot1",
-      prevSeq: 1,
+      baseSeq: 1,
       chunkSeq: 1,
     });
   });

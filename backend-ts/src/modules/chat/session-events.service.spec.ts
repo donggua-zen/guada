@@ -390,6 +390,30 @@ describe("SessionEventsService 连接补发", () => {
       service.onModuleDestroy();
       expect((service as any).recentTerminals.size).toBe(0);
     });
+
+    it("session.cleared：广播并作废旧日志的终态墓碑", () => {
+      emitTerminal("s1");
+      const broadcast = jest.spyOn(service as any, "broadcastToAllClients");
+
+      service.handleSessionCleared({
+        sessionId: "s1",
+        timestamp: "2026-01-01T01:00:00.000Z",
+        source: "client-1",
+      });
+
+      expect(broadcast).toHaveBeenCalledWith({
+        type: "session_cleared",
+        sessionId: "s1",
+        timestamp: "2026-01-01T01:00:00.000Z",
+        source: "client-1",
+        payload: undefined,
+      });
+      // 墓碑记录的是旧日志尾：清空后重连不得再补发旧终态
+      const replays = collectCatchup("client-2").filter(
+        (e) => e.type === "stream_status_changed" && e.payload?.replayed,
+      );
+      expect(replays).toEqual([]);
+    });
   });
 });
 
@@ -497,6 +521,25 @@ describe("SessionStreamManager 事件盖戳", () => {
     expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq])).toEqual([
       [5, 1],
       [5, 2],
+    ]);
+  });
+
+  it("logSeq = 未钳制的真实落库游标（prevSeq 回退时仍报真实值，裸帧不带）", () => {
+    const mgr = new SessionStreamManager();
+    const relay = jest.fn();
+    mgr.setStreamRelay(relay);
+    mgr.startStream("s1", new AbortController(), "chat");
+
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", prevSeq: 8 } as any);
+    // 并发乱序：传输 base 钳制在 8，但真实落库游标是 7 —— 前端水位必须看到 7
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "b", prevSeq: 7 } as any);
+    // 裸运行时帧：没有真实落库游标，不携带 logSeq（前端水位保持不动）
+    mgr.publish("s1", { type: "error", error: "boom" } as any);
+
+    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq, c[1].logSeq])).toEqual([
+      [8, 1, 8],
+      [8, 2, 7],
+      [8, 3, undefined],
     ]);
   });
 });

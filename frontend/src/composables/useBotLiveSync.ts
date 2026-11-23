@@ -127,6 +127,11 @@ export function useBotLiveSync(options: BotLiveSyncOptions) {
     scheduleSessions();
   });
 
+  subscribe("session_cleared", () => {
+    // 其他窗口清空聊天记录：bot 会话内容随日志重建，重拉聚合让预览/排序收敛
+    scheduleSessions();
+  });
+
   subscribe("stream_status_changed", (event) => {
     // bot 回合 running/终态：新消息置顶与新会话首次出现都在这里兜住
     if (event.payload?.sessionType !== "bot") return;

@@ -227,8 +227,9 @@ import {
   clearSessionHistoryStale,
 } from "@/utils/sessionResync"
 import {
-  applyLiveChunk,
+  applyInFlightChunks,
   foldEvents,
+  hasCachedTurns,
   takeStash as takeProjectorStash,
 } from "@/services/modules/streamProjector"
 import { catchUpIncrementally } from "@/services/modules/streamIncremental"
@@ -653,12 +654,12 @@ function handleNearTop() {
   }
   if (!hasMoreMessages.value || isLoadingMore.value || !currentSessionId.value) return;
   // 分页游标：事件页的 nextBeforeSeq（null = 无更早内容）
-  const eventCursor =
-    sessionStore.getSessionState(currentSessionId.value)?.eventCursor ?? null;
-  if (eventCursor != null) {
+  const pageCursor =
+    sessionStore.getSessionState(currentSessionId.value)?.pageCursor ?? null;
+  if (pageCursor != null) {
     // 立即设置标记，防止重复触发
     isLoadingMore.value = true;
-    loadMoreMessages(currentSessionId.value, eventCursor);
+    loadMoreMessages(currentSessionId.value, pageCursor);
   }
 }
 
@@ -1534,8 +1535,14 @@ async function handleSessionResync(event: Event) {
       }
       return
     }
-    console.log(
-      `[ChatPanel] 增量补拉回退整页重载（${incremental.reason ?? "unknown"}）: ${sessionId}`,
+    // 日志换代（torn 尾截断后 seq 复用 / 清空记录后重建）：旧的邮箱、去重游标与缺口
+    // 都属于上一代日志——不清掉的话，整页 fold 之后的 replayStreamTailAfterReload 会按
+    // `prevSeq >= pageEndSeq` 把旧代次尾部回放进新树；新代次帧也可能被旧游标判成重复。
+    if (incremental.reason === "log-rewound") {
+      streamEventHub.cleanup(sessionId)
+    }
+    console.warn(
+      `[ChatPanel] 增量补拉回退整页重载（${incremental.reason ?? "unknown"}）: ${sessionId} appliedSeq=${sessionStore.getAppliedSeq(sessionId) ?? "-"}`,
     )
   }
 
@@ -1833,12 +1840,11 @@ async function loadMessages(
 
   try {
     const sessionState = sessionStore.getSessionState(sessionId);
-    // 本次加载前是否已有缓存树（与 projectChunk 的 hasCache 同一谓词）。
+    // 本次加载前是否已有缓存树（与 projectChunk 同一谓词）。
     // true 仅出现在"强制重拉"场景（loaded 被 markSessionHistoryStale 置 false 而树还在）：
     // 此时 live chunk 之前是直接写树的（没进 stash），fold 会抹掉在飞块 →
     // 加载后需从 StreamEventHub 邮箱重放尾部。无缓存路径由既有 stash 机制承担，二者互斥。
-    const hadCache =
-      sessionState.loaded === true || (sessionState.turns?.length ?? 0) > 0;
+    const hadCache = hasCachedTurns(sessionStore, sessionId);
     // 记录 load-more 前的滚动位置（内容高度），rebuild 后恢复
     const scrollElement = scrollContainerRef.value?.getScrollElement?.();
     const oldScrollHeight = !isInitial ? scrollElement?.scrollHeight || 0 : 0;
@@ -1850,7 +1856,7 @@ async function loadMessages(
     });
     fetchSpan?.end({ initial: isInitial ? 1 : 0, events: page.events.length });
 
-    // 事件数组：初始替换 / load-more 前插（live 终态事件已由 applyLiveChunk 追加进 eventLog）
+    // 事件数组：初始替换 / load-more 前插（live 终态事件已由 live 应用路径追加进 eventLog）
     const prevLog = sessionState.eventLog || [];
     const headPage = page; // 初始页 = 最新页（订阅基线/endSeq 以它为准）
     sessionState.eventLog = isInitial
@@ -1869,25 +1875,22 @@ async function loadMessages(
     // 且无法修复锚点索引 delete 集滞后这类竞态，故删除（残留竞态见下方诊断日志）。
 
     // 分页游标：下一页 = 页首前一 seq（null = 无更早内容）
-    sessionState.eventCursor = page.nextBeforeSeq;
+    sessionState.pageCursor = page.nextBeforeSeq;
 
     // 消费暂存:把"无缓存期间暂存的事件"按 seq 对齐后应用进 store。
-    // prevSeq 是"先入库后发事件"的入库游标:prevSeq < endSeq 的事件必已包含在历史页内
-    // (跳过,防重复);prevSeq == endSeq 的事件发布于快照末尾之后、不在快照内——
-    // 在飞 chunk 恰属此类(chunk 不入库,prevSeq == 最后在库事件 seq),必须应用,
-    // 否则刷新后已流出的增量丢失、只能等 finish 重建。边界上重复应用的已入库事件
-    // (user_message 等)由 projector 按 messageId/turnId 幂等吸收。prevSeq 缺失照旧应用(fail-open)。
+    // 过滤口径见 applyInFlightChunks：发布时页尾已覆盖的帧跳过（防 delta 重复累加），
+    // 页尾之后/无游标的帧必须应用，否则刷新后已流出的增量丢失、只能等 block_end 重建。
+    // 边界上重复应用的已入库事件(user_message 等)由 projector 按 messageId/turnId 幂等吸收。
     // endSeq 用初始页(最新页)尾:load-more 向左扩展历史,不改变订阅基线。
     const endSeq = headPage.endSeq ?? 0;
     const projectorStash = takeProjectorStash(sessionId);
     const stashSpan = perfStart('replay.stashApply');
-    let appliedStash = 0;
-    for (const chunk of projectorStash) {
-      const prevSeq = (chunk as { prevSeq?: number }).prevSeq;
-      if (typeof prevSeq === "number" && prevSeq < endSeq) continue;
-      applyLiveChunk(sessionStore, sessionId, chunk);
-      appliedStash += 1;
-    }
+    const appliedStash = applyInFlightChunks(
+      sessionStore,
+      sessionId,
+      projectorStash,
+      endSeq,
+    );
     stashSpan?.end({ events: appliedStash });
 
     // 强制重拉 = 整页刷新等价：事件页只含已落盘内容，fold 之后把邮箱里
@@ -1923,8 +1926,9 @@ async function loadMessages(
     // 标记会话内容已缓存(二次打开不再向后端拉取)
     if (isInitial) {
       sessionStore.getSessionState(sessionId).loaded = true;
-      // 已应用水位 = 本次页尾 seq：后续断点续传只拉 `seq > appliedSeq` 的缺失尾部
-      sessionStore.setAppliedSeq(sessionId, page.endSeq ?? -1);
+      // 已应用水位 = 本次页尾 seq：后续断点续传只拉 `seq > appliedSeq` 的缺失尾部。
+      // 用可降的 reset：整页重建是唯一有资格下调水位的路径（日志回绕后旧高水位必须能复位）。
+      sessionStore.resetAppliedSeq(sessionId, page.endSeq);
       // 整页重拉成功 = 内容已按服务端权威页重建，补发缺口随之消解
       streamEventHub.clearStreamGap(sessionId);
       // 任何路径成功拉到最新页即视为历史已新鲜：清掉待重拉标记，

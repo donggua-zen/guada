@@ -269,20 +269,149 @@ describe("catchUpIncrementally：增量优先 / 回退判定", () => {
     expect(store.state.appliedSeq).toBe(6);
   });
 
-  it("已追平（空批）：只把水位推到 tailSeq", async () => {
+  it("已追平（空批且 tailSeq === 水位）：applied，不重复请求", async () => {
+    const store = createStore();
+    applyLiveChunk(store, "s1", { type: "turn_start", turnId: "t1" } as any);
+    store.state.appliedSeq = 10;
+    const fetchTail = vi.fn(async () => batch([], { endSeq: 10, tailSeq: 10 }));
+
+    const res = await catchUpIncrementally({ store, sessionId: "s1", fetchTail });
+
+    expect(res.status).toBe("applied");
+    expect(res.events).toEqual([]);
+    expect(fetchTail).toHaveBeenCalledTimes(1);
+    expect(store.state.appliedSeq).toBe(10);
+  });
+
+  it("空批但日志尾超前（读后并发追加）→ 重试一次拿到事件", async () => {
     const store = createStore();
     applyLiveChunk(store, "s1", { type: "turn_start", turnId: "t1" } as any);
     store.state.appliedSeq = 10;
 
+    const fetchTail = vi
+      .fn()
+      .mockResolvedValueOnce(batch([], { endSeq: 10, tailSeq: 12 }))
+      .mockResolvedValueOnce(
+        batch([assistantMessage("t1", "m1", 11, [{ type: "text", text: "追平" }])], {
+          endSeq: 12,
+          tailSeq: 12,
+        }),
+      );
+
+    const res = await catchUpIncrementally({ store, sessionId: "s1", fetchTail });
+
+    expect(res.status).toBe("applied");
+    expect(res.events).toHaveLength(1);
+    expect(fetchTail).toHaveBeenCalledTimes(2);
+    expect(store.state.appliedSeq).toBe(12);
+  });
+
+  it("连续空批但日志尾超前 → read-gap（不把未返回的事件记成已应用）", async () => {
+    const store = createStore();
+    applyLiveChunk(store, "s1", { type: "turn_start", turnId: "t1" } as any);
+    store.state.appliedSeq = 10;
+    const fetchTail = vi.fn(async () => batch([], { endSeq: 10, tailSeq: 12 }));
+
+    const res = await catchUpIncrementally({ store, sessionId: "s1", fetchTail });
+
+    expect(res.status).toBe("needs-full-reload");
+    expect(res.reason).toBe("read-gap");
+    expect(fetchTail).toHaveBeenCalledTimes(2);
+    expect(store.state.appliedSeq).toBe(10);
+  });
+
+  it("日志回绕（空批 tailSeq 小于水位）→ log-rewound，水位不动", async () => {
+    const store = createStore();
+    applyLiveChunk(store, "s1", { type: "turn_start", turnId: "t1" } as any);
+    store.state.appliedSeq = 57;
+    const fetchTail = vi.fn(async () => batch([], { endSeq: 57, tailSeq: 3 }));
+
+    const res = await catchUpIncrementally({ store, sessionId: "s1", fetchTail });
+
+    expect(res.status).toBe("needs-full-reload");
+    expect(res.reason).toBe("log-rewound");
+    expect(store.state.appliedSeq).toBe(57);
+  });
+
+  it("批尾越过日志尾（旧代次索引/并发截断）→ log-rewound", async () => {
+    const store = createStore();
+    applyLiveChunk(store, "s1", { type: "turn_start", turnId: "t1" } as any);
+    store.state.appliedSeq = 20;
+
     const res = await catchUpIncrementally({
       store,
       sessionId: "s1",
-      fetchTail: async () => batch([], { endSeq: 10, tailSeq: 12 }),
+      fetchTail: async () =>
+        batch([assistantMessage("t1", "m1", 21, [{ type: "text", text: "x" }])], {
+          endSeq: 21,
+          tailSeq: 20,
+        }),
     });
 
-    expect(res.status).toBe("applied");
-    expect(res.events).toEqual([]);
-    expect(store.state.appliedSeq).toBe(12);
+    expect(res.status).toBe("needs-full-reload");
+    expect(res.reason).toBe("log-rewound");
+    expect(store.state.turns[0].messages).toHaveLength(0);
+  });
+
+  it("接缝不连续（批首跳过水位后的 seq）→ seq-gap，不应用", async () => {
+    const store = createStore();
+    applyLiveChunk(store, "s1", { type: "turn_start", turnId: "t1" } as any);
+    store.state.appliedSeq = 4;
+
+    const res = await catchUpIncrementally({
+      store,
+      sessionId: "s1",
+      fetchTail: async () =>
+        batch([assistantMessage("t1", "m1", 6, [{ type: "text", text: "x" }])], {
+          tailSeq: 6,
+        }),
+    });
+
+    expect(res.status).toBe("needs-full-reload");
+    expect(res.reason).toBe("seq-gap");
+    expect(store.state.turns[0].messages).toHaveLength(0);
+  });
+
+  it("批内 seq 跳号 → seq-gap-in-batch，不应用", async () => {
+    const store = createStore();
+    applyLiveChunk(store, "s1", { type: "turn_start", turnId: "t1" } as any);
+    store.state.appliedSeq = 4;
+
+    const res = await catchUpIncrementally({
+      store,
+      sessionId: "s1",
+      fetchTail: async () =>
+        batch(
+          [
+            assistantMessage("t1", "m1", 5, [{ type: "text", text: "a" }]),
+            assistantMessage("t1", "m2", 7, [{ type: "text", text: "b" }]),
+          ],
+          { tailSeq: 7 },
+        ),
+    });
+
+    expect(res.status).toBe("needs-full-reload");
+    expect(res.reason).toBe("seq-gap-in-batch");
+    expect(store.state.turns[0].messages).toHaveLength(0);
+  });
+
+  it("事件缺 seq → bad-response", async () => {
+    const store = createStore();
+    applyLiveChunk(store, "s1", { type: "turn_start", turnId: "t1" } as any);
+    store.state.appliedSeq = 4;
+
+    const res = await catchUpIncrementally({
+      store,
+      sessionId: "s1",
+      fetchTail: async () =>
+        batch([{ type: "turn/finish", data: { turnId: "t1" } } as any], {
+          endSeq: 5,
+          tailSeq: 5,
+        }),
+    });
+
+    expect(res.status).toBe("needs-full-reload");
+    expect(res.reason).toBe("bad-response");
   });
 
   it("水位缺失 → 回退整页重拉", async () => {

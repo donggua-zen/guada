@@ -6,6 +6,9 @@ import {
   Body,
   Param,
   Query,
+  Headers,
+  HttpException,
+  HttpStatus,
   UseGuards,
   Logger,
   Inject,
@@ -17,6 +20,7 @@ import {
 } from "../../common/persistence/message-store.interface";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionReplayService } from "./session-replay.service";
+import { EventBusService } from "../../common/events/event-bus.service";
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -26,6 +30,7 @@ export class MessagesController {
     @Inject(MESSAGE_STORE_TOKEN) private readonly messageStore: IMessageStore,
     private readonly streamManager: SessionStreamManager,
     private readonly replayService: SessionReplayService,
+    private readonly eventBus: EventBusService,
   ) {}
 
   /** 确保会话有持久化存储（新会话自动创建） */
@@ -102,13 +107,34 @@ export class MessagesController {
 
   /**
    * 清空会话的所有轮次
+   *
+   * 物理删除整个 JSONL 目录（seq 换代）：其他窗口必须清空本地树/水位并按新日志重拉，
+   * 因此成功后广播 session.cleared。流式输出中禁止清空（对齐删除会话的护栏）——
+   * 否则引擎仍会向已删除/重建的日志追加事件，落盘内容与回合状态互相错乱。
    */
   @Delete("sessions/:sessionId/messages")
   async clearSessionMessages(
     @Param("sessionId") sessionId: string,
+    @Headers("x-client-id") clientId?: string,
   ) {
     await this.ensureSession(sessionId);
-    return this.messageStore.clearSessionTurns(sessionId);
+    if (this.streamManager.hasActiveStream(sessionId)) {
+      throw new HttpException(
+        {
+          error: "会话正在流式输出中，无法清空聊天记录",
+          code: "SESSION_STREAMING",
+          activeSessionId: sessionId,
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+    const result = await this.messageStore.clearSessionTurns(sessionId);
+    this.eventBus.emit("session.cleared", {
+      sessionId,
+      timestamp: new Date().toISOString(),
+      source: clientId || undefined,
+    });
+    return result;
   }
 
   /**

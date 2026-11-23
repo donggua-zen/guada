@@ -296,12 +296,16 @@ export interface SessionState {
     eventLog?: Array<
       import("@/types/stream").WireStreamEvent | import("@/types/stream/domain-event.types").DomainEvent
     >
-    /** 分页游标：下一页事件页的 beforeSeq（页首前一 seq）；null = 无更早内容 */
-    eventCursor?: number | null
+    /**
+     * 分页游标：下一页事件页的 beforeSeq（页首前一 seq）；null = 无更早内容。
+     * 与 hub 的 `streamCursor`（重放去重位置）无关——都叫"游标"但语义不同。
+     */
+    pageCursor?: number | null
     /**
      * 已应用水位：本地树已反映到的最高持久化事件 seq（不持久化）。
      * 断点续传据此只拉缺失尾部（`seq > appliedSeq`）；未加载过内容时缺省。
-     * 只由"实际应用进树的持久化事件"推进（初始页 endSeq / 增量批 endSeq / live prevSeq）。
+     * 只由"实际应用进树的持久化事件"推进（初始页 endSeq / 增量批 endSeq / live logSeq）；
+     * 整页重建时用 resetAppliedSeq 直接赋值（日志回绕后需要能下调）。
      */
     appliedSeq?: number
     inputMessage: InputMessageState

@@ -851,3 +851,63 @@ describe("sessionStore 会话配置 patch", () => {
     expect(store.getSession("missing")).toBeUndefined();
   });
 });
+
+describe("sessionStore 已应用水位", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it("setAppliedSeq 只增不减（并发路径的乱序保护）", () => {
+    const store = useSessionStore();
+    expect(store.getAppliedSeq("s1")).toBeUndefined();
+
+    store.setAppliedSeq("s1", 10);
+    store.setAppliedSeq("s1", 7);
+    expect(store.getAppliedSeq("s1")).toBe(10);
+
+    store.setAppliedSeq("s1", -1);
+    store.setAppliedSeq("s1", Number.NaN);
+    expect(store.getAppliedSeq("s1")).toBe(10);
+  });
+
+  it("resetAppliedSeq 可升可降（整页重建后允许下调）", () => {
+    const store = useSessionStore();
+    store.setAppliedSeq("s1", 57);
+
+    store.resetAppliedSeq("s1", 3);
+    expect(store.getAppliedSeq("s1")).toBe(3);
+
+    store.resetAppliedSeq("s1", 80);
+    expect(store.getAppliedSeq("s1")).toBe(80);
+  });
+
+  it("resetAppliedSeq 传空日志页尾/非法值 → 清空水位", () => {
+    const store = useSessionStore();
+
+    store.setAppliedSeq("s1", 57);
+    store.resetAppliedSeq("s1", -1);
+    expect(store.getAppliedSeq("s1")).toBeUndefined();
+
+    store.setAppliedSeq("s1", 57);
+    store.resetAppliedSeq("s1", undefined);
+    expect(store.getAppliedSeq("s1")).toBeUndefined();
+
+    store.setAppliedSeq("s1", 57);
+    store.resetAppliedSeq("s1", Number.NaN);
+    expect(store.getAppliedSeq("s1")).toBeUndefined();
+  });
+
+  it("clearSessionMessages 同时复位水位与回合树", () => {
+    const store = useSessionStore();
+    const state = store.getSessionState("s1");
+    state.turns = [{ id: "t1" } as any];
+    state.eventLog = [{ seq: 1, type: "turn/start" } as any];
+    store.setAppliedSeq("s1", 42);
+
+    store.clearSessionMessages("s1");
+
+    expect(store.getSessionState("s1").turns).toHaveLength(0);
+    expect(store.getSessionState("s1").eventLog).toHaveLength(0);
+    expect(store.getAppliedSeq("s1")).toBeUndefined();
+  });
+});

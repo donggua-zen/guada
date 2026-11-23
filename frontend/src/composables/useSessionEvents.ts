@@ -19,16 +19,13 @@ import { useAuthStore } from "@/stores/auth";
 import { apiService } from "@/services/ApiService";
 import { streamEventHub } from "@/services/modules/StreamEventHub";
 import {
+  hasCachedTurns,
   projectChunk,
   resetSessionTurnsTransientState,
 } from "@/services/modules/streamProjector";
 import { reconcileStoppedStream } from "@/services/modules/streamReconcile";
 import { toast } from '@/components/ui/toastService';
-import {
-  clearSessionHistoryStale,
-  isSessionHistoryStale,
-  markSessionHistoryStale,
-} from "@/utils/sessionResync";
+import { markSessionHistoryStale } from "@/utils/sessionResync";
 import type { UserQueueSnapshot } from "@/types/session";
 
 export function useSessionEvents() {
@@ -106,11 +103,8 @@ export function useSessionEvents() {
   function forceReloadCurrentSession(reason: string): void {
     const sessionId = currentSessionId.value;
     if (!sessionId) return;
-    const state = sessionStore.getSessionState(sessionId);
     // 有树即值得重拉：loaded=false 也可能是上一次重拉失败（下次触发点必须能继续重试）
-    const hasTree =
-      state.loaded === true || (sessionStore.getTurns(sessionId)?.length ?? 0) > 0;
-    if (!hasTree) return; // 无缓存树：正常打开/加载会拉
+    if (!hasCachedTurns(sessionStore, sessionId)) return; // 无缓存树：正常打开/加载会拉
     if (!sessionStore.sessionIsStreaming(sessionId) && !hasOpenTurn(sessionId)) {
       return;
     }
@@ -242,12 +236,6 @@ export function useSessionEvents() {
         }
         if (chunk.streamBootId) lastStreamBootId = chunk.streamBootId;
 
-        // 已应用水位保守推进：prevSeq 是发布时刻的入库游标（只会低估不会高估）。
-        // 补发缺口未清前不推进——否则会把"没收到的那段"当成已应用，永久跳过缺口。
-        if (typeof chunk.prevSeq === "number" && !streamEventHub.hasPendingGap(sid)) {
-          sessionStore.setAppliedSeq(sid, chunk.prevSeq);
-        }
-
         // 压缩失败/取消：瞬态提示（成功由对话区结果卡承载，不额外打扰）
         if (chunk.type === "compression_error") {
           if (chunk.cancelled) {
@@ -261,6 +249,17 @@ export function useSessionEvents() {
           }
         }
         projectChunk(sessionStore, sid, chunk);
+
+        // 已应用水位保守推进：logSeq 是发布时刻**未钳制**的真实落库游标
+        // （prevSeq 被 manager 单调钳制，日志清空/截断后仍停在旧高值，不能当水位用）。
+        // 补发缺口未清前不推进——否则会把"没收到的那段"当成已应用，永久跳过缺口；
+        // 裸运行时帧（无 logSeq）不推进。
+        //
+        // 顺序：必须在 projectChunk **之后**。投影抛错时 hub 的 try/catch 会吞掉异常，
+        // 若水位先推进，这条事件就既没进树、也不会被下次增量补拉取回——静默永久丢失。
+        if (typeof chunk.logSeq === "number" && !streamEventHub.hasPendingGap(sid)) {
+          sessionStore.setAppliedSeq(sid, chunk.logSeq);
+        }
 
         // 审批/询问到达 = 有人在等你操作：非当前会话或窗口隐藏时置未读。
         // 桌面任务栏红点由 useTrayStats 轮询 unread 派生（与侧边栏蓝点/待答胶囊同源）；
@@ -385,6 +384,22 @@ export function useSessionEvents() {
             });
           }
         }
+      }),
+    );
+
+    unsubscribers.push(
+      apiService.onSessionEvent("session_cleared", (event) => {
+        // 发起窗口已本地清空并重拉；本事件只用于其他窗口失效
+        if (event.source === apiService.getClientId()) return;
+        const { sessionId } = event;
+        if (!sessionId) return;
+        // 服务端日志已整目录删除并重建（seq 从 0 起）：清本窗口的树、事件数组、
+        // 已应用水位、待答卡，再丢弃旧代次的邮箱/去重游标/缺口标记。
+        sessionStore.clearSessionMessages(sessionId);
+        streamEventHub.cleanup(sessionId);
+        // 标脏：当前会话立即触发 resync（树为空 → 直接整页重拉）；
+        // 非当前会话 loaded=false，下次打开绕过缓存门禁重拉。
+        markSessionHistoryStale(sessionStore, sessionId);
       }),
     );
 
@@ -590,7 +605,5 @@ export function useSessionEvents() {
     init,
     cleanup,
     refreshQueue,
-    isSessionHistoryStale,
-    clearSessionHistoryStale,
   };
 }

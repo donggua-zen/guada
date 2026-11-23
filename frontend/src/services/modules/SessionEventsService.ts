@@ -5,6 +5,7 @@ export type SessionEventType =
   | "connected"
   | "session_created"
   | "session_deleted"
+  | "session_cleared"
   | "session_renamed"
   | "session_updated"
   | "stream_status_changed"

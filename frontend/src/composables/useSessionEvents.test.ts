@@ -214,6 +214,7 @@ describe("useSessionEvents 统一订阅器", () => {
       sessionId: "gap-s1",
       text: "a",
       prevSeq: 5,
+      logSeq: 5,
       chunkSeq: 1,
       streamBootId: "boot-gap",
     } as any);
@@ -230,6 +231,7 @@ describe("useSessionEvents 统一订阅器", () => {
       sessionId: "gap-s1",
       text: "b",
       prevSeq: 6,
+      logSeq: 6,
       chunkSeq: 1,
       streamBootId: "boot-gap",
     } as any);
@@ -242,10 +244,144 @@ describe("useSessionEvents 统一订阅器", () => {
       sessionId: "gap-s1",
       text: "c",
       prevSeq: 7,
+      logSeq: 7,
       chunkSeq: 1,
       streamBootId: "boot-gap",
     } as any);
     expect(store.getAppliedSeq("gap-s1")).toBe(7);
+  });
+
+  it("已应用水位只认未钳制的 logSeq（传输 prevSeq 超前不推进，裸帧不推进）", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+
+    // 日志回绕后传输基座仍停在旧高值：水位必须跟真实落库游标走
+    streamEventHub.route({
+      type: "text_delta",
+      sessionId: "logseq-s1",
+      text: "a",
+      prevSeq: 57,
+      logSeq: 3,
+      chunkSeq: 1,
+      streamBootId: "boot-logseq",
+    } as any);
+    expect(store.getAppliedSeq("logseq-s1")).toBe(3);
+
+    // 裸运行时帧（如 error）没有 logSeq：不能把水位推到 prevSeq
+    streamEventHub.route({
+      type: "error",
+      sessionId: "logseq-s1",
+      error: "boom",
+      prevSeq: 57,
+      chunkSeq: 2,
+      streamBootId: "boot-logseq",
+    } as any);
+    expect(store.getAppliedSeq("logseq-s1")).toBe(3);
+  });
+
+  it("投影抛错时水位不推进（否则该事件既没进树、也不会被增量补拉取回）", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    const sid = "throw-s1";
+
+    // 先建立水位基线（正常帧）
+    streamEventHub.route({
+      type: "text_delta",
+      sessionId: sid,
+      text: "ok",
+      prevSeq: 9,
+      logSeq: 9,
+      chunkSeq: 1,
+      streamBootId: "boot-throw",
+    } as any);
+    expect(store.getAppliedSeq(sid)).toBe(9);
+
+    // 让投影内部抛错（ask_requested 在 projectChunk 的 try 内直写交互卡），
+    // hub 的 try/catch 会吞掉异常 → 水位必须停在 9，不能前进到 20。
+    const original = store.upsertSessionPendingAsk;
+    store.upsertSessionPendingAsk = () => {
+      throw new Error("projection boom");
+    };
+    try {
+      expect(() =>
+        streamEventHub.route({
+          type: "ask_requested",
+          sessionId: sid,
+          requestId: "r1",
+          kind: "approval",
+          questions: [],
+          prevSeq: 20,
+          logSeq: 20,
+          chunkSeq: 2,
+          streamBootId: "boot-throw",
+        } as any),
+      ).not.toThrow();
+      expect(store.getAppliedSeq(sid)).toBe(9);
+    } finally {
+      store.upsertSessionPendingAsk = original;
+    }
+  });
+
+  it("session_cleared（他源）：清树/水位/邮箱并派发 resync", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    const state = store.getSessionState("clr-s1");
+    state.turns = [{ id: "t1" } as any];
+    state.eventLog = [{ seq: 1, type: "turn/start" } as any];
+    store.setAppliedSeq("clr-s1", 42);
+    // 建立 hub 游标与邮箱
+    streamEventHub.route({
+      type: "turn_start",
+      sessionId: "clr-s1",
+      turnId: "t1",
+      prevSeq: 42,
+      logSeq: 42,
+      chunkSeq: 1,
+      streamBootId: "boot-clear",
+    } as any);
+    expect(streamEventHub.getCursor("clr-s1")).toBeDefined();
+
+    const resync = vi.fn();
+    window.addEventListener(SESSION_RESYNC_EVENT, resync);
+    try {
+      emitSessionEvent("session_cleared", {
+        sessionId: "clr-s1",
+        timestamp: "2026-11-23T00:00:00Z",
+        source: "client-other",
+      });
+
+      expect(store.getSessionState("clr-s1").turns).toHaveLength(0);
+      expect(store.getSessionState("clr-s1").eventLog).toHaveLength(0);
+      expect(store.getAppliedSeq("clr-s1")).toBeUndefined();
+      expect(streamEventHub.getCursor("clr-s1")).toBeUndefined();
+      expect(resync).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(SESSION_RESYNC_EVENT, resync);
+    }
+  });
+
+  it("session_cleared（本源回显）：不清本地状态、不派发 resync", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    const state = store.getSessionState("clr-s2");
+    state.turns = [{ id: "t1" } as any];
+    store.setAppliedSeq("clr-s2", 9);
+
+    const resync = vi.fn();
+    window.addEventListener(SESSION_RESYNC_EVENT, resync);
+    try {
+      emitSessionEvent("session_cleared", {
+        sessionId: "clr-s2",
+        timestamp: "2026-11-23T00:00:00Z",
+        source: "client-self",
+      });
+
+      expect(store.getSessionState("clr-s2").turns).toHaveLength(1);
+      expect(store.getAppliedSeq("clr-s2")).toBe(9);
+      expect(resync).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener(SESSION_RESYNC_EVENT, resync);
+    }
   });
 
   it("connected 携带补发起点且当前会话存在缺口 → 派发强制重拉", () => {

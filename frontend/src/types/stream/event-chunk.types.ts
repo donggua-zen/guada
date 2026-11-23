@@ -10,8 +10,9 @@
  * - 消息级事件（StreamChunk 直通 + user_message/tool_calls_response）：
  *   携带 messageId 关联所属 assistant 消息，消息内容完全由这一层承载
  *
- * 传输层信封：WireStreamEvent = SessionStreamEvent & { sessionId?, prevSeq? }
- * （chat-runner 注入 prevSeq 续传游标，session-events 注入 sessionId 后经 SSE 下发）
+ * 传输层信封：WireStreamEvent = SessionStreamEvent & { sessionId?, prevSeq?, chunkSeq?, logSeq?, streamBootId? }
+ * （chat-runner 注入 prevSeq 续传游标，session-events 注入 sessionId 后经 SSE 下发，
+ *  manager 盖戳传输位置 chunkSeq 与未钳制的落库水位 logSeq）
  *
  * 迁移说明：将来做前后端共享包时，本文件整体搬入 packages/shared/src/stream/，
  * 消费方 import 路径从 "@/types/stream" 改为 "@guada/shared" 即可（零成本迁移）。
@@ -498,16 +499,26 @@ export type SessionStreamEvent =
   | ToolImagePruneEvent
   | MessageChunkEvent;
 
-/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 chunkSeq/streamBootId） */
+/** 传输层事件（chat-runner 注入 prevSeq；session-events 信封注入 sessionId；publish 盖戳 chunkSeq/logSeq/streamBootId） */
 export type WireStreamEvent = SessionStreamEvent & {
   sessionId?: string;
-  /** 落库区间：广播那一刻该会话最后一条已入库事件的 seq */
+  /**
+   * 传输区间基座：与 chunkSeq 组成去重位置 `(prevSeq, chunkSeq)`。
+   *
+   * 后端 manager 会做单调钳制（抵御并发 publish 乱序），因此它可能不等于真实落库游标。
+   * **推进已应用水位用 logSeq**（`useSessionEvents`），本字段只用于重放去重与区间归属。
+   */
   prevSeq?: number;
   /**
    * 区间内帧序号：同一 prevSeq 下第 n 个帧（1 起，prevSeq 前进时归零）。
    * 与 prevSeq 组成传输位置 `(prevSeq, chunkSeq)`，hub 据此做重放去重与区间归属。
    */
   chunkSeq?: number;
+  /**
+   * 发布时刻真实最后已落库事件的 seq（未做传输钳制）。
+   * 日志回绕（截断后 seq 复用、清空后重建）时它会随日志尾下降；裸运行时帧不带本字段。
+   */
+  logSeq?: number;
   /** 后端进程启动标识：重启后传输位置重置（chunkSeq 从 1 起），hub 据此重置幂等游标 */
   streamBootId?: string;
 };

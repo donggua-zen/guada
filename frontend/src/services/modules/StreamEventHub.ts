@@ -2,20 +2,22 @@
  * StreamEventHub:流式事件路由中心(合并为单 SSE 后的前端核心)
  *
  * 模型:每个会话一个"邮箱"(mailbox,滚动窗口)+ 全局常驻订阅者。
- * - route(event):先按传输位置 (prevSeq, chunkSeq) 幂等校验,再进邮箱;全局订阅者同步收到
+ * - route(event):先按传输位置 (baseSeq, chunkSeq) 幂等校验,再进邮箱;全局订阅者同步收到
  * - subscribeAll(onEvent):唯一的生产消费入口(useSessionEvents 常驻消费)
  * - getTailAfterLastCheckpoint(sessionId):强制重拉时取"最后一个落盘边界之后的在飞尾部"
  * - noteCatchupPositions():连接补发开始前登记各流起点,判定补发是否覆盖本地游标
  *
- * 关键不变量(先入库后发事件):广播事件的 prevSeq = 该会话最后一条已入库事件的 seq。
- * 因 chunk 不入库,prevSeq 不会落在 chunk 区间中间——历史页读取与尾部重放都依赖它。
+ * 两个 seq 概念（务必区分）:
+ * - `prevSeq`(线上字段名) = **传输区间基座** baseSeq。后端 publish 为每条帧盖戳
+ *   (prevSeq, chunkSeq) + streamBootId(进程标识)。prevSeq 是落库区间，chunkSeq 是区间内
+ *   第 n 个帧(prevSeq 前进时归零)，按会话连续、跨回合不重置。因为 chunk 不入库，
+ *   prevSeq 不会落在 chunk 区间中间——历史页读取与尾部重放都依赖它。
+ *   注意 prevSeq 被后端单调钳制(抵御并发 publish 乱序)，**不代表真实日志尾**。
+ * - `logSeq` = 发布时刻未钳制的真实落库 seq，**已应用水位**只认它(见 useSessionEvents)。
  *
- * 传输位置:后端 publish 为每条帧盖戳 (prevSeq, chunkSeq) + streamBootId(进程标识)。
- * - prevSeq 是落库区间;chunkSeq 是区间内第 n 个帧(prevSeq 前进时归零),按会话连续、
- *   跨回合不重置。
- * - SSE 重连补发会重放整个 eventBuffer;同 bootId 下位置 <= 游标的帧在此直接丢弃,
- *   防止 delta 重复追加导致文本翻倍。bootId 变化(后端重启)则接受并重置游标。
- * - 缺任一位置字段的帧 fail-open(不去重),兼容旧后端/异常帧。
+ * 去重:SSE 重连补发会重放整个 eventBuffer;同 bootId 下位置 <= 游标的帧在此直接丢弃,
+ * 防止 delta 重复追加导致文本翻倍。bootId 变化(后端重启)则接受并重置游标。
+ * 缺任一位置字段的帧 fail-open(不去重),兼容旧后端/异常帧。
  */
 
 /**
@@ -46,7 +48,7 @@ export class StreamEventHub {
   private globalSubscribers: SessionSubscriber[] = [];
   /** 每会话邮箱上限:防止未打开会话的流式事件无限累积 */
   private readonly MAX_BUFFERED = 2000;
-  /** 每会话幂等游标(后端盖戳的传输位置 prevSeq/chunkSeq + streamBootId;重连补发去重依据) */
+  /** 每会话幂等游标(后端盖戳的传输位置 baseSeq/chunkSeq + streamBootId;重连补发去重依据) */
   private readonly streamCursor = new Map<
     string,
     { bootId?: string; prevSeq: number; chunkSeq: number }
@@ -54,7 +56,7 @@ export class StreamEventHub {
   /**
    * 补发不覆盖本地游标的会话（可能丢了落库事件）。
    *
-   * 由 connected 帧的 streamPositions 判定：补发起点 prevSeq 越过本地游标的 prevSeq，
+   * 由 connected 帧的 streamPositions 判定：补发起点 baseSeq 越过本地游标的 baseSeq，
    * 说明中间跨过了落库区间。标记后冻结水位推进，恢复走整页重拉；整页重拉成功后清除。
    */
   private readonly gapSessions = new Set<string>();
@@ -82,24 +84,24 @@ export class StreamEventHub {
     const sessionId = event.sessionId;
     if (!sessionId) return;
 
-    const logSeq = event.prevSeq;
+    const baseSeq = event.prevSeq;
     const ord = event.chunkSeq;
     if (
-      typeof logSeq === "number" &&
-      Number.isFinite(logSeq) &&
+      typeof baseSeq === "number" &&
+      Number.isFinite(baseSeq) &&
       typeof ord === "number" &&
       Number.isFinite(ord)
     ) {
       const cursor = this.streamCursor.get(sessionId);
       if (cursor && cursor.bootId === event.streamBootId) {
         const duplicate =
-          logSeq < cursor.prevSeq ||
-          (logSeq === cursor.prevSeq && ord <= cursor.chunkSeq);
+          baseSeq < cursor.prevSeq ||
+          (baseSeq === cursor.prevSeq && ord <= cursor.chunkSeq);
         if (duplicate) return;
       }
       this.streamCursor.set(sessionId, {
         bootId: event.streamBootId,
-        prevSeq: logSeq,
+        prevSeq: baseSeq,
         chunkSeq: ord,
       });
     }
@@ -161,25 +163,27 @@ export class StreamEventHub {
     return [];
   }
 
-  /** 邮箱当前条数（诊断/测试；未缓存会话 = 0，不创建缓存） */
+  /** 邮箱当前条数（仅诊断/测试；未缓存会话 = 0，不创建缓存） */
   getMailboxSize(sessionId: string): number {
     return this.sessions.get(sessionId)?.mailbox.length ?? 0;
   }
 
-  /** 当前去重游标（缺口判定/诊断用；无缓存返回 undefined） */
+  /** 当前去重游标（仅诊断/测试；无缓存返回 undefined）。字段名沿用线上 prevSeq。 */
   getCursor(
     sessionId: string,
-  ): { bootId?: string; prevSeq: number; chunkSeq: number } | undefined {
+  ): { bootId?: string; baseSeq: number; chunkSeq: number } | undefined {
     const cursor = this.streamCursor.get(sessionId);
-    return cursor ? { ...cursor } : undefined;
+    return cursor
+      ? { bootId: cursor.bootId, baseSeq: cursor.prevSeq, chunkSeq: cursor.chunkSeq }
+      : undefined;
   }
 
   /**
    * 登记一次连接补发的各流起点位置（来自 connected 帧的 streamPositions）。
    *
-   * 判定规则：只有"补发起点跨过了本地游标的落库区间"(start.prevSeq > cursor.prevSeq)
+   * 判定规则：只有"补发起点跨过了本地游标的落库区间"(start.baseSeq > cursor.baseSeq)
    * 才标记缺口——中间可能有本地从未收到的落库事件。
-   * 同一 prevSeq 内 chunkSeq 跳跃不标记：cleanupIntermediateEvents 会删掉已完成的 delta
+   * 同一 baseSeq 内 chunkSeq 跳跃不标记：cleanupIntermediateEvents 会删掉已完成的 delta
    * （由 block_end 携带完整块替代），属合法空洞。
    * 本地无游标（从未收到该会话的 live 帧）时不判定：内容由事件页/增量补拉负责。
    */

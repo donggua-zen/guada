@@ -79,6 +79,22 @@ export interface SessionDeletedEvent {
 }
 
 /**
+ * 会话聊天记录清空事件（内部模块间使用）
+ *
+ * 事件名：session.cleared
+ *
+ * 语义：该会话的 JSONL 事件日志已被整目录删除并会在下次读写时重建（seq 从 0 起）。
+ * 其他窗口收到后必须丢弃本地树/水位/邮箱，按新日志整页重拉——seq 是日志位置，
+ * 重建后与旧日志的 seq 不再对应。
+ */
+export interface SessionClearedEvent {
+  sessionId: string;
+  timestamp: string;
+  source?: string;
+  payload?: Record<string, any>;
+}
+
+/**
  * 子 Agent 创建事件（内部模块间使用）
  *
  * 事件名：subagent.created
@@ -234,6 +250,7 @@ export function toSessionEvent(
     | SessionCreatedEvent
     | SessionUpdatedEvent
     | SessionDeletedEvent
+    | SessionClearedEvent
     | SubAgentCreatedEvent
     | SubAgentRunEndedEvent
     | TodoUpdatedEvent

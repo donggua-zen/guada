@@ -7,6 +7,7 @@ import {
   SessionCreatedEvent,
   SessionUpdatedEvent,
   SessionDeletedEvent,
+  SessionClearedEvent,
   SubAgentCreatedEvent,
   SubAgentRunEndedEvent,
   TodoUpdatedEvent,
@@ -37,6 +38,7 @@ export type SessionEventType =
   | "connected"
   | "session_created"
   | "session_deleted"
+  | "session_cleared"
   | "session_renamed"
   | "session_updated"
   | "stream_status_changed"
@@ -446,6 +448,20 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     this.recentTerminals.delete(event.sessionId);
     this.broadcastToAllClients(
       toSessionEvent("session_deleted", event),
+    );
+  }
+
+  /**
+   * 监听内部 session.cleared 事件，转发给 SSE 客户端
+   *
+   * 清空聊天记录 = 日志换代（seq 复用）：其他窗口必须清空本地树/水位/邮箱并整页重拉。
+   * 终态墓碑记录的是旧日志尾，同一并作废。
+   */
+  @OnEvent("session.cleared")
+  handleSessionCleared(event: SessionClearedEvent) {
+    this.recentTerminals.delete(event.sessionId);
+    this.broadcastToAllClients(
+      toSessionEvent("session_cleared", event),
     );
   }
 

@@ -1511,6 +1511,74 @@ export function applyLiveChunk(
 }
 
 /**
+ * 会话是否已有可用的缓存树（单点谓词）。
+ *
+ * 语义：`loaded` 是"历史已成功拉过"的标记；`turns.length > 0` 兜住"树已建但 loaded 被
+ * 标脏/未置位"的过渡态（markSessionHistoryStale 会把 loaded 置 false 而树还在）。
+ * 三个消费方（live 投影路由、强制重拉的 hadCache 判定、重拉前置门槛）必须同口径，
+ * 否则会出现"live 直写树但重拉以为是首次加载、不重放邮箱尾部"这类不一致。
+ */
+export function hasCachedTurns(
+  sessionStore: ProjectorSessionStore,
+  sessionId: string,
+): boolean {
+  const state = sessionStore.getSessionState(sessionId);
+  return state.loaded === true || (state.turns?.length ?? 0) > 0;
+}
+
+/**
+ * 判断一条在飞帧是否"已包含在事件页内"（重拉后是否该跳过）。
+ *
+ * 判定依据是**发布时刻的落库游标**，不是帧自身的 seq（delta 根本不入库）：
+ * - 优先 `logSeq`（未钳制的真实落库 seq）：`logSeq < pageEndSeq` ⇒ 发布时页尾已覆盖它 ⇒ 跳过。
+ * - 旧后端/裸运行时帧无 `logSeq` 时回退 `prevSeq`（钳制后只会偏大，回退是保守选择：
+ *   偏大意味着"更可能应用"，靠投影器按 messageId/turnId 幂等吸收）。
+ * - 两者都缺失 ⇒ fail-open 应用（与 hub 去重口径一致）。
+ *
+ * 为什么必须跳过：页内已有该消息的最终内容，重复应用 delta 会让文本翻倍——
+ * 这正是整页刷新路径用 stash + 该过滤做到"等价刷新"的原因。
+ */
+export function isChunkCoveredByPage(
+  chunk: ProjectorChunk,
+  pageEndSeq: number,
+): boolean {
+  if (typeof pageEndSeq !== "number" || !Number.isFinite(pageEndSeq)) return false;
+  const wire = chunk as { logSeq?: number; prevSeq?: number };
+  const cursor =
+    typeof wire.logSeq === "number" && Number.isFinite(wire.logSeq)
+      ? wire.logSeq
+      : typeof wire.prevSeq === "number" && Number.isFinite(wire.prevSeq)
+        ? wire.prevSeq
+        : undefined;
+  if (cursor === undefined) return false;
+  return cursor < pageEndSeq;
+}
+
+/**
+ * 应用一批"在飞帧"（未落盘的 delta / 页尾之后的事件），跳过事件页已覆盖的部分。
+ *
+ * 两个来源共用本函数，语义因此只有一份：
+ * - 无缓存会话的 stash（`takeStash`）：刷新/首次打开期间暂存的实时帧；
+ * - 强制重拉后的邮箱尾部（`getTailAfterLastCheckpoint`）：已有缓存时 fold 抹掉的在飞块。
+ *
+ * @returns 实际应用的帧数
+ */
+export function applyInFlightChunks(
+  sessionStore: ProjectorSessionStore,
+  sessionId: string,
+  chunks: readonly ProjectorChunk[],
+  pageEndSeq: number,
+): number {
+  let applied = 0;
+  for (const chunk of chunks) {
+    if (isChunkCoveredByPage(chunk, pageEndSeq)) continue;
+    applyLiveChunk(sessionStore, sessionId, chunk);
+    applied += 1;
+  }
+  return applied;
+}
+
+/**
  * 事件到达投影(接收链路常驻入口):有缓存 → applyLiveChunk;无缓存 → 暂存 finish 后事件。
  */
 export function projectChunk(
@@ -1520,8 +1588,6 @@ export function projectChunk(
 ): void {
   const span = perfStartScoped("live.chunk", chunk.type);
   try {
-    const sessionState = sessionStore.getSessionState(sessionId);
-
     // 会话级交互卡以 sessionId 唯一锚点、与回合缓存无关：先于 hasCache 门控直写，
     // 否则「未打开过内容的会话」（刷新后的非当前会话、另一窗口正在跑的会话）在 store 里
     // 看不到 pendingAsk，侧边栏等会话级消费者失明。与 applyLiveChunk 的 live 分支同值幂等双写。
@@ -1531,9 +1597,7 @@ export function projectChunk(
       sessionStore.removeSessionPendingAsk(sessionId, chunk.requestId);
     }
 
-    const hasCache =
-      sessionState.loaded === true || (sessionState.turns?.length ?? 0) > 0;
-    if (!hasCache) {
+    if (!hasCachedTurns(sessionStore, sessionId)) {
       stashEvent(sessionId, chunk);
       return;
     }

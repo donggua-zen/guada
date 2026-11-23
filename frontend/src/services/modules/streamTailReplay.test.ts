@@ -1,71 +1,140 @@
-import { describe, it, expect, vi } from "vitest";
-import type { ProjectorChunk, ProjectorSessionStore } from "./streamProjector";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+vi.mock("@/services/ApiService", () => ({ apiService: {} }));
 
-/**
- * 强制重拉尾部重放的筛选规则（与 stash 消费同一口径）：
- * - prevSeq >= pageEndSeq（或缺失）→ 页内没有，重放
- * - prevSeq < pageEndSeq → 必已包含在事件页内，整体跳过（含 delta，防文本翻倍）
- */
-const { applyLiveChunkMock } = vi.hoisted(() => ({ applyLiveChunkMock: vi.fn() }));
-
-vi.mock("./streamProjector", () => ({
-  applyLiveChunk: (...args: unknown[]) => applyLiveChunkMock(...args),
-}));
-
+import {
+  applyInFlightChunks,
+  isChunkCoveredByPage,
+  type ProjectorChunk,
+  type ProjectorSessionState,
+} from "./streamProjector";
 import { replayStreamTailAfterReload } from "./streamTailReplay";
 
-const store = {} as ProjectorSessionStore;
-
-function chunk(type: string, prevSeq?: number): ProjectorChunk {
-  return { type, sessionId: "s1", prevSeq } as ProjectorChunk;
+/**
+ * 在飞帧的"是否已被事件页覆盖"判定与批量应用（stash 消费 / 强制重拉尾部重放共用）。
+ *
+ * 口径：发布时刻的落库游标（优先 logSeq，回退 prevSeq）< pageEndSeq ⇒ 页内已含 ⇒ 跳过；
+ * 缺游标 fail-open 应用。跳过是必须的——重复应用 delta 会让文本翻倍。
+ */
+function chunk(
+  type: string,
+  seqs: { logSeq?: number; prevSeq?: number } = {},
+): ProjectorChunk {
+  return { type, sessionId: "s1", ...seqs } as ProjectorChunk;
 }
 
-describe("replayStreamTailAfterReload", () => {
-  it("在飞尾部（prevSeq == 页尾）全部按序重放，含 delta/block_start", () => {
-    applyLiveChunkMock.mockClear();
-    const tail = [
-      chunk("block_start", 4),
-      chunk("text_delta", 4),
-      chunk("block_end", 4),
-      chunk("finish", 4),
-      chunk("usage"), // 无 prevSeq → fail-open
-    ];
+function createStore() {
+  const state = {
+    loaded: true,
+    turns: [] as any[],
+    eventLog: [] as any[],
+    pendingAsks: undefined as ProjectorSessionState["pendingAsks"],
+  };
+  const store = {
+    state,
+    getSessionState: () => state,
+    getTurns: () => state.turns,
+    setTurns: (_sid: string, t: any[]) => {
+      state.turns = t;
+    },
+    deleteTurnById: (_sid: string, id: string) => {
+      state.turns = state.turns.filter((t) => t.id !== id);
+    },
+    setSessionIsCompressing: () => {},
+    sessionIsCompressing: () => false,
+    sessionIsStreaming: (): boolean => false,
+    upsertSessionPendingAsk: () => {},
+    removeSessionPendingAsk: () => {},
+    clearSessionPendingAsks: () => {},
+  };
+  return store;
+}
 
-    const applied = replayStreamTailAfterReload(store, "s1", tail, 4);
+describe("isChunkCoveredByPage", () => {
+  it("logSeq 落后于页尾 → 已覆盖（跳过）", () => {
+    expect(isChunkCoveredByPage(chunk("text_delta", { logSeq: 3 }), 4)).toBe(true);
+  });
 
-    expect(applied).toBe(5);
-    expect(applyLiveChunkMock.mock.calls.map((call) => call[2].type)).toEqual([
-      "block_start",
-      "text_delta",
+  it("logSeq 等于/大于页尾 → 未覆盖（应用）", () => {
+    expect(isChunkCoveredByPage(chunk("text_delta", { logSeq: 4 }), 4)).toBe(false);
+    expect(isChunkCoveredByPage(chunk("text_delta", { logSeq: 5 }), 4)).toBe(false);
+  });
+
+  it("logSeq 优先于被钳制的 prevSeq", () => {
+    // prevSeq 钳制后偏大（4），真实落库游标 logSeq=2 → 应按 logSeq 判定为已覆盖
+    expect(
+      isChunkCoveredByPage(chunk("text_delta", { prevSeq: 4, logSeq: 2 }), 4),
+    ).toBe(true);
+  });
+
+  it("缺 logSeq 时回退 prevSeq（旧后端/裸运行时帧）", () => {
+    expect(isChunkCoveredByPage(chunk("text_delta", { prevSeq: 2 }), 4)).toBe(true);
+    expect(isChunkCoveredByPage(chunk("text_delta", { prevSeq: 4 }), 4)).toBe(false);
+  });
+
+  it("无任何游标 → fail-open（应用）", () => {
+    expect(isChunkCoveredByPage(chunk("usage"), 4)).toBe(false);
+  });
+
+  it("pageEndSeq 非有限值 → 不过滤", () => {
+    expect(isChunkCoveredByPage(chunk("text_delta", { logSeq: 1 }), Number.NaN)).toBe(
+      false,
+    );
+  });
+});
+
+describe("applyInFlightChunks", () => {
+  let store: ReturnType<typeof createStore>;
+
+  beforeEach(() => {
+    store = createStore();
+  });
+
+  it("页尾之后的帧按序应用，页内已含的跳过", () => {
+    const applied = applyInFlightChunks(
+      store,
+      "s1",
+      [
+        chunk("block_start", { logSeq: 3 }), // 页内已含 → 跳过
+        chunk("block_end", { logSeq: 4 }), // 页尾之后 → 应用
+        chunk("finish", { logSeq: 4 }), // 应用
+      ],
+      4,
+    );
+
+    expect(applied).toBe(2);
+    // applyLiveChunk 会把终态事件记进 eventLog（delta/block_start 不记）
+    expect(store.state.eventLog.map((e: any) => e.type)).toEqual([
       "block_end",
       "finish",
-      "usage",
     ]);
   });
 
-  it("prevSeq 落后于页尾的 chunk 一律跳过（页内已含，重复应用会文本翻倍）", () => {
-    applyLiveChunkMock.mockClear();
-    const tail = [
-      chunk("block_start", 3),
-      chunk("text_delta", 3),
-      chunk("block_end", 3),
-      chunk("turn_end", 2),
-    ];
-
-    expect(replayStreamTailAfterReload(store, "s1", tail, 4)).toBe(0);
-    expect(applyLiveChunkMock).not.toHaveBeenCalled();
+  it("空批次零行为（普通加载/无活跃流路径）", () => {
+    expect(applyInFlightChunks(store, "s1", [], 10)).toBe(0);
+    expect(store.state.eventLog).toHaveLength(0);
   });
 
-  it("空尾部零行为（普通加载/无活跃流路径）", () => {
-    applyLiveChunkMock.mockClear();
-    expect(replayStreamTailAfterReload(store, "s1", [], 10)).toBe(0);
-    expect(applyLiveChunkMock).not.toHaveBeenCalled();
+  it("无游标的帧 fail-open 应用（不因过滤丢事件）", () => {
+    const applied = applyInFlightChunks(
+      store,
+      "s1",
+      [chunk("block_end"), chunk("finish")],
+      Number.NaN,
+    );
+    expect(applied).toBe(2);
   });
+});
 
-  it("pageEndSeq 非有限值时不因过滤丢事件", () => {
-    applyLiveChunkMock.mockClear();
-    const tail = [chunk("block_end", 1), chunk("finish", 1)];
-    expect(replayStreamTailAfterReload(store, "s1", tail, Number.NaN)).toBe(2);
-    expect(applyLiveChunkMock).toHaveBeenCalledTimes(2);
+describe("replayStreamTailAfterReload", () => {
+  it("与 applyInFlightChunks 同口径（邮箱尾部重放 = stash 消费语义）", () => {
+    const store = createStore();
+    const applied = replayStreamTailAfterReload(
+      store,
+      "s1",
+      [chunk("block_start", { logSeq: 3 }), chunk("finish", { logSeq: 4 })],
+      4,
+    );
+    expect(applied).toBe(1);
+    expect(store.state.eventLog.map((e: any) => e.type)).toEqual(["finish"]);
   });
 });

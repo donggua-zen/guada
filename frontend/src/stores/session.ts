@@ -973,6 +973,20 @@ export const useSessionStore = defineStore('session', () => {
         state.appliedSeq = Math.max(state.appliedSeq ?? -1, seq)
     }
 
+    /**
+     * 复位已应用水位（可升可降；整页重建后调用）
+     *
+     * 与 setAppliedSeq 的区别：`setAppliedSeq` 给并发路径（live 帧/增量批/页尾）用 max 语义，
+     * 防止乱序回退；但日志回绕（torn 尾截断后 seq 复用、清空记录后重建）会让本地水位高于
+     * 服务端日志尾，max 永远降不下来——只有"整页重建了整棵树"这条路径有资格把水位
+     * 直接设为页尾（可低于旧值）。`seq` 非有限或 < 0（空日志页的 -1）时清空水位。
+     */
+    const resetAppliedSeq = (sessionId: string, seq?: number): void => {
+        const state = getSessionState(sessionId)
+        state.appliedSeq =
+            typeof seq === "number" && Number.isFinite(seq) && seq >= 0 ? seq : undefined
+    }
+
     /** 纯读已应用水位（不创建缓存；未加载返回 undefined） */
     const getAppliedSeq = (sessionId: string): number | undefined => {
         return sessions.value.get(sessionId)?.appliedSeq
@@ -1096,6 +1110,7 @@ export const useSessionStore = defineStore('session', () => {
         getSidebarFlag,
         syncStreamingState,
         setAppliedSeq,
+        resetAppliedSeq,
         getAppliedSeq,
         clearSidebarState
     }

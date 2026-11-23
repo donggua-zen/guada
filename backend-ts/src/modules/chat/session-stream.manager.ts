@@ -221,32 +221,35 @@ export class SessionStreamManager {
       this.cleanupIntermediateEvents(stream, event.messageId);
     }
 
-    // 最后入库 seq 下界（终态墓碑携带；prevSeq 缺失/非数字的运行时帧忽略）
-    if (typeof event.prevSeq === "number" && Number.isFinite(event.prevSeq)) {
+    // 真实落库游标（未钳制）：终态墓碑与 SSE logSeq 共用
+    const rawPrev =
+      typeof event.prevSeq === "number" && Number.isFinite(event.prevSeq)
+        ? event.prevSeq
+        : undefined;
+    if (rawPrev !== undefined) {
       const prev = this.lastPersistedSeqBySession.get(sessionId);
-      if (prev === undefined || event.prevSeq > prev) {
-        this.lastPersistedSeqBySession.set(sessionId, event.prevSeq);
+      if (prev === undefined || rawPrev > prev) {
+        this.lastPersistedSeqBySession.set(sessionId, rawPrev);
       }
     }
 
     // 传输位置 = 落库区间(base) + 区间内帧序号(ord)。
-    // base 取 prevSeq（发布时刻的入库游标）；并发 publishStream 可能乱序，回退时
+    // base 优先取 prevSeq（发布时刻的入库游标）；并发 publishStream 可能乱序，回退时
     // 钳制到当前 base 并递增 ord，保证 (base, ord) 字典序严格单调。
     const prevPos = this.chunkPosBySession.get(sessionId);
-    const rawBase =
-      typeof event.prevSeq === "number" && Number.isFinite(event.prevSeq)
-        ? event.prevSeq
-        : prevPos?.base ?? 0;
+    const rawBase = rawPrev ?? prevPos?.base ?? 0;
     const base = prevPos ? Math.max(rawBase, prevPos.base) : rawBase;
     const ord = prevPos && base === prevPos.base ? prevPos.ord + 1 : 1;
     this.chunkPosBySession.set(sessionId, { base, ord });
 
-    // 前端 StreamEventHub 按同 bootId 下的 (prevSeq, chunkSeq) 元组做入口幂等——
-    // SSE 重连补发重放 eventBuffer 时，已消费过的帧直接丢弃，防止 delta 重复累加。
+    // logSeq = 未钳制的真实落库游标：日志回绕后它会随日志尾下降，客户端据此推进
+    // "已应用水位"；prevSeq 只承担传输去重（钳制后只能升，不能代表日志尾）。
+    // 裸运行时帧（无 prevSeq）不携带 logSeq，客户端水位保持不动。
     const stamped: StreamEvent = {
       ...event,
       prevSeq: base,
       chunkSeq: ord,
+      ...(rawPrev !== undefined ? { logSeq: rawPrev } : {}),
       streamBootId: this.bootId,
     };
 

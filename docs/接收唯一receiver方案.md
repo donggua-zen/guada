@@ -1,166 +1,114 @@
-# 接收唯一 receiver 方案
+# 接收链路：唯一 receiver 与断点续传
 
-> 目标:前端**发送与接收分离**。发送是发送(独立入口,只调后端),接收是接收(**全局唯一 receiver**,消费全局 SSE 通道)。所有流式事件——无论自己发起、其他窗口发起、刷新后订阅——都进唯一 receiver 处理。
+> 前端**发送与接收分离**：发送只调后端发起请求；接收是**全局唯一 receiver**，消费全局
+> SSE 通道。所有流式事件——自己发起的、其他窗口发起的、刷新后补发的——都进同一条接收链路。
 
-## 现行实现（2026-11 更新，以本节为准）
-
-> 下文"目标架构 / DSH 对照 / 改造计划"保留为设计沿革。其中 `subscribe(sid, lastSeq)`、
-> `setHistoryBaseline`、按会话注销/基线等描述已在清理中删除，不再存在于代码。
-
-- **接收链路**：`SessionEventsService`（单条全局 SSE）→ `method` 以 `stream/*` 开头的帧进
-  `StreamEventHub.route`；其余会话事件按 `type` 分发给 `onSessionEvent` 监听器。
-- **唯一消费入口**：`StreamEventHub.subscribeAll`（由 `useSessionEvents` 常驻消费）。
-  按会话 `subscribe` / 历史基线 API 已删除。
-- **重放去重（传输位置）**：每条流帧带 `(prevSeq, chunkSeq)` + `streamBootId`。
-  - `prevSeq` = 发布时刻最后一条已落库事件的 seq（落库区间，整数）；
-  - `chunkSeq` = 同一区间内第 n 个帧（1 起；区间前进时归零；按会话连续、跨回合不重置）；
-  - 同 `bootId` 下位置 ≤ 本会话去重游标 → 判定为重放重复，丢弃；`bootId` 变化 → 重置游标；
-  - 缺任一位置字段的帧 fail-open（不去重，兼容异常/旧帧）。
-  - 同区间内的 `chunkSeq` 空洞是合法的：`cleanupIntermediateEvents` 会删掉已完成的 delta
-    （由 `block_end` 携带完整块替代），因此**不能用 `chunkSeq` 连续性判断丢帧**。
-- **补发覆盖度**：SSE 建连补发的第一帧 `connected` 带 `payload.streamPositions`
-  （各活跃流 `eventBuffer[0]` 的位置）。若起点 `prevSeq` 越过本地游标 `prevSeq`，
-  说明本次补发没覆盖缺口 → 前端标记 gap，冻结已应用水位的推进，恢复走整页重拉；
-  整页重拉成功后清除标记。
-- **历史与增量**：历史用事件页（Turn 锚点索引，`beforeSeq` 反向翻页）；
-  断点续传用 `GET /chat/sessions/:id/events/tail?afterSeq=...`（`seq > afterSeq` 前向增量）。
-  前者 fold 重建，后者就地应用。
-
-## 一、目标架构
+## 一、链路
 
 ```
-┌─ 发送(send):sendMessage(独立,不唯一亦可)
-│    新发消息、整轮重答、断点续传
-│    → 只做一件事:调后端发起请求(regenerationMode/userMessage 只是参数)
-│    → 不处理事件
-│
-└─ 接收(receive):全局唯一 receiver ✅
-     所有流式事件(自己发起的响应 / 其他窗口的流 / 刷新后订阅)
-     → 消费全局 SSE → StreamEventHub
-     → 会话级:按 sessionId 决定处理或丢弃(切换会话时注销 or 内部过滤)
-     → 时序:必须在"历史从后端拉取之后"才处理(依赖 lastSeq 基线)
+后端 SessionEventsService（单条全局 SSE）
+  ├─ method 以 stream/* 开头  → StreamEventHub.route → 邮箱 + subscribeAll
+  └─ 其余会话事件             → onSessionEvent(type) 监听器
+        ↑
+前端 useSessionEvents（常驻，MainLayout 挂载）
+  ├─ subscribeAll → projectChunk（有树直写 / 无树暂存）
+  ├─ onSessionEvent → 会话级状态、CRUD、流状态、缺口判定
+  └─ 触发历史重载（回前台 / 重连 / 判停 / 日志换代）
 ```
 
-### 接收唯一的三条铁律
+唯一消费入口是 `StreamEventHub.subscribeAll`。按会话订阅 / 历史基线那套 API 已不存在。
 
-1. **唯一入口**:全项目只有一个 receiver 消费 StreamEventHub / SSE 事件,不存在第二条接收链路。
-2. **会话级**:receiver 按当前会话工作——当前会话事件处理,非当前会话事件丢弃(切换会话注销或按 sessionId 过滤)。
-3. **时序**:receiver 必须等 `loadSession`(HTTP 拉历史)完成、拿到 `lastSeq` 基线之后才处理事件。增量判断依赖 `prevSeq >= lastSeq`,历史未拉取则无法判断"历史已包含 vs 新增量",会重复处理。
+## 二、三个 seq 概念（务必区分）
 
-## 二、DSH 对照(实证,packages/client)
-
-### DSH 接收唯一(receive)
-
-```
-单一 mux SSE 流(所有会话事件聚合)
-  └─ 单一 pumpStream 循环(connection.ts L128/178)消费
-       └─ onMuxEnvelope
-            └─ sessions.handleMuxEnvelope(index.ts:205)   ← 唯一接收分发入口
-                 └─ manager.handleMuxEnvelope(L683) 按 frame.type 分发
-                      ├─ session/event       → 内容事件
-                      ├─ session/subscribed  → 订阅基线(带 lastSeq)
-                      └─ ... → session.handleMuxEnvelope(L471)
-```
-
-- **订阅归接收**:`session/subscribed` 是 mux 流里的一个帧类型,订阅不是独立入口,与接收是同一个 receive。
-- **发送独立**:走独立 RPC(`op: 'send'`),不经过 mux 接收流。
-- **历史拉取独立**:打开会话 `open()` → `history({ beforeSeq, maxMessages })` 独立 RPC 拉历史(session.ts L369/386),不是 mux 流回放。
-
-### DSH 的时序(历史拉取 + 邮箱 + 基线)
-
-```
-① open() → history RPC 拉历史(得 baseSeq)        ← 从后端拉取对话记录
-② 同时 mux 流持续到达新事件 → 进 liveBuffer(邮箱)   ← 事件先缓存,不丢
-③ session/subscribed(lastSeq) 帧到达 = 基线信号
-④ history 落地后 → 把 liveBuffer 里的事件按 seq 与历史拼接(stitch) → 才处理
-```
-
-**DSH 就是"先拉历史,再按基线处理增量"**——`liveBuffer` 等 history 落地才拼接。这印证了本方案铁律③。
-
-## 三、本项目当前状态与差距
-
-### 现状(已部分收敛)
-
-- 后端已合并为**全局单一 SSE 通道**(SessionEventsService → streamEventHub.route)。
-- `StreamEventHub`:邮箱模型——事件先 `route` 进 mailbox(不丢),`subscribe(sid, lastSeq, cb)` 返回 `{ initialEvents(prevSeq>=lastSeq), unsubscribe }`。
-- `useStreamResponse.subscribeStreamEvents`(L632):先 `streamEventHub.subscribe(sid, lastSeq, cb)`,再按需 `apiService.chat` 触发,事件循环处理。
-- `useStreamResponse.processStreamLoop`(L687):唯一事件循环,按事件类型(think/text/tool_call/turn_start/turn_resume/turn_delete…)分发。
-- ChatPanel 三个入口(`handleStreamResponse`/`handleStreamResponseWithCreate`/`handleStreamResponseAsSubscriber`)已收敛为 `handleStreamRequest`(一个函数,但**仍被多个场景各自调用**,不满足"接收唯一")。
-
-### 差距(需改造)
-
-| 项 | 现状 | 目标 |
+| 名称 | 含义 | 用途 |
 |---|---|---|
-| 接收入口 | `processStreamLoop` 在 `handleStreamRequest` 内被多次调用;事件处理与"触发发送"耦合在 `subscribeStreamEvents` 里 | **唯一 receiver**,全局一个消费 StreamEventHub 的实体 |
-| 会话级 | `subscribeStreamEvents` 按会话订阅,但每个调用方各自 subscribe | receiver 内部按 sessionId 过滤/注销,当前会话才处理 |
-| 时序 | `subscribe(sid, lastSeq)` 天然在 loadSession 后,已满足 | 保持;receiver 显式等历史基线就绪 |
-| 发送 | `subscribeStreamEvents` 里 `apiService.chat` 与事件接收混在一起 | 发送独立(sendMessage 只调后端),事件由 receiver 统一收 |
+| `logSeq` | 发布时刻**未钳制**的真实落库 seq | 推进已应用水位 `appliedSeq` |
+| `prevSeq` | **传输区间基座**（可能被单调钳制） | 重放去重、区间归属、尾部重放过滤 |
+| `chunkSeq` | 同一 `prevSeq` 区间内第 n 个帧（1 起，区间前进时归零） | 与 `prevSeq` 组成去重元组 |
 
-## 四、落地步骤
+- `prevSeq` 被 `SessionStreamManager.publish` 做 `base = max(raw, 上次 base)` 钳制，用于抵御
+  并发 `publishStream` 的乱序。**因此它不代表日志尾**——日志清空/截断后仍停在旧高值。
+  需要日志真相时一律用 `logSeq`。
+- 去重：同 `streamBootId` 下 `(prevSeq, chunkSeq) <= 游标` 判定为重放，丢弃；`bootId` 变化
+  （后端重启）重置游标；缺任一位置字段 fail-open。
+- 同区间内 `chunkSeq` 空洞是**合法**的：`cleanupIntermediateEvents` 会删掉已完成的 delta
+  （由 `block_end` 携带完整块替代），所以不能用 `chunkSeq` 连续性判断丢帧。
 
-### 1. 新建全局唯一 receiver(前端核心)
+## 三、已应用水位 `appliedSeq`
 
-```ts
-// frontend/src/services/modules/StreamReceiver.ts
-// 全局唯一接收器:消费 StreamEventHub,按当前会话处理事件
-class StreamReceiver {
-  private activeSessionId: string | null = null;   // 当前会话
-  private lastSeqBySession = new Map<string, number>(); // 历史基线游标
-  private subscribers = new Map<string, (chunk) => void>(); // 按会话的处理器
+- 只由**实际应用进树的持久化事件**推进：live 帧的 `logSeq`、增量批的 `endSeq`、事件页的 `endSeq`。
+- 写入必须在投影**之后**：投影抛错时 hub 的 try/catch 会吞掉异常，若水位先推进，这条事件
+  既没进树、也不会被下次增量取回——静默永久丢失。
+- `setAppliedSeq` 取 max（并发路径乱序保护）；整页重建走 `resetAppliedSeq`（可降），
+  这是日志回绕后复位水位的唯一出口。
+- 补发缺口未清前不推进（见下节）。
 
-  // 会话级:设置当前会话(切换时注销上一个,丢弃非当前会话事件)
-  setActiveSession(sessionId: string | null): void;
+## 四、补发覆盖度与缺口
 
-  // 时序:历史拉取完成后设置基线,才放行该会话事件
-  setHistoryBaseline(sessionId: string, lastSeq: number): void;
+SSE 建连补发的第一帧 `connected` 带 `payload.streamPositions`（各活跃流 `eventBuffer[0]` 的
+位置）。若起点 `prevSeq` 越过本地游标 `prevSeq`，说明本次补发没覆盖缺口 → 标记 gap、
+冻结水位推进、当前会话改走整页重拉；重拉成功后清除标记。
 
-  // 唯一订阅点:内部调 streamEventHub.subscribe,按 sessionId 过滤
-  private onEvent(sessionId: string, chunk: StreamChunk): void;
-}
+## 五、两条补拉路径
 
-export const streamReceiver = new StreamReceiver();
-```
+| | 历史页 | 增量尾 |
+|---|---|---|
+| 接口 | `GET /sessions/:id/events?turns&beforeSeq` | `GET /sessions/:id/events/tail?afterSeq&limit` |
+| 语义 | 尾部 N 个回合的连续事件区间（按回合括号对齐） | `seq > afterSeq` 前向增量 |
+| 前端 | `foldEvents` 全量重建 | `applyEventsIncremental` 就地并入 |
 
-- **消费源**:全局 StreamEventHub(`streamEventHub` 单例)。
-- **会话级**:`setActiveSession` 切换时注销上一会话的订阅(方式一);或在 `onEvent` 里 `if (sessionId !== activeSessionId) return`(方式二)。
-- **时序**:`setHistoryBaseline(sid, lastSeq)` 记录基线;receiver 对该会话只处理 `prevSeq >= lastSeq` 的增量(历史未拉取时事件进邮箱不处理,与 DSH liveBuffer 同理)。
+增量批的回退守卫（任一命中即整页重拉）：
 
-### 2. 接收唯一化(useStreamResponse)
+- `no-watermark` / `multiple-open-turns` / `gap-too-large` / `cant-seed-turn-cursor`；
+- `log-rewound`：`tailSeq < appliedSeq`，或批尾越过日志尾（日志换代：torn 尾截断后 seq 复用、
+  清空记录后重建）。命中时额外清空 hub 邮箱/游标，防止旧代次尾部回放进新树；
+- `seq-gap`：批首 ≠ 水位 + 1；`seq-gap-in-batch`：批内 seq 跳号（读路径漏事件）；
+- `read-gap`：空批但日志尾超前，重试一次仍空（陈旧索引静默截断）；
+- `bad-response` / `fetch-failed` / `apply-failed`。
 
-- `processStreamLoop` 的事件处理部分改为:向唯一 `streamReceiver` 注册当前会话的处理器(一次),由 receiver 统一收事件后调用。
-- 删除各场景各自 `streamEventHub.subscribe` 的调用,统一收敛到 receiver 内部唯一 subscribe。
-- `subscribeStreamEvents` 的"触发发送"(`apiService.chat`)拆出,归发送侧。
+空批只有 `tailSeq === appliedSeq` 才算追平；否则不推进水位（不能把未返回的事件当成已应用）。
 
-### 3. 发送独立(sendMessage)
+## 六、在飞帧的应用口径
 
-```ts
-// ChatPanel:发送唯一(或与接收分离)
-function sendMessage(sessionId, options: { content?, files?, replaceTurnId?, regenerationMode?, assistantMessageId?, userMessage?, lastSeq? }) {
-  // 只调后端发起,不处理事件(事件由唯一 receiver 统一收)
-  return apiService.chat({ sessionId, ...options });
-}
-```
+未落盘的 delta 有两个来源，共用 `applyInFlightChunks`：
 
-- 新发/重答(regenerationMode=null)/续传(resume)/订阅(subscribe)的参数形态统一,内部只 `apiService.chat`。
-- 事件处理完全交给 receiver,发送侧不再订阅、不再处理。
+- 无缓存会话的 **stash**（`takeStash`）：刷新/首次打开期间暂存的实时帧；
+- 强制重拉后的**邮箱尾部**（`getTailAfterLastCheckpoint`）：已有缓存时 fold 抹掉的在飞块。
 
-### 4. 时序衔接(loadSession → receiver)
+过滤口径：发布时刻游标（优先 `logSeq`，回退 `prevSeq`）`< pageEndSeq` ⇒ 页内已含 ⇒ 跳过
+（重复应用 delta 会让文本翻倍）；缺游标 fail-open 应用。
 
-```
-打开/切换到会话:
-  loadSession(sid) 拉历史 ──► 返回 lastSeq
-       │
-       └──► streamReceiver.setHistoryBaseline(sid, lastSeq)
-            └──► receiver 对该会话开始处理 prevSeq >= lastSeq 的增量
-```
+## 七、清空聊天记录 = 日志换代
 
-- 刷新/多窗口:其他会话或同一会话的活跃流事件先进邮箱,当前会话基线就绪后按 prevSeq>=lastSeq 取出处理。
-- 与 DSH 完全一致:先拉历史,再按基线处理增量。
+`DELETE /sessions/:id/messages` 物理删除会话日志目录（seq 从 0 重建），流式输出中返回
+409 `SESSION_STREAMING`。成功后广播 `session_cleared`；其他窗口清空本地树/水位/邮箱并
+整页重拉，不长期停留在旧内容。
 
-## 五、验收标准
+## 八、验收标准
 
-- [ ] 前端 `streamEventHub.subscribe` / SSE 事件消费**全项目仅一处**(唯一 receiver 内部)。
-- [ ] 切换会话时,上一会话事件被丢弃/注销,不污染新会话。
-- [ ] 历史未拉取完成时,事件不处理(不重复塞入 store);拉取后按 lastSeq 增量正确。
-- [ ] 新发/重答/续传/订阅四场景事件都经唯一 receiver 处理,发送侧零事件消费。
-- [ ] 后端 tsc 0、前端 vue-tsc 基线一致。
+- [ ] 流式事件消费全项目仅一处（`StreamEventHub.subscribeAll`）。
+- [ ] 切换会话时上一会话事件不污染新会话（按 sessionId 路由）。
+- [ ] 水位只用 `logSeq` 推进，且在投影成功之后。
+- [ ] 回绕/接缝/批内任一异常都退回整页重拉，不静默应用残缺批。
+- [ ] 双端类型检查 0 错误。
+
+## 九、已知残留（TODO）
+
+缺 manifest 级日志代次（`logGeneration`），因此"回绕后日志又长过本地旧水位、且该窗口全程
+未触发 resync"检测不到——批首 seq 恰好合法，接缝校验放行，本窗口少应用几条 seq 被复用的
+修复事件（典型症状：旧回合缺 `turn/finish` 一直显示进行中）。
+
+触发需四条同时成立：后端 append 中途崩溃留下 torn 尾（`appendEvents` 无 fsync）→ 重启截断
+并复用 seq → 该窗口整段时间无 resync（未回前台/未重连/无未闭合回合）→ 其他窗口或设备已把
+日志写回旧水位之上。
+
+**影响可逆**：服务端日志完整自洽，仅本地视图过期。浏览器刷新（Pinia 重建 → `appliedSeq`
+不持久化 → 整页 fold）或会话状态被 `evictSessionStates` 淘汰（2h / 32 上限）即恢复。
+
+若将来要收口，最低成本做法是 `streamBootId` 变化（= 后端重启，即截断的唯一前提）时清空各
+会话水位，让重启后首次 resync 必定整页重拉一次。
+
+## 附：设计沿革
+
+早期设计（`subscribe(sid, lastSeq)` 按会话订阅 + 历史基线 + `StreamReceiver` 类）已被
+`subscribeAll` 单入口取代；DSH 的 mux 对照分析见 git 历史。现行实现以本文为准。
