@@ -964,7 +964,7 @@ export const useSessionStore = defineStore('session', () => {
     /**
      * 已应用水位（本地树已反映到的最高持久化 seq）
      *
-     * 单调递增：并发路径（live prevSeq / 增量批 endSeq / 整页 endSeq）谁先到都不会回退，
+     * 单调递增：并发路径（live logSeq / 增量批 endSeq / 整页 endSeq）谁先到都不会回退，
      * 避免"回退水位 → 重复拉取同一段"或"跳过缺口"。
      */
     const setAppliedSeq = (sessionId: string, seq: number): void => {

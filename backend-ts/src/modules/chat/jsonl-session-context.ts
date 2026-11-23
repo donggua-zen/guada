@@ -953,16 +953,17 @@ export class JsonlSessionContext implements ISessionContext, CompactionDataSourc
   /**
    * 发布流式事件（唯一发布面：引擎/钩子/审批等深层模块直发入口）。
    *
-   * 组装 prevSeq 续传游标（"先入库后发事件"：读本会话最后一条已入库事件的 seq）
-   * 后交 SessionStreamManager.publish（缓存+进程内扇出+SSE 直投合一）；无活跃流时静默丢弃。
+   * 组装 logSeq 落库游标（"先入库后发事件"：读本会话最后一条已入库事件的 seq）
+   * 后交 SessionStreamManager.publish（缓存+进程内扇出+SSE 直投合一）；
+   * 传输基座 baseSeq 由 manager 钳制推导，这里只提供日志真相。
    */
   async publishStream(
     chunk: import('./types/event-chunk.types').SessionStreamEvent,
   ): Promise<void> {
-    const prevSeq = await this.messageStore.getLastProcessedSeq(this.sessionId);
+    const logSeq = await this.messageStore.getLastProcessedSeq(this.sessionId);
     this.streamManager.publish(this.sessionId, {
       ...chunk,
-      prevSeq,
+      logSeq,
     } as import('./types/event-chunk.types').WireStreamEvent);
   }
 

@@ -1531,7 +1531,7 @@ export function hasCachedTurns(
  *
  * 判定依据是**发布时刻的落库游标**，不是帧自身的 seq（delta 根本不入库）：
  * - 优先 `logSeq`（未钳制的真实落库 seq）：`logSeq < pageEndSeq` ⇒ 发布时页尾已覆盖它 ⇒ 跳过。
- * - 旧后端/裸运行时帧无 `logSeq` 时回退 `prevSeq`（钳制后只会偏大，回退是保守选择：
+ * - 旧后端/裸运行时帧无 `logSeq` 时回退 `baseSeq`（钳制后只会偏大，回退是保守选择：
  *   偏大意味着"更可能应用"，靠投影器按 messageId/turnId 幂等吸收）。
  * - 两者都缺失 ⇒ fail-open 应用（与 hub 去重口径一致）。
  *
@@ -1543,12 +1543,12 @@ export function isChunkCoveredByPage(
   pageEndSeq: number,
 ): boolean {
   if (typeof pageEndSeq !== "number" || !Number.isFinite(pageEndSeq)) return false;
-  const wire = chunk as { logSeq?: number; prevSeq?: number };
+  const wire = chunk as { logSeq?: number; baseSeq?: number };
   const cursor =
     typeof wire.logSeq === "number" && Number.isFinite(wire.logSeq)
       ? wire.logSeq
-      : typeof wire.prevSeq === "number" && Number.isFinite(wire.prevSeq)
-        ? wire.prevSeq
+      : typeof wire.baseSeq === "number" && Number.isFinite(wire.baseSeq)
+        ? wire.baseSeq
         : undefined;
   if (cursor === undefined) return false;
   return cursor < pageEndSeq;

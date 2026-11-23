@@ -90,9 +90,9 @@ describe("SessionEventsService 连接补发", () => {
       kind: "chat",
       sessionType: "web",
     });
-    // 重放事件携带 publish 盖戳（前端入口幂等的游标依据：同 bootId 下的 (prevSeq, chunkSeq)）
+    // 重放事件携带 publish 盖戳（前端入口幂等的游标依据：同 bootId 下的 (baseSeq, chunkSeq)）
     expect(received[3].payload.chunkSeq).toBe(2);
-    expect(received[3].payload.prevSeq).toBe(0);
+    expect(received[3].payload.baseSeq).toBe(0);
     expect(received[3].payload.streamBootId).toBeTruthy();
   });
 
@@ -170,7 +170,7 @@ describe("SessionEventsService 连接补发", () => {
 
     expect(received[0].type).toBe("connected");
     expect(received[0].payload.streamPositions).toEqual([
-      { sessionId: "s1", prevSeq: 0, chunkSeq: 1 },
+      { sessionId: "s1", baseSeq: 0, chunkSeq: 1 },
     ]);
   });
 
@@ -303,7 +303,7 @@ describe("SessionEventsService 连接补发", () => {
         type: "text_delta",
         messageId: "m1",
         text: "x",
-        prevSeq: 7,
+        logSeq: 7,
       } as any);
       streamManager.stopStream("s1", "completed");
 
@@ -418,7 +418,7 @@ describe("SessionEventsService 连接补发", () => {
 });
 
 describe("SessionStreamManager 事件盖戳", () => {
-  it("(prevSeq, chunkSeq) 跨流（回合）连续：同一区间 ord 递增，base 不变", () => {
+  it("(baseSeq, chunkSeq) 跨流（回合）连续：同一区间 ord 递增，base 不变", () => {
     const mgr = new SessionStreamManager();
     const relay = jest.fn();
     mgr.setStreamRelay(relay);
@@ -439,7 +439,7 @@ describe("SessionStreamManager 事件盖戳", () => {
     mgr.startStream("s1", new AbortController(), "chat");
     mgr.publish("s1", { type: "turn_start", turnId: "t2" } as any);
 
-    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq])).toEqual([
+    expect(relay.mock.calls.map((c) => [c[1].baseSeq, c[1].chunkSeq])).toEqual([
       [0, 1],
       [0, 2],
       [0, 3],
@@ -447,7 +447,7 @@ describe("SessionStreamManager 事件盖戳", () => {
     expect(new Set(relay.mock.calls.map((c) => c[1].streamBootId)).size).toBe(1);
     // 盖戳后的同一对象进 buffer（补发与 live 一致）
     const buffer = mgr.getActiveStreams()[0].eventBuffer;
-    expect(buffer.map((e) => [e.prevSeq, e.chunkSeq])).toEqual([[0, 3]]);
+    expect(buffer.map((e) => [e.baseSeq, e.chunkSeq])).toEqual([[0, 3]]);
   });
 
   it("会话之间位置相互独立", () => {
@@ -467,7 +467,7 @@ describe("SessionStreamManager 事件盖戳", () => {
     } as any);
     mgr.publish("s2", { type: "turn_start", turnId: "t9" } as any);
 
-    expect(relay.mock.calls.map((c) => [c[0], c[1].prevSeq, c[1].chunkSeq])).toEqual([
+    expect(relay.mock.calls.map((c) => [c[0], c[1].baseSeq, c[1].chunkSeq])).toEqual([
       ["s1", 0, 1],
       ["s1", 0, 2],
       ["s2", 0, 1],
@@ -480,63 +480,63 @@ describe("SessionStreamManager 事件盖戳", () => {
     mgr.setStreamRelay(relay);
     mgr.startStream("s1", new AbortController(), "chat");
 
-    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", prevSeq: 7 } as any);
-    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "b", prevSeq: 7 } as any);
-    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "c", prevSeq: 8 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", logSeq: 7 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "b", logSeq: 7 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "c", logSeq: 8 } as any);
 
-    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq])).toEqual([
+    expect(relay.mock.calls.map((c) => [c[1].baseSeq, c[1].chunkSeq])).toEqual([
       [7, 1],
       [7, 2],
       [8, 1],
     ]);
   });
 
-  it("prevSeq 回退（并发 publish 乱序）→ 钳制到当前 base 并递增 ord", () => {
+  it("logSeq 回退（并发 publish 乱序）→ 钳制到当前 base 并递增 ord", () => {
     const mgr = new SessionStreamManager();
     const relay = jest.fn();
     mgr.setStreamRelay(relay);
     mgr.startStream("s1", new AbortController(), "chat");
 
-    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", prevSeq: 8 } as any);
-    // 后到的帧读到更旧的 prevSeq：不能让它把位置拉回去，否则前端会当成已消费
-    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "b", prevSeq: 7 } as any);
-    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "c", prevSeq: 9 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", logSeq: 8 } as any);
+    // 后到的帧读到更旧的 logSeq：不能让它把位置拉回去，否则前端会当成已消费
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "b", logSeq: 7 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "c", logSeq: 9 } as any);
 
-    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq])).toEqual([
+    expect(relay.mock.calls.map((c) => [c[1].baseSeq, c[1].chunkSeq])).toEqual([
       [8, 1],
       [8, 2],
       [9, 1],
     ]);
   });
 
-  it("缺 prevSeq 的运行时帧（chat-runner 裸 error）沿用上次 base 并递增 ord", () => {
+  it("缺 logSeq 的运行时帧（chat-runner 裸 error）沿用上次 base 并递增 ord", () => {
     const mgr = new SessionStreamManager();
     const relay = jest.fn();
     mgr.setStreamRelay(relay);
     mgr.startStream("s1", new AbortController(), "chat");
 
-    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", prevSeq: 5 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", logSeq: 5 } as any);
     mgr.publish("s1", { type: "error", error: "boom" } as any);
 
-    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq])).toEqual([
+    expect(relay.mock.calls.map((c) => [c[1].baseSeq, c[1].chunkSeq])).toEqual([
       [5, 1],
       [5, 2],
     ]);
   });
 
-  it("logSeq = 未钳制的真实落库游标（prevSeq 回退时仍报真实值，裸帧不带）", () => {
+  it("logSeq 恒为生产者给出的真实值（不被传输钳制影响，裸帧不带）", () => {
     const mgr = new SessionStreamManager();
     const relay = jest.fn();
     mgr.setStreamRelay(relay);
     mgr.startStream("s1", new AbortController(), "chat");
 
-    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", prevSeq: 8 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "a", logSeq: 8 } as any);
     // 并发乱序：传输 base 钳制在 8，但真实落库游标是 7 —— 前端水位必须看到 7
-    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "b", prevSeq: 7 } as any);
+    mgr.publish("s1", { type: "text_delta", messageId: "m1", text: "b", logSeq: 7 } as any);
     // 裸运行时帧：没有真实落库游标，不携带 logSeq（前端水位保持不动）
     mgr.publish("s1", { type: "error", error: "boom" } as any);
 
-    expect(relay.mock.calls.map((c) => [c[1].prevSeq, c[1].chunkSeq, c[1].logSeq])).toEqual([
+    expect(relay.mock.calls.map((c) => [c[1].baseSeq, c[1].chunkSeq, c[1].logSeq])).toEqual([
       [8, 1, 8],
       [8, 2, 7],
       [8, 3, undefined],

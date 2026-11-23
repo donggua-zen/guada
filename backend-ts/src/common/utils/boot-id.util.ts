@@ -5,7 +5,7 @@
  *
  * 凡是"序号只在进程内单调、重启后归零"的游标/版本号，都必须带它下发给前端，
  * 前端据此识别"序号已重置"，否则会把新进程的低序号当成过期数据丢弃：
- * - 会话流事件去重：`(prevSeq, chunkSeq)` 传输位置 + streamBootId（见 chat/session-stream.manager.ts）
+ * - 会话流事件去重：`(baseSeq, chunkSeq)` 传输位置 + streamBootId（见 chat/session-stream.manager.ts）
  * - 后台作业快照：revision + bootId（见 jobs/job-registry.service.ts）
  *
  * 不要各模块各写一份 `Date.now()+random`：两份启动标识虽同进程同值语义，

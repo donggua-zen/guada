@@ -1537,7 +1537,7 @@ async function handleSessionResync(event: Event) {
     }
     // 日志换代（torn 尾截断后 seq 复用 / 清空记录后重建）：旧的邮箱、去重游标与缺口
     // 都属于上一代日志——不清掉的话，整页 fold 之后的 replayStreamTailAfterReload 会按
-    // `prevSeq >= pageEndSeq` 把旧代次尾部回放进新树；新代次帧也可能被旧游标判成重复。
+    // `logSeq >= pageEndSeq` 把旧代次尾部回放进新树；新代次帧也可能被旧游标判成重复。
     if (incremental.reason === "log-rewound") {
       streamEventHub.cleanup(sessionId)
     }
@@ -1864,7 +1864,7 @@ async function loadMessages(
       : [...page.events, ...prevLog];
 
     // 历史快照最后入库 seq 由 headPage.endSeq 承载：订阅基线已由下方 stash 消费
-    // 与邮箱尾部重放的 prevSeq >= endSeq 过滤表达，不再单独维护游标。
+    // 与邮箱尾部重放的 logSeq >= endSeq 过滤表达，不再单独维护游标。
 
     // 折叠：清树后全量重建（eventLog 含 live 终态事件，re-fold 天然保留实时尾部）
     foldEvents(sessionStore, sessionId, sessionState.eventLog, isInitial ? 'initial' : 'load-more');
@@ -2091,7 +2091,7 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   try {
     currentSessionId.value = newSessionId;
     // 打开会话:直接拉历史快照(事件页 endSeq 作为已应用水位)。
-    // StreamEventHub 邮箱常驻收事件,无需 startBuffering——消费方按 (prevSeq, chunkSeq) 去重。
+    // StreamEventHub 邮箱常驻收事件,无需 startBuffering——消费方按 (baseSeq, chunkSeq) 去重。
     await loadSession(newSessionId);
     if (token !== sessionChangeToken) return;
     traceSessionOpen(newSessionId, 'panel:load-done');

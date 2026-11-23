@@ -171,7 +171,7 @@ describe("useSessionEvents 统一订阅器", () => {
     // 旧进程的流事件：建立 bootId 基线
     streamEventHub.route({
       type: "turn_start", sessionId: "boot-s1", turnId: "T1",
-      prevSeq: 0, chunkSeq: 1, streamBootId: "boot-A",
+      baseSeq: 0, chunkSeq: 1, streamBootId: "boot-A",
     } as any);
 
     store.upsertSessionPendingAsk("boot-s1", { requestId: "req1", kind: "approval", questions: [] });
@@ -179,7 +179,7 @@ describe("useSessionEvents 统一订阅器", () => {
     // 新进程事件（bootId 变化）→ 残留待批被清
     streamEventHub.route({
       type: "turn_start", sessionId: "boot-s1", turnId: "T2",
-      prevSeq: 0, chunkSeq: 1, streamBootId: "boot-B",
+      baseSeq: 0, chunkSeq: 1, streamBootId: "boot-B",
     } as any);
 
     expect(store.sessionPendingAsk("boot-s1")).toBeUndefined();
@@ -191,7 +191,7 @@ describe("useSessionEvents 统一订阅器", () => {
 
     streamEventHub.route({
       type: "turn_start", sessionId: "boot-s2", turnId: "T1",
-      prevSeq: 0, chunkSeq: 1, streamBootId: "boot-C",
+      baseSeq: 0, chunkSeq: 1, streamBootId: "boot-C",
     } as any);
 
     store.upsertSessionPendingAsk("boot-s2", { requestId: "req1", kind: "approval", questions: [] });
@@ -199,7 +199,7 @@ describe("useSessionEvents 统一订阅器", () => {
     // 同进程的后续事件（重连补发的连续帧）：不得触发全清
     streamEventHub.route({
       type: "turn_start", sessionId: "boot-s2", turnId: "T2",
-      prevSeq: 0, chunkSeq: 2, streamBootId: "boot-C",
+      baseSeq: 0, chunkSeq: 2, streamBootId: "boot-C",
     } as any);
 
     expect(store.sessionPendingAsk("boot-s2")?.requestId).toBe("req1");
@@ -213,7 +213,7 @@ describe("useSessionEvents 统一订阅器", () => {
       type: "text_delta",
       sessionId: "gap-s1",
       text: "a",
-      prevSeq: 5,
+      baseSeq: 5,
       logSeq: 5,
       chunkSeq: 1,
       streamBootId: "boot-gap",
@@ -222,7 +222,7 @@ describe("useSessionEvents 统一订阅器", () => {
 
     // 连接补发起点落在更晚的落库区间 → 中间可能有没收到的事件
     streamEventHub.noteCatchupPositions([
-      { sessionId: "gap-s1", prevSeq: 6, chunkSeq: 1 },
+      { sessionId: "gap-s1", baseSeq: 6, chunkSeq: 1 },
     ]);
     expect(streamEventHub.hasPendingGap("gap-s1")).toBe(true);
 
@@ -230,7 +230,7 @@ describe("useSessionEvents 统一订阅器", () => {
       type: "text_delta",
       sessionId: "gap-s1",
       text: "b",
-      prevSeq: 6,
+      baseSeq: 6,
       logSeq: 6,
       chunkSeq: 1,
       streamBootId: "boot-gap",
@@ -243,7 +243,7 @@ describe("useSessionEvents 统一订阅器", () => {
       type: "text_delta",
       sessionId: "gap-s1",
       text: "c",
-      prevSeq: 7,
+      baseSeq: 7,
       logSeq: 7,
       chunkSeq: 1,
       streamBootId: "boot-gap",
@@ -251,7 +251,7 @@ describe("useSessionEvents 统一订阅器", () => {
     expect(store.getAppliedSeq("gap-s1")).toBe(7);
   });
 
-  it("已应用水位只认未钳制的 logSeq（传输 prevSeq 超前不推进，裸帧不推进）", () => {
+  it("已应用水位只认未钳制的 logSeq（传输 baseSeq 超前不推进，裸帧不推进）", () => {
     useSessionEvents().init();
     const store = useSessionStore();
 
@@ -260,19 +260,19 @@ describe("useSessionEvents 统一订阅器", () => {
       type: "text_delta",
       sessionId: "logseq-s1",
       text: "a",
-      prevSeq: 57,
+      baseSeq: 57,
       logSeq: 3,
       chunkSeq: 1,
       streamBootId: "boot-logseq",
     } as any);
     expect(store.getAppliedSeq("logseq-s1")).toBe(3);
 
-    // 裸运行时帧（如 error）没有 logSeq：不能把水位推到 prevSeq
+    // 裸运行时帧（如 error）没有 logSeq：不能把水位推到 baseSeq
     streamEventHub.route({
       type: "error",
       sessionId: "logseq-s1",
       error: "boom",
-      prevSeq: 57,
+      baseSeq: 57,
       chunkSeq: 2,
       streamBootId: "boot-logseq",
     } as any);
@@ -289,7 +289,7 @@ describe("useSessionEvents 统一订阅器", () => {
       type: "text_delta",
       sessionId: sid,
       text: "ok",
-      prevSeq: 9,
+      baseSeq: 9,
       logSeq: 9,
       chunkSeq: 1,
       streamBootId: "boot-throw",
@@ -310,7 +310,7 @@ describe("useSessionEvents 统一订阅器", () => {
           requestId: "r1",
           kind: "approval",
           questions: [],
-          prevSeq: 20,
+          baseSeq: 20,
           logSeq: 20,
           chunkSeq: 2,
           streamBootId: "boot-throw",
@@ -334,7 +334,7 @@ describe("useSessionEvents 统一订阅器", () => {
       type: "turn_start",
       sessionId: "clr-s1",
       turnId: "t1",
-      prevSeq: 42,
+      baseSeq: 42,
       logSeq: 42,
       chunkSeq: 1,
       streamBootId: "boot-clear",
@@ -393,7 +393,7 @@ describe("useSessionEvents 统一订阅器", () => {
       type: "text_delta",
       sessionId: "s1",
       text: "a",
-      prevSeq: 3,
+      baseSeq: 3,
       chunkSeq: 1,
       streamBootId: "boot-conn",
     } as any);
@@ -406,7 +406,7 @@ describe("useSessionEvents 统一订阅器", () => {
       sessionId: "",
       timestamp: "t",
       payload: {
-        streamPositions: [{ sessionId: "s1", prevSeq: 4, chunkSeq: 1 }],
+        streamPositions: [{ sessionId: "s1", baseSeq: 4, chunkSeq: 1 }],
       },
     });
     off();
@@ -595,7 +595,7 @@ describe("useSessionEvents 统一订阅器", () => {
       kind: "approval",
       cardKind: "command-approval",
       questions: [],
-      prevSeq: 0, chunkSeq: 1,
+      baseSeq: 0, chunkSeq: 1,
       streamBootId: "boot-ask",
     } as any);
 
@@ -614,7 +614,7 @@ describe("useSessionEvents 统一订阅器", () => {
       kind: "ask",
       cardKind: "question",
       questions: [],
-      prevSeq: 0, chunkSeq: 1,
+      baseSeq: 0, chunkSeq: 1,
       streamBootId: "boot-ask",
     } as any);
 

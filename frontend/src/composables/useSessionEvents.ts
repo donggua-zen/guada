@@ -220,13 +220,13 @@ export function useSessionEvents() {
         const sid = chunk.sessionId;
         if (!sid) return;
 
-        // 记录最后流帧时间（watchdog 判静默用；hub 已按 (prevSeq, chunkSeq) 元组去重）
+        // 记录最后流帧时间（watchdog 判静默用；hub 已按 (baseSeq, chunkSeq) 元组去重）
         lastStreamChunkAt.set(sid, Date.now());
 
         // 后端重启：清掉上一个进程残留的待批状态（本帧若恰是 ask_requested，
         // 紧随其后的 projectChunk 会重新写入；新进程仍待批的 ask 由补发帧重建）。
         // 注意不能改成"每次建连就清"：同进程重连（网络闪断）时补发会被 hub 按
-        // (prevSeq, chunkSeq) 去重丢弃，状态无法重建，清了就把仍可应答的卡片弄丢。
+        // (baseSeq, chunkSeq) 去重丢弃，状态无法重建，清了就把仍可应答的卡片弄丢。
         if (
           chunk.streamBootId &&
           lastStreamBootId &&
@@ -251,7 +251,7 @@ export function useSessionEvents() {
         projectChunk(sessionStore, sid, chunk);
 
         // 已应用水位保守推进：logSeq 是发布时刻**未钳制**的真实落库游标
-        // （prevSeq 被 manager 单调钳制，日志清空/截断后仍停在旧高值，不能当水位用）。
+        // （baseSeq 被 manager 单调钳制，日志清空/截断后仍停在旧高值，不能当水位用）。
         // 补发缺口未清前不推进——否则会把"没收到的那段"当成已应用，永久跳过缺口；
         // 裸运行时帧（无 logSeq）不推进。
         //
@@ -279,7 +279,7 @@ export function useSessionEvents() {
     // ask_requested 是流帧：页面刷新 / SSE 丢帧后前端拿不到它，而历史重放刻意不重建待答卡片
     // （无从判断该 ask 是否仍在等待）→ 卡片不回来、后端无超时 → 回合永久挂住。
     // 这里每次（重）建连直接读后端等待表补一刀。**只 upsert、不清空**：同进程重连时补发帧
-    // 会被 hub 按 (prevSeq, chunkSeq) 去重丢弃，清空会把仍可应答的卡片弄丢（与 streamBootId 分支同一约束）。
+    // 会被 hub 按 (baseSeq, chunkSeq) 去重丢弃，清空会把仍可应答的卡片弄丢（与 streamBootId 分支同一约束）。
     unsubscribers.push(
       apiService.onConnected?.(() => {
         const firstConnect = !hasConnectedOnce;
@@ -459,7 +459,7 @@ export function useSessionEvents() {
     // === 连接补发起点：缺口判定 ===
     //
     // 后端在补发前缀的第一帧（connected）里带上各活跃流 buffer 首帧的传输位置。
-    // 起点 prevSeq 越过本地游标的 prevSeq = 本次补发没有覆盖我缺的那段
+    // 起点 baseSeq 越过本地游标的 baseSeq = 本次补发没有覆盖我缺的那段
     // （缓冲区滚动 / cleanup 后起点前移），中间可能丢了落库事件：
     // 冻结水位推进（见上方 live 订阅），并让当前会话改走整页重拉。
     unsubscribers.push(

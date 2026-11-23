@@ -104,7 +104,7 @@ CHANGELOG 自述（v0.6.4 段，约 :306-421）：每个能力设计五次、降
 
 ### 3.3 流事件全集与审批闭环
 
-- 流事件契约：`modules/chat/types/event-chunk.types.ts SessionStreamEvent`（`message_chunk` / `tool_calls_response` / `ask_requested` / `ask_resolved` / `turn_start` / `turn_end` / `context_stats` …），带传输位置 `(prevSeq, chunkSeq)` + `streamBootId` 幂等游标——与 ACP `session/update` 通知流的语义一一对应。
+- 流事件契约：`modules/chat/types/event-chunk.types.ts SessionStreamEvent`（`message_chunk` / `tool_calls_response` / `ask_requested` / `ask_resolved` / `turn_start` / `turn_end` / `context_stats` …），带传输位置 `(baseSeq, chunkSeq)` + `streamBootId` 幂等游标——与 ACP `session/update` 通知流的语义一一对应。
 - 审批闭环：`common/types/ask.types.ts:78 AskRequest` / `:55 AskCardKind`；后端 `AskService` 发 `ask_requested` SSE 帧并原地阻塞，前端 `components/chat/SessionCards.vue` 渲染审批卡，`POST /api/v1/chat/respond` 唤醒。ACP `session/request_permission` ↔ 这套机制是同构问题。
 - 权限策略：`modules/policy` + `toolPolicy` 白名单 + `shell/process-manager.service.ts` 的进程管控（Win32 Job）。
 

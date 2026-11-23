@@ -5,7 +5,7 @@ import { SessionStreamManager, StreamEvent } from '../../src/modules/chat/sessio
 // ─── 事件构造辅助 ───
 
 function chunkEvent(partial: Partial<StreamEvent> & { type: StreamEvent['type'] }): StreamEvent {
-  return { prevSeq: 0, ...partial } as StreamEvent;
+  return { logSeq: 0, ...partial } as StreamEvent;
 }
 
 function startStream(mgr: SessionStreamManager, sessionId = 's1'): void {
@@ -94,28 +94,28 @@ describe('SessionStreamManager 最后入库 seq（终态墓碑用）', () => {
     mgr = new SessionStreamManager();
   });
 
-  it('publish 取 prevSeq 最大值；缺失/非数字忽略，落后值不回退', () => {
+  it('publish 取 logSeq 最大值；缺失/非数字忽略，落后值不回退', () => {
     startStream(mgr, 's1');
     expect(mgr.getLastPersistedSeq('s1')).toBeNull();
 
-    mgr.publish('s1', chunkEvent({ type: 'text_delta', messageId: 'm1', text: 'a' })); // prevSeq 0
+    mgr.publish('s1', chunkEvent({ type: 'text_delta', messageId: 'm1', text: 'a' })); // logSeq 0
     expect(mgr.getLastPersistedSeq('s1')).toBe(0);
 
-    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'b', prevSeq: 7 } as StreamEvent);
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'b', logSeq: 7 } as StreamEvent);
     expect(mgr.getLastPersistedSeq('s1')).toBe(7);
 
-    // 落后的 prevSeq 不回退（并发 publish 可能读到同一入库游标）
-    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'c', prevSeq: 3 } as StreamEvent);
+    // 落后的 logSeq 不回退（并发 publish 可能读到同一入库游标）
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'c', logSeq: 3 } as StreamEvent);
     expect(mgr.getLastPersistedSeq('s1')).toBe(7);
 
-    // 运行时帧可能没有 prevSeq（如 chat-runner 的裸 error 帧）
-    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'd', prevSeq: undefined } as StreamEvent);
+    // 运行时帧可能没有 logSeq（如 chat-runner 的裸 error 帧）
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'd', logSeq: undefined } as StreamEvent);
     expect(mgr.getLastPersistedSeq('s1')).toBe(7);
   });
 
   it('stopStream 后保留（下一回合在同一水位上继续单调）', () => {
     startStream(mgr, 's1');
-    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'a', prevSeq: 5 } as StreamEvent);
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'a', logSeq: 5 } as StreamEvent);
     mgr.stopStream('s1', 'completed');
     expect(mgr.getLastPersistedSeq('s1')).toBe(5);
   });

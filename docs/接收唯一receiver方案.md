@@ -23,13 +23,13 @@
 | 名称 | 含义 | 用途 |
 |---|---|---|
 | `logSeq` | 发布时刻**未钳制**的真实落库 seq | 推进已应用水位 `appliedSeq` |
-| `prevSeq` | **传输区间基座**（可能被单调钳制） | 重放去重、区间归属、尾部重放过滤 |
-| `chunkSeq` | 同一 `prevSeq` 区间内第 n 个帧（1 起，区间前进时归零） | 与 `prevSeq` 组成去重元组 |
+| `baseSeq` | **传输区间基座**（可能被单调钳制） | 重放去重、区间归属、尾部重放过滤 |
+| `chunkSeq` | 同一 `baseSeq` 区间内第 n 个帧（1 起，区间前进时归零） | 与 `baseSeq` 组成去重元组 |
 
-- `prevSeq` 被 `SessionStreamManager.publish` 做 `base = max(raw, 上次 base)` 钳制，用于抵御
+- `baseSeq` 被 `SessionStreamManager.publish` 做 `base = max(raw, 上次 base)` 钳制，用于抵御
   并发 `publishStream` 的乱序。**因此它不代表日志尾**——日志清空/截断后仍停在旧高值。
   需要日志真相时一律用 `logSeq`。
-- 去重：同 `streamBootId` 下 `(prevSeq, chunkSeq) <= 游标` 判定为重放，丢弃；`bootId` 变化
+- 去重：同 `streamBootId` 下 `(baseSeq, chunkSeq) <= 游标` 判定为重放，丢弃；`bootId` 变化
   （后端重启）重置游标；缺任一位置字段 fail-open。
 - 同区间内 `chunkSeq` 空洞是**合法**的：`cleanupIntermediateEvents` 会删掉已完成的 delta
   （由 `block_end` 携带完整块替代），所以不能用 `chunkSeq` 连续性判断丢帧。
@@ -46,7 +46,7 @@
 ## 四、补发覆盖度与缺口
 
 SSE 建连补发的第一帧 `connected` 带 `payload.streamPositions`（各活跃流 `eventBuffer[0]` 的
-位置）。若起点 `prevSeq` 越过本地游标 `prevSeq`，说明本次补发没覆盖缺口 → 标记 gap、
+位置）。若起点 `baseSeq` 越过本地游标 `baseSeq`，说明本次补发没覆盖缺口 → 标记 gap、
 冻结水位推进、当前会话改走整页重拉；重拉成功后清除标记。
 
 ## 五、两条补拉路径
@@ -75,7 +75,7 @@ SSE 建连补发的第一帧 `connected` 带 `payload.streamPositions`（各活�
 - 无缓存会话的 **stash**（`takeStash`）：刷新/首次打开期间暂存的实时帧；
 - 强制重拉后的**邮箱尾部**（`getTailAfterLastCheckpoint`）：已有缓存时 fold 抹掉的在飞块。
 
-过滤口径：发布时刻游标（优先 `logSeq`，回退 `prevSeq`）`< pageEndSeq` ⇒ 页内已含 ⇒ 跳过
+过滤口径：发布时刻游标（优先 `logSeq`，回退 `baseSeq`）`< pageEndSeq` ⇒ 页内已含 ⇒ 跳过
 （重复应用 delta 会让文本翻倍）；缺游标 fail-open 应用。
 
 ## 七、清空聊天记录 = 日志换代

@@ -201,7 +201,7 @@ export interface ISessionContext {
   /**
    * 发布流式事件到会话活跃流（deep 层模块直发入口：引擎、钩子订阅者、审批服务等）。
    *
-   * 实现内组装 prevSeq 续传游标（"先入库后发事件"契约）后交 SessionStreamManager.publish
+   * 实现内组装 baseSeq 续传游标（"先入库后发事件"契约）后交 SessionStreamManager.publish
    * （eventBuffer 缓存 + 进程内扇出 + SSE 直投三合一）。无活跃流时静默丢弃。
    */
   publishStream(chunk: import("./types/event-chunk.types").SessionStreamEvent): Promise<void>;

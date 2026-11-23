@@ -886,7 +886,7 @@ export class ChatRunnerService {
       };
       this.eventBus.emit("stream.status_changed", startEvent);
 
-      // 引擎直发模式：流式事件由引擎经 sessionContext.publishStream 发布（prevSeq 在发布点组装），
+      // 引擎直发模式：流式事件由引擎经 sessionContext.publishStream 发布（baseSeq 在发布点组装），
       // chat-runner 只 await 完成并做流生命周期收尾（supervisor 职责）
       const result = await this.agentEngine.run(
         sessionContext,

@@ -194,7 +194,7 @@ describe('JsonlSessionContext 读取层直通', () => {
     turnApprovalMemory.clear();
   });
 
-  it('publishStream 组装 prevSeq 续传游标并透传 streamManager.publish（唯一发布面）', async () => {
+  it('publishStream 组装 logSeq 落库游标并透传 streamManager.publish（唯一发布面）', async () => {
     const { ctx, streamManager } = createContext({
       messageStore: { getLastProcessedSeq: jest.fn(async () => 42) },
     });
@@ -210,8 +210,8 @@ describe('JsonlSessionContext 读取层直通', () => {
     expect(streamManager.publish).toHaveBeenCalledTimes(1);
     const [sessionId, event] = streamManager.publish.mock.calls[0];
     expect(sessionId).toBe('s1');
-    // prevSeq 由发布点组装（"先入库后发事件"契约），引擎/深层模块无需感知游标
-    expect(event).toMatchObject({ type: 'text_delta', messageId: 'm1', prevSeq: 42 });
+    // logSeq 由发布点组装（"先入库后发事件"契约），引擎/深层模块无需感知游标
+    expect(event).toMatchObject({ type: 'text_delta', messageId: 'm1', logSeq: 42 });
   });
 
   it('appendContextStats：写 context/stats 锚点（可选字段缺省时不落空字段）', async () => {

@@ -67,7 +67,7 @@ DSH 对照:`AskUserQuestionItem`(user-questions/src/types.ts:35-50)同构;差异
 工具 handler / 引擎(深层,经 DI 注入 AskService)
   └─ askService.ask(session, request, abortSignal?)
        ├─ appendAskAsked → JSONL ask/asked(审计,先入库后发事件)
-       ├─ publishStream → ask_requested 帧(eventBuffer 可重放 + SSE 直投,prevSeq 组装)
+       ├─ publishStream → ask_requested 帧(eventBuffer 可重放 + SSE 直投,logSeq 组装)
        ├─ InteractionWaitService.waitForAnswers(requestId) ←─┐
        │ (无超时,仅与 abortSignal 竞速;abort → cancel + cancelled 审计/帧 + AskDeniedError)
        └─ appendAskAnswered → JSONL ask/answered(每次 asked 必有 answered,cancelled 标记)

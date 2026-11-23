@@ -97,7 +97,7 @@ export interface AskRequest {
 
 // ==================== wire 流帧（进 SessionStreamEvent 联合，由 chat/event-chunk 引用） ====================
 
-/** 交互请求帧（入 eventBuffer 可重放 + SSE 直投，prevSeq 由发布面组装） */
+/** 交互请求帧（入 eventBuffer 可重放 + SSE 直投，baseSeq 由发布面组装） */
 export interface AskRequestedEvent {
   type: "ask_requested";
   /** 临时凭证（uuid），前端应答回传匹配等待者 */

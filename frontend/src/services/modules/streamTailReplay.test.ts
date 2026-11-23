@@ -12,12 +12,12 @@ import { replayStreamTailAfterReload } from "./streamTailReplay";
 /**
  * 在飞帧的"是否已被事件页覆盖"判定与批量应用（stash 消费 / 强制重拉尾部重放共用）。
  *
- * 口径：发布时刻的落库游标（优先 logSeq，回退 prevSeq）< pageEndSeq ⇒ 页内已含 ⇒ 跳过；
+ * 口径：发布时刻的落库游标（优先 logSeq，回退 baseSeq）< pageEndSeq ⇒ 页内已含 ⇒ 跳过；
  * 缺游标 fail-open 应用。跳过是必须的——重复应用 delta 会让文本翻倍。
  */
 function chunk(
   type: string,
-  seqs: { logSeq?: number; prevSeq?: number } = {},
+  seqs: { logSeq?: number; baseSeq?: number } = {},
 ): ProjectorChunk {
   return { type, sessionId: "s1", ...seqs } as ProjectorChunk;
 }
@@ -59,16 +59,16 @@ describe("isChunkCoveredByPage", () => {
     expect(isChunkCoveredByPage(chunk("text_delta", { logSeq: 5 }), 4)).toBe(false);
   });
 
-  it("logSeq 优先于被钳制的 prevSeq", () => {
-    // prevSeq 钳制后偏大（4），真实落库游标 logSeq=2 → 应按 logSeq 判定为已覆盖
+  it("logSeq 优先于被钳制的 baseSeq", () => {
+    // baseSeq 钳制后偏大（4），真实落库游标 logSeq=2 → 应按 logSeq 判定为已覆盖
     expect(
-      isChunkCoveredByPage(chunk("text_delta", { prevSeq: 4, logSeq: 2 }), 4),
+      isChunkCoveredByPage(chunk("text_delta", { baseSeq: 4, logSeq: 2 }), 4),
     ).toBe(true);
   });
 
-  it("缺 logSeq 时回退 prevSeq（旧后端/裸运行时帧）", () => {
-    expect(isChunkCoveredByPage(chunk("text_delta", { prevSeq: 2 }), 4)).toBe(true);
-    expect(isChunkCoveredByPage(chunk("text_delta", { prevSeq: 4 }), 4)).toBe(false);
+  it("缺 logSeq 时回退 baseSeq（旧后端/裸运行时帧）", () => {
+    expect(isChunkCoveredByPage(chunk("text_delta", { baseSeq: 2 }), 4)).toBe(true);
+    expect(isChunkCoveredByPage(chunk("text_delta", { baseSeq: 4 }), 4)).toBe(false);
   });
 
   it("无任何游标 → fail-open（应用）", () => {

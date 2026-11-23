@@ -17,8 +17,8 @@ describe("StreamEventHub 邮箱 + 全局订阅", () => {
     hub = new StreamEventHub();
   });
 
-  function ev(type: string, sessionId: string, prevSeq?: number): HubStreamEvent {
-    return { type, sessionId, prevSeq } as HubStreamEvent;
+  function ev(type: string, sessionId: string, baseSeq?: number): HubStreamEvent {
+    return { type, sessionId, baseSeq } as HubStreamEvent;
   }
 
   it("route 无订阅者也进邮箱（供强制重拉取尾部）", () => {
@@ -77,8 +77,8 @@ describe("StreamEventHub 在飞尾部(getTailAfterLastCheckpoint)", () => {
     hub = new StreamEventHub();
   });
 
-  function ev(type: string, sessionId: string, prevSeq?: number): HubStreamEvent {
-    return { type, sessionId, prevSeq } as HubStreamEvent;
+  function ev(type: string, sessionId: string, baseSeq?: number): HubStreamEvent {
+    return { type, sessionId, baseSeq } as HubStreamEvent;
   }
 
   it("取最后一个 finish 之后的 chunk（含未落盘的 delta）", () => {
@@ -126,7 +126,7 @@ describe("StreamEventHub 在飞尾部(getTailAfterLastCheckpoint)", () => {
     const onEvent = vi.fn();
     hub.subscribeAll(onEvent);
     const seqEv = (type: string, ord: number): HubStreamEvent =>
-      ({ type, sessionId: "s1", prevSeq: 1, chunkSeq: ord, streamBootId: "boot1" } as HubStreamEvent);
+      ({ type, sessionId: "s1", baseSeq: 1, chunkSeq: ord, streamBootId: "boot1" } as HubStreamEvent);
 
     hub.route(seqEv("turn_end", 1)); // checkpoint（已落盘边界）
     hub.route(seqEv("turn_start", 2));
@@ -149,11 +149,11 @@ describe("StreamEventHub 在飞尾部(getTailAfterLastCheckpoint)", () => {
 });
 
 /**
- * 入口幂等:后端 publish 为每条帧盖戳 (prevSeq=传输基座, chunkSeq) + streamBootId(进程标识)。
+ * 入口幂等:后端 publish 为每条帧盖戳 (baseSeq=传输基座, chunkSeq) + streamBootId(进程标识)。
  * SSE 重连时连接补发会重放整个 eventBuffer——已路由过的事件必须丢弃,
  * 否则已加载会话的 live 路径会把 delta 重复追加(文本翻倍)。
  */
-describe("StreamEventHub 入口幂等((prevSeq, chunkSeq) 元组去重)", () => {
+describe("StreamEventHub 入口幂等((baseSeq, chunkSeq) 元组去重)", () => {
   let hub: StreamEventHub;
 
   beforeEach(() => {
@@ -171,7 +171,7 @@ describe("StreamEventHub 入口幂等((prevSeq, chunkSeq) 元组去重)", () => 
     return {
       type,
       sessionId,
-      prevSeq: baseSeq,
+      baseSeq,
       chunkSeq: ord,
       streamBootId: bootId,
     } as HubStreamEvent;
@@ -237,7 +237,7 @@ describe("StreamEventHub 入口幂等((prevSeq, chunkSeq) 元组去重)", () => 
     const onEvent = vi.fn();
     hub.subscribeAll(onEvent);
     const plain = (type: string): HubStreamEvent =>
-      ({ type, sessionId: "s1", prevSeq: 1 } as HubStreamEvent); // 无 chunkSeq
+      ({ type, sessionId: "s1", baseSeq: 1 } as HubStreamEvent); // 无 chunkSeq
 
     hub.route(plain("text_delta")); // 缺字段 → 放行
     hub.route(seqEv("text_delta", "s1", 1, 1)); // 建立游标
@@ -255,7 +255,7 @@ describe("StreamEventHub 入口幂等((prevSeq, chunkSeq) 元组去重)", () => 
     const onEvent = vi.fn();
     hub.subscribeAll(onEvent);
     hub.route(seqEv("text_delta", "s1", 5, 1));
-    hub.noteCatchupPositions([{ sessionId: "s1", prevSeq: 6, chunkSeq: 1 }]);
+    hub.noteCatchupPositions([{ sessionId: "s1", baseSeq: 6, chunkSeq: 1 }]);
     expect(hub.hasPendingGap("s1")).toBe(true);
 
     hub.cleanup("s1");
@@ -269,15 +269,15 @@ describe("StreamEventHub 入口幂等((prevSeq, chunkSeq) 元组去重)", () => 
 
   it("补发起点越过游标区间 → 标记缺口；同区间跳跃不标记", () => {
     // 无游标 → 不判定
-    hub.noteCatchupPositions([{ sessionId: "s1", prevSeq: 5, chunkSeq: 1 }]);
+    hub.noteCatchupPositions([{ sessionId: "s1", baseSeq: 5, chunkSeq: 1 }]);
     expect(hub.hasPendingGap("s1")).toBe(false);
 
     hub.route(seqEv("text_delta", "s1", 3, 2));
     // 同区间内起点更靠后（cleanup 删过 delta）→ 合法空洞,不标记
-    hub.noteCatchupPositions([{ sessionId: "s1", prevSeq: 3, chunkSeq: 9 }]);
+    hub.noteCatchupPositions([{ sessionId: "s1", baseSeq: 3, chunkSeq: 9 }]);
     expect(hub.hasPendingGap("s1")).toBe(false);
     // 起点落在更晚的落库区间 → 中间可能有本地没收到的事件 → 标记
-    hub.noteCatchupPositions([{ sessionId: "s1", prevSeq: 4, chunkSeq: 1 }]);
+    hub.noteCatchupPositions([{ sessionId: "s1", baseSeq: 4, chunkSeq: 1 }]);
     expect(hub.hasPendingGap("s1")).toBe(true);
 
     hub.clearStreamGap("s1");

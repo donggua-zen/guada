@@ -8,11 +8,11 @@
  * - noteCatchupPositions():连接补发开始前登记各流起点,判定补发是否覆盖本地游标
  *
  * 两个 seq 概念（务必区分）:
- * - `prevSeq`(线上字段名) = **传输区间基座** baseSeq。后端 publish 为每条帧盖戳
- *   (prevSeq, chunkSeq) + streamBootId(进程标识)。prevSeq 是落库区间，chunkSeq 是区间内
- *   第 n 个帧(prevSeq 前进时归零)，按会话连续、跨回合不重置。因为 chunk 不入库，
- *   prevSeq 不会落在 chunk 区间中间——历史页读取与尾部重放都依赖它。
- *   注意 prevSeq 被后端单调钳制(抵御并发 publish 乱序)，**不代表真实日志尾**。
+ * - `baseSeq`(线上字段名) = **传输区间基座** baseSeq。后端 publish 为每条帧盖戳
+ *   (baseSeq, chunkSeq) + streamBootId(进程标识)。baseSeq 是落库区间，chunkSeq 是区间内
+ *   第 n 个帧(baseSeq 前进时归零)，按会话连续、跨回合不重置。因为 chunk 不入库，
+ *   baseSeq 不会落在 chunk 区间中间——历史页读取与尾部重放都依赖它。
+ *   注意 baseSeq 被后端单调钳制(抵御并发 publish 乱序)，**不代表真实日志尾**。
  * - `logSeq` = 发布时刻未钳制的真实落库 seq，**已应用水位**只认它(见 useSessionEvents)。
  *
  * 去重:SSE 重连补发会重放整个 eventBuffer;同 bootId 下位置 <= 游标的帧在此直接丢弃,
@@ -51,7 +51,7 @@ export class StreamEventHub {
   /** 每会话幂等游标(后端盖戳的传输位置 baseSeq/chunkSeq + streamBootId;重连补发去重依据) */
   private readonly streamCursor = new Map<
     string,
-    { bootId?: string; prevSeq: number; chunkSeq: number }
+    { bootId?: string; baseSeq: number; chunkSeq: number }
   >();
   /**
    * 补发不覆盖本地游标的会话（可能丢了落库事件）。
@@ -75,7 +75,7 @@ export class StreamEventHub {
   /**
    * 路由一条流式事件(由 SessionEventsService 在收到 stream/* method 时调用)
    *
-   * 入口幂等:带传输位置 (prevSeq, chunkSeq) 的事件,若同 bootId 下位置 <= 游标则判定为
+   * 入口幂等:带传输位置 (baseSeq, chunkSeq) 的事件,若同 bootId 下位置 <= 游标则判定为
    * 连接补发的重放/重复投递,直接丢弃;bootId 变化(后端重启)接受并重置游标;
    * 缺任一位置字段的事件放行(fail-open)。
    * 通过校验后:事件进邮箱,并同步推给全局常驻订阅者。
@@ -84,7 +84,7 @@ export class StreamEventHub {
     const sessionId = event.sessionId;
     if (!sessionId) return;
 
-    const baseSeq = event.prevSeq;
+    const baseSeq = event.baseSeq;
     const ord = event.chunkSeq;
     if (
       typeof baseSeq === "number" &&
@@ -95,13 +95,13 @@ export class StreamEventHub {
       const cursor = this.streamCursor.get(sessionId);
       if (cursor && cursor.bootId === event.streamBootId) {
         const duplicate =
-          baseSeq < cursor.prevSeq ||
-          (baseSeq === cursor.prevSeq && ord <= cursor.chunkSeq);
+          baseSeq < cursor.baseSeq ||
+          (baseSeq === cursor.baseSeq && ord <= cursor.chunkSeq);
         if (duplicate) return;
       }
       this.streamCursor.set(sessionId, {
         bootId: event.streamBootId,
-        prevSeq: baseSeq,
+        baseSeq: baseSeq,
         chunkSeq: ord,
       });
     }
@@ -168,13 +168,13 @@ export class StreamEventHub {
     return this.sessions.get(sessionId)?.mailbox.length ?? 0;
   }
 
-  /** 当前去重游标（仅诊断/测试；无缓存返回 undefined）。字段名沿用线上 prevSeq。 */
+  /** 当前去重游标（仅诊断/测试；无缓存返回 undefined）。字段名沿用线上 baseSeq。 */
   getCursor(
     sessionId: string,
   ): { bootId?: string; baseSeq: number; chunkSeq: number } | undefined {
     const cursor = this.streamCursor.get(sessionId);
     return cursor
-      ? { bootId: cursor.bootId, baseSeq: cursor.prevSeq, chunkSeq: cursor.chunkSeq }
+      ? { bootId: cursor.bootId, baseSeq: cursor.baseSeq, chunkSeq: cursor.chunkSeq }
       : undefined;
   }
 
@@ -190,14 +190,14 @@ export class StreamEventHub {
   noteCatchupPositions(
     positions: ReadonlyArray<{
       sessionId: string;
-      prevSeq: number;
+      baseSeq: number;
       chunkSeq: number;
     }>,
   ): void {
     for (const pos of positions) {
       const cursor = this.streamCursor.get(pos.sessionId);
       if (!cursor) continue;
-      if (pos.prevSeq > cursor.prevSeq) {
+      if (pos.baseSeq > cursor.baseSeq) {
         this.gapSessions.add(pos.sessionId);
       }
     }

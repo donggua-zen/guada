@@ -71,7 +71,7 @@ export class SessionStreamManager {
    * - 不随 ActiveStream 销毁重置：回合结束 stopStream 后下一回合继续在上一位置之上递增，
    *   否则新回合首帧会与前端旧游标冲突而被判为重复。
    * - `base` 前进（有新事件落库）时 `ord` 归零；`base` 必须单调——publishStream 先
-   *   await 存储读、并发缓存重建可能让 prevSeq 乱序，回退帧沿用当前 base 并递增 ord
+   *   await 存储读、并发缓存重建可能让 logSeq 乱序，回退帧沿用当前 base 并递增 ord
    *   （只影响区间标注，不影响帧的顺序与去重）。
    * - 仅按会话累积，无清理钩子（量级与会话数同阶）。
    */
@@ -80,9 +80,9 @@ export class SessionStreamManager {
     { base: number; ord: number }
   >();
   /**
-   * 每会话最后已入库 seq 的保守下界（publish 时取 max(prevSeq)）。
+   * 每会话最后已入库 seq 的保守下界（publish 时取 max(logSeq)）。
    *
-   * prevSeq 是发布时刻的入库游标（只会低估不会高估），供终态墓碑携带，作为
+   * logSeq 是发布时刻的入库游标（只会低估不会高估），供终态墓碑携带，作为
    * "客户端可能缺到哪"的下界；与 chunkPosBySession 同策略不随 stopStream 清理。
    */
   private readonly lastPersistedSeqBySession = new Map<string, number>();
@@ -150,7 +150,7 @@ export class SessionStreamManager {
 
   /**
    * 订阅已存在的流（内部订阅：事件实时经 subject 转发，无游标补发——
-   * 增量续传由 SSE 全局广播 + 前端 StreamEventHub((prevSeq, chunkSeq) 元组去重) 承担）
+   * 增量续传由 SSE 全局广播 + 前端 StreamEventHub((baseSeq, chunkSeq) 元组去重) 承担）
    *
    * @param sessionId 会话 ID
    * @param subscriberId 订阅者唯一标识
@@ -208,7 +208,7 @@ export class SessionStreamManager {
    * 将连续的 text/think 事件合并为单个事件，减少新订阅者的事件数量。
    *
    * @param sessionId 会话 ID
-   * @param event 流式事件（prevSeq 由生产者赋值——"先入库后发事件"契约）
+   * @param event 流式事件（logSeq 由生产者赋值——"先入库后发事件"契约；baseSeq 由本方法推得）
    */
   publish(sessionId: string, event: StreamEvent): void {
     const stream = this.activeStreams.get(sessionId);
@@ -221,35 +221,34 @@ export class SessionStreamManager {
       this.cleanupIntermediateEvents(stream, event.messageId);
     }
 
-    // 真实落库游标（未钳制）：终态墓碑与 SSE logSeq 共用
-    const rawPrev =
-      typeof event.prevSeq === "number" && Number.isFinite(event.prevSeq)
-        ? event.prevSeq
+    // 真实落库游标（生产者赋值、未钳制）：终态墓碑与 SSE logSeq 共用
+    const rawLog =
+      typeof event.logSeq === "number" && Number.isFinite(event.logSeq)
+        ? event.logSeq
         : undefined;
-    if (rawPrev !== undefined) {
+    if (rawLog !== undefined) {
       const prev = this.lastPersistedSeqBySession.get(sessionId);
-      if (prev === undefined || rawPrev > prev) {
-        this.lastPersistedSeqBySession.set(sessionId, rawPrev);
+      if (prev === undefined || rawLog > prev) {
+        this.lastPersistedSeqBySession.set(sessionId, rawLog);
       }
     }
 
     // 传输位置 = 落库区间(base) + 区间内帧序号(ord)。
-    // base 优先取 prevSeq（发布时刻的入库游标）；并发 publishStream 可能乱序，回退时
+    // base 取 logSeq（发布时刻的入库游标）；并发 publishStream 可能乱序，回退时
     // 钳制到当前 base 并递增 ord，保证 (base, ord) 字典序严格单调。
     const prevPos = this.chunkPosBySession.get(sessionId);
-    const rawBase = rawPrev ?? prevPos?.base ?? 0;
+    const rawBase = rawLog ?? prevPos?.base ?? 0;
     const base = prevPos ? Math.max(rawBase, prevPos.base) : rawBase;
     const ord = prevPos && base === prevPos.base ? prevPos.ord + 1 : 1;
     this.chunkPosBySession.set(sessionId, { base, ord });
 
-    // logSeq = 未钳制的真实落库游标：日志回绕后它会随日志尾下降，客户端据此推进
-    // "已应用水位"；prevSeq 只承担传输去重（钳制后只能升，不能代表日志尾）。
-    // 裸运行时帧（无 prevSeq）不携带 logSeq，客户端水位保持不动。
+    // baseSeq = 钳制后的传输基座（只用于重放去重，不能代表日志尾）；
+    // logSeq 由生产者给出、原样透传（日志回绕后它会随日志尾下降，客户端据此推进水位）。
+    // 裸运行时帧（生产者未给 logSeq）不携带它，客户端水位保持不动。
     const stamped: StreamEvent = {
       ...event,
-      prevSeq: base,
+      baseSeq: base,
       chunkSeq: ord,
-      ...(rawPrev !== undefined ? { logSeq: rawPrev } : {}),
       streamBootId: this.bootId,
     };
 
