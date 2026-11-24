@@ -84,6 +84,7 @@
     downloading: 'Downloading {percent}%',
     downloadComplete: 'Update package downloaded',
     installTip: 'After clicking "Restart and Install", the app will close and open the installer. Complete the setup wizard to relaunch the app automatically.',
+    installTipMac: 'After clicking "Restart and Install", the app closes, replaces GuaDa in /Applications with the new version and restarts automatically.',
     installing: 'Opening installer...',
     cancelDownload: 'Cancel Download',
     backgroundDownload: 'Download in Background',

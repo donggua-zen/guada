@@ -34,12 +34,25 @@ export const useUpdateStore = defineStore('update', () => {
   let initialized = false
 
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI
-  const isWindows = computed(() => window.electronAPI?.platform === 'win32')
+  const platform = typeof window !== 'undefined' ? window.electronAPI?.platform : undefined
+  const isWindows = computed(() => platform === 'win32')
+  const isMac = computed(() => platform === 'darwin')
 
-  /** Windows 且官网下发了 GitCode 直链时，才展示应用内下载。 */
-  const canInPlaceUpdate = computed(
-    () => isWindows.value && !!info.value?.downloads?.win?.url,
-  )
+  /**
+   * 可应用内下载的条件：官方下发了对应平台的直链。
+   * macOS 兼容 downloads.mac / downloads.darwin 两种字段名；两者都缺失时
+   * （旧部署只发布 win）回退到浏览器下载。
+   */
+  const canInPlaceUpdate = computed(() => {
+    const downloads = info.value?.downloads
+    if (!downloads) return false
+    const asset = isWindows.value
+      ? downloads.win
+      : isMac.value
+        ? (downloads.mac ?? downloads.darwin)
+        : undefined
+    return typeof asset?.url === 'string' && !!asset.url
+  })
 
   /** 标题栏徽标展示条件：有更新，或已经在下载/已下载。 */
   const hasUpdate = computed(() =>
@@ -216,6 +229,7 @@ export const useUpdateStore = defineStore('update', () => {
     isChecking,
     isElectron,
     isWindows,
+    isMac,
     canInPlaceUpdate,
     hasUpdate,
     isSkipped,

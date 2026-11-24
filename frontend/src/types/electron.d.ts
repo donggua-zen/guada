@@ -25,6 +25,8 @@ export interface UpdateInfo {
   releaseNotes?: string
   downloads?: {
     win?: UpdateDownloadAsset
+    mac?: UpdateDownloadAsset
+    darwin?: UpdateDownloadAsset
   }
   [key: string]: unknown
 }
