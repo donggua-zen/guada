@@ -84,6 +84,7 @@ export default {
     downloading: '正在下载 {percent}%',
     downloadComplete: '更新包已下载完成',
     installTip: '点击“重启并安装”后应用会关闭并打开安装程序；在向导中完成安装后会自动重新启动。',
+    installTipMac: '点击“重启并安装”后应用会关闭，自动用新版本覆盖 /Applications 下的 GuaDa 并重新启动。',
     installing: '正在打开安装程序...',
     cancelDownload: '取消下载',
     backgroundDownload: '后台下载',

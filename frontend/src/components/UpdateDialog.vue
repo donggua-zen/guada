@@ -72,7 +72,7 @@
       <!-- 已下载 -->
       <div v-else-if="store.isDownloaded" class="rounded-lg bg-green-500/10 p-3 text-xs text-green-600 dark:text-green-400 space-y-1">
         <div>{{ t('ui.update.downloadComplete') }}</div>
-        <div class="opacity-80">{{ t('ui.update.installTip') }}</div>
+        <div class="opacity-80">{{ store.isMac ? t('ui.update.installTipMac') : t('ui.update.installTip') }}</div>
       </div>
 
       <!-- 安装中 -->

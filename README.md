@@ -193,6 +193,9 @@ pnpm run build:electron   # 安装包输出在 release/ 目录
 xattr -cr /Applications/GuaDa.app
 ```
 
+> **后续版本更新无需再手动执行**：应用内「检查更新 → 下载 → 重启并安装」会自动完成
+> 挂载、覆盖与清除隔离属性（需要服务端在 `check_update` 里下发 `downloads.mac`）。
+
 再正常双击打开即可。若仍提示「已损坏」，追加一次本机 ad-hoc 重签（无需任何证书）：
 
 ```bash

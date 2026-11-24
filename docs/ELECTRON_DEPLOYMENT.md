@@ -278,6 +278,31 @@ codesign --force --deep --sign - /Applications/GuaDa.app
 
 再打开即可。`--deep` 会连同 `Contents/Frameworks` 下的 Electron 组件一起重签。
 
+#### 4.2.1 更新方式：应用内下载与安装
+
+桌面端检查更新的接口是 `GET /api/check_update?version=&platform=`，`platform` 取
+`win` / `mac` / `linux`。响应里的 `downloads` 决定能否**应用内**更新：
+
+```json
+{
+  "version": "1.0.12",
+  "hasUpdate": true,
+  "downloads": {
+    "win": { "url": "...", "fileName": "GuaDa-Setup-1.0.12.exe", "sha512": "...", "size": 153539780 },
+    "mac": { "url": "...", "fileName": "GuaDa-1.0.12-arm64.dmg", "sha512": "...", "size": 120000000 }
+  }
+}
+```
+
+- Windows 缺 `downloads.win`、macOS 缺 `downloads.mac`（兼容 `downloads.darwin`）时，
+  客户端自动回退为「打开浏览器下载页」，不影响更新检查。
+- macOS 的安装不走安装向导：客户端挂载 dmg → 用 `ditto` 覆盖当前运行的应用包
+  （通常 `/Applications/GuaDa.app`）→ `xattr -cr` 清除隔离属性 → 重启。
+  因此 dmg 内必须是单个 `.app`，且应用目录可写（装在 `/Applications` 时正常）。
+- 自签名包在应用内安装后不会再有 Gatekeeper 拦截：`xattr -cr` 已由客户端完成。
+  但**签名身份必须保持一致**，否则 TCC（屏幕录制/辅助功能/本地网络）授权会失效。
+- 首次安装（从浏览器下载 dmg）仍需要 4.1 的手动放行步骤。
+
 #### 4.3 正式签名与公证（可选，当前未启用）
 
 要让用户**双击即开、零步骤**，需要 Apple Developer 账号（$99/年）并走完整链路：

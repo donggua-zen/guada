@@ -31,6 +31,7 @@ import { BrowserAutomationService } from "./browser-automation-service";
 import { ComputerSidecarClient } from "./computer-sidecar-client";
 import {
   UpdateManager,
+  installMacDmg,
   launchInstaller,
   type UpdateEvent,
   type UpdateInfo,
@@ -2679,6 +2680,18 @@ function setupIpcHandlers() {
       // 先完成完整的优雅退出（后端、Bridge、浏览器自动化），
       // 再打开安装向导；用户在向导中完成后会自动启动新版本。
       await performShutdown();
+      if (process.platform === "darwin") {
+        // macOS：就地安装 dmg（挂载 → 覆盖 /Applications → 清隔离），随后重启。
+        await installMacDmg(installerPath);
+        // app.getPath("exe") 形如 /Applications/GuaDa.app/Contents/MacOS/GuaDa，
+        // 上溯三级得到应用包路径，作为重启目标（此时磁盘上已是新版本）。
+        const bundlePath = path.resolve(app.getPath("exe"), "../../..");
+        setTimeout(() => {
+          app.relaunch({ execPath: bundlePath });
+          app.exit(0);
+        }, 500);
+        return { success: true };
+      }
       await launchInstaller(installerPath);
       setTimeout(() => app.exit(0), 200);
       return { success: true };

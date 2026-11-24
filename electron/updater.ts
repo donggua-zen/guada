@@ -29,6 +29,8 @@ export interface UpdateInfo {
   releaseNotes?: string;
   downloads?: {
     win?: UpdateAsset;
+    mac?: UpdateAsset;
+    darwin?: UpdateAsset;
   };
   [key: string]: unknown;
 }
@@ -178,6 +180,95 @@ export function launchInstaller(filePath: string): Promise<void> {
       }
     });
   });
+}
+
+/**
+ * macOS：安装已下载的 dmg。
+ *
+ * 自签名（未公证）的包无法使用 Sparkle / electron-updater 的更新框架，这里用系统
+ * 自带工具完成：挂载 → ditto 覆盖当前运行的应用包 → 清除隔离属性。调用方随后重启。
+ *
+ * 清除 quarantine 是必需的：包从网络下载会带 com.apple.quarantine，Gatekeeper
+ * 会以「已损坏 / 无法验证开发者」拦下；应用内更新已由用户点「重启并安装」显式
+ * 确认过，所以这里直接清属性，不再要求用户跑 xattr。
+ *
+ * 目标目录取当前运行位置（原地升级）；不可写时抛错并提示用户手动安装。
+ */
+export async function installMacDmg(dmgPath: string): Promise<void> {
+  if (process.platform !== "darwin") {
+    throw new Error("installMacDmg is macOS only");
+  }
+  const mountPoint = path.join(app.getPath("temp"), `guada-update-${Date.now()}`);
+
+  const run = (cmd: string, args: string[]): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      let err = "";
+      child.stdout?.on("data", (chunk) => (out += chunk.toString()));
+      child.stderr?.on("data", (chunk) => (err += chunk.toString()));
+      child.once("error", reject);
+      child.once("close", (code) => {
+        if (code === 0) resolve(out);
+        else reject(new Error(`${cmd} exited ${code}: ${err.trim() || out.trim()}`));
+      });
+    });
+
+  await fs.promises.mkdir(mountPoint, { recursive: true });
+  let attached = false;
+  try {
+    // -nobrowse: 不在 Finder 里弹出；-noverify: 跳过校验（自签名包会被
+    // hdiutil 的校验拒绝）；-mountpoint 指定挂载点便于后续定位。
+    await run("hdiutil", [
+      "attach",
+      dmgPath,
+      "-nobrowse",
+      "-noverify",
+      "-readonly",
+      "-mountpoint",
+      mountPoint,
+    ]);
+    attached = true;
+
+    // dmg 里应当是单个 .app，按后缀挑出来（避免依赖固定名字）。
+    const entries = await fs.promises.readdir(mountPoint);
+    const appName = entries.find((name) => name.endsWith(".app"));
+    if (!appName) {
+      throw new Error("更新包内没有找到 .app");
+    }
+    const sourceApp = path.join(mountPoint, appName);
+    // 装到当前运行位置（原地升级）；从 dmg 直接运行时退到 /Applications。
+    const currentBundle = path.resolve(app.getPath("exe"), "../../..");
+    const targetApp = fs.existsSync(currentBundle)
+      ? currentBundle
+      : path.join("/Applications", appName);
+    const targetParent = path.dirname(targetApp);
+    try {
+      await fs.promises.access(targetParent, fs.constants.W_OK);
+    } catch {
+      throw new Error(
+        `没有写入权限：${targetParent}。请把它放到 /Applications 后重试，或手动安装。`,
+      );
+    }
+
+    // ditto 能保留签名、扩展属性与资源分支，比 cp -R 更可靠。
+    await run("ditto", [sourceApp, targetApp]);
+    // 关键：清掉从网络继承的隔离属性，否则新版本会被 Gatekeeper 拦。
+    try {
+      await run("xattr", ["-cr", targetApp]);
+    } catch (error: any) {
+      log.warn("[updater] 清除隔离属性失败（不影响安装）:", error?.message || error);
+    }
+  } finally {
+    if (attached) {
+      try {
+        await run("hdiutil", ["detach", mountPoint, "-force"]);
+      } catch (error: any) {
+        log.warn("[updater] 卸载 dmg 失败:", error?.message || error);
+      }
+    }
+    await fs.promises.rm(mountPoint, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 export class UpdateManager {
@@ -556,10 +647,20 @@ export class UpdateManager {
   }
 
   private pickAsset(info: UpdateInfo): UpdateAsset | null {
-    if (process.platform !== "win32") return null;
-    const asset = info.downloads?.win;
-    if (!asset || typeof asset.url !== "string" || !asset.url) return null;
-    return asset;
+    // macOS may serve either downloads.mac or downloads.darwin depending on
+    // the backend version; tolerate both. When neither is present (older
+    // deployments only publish downloads.win) the caller falls back to
+    // opening the browser download page.
+    const candidates =
+      process.platform === "win32"
+        ? [info.downloads?.win]
+        : process.platform === "darwin"
+          ? [info.downloads?.mac, info.downloads?.darwin]
+          : [];
+    for (const asset of candidates) {
+      if (asset && typeof asset.url === "string" && asset.url) return asset;
+    }
+    return null;
   }
 
   private async assertDiskSpace(dir: string, expectedSize: number): Promise<void> {
