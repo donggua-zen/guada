@@ -267,13 +267,13 @@
         <h2 class="mt-8 mb-2 font-semibold">GdTabs / GdPagination / GdCollapse</h2>
         <div class="grid gap-5">
             <div>
-                <GdTabs v-model="tabsVal" :tabs="tabItems" @change="(n) => (tabsHint = n)" />
+                <GdTabs v-model="tabsVal" :tabs="tabItems" @change="(n: string) => (tabsHint = n)" />
                 <div class="mt-3 text-[13px] text-[var(--gd-color-text-gray)]">当前：{{ tabsVal }}（change: {{ tabsHint || '—' }}）</div>
             </div>
             <div class="flex flex-wrap items-center gap-4">
-                <GdPagination v-model="pageVal" :total="186" :page-size="12" @change="(p) => (pageHint = p)" />
+                <GdPagination v-model="pageVal" :total="186" :page-size="12" @change="(p: number) => (pageHint = p)" />
                 <span class="text-[12px] text-[var(--gd-color-text-gray)]">change: {{ pageHint || '—' }}</span>
-                <GdPagination :total="40" :page-size="20" :model-value="2" @change="(p) => toast.info('跳到第 ' + p + ' 页')" />
+                <GdPagination :total="40" :page-size="20" :model-value="2" @change="(p: number) => toast.info('跳到第 ' + p + ' 页')" />
                 <GdPagination v-model="pageVal" :total="5" :page-size="20" hide-on-single-page />
                 <span class="text-[12px] text-[var(--gd-color-text-gray)]">↑ 单页应隐藏</span>
             </div>
