@@ -14,6 +14,7 @@
  *   --version <x.y.z>     默认读取根 package.json
  *   --config <path>       默认 ../ai_web/backend/config.json
  *   --file <path>         改用本地 latest.yml（默认从 GitCode 拉取）
+ *   --mac-file <path>     可选：本地 latest-mac-arm64.yml，用于写入 downloads.mac（macOS 应用内更新）
  *   --version-code <n>    手动指定 versionCode（默认按 major*100 + minor*10 + patch 计算）
  *   --date <YYYY-MM-DD>   默认今天
  *   --description <text>  覆盖更新说明（默认保留 config 现有值）
@@ -157,6 +158,27 @@ async function main() {
   const blockmapUrl = `${downloadUrl}.blockmap`;
   const size = Number(file.size || 0);
 
+  // macOS 应用内更新：downloads.mac 指向 arm64 dmg（Intel 实验版仍走官网手动安装）。
+  // 元数据由 --mac-file 传入（通常是 arm64 job 的 latest-mac.yml），避免被 x64 job 的
+  // latest-mac.yml 覆盖；未提供时保留旧值并提示。
+  let macDownload = null;
+  if (args["mac-file"]) {
+    const macPath = path.resolve(repoRoot, args["mac-file"]);
+    if (!fs.existsSync(macPath)) throw new Error(`latest-mac.yml 不存在：${macPath}`);
+    const macMeta = yaml.load(fs.readFileSync(macPath, "utf8"));
+    const macFile = Array.isArray(macMeta?.files) ? macMeta.files[0] : null;
+    if (!macFile?.url || !macFile?.sha512) {
+      throw new Error("latest-mac.yml 缺少 files[0].url 或 sha512");
+    }
+    const macName = path.basename(decodeURIComponent(String(macFile.url)));
+    macDownload = {
+      url: `${GITCODE_REPO}/releases/download/v${version}/${encodeURIComponent(macName)}`,
+      fileName: macName,
+      sha512: String(macFile.sha512),
+      size: Number(macFile.size || 0),
+    };
+  }
+
   const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
   const next = {
     ...config,
@@ -174,8 +196,12 @@ async function main() {
         size,
         blockmapUrl,
       },
+      ...(macDownload ? { mac: macDownload } : {}),
     },
   };
+  if (!macDownload && next.downloads.mac) {
+    console.warn("⚠️  未提供 --mac-file，downloads.mac 保留旧值，请在发版时更新");
+  }
 
   if (args.description) next.description = String(args.description);
   if (args.mandatory) next.mandatory = true;
@@ -190,6 +216,10 @@ async function main() {
   console.log(`  latest.yml：${latestYmlUrl}`);
   console.log(`  sha512：${String(file.sha512).slice(0, 24)}...`);
   console.log(`  GitHub 备用：https://github.com/${GITHUB_REPO}/releases/download/v${version}/${fileName}`);
+  if (macDownload) {
+    console.log(`  macOS 应用内更新：${macDownload.fileName}（${(macDownload.size / 1024 / 1024).toFixed(1)} MB）`);
+    console.log(`    ${macDownload.url}`);
+  }
   console.log("");
 
   if (args["dry-run"]) {
