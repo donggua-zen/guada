@@ -56,9 +56,10 @@
           <button class="queue-action-btn" v-tooltip="t('chat.queue.sendNow')" @click="emit('sendNow', item.id)">
             <Play24Filled class="w-3.5 h-3.5"  />
           </button>
-          <button class="queue-action-btn" v-tooltip="injectHint(item)"
+          <!-- 引导（inject）：与"立即发送"并列，工具边界结束本回合后以该消息开新回合 -->
+          <button class="queue-action-btn queue-guide-btn" :aria-label="t('chat.queue.guide')" v-tooltip="injectHint(item)"
             :disabled="item.delivery === 'inject'" @click="emit('setDelivery', item.id, 'inject')">
-            {{ deliveryBadge(item) }}
+            <Lightbulb24Regular class="w-3.5 h-3.5" />
           </button>
           <button class="queue-action-btn" @click="emit('edit', item)" v-tooltip="t('chat.queue.edit')">
             <Edit24Regular class="w-3.5 h-3.5"  />
@@ -89,6 +90,7 @@ import {
   Attach24Regular,
   Dismiss24Regular,
   Edit24Regular,
+  Lightbulb24Regular,
   Pause24Filled,
   Play24Filled,
   Warning24Filled,
@@ -127,14 +129,14 @@ const emit = defineEmits<{
 
 /** 投递时机徽标：只对非默认时机显示，避免每条都挂标签 */
 const deliveryBadge = (item: QueuedMessage): string => {
-  if (item.delivery === 'inject') return '边界接管'
-  if (item.delivery === 'interrupt') return '立即'
+  if (item.delivery === 'inject') return t('chat.queue.guideBadge')
+  if (item.delivery === 'interrupt') return t('chat.queue.interruptBadge')
   return ''
 }
 const injectHint = (item: QueuedMessage): string =>
   item.delivery === 'inject'
-    ? '已在工具边界接管'
-    : '改为「当前工具跑完后开新回合」发送'
+    ? t('chat.queue.guideApplied')
+    : t('chat.queue.guideHint')
 
 function isPromoting(item: QueuedMessage): boolean {
   return !!props.promotingId && props.promotingId === item.id
