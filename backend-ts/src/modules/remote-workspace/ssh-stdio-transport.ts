@@ -64,6 +64,16 @@ export class SshStdioTransport implements RpcTransport {
     this.channel.stderr?.on("data", (chunk: Buffer) => this.stderrTail.append(chunk));
     let exitCode: number | null = null;
     let exitSignal: string | null = null;
+    // 'error' 必须有监听：ssh2 的 channel/client 在连接重置、通道关闭后写入等
+    // 情况下会 emit('error')，无人认领即抛 uncaughtException → 后端进程退出。
+    // 大文件传输中途断链（对端 OOM/网络抖动/sshd 超时）正是高发场景。
+    const onTransportError = (where: string) => (err: Error) => {
+      this.logger.warn(`transport ${this.describeCommand} ${where}: ${err?.message || err}`);
+      this.handleClose(exitCode, exitSignal);
+    };
+    this.channel.on("error", onTransportError("channel error"));
+    this.channel.stderr?.on("error", onTransportError("stderr error"));
+    this.client.on("error", onTransportError("ssh client error"));
     this.channel.on("exit", (code: number | null, signal?: string) => {
       exitCode = code ?? null;
       exitSignal = signal ?? null;
@@ -127,8 +137,13 @@ export class SshStdioTransport implements RpcTransport {
       cb?.(new Error(`${this.label} closed`));
       return;
     }
-    // 整行原子写入（NDJSON 帧）；背压由 ssh2 通道排队，回调在冲刷后触发
-    this.channel.write(data + "\n", (err?: Error) => cb?.(err ?? undefined));
+    // 整行原子写入（NDJSON 帧）；背压由 ssh2 通道排队，回调在冲刷后触发。
+    // write 可能同步抛（通道已销毁）：转成回调错误，避免打断调用方调用栈。
+    try {
+      this.channel.write(data + "\n", (err?: Error) => cb?.(err ?? undefined));
+    } catch (err: any) {
+      cb?.(err instanceof Error ? err : new Error(String(err)));
+    }
   }
 
   close(): void {

@@ -87,6 +87,19 @@ export class StreamRpcTransport implements RpcTransport {
 
     this.child.stdout?.on("data", (chunk: Buffer) => this.feed(chunk));
     this.child.stderr?.on("data", (chunk: Buffer) => this.stderrTail.append(chunk));
+    // stdio 三个流的 'error' 必须各自有监听：EventEmitter 上无人认领的 'error'
+    // 会抛成 uncaughtException → main.ts 进程级处理器 process.exit(1)，整个后端
+    // 退出。大文件传输中途 agent 被 kill / 管道断开时，下一次 write 立即触发
+    // stdin 的 EPIPE，正是这个形态（本文件头注释里的"断链自动重建"因此失效）。
+    const onStreamError = (stream: string) => (err: Error) => {
+      this.logger.warn(
+        `transport ${this.describeCommand} ${stream} error: ${err?.message || err}`,
+      );
+      this.handleClose(null, null);
+    };
+    this.child.stdin?.on("error", onStreamError("stdin"));
+    this.child.stdout?.on("error", onStreamError("stdout"));
+    this.child.stderr?.on("error", onStreamError("stderr"));
     this.child.on("error", (err) => {
       // spawn 失败（命令不存在等）：记录后按传输关闭处理
       this.logger.warn(`transport ${this.describeCommand} spawn error: ${err.message}`);
@@ -117,8 +130,13 @@ export class StreamRpcTransport implements RpcTransport {
       cb?.(new Error(`${this.label} closed`));
       return;
     }
-    // 整行原子写入（NDJSON 帧）；背压由 Node 流排队，回调在冲刷后触发
-    stdin.write(data + "\n", (err) => cb?.(err ?? undefined));
+    // 整行原子写入（NDJSON 帧）；背压由 Node 流排队，回调在冲刷后触发。
+    // write 可能同步抛（流已 destroyed）：转成回调错误，避免打断调用方调用栈。
+    try {
+      stdin.write(data + "\n", (err) => cb?.(err ?? undefined));
+    } catch (err: any) {
+      cb?.(err instanceof Error ? err : new Error(String(err)));
+    }
   }
 
   close(): void {

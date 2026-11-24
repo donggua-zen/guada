@@ -16,6 +16,14 @@ import { RpcClient, isUnknownMethodError, isTransportError } from "./rpc";
 import { RemoteWorkspaceService, RemoteConnection } from "./remote-workspace.service";
 import { StreamingSanitizer } from "../shell/stream-sanitizer";
 import { EventBusService } from "../../common/events/event-bus.service";
+import {
+  RemoteLimitError,
+  fileLimitError,
+  formatBytes,
+  getRemoteFileMaxBytes,
+  getRemoteTransferMaxBytes,
+  transferLimitError,
+} from "./remote-limits";
 import type { FileStat, DirEntry } from "../../common/workspace/workspace-provider.interface";
 
 interface CachedAgent {
@@ -439,6 +447,8 @@ function decodeAgentOutput<T extends Record<string, any>>(
  * - 工具层（readFile/execute 等带输出加工）：供 legacy remote_* 工具使用。
  */
 export class RemoteAgent {
+  private readonly logger = new Logger(RemoteAgent.name);
+
   constructor(
     private rpc: RpcClient,
     private config: any,
@@ -467,6 +477,36 @@ export class RemoteAgent {
   // ── 原语层 ──
 
   /**
+   * 整文件读写入口闸门：先 stat，超过 REMOTE_FILE_MAX_MB 直接拒绝。
+   *
+   * read/write/edit 的远端分支仍是「整文件单条 RPC」（readFileRange 分块读尚未
+   * 接进工具层），超大文件在 agent 与后端两侧都会放大 3~5 倍，且后端拼接 NDJSON
+   * 行会撞 V8 单字符串上限。闸门在入口给出可执行错误，避免把极端输入交给链路去赌。
+   *
+   * stat 失败（文件不存在 / 旧版 agent）不改变原语自身的错误语义，交给后续调用。
+   */
+  private async assertWholeFileSize(
+    absPath: string,
+    action: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const max = getRemoteFileMaxBytes();
+    try {
+      const r = await this.rpc.call<{
+        isFile: boolean;
+        isDirectory: boolean;
+        size: number;
+      }>("stat", { path: absPath }, signal);
+      if (r?.isFile && typeof r.size === "number" && r.size > max) {
+        throw fileLimitError(r.size, max, action);
+      }
+    } catch (err) {
+      if (err instanceof RemoteLimitError) throw err;
+      // stat 不可用：保持原语自身的错误语义（readFile 会给出真实原因）
+    }
+  }
+
+  /**
    * 读取远端文件原始内容。
    * utf-8 直接文本取回；其他编码按 base64 取回字节后用 iconv 本地解码
    * （agent 原语只产出 utf-8 文本或 base64 字节）。
@@ -477,6 +517,7 @@ export class RemoteAgent {
     signal?: AbortSignal,
   ): Promise<string> {
     const absPath = this.resolveRemotePath(filePath);
+    await this.assertWholeFileSize(absPath, "Remote read", signal);
     const enc = (encoding || "utf-8").toLowerCase();
     if (enc === "utf-8" || enc === "utf8") {
       const result = await this.rpc.call<{ data: string | number[] }>(
@@ -504,6 +545,9 @@ export class RemoteAgent {
   /**
    * 写入远端文件。utf-8 直接写；其他编码本地编码为字节后走分块上传（二进制安全，
    * agent 的 writeFile 原语只接受 UTF-8 文本）。
+   *
+   * 两条分支都受 REMOTE_FILE_MAX_MB 约束：write 的入参来自模型，正常远小于阈值；
+   * 真正会撞上的是「edit 读整文件 → 改写 → 写整文件」的路径（read 侧已先拦截）。
    */
   async writeFileRaw(
     filePath: string,
@@ -514,10 +558,15 @@ export class RemoteAgent {
     const absPath = this.resolveRemotePath(filePath);
     const enc = (encoding || "utf-8").toLowerCase();
     if (enc === "utf-8" || enc === "utf8") {
+      const bytes = Buffer.byteLength(content, "utf8");
+      const max = getRemoteFileMaxBytes();
+      if (bytes > max) throw fileLimitError(bytes, max, "Remote write");
       await this.rpc.call("writeFile", { path: absPath, content }, signal);
       return;
     }
     const bytes = iconv.encode(content, enc);
+    const max = getRemoteFileMaxBytes();
+    if (bytes.length > max) throw fileLimitError(bytes.length, max, "Remote write");
     await this.uploadBuffer(absPath, bytes, signal);
   }
 
@@ -527,6 +576,10 @@ export class RemoteAgent {
     data: Buffer,
     signal?: AbortSignal,
   ): Promise<void> {
+    // 本 API 的入参已经是完整 Buffer（调用方内存里已有全量），按整文件上限约束；
+    // 真正流式的大文件传输走 upload(localPath)。
+    const max = getRemoteFileMaxBytes();
+    if (data.length > max) throw fileLimitError(data.length, max, "Remote write");
     const start = await this.rpc.call<{ uploadId: string }>(
       "uploadStart",
       { remotePath, totalBytes: data.length },
@@ -906,6 +959,9 @@ export class RemoteAgent {
     const absPath = filePath.startsWith("/")
       ? filePath
       : path.posix.join(this.basePath, filePath);
+    const bytes = Buffer.byteLength(content, "utf8");
+    const max = getRemoteFileMaxBytes();
+    if (bytes > max) throw fileLimitError(bytes, max, "Remote write");
     await this.rpc.call("writeFile", { path: absPath, content }, signal);
   }
 
@@ -991,6 +1047,28 @@ export class RemoteAgent {
     return parts.join("\n\n");
   }
 
+  /**
+   * 给传输中断错误补上进度（已传/总量），并保留原错误码与 transport 标记。
+   * 大文件断链的现场往往只剩一行工具错误：带进度才能区分"刚开始就断"与
+   * "传到最后几 MB 才断"（前者查连接，后者查目标端内存/磁盘/超时）。
+   */
+  private withTransferProgress(
+    err: any,
+    action: "upload" | "download",
+    done: number,
+    total: number,
+  ): Error {
+    const base = err?.message || String(err);
+    const message = `${base} [remote_transfer ${action} interrupted after ${formatBytes(done)} of ${formatBytes(total)}]`;
+    this.logger.warn(message);
+    const wrapped = new Error(message);
+    // 保留调用方依赖的语义：AbortError 名称、错误码、传输类标记
+    if (err?.name && err.name !== "Error") wrapped.name = err.name;
+    if (err?.code) (wrapped as any).code = err.code;
+    if (err?.transport === true) (wrapped as any).transport = true;
+    return wrapped;
+  }
+
   async upload(localPath: string, remotePath: string, signal?: AbortSignal): Promise<string> {
     const absRemote = remotePath.startsWith("/")
       ? remotePath
@@ -999,6 +1077,15 @@ export class RemoteAgent {
     const handle = await fs.promises.open(localPath, "r");
     try {
       const stat = await handle.stat();
+      // 大小闸门：分块本身内存恒定，但大文件传输耗时长、断链概率高；入口先给
+      // 可执行拒绝，避免用户把几十 GB 的输入交给链路去赌（env 可调）。
+      const maxBytes = getRemoteTransferMaxBytes();
+      if (stat.size > maxBytes) {
+        throw transferLimitError(stat.size, maxBytes, "remote_transfer upload");
+      }
+      this.logger.log(
+        `remote_transfer upload: ${formatBytes(stat.size)} ${localPath} → ${absRemote}`,
+      );
       const start = await this.rpc.call<{ uploadId: string }>(
         "uploadStart",
         { remotePath: absRemote, totalBytes: stat.size },
@@ -1026,7 +1113,7 @@ export class RemoteAgent {
         try {
           await this.rpc.call("uploadAbort", { uploadId });
         } catch {}
-        throw e;
+        throw this.withTransferProgress(e, "upload", position, stat.size);
       }
     } finally {
       await handle.close();
@@ -1044,11 +1131,22 @@ export class RemoteAgent {
       signal,
     );
     const downloadId = start.downloadId;
+    // 大小闸门在打开本地文件之前：超限时先释放远端下载会话，避免句柄/半成品残留
+    const maxBytes = getRemoteTransferMaxBytes();
+    if (typeof start.totalBytes === "number" && start.totalBytes > maxBytes) {
+      try {
+        await this.rpc.call("downloadEnd", { downloadId });
+      } catch {}
+      throw transferLimitError(start.totalBytes, maxBytes, "remote_transfer download");
+    }
+    this.logger.log(
+      `remote_transfer download: ${formatBytes(start.totalBytes)} ${absRemote} → ${localPath}`,
+    );
     await fs.promises.mkdir(path.dirname(localPath), { recursive: true });
     const handle = await fs.promises.open(localPath, "w");
+    let offset = 0;
+    let received = 0;
     try {
-      let offset = 0;
-      let received = 0;
       while (true) {
         const chunk = await this.rpc.call<{ data: string; isLast: string }>(
           "downloadChunk",
@@ -1069,7 +1167,7 @@ export class RemoteAgent {
       try {
         await this.rpc.call("downloadEnd", { downloadId });
       } catch {}
-      throw e;
+      throw this.withTransferProgress(e, "download", received, start.totalBytes);
     } finally {
       await handle.close();
     }

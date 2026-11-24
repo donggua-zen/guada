@@ -1,4 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { RemoteAgent } from "./remote-workspace-agent-manager";
 import { RpcClient, WsRpcTransport } from "./rpc";
 
@@ -145,5 +148,91 @@ describe("RemoteAgent 原语层", () => {
     const r = await agent.globRaw("**/*.ts", undefined, ["**/node_modules/**"], 5, 2);
     expect(r.files).toEqual([{ path: "a.ts", size: 3 }]);
     expect(r.hasMore).toBe(true);
+  });
+
+  /**
+   * 大小闸门（env 可调）：remote_transfer 与整文件读写各一道，
+   * 超限时在入口给出可执行错误，而不是把几十 GB 输入交给传输链路。
+   */
+  describe("大小闸门", () => {
+    const ENV_KEYS = ["REMOTE_TRANSFER_MAX_MB", "REMOTE_FILE_MAX_MB"] as const;
+    const savedEnv: Record<string, string | undefined> = {};
+    beforeAll(() => {
+      for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
+    });
+    afterEach(() => {
+      for (const k of ENV_KEYS) {
+        if (savedEnv[k] === undefined) delete process.env[k];
+        else process.env[k] = savedEnv[k];
+      }
+    });
+
+    it("upload：超过 REMOTE_TRANSFER_MAX_MB 直接拒绝", async () => {
+      process.env.REMOTE_TRANSFER_MAX_MB = "1";
+      const file = path.join(os.tmpdir(), `guada-gate-upload-${process.pid}.bin`);
+      await fs.promises.writeFile(file, Buffer.alloc(2 * 1024 * 1024));
+      rpcHandler = (req, send) => send({ error: `unexpected method: ${req.method}` });
+      const agent = await buildAgent();
+      try {
+        await expect(agent.upload(file, "big.bin")).rejects.toThrow(
+          /exceeds the single-transfer limit/,
+        );
+      } finally {
+        await fs.promises.unlink(file).catch(() => {});
+      }
+    });
+
+    it("download：超过上限时拒绝并释放远端下载会话", async () => {
+      process.env.REMOTE_TRANSFER_MAX_MB = "1";
+      const seen: string[] = [];
+      rpcHandler = (req, send) => {
+        seen.push(req.method);
+        if (req.method === "downloadStart") {
+          send({ result: { downloadId: "d-big", totalBytes: 2 * 1024 * 1024 } });
+          return;
+        }
+        if (req.method === "downloadEnd") {
+          send({ result: { status: "ok" } });
+          return;
+        }
+        send({ error: `unknown method: ${req.method}` });
+      };
+      const agent = await buildAgent();
+      const localPath = path.join(os.tmpdir(), `guada-gate-download-${process.pid}.bin`);
+      await expect(agent.download("big.bin", localPath)).rejects.toThrow(
+        /exceeds the single-transfer limit/,
+      );
+      expect(seen).toContain("downloadEnd");
+      await fs.promises.unlink(localPath).catch(() => {});
+    });
+
+    it("readFileRaw：超过 REMOTE_FILE_MAX_MB 时先 stat 拒绝", async () => {
+      process.env.REMOTE_FILE_MAX_MB = "1";
+      rpcHandler = (req, send) => {
+        if (req.method === "stat") {
+          send({ result: { isFile: true, isDirectory: false, size: 2 * 1024 * 1024, mtime: 0 } });
+          return;
+        }
+        send({ error: `unexpected method: ${req.method}` });
+      };
+      const agent = await buildAgent();
+      await expect(agent.readFileRaw("big.log")).rejects.toThrow(
+        /exceeds the whole-file limit/,
+      );
+    });
+
+    it("writeFileRaw：超过 REMOTE_FILE_MAX_MB 时拒绝且不发 writeFile", async () => {
+      process.env.REMOTE_FILE_MAX_MB = "1";
+      const methods: string[] = [];
+      rpcHandler = (req, send) => {
+        methods.push(req.method);
+        send({ error: `unexpected method: ${req.method}` });
+      };
+      const agent = await buildAgent();
+      await expect(
+        agent.writeFileRaw("big.txt", "x".repeat(2 * 1024 * 1024)),
+      ).rejects.toThrow(/exceeds the whole-file limit/);
+      expect(methods).not.toContain("writeFile");
+    });
   });
 });

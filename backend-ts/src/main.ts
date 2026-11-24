@@ -37,6 +37,9 @@ function logFatal(kind: string, err: unknown): void {
   } catch {
     // 日志系统自身异常时以 stderr 为准
   }
+  // winston 是异步流，紧跟 process.exit(1) 的 error 条目可能来不及落盘（"现场丢失"）。
+  // 这里同步追加一行 last-breath（含 uptime/rss/原因），保证每次 logFatal 都留下痕迹。
+  lastBreath(`logFatal ${kind}: ${String(error.message).slice(0, 300)}`);
   process.exit(1);
 }
 

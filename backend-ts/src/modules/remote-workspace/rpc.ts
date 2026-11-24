@@ -7,6 +7,7 @@
  * - Push:     { event, data }
  */
 
+import { Logger } from "@nestjs/common";
 import WebSocket from "ws";
 
 export interface RPCRequest {
@@ -99,23 +100,51 @@ export interface RpcTransport {
 /** WebSocket 传输（SSH / devMode 直连的既有通道） */
 export class WsRpcTransport implements RpcTransport {
   readonly label = "WebSocket";
+  private readonly logger = new Logger(WsRpcTransport.name);
   private readonly messageHandlers: Array<(raw: string) => void> = [];
   private readonly closeHandlers: Array<() => void> = [];
   private closed = false;
+  private closeNotified = false;
 
   constructor(private readonly ws: WebSocket) {
     ws.on("message", (raw: WebSocket.RawData) => {
       const text = raw.toString();
       for (const h of this.messageHandlers) h(text);
     });
-    ws.on("close", () => {
-      this.closed = true;
-      for (const h of this.closeHandlers) h();
+    // 'error' 必须有监听：EventEmitter 上无人认领的 'error' 会抛成
+    // uncaughtException，main.ts 的进程级处理器随后 process.exit(1) —— 整个后端
+    // 直接退出（大文件传输中途断链的典型现场）。统一按传输关闭处理：reject 挂起
+    // 请求 → 上层清理缓存 → 下次调用自动重建连接。
+    ws.on("error", (err: Error) => {
+      this.logger.warn(`WebSocket transport error: ${err?.message || err}`);
+      this.notifyClose();
     });
+    ws.on("close", () => this.notifyClose());
+  }
+
+  /** 关闭通知只发一次（'error' 之后通常紧跟 'close'，避免重复 reject） */
+  private notifyClose(): void {
+    if (this.closeNotified) return;
+    this.closeNotified = true;
+    this.closed = true;
+    for (const h of this.closeHandlers) {
+      try {
+        h();
+      } catch {}
+    }
   }
 
   send(data: string, cb?: (err?: Error) => void): void {
-    this.ws.send(data, (err) => cb?.(err ?? undefined));
+    if (this.closed || this.ws.readyState !== WebSocket.OPEN) {
+      cb?.(new Error(`${this.label} closed`));
+      return;
+    }
+    try {
+      this.ws.send(data, (err) => cb?.(err ?? undefined));
+    } catch (err: any) {
+      // ws.send 在异常状态下可能同步抛错：转成回调错误，保住调用方语义
+      cb?.(err instanceof Error ? err : new Error(String(err)));
+    }
   }
 
   close(): void {
@@ -278,7 +307,6 @@ export class RpcClient {
     return new Promise((resolve, reject) => {
       // 支持调用方自定义 requestId(用于 abort/超时后可预测的日志路径)
       const id = requestId || `r${++this.msgId}`;
-      this.pending.set(id, { resolve, reject });
       const req: RPCRequest = { id, method, params };
 
       // 超时兜底:响应未达时主动失败,避免无限挂起(如命令早完成但响应丢失)
@@ -321,14 +349,25 @@ export class RpcClient {
           return;
         }
         signal.addEventListener("abort", onAbort, { once: true });
-        // 请求完成时清理监听
+        // 请求完成（无论 resolve / reject）时清理 abort 监听。
+        // 大文件分块传输（1024 块/GB）会复用同一个 signal：只包 reject 的话，
+        // 成功返回的每一块都会留下一个监听器（MaxListenersExceededWarning +
+        // 闭包累积），必须在 resolve 侧也移除。
         const origReject = reject;
         reject = (e: any) => {
           if (timer) clearTimeout(timer);
           signal.removeEventListener("abort", onAbort);
           origReject(e);
         };
+        const origResolve = resolve;
+        resolve = (v: any) => {
+          if (timer) clearTimeout(timer);
+          signal.removeEventListener("abort", onAbort);
+          origResolve(v);
+        };
       }
+
+      this.pending.set(id, { resolve, reject });
 
       this.transport.send(JSON.stringify(req), (err) => {
         if (err) {

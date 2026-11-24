@@ -312,3 +312,83 @@ describe("RpcClient error classification", () => {
     expect(isTransportError(err)).toBe(true);
   });
 });
+
+/**
+ * 传输健壮性回归：
+ * - ws 'error'（EPIPE/ECONNRESET）必须有监听，否则 EventEmitter 会抛
+ *   uncaughtException，把整个后端进程带走（大文件传输中途断链的现场）；
+ * - 分块传输共用同一个 AbortSignal，成功返回的每块都要移除 abort 监听，
+ *   否则 1GB 传输会累积 1000+ 监听器（警告 + 闭包泄漏）。
+ */
+describe("RpcClient / WsRpcTransport 健壮性", () => {
+  let server: WebSocketServer;
+
+  beforeEach(() => {
+    server = new WebSocketServer({ port: 0 });
+  });
+
+  afterEach(async () => {
+    for (const client of server.clients) client.terminate();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  function serverUrl(): string {
+    const addr = server.address() as { port: number };
+    return `ws://127.0.0.1:${addr.port}`;
+  }
+
+  function startEchoServer() {
+    server.on("connection", (ws) => {
+      ws.on("message", (raw) => {
+        try {
+          const req = JSON.parse(raw.toString());
+          ws.send(JSON.stringify({ id: req.id, result: { pong: "ok" } }));
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+  }
+
+  async function connectRpc(): Promise<{ rpc: RpcClient; ws: WebSocket }> {
+    const ws = new WebSocket(serverUrl());
+    await new Promise<void>((resolve) => ws.once("open", () => resolve()));
+    const rpc = new RpcClient(new WsRpcTransport(ws));
+    rpc.setConnected();
+    rpc.onDisconnect(() => {});
+    return { rpc, ws };
+  }
+
+  test("ws 'error' 不抛出，按传输关闭处理（仅通知一次）", async () => {
+    const ws = new WebSocket(serverUrl());
+    await new Promise<void>((resolve) => ws.once("open", () => resolve()));
+    const transport = new WsRpcTransport(ws);
+    const onClose = jest.fn();
+    transport.onClose(onClose);
+
+    expect(() => ws.emit("error", new Error("EPIPE"))).not.toThrow();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(transport.isOpen()).toBe(false);
+
+    // 后续 'close' 不重复通知
+    ws.emit("close");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    ws.terminate();
+  });
+
+  test("分块调用共用 signal 时成功返回不泄漏 abort 监听", async () => {
+    startEchoServer();
+    const { rpc } = await connectRpc();
+    const controller = new AbortController();
+
+    for (let i = 0; i < 30; i++) {
+      await rpc.call("ping", {}, controller.signal);
+    }
+
+    // Node >= 15 的 EventTarget 监听查询：成功路径必须清理干净
+    const { getEventListeners } = await import("events");
+    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+
+    rpc.close();
+  });
+});
