@@ -188,6 +188,124 @@ describe("SessionEventsService（WebSocket）连接", () => {
     service.disconnect();
   });
 
+  it("ready 携带侧栏修订号：首次与重连 meta 正确", () => {
+    const service = createService();
+    const listener = vi.fn();
+    service.onSidebarState(listener);
+    service.connect();
+    lastSocket().open();
+    lastSocket().push({
+      kind: "ready",
+      connectionId: "c1",
+      protocol: "guada.events.v1",
+      state: {
+        scope: "sidebar",
+        bootId: "boot-1",
+        revision: 1,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+
+    expect(listener).toHaveBeenLastCalledWith(
+      expect.objectContaining({ bootId: "boot-1", revision: 1 }),
+      { reason: "ready", reconnected: false, changed: true },
+    );
+
+    lastSocket().close();
+    vi.advanceTimersByTime(2_000);
+    lastSocket().open();
+    lastSocket().push({
+      kind: "ready",
+      connectionId: "c2",
+      protocol: "guada.events.v1",
+      state: {
+        scope: "sidebar",
+        bootId: "boot-1",
+        revision: 2,
+        updatedAt: "2026-01-01T00:00:01.000Z",
+      },
+    });
+
+    expect(listener).toHaveBeenLastCalledWith(
+      expect.objectContaining({ bootId: "boot-1", revision: 2 }),
+      { reason: "ready", reconnected: true, changed: true },
+    );
+    service.disconnect();
+  });
+
+  it("state 推送只在修订号变化时通知", () => {
+    const service = createService();
+    const listener = vi.fn();
+    service.onSidebarState(listener);
+    service.connect();
+    lastSocket().open();
+    lastSocket().push({
+      kind: "ready",
+      connectionId: "c1",
+      protocol: "guada.events.v1",
+      state: {
+        scope: "sidebar",
+        bootId: "boot-1",
+        revision: 1,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    listener.mockClear();
+
+    const frame = {
+      kind: "state",
+      scope: "sidebar",
+      bootId: "boot-1",
+      revision: 2,
+      updatedAt: "2026-01-01T00:00:01.000Z",
+    };
+    lastSocket().push(frame);
+    lastSocket().push(frame);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ revision: 2 }),
+      { reason: "push", reconnected: false, changed: true },
+    );
+    service.disconnect();
+  });
+
+  it("每 60s 发一次 state/ping；隐藏时不发", () => {
+    const service = createService();
+    service.connect();
+    lastSocket().ready();
+    lastSocket().sent.length = 0;
+
+    vi.advanceTimersByTime(60_000);
+    expect(lastSocket().sent).toContainEqual({ kind: "state/ping" });
+
+    doc.hidden = true;
+    doc.visibilityState = "hidden";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    lastSocket().sent.length = 0;
+    vi.advanceTimersByTime(60_000);
+    expect(lastSocket().sent).not.toContainEqual({ kind: "state/ping" });
+    service.disconnect();
+  });
+
+  it("短时间隐藏后回前台补一次 state/ping（不触发重连）", () => {
+    const service = createService();
+    service.connect();
+    lastSocket().ready();
+    lastSocket().sent.length = 0;
+
+    doc.hidden = true;
+    doc.visibilityState = "hidden";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    doc.hidden = false;
+    doc.visibilityState = "visible";
+    doc.dispatchEvent(new Event("visibilitychange"));
+
+    expect(hoisted.sockets).toHaveLength(1);
+    expect(lastSocket().sent).toContainEqual({ kind: "state/ping" });
+    service.disconnect();
+  });
+
   it("页面隐藏超过 15s 后恢复可见 → 重建连接", () => {
     const service = createService();
     service.connect();

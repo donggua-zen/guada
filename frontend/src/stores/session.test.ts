@@ -911,3 +911,64 @@ describe("sessionStore 已应用水位", () => {
     expect(store.getAppliedSeq("s1")).toBeUndefined();
   });
 });
+
+describe("sessionStore 侧栏快照剪除", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  function addSession(store: ReturnType<typeof useSessionStore>, id: string, patch: Record<string, unknown> = {}) {
+    store.sessionsMap.set(id, {
+      id,
+      title: id,
+      groupId: null,
+      pinned: false,
+      archived: false,
+      sessionType: "web",
+      ...patch,
+    } as any);
+  }
+
+  it("只剪除不在快照且没有工作态的侧栏投影；当前/bot/子代理/工作中/流式中保留", () => {
+    const store = useSessionStore();
+    addSession(store, "keep");
+    addSession(store, "active");
+    addSession(store, "working");
+    addSession(store, "streaming");
+    store.setSessionIsStreaming("streaming", true);
+    addSession(store, "unread");
+    addSession(store, "plain");
+    addSession(store, "bot", { sessionType: "bot" });
+    addSession(store, "sub", { sessionType: "sub_agent" });
+    store.setSidebarFlag("working", "working", true);
+    store.setSidebarFlag("unread", "unread", true);
+
+    const removed = store.dropSidebarSessions(new Set(["keep"]), "active");
+
+    expect(removed.sort()).toEqual(["plain", "unread"]);
+    expect([...store.sessionsMap.keys()].sort()).toEqual([
+      "active",
+      "bot",
+      "keep",
+      "streaming",
+      "sub",
+      "working",
+    ]);
+    // 侧栏角标只清被剪除的会话
+    expect(store.getSidebarState("working").working).toBe(true);
+    expect(store.getSidebarState("unread").unread).toBe(false);
+  });
+
+  it("clearPinnedExcept 以服务端清单为准，只清掉不再置顶的标记", () => {
+    const store = useSessionStore();
+    addSession(store, "a", { pinned: true });
+    addSession(store, "b", { pinned: true });
+    addSession(store, "c", { pinned: false });
+
+    store.clearPinnedExcept(new Set(["a", "c"]));
+
+    expect(store.sessionsMap.get("a")?.pinned).toBe(true);
+    expect(store.sessionsMap.get("b")?.pinned).toBe(false);
+    expect(store.sessionsMap.get("c")?.pinned).toBe(false);
+  });
+});

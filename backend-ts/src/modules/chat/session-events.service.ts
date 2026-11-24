@@ -29,6 +29,10 @@ import type { SessionStoreFacade } from './session-store.facade';
 import { HOOKS } from "./types/hooks.contract";
 import type { JobsSnapshotEvent } from "../jobs/job.types";
 import { UserInputQueueService } from "./user-input-queue.service";
+import {
+  SIDEBAR_STATE_CHANGED,
+  type SidebarStateChangedEvent,
+} from "./sidebar-state.service";
 /**
  * 会话事件类型
  */
@@ -607,6 +611,30 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
       timestamp: event.timestamp,
       payload: event,
     });
+  }
+
+  /**
+   * 侧栏结构修订号变化：向所有连接广播轻量 state 帧。
+   *
+   * 分组/项目分组的改名、排序、图标、归档、删除没有逐条会话事件；客户端
+   * 收到修订号变化后重拉侧栏快照做对账。走 deliver() 是为了在带内快照
+   * 读页期间排队，避免 state 帧插到 snapshot 之前。
+   */
+  @OnEvent(SIDEBAR_STATE_CHANGED)
+  handleSidebarStateChanged(event: SidebarStateChangedEvent): void {
+    if (this.connections.size === 0) return;
+    const { reason: _reason, ...state } = event;
+    const message = JSON.stringify({ kind: "state", ...state });
+    for (const connection of this.connections.values()) {
+      try {
+        this.deliver(connection, message);
+      } catch {
+        this.logger.warn(
+          `Failed to send sidebar state to ${connection.clientId}, removing`,
+        );
+        this.unsubscribe(connection);
+      }
+    }
   }
 
   /**

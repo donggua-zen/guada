@@ -57,6 +57,15 @@ export const useSessionStore = defineStore('session', () => {
     /** 非响应式 LRU 访问时间戳(按会话记录最近访问,淘汰时用;不触发 Vue 响应式) */
     const sessionLastAccess = new Map<string, number>()
 
+    /**
+     * 远端会话事件代际：session_created/updated/deleted 应用时递增。
+     * 侧栏对账请求若在途期间收到过事件，说明快照可能比事件旧，丢弃重拉。
+     */
+    const sidebarEventEpoch = ref(0)
+    const bumpSidebarEventEpoch = (): void => {
+        sidebarEventEpoch.value += 1
+    }
+
     // 会话侧边栏状态（未读 / 工作中）
     const sessionSidebarStates: Ref<Map<string, { unread: boolean; working: boolean }>> = ref(new Map())
 
@@ -315,6 +324,53 @@ export const useSessionStore = defineStore('session', () => {
         sessions.value.delete(sessionId)
         sessionLastAccess.delete(sessionId)
         clearQueueCount(sessionId)
+    }
+
+    /**
+     * 侧栏快照对账后剪除不在快照里的会话（已删除/已归档/移出可见窗口）。
+     *
+     * 只删侧栏投影（sessionsMap / 未读工作中标记 / 队列角标），**不清内容缓存**：
+     * 有些会话只是暂时落在当前分页窗口之外，点「加载更多」或重新打开时还要用。
+     * 当前会话与 bot/sub_agent 会话不参与剪除，避免影响聊天页/子代理视图。
+     */
+    const dropSidebarSessions = (
+        keepIds: ReadonlySet<string>,
+        activeSessionId?: string | null,
+    ): string[] => {
+        const removed: string[] = []
+        for (const [id, session] of sessionsMap.value) {
+            if (keepIds.has(id) || id === activeSessionId) continue
+            if (session.sessionType === 'bot' || session.sessionType === 'sub_agent') continue
+            // 正在工作/待答/排队：桌面宠物与托盘还要用，即使它已经落到
+            // 当前分页窗口之外也不能从统一数据源里删掉。unread 不保活：
+            // 未读标记最可能是旧状态，保活会让远端已删除的会话变成幽灵行。
+            const sidebarState = sessionSidebarStates.value.get(id)
+            if (sidebarState?.working) continue
+            if ((sessionQueueCounts.value.get(id) ?? 0) > 0) continue
+            const content = sessions.value.get(id)
+            if (
+                content &&
+                (content.isStreaming ||
+                    hasPendingAsks(content) ||
+                    hasQueuedMessages(content))
+            ) {
+                continue
+            }
+            sessionsMap.value.delete(id)
+            sessionSidebarStates.value.delete(id)
+            sessionQueueCounts.value.delete(id)
+            removed.push(id)
+        }
+        return removed
+    }
+
+    /** 置顶清单以服务端为准：本地已置顶但不在本次清单里的会话清掉 pinned 标记 */
+    const clearPinnedExcept = (pinnedIds: ReadonlySet<string>): void => {
+        for (const [id, session] of sessionsMap.value) {
+            if (session.pinned && !pinnedIds.has(id)) {
+                session.pinned = false
+            }
+        }
     }
 
     /**
@@ -1036,6 +1092,8 @@ export const useSessionStore = defineStore('session', () => {
         // 状态
         activeSessionId,
         sessionsMap,
+        sidebarEventEpoch,
+        bumpSidebarEventEpoch,
 
         // actions
         getSessionState,
@@ -1090,6 +1148,8 @@ export const useSessionStore = defineStore('session', () => {
         patchSession,
         patchSessionSettings,
         removeSession,
+        dropSidebarSessions,
+        clearPinnedExcept,
         getSessionsByGroup,
         getVisibleSessionsByGroup,
         getSessionsByProjectGroup,

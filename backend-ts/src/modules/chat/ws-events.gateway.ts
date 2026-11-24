@@ -12,6 +12,7 @@ import { AccountFileStore } from "../auth/account-file.store";
 import { SessionEventsService, type EventConnection } from "./session-events.service";
 import { SessionReplayService } from "./session-replay.service";
 import { SessionService } from "./session.service";
+import { SidebarStateService } from "./sidebar-state.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import {
   WorkspaceWatcherService,
@@ -63,6 +64,7 @@ export class WsEventsGateway implements OnApplicationBootstrap, OnModuleDestroy 
     private readonly jwtService: JwtService,
     private readonly accountStore: AccountFileStore,
     private readonly sessionEvents: SessionEventsService,
+    private readonly sidebarState: SidebarStateService,
     private readonly replayService: SessionReplayService,
     private readonly sessionService: SessionService,
     private readonly workspaceService: WorkspaceService,
@@ -155,7 +157,13 @@ export class WsEventsGateway implements OnApplicationBootstrap, OnModuleDestroy 
     };
     this.states.set(ws, state);
 
-    this.send(ws, { kind: "ready", connectionId, protocol: WS_EVENTS_PROTOCOL });
+    this.send(ws, {
+      kind: "ready",
+      connectionId,
+      protocol: WS_EVENTS_PROTOCOL,
+      // 侧栏修订号基线：客户端重连后与本机已知值比较，决定是否重拉对账
+      state: this.sidebarState.snapshot(),
+    });
 
     ws.on("pong", () => {
       state.alive = true;
@@ -293,6 +301,10 @@ export class WsEventsGateway implements OnApplicationBootstrap, OnModuleDestroy 
         return;
       case "ping":
         this.send(state.ws, { kind: "pong", ts: message.ts });
+        return;
+      case "state/ping":
+        // 周期兜底：客户端只需知道当前修订号，不需要服务端维护每连接 ack
+        this.send(state.ws, { kind: "state", ...this.sidebarState.snapshot() });
         return;
       case "open":
         await this.handleOpen(state, message);

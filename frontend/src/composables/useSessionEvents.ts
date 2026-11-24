@@ -338,6 +338,8 @@ export function useSessionEvents() {
 
     unsubscribers.push(
       apiService.onSessionEvent("session_created", (event) => {
+        // 事件先于旧快照应用时，让在途的侧栏对账丢弃重拉
+        sessionStore.bumpSidebarEventEpoch();
         if (event.source === apiService.getClientId()) return;
         const { payload } = event;
         if (
@@ -361,6 +363,7 @@ export function useSessionEvents() {
 
     unsubscribers.push(
       apiService.onSessionEvent("session_deleted", (event) => {
+        sessionStore.bumpSidebarEventEpoch();
         if (event.source === apiService.getClientId()) return;
         const { sessionId } = event;
         sessionStore.removeSession(sessionId);
@@ -405,6 +408,7 @@ export function useSessionEvents() {
 
     unsubscribers.push(
       apiService.onSessionEvent("session_updated", (event) => {
+        sessionStore.bumpSidebarEventEpoch();
         if (event.source === apiService.getClientId()) return;
         const { sessionId, payload } = event;
         if (

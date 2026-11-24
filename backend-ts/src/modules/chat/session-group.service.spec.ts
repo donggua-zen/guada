@@ -16,6 +16,7 @@ describe("SessionGroupService 归档本分组", () => {
   let sessionsBase: string;
   let store: TestSessionStore;
   let service: SessionGroupService;
+  let sidebarState: { touch: jest.Mock };
   let groupId: string;
   const streaming = new Set<string>();
 
@@ -42,9 +43,14 @@ describe("SessionGroupService 归档本分组", () => {
     await store.initialize();
     streaming.clear();
 
-    service = new SessionGroupService(store as any, {
-      hasActiveStream: (id: string) => streaming.has(id),
-    } as any);
+    sidebarState = { touch: jest.fn() };
+    service = new SessionGroupService(
+      store as any,
+      {
+        hasActiveStream: (id: string) => streaming.has(id),
+      } as any,
+      sidebarState as any,
+    );
 
     const group = await store.createGroup({ name: "开发", sortOrder: 0 });
     groupId = group.id;
@@ -78,6 +84,7 @@ describe("SessionGroupService 归档本分组", () => {
     expect((await store.getMeta("a2"))!.archived).toBe(true);
     expect((await store.getMeta("stream"))!.archived).toBe(false);
     expect((await store.getMeta("arch"))!.archived).toBe(true);
+    expect(sidebarState.touch).toHaveBeenCalledWith("session-group-archived");
   });
 
   it("归档本分组不影响组外会话，分组行保留", async () => {
@@ -94,6 +101,21 @@ describe("SessionGroupService 归档本分组", () => {
     await expect(service.getStats("grp-missing")).rejects.toMatchObject({
       status: 404,
     });
+  });
+
+  it("分组写操作都 touch 侧栏修订号", async () => {
+    sidebarState.touch.mockClear();
+    const created = await service.createGroup({ name: "修订号" });
+    await service.updateGroup(created.id, { name: "改名" });
+    await service.reorderGroups([created.id, groupId]);
+    await service.deleteGroup(created.id);
+
+    expect(sidebarState.touch.mock.calls.map((c) => c[0])).toEqual([
+      "session-group-created",
+      "session-group-updated",
+      "session-groups-reordered",
+      "session-group-deleted",
+    ]);
   });
 
   it("创建可带图标；更新支持只改图标；非法 key 400", async () => {

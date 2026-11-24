@@ -55,6 +55,32 @@ describe("SessionEventsService 连接与订阅", () => {
     ]);
   });
 
+  it("侧栏修订号广播到所有连接，不受 watch 过滤", () => {
+    const a = connect("a");
+    const b = connect("b");
+    service.watchSessions(b.connection, ["s1"]);
+    a.received.length = 0;
+    b.received.length = 0;
+
+    service.handleSidebarStateChanged({
+      scope: "sidebar",
+      bootId: "boot-1",
+      revision: 7,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      reason: "test",
+    });
+
+    const expected = {
+      kind: "state",
+      scope: "sidebar",
+      bootId: "boot-1",
+      revision: 7,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(a.received).toEqual([expected]);
+    expect(b.received).toEqual([expected]);
+  });
+
   it("watch 补发：connected → buffer 重放 → running 状态", () => {
     streamManager.startStream("s1", new AbortController(), "chat");
     streamManager.publish("s1", {

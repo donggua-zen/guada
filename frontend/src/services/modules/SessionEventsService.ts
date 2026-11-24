@@ -43,6 +43,31 @@ export interface SessionEvent {
 
 export type SessionEventListener = (event: SessionEvent) => void;
 
+/** 侧栏结构修订号（与后端 ws-events.types.ts 对齐） */
+export interface SidebarStateSnapshot {
+  scope: "sidebar";
+  bootId: string;
+  revision: number;
+  updatedAt: string;
+}
+
+export interface SidebarStateChangeMeta {
+  reason: "ready" | "push";
+  /** true = 本次 ready 是重连（之前已建连过）；false = 首次建连 */
+  reconnected: boolean;
+  /** bootId+revision 是否与上一次已知值不同 */
+  changed: boolean;
+}
+
+export type SidebarStateListener = (
+  state: SidebarStateSnapshot,
+  meta: SidebarStateChangeMeta,
+) => void;
+
+function sidebarStateKey(state: SidebarStateSnapshot): string {
+  return `${state.bootId}:${state.revision}`;
+}
+
 /** 服务端握手子协议（与 backend ws-events.types.ts 对齐） */
 const WS_EVENTS_PROTOCOL = "guada.events.v1";
 const WS_BEARER_PREFIX = "bearer.";
@@ -50,6 +75,7 @@ const WS_BEARER_PREFIX = "bearer.";
 const RESUME_RECONNECT_AFTER_HIDDEN_MS = 15_000;
 const STALE_ACTIVITY_MS = 150_000;
 const WATCHDOG_INTERVAL_MS = 30_000;
+const STATE_PING_INTERVAL_MS = 60_000;
 const RECONNECT_BASE_DELAY_MS = 2_000;
 const RECONNECT_MAX_DELAY_MS = 30_000;
 const RECONNECT_MIN_INTERVAL_MS = 1_000;
@@ -74,8 +100,14 @@ export class SessionEventsService {
   private readonly connectListeners = new Set<() => void>();
   private readonly fatalListeners = new Set<() => void>();
   private readonly workspaceListeners = new Set<(event: any) => void>();
+  private readonly sidebarStateListeners = new Set<SidebarStateListener>();
   private listeners: Map<SessionEventType | "*", Set<SessionEventListener>> = new Map();
   private readonly deliveredTerminalIds = new Map<string, string>();
+  /** 侧栏结构修订号（内存；重连保留用于比较，disconnect 清空） */
+  private sidebarState: SidebarStateSnapshot | null = null;
+  /** 是否已经历过 ready：用于区分首次建连与重连 */
+  private hasBeenReady = false;
+  private statePingTimer: ReturnType<typeof setInterval> | null = null;
 
   /** 本连接关注（期望接收内容帧）的会话；重连后重放 */
   private readonly desiredSessions = new Set<string>();
@@ -100,6 +132,9 @@ export class SessionEventsService {
     this.hiddenAt = null;
     if (hiddenFor > RESUME_RECONNECT_AFTER_HIDDEN_MS || !this.isConnected()) {
       this.reconnect(`resume after hidden ${Math.round(hiddenFor / 1000)}s`);
+    } else {
+      // 短时间隐藏不会触发重连；补一次修订号核对，兜住后台期间错过的推送
+      this.requestSidebarStateCheck();
     }
   };
 
@@ -182,6 +217,8 @@ export class SessionEventsService {
     this.closeSocket();
     this.lastActivityAt = 0;
     this.hiddenAt = null;
+    this.sidebarState = null;
+    this.hasBeenReady = false;
     this.deliveredTerminalIds.clear();
     for (const waiter of this.snapshotWaiters.values()) {
       clearTimeout(waiter.timer);
@@ -189,6 +226,7 @@ export class SessionEventsService {
     }
     this.snapshotWaiters.clear();
     this.listeners.clear();
+    this.sidebarStateListeners.clear();
   }
 
   private closeSocket(): void {
@@ -285,12 +323,15 @@ export class SessionEventsService {
 
   private handleServerMessage(message: any): void {
     switch (message?.kind) {
-      case "ready":
+      case "ready": {
+        const reconnected = this.hasBeenReady;
+        this.hasBeenReady = true;
         this.ready = true;
         this.lastActivityAt = Date.now();
         this.reconnectDelayMs = RECONNECT_BASE_DELAY_MS;
         console.log("[SessionEvents] WS 连接已建立");
         this.replayWatchSet();
+        this.applySidebarState(message.state, "ready", reconnected);
         for (const listener of this.connectListeners) {
           try {
             listener();
@@ -299,8 +340,12 @@ export class SessionEventsService {
           }
         }
         return;
+      }
       case "event":
         this.routeEvent(message.data);
+        return;
+      case "state":
+        this.applySidebarState(message, "push", false);
         return;
       case "workspace":
         for (const listener of this.workspaceListeners) {
@@ -408,6 +453,11 @@ export class SessionEventsService {
     window.addEventListener("online", this.handleOnline);
     window.addEventListener("pageshow", this.handlePageShow);
     this.watchdogTimer = setInterval(this.runWatchdog, WATCHDOG_INTERVAL_MS);
+    // 修订号周期兜底：只在已连接且前台时真正发帧（requestSidebarStateCheck 内判定）
+    this.statePingTimer = setInterval(
+      () => this.requestSidebarStateCheck(),
+      STATE_PING_INTERVAL_MS,
+    );
   }
 
   private removeLifecycleHandlers(): void {
@@ -418,6 +468,10 @@ export class SessionEventsService {
     if (this.watchdogTimer) {
       clearInterval(this.watchdogTimer);
       this.watchdogTimer = null;
+    }
+    if (this.statePingTimer) {
+      clearInterval(this.statePingTimer);
+      this.statePingTimer = null;
     }
   }
 
@@ -457,6 +511,64 @@ export class SessionEventsService {
   onWorkspaceEvent(listener: (event: any) => void): () => void {
     this.workspaceListeners.add(listener);
     return () => this.workspaceListeners.delete(listener);
+  }
+
+  // ── 侧栏结构修订号 ──
+
+  getSidebarState(): SidebarStateSnapshot | null {
+    return this.sidebarState ? { ...this.sidebarState } : null;
+  }
+
+  /** `bootId:revision`，供同步器做等值比较 */
+  getSidebarStateKey(): string | null {
+    return this.sidebarState ? sidebarStateKey(this.sidebarState) : null;
+  }
+
+  onSidebarState(listener: SidebarStateListener): () => void {
+    this.sidebarStateListeners.add(listener);
+    return () => this.sidebarStateListeners.delete(listener);
+  }
+
+  /** 主动核对一次修订号（周期兜底/回前台补一次） */
+  requestSidebarStateCheck(): void {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      return;
+    }
+    this.send({ kind: "state/ping" });
+  }
+
+  private applySidebarState(
+    raw: any,
+    reason: "ready" | "push",
+    reconnected: boolean,
+  ): void {
+    if (
+      !raw ||
+      raw.scope !== "sidebar" ||
+      typeof raw.bootId !== "string" ||
+      typeof raw.revision !== "number"
+    ) {
+      return;
+    }
+    const next: SidebarStateSnapshot = {
+      scope: "sidebar",
+      bootId: raw.bootId,
+      revision: raw.revision,
+      updatedAt:
+        typeof raw.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+    };
+    const changed =
+      !this.sidebarState ||
+      sidebarStateKey(this.sidebarState) !== sidebarStateKey(next);
+    this.sidebarState = next;
+    if (!changed && !reconnected) return;
+    for (const listener of this.sidebarStateListeners) {
+      try {
+        listener(next, { reason, reconnected, changed });
+      } catch (error) {
+        console.error("[SessionEvents] sidebar state 监听器失败:", error);
+      }
+    }
   }
 
   // ── watch / 快照 ──

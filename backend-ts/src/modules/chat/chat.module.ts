@@ -27,6 +27,7 @@ import { JobNotifierService } from "../jobs/job-notifier.service";
 
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionEventsService } from "./session-events.service";
+import { SidebarStateService } from "./sidebar-state.service";
 import { WsEventsGateway } from "./ws-events.gateway";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { WorkspaceWatcherService } from "../../common/services/workspace-watcher.service";
@@ -76,6 +77,8 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     UploadPathService,
     WorkspaceWatcherService,
     SessionEventsService,
+    // 侧栏结构性变更的粗粒度修订号（分组/项目分组/自动标题），经 WS 推送
+    SidebarStateService,
     WsEventsGateway,
     UserInputQueueService,
     ChatRunnerService,

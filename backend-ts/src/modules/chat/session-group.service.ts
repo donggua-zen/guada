@@ -1,8 +1,9 @@
-import { Inject, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { Inject, HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { parseGroupIcon } from "../../common/utils/group-icon.util";
 import { SESSION_STORE_TOKEN } from './session-store.facade';
 import type { SessionStoreFacade } from './session-store.facade';
 import { SessionStreamManager } from "./session-stream.manager";
+import { SidebarStateService } from "./sidebar-state.service";
 
 /**
  * 会话分组服务（单账户）
@@ -17,6 +18,8 @@ export class SessionGroupService {
   constructor(
     @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
     private streamManager: SessionStreamManager,
+    // 测试/嵌入场景可省略；生产由 ChatModule 注入
+    @Optional() private readonly sidebarState?: SidebarStateService,
   ) {}
 
   /** 获取所有会话分组（按 sortOrder 升序） */
@@ -34,11 +37,13 @@ export class SessionGroupService {
       throw new HttpException("无效的分组图标", HttpStatus.BAD_REQUEST);
     }
     const maxOrder = await this.sessionStore.getMaxGroupSortOrder();
-    return await this.sessionStore.createGroup({
+    const group = await this.sessionStore.createGroup({
       name: data.name,
       sortOrder: maxOrder + 1,
       ...(icon.value !== undefined ? { icon: icon.value } : {}),
     });
+    this.sidebarState?.touch("session-group-created");
+    return group;
   }
 
   /** 更新分组名称和/或图标 */
@@ -66,7 +71,9 @@ export class SessionGroupService {
     if (Object.keys(updateData).length === 0) {
       throw new HttpException("没有可更新的字段", HttpStatus.BAD_REQUEST);
     }
-    return await this.sessionStore.updateGroup(groupId, updateData);
+    const updated = await this.sessionStore.updateGroup(groupId, updateData);
+    this.sidebarState?.touch("session-group-updated");
+    return updated;
   }
 
   /**
@@ -78,7 +85,10 @@ export class SessionGroupService {
     if (!group) {
       throw new HttpException("分组不存在", HttpStatus.NOT_FOUND);
     }
-    return await this.sessionStore.deleteGroup(groupId);
+    const result = await this.sessionStore.deleteGroup(groupId);
+    // 删除分组会把成员会话 groupId 置空：没有逐会话事件，靠修订号对账
+    this.sidebarState?.touch("session-group-deleted");
+    return result;
   }
 
   /**
@@ -95,9 +105,11 @@ export class SessionGroupService {
       }
     }
 
-    return await this.sessionStore.batchUpdateGroupSortOrder(
+    const result = await this.sessionStore.batchUpdateGroupSortOrder(
       groupIds.map((id, index) => ({ id, sortOrder: index })),
     );
+    this.sidebarState?.touch("session-groups-reordered");
+    return result;
   }
 
   /** 分组统计（仅 web 会话；归档确认弹窗用） */
@@ -141,6 +153,10 @@ export class SessionGroupService {
       sessionIds.push(meta.id);
     }
 
+    if (sessionIds.length > 0) {
+      // 批量归档走 store 直写，没有逐会话事件：通知其它端重拉侧栏
+      this.sidebarState?.touch("session-group-archived");
+    }
     return {
       success: true,
       archived: sessionIds.length,

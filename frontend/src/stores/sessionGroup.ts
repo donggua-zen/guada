@@ -67,6 +67,15 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   const projectGroupsLoaded = ref(false)
 
   /**
+   * 本地侧栏写操作代际：用于丢弃“请求期间发生了本地变更”的旧对账结果。
+   * 每次分组/项目分组写操作在服务端确认后递增。
+   */
+  const mutationEpoch = ref(0)
+  const bumpMutation = (): void => {
+    mutationEpoch.value += 1
+  }
+
+  /**
    * 「上次选择」的手工分组（localStorage 持久化，与 `workspaceStore.lastChoice` 同构）。
    *
    * 侧栏分组的「新建会话」不再经 URL query 传意图（相同 URL 的 replace 是 no-op，
@@ -170,6 +179,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   ): Promise<SessionGroup | null> => {
     try {
       const group = await apiService.createSessionGroup({ name, icon })
+      bumpMutation()
       groups.value.push(group)
       // 新分组默认展开
       expandedState.value.set(group.id, true)
@@ -190,6 +200,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   ): Promise<boolean> => {
     try {
       const updated = await apiService.updateSessionGroup(groupId, updates)
+      bumpMutation()
       const index = groups.value.findIndex(g => g.id === groupId)
       if (index !== -1) {
         groups.value[index] = updated
@@ -207,6 +218,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   const deleteGroup = async (groupId: string): Promise<boolean> => {
     try {
       await apiService.deleteSessionGroup(groupId)
+      bumpMutation()
       groups.value = groups.value.filter(g => g.id !== groupId)
       expandedState.value.delete(groupId)
       saveExpandedState(expandedState.value)
@@ -225,6 +237,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   const reorderGroups = async (orderedIds: string[]): Promise<boolean> => {
     try {
       await apiService.reorderSessionGroups(orderedIds)
+      bumpMutation()
       // 更新本地排序
       const newGroups: SessionGroup[] = []
       for (const id of orderedIds) {
@@ -254,6 +267,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   }> => {
     try {
       const result = await apiService.archiveSessionGroup(groupId)
+      bumpMutation()
       return {
         success: true,
         archived: result.archived,
@@ -359,6 +373,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   ): Promise<boolean> => {
     try {
       const updated = await apiService.updateProjectGroup(groupId, updates)
+      bumpMutation()
       const index = projectGroups.value.findIndex((g) => g.id === groupId)
       if (index !== -1) {
         projectGroups.value[index] = {
@@ -378,6 +393,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   const reorderProjectGroups = async (orderedIds: string[]): Promise<boolean> => {
     try {
       await apiService.reorderProjectGroups(orderedIds)
+      bumpMutation()
       const general = projectGroups.value.find((g) => g.kind === 'general')
       const reordered: ProjectGroup[] = []
       orderedIds.forEach((id, index) => {
@@ -410,6 +426,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   }> => {
     try {
       const result = await apiService.deleteProjectGroup(groupId)
+      bumpMutation()
       projectGroups.value = projectGroups.value.filter((g) => g.id !== groupId)
       expandedState.value.delete(groupId)
       saveExpandedState(expandedState.value)
@@ -433,6 +450,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   ): Promise<{ success: boolean; group?: ProjectGroup; error?: unknown }> => {
     try {
       const group = await apiService.createProjectGroup(projectPath)
+      bumpMutation()
       return { success: true, group }
     } catch (error) {
       console.error('创建项目失败:', error)
@@ -451,6 +469,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
   }> => {
     try {
       const result = await apiService.archiveProjectGroup(groupId)
+      bumpMutation()
       return {
         success: true,
         archived: result.archived,
@@ -474,6 +493,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
     projectGroups,
     projectGroupsLoaded,
     lastGroupChoice,
+    mutationEpoch,
 
     // 计算属性
     sortedGroups,
@@ -481,6 +501,7 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
     isExpanded,
 
     // Actions
+    bumpMutation,
     loadGroups,
     setGroups,
     toggleExpand,

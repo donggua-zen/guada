@@ -18,6 +18,11 @@ describe("ProjectGroupService 手动注册项目", () => {
   let baseDir: string;
   let store: TestSessionStore;
   let service: ProjectGroupService;
+  let sidebarState: { touch: jest.Mock };
+  let sessionService: {
+    archiveProjectGroupSessions: jest.Mock;
+    deleteProjectGroupSessions: jest.Mock;
+  };
 
   beforeAll(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "project-group-service-"));
@@ -43,9 +48,26 @@ describe("ProjectGroupService 手动注册项目", () => {
     store = createTestSessionStore();
     await store.initialize();
 
-    service = new ProjectGroupService(store as any, {} as any, {
-      getEffectiveBaseDir: async () => baseDir,
-    } as any);
+    sidebarState = { touch: jest.fn() };
+    sessionService = {
+      archiveProjectGroupSessions: jest.fn(async () => ({
+        archived: 0,
+        skipped: 0,
+        sessionIds: [],
+      })),
+      deleteProjectGroupSessions: jest.fn(async () => ({
+        deleted: 0,
+        sessionIds: [],
+      })),
+    };
+    service = new ProjectGroupService(
+      store as any,
+      sessionService as any,
+      {
+        getEffectiveBaseDir: async () => baseDir,
+      } as any,
+      sidebarState as any,
+    );
   });
 
   it("注册已存在的真实目录，名称取目录末段", async () => {
@@ -92,6 +114,34 @@ describe("ProjectGroupService 手动注册项目", () => {
     await expect(service.createGroup({ path: file })).rejects.toMatchObject({
       status: 400,
     });
+  });
+
+  it("项目分组写操作都 touch 侧栏修订号", async () => {
+    const dir = fs.mkdtempSync(path.join(tmpRoot, "proj-touch-"));
+    const created = await service.createGroup({ path: dir });
+    await service.updateGroup(created.id, { name: "改名" });
+    await service.reorderGroups([created.id]);
+
+    sessionService.archiveProjectGroupSessions.mockResolvedValueOnce({
+      archived: 1,
+      skipped: 0,
+      sessionIds: ["s1"],
+    });
+    await service.archiveGroup(created.id);
+
+    sessionService.deleteProjectGroupSessions.mockResolvedValueOnce({
+      deleted: 1,
+      sessionIds: ["s1"],
+    });
+    await service.deleteGroup(created.id);
+
+    expect(sidebarState.touch.mock.calls.map((c) => c[0])).toEqual([
+      "project-group-created",
+      "project-group-updated",
+      "project-groups-reordered",
+      "project-group-archived",
+      "project-group-deleted",
+    ]);
   });
 
   it("更新图标：可只改图标，名称与改名标记不受影响；非法 key 拒绝", async () => {

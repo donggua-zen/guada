@@ -17,6 +17,26 @@ export const WS_BEARER_PROTOCOL_PREFIX = "bearer.";
 
 export type WsWatchScope = "file" | "git";
 
+/** 侧栏结构修订号（分组/项目分组/自动标题等无逐条事件的变更） */
+export interface WsSidebarState {
+  scope: "sidebar";
+  bootId: string;
+  revision: number;
+  updatedAt: string;
+}
+
+export interface WsReadyMessage {
+  kind: "ready";
+  connectionId: string;
+  protocol: string;
+  /** 建连时的侧栏修订号基线；客户端据此判断是否需要重拉对账 */
+  state: WsSidebarState;
+}
+
+export interface WsStateMessage extends WsSidebarState {
+  kind: "state";
+}
+
 export type WsClientMessage =
   | { kind: "watch"; sessionIds: string[] }
   | { kind: "unwatch"; sessionIds: string[] }
@@ -33,6 +53,7 @@ export type WsClientMessage =
       scopes: WsWatchScope[];
       enabled?: boolean;
     }
+  | { kind: "state/ping" }
   | { kind: "ping"; ts?: number };
 
 export interface WsEventMessage {
@@ -70,7 +91,8 @@ export interface WsAckMessage {
 }
 
 export type WsServerMessage =
-  | { kind: "ready"; connectionId: string; protocol: string }
+  | WsReadyMessage
+  | WsStateMessage
   | WsEventMessage
   | WsWorkspaceMessage
   | WsSnapshotMessage

@@ -386,6 +386,8 @@ import GdButton from '@/components/ui/GdButton.vue'
 import MobileAccessDialog from '@/components/MobileAccessDialog.vue'
 import DirectoryBrowserDialog from '@/components/DirectoryBrowserDialog.vue'
 import { apiService } from '@/services/ApiService'
+import { applySidebarSnapshot, type SidebarBucketSnapshot } from '@/services/modules/sidebarSnapshot'
+import { SidebarStateSync } from '@/services/modules/sidebarStateSync'
 import type { Session, SessionGroup, ProjectGroup, SidebarSessionsResponse, SidebarProjectSessionsResponse } from '@/types/session'
 
 import {
@@ -570,7 +572,7 @@ async function registerProjectGroup(selectedPath: string) {
     return
   }
   toast.success(t('ui.sidebar.projectCreated'))
-  await loadSessions()
+  await loadSessions({ mode: 'reconcile', reason: 'project-created' })
 }
 
 /** 切换模式后重新拉取（两种模式的桶 id 不重叠，共享数据源无需清空） */
@@ -578,7 +580,7 @@ const handleGroupingModeChange = async (value: string | number | boolean) => {
   const mode = value === 'workspace' ? 'workspace' : 'group'
   if (mode === sessionGroupStore.groupingMode) return
   sessionGroupStore.groupingMode = mode
-  await loadSessions()
+  await loadSessions({ mode: 'initial', reason: 'grouping-mode' })
 }
 
 /** 目录模式拖拽状态（原生 HTML5 DnD，与工作区 tab 一致） */
@@ -689,6 +691,15 @@ const moveTargetSession = ref<Session | null>(null)
 
 // 是否正在初始化加载
 const isInitializing = ref(false)
+/** 是否正在进行侧栏对账（与初始化/加载更多互斥） */
+const isReconciling = ref(false)
+/** 本窗口发起的会话级侧栏写操作代际（分组写操作由 sessionGroupStore.mutationEpoch 记录） */
+const localSidebarMutationEpoch = ref(0)
+const bumpLocalSidebarMutation = (): void => {
+  localSidebarMutationEpoch.value += 1
+}
+const currentSidebarMutationEpoch = (): number =>
+  sessionGroupStore.mutationEpoch + localSidebarMutationEpoch.value
 
 /** 首屏每组加载条数（折叠分组时把可见数量重置回该值） */
 const initialPageSize = ref(window.innerHeight > 1080 ? 15 : 10)
@@ -943,68 +954,195 @@ const groupHasMoreSessions = (groupId: string): boolean => {
   return sessionStore.groupHasMore(groupId)
 }
 
-// 初始化加载所有分组的前N个会话（单次请求获取分组+各分组会话）
-const loadSessions = async () => {
-  isInitializing.value = true
+type SidebarLoadMode = 'initial' | 'reconcile'
+
+/**
+ * 加载/对账侧栏。
+ *
+ * - initial：首屏/切换分组模式。每组拉首屏条数，置顶失败可忽略。
+ * - reconcile：修订号变化/重连后的对账。基础请求仍用首屏条数，但对已经
+ *   加载更多的桶再拉一次完整可见窗口，避免把某个桶的深度放大到所有分组；
+ *   置顶或扩展窗口任一失败即整次放弃，交给同步器退避重试。
+ *
+ * 返回值：true = 已应用；false = 因忙/代际冲突跳过（同步器会稍后重试）。
+ */
+const loadSessions = async (
+  options: { mode?: SidebarLoadMode; reason?: string } = {},
+): Promise<boolean> => {
+  const mode = options.mode ?? 'initial'
+  if (mode === 'initial') {
+    if (isInitializing.value || isReconciling.value) return false
+    isInitializing.value = true
+  } else {
+    if (
+      isInitializing.value ||
+      isReconciling.value ||
+      sessionGroupStore.loadingMoreGroupId
+    ) {
+      return false
+    }
+    isReconciling.value = true
+  }
+
+  const startKey = apiService.getSidebarStateKey()
+  // 对账时把远端会话事件也计入代际：事件比在途快照新时丢弃重拉
+  const epochOf = (): number =>
+    currentSidebarMutationEpoch() +
+    (mode === 'reconcile' ? sessionStore.sidebarEventEpoch : 0)
+  const startEpoch = epochOf()
   try {
-    const pageSize = window.innerHeight > 1080 ? 15 : 10
-    initialPageSize.value = pageSize
+    const pageSize =
+      mode === 'initial'
+        ? window.innerHeight > 1080
+          ? 15
+          : 10
+        : initialPageSize.value
+    if (mode === 'initial') initialPageSize.value = pageSize
+
     const workspaceMode = sessionGroupStore.groupingMode === 'workspace'
-    // 分组区与置顶区并行拉取（置顶失败不拖垮主列表）
-    const [data, pinnedData] = await Promise.all([
+    // 分组区与置顶区并行拉取：initial 时置顶失败不拖垮主列表；
+    // reconcile 时置顶失败必须整体放弃（否则会把本地置顶状态误清空）。
+    const [sidebarResult, pinnedResult] = await Promise.allSettled([
       workspaceMode
         ? apiService.fetchSidebarSessions(pageSize, 'workspace')
         : apiService.fetchSidebarSessions(pageSize),
-      apiService
-        .fetchPinnedSessions()
-        .catch(() => ({ items: [] as Session[] })),
+      apiService.fetchPinnedSessions(),
     ])
+    if (sidebarResult.status === 'rejected') throw sidebarResult.reason
+    const data = sidebarResult.value as
+      | SidebarSessionsResponse
+      | SidebarProjectSessionsResponse
+    const pinned =
+      pinnedResult.status === 'fulfilled'
+        ? pinnedResult.value?.items || []
+        : null
+    if (mode === 'reconcile' && pinned === null) {
+      throw new Error('侧栏置顶清单拉取失败')
+    }
 
-    // 设置分组列表（两种模式的实体互不干扰）
-    if (workspaceMode) {
-      sessionGroupStore.setProjectGroups(
-        (data as SidebarProjectSessionsResponse).groups || [],
+    let buckets: SidebarBucketSnapshot[] = (data.groupSessions || []).map(
+      (gs) => ({
+        bucketId: workspaceMode
+          ? (gs.groupId ?? GENERAL_PROJECT_GROUP_ID)
+          : gs.groupId === null
+            ? UNGROUPED_ID
+            : gs.groupId,
+        items: gs.items || [],
+        hasMore: gs.hasMore,
+      }),
+    )
+
+    // 对账：已加载更多的桶补拉完整可见窗口（只对这类桶发请求，避免全局放大）
+    if (mode === 'reconcile') {
+      const expanded = buckets.filter(
+        (bucket) => sessionStore.getLoadedCount(bucket.bucketId) > pageSize,
       )
-    } else {
-      sessionGroupStore.setGroups((data as SidebarSessionsResponse).groups || [])
+      const refreshed = await Promise.all(
+        expanded.map(async (bucket) => {
+          const count = sessionStore.getLoadedCount(bucket.bucketId)
+          const page = workspaceMode
+            ? await apiService.fetchSessions(
+                0,
+                count,
+                undefined,
+                undefined,
+                false,
+                bucket.bucketId,
+              )
+            : await apiService.fetchSessions(
+                0,
+                count,
+                bucket.bucketId === UNGROUPED_ID ? null : bucket.bucketId,
+              )
+          const items = page.items || []
+          return {
+            bucketId: bucket.bucketId,
+            items,
+            hasMore: page.hasMore ?? items.length < (page.total || 0),
+          } satisfies SidebarBucketSnapshot
+        }),
+      )
+      const byId = new Map(refreshed.map((bucket) => [bucket.bucketId, bucket]))
+      buckets = buckets.map((bucket) => byId.get(bucket.bucketId) ?? bucket)
     }
 
-    // 置顶会话写入统一数据源（「已置顶」分区由 sessionsMap 派生）
-    for (const session of pinnedData?.items || []) {
-      sessionStore.setSession(session)
-      if (session.isStreaming) {
-        sessionStore.syncStreamingState(session.id, true)
+    // 请求期间发生了本地写/远端事件：丢弃这次旧快照，交给同步器重跑
+    if (epochOf() !== startEpoch) {
+      if (mode === 'initial') {
+        // 首屏没有同步器兜底：稍后按最新状态重拉一次
+        setTimeout(() => {
+          void loadSessions({ mode: 'initial', reason: 'epoch-retry' })
+        }, 200)
       }
+      return false
     }
 
-    // 处理各分组的会话
-    for (const gs of data.groupSessions || []) {
-      const storeGroupId = workspaceMode
-        ? (gs.groupId ?? GENERAL_PROJECT_GROUP_ID)
-        : (gs.groupId === null ? UNGROUPED_ID : gs.groupId)
-      for (const session of gs.items || []) {
-        sessionStore.setSession(session)
-      }
-      sessionStore.setLoadedCount(storeGroupId, gs.items?.length || 0)
-      sessionStore.setHasMore(storeGroupId, gs.hasMore)
-
-      // 同步流式状态
-      for (const session of gs.items || []) {
-        if (session.isStreaming) {
-          sessionStore.syncStreamingState(session.id, true)
-        }
-      }
-    }
+    applySidebarSnapshot(
+      { sessionStore, sessionGroupStore },
+      {
+        mode: workspaceMode ? 'workspace' : 'group',
+        groups: workspaceMode
+          ? (data as SidebarProjectSessionsResponse).groups || []
+          : (data as SidebarSessionsResponse).groups || [],
+        buckets,
+        pinned,
+        activeSessionId: currentSessionId.value || sessionStore.activeSessionId,
+      },
+    )
+    stateSync.markApplied(startKey)
+    return true
   } catch (error) {
-    console.error('获取对话列表失败:', error)
+    console.error(
+      mode === 'reconcile' ? '侧栏对账失败:' : '获取对话列表失败:',
+      error,
+    )
+    if (mode === 'reconcile') throw error
+    // 首屏失败后不要让同步器永远处于“未应用”状态：标记一次空基线，
+    // 后续修订号推送/可见性恢复可以触发 reconcile 兜底重试。
+    stateSync.markApplied(null)
+    return false
   } finally {
-    isInitializing.value = false
+    if (mode === 'initial') isInitializing.value = false
+    else isReconciling.value = false
   }
 }
 
+/**
+ * 侧栏修订号同步：分组/项目分组/自动标题等没有逐条事件的结构性变更，
+ * 由服务端广播修订号，这里重拉快照对账。
+ */
+const stateSync = new SidebarStateSync({
+  getStateKey: () => apiService.getSidebarStateKey(),
+  subscribe: (listener) => apiService.onSidebarState(listener),
+  ping: () => apiService.requestSidebarStateCheck(),
+  refresh: async () => {
+    // reconcile 失败时 loadSessions 会 throw，交给同步器退避重试
+    return await loadSessions({ mode: 'reconcile', reason: 'state-sync' })
+  },
+  isVisible: () =>
+    typeof document === 'undefined' || document.visibilityState !== 'hidden',
+  onError: (error) => {
+    console.warn('[sidebar] 对账失败，稍后重试:', error)
+  },
+})
+
+onMounted(() => {
+  stateSync.start()
+})
+
+onBeforeUnmount(() => {
+  stateSync.stop()
+})
+
 // 为指定分组加载更多会话
 const loadMoreForGroup = async (groupId: string) => {
-  if (sessionGroupStore.loadingMoreGroupId) return
+  if (
+    sessionGroupStore.loadingMoreGroupId ||
+    isInitializing.value ||
+    isReconciling.value
+  ) {
+    return
+  }
 
   const workspaceMode = sessionGroupStore.groupingMode === 'workspace'
   const currentSessions = getGroupSessions(groupId)
@@ -1158,13 +1296,16 @@ const handleDropdownSelect = (command: string, session: Session) => {
  */
 const handlePinSession = async (session: Session) => {
   const next = !session.pinned
+  bumpLocalSidebarMutation()
   sessionStore.setSessionPinned(session.id, next)
   try {
     await apiService.updateSession(session.id, { pinned: next })
+    bumpLocalSidebarMutation()
     toast.success(next ? t('ui.sidebar.pinned') : t('ui.sidebar.unpinned'))
   } catch (error) {
     // 回滚到原状态
     sessionStore.setSessionPinned(session.id, !next)
+    bumpLocalSidebarMutation()
     console.error('置顶会话失败:', error)
     toast.error(t('ui.sidebar.pinFailed'))
   }
@@ -1184,6 +1325,7 @@ const handleArchiveSession = async (session: Session) => {
   try {
     const result = await apiService.archiveSession(session.id, true)
     if (result.success) {
+      bumpLocalSidebarMutation()
       // 从 sessionStore 中删除（不再展示在侧边栏）
       sessionStore.removeSession(session.id)
       sessionStore.clearSidebarState(session.id)
@@ -1230,6 +1372,7 @@ const confirmMoveSession = async () => {
 
     // 调用API更新
     await apiService.updateSession(session.id, { groupId: groupIdToSet })
+    bumpLocalSidebarMutation()
 
     // 更新统一数据源中的分组ID
     sessionStore.moveSession(session.id, groupIdToSet)
@@ -1264,6 +1407,7 @@ const handleDeleteGroup = async (group: SidebarGroupItem) => {
     })
 
     if (confirmed) {
+      bumpLocalSidebarMutation()
       // 将该分组下的所有会话移到未分组（统一数据源中批量更新）。
       // 注意：不能只遍历 getSessionsByGroup（它排除了置顶项）——置顶会话同样属于该分组，
       // 后端 deleteGroup 会一并解绑，本地必须同步，否则取消置顶后会"消失"。
@@ -1322,7 +1466,7 @@ const handleArchiveGroup = async (group: SidebarGroupItem) => {
     router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
   }
 
-  await loadSessions()
+  await loadSessions({ mode: 'reconcile', reason: 'group-archived' })
   toast.success(t('ui.sidebar.groupArchived', { count: result.archived }))
   if (result.skipped > 0) {
     toast.warning(t('ui.sidebar.groupArchiveSkipped', { count: result.skipped }))
@@ -1353,7 +1497,7 @@ const handleEditProjectGroup = (group: SidebarGroupItem) => {
 }
 
 const handleGroupSaved = async () => {
-  await loadSessions()
+  await loadSessions({ mode: 'reconcile', reason: 'group-saved' })
 }
 
 /**
@@ -1397,7 +1541,7 @@ const handleArchiveProjectGroup = async (group: SidebarGroupItem) => {
   }
 
   sessionStore.resetGroupPagination(group.id, initialPageSize.value)
-  await loadSessions()
+  await loadSessions({ mode: 'reconcile', reason: 'project-archived' })
   toast.success(t('ui.sidebar.projectArchived', { count: result.archived }))
   if (result.skipped > 0) {
     toast.warning(t('ui.sidebar.projectArchiveSkipped', { count: result.skipped }))
@@ -1455,7 +1599,7 @@ const handleDeleteProjectGroup = async (group: SidebarGroupItem) => {
   }
 
   sessionStore.resetGroupPagination(group.id, initialPageSize.value)
-  await loadSessions()
+  await loadSessions({ mode: 'reconcile', reason: 'project-deleted' })
   toast.success(t('ui.sidebar.projectDeleted', { count: result.deleted }))
 }
 
@@ -1480,6 +1624,7 @@ const handleRenameSession = async (session: Session) => {
 
       // 调用 API 更新对话
       await apiService.updateSession(session.id, updatedSession)
+      bumpLocalSidebarMutation()
 
       // 更新统一数据源中的标题
       sessionStore.updateSessionTitle(session.id, newTitle)
@@ -1532,6 +1677,7 @@ const confirmDeleteSession = async () => {
 
     // 传递 deleteWorkspace 参数
     await apiService.deleteSession(session.id, deleteWorkspaceChecked.value)
+    bumpLocalSidebarMutation()
 
     // 如果删除的是当前会话，自动切换到相邻会话
     if (currentSessionId.value === session.id) {

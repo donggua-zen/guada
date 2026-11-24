@@ -29,6 +29,8 @@ import {
   SessionEventsService,
   type SessionEvent,
   type SessionEventType,
+  type SidebarStateListener,
+  type SidebarStateSnapshot,
 } from "./modules/SessionEventsService";
 import type { SessionSnapshotPayload } from "./modules/sessionSnapshot";
 import { generateUuid } from "@/utils/uuid";
@@ -441,6 +443,25 @@ class ApiService {
       requestId,
       ...options,
     }, timeoutMs)) as SessionSnapshotPayload;
+  }
+
+  // ========== 侧栏结构修订号 ==========
+
+  onSidebarState(listener: SidebarStateListener): () => void {
+    return this.sessionEventsService.onSidebarState(listener);
+  }
+
+  getSidebarState(): SidebarStateSnapshot | null {
+    return this.sessionEventsService.getSidebarState();
+  }
+
+  getSidebarStateKey(): string | null {
+    return this.sessionEventsService.getSidebarStateKey();
+  }
+
+  /** 主动核对一次侧栏修订号（周期兜底由 SessionEventsService 内部定时触发） */
+  requestSidebarStateCheck(): void {
+    this.sessionEventsService.requestSidebarStateCheck();
   }
 
   /** 声明关注某会话（内容帧只下发给关注者）；重连后自动重放 */

@@ -58,6 +58,7 @@ import { mergePlanModeSettings } from "./plan-mode-settings.util";
 import { normalizeSandboxMode } from "../../common/services/sandbox-policy";
 import { pickTitleMessages } from "./session-title.util";
 import { resolveThinkingEffort } from "../llm-core";
+import { SidebarStateService } from "./sidebar-state.service";
 
 @Injectable()
 export class SessionService {
@@ -84,6 +85,8 @@ export class SessionService {
     @Optional() private readonly jobRegistry?: JobRegistryService,
     // 工具截图裁剪：纯 JSONL 写入 + 快照重建，无外部依赖；测试可省略。
     @Optional() private readonly toolImagePruneService?: ToolImagePruneService,
+    // 侧栏修订号：自动标题目前不发事件，需要通知其它端对账；测试可省略。
+    @Optional() private readonly sidebarState?: SidebarStateService,
   ) {}
 
   /**
@@ -1318,6 +1321,8 @@ export class SessionService {
 
       // 更新会话标题
       await this.sessionStore.update(sessionId, { title: newTitle });
+      // 自动标题没有 session.updated 事件：通知其它端重拉侧栏
+      this.sidebarState?.touch("session-auto-title");
 
       this.logger.log(
         `Successfully generated title '${newTitle}' for session ${sessionId}`,

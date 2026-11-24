@@ -1,4 +1,4 @@
-import { Inject, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { Inject, HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import * as fs from "fs";
 import * as path from "path";
 import { SESSION_STORE_TOKEN } from './session-store.facade';
@@ -7,6 +7,7 @@ import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { qualifiesForProjectGroup } from "../../common/utils/workspace-key.util";
 import { parseGroupIcon } from "../../common/utils/group-icon.util";
+import { SidebarStateService } from "./sidebar-state.service";
 
 /**
  * 目录分组服务（按工作目录分组，单账户）。
@@ -27,6 +28,8 @@ export class ProjectGroupService {
     @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
     private sessionService: SessionService,
     private workspaceService: WorkspaceService,
+    // 测试/嵌入场景可省略；生产由 ChatModule 注入
+    @Optional() private readonly sidebarState?: SidebarStateService,
   ) {}
 
   /** 获取所有目录分组（按 position 升序） */
@@ -64,10 +67,12 @@ export class ProjectGroupService {
       );
     }
 
-    return await this.sessionStore.ensureProjectGroup({
+    const group = await this.sessionStore.ensureProjectGroup({
       path: resolved,
       prepend: true,
     });
+    this.sidebarState?.touch("project-group-created");
+    return group;
   }
 
   /** 更新显示名和/或图标（只改显示名，不动磁盘目录） */
@@ -92,7 +97,9 @@ export class ProjectGroupService {
     if (Object.keys(updateData).length === 0) {
       throw new HttpException("没有可更新的字段", HttpStatus.BAD_REQUEST);
     }
-    return await this.sessionStore.updateProjectGroup(group.id, updateData);
+    const updated = await this.sessionStore.updateProjectGroup(group.id, updateData);
+    this.sidebarState?.touch("project-group-updated");
+    return updated;
   }
 
   /** 批量更新排序（要求完整 id 集合） */
@@ -109,7 +116,9 @@ export class ProjectGroupService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    return await this.sessionStore.reorderProjectGroups(groupIds);
+    const result = await this.sessionStore.reorderProjectGroups(groupIds);
+    this.sidebarState?.touch("project-groups-reordered");
+    return result;
   }
 
   /** 统计该目录下的会话数量（删除/归档确认弹窗用） */
@@ -127,6 +136,10 @@ export class ProjectGroupService {
     const result = await this.sessionService.archiveProjectGroupSessions(
       group.pathKey,
     );
+    if ((result.sessionIds?.length ?? 0) > 0) {
+      // 批量归档没有逐会话事件：通知其它端重拉侧栏
+      this.sidebarState?.touch("project-group-archived");
+    }
     return { success: true, ...result };
   }
 
@@ -141,6 +154,8 @@ export class ProjectGroupService {
       group.pathKey,
     );
     await this.sessionStore.deleteProjectGroup(group.id);
+    // 批量删除会话 + 删除分组行都没有逐会话事件
+    this.sidebarState?.touch("project-group-deleted");
     return { success: true, ...result };
   }
 
