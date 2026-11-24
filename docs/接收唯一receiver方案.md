@@ -161,4 +161,4 @@ S→C: { kind:"snapshot", requestId, payload }        ← 先写快照
 ## 附：设计沿革
 
 早期设计（`subscribe(sid, lastSeq)` 按会话订阅 + 历史基线 + `StreamReceiver` 类）已被
-`subscribeAll` 单入口取代；DSH 的 mux 对照分析见 git 历史。现行实现以本文为准。
+`subscribeAll` 单入口取代。现行实现以本文为准。
