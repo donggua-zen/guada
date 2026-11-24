@@ -227,13 +227,11 @@ import {
   clearSessionHistoryStale,
 } from "@/utils/sessionResync"
 import {
-  applyInFlightChunks,
   foldEvents,
-  hasCachedTurns,
-  takeStash as takeProjectorStash,
 } from "@/services/modules/streamProjector"
 import { catchUpIncrementally } from "@/services/modules/streamIncremental"
-import { replayStreamTailAfterReload } from "@/services/modules/streamTailReplay"
+import { applySessionSnapshot } from "@/services/modules/sessionSnapshot"
+import { SessionWatchRegistry } from "@/services/modules/sessionWatchRegistry"
 import type { InputMessageState, Session, QueuedMessage, QueuePauseReason, ChatFileView } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { Turn, TurnContent, MessageBundle } from '@/types/message';
@@ -292,6 +290,20 @@ import GdPopover from '@/components/ui/GdPopover.vue'
 const { confirm } = usePopup();
 // 队列补发：打开会话时若后端已空闲但队列非空（错过终态事件）则补一次消费
 const { refreshQueue } = useSessionEvents();
+
+// 会话 watch 注册表：多 pane 共享引用计数；传输侧只保存期望集合，重连自动重放
+const sessionWatchRegistry = new SessionWatchRegistry(
+  (sid) => apiService.watchSession(sid),
+  (sid) => apiService.unwatchSession(sid),
+)
+// 本组件实例当前持有的 watch（切换/卸载时释放）
+let watchedSessionId: string | null = null
+function syncWatchedSession(next: string | null) {
+  if (next === watchedSessionId) return
+  if (watchedSessionId) sessionWatchRegistry.release(watchedSessionId)
+  watchedSessionId = next
+  if (next) sessionWatchRegistry.acquire(next)
+}
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
 const capabilities = useCapabilitiesStore();
@@ -1535,7 +1547,7 @@ async function handleSessionResync(event: Event) {
       }
       return
     }
-    // 日志换代（torn 尾截断后 seq 复用 / 清空记录后重建）：旧的邮箱、去重游标与缺口
+    // 日志换代（torn 尾截断后 seq 复用 / 清空记录后重建）：旧的去重游标与缺口
     // 都属于上一代日志——不清掉的话，整页 fold 之后的 replayStreamTailAfterReload 会按
     // `logSeq >= pageEndSeq` 把旧代次尾部回放进新树；新代次帧也可能被旧游标判成重复。
     if (incremental.reason === "log-rewound") {
@@ -1569,6 +1581,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  syncWatchedSession(null)
   window.removeEventListener(SESSION_RESYNC_EVENT, handleSessionResync)
   resyncLoadGeneration.clear()
   clearSkeletonTimers();
@@ -1840,101 +1853,74 @@ async function loadMessages(
 
   try {
     const sessionState = sessionStore.getSessionState(sessionId);
-    // 本次加载前是否已有缓存树（与 projectChunk 同一谓词）。
-    // true 仅出现在"强制重拉"场景（loaded 被 markSessionHistoryStale 置 false 而树还在）：
-    // 此时 live chunk 之前是直接写树的（没进 stash），fold 会抹掉在飞块 →
-    // 加载后需从 StreamEventHub 邮箱重放尾部。无缓存路径由既有 stash 机制承担，二者互斥。
-    const hadCache = hasCachedTurns(sessionStore, sessionId);
     // 记录 load-more 前的滚动位置（内容高度），rebuild 后恢复
     const scrollElement = scrollContainerRef.value?.getScrollElement?.();
     const oldScrollHeight = !isInitial ? scrollElement?.scrollHeight || 0 : 0;
 
+    // 打开 / 强制重拉：唯一路径是带内快照（HTTP 触发，快照帧与后续事件走同一条 SSE）。
+    // 读页期间产生的帧由服务端按连接积压、快照先落地再按序排空——客户端不再
+    // 需要邮箱/stash 去兜"读页期间的竞态"，这两套机制已删除。
+    // SSE 是基础设施：未连接时 requestSessionSnapshot 会先短暂等待建连；
+    // 失败直接抛给外层 catch（保留 loaded=false，由 resync/重开重试），没有 HTTP 降级。
+    if (isInitial) {
+      const snapshotSpan = perfStart('replay.snapshot');
+      const snapshot = await apiService.requestSessionSnapshot(sessionId, {
+        turns: INITIAL_PAGE_SIZE,
+      });
+      if (snapshot.error) throw new Error(snapshot.error);
+      const { appliedTail } = applySessionSnapshot(
+        sessionStore,
+        sessionId,
+        snapshot,
+      );
+      snapshotSpan?.end({ events: snapshot.events.length, tail: appliedTail });
+      traceSessionOpen(sessionId, 'panel:snapshot-apply', {
+        events: snapshot.events.length,
+        tail: appliedTail,
+      });
+      hasMoreMessages.value = snapshot.hasMore;
+      // 诊断：页语义保证 hasMore=true 时应有 N 个有效轮次
+      if (
+        snapshot.hasMore &&
+        sessionStore.getSessionState(sessionId).turns.length < INITIAL_PAGE_SIZE
+      ) {
+        console.warn(
+          `[ChatPanel] 初始快照轮次不足: session=${sessionId} turns=${
+            sessionStore.getSessionState(sessionId).turns.length
+          }/${INITIAL_PAGE_SIZE} hasMore=${snapshot.hasMore}`,
+        );
+      }
+      // 整页重建成功 = 内容已按服务端权威快照重建，补发缺口/待重拉标记随之消解
+      streamEventHub.clearStreamGap(sessionId);
+      clearSessionHistoryStale(sessionId);
+      return;
+    }
+
+    // 上滚加载更早历史：读的是 beforeSeq 之前的旧区间，新事件只追加在日志头部，
+    // 不会落进旧页；compaction/turn_delete 是追加型事件，已在 eventLog 里参与 re-fold。
+    // 无竞态，直接走事件页 HTTP。
     const fetchSpan = perfStart('replay.fetch');
     const page = await fetchEventsPageValidated(sessionId, {
-      beforeSeq: isInitial ? undefined : options.beforeSeq,
-      turns: isInitial ? INITIAL_PAGE_SIZE : MESSAGES_PAGE_SIZE,
+      beforeSeq: options.beforeSeq,
+      turns: MESSAGES_PAGE_SIZE,
     });
-    fetchSpan?.end({ initial: isInitial ? 1 : 0, events: page.events.length });
+    fetchSpan?.end({ initial: 0, events: page.events.length });
 
-    // 事件数组：初始替换 / load-more 前插（live 终态事件已由 live 应用路径追加进 eventLog）
+    // 事件数组：load-more 前插（live 终态事件已由 live 应用路径追加进 eventLog）
     const prevLog = sessionState.eventLog || [];
-    const headPage = page; // 初始页 = 最新页（订阅基线/endSeq 以它为准）
-    sessionState.eventLog = isInitial
-      ? [...page.events]
-      : [...page.events, ...prevLog];
-
-    // 历史快照最后入库 seq 由 headPage.endSeq 承载：订阅基线已由下方 stash 消费
-    // 与邮箱尾部重放的 logSeq >= endSeq 过滤表达，不再单独维护游标。
+    sessionState.eventLog = [...page.events, ...prevLog];
 
     // 折叠：清树后全量重建（eventLog 含 live 终态事件，re-fold 天然保留实时尾部）
-    foldEvents(sessionStore, sessionId, sessionState.eventLog, isInitial ? 'initial' : 'load-more');
-
-    // 不再有初始补页循环：后端两条读页路径（锚点索引快路径 / 全量兜底）在
-    // hasMore=true 时都恰好返回 N 个有效 turn/start，投影后 turns.length 不会不足；
-    // 历史欠载由用户滚动 load-more 继续接。原循环每页都会全量 re-fold，
-    // 且无法修复锚点索引 delete 集滞后这类竞态，故删除（残留竞态见下方诊断日志）。
+    foldEvents(sessionStore, sessionId, sessionState.eventLog, 'load-more');
 
     // 分页游标：下一页 = 页首前一 seq（null = 无更早内容）
     sessionState.pageCursor = page.nextBeforeSeq;
 
-    // 消费暂存:把"无缓存期间暂存的事件"按 seq 对齐后应用进 store。
-    // 过滤口径见 applyInFlightChunks：发布时页尾已覆盖的帧跳过（防 delta 重复累加），
-    // 页尾之后/无游标的帧必须应用，否则刷新后已流出的增量丢失、只能等 block_end 重建。
-    // 边界上重复应用的已入库事件(user_message 等)由 projector 按 messageId/turnId 幂等吸收。
-    // endSeq 用初始页(最新页)尾:load-more 向左扩展历史,不改变订阅基线。
-    const endSeq = headPage.endSeq ?? 0;
-    const projectorStash = takeProjectorStash(sessionId);
-    const stashSpan = perfStart('replay.stashApply');
-    const appliedStash = applyInFlightChunks(
-      sessionStore,
-      sessionId,
-      projectorStash,
-      endSeq,
-    );
-    stashSpan?.end({ events: appliedStash });
-
-    // 强制重拉 = 整页刷新等价：事件页只含已落盘内容，fold 之后把邮箱里
-    // "最后一个 checkpoint（finish/turn_end）之后的在飞尾部"重放回来——
-    // delta 不在 eventLog，不重放会让正在输出的块消失到 block_end 才恢复。
-    // 必须在 fold 之后执行，且整段同步完成，
-    // 期间到达的 live 事件已进邮箱，不会漏。无缓存路径（首次打开）由 stash 承担。
-    if (isInitial && hadCache) {
-      const tail = streamEventHub.getTailAfterLastCheckpoint(sessionId);
-      if (tail.length > 0) {
-        const appliedTail = replayStreamTailAfterReload(
-          sessionStore,
-          sessionId,
-          tail,
-          endSeq,
-        );
-        traceSessionOpen(sessionId, 'panel:tail-replay', { events: appliedTail });
-      }
-    }
-
-    // 诊断：后端页语义保证 hasMore=true 时恰好 N 个有效轮次；这里只应在锚点索引
-    // delete 集滞后/重复 turnId 等罕见竞态下触发（供线上发现，不阻塞加载）。
-    if (isInitial && page.hasMore && sessionState.turns.length < INITIAL_PAGE_SIZE) {
-      console.warn(
-        `[ChatPanel] 初始页轮次不足: session=${sessionId} turns=${sessionState.turns.length}/${INITIAL_PAGE_SIZE} hasMore=${page.hasMore}`,
-      );
-    }
-
     hasMoreMessages.value = page.hasMore;
     // 分页游标状态按会话记忆(切会话回来时恢复)
-    sessionStore.getSessionState(sessionId).turnsHasMore = page.hasMore;
+    sessionState.turnsHasMore = page.hasMore;
 
-    // 标记会话内容已缓存(二次打开不再向后端拉取)
-    if (isInitial) {
-      sessionStore.getSessionState(sessionId).loaded = true;
-      // 已应用水位 = 本次页尾 seq：后续断点续传只拉 `seq > appliedSeq` 的缺失尾部。
-      // 用可降的 reset：整页重建是唯一有资格下调水位的路径（日志回绕后旧高水位必须能复位）。
-      sessionStore.resetAppliedSeq(sessionId, page.endSeq);
-      // 整页重拉成功 = 内容已按服务端权威页重建，补发缺口随之消解
-      streamEventHub.clearStreamGap(sessionId);
-      // 任何路径成功拉到最新页即视为历史已新鲜：清掉待重拉标记，
-      // 下次回前台不再重复强制重拉（除非又出现未闭合回合）。
-      clearSessionHistoryStale(sessionId);
-    } else if (page.events.length > 0) {
+    if (page.events.length > 0) {
       // 恢复滚动位置，避免跳到顶部（rebuild 替换整树，需补偿高度差）
       nextTick(() => {
         const el = scrollContainerRef.value?.getScrollElement?.();
@@ -2076,6 +2062,8 @@ watch(showSkeleton, (visible, prevVisible) => {
 
 async function handleSessionChange(newSessionId: string | null, oldSessionId: string | null) {
   if (newSessionId === oldSessionId) return;
+  // 订阅切换先于加载：快照读页期间的 live 帧也要能送达本 pane
+  syncWatchedSession(newSessionId);
 
   resetTitleFlag();
   // 接收唯一链路是 useSessionEvents 的 streamEventHub.subscribeAll（常驻、按 sessionId 路由），
@@ -2091,7 +2079,7 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   try {
     currentSessionId.value = newSessionId;
     // 打开会话:直接拉历史快照(事件页 endSeq 作为已应用水位)。
-    // StreamEventHub 邮箱常驻收事件,无需 startBuffering——消费方按 (baseSeq, chunkSeq) 去重。
+    // StreamEventHub 常驻收事件,无需 startBuffering——消费方按 (baseSeq, chunkSeq) 去重。
     await loadSession(newSessionId);
     if (token !== sessionChangeToken) return;
     traceSessionOpen(newSessionId, 'panel:load-done');

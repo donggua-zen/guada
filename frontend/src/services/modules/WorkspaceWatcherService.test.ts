@@ -1,168 +1,95 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { WorkspaceWatcherService } from "./WorkspaceWatcherService";
 
 /**
- * 工作目录 SSE 客户端的 subscribe-scope 生命周期测试。
- *
- * 背景：后端把 scope 记在「连接」上，SSE 一断开（后端重启、网络抖动、休眠唤醒）
- * 该 clientId 的 scope 就被清空；客户端此前只在会话切换时 POST 一次，重连后
- * 不再重放 → file/git watcher 静默停用，文件变更事件全部丢失。
+ * workspace 监听服务现在是全局 WS 之上的一层：
+ * - setWatchScope → SessionEventsService.setWorkspaceWatch
+ * - 收到 workspace 事件后按 currentSessionId 过滤
+ * - 连接重连（onConnected）时重放期望 scopes
  */
-
-interface MockEventSourceInstance {
-  url: string;
-  onopen: (() => void) | null;
-  onmessage: ((event: { data: string }) => void) | null;
-  onerror: ((error: unknown) => void) | null;
-  readyState: number;
-  closed: boolean;
-  close(): void;
+function createSessionEvents() {
+  const connected = new Set<() => void>();
+  const workspace = new Set<(event: any) => void>();
+  return {
+    getClientId: () => "client-1",
+    onConnected: (cb: () => void) => {
+      connected.add(cb);
+      return () => connected.delete(cb);
+    },
+    onWorkspaceEvent: (cb: (event: any) => void) => {
+      workspace.add(cb);
+      return () => workspace.delete(cb);
+    },
+    setWorkspaceWatch: vi.fn(),
+    fireConnected: () => connected.forEach((cb) => cb()),
+    fireWorkspace: (event: any) => workspace.forEach((cb) => cb(event)),
+  };
 }
 
-const esMock = vi.hoisted(() => {
-  class MockEventSource {
-    static instances: MockEventSource[] = [];
-    static reset() {
-      MockEventSource.instances = [];
-    }
-    url: string;
-    onopen: (() => void) | null = null;
-    onmessage: ((event: { data: string }) => void) | null = null;
-    onerror: ((error: unknown) => void) | null = null;
-    readyState = 1;
-    closed = false;
-    constructor(url: string) {
-      this.url = url;
-      MockEventSource.instances.push(this);
-    }
-    close() {
-      this.closed = true;
-      this.readyState = 2;
-    }
-  }
-  return { MockEventSource };
-});
+describe("WorkspaceWatcherService（WS 委托）", () => {
+  it("connect 记录当前会话；setWatchScope 下发 scope", async () => {
+    const events = createSessionEvents();
+    const service = new WorkspaceWatcherService(events as any);
 
-vi.mock("event-source-polyfill", () => ({
-  EventSourcePolyfill: esMock.MockEventSource,
-}));
-
-const MockES = esMock.MockEventSource;
-
-/** 等待 onopen 里 void 掉的异步重放跑完 */
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-describe("WorkspaceWatcherService 订阅范围重放", () => {
-  let service: WorkspaceWatcherService;
-  let fetchMock: ReturnType<typeof vi.fn>;
-
-  beforeEach(() => {
-    MockES.reset();
-    vi.stubGlobal("localStorage", { getItem: () => null });
-    vi.stubGlobal("sessionStorage", { getItem: () => null });
-    fetchMock = vi.fn().mockResolvedValue({ ok: true });
-    vi.stubGlobal("fetch", fetchMock);
-    service = new WorkspaceWatcherService(() => "http://api/v1");
-  });
-
-  afterEach(() => {
-    service.disconnect();
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-  });
-
-  function lastInstance(): MockEventSourceInstance {
-    return MockES.instances[MockES.instances.length - 1] as unknown as MockEventSourceInstance;
-  }
-
-  /** POST 到 workspace/watch 的调用参数（排除其他请求） */
-  function watchCalls() {
-    return fetchMock.mock.calls
-      .filter(([url]) => String(url).endsWith("/workspace/watch"))
-      .map(([, init]) => JSON.parse((init as { body: string }).body));
-  }
-
-  it("首次连接：onopen 重放已记录的 scope（保证 REST 先于 SSE 也能生效）", async () => {
+    service.connect("s1", () => {});
     await service.setWatchScope("s1", "file", true);
-    expect(watchCalls()).toEqual([{ scope: "file", enabled: true }]);
 
-    service.connect("s1");
-    lastInstance().onopen?.();
-    await flush();
+    expect(service.getSessionId()).toBe("s1");
+    expect(events.setWorkspaceWatch).toHaveBeenCalledWith("s1", ["file"], true);
 
-    expect(watchCalls()).toEqual([
-      { scope: "file", enabled: true },
-      { scope: "file", enabled: true },
-    ]);
+    await service.setWatchScope("s1", "file", false);
+    expect(events.setWorkspaceWatch).toHaveBeenLastCalledWith(
+      "s1",
+      ["file"],
+      false,
+    );
   });
 
-  it("未订阅过 scope：连接不产生任何 watch 请求", async () => {
-    service.connect("s1");
-    lastInstance().onopen?.();
-    await flush();
+  it("workspace 事件按当前会话过滤后通知监听器", () => {
+    const events = createSessionEvents();
+    const service = new WorkspaceWatcherService(events as any);
+    const listener = vi.fn();
+    service.onChange(listener);
+    service.connect("s1", () => {});
 
-    expect(watchCalls()).toEqual([]);
+    events.fireWorkspace({ sessionId: "s2", path: "other" });
+    events.fireWorkspace({ sessionId: "s1", path: "a.ts" });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "a.ts" }),
+    );
   });
 
-  it("重连（polyfill 放弃连接）：重建连接并重放 scope", async () => {
-    vi.useFakeTimers();
-    service.connect("s1");
+  it("重连（onConnected）时重放全部期望 scopes", async () => {
+    const events = createSessionEvents();
+    const service = new WorkspaceWatcherService(events as any);
+    service.connect("s1", () => {});
     await service.setWatchScope("s1", "file", true);
     await service.setWatchScope("s1", "git", true);
-    const callsBefore = watchCalls().length;
+    events.setWorkspaceWatch.mockClear();
 
-    const failed = lastInstance();
-    failed.readyState = 2; // CLOSED：polyfill 已放弃
-    failed.onerror?.(new Error("boom"));
-    await vi.advanceTimersByTimeAsync(3000);
+    events.fireConnected();
 
-    expect(MockES.instances).toHaveLength(2);
-    const reconnected = lastInstance();
-    reconnected.onopen?.();
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(watchCalls().slice(callsBefore)).toEqual([
-      { scope: "file", enabled: true },
-      { scope: "git", enabled: true },
-    ]);
+    expect(events.setWorkspaceWatch).toHaveBeenCalledWith(
+      "s1",
+      expect.arrayContaining(["file", "git"]),
+      true,
+    );
   });
 
-  it("主动 disconnect 后：已放弃的连接不再被复活", async () => {
-    vi.useFakeTimers();
-    service.connect("s1");
-    const stale = lastInstance();
+  it("切换会话清空旧订阅；disconnect 清空当前会话", async () => {
+    const events = createSessionEvents();
+    const service = new WorkspaceWatcherService(events as any);
+    service.connect("s1", () => {});
+    await service.setWatchScope("s1", "file", true);
+
+    service.connect("s2", () => {});
+    events.setWorkspaceWatch.mockClear();
+    events.fireConnected(); // s1 的期望已被清空，不应重放
+    expect(events.setWorkspaceWatch).not.toHaveBeenCalled();
+
     service.disconnect();
-
-    stale.readyState = 2;
-    stale.onerror?.(new Error("boom"));
-    await vi.advanceTimersByTimeAsync(10000);
-
-    expect(MockES.instances).toHaveLength(1);
-  });
-
-  it("切换会话：旧会话的期望订阅作废，不会在新连接上被重放", async () => {
-    service.connect("s1");
-    await service.setWatchScope("s1", "file", true);
-
-    service.connect("s2");
-    await flush();
-    const callsBefore = watchCalls().length;
-    lastInstance().onopen?.();
-    await flush();
-
-    expect(lastInstance().url).toContain("/sessions/s2/workspace/events");
-    expect(watchCalls().length).toBe(callsBefore);
-  });
-
-  it("取消订阅后不再重放", async () => {
-    service.connect("s1");
-    await service.setWatchScope("s1", "file", true);
-    await service.setWatchScope("s1", "file", false);
-    const callsBefore = watchCalls().length;
-
-    lastInstance().onopen?.();
-    await flush();
-
-    expect(watchCalls().length).toBe(callsBefore);
+    expect(service.getSessionId()).toBeNull();
   });
 });

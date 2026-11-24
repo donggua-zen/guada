@@ -1,17 +1,18 @@
 /**
- * StreamEventHub:流式事件路由中心(合并为单 SSE 后的前端核心)
+ * StreamEventHub:流式事件路由与重放去重中心(合并为单 SSE 后的前端核心)
  *
- * 模型:每个会话一个"邮箱"(mailbox,滚动窗口)+ 全局常驻订阅者。
- * - route(event):先按传输位置 (baseSeq, chunkSeq) 幂等校验,再进邮箱;全局订阅者同步收到
+ * 模型:只做"入口幂等 + 全局扇出",**不持有事件邮箱**。
+ * - route(event):先按传输位置 (baseSeq, chunkSeq) 幂等校验,通过后同步推给全局订阅者
  * - subscribeAll(onEvent):唯一的生产消费入口(useSessionEvents 常驻消费)
- * - getTailAfterLastCheckpoint(sessionId):强制重拉时取"最后一个落盘边界之后的在飞尾部"
  * - noteCatchupPositions():连接补发开始前登记各流起点,判定补发是否覆盖本地游标
  *
+ * 为什么没有邮箱:历史读取的往返竞态已上移到服务端——`POST /events/open` 触发后,
+ * 快照与读页期间产生的帧走同一条 SSE 连接按序下发（见 SessionEventsService 的
+ * pendingSnapshot），客户端不需要自己缓冲事件。
+ *
  * 两个 seq 概念（务必区分）:
- * - `baseSeq`(线上字段名) = **传输区间基座** baseSeq。后端 publish 为每条帧盖戳
- *   (baseSeq, chunkSeq) + streamBootId(进程标识)。baseSeq 是落库区间，chunkSeq 是区间内
- *   第 n 个帧(baseSeq 前进时归零)，按会话连续、跨回合不重置。因为 chunk 不入库，
- *   baseSeq 不会落在 chunk 区间中间——历史页读取与尾部重放都依赖它。
+ * - `baseSeq`(线上字段名 prevSeq) = **传输区间基座**。后端 publish 为每条帧盖戳
+ *   (baseSeq, chunkSeq) + streamBootId(进程标识)。按会话连续、跨回合不重置。
  *   注意 baseSeq 被后端单调钳制(抵御并发 publish 乱序)，**不代表真实日志尾**。
  * - `logSeq` = 发布时刻未钳制的真实落库 seq，**已应用水位**只认它(见 useSessionEvents)。
  *
@@ -36,18 +37,9 @@ interface SessionSubscriber {
   onEvent: (chunk: HubStreamEvent) => void;
 }
 
-/** 会话流式状态 */
-interface SessionStreamState {
-  /** 邮箱:该会话最近到达的事件(滚动窗口,未打开也保留) */
-  mailbox: HubStreamEvent[];
-}
-
 export class StreamEventHub {
-  private readonly sessions = new Map<string, SessionStreamState>();
   /** 全局订阅者:常驻消费所有会话的流式事件(接收链路独立的基础) */
   private globalSubscribers: SessionSubscriber[] = [];
-  /** 每会话邮箱上限:防止未打开会话的流式事件无限累积 */
-  private readonly MAX_BUFFERED = 2000;
   /** 每会话幂等游标(后端盖戳的传输位置 baseSeq/chunkSeq + streamBootId;重连补发去重依据) */
   private readonly streamCursor = new Map<
     string,
@@ -61,24 +53,13 @@ export class StreamEventHub {
    */
   private readonly gapSessions = new Set<string>();
 
-  private ensure(sessionId: string): SessionStreamState {
-    let state = this.sessions.get(sessionId);
-    if (!state) {
-      state = {
-        mailbox: [],
-      };
-      this.sessions.set(sessionId, state);
-    }
-    return state;
-  }
-
   /**
    * 路由一条流式事件(由 SessionEventsService 在收到 stream/* method 时调用)
    *
    * 入口幂等:带传输位置 (baseSeq, chunkSeq) 的事件,若同 bootId 下位置 <= 游标则判定为
    * 连接补发的重放/重复投递,直接丢弃;bootId 变化(后端重启)接受并重置游标;
    * 缺任一位置字段的事件放行(fail-open)。
-   * 通过校验后:事件进邮箱,并同步推给全局常驻订阅者。
+   * 通过校验后同步推给全局常驻订阅者。
    */
   route(event: HubStreamEvent): void {
     const sessionId = event.sessionId;
@@ -104,13 +85,6 @@ export class StreamEventHub {
         baseSeq: baseSeq,
         chunkSeq: ord,
       });
-    }
-
-    const state = this.ensure(sessionId);
-
-    state.mailbox.push(event);
-    if (state.mailbox.length > this.MAX_BUFFERED) {
-      state.mailbox.shift();
     }
 
     // 全局订阅者:常驻接收所有会话事件(接收链路独立——事件到达即写缓存/暂存)
@@ -139,33 +113,6 @@ export class StreamEventHub {
       const idx = this.globalSubscribers.findIndex((s) => s.id === sub.id);
       if (idx !== -1) this.globalSubscribers.splice(idx, 1);
     };
-  }
-
-  /**
-   * 强制重拉用的"在飞尾部"：邮箱里最后一个 checkpoint（finish/turn_end）之后的所有 chunk。
-   *
-   * checkpoint 语义与暂存机制一致：finish/turn_end 表示该段内容已落盘（事件页包含），
-   * 之后的 chunk 是尚未落盘的在飞增量（delta 不入 eventLog，fold 会抹掉）——强制重拉后
-   * 需要按序重放回来，才等价于"整页刷新"（刷新靠 stash 达到同一效果）。
-   *
-   * 找不到 checkpoint（邮箱已滚出 / 该会话从未收过流）返回空：放弃尾部，
-   * 与刷新路径共用同一 2000 条上限。只读：不改去重游标、不清邮箱。
-   */
-  getTailAfterLastCheckpoint(sessionId: string): HubStreamEvent[] {
-    const state = this.sessions.get(sessionId);
-    if (!state || state.mailbox.length === 0) return [];
-    for (let i = state.mailbox.length - 1; i >= 0; i -= 1) {
-      const type = state.mailbox[i].type;
-      if (type === "finish" || type === "turn_end") {
-        return state.mailbox.slice(i + 1);
-      }
-    }
-    return [];
-  }
-
-  /** 邮箱当前条数（仅诊断/测试；未缓存会话 = 0，不创建缓存） */
-  getMailboxSize(sessionId: string): number {
-    return this.sessions.get(sessionId)?.mailbox.length ?? 0;
   }
 
   /** 当前去重游标（仅诊断/测试；无缓存返回 undefined）。字段名沿用线上 baseSeq。 */
@@ -213,9 +160,8 @@ export class StreamEventHub {
     this.gapSessions.delete(sessionId);
   }
 
-  /** 清理会话状态（会话删除时）：释放邮箱、幂等游标与缺口标记 */
+  /** 清理会话状态（会话删除/清空/日志换代时）：释放幂等游标与缺口标记 */
   cleanup(sessionId: string): void {
-    this.sessions.delete(sessionId);
     this.streamCursor.delete(sessionId);
     this.gapSessions.delete(sessionId);
   }

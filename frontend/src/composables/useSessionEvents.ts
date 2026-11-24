@@ -63,7 +63,7 @@ export function useSessionEvents() {
   //
   // 恢复策略（整页刷新等价）：
   // - 回前台(隐藏≥15s)/真实重连：当前会话仍有未闭合回合或仍在流式 → 直接强制重拉
-  //   最新事件页（loadMessages 会重放邮箱尾部，流式中也安全）；
+  //   最新事件页（loadMessages 走带内快照，在飞尾部随快照下发，流式中也安全）；
   // - 对所有本地 running 会话探测 /status，服务端确认停止 → 统一收敛瞬态 + 失效历史。
 
   /** 每会话最后收到流帧的时间（watchdog 判静默用） */
@@ -96,7 +96,7 @@ export function useSessionEvents() {
    * 回前台/真实重连后强制重拉当前会话历史（整页刷新等价）。
    *
    * 后台期间回合可能已结束：终态帧只在完成那一刻广播一次、stopStream 随即删补发缓冲，
-   * 唯一完整源是持久化事件页。这里不做"判停"前置——重拉路径本身会重放邮箱尾部
+   * 唯一完整源是持久化事件页。这里不做"判停"前置——重拉路径走带内快照，尾部随快照下发
    * （见 loadMessages），流式中也安全；只在本地仍有未闭合回合/自认流式时触发，
    * 空闲会话不产生额外请求。
    */
@@ -365,7 +365,7 @@ export function useSessionEvents() {
         const { sessionId } = event;
         sessionStore.removeSession(sessionId);
         sessionStore.clearSidebarState(sessionId);
-        // 释放该会话的邮箱与去重游标（会话删除后不会再收到流事件）
+        // 释放该会话的去重游标与缺口标记（会话删除后不会再收到流事件）
         streamEventHub.cleanup(sessionId);
 
         if (currentSessionId.value === sessionId) {
@@ -394,7 +394,7 @@ export function useSessionEvents() {
         const { sessionId } = event;
         if (!sessionId) return;
         // 服务端日志已整目录删除并重建（seq 从 0 起）：清本窗口的树、事件数组、
-        // 已应用水位、待答卡，再丢弃旧代次的邮箱/去重游标/缺口标记。
+        // 已应用水位、待答卡，再丢弃旧代次的去重游标/缺口标记。
         sessionStore.clearSessionMessages(sessionId);
         streamEventHub.cleanup(sessionId);
         // 标脏：当前会话立即触发 resync（树为空 → 直接整页重拉）；

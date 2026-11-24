@@ -17,13 +17,19 @@ describe("MessagesController 清空聊天记录", () => {
     };
     const hasActiveStream = jest.fn(() => false);
     const eventBus = { emit: jest.fn() };
+    const getEventPage = jest.fn(async () => ({
+      events: [],
+      endSeq: 0,
+      nextBeforeSeq: null,
+      hasMore: false,
+    }));
     const controller = new MessagesController(
       messageStore as any,
       { hasActiveStream } as any,
-      {} as any,
+      { getEventPage } as any,
       eventBus as any,
     );
-    return { controller, messageStore, hasActiveStream, eventBus };
+    return { controller, messageStore, hasActiveStream, eventBus, getEventPage };
   }
 
   it("流式输出中 → 409，且不清空、不广播", async () => {

@@ -1,7 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from "@nestjs/event-emitter";
-import { Subject, Observable, Subscription, defer, concat, from } from "rxjs";
-import { MessageEvent } from "@nestjs/common";
 import {
   StreamStatusChangedEvent,
   SessionCreatedEvent,
@@ -36,6 +34,7 @@ import { UserInputQueueService } from "./user-input-queue.service";
  */
 export type SessionEventType =
   | "connected"
+  | "session_snapshot"
   | "session_created"
   | "session_deleted"
   | "session_cleared"
@@ -87,16 +86,54 @@ interface RecentTerminal {
 }
 
 /**
- * 用户事件订阅者
+ * 带内历史快照的待提交状态。
+ *
+ * 读页是异步的（磁盘 IO），期间的 live 帧必须先积压在连接级队列里，
+ * 等 snapshot 帧写入同一 Subject 之后再按序排空——这是"快照与后续事件同通道"
+ * 的全部意义：客户端不需要自己缓冲。
  */
-interface UserEventSubscriber {
-  subject: Subject<MessageEvent>;
-  connectedAt: Date;
-  clientId: string;
-  /** 本次连接的唯一标识：unsubscribe 按它做身份校验，防止旧连接的 close 误删新连接注册 */
-  connectionId: string;
-  heartbeatSubscription?: any;
+interface PendingSnapshot {
+  requestId: string;
+  sessionId: string;
+  queue: Array<{ data: string; logSeq?: number }>;
 }
+
+/**
+ * 实时事件连接（一条 WebSocket）。
+ *
+ * 由 WsEventsGateway 注册；本服务只依赖 `send(data: string)`，便于测试替身。
+ * `watchedSessions` 决定内容帧是否下发；`pendingSnapshot` 在读页期间积压该连接的帧。
+ */
+export interface EventConnection {
+  clientId: string;
+  connectionId: string;
+  send: (data: string) => void;
+  /** 本连接关注的会话（内容帧只发给订阅者） */
+  watchedSessions: Set<string>;
+  /** 非空 = 正在为该连接生成历史快照，期间所有帧进 queue */
+  pendingSnapshot?: PendingSnapshot;
+  /** 快照串行化：同一连接上的 open 请求依次执行（多 pane 同时打开不互相抢占） */
+  openChain: Promise<void>;
+  connectedAt: Date;
+}
+
+/** 快照读页期间允许积压的帧上限（超过丢最旧并告警；正常读页是毫秒级） */
+const MAX_PENDING_SNAPSHOT_QUEUE = 2000;
+
+/**
+ * 必须全局广播的流帧类型（不按 watch 过滤）。
+ *
+ * 这些帧服务于"即使不在看该会话也要知道"的功能：
+ * - ask_requested / ask_resolved：未读红点、侧栏待答胶囊、托盘/桌宠、多窗口收卡；
+ * - workflow_event：workflowRuns store 全量消费（未加载会话也照收）；
+ * - compression_error：任意会话的压缩失败全局提示。
+ */
+const ALWAYS_BROADCAST_STREAM_TYPES: ReadonlySet<string> = new Set([
+  "ask_requested",
+  "ask_resolved",
+  "workflow_event",
+  "compression_error",
+]);
 
 /**
  * 内部事件监听器
@@ -118,7 +155,7 @@ interface InternalEventListener {
 export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SessionEventsService.name);
   /** 在线连接表：键 = connectionId（同一 clientId 的多标签页/多窗口各占一条连接） */
-  private readonly subscribers = new Map<string, UserEventSubscriber>();
+  private readonly connections = new Map<string, EventConnection>();
   /** 连接序号：生成 connectionId 用 */
   private connectionSeq = 0;
   /** 终态墓碑（按会话一条；running 事件与新终态都会覆盖/失效） */
@@ -142,86 +179,101 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /**
-   * 订阅事件流（每条连接独立条目；同一 clientId 的多标签页并存，互不惊扰）
-   * @param clientId 客户端唯一标识（如 tabId）
-   * @returns observable 事件流 + connectionId（本次连接标识，unsubscribe 时回传做身份校验）
-   */
-  subscribe(clientId: string): {
-    observable: Observable<MessageEvent>;
-    connectionId: string;
-  } {
-    const subject = new Subject<MessageEvent>();
-    const connectionId = `conn_${++this.connectionSeq}_${Date.now()}`;
-
-    // 每 90 秒发送一次心跳，防止前端超时断开
-    const heartbeatSubscription = new Subscription();
-    const heartbeatTimer = setInterval(() => {
-      try {
-        this.logger.debug(`Sending heartbeat to ${clientId}`);
-        subject.next({
-          data: JSON.stringify({
-            type: "heartbeat",
-            timestamp: new Date().toISOString(),
-          }),
-        } as MessageEvent);
-      } catch (error) {
-        // 如果发送失败，说明连接已断开，取消心跳
-        clearInterval(heartbeatTimer);
-      }
-    }, 90000);
-    heartbeatSubscription.add(() => clearInterval(heartbeatTimer));
-
-    // 键即身份：同 clientId 的新连接（刷新重连/另一标签页）是独立条目，不覆盖旧连接；
-    // 旧连接的 req close 只删自己那条，不会误删新连接，心跳定时器也不存在孤儿泄漏。
-    this.subscribers.set(connectionId, {
-      subject,
-      connectedAt: new Date(),
-      clientId,
-      connectionId,
-      heartbeatSubscription,
-    });
-
-    this.logger.debug(
-      `Client ${clientId} (${connectionId}) subscribed, total connections: ${this.subscribers.size}`,
-    );
-
-    // 连接补发（connected + eventBuffer 重放 + running 状态）必须作为返回流自身的前缀，
-    // 而不能往 subject 上异步 next：NestJS 对 @Sse 返回值的订阅发生在
-    // Promise.resolve(result).then(...) 及拦截器链 transformDeferred 的 promise 反应里，
-    // 严格晚于本方法的同步栈——此前用 queueMicrotask 补发，全部打在零订阅者的普通
-    // Subject 上被静默丢弃（表现为刷新后已流出的事件丢失、isStreaming 状态丢失）。
-    // defer + concat 语义：
-    //   - defer：订阅真正发生的那一刻才计算补发快照，连接窗口内新进的 chunk 也在其中；
-    //   - concat：补发先同步发出，随后同一同步栈内订阅 subject，两者之间无缝隙，
-    //     不存在"补发算完但 subject 未订阅"的丢失窗口；
-    //   - 若订阅时该连接已被注销（快速刷新秒关），跳过补发只接 live。
-    const observable = defer(() => {
-      if (this.subscribers.get(connectionId)?.subject !== subject) {
-        return subject.asObservable();
-      }
-      // 补发是同步计算：sessionType 已随 ActiveStream 携带（startStream 时确定），
-      // 因此不需要 await 元信息端口——否则会破坏下面「补发与 live 订阅无缝隙」的时序保证。
-      return concat(from(this.buildCatchupEvents()), subject.asObservable());
-    });
-
-    return { observable, connectionId };
+  /** 生成连接标识（gateway 在握手成功后调用） */
+  createConnectionId(): string {
+    return `conn_${++this.connectionSeq}_${Date.now()}`;
   }
 
   /**
-   * 连接补发事件列表：connected 事件、活跃流 eventBuffer 重放、running 状态补发。
-   * 在返回流被订阅时同步计算并作为流前缀发出（见 subscribe 的 defer+concat 说明）。
+   * 注册一条已认证的 WebSocket 连接。
+   *
+   * 注册后立即下发全局队列计数快照；会话内容等客户端发送 watch 后再补发
+   * （`watchSessions`），避免把未关注会话的 buffer 推给新连接。
    */
-  private buildCatchupEvents(): MessageEvent[] {
-    const events: MessageEvent[] = [];
-    const activeStreams = this.streamManager.getActiveStreams();
+  registerConnection(
+    clientId: string,
+    connectionId: string,
+    send: (data: string) => void,
+  ): EventConnection {
+    const connection: EventConnection = {
+      clientId,
+      connectionId,
+      send,
+      watchedSessions: new Set(),
+      openChain: Promise.resolve(),
+      connectedAt: new Date(),
+    };
+    this.connections.set(connectionId, connection);
 
-    // 连接成功事件 + 各活跃流的"补发起点位置"。
-    //
-    // 位置 = eventBuffer[0] 的 (baseSeq, chunkSeq)：即本次补发会从哪一帧开始重放。
-    // 客户端拿自己的去重游标与之比较，可判断"这次补发是否覆盖了我缺的部分"：
-    // 起点 baseSeq > 游标 baseSeq ⇒ 中间跨过了落库区间，可能丢了内容 → 回退整页重拉。
-    // 该帧先于所有重放帧到达（补发是返回流的前缀），因此客户端能在处理重放前先立标记。
+    // 用户队列计数快照：侧边栏角标在首次连接/刷新后即可恢复；
+    // 具体条目按会话打开时 GET /sessions/:id/queue 拉取。
+    this.deliver(
+      connection,
+      this.wrapEvent({
+        type: "queues_snapshot",
+        sessionId: "*",
+        timestamp: new Date().toISOString(),
+        payload: {
+          epoch: this.userInputQueue.epoch,
+          counts: this.userInputQueue.getAllCounts(),
+        },
+      } as SessionEvent),
+    );
+
+    this.logger.debug(
+      `Client ${clientId} (${connectionId}) connected, total connections: ${this.connections.size}`,
+    );
+    return connection;
+  }
+
+  /**
+   * 订阅一组会话：加入 watchedSessions 并立即补发这批会话的连接补发帧
+   * （connected.streamPositions → eventBuffer 重放 → running 状态 → 终态墓碑）。
+   *
+   * 这是 per-session 过滤的入口：内容帧只下发给 watchedSessions；
+   * 跨会话信号（ask/workflow_event/compression_error）仍全局广播。
+   */
+  watchSessions(connection: EventConnection, sessionIds: string[]): void {
+    if (!this.connections.has(connection.connectionId)) return;
+    const added: string[] = [];
+    for (const sid of sessionIds) {
+      if (!sid || connection.watchedSessions.has(sid)) continue;
+      connection.watchedSessions.add(sid);
+      added.push(sid);
+    }
+    if (added.length === 0) return;
+    try {
+      for (const data of this.buildCatchupEvents(added)) {
+        this.deliver(connection, data);
+      }
+    } catch {
+      // 连接已断开：补发失败不应影响其它连接
+      this.unsubscribe(connection);
+    }
+  }
+
+  /** 取消订阅一组会话：之后这些会话的内容帧不再发给该连接 */
+  unwatchSessions(connection: EventConnection, sessionIds: string[]): void {
+    for (const sid of sessionIds) {
+      connection.watchedSessions.delete(sid);
+    }
+  }
+
+  /**
+   * 连接补发事件（序列化后的字符串，供 watchSessions 直接下发）：
+   * connected 位置、活跃流 eventBuffer 重放、running 状态补发、终态墓碑。
+   *
+   * @param sessionIds 本次新订阅的会话（只补发这些会话）
+   */
+  private buildCatchupEvents(sessionIds: string[]): string[] {
+    const events: string[] = [];
+    const wanted = new Set(sessionIds);
+    const activeStreams = this.streamManager
+      .getActiveStreams()
+      .filter((stream) => wanted.has(stream.sessionId));
+
+    // 补发起点位置：客户端拿自己的去重游标与之比较，判断补发是否覆盖缺口。
+    // 该帧先于所有重放帧到达，客户端能在处理重放前先立标记。
     const streamPositions = activeStreams
       .map((stream) => {
         const first = stream.eventBuffer[0];
@@ -243,58 +295,30 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
           p !== null,
       );
 
-    events.push({
-      data: JSON.stringify({
+    events.push(
+      this.wrapEvent({
         type: "connected",
         timestamp: new Date().toISOString(),
         payload: { streamPositions },
-      }),
-    } as MessageEvent);
+      } as unknown as SessionEvent),
+    );
 
-    // 用户队列计数快照：侧边栏角标在首次连接/刷新后即可恢复；
-    // 具体条目按会话打开时 GET /sessions/:id/queue 拉取。
-    events.push({
-      data: JSON.stringify({
-        type: "queues_snapshot",
-        sessionId: "*",
-        timestamp: new Date().toISOString(),
-        payload: {
-          epoch: this.userInputQueue.epoch,
-          counts: this.userInputQueue.getAllCounts(),
-        },
-      }),
-    } as MessageEvent);
-
-    // 统一 SSE:连接建立时补发全部活跃流的 eventBuffer 增量。
-    // 替代前端 catchup HTTP 拉取——刷新/多窗口重连时,连接前已产生的流式事件在此补发,
-    // 前端按 payload.sessionId 归会话、按 (baseSeq, chunkSeq) 元组做入口幂等去重后消费。
+    // 活跃流 eventBuffer 重放（cleanupIntermediateEvents 已把已完成 delta 换成 block_end）
     for (const stream of activeStreams) {
       for (const chunk of stream.eventBuffer) {
         const unified = createUnifiedEvent(
           this.mapStreamMethod(chunk.type),
           { sessionId: stream.sessionId, ...chunk } as Record<string, any>,
         );
-        events.push({
-          data: JSON.stringify(unified),
-        } as MessageEvent);
+        events.push(this.wrapEvent(unified));
       }
     }
 
-    // 刷新安全（v1.8）：stream_status_changed 不在 eventBuffer 中、不随 catchup 重放，
-    // 刷新后会话级 isStreaming/streamStatus 会丢失。对活跃流补发 running 状态，
-    // 恢复"回合内原地阻塞等待应答仍工作中"的会话级视图（统一交互卡；阻止新消息撞 SESSION_BUSY）。
-    // kind 随流类型下发：chat 流前端跳过事件页拉取靠 buffer 重放；maintenance 流
-    // （手动压缩伪流）buffer 无回合历史，前端照常拉事件页，压缩中状态由 catchup 的
-    // compression_start 恢复。
-    // sessionType 随流下发：子会话（sub_agent/bot）补发需带上，否则前端
-    // useSessionEvents 的 isSubOrBot 判定失效，子会话状态会误穿主会话分支
-    // （污染主会话 isStreaming / 侧边栏 working）。ActiveStream 不含 sessionType，按 sessionId 查。
+    // running 状态补发：刷新后恢复会话级 isStreaming/streamStatus
     for (const stream of activeStreams) {
-      // 会话类型随流记录携带（startStream 时确定）：补发必须同步完成，
-      // 不能在这里 await 元信息端口。
       const sessionType = stream.sessionType ?? "web";
-      events.push({
-        data: JSON.stringify(
+      events.push(
+        this.wrapEvent(
           toSessionEvent("stream_status_changed", {
             sessionId: stream.sessionId,
             timestamp: new Date().toISOString(),
@@ -306,26 +330,24 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
             },
           }),
         ),
-      } as MessageEvent);
+      );
     }
 
-    // 终态墓碑：对"最近结束且当前没有活跃流"的会话补发终态快照。
-    // 后台/断线期间跑完的回合，stopStream 已删活跃流、终态帧也早已广播过一次——
-    // 这里补发带 terminalId 的同一帧，客户端按 id 去重后即可直接收敛。
+    // 终态墓碑：对"最近结束且当前没有活跃流"的会话补发终态快照
     const now = Date.now();
     for (const [sessionId, terminal] of this.recentTerminals) {
+      if (!wanted.has(sessionId)) continue;
       if (now - terminal.endedAt > RECENT_TERMINAL_TTL_MS) {
         this.recentTerminals.delete(sessionId);
         continue;
       }
-      // 队列续跑：同一会话已有新活跃流时，旧终态不得重放（会覆盖 running）
       if (this.streamManager.hasActiveStream(sessionId)) continue;
-      events.push({
-        data: JSON.stringify({
+      events.push(
+        this.wrapEvent({
           ...terminal.event,
           payload: { ...terminal.event.payload, replayed: true },
-        }),
-      } as MessageEvent);
+        } as SessionEvent),
+      );
     }
 
     return events;
@@ -339,23 +361,20 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
    * 因此不能用它判断"有没有人能应答审批"。
    */
   hasConnectedClients(): boolean {
-    return this.subscribers.size > 0;
+    return this.connections.size > 0;
   }
 
   /**
-   * 取消订阅
-   * @param clientId 客户端标识（仅作日志/ sanity 校验）
-   * @param connectionId 本次连接标识：订阅表按 connectionId 键控，旧连接的 req close
-   *   晚到只删自己那条——刷新重连（同 clientId 新旧两条连接）不会误删新连接注册
+   * 注销一条连接（WebSocket close 时调用）。
+   *
+   * 键即身份：同 clientId 的新连接是独立条目，旧连接 close 只删自己那条。
    */
-  unsubscribe(clientId: string, connectionId: string): void {
-    const subscriber = this.subscribers.get(connectionId);
-    if (!subscriber || subscriber.clientId !== clientId) return;
-    subscriber.heartbeatSubscription?.unsubscribe();
-    subscriber.subject.complete();
-    this.subscribers.delete(connectionId);
+  unsubscribe(connection: EventConnection): void {
+    if (this.connections.get(connection.connectionId) !== connection) return;
+    this.connections.delete(connection.connectionId);
+    connection.pendingSnapshot = undefined;
     this.logger.debug(
-      `Client ${clientId} (${connectionId}) unsubscribed, remaining: ${this.subscribers.size}`,
+      `Client ${connection.clientId} (${connection.connectionId}) disconnected, remaining: ${this.connections.size}`,
     );
   }
 
@@ -591,55 +610,203 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 向指定用户的所有客户端广播事件
+   * 向所有在线连接广播会话/宿主事件（不受 watch 过滤影响）。
    */
   private broadcastToAllClients(event: SessionEvent): void {
-    if (this.subscribers.size === 0) return;
-
-    const messageEvent: MessageEvent = {
-      data: JSON.stringify(event),
-    } as MessageEvent;
-
-    for (const subscriber of this.subscribers.values()) {
+    if (this.connections.size === 0) return;
+    const message = this.wrapEvent(event);
+    for (const connection of this.connections.values()) {
       try {
-        subscriber.subject.next(messageEvent);
+        this.deliver(connection, message);
       } catch {
         this.logger.warn(
-          `Failed to send event to ${subscriber.clientId}, removing`,
+          `Failed to send event to ${connection.clientId}, removing`,
         );
-        this.unsubscribe(subscriber.clientId, subscriber.connectionId);
+        this.unsubscribe(connection);
+      }
+    }
+  }
+
+  /** 包成 WS `event` 信封（流帧/会话事件/workspace 事件共用） */
+  private wrapEvent(event: unknown): string {
+    return JSON.stringify({ kind: "event", data: event });
+  }
+
+  /**
+   * 唯一投递函数：有 pendingSnapshot 时入队，否则直接写 WebSocket。
+   *
+   * 快照读页期间入队的帧在 commitSnapshot 里按原序排空；`logSeq` 供排空时
+   * 丢弃"事件页已覆盖"的持久化帧（delta 不带 seq，保留）。
+   */
+  private deliver(
+    connection: EventConnection,
+    message: string,
+    logSeq?: number,
+  ): void {
+    const pending = connection.pendingSnapshot;
+    if (!pending) {
+      connection.send(message);
+      return;
+    }
+    pending.queue.push({ data: message, logSeq });
+    if (pending.queue.length > MAX_PENDING_SNAPSHOT_QUEUE) {
+      pending.queue.shift();
+      this.logger.warn(
+        `[snapshot] queue overflow for ${connection.clientId}, dropping oldest frame`,
+      );
+    }
+  }
+
+  /**
+   * 带内历史快照：读页期间把该连接的帧积压，读完后先发 snapshot、再排空队列。
+   *
+   * 同一连接上的多个 open 请求**串行执行**（openChain）：多 pane 同时首次打开时
+   * 不再互相抢占，第二个请求等第一个提交后再开始读页。
+   */
+  async openSnapshot(
+    connection: EventConnection,
+    sessionId: string,
+    requestId: string,
+    readPage: () => Promise<{
+      events: unknown[];
+      endSeq: number;
+      nextBeforeSeq: number | null;
+      hasMore: boolean;
+    }>,
+  ): Promise<{ ok: boolean; reason?: "disconnected" }> {
+    const run = async (): Promise<{ ok: boolean; reason?: "disconnected" }> => {
+      if (this.connections.get(connection.connectionId) !== connection) {
+        return { ok: false, reason: "disconnected" };
+      }
+      // 打开即订阅：后续 live 帧能到达该连接（不等客户端额外发 watch）
+      if (!connection.watchedSessions.has(sessionId)) {
+        this.watchSessions(connection, [sessionId]);
+      }
+      connection.pendingSnapshot = { requestId, sessionId, queue: [] };
+      // T0：在 await 之前同步截取，publish 不可能插进这两行之间
+      const tail = this.streamManager.getInFlightTail(sessionId);
+
+      try {
+        const page = await readPage();
+        if (this.connections.get(connection.connectionId) !== connection) {
+          return { ok: false, reason: "disconnected" };
+        }
+        this.commitSnapshot(connection, requestId, {
+          requestId,
+          sessionId,
+          events: page.events,
+          endSeq: page.endSeq,
+          nextBeforeSeq: page.nextBeforeSeq,
+          hasMore: page.hasMore,
+          tail,
+          bootId: APP_BOOT_ID,
+        });
+        return { ok: true };
+      } catch (error) {
+        if (this.connections.get(connection.connectionId) !== connection) {
+          return { ok: false, reason: "disconnected" };
+        }
+        this.logger.warn(
+          `[snapshot] read page failed for ${sessionId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        // 仍要提交（带 error）：客户端据此报错并重试，队列不能永久卡住
+        this.commitSnapshot(connection, requestId, {
+          requestId,
+          sessionId,
+          events: [],
+          endSeq: -1,
+          nextBeforeSeq: null,
+          hasMore: false,
+          tail: [],
+          bootId: APP_BOOT_ID,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { ok: true };
+      }
+    };
+    const result = connection.openChain.then(run, run);
+    connection.openChain = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  /** 先写 snapshot 帧，再按原序排空队列（已落在页内的持久化帧丢弃） */
+  private commitSnapshot(
+    connection: EventConnection,
+    requestId: string,
+    payload: {
+      requestId: string;
+      sessionId: string;
+      events: unknown[];
+      endSeq: number;
+      nextBeforeSeq: number | null;
+      hasMore: boolean;
+      tail: unknown[];
+      bootId: string;
+      error?: string;
+    },
+  ): void {
+    const pending = connection.pendingSnapshot;
+    if (!pending || pending.requestId !== requestId) return;
+    // 先清屏障再写帧：commit 是同步块，期间不会有 publish 插进来，
+    // 后续帧直接写 socket，不会排到 snapshot 之前。
+    connection.pendingSnapshot = undefined;
+
+    try {
+      connection.send(
+        JSON.stringify({ kind: "snapshot", requestId, payload }),
+      );
+    } catch {
+      this.unsubscribe(connection);
+      return;
+    }
+
+    for (const item of pending.queue) {
+      if (typeof item.logSeq === "number" && item.logSeq < payload.endSeq) {
+        continue;
+      }
+      try {
+        connection.send(item.data);
+      } catch {
+        this.unsubscribe(connection);
+        return;
       }
     }
   }
 
   /**
-   * SSE 直投（唯一发布入口的消费者侧，由 streamManager relay 调用）
+   * 流帧直投（唯一发布入口的消费者侧，由 streamManager relay 调用）。
    *
-   * 构造统一事件信封(UnifiedEvent),method = stream/*,payload 保留原始 EventChunk 字段 + sessionId。
-   * 该用户的所有在线客户端(多窗口)都会收到,前端按 method 路由、按 payload.sessionId 归会话。
-   *
-   * @param sessionId 会话 ID
-   * @param chunk 流式事件块(EventChunk)
+   * per-session 过滤：内容帧只发给 watchedSessions 含该会话的连接；
+   * **跨会话信号**（ask/workflow/压缩失败）始终广播——它们服务于未读红点、
+   * 侧栏待答胶囊、workflow 实时进度等"即使不在看该会话也要知道"的功能。
    */
   private pushStreamEvent(sessionId: string, chunk: SessionStreamEvent): void {
-    if (this.subscribers.size === 0) return;
+    if (this.connections.size === 0) return;
 
     const unified = createUnifiedEvent(
       this.mapStreamMethod(chunk.type),
       { sessionId, ...chunk } as Record<string, any>,
     );
-    const messageEvent: MessageEvent = {
-      data: JSON.stringify(unified),
-    } as MessageEvent;
+    const message = this.wrapEvent(unified);
+    const logSeq = (chunk as { logSeq?: number }).logSeq;
+    const alwaysBroadcast = ALWAYS_BROADCAST_STREAM_TYPES.has(chunk.type);
 
-    for (const subscriber of this.subscribers.values()) {
+    for (const connection of this.connections.values()) {
+      if (!alwaysBroadcast && !connection.watchedSessions.has(sessionId)) {
+        continue;
+      }
       try {
-        subscriber.subject.next(messageEvent);
+        this.deliver(connection, message, logSeq);
       } catch {
         this.logger.warn(
-          `Failed to send stream event to ${subscriber.clientId}, removing`,
+          `Failed to send stream event to ${connection.clientId}, removing`,
         );
-        this.unsubscribe(subscriber.clientId, subscriber.connectionId);
+        this.unsubscribe(connection);
       }
     }
   }
@@ -691,15 +858,11 @@ export class SessionEventsService implements OnModuleInit, OnModuleDestroy {
 
   /** 在线客户端数量 */
   getClientCount(): number {
-    return this.subscribers.size;
+    return this.connections.size;
   }
 
   onModuleDestroy() {
-    for (const subscriber of this.subscribers.values()) {
-      subscriber.heartbeatSubscription?.unsubscribe();
-      subscriber.subject.complete();
-    }
-    this.subscribers.clear();
+    this.connections.clear();
     this.recentTerminals.clear();
   }
 }

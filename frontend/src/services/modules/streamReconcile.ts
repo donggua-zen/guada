@@ -4,7 +4,7 @@
  * 背景：终态帧（stream_status_changed: completed/error）只在完成那一刻对在线连接
  * 广播一次，stopStream 随即删除补发缓冲 → 后台/断线期间跑完的回合收不到任何终态信号。
  * 服务端权威判定"已停止"时，必须一次性把瞬态收敛干净，并让历史失效触发强制重拉
- * （事件页 + 邮箱尾部重放 = 整页刷新等价）。
+ * （带内快照含事件页与在飞尾部 = 整页刷新等价）。
  */
 import { isSessionHistoryStale, markSessionHistoryStale } from "@/utils/sessionResync";
 import { resetTurnTransientState } from "./streamProjector";

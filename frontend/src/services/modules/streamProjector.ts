@@ -111,9 +111,6 @@ function isAtOrBeforeBoundary(messageId: string, boundaryId: string): boolean {
   return messageId <= boundaryId;
 }
 
-/** 模块级暂存:无缓存会话的 finish 后事件(跨 handler/常驻接收共享) */
-const stashBySession = new Map<string, ProjectorChunk[]>();
-
 /**
  * 折叠期当前回合游标（sessionId → 当前回合 id）。
  * turn_start 设置、turn_end/turn_delete 清除；compaction_summary 据此判定 in-turn（回合内占位）
@@ -161,27 +158,6 @@ function findBlockByToolCallId(turns: Turn[], toolCallId: string): TurnContent |
     }
   }
   return undefined;
-}
-
-/**
- * 暂存事件:finish/turn_end 表示该轮已落盘(后端快照包含),清空旧暂存;
- * 其余事件追加(打开会话时应用)。
- */
-function stashEvent(sessionId: string, chunk: ProjectorChunk): void {
-  if (chunk.type === "finish" || chunk.type === "turn_end") {
-    stashBySession.delete(sessionId);
-    return;
-  }
-  const list = stashBySession.get(sessionId) ?? [];
-  list.push(chunk);
-  stashBySession.set(sessionId, list);
-}
-
-/** 打开无缓存会话时取出暂存(应用后清空) */
-export function takeStash(sessionId: string): ProjectorChunk[] {
-  const list = stashBySession.get(sessionId) ?? [];
-  stashBySession.delete(sessionId);
-  return list;
 }
 
 /**
@@ -1516,7 +1492,7 @@ export function applyLiveChunk(
  * 语义：`loaded` 是"历史已成功拉过"的标记；`turns.length > 0` 兜住"树已建但 loaded 被
  * 标脏/未置位"的过渡态（markSessionHistoryStale 会把 loaded 置 false 而树还在）。
  * 三个消费方（live 投影路由、强制重拉的 hadCache 判定、重拉前置门槛）必须同口径，
- * 否则会出现"live 直写树但重拉以为是首次加载、不重放邮箱尾部"这类不一致。
+ * 否则会出现"live 直写树但重拉以为是首次加载、不重放快照尾部"这类不一致。
  */
 export function hasCachedTurns(
   sessionStore: ProjectorSessionStore,
@@ -1536,7 +1512,7 @@ export function hasCachedTurns(
  * - 两者都缺失 ⇒ fail-open 应用（与 hub 去重口径一致）。
  *
  * 为什么必须跳过：页内已有该消息的最终内容，重复应用 delta 会让文本翻倍——
- * 这正是整页刷新路径用 stash + 该过滤做到"等价刷新"的原因。
+ * 这正是整页快照路径用 tail + 该过滤做到"等价刷新"的原因。
  */
 export function isChunkCoveredByPage(
   chunk: ProjectorChunk,
@@ -1557,9 +1533,9 @@ export function isChunkCoveredByPage(
 /**
  * 应用一批"在飞帧"（未落盘的 delta / 页尾之后的事件），跳过事件页已覆盖的部分。
  *
- * 两个来源共用本函数，语义因此只有一份：
- * - 无缓存会话的 stash（`takeStash`）：刷新/首次打开期间暂存的实时帧；
- * - 强制重拉后的邮箱尾部（`getTailAfterLastCheckpoint`）：已有缓存时 fold 抹掉的在飞块。
+ * 数据来源是服务端带内快照的 `tail`（`POST /events/open` 的 `session_snapshot`）：
+ * 快照的 `events` 只含已落盘内容，打开前已输出但未落盘的增量必须随快照一起重放，
+ * 否则 fold 之后正在输出的块会消失到 `block_end` 才恢复。
  *
  * @returns 实际应用的帧数
  */
@@ -1579,7 +1555,10 @@ export function applyInFlightChunks(
 }
 
 /**
- * 事件到达投影(接收链路常驻入口):有缓存 → applyLiveChunk;无缓存 → 暂存 finish 后事件。
+ * 事件到达投影(接收链路常驻入口):有缓存 → applyLiveChunk;无缓存 → 忽略。
+ *
+ * 无缓存时不能建树（会得到只有尾部的残缺树，且缓存门禁会因此跳过历史加载）；
+ * 这段时间的在飞帧由服务端快照通道在打开时补发，客户端不再暂存。
  */
 export function projectChunk(
   sessionStore: ProjectorSessionStore,
@@ -1597,8 +1576,10 @@ export function projectChunk(
       sessionStore.removeSessionPendingAsk(sessionId, chunk.requestId);
     }
 
+    // 未打开过内容的会话不建树：折叠必须从事件页开始（否则会得到只有尾部的残缺树，
+    // 且 hasCachedTurns 变真、缓存门禁会跳过历史加载）。读页期间的在飞帧由服务端
+    // 在 snapshot 通道里按序补发，客户端不再暂存。
     if (!hasCachedTurns(sessionStore, sessionId)) {
-      stashEvent(sessionId, chunk);
       return;
     }
     applyLiveChunk(sessionStore, sessionId, chunk);

@@ -28,8 +28,10 @@
         </button>
     </template>
 
-    <DropdownMenu v-tooltip="t('chat.messageActions.more')" @command="handleCommand">
-        <div class="message-action-button">
+    <DropdownMenu @command="handleCommand">
+        <!-- v-tooltip 必须挂在真实元素上：DropdownMenu 是 div + Teleport 双根，
+             运行时指令挂在组件上无法定位根元素（Vue 会告警且 tooltip 失效） -->
+        <div v-tooltip="t('chat.messageActions.more')" class="message-action-button">
           <MoreHorizontal16Regular class="w-4 h-4 pointer-events-none" />
         </div>
       <template #dropdown>

@@ -1,8 +1,19 @@
 /**
- * 会话事件类型
+ * 实时事件客户端（WebSocket）。
+ *
+ * 一条物理连接承载：会话流帧（stream/*）、会话/宿主事件、workspace 文件事件、
+ * 带内历史快照（open → snapshot）。客户端用 watch/unwatch 声明关注的会话，
+ * 服务端只下发这些会话的内容帧；跨会话信号（ask/workflow/压缩失败）仍全局广播。
+ *
+ * 连接监督与旧 SSE 版一致：可见性/网络恢复触发重连、30s watchdog、150s 无活动判死、
+ * 指数退避 2s→30s；重连成功后重放 watch 集合。
  */
+import { getClientId } from "@/utils/clientId";
+import { streamEventHub } from "./StreamEventHub";
+
 export type SessionEventType =
   | "connected"
+  | "session_snapshot"
   | "session_created"
   | "session_deleted"
   | "session_cleared"
@@ -22,84 +33,62 @@ export type SessionEventType =
   | "bot_changed"
   | "scheduler_task_finished";
 
-/**
- * 会话事件
- */
 export interface SessionEvent {
   type: SessionEventType;
   sessionId: string;
   timestamp: string;
-  // 各事件类型的载荷形状互不相同且为后端开放字典（useSessionEvents 等消费方按需深读
-  // payload.session/status 等），无法收敛为 Record<string, unknown> 而不改动范围外消费方
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 白名单：动态边界，见上方说明
   payload?: Record<string, any>;
   source?: string;
 }
 
-/**
- * 会话事件监听器
- */
-type SessionEventListener = (event: SessionEvent) => void;
+export type SessionEventListener = (event: SessionEvent) => void;
 
-/** EventSource.CLOSED（不依赖全局 EventSource，便于单测） */
-const READY_STATE_CLOSED = 2;
+/** 服务端握手子协议（与 backend ws-events.types.ts 对齐） */
+const WS_EVENTS_PROTOCOL = "guada.events.v1";
+const WS_BEARER_PREFIX = "bearer.";
 
-/** 页面隐藏超过该时长后恢复可见，主动重建连接（手机息屏/切后台后连接可能已半开） */
 const RESUME_RECONNECT_AFTER_HIDDEN_MS = 15_000;
-/** 超过该时长没有任何字节（后端心跳 90s）判定连接假死 */
 const STALE_ACTIVITY_MS = 150_000;
-/** 可见状态下的假死巡检间隔 */
 const WATCHDOG_INTERVAL_MS = 30_000;
-/** polyfill 放弃重试（CLOSED）后的手动重连退避 */
 const RECONNECT_BASE_DELAY_MS = 2_000;
 const RECONNECT_MAX_DELAY_MS = 30_000;
-/** 连续恢复事件（visibility + online 同时触发）去抖 */
 const RECONNECT_MIN_INTERVAL_MS = 1_000;
-
-/**
- * 用户级会话事件服务
- *
- * 通过 SSE 长连接接收后端推送的会话事件，替代轮询机制。
- *
- * 连接监督（移动端息屏恢复的关键）：
- * - 页面恢复可见 / 网络恢复 / bfcache 恢复时主动检查并重建连接；
- * - 30s 巡检：连接 CLOSED 或长时间无任何消息（假死）时重建；
- * - polyfill 因非 200（如 token 过期 401）进入 CLOSED 后不会自行重试，
- *   这里按退避手动重连，并通知上层做鉴权兜底。
- */
-import { EventSourcePolyfill } from "event-source-polyfill";
-import { getClientId } from "@/utils/clientId";
-import { streamEventHub } from "./StreamEventHub";
+const SNAPSHOT_TIMEOUT_MS = 10_000;
 
 export class SessionEventsService {
-  private eventSource: EventSourcePolyfill | null = null;
-  /** （重）建连监听器（补拉挂起状态用） */
-  private readonly connectListeners = new Set<() => void>();
-  /** 连接被判死（polyfill CLOSED，常见于 401/HTTP 错误）时通知上层 */
-  private readonly fatalListeners = new Set<() => void>();
-  private listeners: Map<SessionEventType | "*", Set<SessionEventListener>> =
-    new Map();
-  private clientId: string;
-  /**
-   * 已分发过的终态帧（sessionId → terminalId）。
-   *
-   * 终态只在完成那一刻广播一次，连接补发会重放同一帧（terminalId 相同）。
-   * 在分发前丢弃重复，确保桌宠动画/列表重拉/历史校准等所有消费方都不会被重复触发；
-   * 页面刷新后本表为空，重放会作为"首次送达"正常分发一次。
-   */
-  private readonly deliveredTerminalIds = new Map<string, string>();
-
-  /** 是否处于期望连接状态（disconnect 后为 false，阻止定时器复活连接） */
+  private ws: WebSocket | null = null;
   private active = false;
-  /** 最后一次收到任何字节的时间（含心跳） */
+  /** 子协议被代理剥离后的兜底：token 改走 query（只尝试一次） */
+  private useQueryToken = false;
+  /** 握手完成（收到 ready）后才算可接收快照 */
+  private ready = false;
+  private clientId: string;
   private lastActivityAt = 0;
-  /** 页面进入隐藏的时刻 */
   private hiddenAt: number | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectDelayMs = RECONNECT_BASE_DELAY_MS;
   private lastReconnectAt = 0;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   private lifecycleInstalled = false;
+
+  private readonly connectListeners = new Set<() => void>();
+  private readonly fatalListeners = new Set<() => void>();
+  private readonly workspaceListeners = new Set<(event: any) => void>();
+  private listeners: Map<SessionEventType | "*", Set<SessionEventListener>> = new Map();
+  private readonly deliveredTerminalIds = new Map<string, string>();
+
+  /** 本连接关注（期望接收内容帧）的会话；重连后重放 */
+  private readonly desiredSessions = new Set<string>();
+
+  /** 等待中的带内快照（requestId → waiter） */
+  private readonly snapshotWaiters = new Map<
+    string,
+    {
+      resolve: (payload: Record<string, any>) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
 
   private readonly handleVisibilityChange = (): void => {
     if (typeof document === "undefined") return;
@@ -109,28 +98,28 @@ export class SessionEventsService {
     }
     const hiddenFor = this.hiddenAt ? Date.now() - this.hiddenAt : 0;
     this.hiddenAt = null;
-    if (hiddenFor > RESUME_RECONNECT_AFTER_HIDDEN_MS || this.isConnectionDown()) {
+    if (hiddenFor > RESUME_RECONNECT_AFTER_HIDDEN_MS || !this.isConnected()) {
       this.reconnect(`resume after hidden ${Math.round(hiddenFor / 1000)}s`);
     }
   };
 
   private readonly handleOnline = (): void => {
-    if (this.isConnectionDown() || this.isStale()) {
+    if (!this.isConnected() || this.isStale()) {
       this.reconnect("network online");
     }
   };
 
   private readonly handlePageShow = (event: PageTransitionEvent): void => {
-    if (event.persisted || this.isConnectionDown()) {
+    if (event.persisted || !this.isConnected()) {
       this.reconnect("pageshow");
     }
   };
 
   private readonly runWatchdog = (): void => {
     if (typeof document !== "undefined" && document.visibilityState === "hidden") {
-      return; // 后台时定时器本就会被节流，恢复可见时另有钩子
+      return;
     }
-    if (this.isConnectionDown()) {
+    if (!this.isConnected()) {
       this.reconnect("watchdog: connection down");
       return;
     }
@@ -140,46 +129,29 @@ export class SessionEventsService {
   };
 
   constructor(private getBaseURL: () => string) {
-    // 使用全局客户端标识（localStorage 持久化，刷新页面保持不变）
     this.clientId = getClientId();
   }
 
-  /**
-   * 生成客户端 ID（用于标识当前浏览器标签页）
-   */
   getClientId(): string {
     return this.clientId;
   }
 
-  /** （重）建连监听（返回取消订阅函数） */
-  onConnected(listener: () => void): () => void {
-    this.connectListeners.add(listener);
-    return () => this.connectListeners.delete(listener);
+  /** 已连接且握手完成（可发送 open 请求） */
+  isConnected(): boolean {
+    return (
+      this.ready &&
+      this.ws !== null &&
+      this.ws.readyState === WebSocket.OPEN
+    );
   }
 
-  /** 连接被判死（polyfill 不再重试）时通知；用于触发一次鉴权校验 */
-  onConnectionFatal(listener: () => void): () => void {
-    this.fatalListeners.add(listener);
-    return () => this.fatalListeners.delete(listener);
-  }
+  // ── 生命周期 ──
 
-  /**
-   * 连接到事件流
-   * 后端通过 token 鉴权，前端无需传递身份信息
-   */
   connect(): void {
     this.active = true;
     this.installLifecycleHandlers();
-    // 注意：不能调用 disconnect()——它会清空业务监听器
-    const previous = this.eventSource;
-    this.eventSource = null;
-    if (previous) {
-      try {
-        previous.close();
-      } catch {
-        /* 已关闭 */
-      }
-    }
+    // 幂等：重复 connect（HMR/重复挂载）先关闭旧 socket，避免双连接
+    this.closeSocket();
     this.startConnection();
   }
 
@@ -190,22 +162,46 @@ export class SessionEventsService {
     if (now - this.lastReconnectAt < RECONNECT_MIN_INTERVAL_MS) return;
     this.lastReconnectAt = now;
 
-    console.log(`[SessionEvents] 重建 SSE 连接: ${reason}`);
+    console.log(`[SessionEvents] 重建 WS 连接: ${reason}`);
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    const previous = this.eventSource;
-    this.eventSource = null;
-    if (previous) {
+    this.closeSocket();
+    this.reconnectDelayMs = RECONNECT_BASE_DELAY_MS;
+    this.startConnection();
+  }
+
+  disconnect(): void {
+    this.active = false;
+    this.removeLifecycleHandlers();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.closeSocket();
+    this.lastActivityAt = 0;
+    this.hiddenAt = null;
+    this.deliveredTerminalIds.clear();
+    for (const waiter of this.snapshotWaiters.values()) {
+      clearTimeout(waiter.timer);
+      waiter.reject(new Error("session events disconnected"));
+    }
+    this.snapshotWaiters.clear();
+    this.listeners.clear();
+  }
+
+  private closeSocket(): void {
+    const ws = this.ws;
+    this.ws = null;
+    this.ready = false;
+    if (ws) {
       try {
-        previous.close();
+        ws.close();
       } catch {
         /* 已关闭 */
       }
     }
-    this.reconnectDelayMs = RECONNECT_BASE_DELAY_MS;
-    this.startConnection();
   }
 
   private startConnection(): void {
@@ -213,62 +209,176 @@ export class SessionEventsService {
 
     const token =
       localStorage.getItem("token") || sessionStorage.getItem("token") || "";
-    const url = `${this.getBaseURL()}/events/sessions`;
+    const url = this.buildSocketUrl();
+    const protocols =
+      token && !this.useQueryToken
+        ? [WS_EVENTS_PROTOCOL, `${WS_BEARER_PREFIX}${token}`]
+        : [WS_EVENTS_PROTOCOL];
 
-    const source = new EventSourcePolyfill(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-Client-Id": this.clientId,
-      },
-      heartbeatTimeout: 180000,
-    });
-    this.eventSource = source;
+    const ws = new WebSocket(url, protocols);
+    this.ws = ws;
 
-    source.onopen = () => {
-      if (this.eventSource !== source) return;
+    ws.onopen = () => {
+      if (this.ws !== ws) return;
       this.lastActivityAt = Date.now();
-      this.reconnectDelayMs = RECONNECT_BASE_DELAY_MS;
-      console.log("[SessionEvents] SSE 连接已建立");
-      // （重）建连通知：订阅方据此补拉状态（如挂起中的交互卡——ask_requested 是流帧，
-      // 刷新/丢帧后拿不到，历史重放又刻意不重建）。只补写、不清空，同进程重连安全。
-      for (const listener of this.connectListeners) {
-        try {
-          listener();
-        } catch (error) {
-          console.error("[SessionEvents] onConnected 监听器失败:", error);
-        }
-      }
+      // 真正的可用性以服务端 ready 帧为准（鉴权在握手阶段完成）
     };
 
-    source.onmessage = (event) => {
-      if (this.eventSource !== source) return;
+    ws.onmessage = (event) => {
+      if (this.ws !== ws) return;
       this.lastActivityAt = Date.now();
+      let message: any;
       try {
-        const data = JSON.parse(event.data);
-        // 合并后:流式事件(UnifiedEvent,method 以 stream/ 开头)路由到 StreamEventHub
-        if (data?.method && typeof data.method === "string" && data.method.startsWith("stream/")) {
-          streamEventHub.route({
-            ...(data.payload || {}),
-            sessionId: data.payload?.sessionId,
-          });
+        message = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+      this.handleServerMessage(message);
+    };
+
+    ws.onerror = () => {
+      if (this.ws !== ws) return;
+      console.error("[SessionEvents] WS 连接错误");
+    };
+
+    ws.onclose = (event) => {
+      if (this.ws !== ws) return;
+      this.ws = null;
+      this.ready = false;
+      // 4401 = 未授权：交由鉴权流程处理，同时按退避重试（token 可能刷新）
+      if (event.code === 4401) this.notifyFatal();
+
+      // 子协议握手失败（400/1006）→ 一次性回退到 query token 重试
+      const token =
+        localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+      if (!this.ready && !this.useQueryToken && token) {
+        this.useQueryToken = true;
+        setTimeout(() => {
+          if (this.active && !this.ws) this.startConnection();
+        }, 0);
+        return;
+      }
+      this.scheduleReconnect();
+    };
+  }
+
+  private buildSocketUrl(): string {
+    const rawBase = this.getBaseURL() || "/api/v1";
+    const origin =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "http://localhost";
+    const url = new URL(
+      rawBase.endsWith("/") ? rawBase : `${rawBase}/`,
+      origin,
+    );
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = `${url.pathname.replace(/\/$/, "")}/events/ws`;
+    url.searchParams.set("clientId", this.clientId);
+    if (this.useQueryToken) {
+      const token =
+        localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+      if (token) url.searchParams.set("token", token);
+    }
+    return url.toString();
+  }
+
+  private handleServerMessage(message: any): void {
+    switch (message?.kind) {
+      case "ready":
+        this.ready = true;
+        this.lastActivityAt = Date.now();
+        this.reconnectDelayMs = RECONNECT_BASE_DELAY_MS;
+        console.log("[SessionEvents] WS 连接已建立");
+        this.replayWatchSet();
+        for (const listener of this.connectListeners) {
+          try {
+            listener();
+          } catch (error) {
+            console.error("[SessionEvents] onConnected 监听器失败:", error);
+          }
+        }
+        return;
+      case "event":
+        this.routeEvent(message.data);
+        return;
+      case "workspace":
+        for (const listener of this.workspaceListeners) {
+          try {
+            listener(message.data);
+          } catch (error) {
+            console.error("[SessionEvents] workspace 监听器失败:", error);
+          }
+        }
+        return;
+      case "snapshot":
+        this.settleSnapshot(message);
+        return;
+      case "ack":
+        this.settleAck(message);
+        return;
+      case "pong":
+        return;
+      default:
+        return;
+    }
+  }
+
+  private routeEvent(data: any): void {
+    if (!data || typeof data !== "object") return;
+    if (typeof data.method === "string" && data.method.startsWith("stream/")) {
+      streamEventHub.route({
+        ...(data.payload || {}),
+        sessionId: data.payload?.sessionId,
+      });
+      return;
+    }
+    this.handleEvent(data as SessionEvent);
+  }
+
+  /** 处理接收到的会话事件（与旧 SSE 版一致：终态入口去重 + 类型分发） */
+  private handleEvent(event: SessionEvent): void {
+    if (event.type === "session_snapshot") {
+      this.settleSnapshot({ ...event.payload, __legacy: true });
+    }
+    if (event.type === "stream_status_changed") {
+      const status = event.payload?.status;
+      const terminalId = event.payload?.terminalId;
+      if (
+        status !== "running" &&
+        typeof terminalId === "string" &&
+        terminalId.length > 0
+      ) {
+        if (this.deliveredTerminalIds.get(event.sessionId) === terminalId) {
           return;
         }
-        this.handleEvent(data as SessionEvent);
-      } catch (error) {
-        console.error("[SessionEvents] 解析事件失败:", error);
+        this.deliveredTerminalIds.set(event.sessionId, terminalId);
       }
-    };
+    }
 
-    source.onerror = (error) => {
-      if (this.eventSource !== source) return;
-      console.error("[SessionEvents] SSE 连接错误:", error);
-      // polyfill 对网络错误会自行退避重连（readyState=CONNECTING）；
-      // 只有 CLOSED（非 200，如 401/403）才需要应用层接管，否则永久失联。
-      if (source.readyState === READY_STATE_CLOSED) {
-        this.notifyFatal();
-        this.scheduleReconnect();
+    const typeListeners = this.listeners.get(event.type);
+    if (typeListeners) {
+      for (const listener of typeListeners) {
+        try {
+          listener(event);
+        } catch (error) {
+          console.error(
+            `[SessionEvents] 监听器执行失败 (${event.type}):`,
+            error,
+          );
+        }
       }
-    };
+    }
+    const allListeners = this.listeners.get("*");
+    if (allListeners) {
+      for (const listener of allListeners) {
+        try {
+          listener(event);
+        } catch (error) {
+          console.error("[SessionEvents] 通配符监听器失败:", error);
+        }
+      }
+    }
   }
 
   private scheduleReconnect(): void {
@@ -280,25 +390,8 @@ export class SessionEventsService {
     );
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      if (!this.active) return;
-      this.reconnect("scheduled retry");
+      this.startConnection();
     }, delay);
-  }
-
-  private notifyFatal(): void {
-    for (const listener of this.fatalListeners) {
-      try {
-        listener();
-      } catch (error) {
-        console.error("[SessionEvents] fatal 监听器失败:", error);
-      }
-    }
-  }
-
-  private isConnectionDown(): boolean {
-    if (!this.eventSource) return true;
-    const state = this.eventSource.readyState;
-    return state === READY_STATE_CLOSED;
   }
 
   private isStale(): boolean {
@@ -318,106 +411,185 @@ export class SessionEventsService {
   }
 
   private removeLifecycleHandlers(): void {
-    if (!this.lifecycleInstalled) return;
     this.lifecycleInstalled = false;
-    if (typeof window !== "undefined") {
-      document.removeEventListener("visibilitychange", this.handleVisibilityChange);
-      window.removeEventListener("online", this.handleOnline);
-      window.removeEventListener("pageshow", this.handlePageShow);
-    }
+    document.removeEventListener("visibilitychange", this.handleVisibilityChange);
+    window.removeEventListener("online", this.handleOnline);
+    window.removeEventListener("pageshow", this.handlePageShow);
     if (this.watchdogTimer) {
       clearInterval(this.watchdogTimer);
       this.watchdogTimer = null;
     }
   }
 
-  /**
-   * 处理接收到的 SSE 事件
-   */
-  private handleEvent(event: SessionEvent): void {
-    // 终态帧入口去重（实时帧 + 重连补发共享同一 terminalId）
-    if (event.type === "stream_status_changed") {
-      const status = event.payload?.status;
-      const terminalId = event.payload?.terminalId;
-      if (
-        status !== "running" &&
-        typeof terminalId === "string" &&
-        terminalId.length > 0
-      ) {
-        if (this.deliveredTerminalIds.get(event.sessionId) === terminalId) {
-          return;
-        }
-        this.deliveredTerminalIds.set(event.sessionId, terminalId);
-      }
-    }
-
-    // 广播给所有注册的监听器
-    const typeListeners = this.listeners.get(event.type);
-    if (typeListeners) {
-      for (const listener of typeListeners) {
-        try {
-          listener(event);
-        } catch (error) {
-          console.error(
-            `[SessionEvents] 监听器执行失败 (${event.type}):`,
-            error,
-          );
-        }
-      }
-    }
-
-    // 同时广播给通配符监听器（监听所有事件）
-    const allListeners = this.listeners.get("*");
-    if (allListeners) {
-      for (const listener of allListeners) {
-        try {
-          listener(event);
-        } catch (error) {
-          console.error("[SessionEvents] 通配符监听器执行失败:", error);
-        }
+  private notifyFatal(): void {
+    for (const listener of this.fatalListeners) {
+      try {
+        listener();
+      } catch (error) {
+        console.error("[SessionEvents] fatal 监听器失败:", error);
       }
     }
   }
 
-  /**
-   * 注册事件监听器
-   * @returns 取消订阅函数
-   */
-  on(eventType: SessionEventType | "*", listener: SessionEventListener): () => void {
-    if (!this.listeners.has(eventType)) {
-      this.listeners.set(eventType, new Set());
-    }
-    this.listeners.get(eventType)!.add(listener);
+  // ── 监听器 ──
 
-    // 返回取消订阅函数
+  on(
+    eventType: SessionEventType | "*",
+    callback: SessionEventListener,
+  ): () => void {
+    if (!this.listeners.has(eventType)) this.listeners.set(eventType, new Set());
+    this.listeners.get(eventType)!.add(callback);
     return () => {
-      const set = this.listeners.get(eventType);
-      if (set) {
-        set.delete(listener);
-        if (set.size === 0) {
-          this.listeners.delete(eventType);
-        }
-      }
+      this.listeners.get(eventType)?.delete(callback);
     };
   }
 
+  onConnected(listener: () => void): () => void {
+    this.connectListeners.add(listener);
+    return () => this.connectListeners.delete(listener);
+  }
+
+  onConnectionFatal(listener: () => void): () => void {
+    this.fatalListeners.add(listener);
+    return () => this.fatalListeners.delete(listener);
+  }
+
+  onWorkspaceEvent(listener: (event: any) => void): () => void {
+    this.workspaceListeners.add(listener);
+    return () => this.workspaceListeners.delete(listener);
+  }
+
+  // ── watch / 快照 ──
+
+  /** 声明关注某会话（内容帧只下发给关注者）；重连后自动重放 */
+  watchSession(sessionId: string): void {
+    if (!sessionId || this.desiredSessions.has(sessionId)) return;
+    this.desiredSessions.add(sessionId);
+    this.send({ kind: "watch", sessionIds: [sessionId] });
+  }
+
+  unwatchSession(sessionId: string): void {
+    if (!this.desiredSessions.delete(sessionId)) return;
+    this.send({ kind: "unwatch", sessionIds: [sessionId] });
+  }
+
+  private replayWatchSet(): void {
+    if (this.desiredSessions.size === 0) return;
+    this.send({ kind: "watch", sessionIds: [...this.desiredSessions] });
+  }
+
+  private send(message: unknown): void {
+    if (!this.isConnected()) return;
+    try {
+      this.ws!.send(JSON.stringify(message));
+    } catch {
+      /* 断线时忽略，重连后由 replayWatchSet 补齐 */
+    }
+  }
+
+  /** workspace 控制面：设置某会话的订阅范围 */
+  setWorkspaceWatch(
+    sessionId: string,
+    scopes: string[],
+    enabled = true,
+  ): void {
+    this.send({ kind: "workspace/watch", sessionId, scopes, enabled });
+  }
+
   /**
-   * 断开连接
+   * 带内历史快照：发送 open，等待 snapshot 帧（超时/被 ack 拒绝则 reject）。
    */
-  disconnect(): void {
-    this.active = false;
-    this.removeLifecycleHandlers();
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+  requestOpen(
+    sessionId: string,
+    options: { requestId: string; turns?: number; beforeSeq?: number },
+    timeoutMs = SNAPSHOT_TIMEOUT_MS,
+  ): Promise<Record<string, any>> {
+    const { requestId } = options;
+    const wait = this.waitForSnapshot(requestId, timeoutMs);
+    try {
+      this.send({
+        kind: "open",
+        requestId,
+        sessionId,
+        turns: options.turns,
+        beforeSeq: options.beforeSeq,
+      });
+    } catch (error) {
+      this.cancelSnapshotWait(requestId);
+      throw error;
     }
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
+    return wait;
+  }
+
+  waitUntilConnected(timeoutMs = 5_000): Promise<void> {
+    if (this.isConnected()) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      let off = (): void => {};
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        off();
+        reject(new Error("SSE_NOT_CONNECTED"));
+      }, timeoutMs);
+      off = this.onConnected(() => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        off();
+        resolve();
+      });
+    });
+  }
+
+  waitForSnapshot<T = Record<string, any>>(
+    requestId: string,
+    timeoutMs = SNAPSHOT_TIMEOUT_MS,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.snapshotWaiters.delete(requestId);
+        reject(new Error("session snapshot timeout"));
+      }, timeoutMs);
+      this.snapshotWaiters.set(requestId, {
+        resolve: resolve as (payload: Record<string, any>) => void,
+        reject,
+        timer,
+      });
+    });
+  }
+
+  cancelSnapshotWait(requestId: string): void {
+    const waiter = this.snapshotWaiters.get(requestId);
+    if (!waiter) return;
+    clearTimeout(waiter.timer);
+    this.snapshotWaiters.delete(requestId);
+  }
+
+  private settleSnapshot(message: any): void {
+    const requestId = message?.requestId ?? message?.payload?.requestId;
+    if (typeof requestId !== "string") return;
+    const waiter = this.snapshotWaiters.get(requestId);
+    if (!waiter) return;
+    this.snapshotWaiters.delete(requestId);
+    clearTimeout(waiter.timer);
+    const payload = message.payload ?? message;
+    const error = payload?.error;
+    if (typeof error === "string" && error.length > 0) {
+      waiter.reject(new Error(error));
+      return;
     }
-    this.lastActivityAt = 0;
-    this.hiddenAt = null;
-    this.deliveredTerminalIds.clear();
-    this.listeners.clear();
+    waiter.resolve(payload);
+  }
+
+  private settleAck(message: any): void {
+    if (message?.ok !== false) return;
+    const requestId = message?.requestId;
+    if (typeof requestId !== "string") return;
+    const waiter = this.snapshotWaiters.get(requestId);
+    if (!waiter) return;
+    this.snapshotWaiters.delete(requestId);
+    clearTimeout(waiter.timer);
+    waiter.reject(new Error(message.reason || "open rejected"));
   }
 }

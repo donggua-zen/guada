@@ -10,6 +10,14 @@ import { SessionService } from "../chat/session.service";
 import { AccountFileStore } from "../auth/account-file.store";
 import { ClientTerminalMessage, ServerTerminalMessage, PtyHandle } from "./types";
 
+function pathnameOf(url: string | undefined): string {
+  try {
+    return new URL(url ?? "", "http://localhost").pathname;
+  } catch {
+    return "";
+  }
+}
+
 interface WsSession {
   ws: WebSocket;
   handle: PtyHandle;
@@ -32,6 +40,11 @@ interface WsSession {
 export class TerminalGateway implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TerminalGateway.name);
   private wss: WebSocketServer | null = null;
+  private upgradeHandler?: (
+    req: IncomingMessage,
+    socket: import("node:stream").Duplex,
+    head: Buffer,
+  ) => void;
   /** WS 连接 → 终端映射 */
   private readonly wsSessions = new Map<WebSocket, WsSession>();
 
@@ -49,8 +62,17 @@ export class TerminalGateway implements OnModuleInit, OnModuleDestroy {
     try {
       const httpServer = this.httpAdapterHost.httpAdapter.getHttpServer();
       const path = "/api/v1/terminal/ws";
-      this.wss = new WebSocketServer({ server: httpServer, path });
+      // noServer + 路径接管：同一 HTTP server 上还有事件网关的 ws 实例，
+      // 带 path 的 ws 会对不匹配的升级请求 abort(400)，两者会互相打 400。
+      this.wss = new WebSocketServer({ noServer: true });
       this.wss.on("connection", (ws, req) => this.handleConnection(ws, req));
+      this.upgradeHandler = (req, socket, head) => {
+        if (pathnameOf(req.url) !== path) return;
+        this.wss?.handleUpgrade(req, socket, head, (ws) => {
+          this.wss?.emit("connection", ws, req);
+        });
+      };
+      httpServer.on("upgrade", this.upgradeHandler);
       this.logger.log(`Terminal WebSocket ready at ${path}`);
     } catch (e: any) {
       this.logger.error(`TerminalGateway init failed: ${e?.message}`);
@@ -58,6 +80,11 @@ export class TerminalGateway implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy(): void {
+    const httpServer = this.httpAdapterHost.httpAdapter?.getHttpServer?.();
+    if (httpServer && this.upgradeHandler) {
+      httpServer.off("upgrade", this.upgradeHandler);
+    }
+    this.upgradeHandler = undefined;
     this.wss?.close();
   }
 

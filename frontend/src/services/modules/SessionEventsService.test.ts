@@ -1,48 +1,53 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * 连接监督器测试：只验证「何时重建连接」，不涉及真实网络。
- * event-source-polyfill 用内存 mock 替代。
+ * WebSocket 版事件客户端：连接/握手/watch 重放/快照等待器/重连监督。
+ * 用内存 MockWebSocket 替代真实网络；时间用 fake timers。
  */
-const hoisted = vi.hoisted(() => ({ instances: [] as any[] }));
+const hoisted = vi.hoisted(() => ({ sockets: [] as any[] }));
 
-vi.mock("event-source-polyfill", () => {
-  class MockEventSource {
-    url: string;
-    options: any;
-    readyState = 0;
-    onopen: (() => void) | null = null;
-    onmessage: ((event: { data: string }) => void) | null = null;
-    onerror: ((error: unknown) => void) | null = null;
-    closed = false;
+class MockWebSocket {
+  static OPEN = 1;
+  static CLOSED = 3;
+  readyState = 0;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onerror: ((error: unknown) => void) | null = null;
+  onclose: ((event: { code: number }) => void) | null = null;
+  sent: any[] = [];
+  closed = false;
 
-    constructor(url: string, options: any) {
-      this.url = url;
-      this.options = options;
-      hoisted.instances.push(this);
-    }
-
-    close() {
-      this.closed = true;
-      this.readyState = 2;
-    }
+  constructor(
+    public url: string,
+    public protocols?: string[],
+  ) {
+    hoisted.sockets.push(this);
   }
-  return { EventSourcePolyfill: MockEventSource };
-});
 
-import { SessionEventsService } from "./SessionEventsService";
+  send(data: string) {
+    this.sent.push(JSON.parse(data));
+  }
 
-const OPEN = 1;
-const CLOSED = 2;
+  close() {
+    this.closed = true;
+    this.readyState = MockWebSocket.CLOSED;
+    this.onclose?.({ code: 1000 });
+  }
 
-function lastSource() {
-  return hoisted.instances[hoisted.instances.length - 1];
-}
+  // 测试驱动
+  open() {
+    this.readyState = MockWebSocket.OPEN;
+    this.onopen?.();
+  }
 
-function openLastSource() {
-  const source = lastSource();
-  source.readyState = OPEN;
-  source.onopen?.();
+  push(message: unknown) {
+    this.onmessage?.({ data: JSON.stringify(message) });
+  }
+
+  ready() {
+    this.open();
+    this.push({ kind: "ready", connectionId: "c1", protocol: "guada.events.v1" });
+  }
 }
 
 let doc: any;
@@ -50,14 +55,14 @@ let win: any;
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
-  hoisted.instances.length = 0;
+  hoisted.sockets.length = 0;
   doc = new EventTarget() as any;
   doc.hidden = false;
   doc.visibilityState = "visible";
   win = new EventTarget();
   vi.stubGlobal("document", doc);
   vi.stubGlobal("window", win);
+  vi.stubGlobal("WebSocket", MockWebSocket);
   vi.stubGlobal("localStorage", { getItem: () => "test-token" });
   vi.stubGlobal("sessionStorage", { getItem: () => null });
 });
@@ -67,196 +72,227 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+import { SessionEventsService } from "./SessionEventsService";
+
+function lastSocket() {
+  return hoisted.sockets[hoisted.sockets.length - 1];
+}
+
 function createService() {
   return new SessionEventsService(() => "http://localhost:3000/api/v1");
 }
 
-function dispatchVisibility(hidden: boolean) {
-  doc.hidden = hidden;
-  doc.visibilityState = hidden ? "hidden" : "visible";
-  doc.dispatchEvent(new Event("visibilitychange"));
-}
-
-describe("SessionEventsService 连接监督", () => {
-  it("初始连接创建一个 EventSource", () => {
+describe("SessionEventsService（WebSocket）连接", () => {
+  it("connect：URL 带 clientId，子协议带 bearer token", () => {
     const service = createService();
     service.connect();
-    expect(hoisted.instances).toHaveLength(1);
-    expect(lastSource().url).toContain("/events/sessions");
+
+    expect(hoisted.sockets).toHaveLength(1);
+    const socket = lastSocket();
+    expect(socket.url).toContain("/api/v1/events/ws");
+    expect(socket.url).toContain("clientId=");
+    expect(socket.protocols).toEqual([
+      "guada.events.v1",
+      "bearer.test-token",
+    ]);
     service.disconnect();
   });
 
-  it("页面隐藏超过 15s 后恢复可见会重建连接", () => {
+  it("收到 ready 才算已连接，并触发 onConnected", () => {
     const service = createService();
+    const connected = vi.fn();
+    service.onConnected(connected);
     service.connect();
-    openLastSource();
 
-    dispatchVisibility(true);
-    vi.advanceTimersByTime(20_000);
-    dispatchVisibility(false);
-
-    expect(hoisted.instances).toHaveLength(2);
+    expect(service.isConnected()).toBe(false);
+    lastSocket().open();
+    expect(service.isConnected()).toBe(false); // 还没 ready
+    lastSocket().push({ kind: "ready" });
+    expect(service.isConnected()).toBe(true);
+    expect(connected).toHaveBeenCalledTimes(1);
     service.disconnect();
   });
 
-  it("短暂切后台（<15s）且连接正常时不重建", () => {
+  it("watch 在 ready 后重放（重连语义）", () => {
     const service = createService();
+    service.watchSession("s1"); // 未连接：只记期望
     service.connect();
-    openLastSource();
+    lastSocket().ready();
 
-    dispatchVisibility(true);
-    vi.advanceTimersByTime(5_000);
-    dispatchVisibility(false);
-
-    expect(hoisted.instances).toHaveLength(1);
+    expect(
+      lastSocket().sent.filter((m: any) => m.kind === "watch"),
+    ).toEqual([{ kind: "watch", sessionIds: ["s1"] }]);
     service.disconnect();
   });
 
-  it("恢复可见时连接已 CLOSED，即使隐藏时间很短也重建", () => {
+  it("stream/* 事件路由到 StreamEventHub；其余按 type 分发", async () => {
+    const { streamEventHub } = await import("./StreamEventHub");
+    const route = vi.spyOn(streamEventHub, "route").mockImplementation(() => {});
     const service = createService();
     service.connect();
-    openLastSource();
-    lastSource().readyState = CLOSED;
+    lastSocket().ready();
 
-    dispatchVisibility(true);
-    vi.advanceTimersByTime(2_000);
-    dispatchVisibility(false);
+    const onUpdated = vi.fn();
+    service.on("session_updated", onUpdated);
+    lastSocket().push({
+      kind: "event",
+      data: {
+        method: "stream/text_delta",
+        payload: { sessionId: "s1", type: "text_delta", text: "a" },
+      },
+    });
+    lastSocket().push({
+      kind: "event",
+      data: { type: "session_updated", sessionId: "s1", payload: {} },
+    });
 
-    expect(hoisted.instances).toHaveLength(2);
+    expect(route).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "s1", text: "a" }),
+    );
+    expect(onUpdated).toHaveBeenCalledTimes(1);
+    route.mockRestore();
     service.disconnect();
   });
 
-  it("网络恢复（online）时连接 CLOSED 会重建", () => {
+  it("终态帧按 terminalId 入口去重", () => {
     const service = createService();
     service.connect();
-    openLastSource();
-    lastSource().readyState = CLOSED;
+    lastSocket().ready();
+    const seen: any[] = [];
+    service.on("stream_status_changed", (e) => seen.push(e));
 
-    win.dispatchEvent(new Event("online"));
-
-    expect(hoisted.instances).toHaveLength(2);
+    const terminal = {
+      kind: "event",
+      data: {
+        type: "stream_status_changed",
+        sessionId: "s1",
+        payload: { status: "completed", terminalId: "tid-1" },
+      },
+    };
+    lastSocket().push(terminal);
+    lastSocket().push(terminal);
+    expect(seen).toHaveLength(1);
     service.disconnect();
   });
 
-  it("watchdog 发现长时间无活动（>150s）会重建", () => {
+  it("连接关闭后按指数退避重连", () => {
     const service = createService();
     service.connect();
-    openLastSource();
+    lastSocket().ready();
+    const first = lastSocket();
 
-    vi.advanceTimersByTime(151_000);
-    // 150s 时正好等于阈值不触发，180s 的巡检触发
-    vi.advanceTimersByTime(30_000);
-
-    expect(hoisted.instances).toHaveLength(2);
-    service.disconnect();
-  });
-
-  it("polyfill CLOSED（如 401）时通知 fatal 并按退避重连", () => {
-    const service = createService();
-    const fatal = vi.fn();
-    service.onConnectionFatal(fatal);
-    service.connect();
-    openLastSource();
-
-    const source = lastSource();
-    source.readyState = CLOSED;
-    source.onerror?.(new Error("401"));
-
-    expect(fatal).toHaveBeenCalledTimes(1);
-    expect(hoisted.instances).toHaveLength(1);
-
-    vi.advanceTimersByTime(2_000);
-    expect(hoisted.instances).toHaveLength(2);
-    service.disconnect();
-  });
-
-  it("disconnect 后不再因可见性变化重建", () => {
-    const service = createService();
-    service.connect();
-    openLastSource();
-    service.disconnect();
-
-    dispatchVisibility(true);
-    vi.advanceTimersByTime(20_000);
-    dispatchVisibility(false);
-
-    expect(hoisted.instances).toHaveLength(1);
-  });
-
-  it("connect 时存在 CONNECTING 的旧连接也会先关闭（避免泄漏）", () => {
-    const service = createService();
-    service.connect();
-    const first = lastSource();
-    expect(first.readyState).toBe(0);
-
-    service.connect();
+    first.close();
     expect(first.closed).toBe(true);
-    expect(hoisted.instances).toHaveLength(2);
+    vi.advanceTimersByTime(2_000);
+    expect(hoisted.sockets.length).toBe(2);
+    service.disconnect();
+  });
+
+  it("页面隐藏超过 15s 后恢复可见 → 重建连接", () => {
+    const service = createService();
+    service.connect();
+    lastSocket().ready();
+
+    doc.hidden = true;
+    doc.visibilityState = "hidden";
+    doc.dispatchEvent(new Event("visibilitychange"));
+    vi.advanceTimersByTime(20_000);
+    doc.hidden = false;
+    doc.visibilityState = "visible";
+    doc.dispatchEvent(new Event("visibilitychange"));
+
+    expect(hoisted.sockets.length).toBe(2);
     service.disconnect();
   });
 });
 
-describe("SessionEventsService 终态帧去重", () => {
-  function push(message: any) {
-    lastSource().onmessage?.({ data: JSON.stringify(message) });
+describe("SessionEventsService（WebSocket）快照等待器", () => {
+  function readyService() {
+    const service = createService();
+    service.connect();
+    lastSocket().ready();
+    return service;
   }
 
-  const terminal = {
-    type: "stream_status_changed",
-    sessionId: "s1",
-    timestamp: "t",
-    payload: { status: "completed", terminalId: "tid-1" },
-  };
-
-  it("同一 terminalId 的补发重放只分发一次；新 terminalId 正常分发", () => {
-    const service = createService();
-    service.connect();
-    openLastSource();
-    const seen: any[] = [];
-    service.on("stream_status_changed", (e) => seen.push(e));
-
-    push(terminal);
-    push({ ...terminal, payload: { ...terminal.payload, replayed: true } });
-    expect(seen).toHaveLength(1);
-
-    push({
-      ...terminal,
-      payload: { status: "completed", terminalId: "tid-2" },
+  it("requestOpen 发送 open；snapshot 帧兑现", async () => {
+    const service = readyService();
+    const wait = service.requestOpen("s1", {
+      requestId: "req-1",
+      turns: 15,
     });
-    expect(seen).toHaveLength(2);
+
+    expect(lastSocket().sent).toContainEqual({
+      kind: "open",
+      requestId: "req-1",
+      sessionId: "s1",
+      turns: 15,
+      beforeSeq: undefined,
+    });
+    lastSocket().push({
+      kind: "snapshot",
+      requestId: "req-1",
+      payload: { requestId: "req-1", sessionId: "s1", endSeq: 3 },
+    });
+    await expect(wait).resolves.toMatchObject({ endSeq: 3 });
     service.disconnect();
   });
 
-  it("running 帧不受去重影响（可重复到达）", () => {
-    const service = createService();
-    service.connect();
-    openLastSource();
-    const seen: any[] = [];
-    service.on("stream_status_changed", (e) => seen.push(e));
-
-    const running = {
-      ...terminal,
-      payload: { status: "running", terminalId: "tid-r" },
-    };
-    push(running);
-    push(running);
-    expect(seen).toHaveLength(2);
+  it("error 载荷 → reject", async () => {
+    const service = readyService();
+    const wait = service.requestOpen("s1", { requestId: "req-1" });
+    lastSocket().push({
+      kind: "snapshot",
+      requestId: "req-1",
+      payload: { requestId: "req-1", error: "disk boom" },
+    });
+    await expect(wait).rejects.toThrow("disk boom");
     service.disconnect();
   });
 
-  it("disconnect 清空去重表：重连后同一 terminalId 会再分发一次", () => {
+  it("ack ok=false → reject", async () => {
+    const service = readyService();
+    const wait = service.requestOpen("s1", { requestId: "req-1" });
+    lastSocket().push({ kind: "ack", requestId: "req-1", ok: false, reason: "bad" });
+    await expect(wait).rejects.toThrow("bad");
+    service.disconnect();
+  });
+
+  it("超时 → reject", async () => {
+    const service = readyService();
+    const wait = service.waitForSnapshot("req-1", 1000);
+    const assertion = expect(wait).rejects.toThrow("timeout");
+    vi.advanceTimersByTime(1000);
+    await assertion;
+    service.disconnect();
+  });
+
+  it("waitUntilConnected：ready 后 resolve", async () => {
     const service = createService();
     service.connect();
-    openLastSource();
-    push(terminal);
+    const wait = service.waitUntilConnected(5000);
+    lastSocket().ready();
+    await expect(wait).resolves.toBeUndefined();
     service.disconnect();
+  });
 
-    service.connect();
-    openLastSource();
-    const seen: any[] = [];
-    service.on("stream_status_changed", (e) => seen.push(e));
-    push(terminal);
-    expect(seen).toHaveLength(1);
+  it("disconnect：拒绝所有等待中的快照", async () => {
+    const service = readyService();
+    const wait = service.waitForSnapshot("req-1", 1000);
+    service.disconnect();
+    await expect(wait).rejects.toThrow("disconnected");
+  });
+
+  it("workspace 事件只分发给 workspace 监听器", () => {
+    const service = readyService();
+    const listener = vi.fn();
+    service.onWorkspaceEvent(listener);
+    lastSocket().push({
+      kind: "workspace",
+      data: { type: "change", sessionId: "s1", path: "a.ts" },
+    });
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "a.ts" }),
+    );
     service.disconnect();
   });
 });

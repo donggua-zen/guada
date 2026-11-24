@@ -436,6 +436,30 @@ export class SessionStreamManager {
   }
 
   /**
+   * 在飞尾部：活跃流 eventBuffer 中"最后一个 checkpoint（finish/turn_end）之后"的帧。
+   *
+   * 供带内 snapshot 使用：事件页只含已落盘内容，正在输出的 delta 只在 buffer 里，
+   * 必须随快照一起下发，客户端 fold 之后才能看到当前回合的已输出部分。
+   *
+   * 找不到 checkpoint（该回合还没结束过 / buffer 已滚动）时返回**整个 buffer**：
+   * 这些帧要么尚未落盘（需要重放），要么已被事件页覆盖（客户端按 `logSeq < endSeq`
+   * 过滤掉）。前端旧的实现此时返回空，会直接放弃在飞内容——这里刻意更完整。
+   *
+   * 返回浅拷贝：调用方可能持有该数组跨越一次异步读页，不能与 publishes 竞争。
+   */
+  getInFlightTail(sessionId: string): StreamEvent[] {
+    const stream = this.activeStreams.get(sessionId);
+    if (!stream || stream.eventBuffer.length === 0) return [];
+    for (let i = stream.eventBuffer.length - 1; i >= 0; i -= 1) {
+      const type = stream.eventBuffer[i].type;
+      if (type === "finish" || type === "turn_end") {
+        return stream.eventBuffer.slice(i + 1);
+      }
+    }
+    return stream.eventBuffer.slice();
+  }
+
+  /**
    * 获取活跃流数量（用于监控）
    */
   getActiveStreamCount(): number {

@@ -120,3 +120,50 @@ describe('SessionStreamManager 最后入库 seq（终态墓碑用）', () => {
     expect(mgr.getLastPersistedSeq('s1')).toBe(5);
   });
 });
+
+describe('SessionStreamManager 在飞尾部（带内 snapshot 用）', () => {
+  let mgr: SessionStreamManager;
+
+  beforeEach(() => {
+    mgr = new SessionStreamManager();
+  });
+
+  it('无活跃流 → 空数组', () => {
+    expect(mgr.getInFlightTail('s1')).toEqual([]);
+  });
+
+  it('只取最后一个 checkpoint 之后的帧', () => {
+    startStream(mgr, 's1');
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'old' } as StreamEvent);
+    mgr.publish('s1', { type: 'finish', messageId: 'm1' } as StreamEvent);
+    mgr.publish('s1', { type: 'turn_start', turnId: 't2' } as StreamEvent);
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm2', text: 'new' } as StreamEvent);
+
+    // finish 本身代表该段落已落盘，不重放
+    expect(mgr.getInFlightTail('s1').map((e) => e.type)).toEqual([
+      'turn_start',
+      'text_delta',
+    ]);
+  });
+
+  it('找不到 checkpoint → 返回整个 buffer（避免放弃在飞内容）', () => {
+    startStream(mgr, 's1');
+    mgr.publish('s1', { type: 'turn_start', turnId: 't1' } as StreamEvent);
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'x' } as StreamEvent);
+
+    expect(mgr.getInFlightTail('s1').map((e) => e.type)).toEqual([
+      'turn_start',
+      'text_delta',
+    ]);
+  });
+
+  it('返回副本：跨异步读页期间不被后续 publish 修改', () => {
+    startStream(mgr, 's1');
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'a' } as StreamEvent);
+
+    const tail = mgr.getInFlightTail('s1');
+    mgr.publish('s1', { type: 'text_delta', messageId: 'm1', text: 'b' } as StreamEvent);
+
+    expect(tail).toHaveLength(1);
+  });
+});

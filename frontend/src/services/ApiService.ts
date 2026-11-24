@@ -30,6 +30,8 @@ import {
   type SessionEvent,
   type SessionEventType,
 } from "./modules/SessionEventsService";
+import type { SessionSnapshotPayload } from "./modules/sessionSnapshot";
+import { generateUuid } from "@/utils/uuid";
 import { createMockMethods, shouldEnableMock } from "./mock/MockApiService";
 
 // 领域 API 模块
@@ -277,10 +279,10 @@ class ApiService {
     );
 
     this.chatStreamService = new ChatStreamService(() => this.baseURL);
-    this.workspaceWatcherService = new WorkspaceWatcherService(
-      () => this.baseURL,
-    );
     this.sessionEventsService = new SessionEventsService(() => this.baseURL);
+    this.workspaceWatcherService = new WorkspaceWatcherService(
+      this.sessionEventsService,
+    );
   }
 
   /**
@@ -414,6 +416,53 @@ class ApiService {
     callback: (event: SessionEvent) => void,
   ): () => void {
     return this.sessionEventsService.on(eventType, callback);
+  }
+
+  /**
+   * 带内打开会话历史：POST 只负责触发，历史快照 + 后续事件从同一条 SSE 返回。
+   *
+   * 消除"读的事件页 vs 并发的 live 帧"的往返竞态——读页期间的帧由服务端
+   * 按连接积压，快照先落地、随后按序排空，客户端不再需要邮箱抑或 stash。
+   *
+   * SSE 是基础设施：未连接时先短暂等待建连，超时/409/读页失败直接抛错，
+   * 调用方保留 loaded=false，由 resync/重开重试（没有 HTTP 降级路径）。
+   */
+  async requestSessionSnapshot(
+    sessionId: string,
+    options: { turns?: number; beforeSeq?: number } = {},
+    timeoutMs = 10_000,
+  ): Promise<SessionSnapshotPayload> {
+    await this.sessionEventsService.waitUntilConnected();
+    if (!this.sessionEventsService.isConnected()) {
+      throw new Error("SSE_NOT_CONNECTED");
+    }
+    const requestId = generateUuid();
+    return (await this.sessionEventsService.requestOpen(sessionId, {
+      requestId,
+      ...options,
+    }, timeoutMs)) as SessionSnapshotPayload;
+  }
+
+  /** 声明关注某会话（内容帧只下发给关注者）；重连后自动重放 */
+  watchSession(sessionId: string): void {
+    this.sessionEventsService.watchSession(sessionId);
+  }
+
+  unwatchSession(sessionId: string): void {
+    this.sessionEventsService.unwatchSession(sessionId);
+  }
+
+  /** workspace 控制面（文件/git 订阅范围） */
+  setWorkspaceWatch(
+    sessionId: string,
+    scopes: string[],
+    enabled = true,
+  ): void {
+    this.sessionEventsService.setWorkspaceWatch(sessionId, scopes, enabled);
+  }
+
+  onWorkspaceEvent(callback: (event: any) => void): () => void {
+    return this.sessionEventsService.onWorkspaceEvent(callback);
   }
 
   /** （重）建连监听（返回取消订阅函数）：用于补拉挂起中的交互卡等 */

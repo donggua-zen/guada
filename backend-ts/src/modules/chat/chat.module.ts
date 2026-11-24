@@ -27,7 +27,7 @@ import { JobNotifierService } from "../jobs/job-notifier.service";
 
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionEventsService } from "./session-events.service";
-import { SessionEventsController } from "./session-events.controller";
+import { WsEventsGateway } from "./ws-events.gateway";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { WorkspaceWatcherService } from "../../common/services/workspace-watcher.service";
 import { ChatRunnerService } from "./chat-runner.service";
@@ -53,7 +53,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Module({
   imports: [AuthModule, ToolsModule, AgentsModule, LlmCoreModule, SkillsModule, SettingsModule, KnowledgeBaseModule, RemoteWorkspaceModule, JobsModule],
-  controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, ProjectGroupController, WorkspaceEventsController, SessionEventsController, SessionQueueController, ClaudeImportController],
+  controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, ProjectGroupController, WorkspaceEventsController, SessionQueueController, ClaudeImportController],
   providers: [
     AgentEngine,
     SessionContextFactory,
@@ -76,6 +76,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
     UploadPathService,
     WorkspaceWatcherService,
     SessionEventsService,
+    WsEventsGateway,
     UserInputQueueService,
     ChatRunnerService,
     JobNotifierService,
