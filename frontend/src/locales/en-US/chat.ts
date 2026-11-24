@@ -487,11 +487,11 @@
   collapseOverview: 'Collapse overview',
   openOverview: 'Open overview',
     // Overview empty state: session not created yet / session exists with nothing to show
-    // (runtime statuses moved out: todo/processes/subagents → composer capsule, workflows → inline tool row)
+    // (runtime & navigation statuses moved out: todo/processes/subagents/browser windows → composer capsule, workflows → inline tool row)
     overviewEmptyNoSession: 'Session not started yet',
-    overviewEmptyNoSessionHint: 'Git tools and browser windows will show up here once the conversation starts',
+    overviewEmptyNoSessionHint: 'Git tools will show up here once the conversation starts',
     overviewEmpty: 'Nothing to overview yet',
-    overviewEmptyHint: 'No Git changes or browser windows in this session',
+    overviewEmptyHint: 'No Git repository detected in this session workspace',
     openInFileManager: 'Open in File Manager',
     openInFinder: 'Open in Finder',
     openInVSCode: 'Open Working Directory in VSCode',

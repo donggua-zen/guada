@@ -1,11 +1,10 @@
 <template>
   <!-- 工作区概览：常驻于聊天内容右侧（占位挤宽），与 WorkspaceSidebar 解耦。
-       数据源：当前会话 agent（由 ChatPage 传入）、GitStore（git 状态/统计/分支/提交弹窗）、
-       browserWebview store。
-       布局：分组标题 + 下属行（当前智能体 / Git 工具 / 浏览器），默认平铺展开。
-       运行时状态区已全部迁出：待办/进程/子代理 → 输入区运行时胶囊（ComposerStatusBar），
+       数据源：当前会话 agent（由 ChatPage 传入）、GitStore（git 状态/统计/分支/提交弹窗）。
+       布局：分组标题 + 下属行（当前智能体 / Git 工具），默认平铺展开。
+       运行时与导航状态已迁出：待办/进程/子代理/浏览器窗口 → 输入区胶囊（ComposerStatusBar），
        工作流进度 → 对话流 workflow_run 工具行原地渲染（WorkflowRunInlineCard）；
-       工作目录 → WorkingDirBar。本面板不再表达任何会话运行状态。 -->
+       工作目录 → WorkingDirBar。本面板只剩静态身份与环境信息，不再表达会话运行状态。 -->
   <aside class="overview-panel">
     <div class="overview-rows">
       <!-- ── 当前智能体：会话绑定即常驻，作为概览区的静态身份信息（不参与运行状态表达） ── -->
@@ -66,22 +65,6 @@
         </button>
       </section>
 
-      <!-- ── 浏览器：有窗口才显示；点击窗口激活（打开工作区预览并切换） ── -->
-      <section v-if="browserWindows.length" class="overview-section">
-        <div class="overview-section-title">{{ t('chat.workspace.browser') }}</div>
-        <div class="overview-browser-list">
-          <button v-for="w in browserWindows" :key="w.windowId" class="overview-browser-tab"
-            @click="activateBrowser(w.windowId)">
-            <span class="overview-browser-favicon">{{ (w.title || '?').slice(0, 1) }}</span>
-            <span class="overview-browser-title">{{ w.title || t('chat.workspace.unnamedWindow') }}</span>
-          </button>
-          <button class="overview-browser-new" @click="createBrowser">
-            <Add16Regular class="w-3.5 h-3.5"  />
-            <span>{{ t('chat.workspace.newTab') }}</span>
-          </button>
-        </div>
-      </section>
-
       <!-- ── 空态 / 加载态：所有分区都无可显示内容时给出明确说明（而非一张空白卡片，
            用户无法分辨「打开了但渲染异常」与「确实没有可概览项」）。
            数据在途时先出加载态，避免空态闪现后被内容替换 ── -->
@@ -103,7 +86,6 @@ import { computed, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   BranchFork16Regular, ArrowUpload16Regular,
-  Add16Regular,
   AppsListDetail20Regular,
   ChevronDown12Regular,
   ArrowSync16Regular,
@@ -114,7 +96,6 @@ import Avatar from "../../ui/Avatar.vue";
 import { useGitStore } from "@/stores/git";
 import { useTabStore } from "@/stores/tab";
 import { useLayoutStore } from "@/stores/layout";
-import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import type { Agent } from "@/types/agent";
 
 const { t } = useI18n();
@@ -127,19 +108,12 @@ const props = defineProps<{
 const git = useGitStore();
 const tabStore = useTabStore();
 const layoutStore = useLayoutStore();
-const browserStore = useBrowserWebviewStore();
-
-// ── 浏览器（声明需在 session watcher 之前：immediate watcher 同步访问） ──
-/** 当前会话的浏览器窗口列表（browserStore 已按会话过滤） */
-const browserWindows = computed(() => browserStore.sessionWebviews);
 
 // ── 空态 / 加载态判定 ──
 // 分区可见性全在模板里以数据存在性 v-if 表达，此处镜像同一组条件（新增/删除分区需同步）。
-// 空态只描述“工作区内容”（Git / 浏览器），不把常驻的智能体卡片算进去：
-// 否则无 Git/浏览器时整块空态消失，用户会误以为概览区只展示角色信息。
-const hasWorkspaceContent = computed<boolean>(
-  () => git.isGitRepo || browserWindows.value.length > 0,
-);
+// 空态只描述“工作区内容”（Git），不把常驻的智能体卡片算进去：
+// 否则无 Git 时整块空态消失，用户会误以为概览区只展示角色信息。
+const hasWorkspaceContent = computed<boolean>(() => git.isGitRepo);
 
 /** git 首帧在途：status 未落地时无工作区分区可显示，但请求在跑（失败后 refreshing 归 false → 不会永久停在加载态） */
 const gitPending = computed<boolean>(() => git.refreshing && !git.status);
@@ -157,10 +131,6 @@ const emptyText = computed<{ title: string; hint: string }>(() =>
     },
 );
 
-// 浏览器 store → tabStore 同步已迁移至 BrowserWebviewLayer（MainLayout 常驻层）：
-// 概览面板是条件渲染（asideWidth>0 才挂载），概览折叠/宽度不足时此处 watch 失效，
-// 会导致浏览器标签不出现；BrowserWebviewLayer 常驻，同步不会断。
-
 // ── 会话绑定：git 数据与事件订阅由 GitStore 管理（bindSession 订阅 git scope），
 //    workspace SSE 连接由 MainLayout 持有 —— 本组件仅展示，不参与连接/订阅生命周期。
 watch(
@@ -175,32 +145,6 @@ function openGit(): void {
   layoutStore.setWorkspaceVisible(true);
   // 显示完全由激活标签驱动：打开 Git 审阅标签
   nextTick(() => tabStore.openGitTab());
-}
-
-function activateBrowser(windowId: string): void {
-  layoutStore.setWorkspaceVisible(true);
-  nextTick(() => {
-    tabStore.selectTab(`browser:${windowId}`);
-  });
-}
-
-async function createBrowser(): Promise<void> {
-  if (!window.electronAPI || !props.sessionId) return;
-  try {
-    const result = await window.electronAPI.createBrowserWindow("about:blank", {
-      sessionId: props.sessionId,
-      createdBy: props.sessionId,
-    });
-    const windowId = result.window?.windowId;
-    if (result.success && windowId) {
-      layoutStore.setWorkspaceVisible(true);
-      nextTick(() => {
-        tabStore.selectTab(`browser:${windowId}`);
-      });
-    }
-  } catch (e) {
-    console.error("Failed to create browser window:", e);
-  }
 }
 </script>
 
@@ -423,66 +367,5 @@ async function createBrowser(): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* 浏览器列表（平铺展开） */
-.overview-browser-list {
-  display: flex;
-  flex-direction: column;
-  padding: 1px 2px 2px 4px;
-  gap: 1px;
-}
-.overview-browser-tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 1px 2px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--gd-color-text-gray);
-  font-size: var(--gd-size-text-base);
-  cursor: pointer;
-  text-align: left;
-}
-.overview-browser-tab:hover {
-  background: var(--gd-color-sidebar-bg-hover);
-  color: var(--gd-color-text);
-}
-.overview-browser-favicon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  background: var(--gd-color-surface-hover);
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--gd-color-text-gray);
-  flex-shrink: 0;
-}
-.overview-browser-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.overview-browser-new {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 2px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--gd-color-text-disabled);
-  font-size: var(--gd-size-text-base);
-  cursor: pointer;
-}
-.overview-browser-new:hover {
-  color: var(--gd-color-text);
-  background: var(--gd-color-sidebar-bg-hover);
 }
 </style>

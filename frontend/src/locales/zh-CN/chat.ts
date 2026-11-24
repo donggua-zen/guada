@@ -487,11 +487,11 @@ export default {
   collapseOverview: '折叠概览',
   openOverview: '打开概览',
     // 概览面板空态：会话尚未建立 / 会话已有但确实没有可概览项
-    // （运行时状态已全部迁出：待办/进程/子代理 → 输入区胶囊，工作流 → 工具行原地渲染）
+    // （运行时与导航状态已全部迁出：待办/进程/子代理/浏览器窗口 → 输入区胶囊，工作流 → 工具行原地渲染）
     overviewEmptyNoSession: '会话尚未开始',
-    overviewEmptyNoSessionHint: '开始对话后，Git 工具与浏览器窗口会显示在这里',
+    overviewEmptyNoSessionHint: '开始对话后，Git 工具会显示在这里',
     overviewEmpty: '暂无可概览内容',
-    overviewEmptyHint: '当前会话没有 Git 变更或浏览器窗口',
+    overviewEmptyHint: '当前会话的工作目录未检测到 Git 仓库',
     openInFileManager: '在文件管理器中打开',
     openInFinder: '在访达中打开',
     openInVSCode: '以 VSCode 打开工作目录',

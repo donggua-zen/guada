@@ -1,6 +1,6 @@
 <template>
-  <!-- 输入区运行时状态胶囊（共享外壳）：单条 28px 药丸内分「目标 / 待办 / 后台进程 / 后台子代理」四段，
-       任一段没有内容就整段不渲染，四段全空整根不渲染；展开后在上方弹出面板按域分段列细节。
+  <!-- 输入区状态胶囊（共享外壳）：单条 28px 药丸内分「目标 / 待办 / 后台进程 / 后台子代理 / 浏览器窗口」五段，
+       任一段没有内容就整段不渲染，五段全空整根不渲染；展开后在上方弹出面板按域分段列细节。
        展开方式按设备分家（见 onCapsuleActivate）：
        - 桌面：hover 即展开（进入 120ms 防误触、离开 80ms 防抖动），移开即收起；
        - 移动端：点击开/关（触屏没有可靠的 hover，悬停展开等于打不开），
@@ -9,8 +9,10 @@
        同一个 16px 图标容器，负边距叠压后小尺寸下糊成一团，且合并计数看不出类型构成。
        数据契约：目标（REST + goal_updated + onConnected 补拉）、待办（REST + todo_updated）、
        后台任务（jobs_snapshot + jobs REST 基线；shell 后台进程与后台子代理已统一为 job 托管，
-       按 kind 拆段展示），各域逻辑见 composables/useGoalStatus.ts、composables/useTodoStatus.ts、
-       composables/useBackgroundJobs.ts。
+       按 kind 拆段展示）、浏览器窗口（browserWebview store，纯 Electron IPC），各域逻辑见
+       composables/useGoalStatus.ts、composables/useTodoStatus.ts、composables/useBackgroundJobs.ts、
+       composables/useBrowserWindows.ts。
+       浏览器段是「导航状态」而非运行任务：有窗口就给入口，点击切到工作区标签；窗口全部关闭后整段消失。
        前台子代理（对话流内阻塞运行的 spawn）不是 job，不进本胶囊——由消息流行内头像动画表达。
        已结束的子代理不在本胶囊表达（运行时状态专属），回放入口见子代理列表面板
        （workspace/SubagentListPanel.vue）。 -->
@@ -72,6 +74,16 @@
           <SubAgentFace :running="subagentFaceAnimating" />
         </span>
         <span class="csb-count" :class="{ 'csb-count--live': subagentStoppingCount === 0 }">{{ subagentJobs.length }}</span>
+      </span>
+
+      <!-- ── 浏览器窗口段：会话里还有打开的窗口时才出现。
+           与后台任务同形（图标 + 计数），但语义是导航而非运行任务：
+           悬停（桌面）/ 点击（移动端）展开面板后切换。 ── -->
+      <span v-if="browserWindows.length" class="csb-seg csb-seg--bg">
+        <span class="csb-icon">
+          <Globe16Regular class="w-4 h-4 csb-icon--muted" />
+        </span>
+        <span class="csb-count">{{ browserWindows.length }}</span>
       </span>
     </div>
 
@@ -196,6 +208,29 @@
               </div>
             </div>
           </section>
+
+          <!-- 浏览器窗口：点击切到工作区对应标签；新建入口仅 Electron 下出现。
+               字母徽标沿袭原概览面板的标题首字母方案，不额外处理图标加载失败。 -->
+          <section v-if="browserWindows.length" class="csb-section">
+            <header class="csb-sec-head">
+              <span class="csb-sec-title">{{ t('chat.workspace.browserWindow') }}</span>
+              <span class="csb-sec-count csb-sec-count--plain">{{ browserWindows.length }}</span>
+              <button v-if="canCreateBrowser" v-tooltip:bottom="tip(t('chat.workspace.newWindow'))"
+                class="csb-sec-btn ml-auto" :aria-label="t('chat.workspace.newWindow')"
+                @click="handleCreateBrowser">
+                <Add16Regular class="w-3.5 h-3.5" />
+              </button>
+            </header>
+            <div class="csb-list">
+              <div v-for="w in browserWindows" :key="w.windowId" v-tooltip:bottom="tip(w.url)"
+                class="csb-row csb-row--clickable" @click="handleActivateBrowser(w.windowId)">
+                <span class="csb-icon">
+                  <span class="csb-browser-badge">{{ (w.title || '?').slice(0, 1) }}</span>
+                </span>
+                <span class="csb-row-text">{{ w.title || t('chat.workspace.unnamedWindow') }}</span>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </Transition>
@@ -205,12 +240,13 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, Pause16Regular, Play16Regular, RecordStop12Regular, Target20Regular } from "@vicons/fluent";
+import { Add16Regular, ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, Globe16Regular, Pause16Regular, Play16Regular, RecordStop12Regular, Target20Regular } from "@vicons/fluent";
 import { ToolTerminalIcon } from "@/components/icons/toolIcons";
 import SubAgentFace from "./message-item/SubAgentFace.vue";
 import { useGoalStatus } from "@/composables/useGoalStatus";
 import { useTodoStatus } from "@/composables/useTodoStatus";
 import { useBackgroundJobs } from "@/composables/useBackgroundJobs";
+import { useBrowserWindows } from "@/composables/useBrowserWindows";
 import { isMobileDevice } from "@/composables/useDevice";
 import { apiService } from "@/services/ApiService";
 import { toast } from "@/components/ui/toastService";
@@ -237,6 +273,12 @@ const { items: todoItems, doneCount: todoDoneCount, currentItem: currentTodo } =
 const { processJobs, subagentJobs, elapsedParts, killJob, openProcessLog } = useBackgroundJobs(
   () => props.sessionId,
 );
+const {
+  windows: browserWindows,
+  canCreate: canCreateBrowser,
+  activate: activateBrowser,
+  create: createBrowser,
+} = useBrowserWindows(() => props.sessionId);
 
 /** 后台任务总数（统一 job 托管：终端进程 + 后台子代理）；胶囊已按 kind 拆两段，这里只供面板/显隐判据用 */
 const backgroundJobCount = computed(
@@ -341,9 +383,13 @@ function clearGoal(): void {
   void mutateGoal(() => apiService.clearSessionGoal(sid, g.revision));
 }
 
-/** 任一段有内容才有胶囊（四段全空 → 整根不渲染，回到底部按钮的 :has() 锚点依赖此行为） */
+/** 任一段有内容才有胶囊（五段全空 → 整根不渲染，回到底部按钮的 :has() 锚点依赖此行为） */
 const hasAny = computed(
-  () => !!goal.value || todoItems.value.length > 0 || backgroundJobCount.value > 0,
+  () =>
+    !!goal.value ||
+    todoItems.value.length > 0 ||
+    backgroundJobCount.value > 0 ||
+    browserWindows.value.length > 0,
 );
 
 // ── 展开态：桌面走 hover，移动端走点击（触屏的 hover 不可靠，悬停展开等于打不开） ──
@@ -463,6 +509,18 @@ function handleOpenSubagentList(): void {
   openSubagentList(props.sessionId);
   closeOnMobile();
 }
+
+/** 浏览器行点击 → 打开工作区并切到对应窗口标签（移动端同时收起面板） */
+function handleActivateBrowser(windowId: string): void {
+  activateBrowser(windowId);
+  closeOnMobile();
+}
+
+/** 新建浏览器窗口（仅 Electron）：移动端点完即收起面板，工作区会直接接管 */
+function handleCreateBrowser(): void {
+  closeOnMobile();
+  void createBrowser();
+}
 </script>
 
 <style scoped>
@@ -559,6 +617,21 @@ function handleOpenSubagentList(): void {
   border-radius: 50%;
   border: 1px solid var(--gd-color-text-disabled);
 }
+/* 浏览器窗口徽标：标题首字母占位（与概览面板同款视觉）。
+   14px 方块放进 16px 图标槽，视觉重量与待办圆点一致；行高取 14px 整数。 */
+.csb-browser-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--gd-color-surface-hover);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+  color: var(--gd-color-text-gray);
+}
 
 .csb-text {
   flex: 1 1 auto;
@@ -642,6 +715,10 @@ function handleOpenSubagentList(): void {
   font-size: 11px;
   font-weight: 600;
   color: var(--gd-color-success);
+}
+/* 浏览器窗口计数是「已打开」而非「运行中」：用中性色，避免绿色被读成 live */
+.csb-sec-count--plain {
+  color: var(--gd-color-text-gray);
 }
 /* 分段标题行右对齐图标按钮（子代理列表入口；.ml-auto 走 tailwind） */
 .csb-sec-btn {
@@ -817,6 +894,13 @@ function handleOpenSubagentList(): void {
   min-width: 0;
   transition: background 0.1s ease;
 }
+/* 浏览器行可点击：hover 底色与后台任务卡片一致 */
+.csb-row--clickable {
+  cursor: pointer;
+}
+.csb-row--clickable:hover {
+  background: var(--gd-color-surface-hover);
+}
 .csb-row-text {
   flex: 1;
   min-width: 0;
@@ -986,6 +1070,13 @@ function handleOpenSubagentList(): void {
   background: transparent;
 }
 .composer-status-bar.is-mobile .csb-task--clickable:active {
+  background: var(--gd-color-surface-hover);
+}
+/* 浏览器行同一套触屏反馈 */
+.composer-status-bar.is-mobile .csb-row--clickable:hover {
+  background: transparent;
+}
+.composer-status-bar.is-mobile .csb-row--clickable:active {
   background: var(--gd-color-surface-hover);
 }
 
