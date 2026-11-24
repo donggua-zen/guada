@@ -209,17 +209,12 @@
             </div>
           </section>
 
-          <!-- 浏览器窗口：点击切到工作区对应标签；新建入口仅 Electron 下出现。
+          <!-- 浏览器窗口：点击切到工作区对应标签。
                字母徽标沿袭原概览面板的标题首字母方案，不额外处理图标加载失败。 -->
           <section v-if="browserWindows.length" class="csb-section">
             <header class="csb-sec-head">
               <span class="csb-sec-title">{{ t('chat.workspace.browserWindow') }}</span>
               <span class="csb-sec-count csb-sec-count--plain">{{ browserWindows.length }}</span>
-              <button v-if="canCreateBrowser" v-tooltip:bottom="tip(t('chat.workspace.newWindow'))"
-                class="csb-sec-btn ml-auto" :aria-label="t('chat.workspace.newWindow')"
-                @click="handleCreateBrowser">
-                <Add16Regular class="w-3.5 h-3.5" />
-              </button>
             </header>
             <div class="csb-list">
               <div v-for="w in browserWindows" :key="w.windowId" v-tooltip:bottom="tip(w.url)"
@@ -240,7 +235,7 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Add16Regular, ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, Globe16Regular, Pause16Regular, Play16Regular, RecordStop12Regular, Target20Regular } from "@vicons/fluent";
+import { ArrowRight16Regular, Bot20Regular, Checkmark16Regular, Dismiss16Regular, Globe16Regular, Pause16Regular, Play16Regular, RecordStop12Regular, Target20Regular } from "@vicons/fluent";
 import { ToolTerminalIcon } from "@/components/icons/toolIcons";
 import SubAgentFace from "./message-item/SubAgentFace.vue";
 import { useGoalStatus } from "@/composables/useGoalStatus";
@@ -275,9 +270,7 @@ const { processJobs, subagentJobs, elapsedParts, killJob, openProcessLog } = use
 );
 const {
   windows: browserWindows,
-  canCreate: canCreateBrowser,
   activate: activateBrowser,
-  create: createBrowser,
 } = useBrowserWindows(() => props.sessionId);
 
 /** 后台任务总数（统一 job 托管：终端进程 + 后台子代理）；胶囊已按 kind 拆两段，这里只供面板/显隐判据用 */
@@ -514,12 +507,6 @@ function handleOpenSubagentList(): void {
 function handleActivateBrowser(windowId: string): void {
   activateBrowser(windowId);
   closeOnMobile();
-}
-
-/** 新建浏览器窗口（仅 Electron）：移动端点完即收起面板，工作区会直接接管 */
-function handleCreateBrowser(): void {
-  closeOnMobile();
-  void createBrowser();
 }
 </script>
 
