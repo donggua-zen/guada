@@ -52,7 +52,7 @@ export interface SkillOrigin {
  * 完整 Skill 定义（内存表示）
  */
 /**
- * 技能资源基（参考 DSH resourceBase）
+ * 技能资源基准目录（resourceBase）
  * 模型以它为基准 + SKILL.md 内的相对路径访问脚本/资源，避免硬编码绝对路径。
  */
 export type SkillResourceBase =

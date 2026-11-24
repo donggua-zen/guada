@@ -1,5 +1,5 @@
 /**
- * 压缩协调器（对齐 deepseek-harness：agent 循环零压缩逻辑，能力插件订阅钩子）
+ * 压缩协调器（agent 循环零压缩逻辑，能力插件订阅钩子）
  *
  * 订阅 agent 钩子：
  * - agent/pre_step：预步骤压力触发（返回 enter.messages=压缩后刷新消息，或 undefined 旁路）
@@ -10,7 +10,7 @@
  * 状态：溢出重试计数（每会话，上限 1 防死循环；压力解除时重置）；
  * 媒体预算重试计数（每会话，上限 3，每次把预算对半砍）。
  * 流内事件（compression_start/error/compaction_summary）经 sessionContext.publishStream 直发
- * （唯一发布面，对齐 DSH session.append 深层直发）；compaction.before 事件由 CompactionService
+ * （唯一发布面，直接写入会话活跃流）；compaction.before 事件由 CompactionService
  * 在确认二级压缩后发射（parallel 等待记忆同步等订阅者完成，payload 携带全量 ISessionContext
  * 供影子轮次使用）——协调器只透传钩子 payload 来源（hook 选项），不感知发射细节。
  */
@@ -118,7 +118,7 @@ export class CompactionCoordinatorService {
    * 预步骤压力触发（agent/pre_step 钩子，副作用管线）
    *
    * 只做副作用（压力压缩原地改写会话存储），返回 void 放行——
-   * agent-engine 在钩子后重读 getMessages() 即得压缩后消息（对齐 DSH：请求消息派生自会话 surface）。
+   * agent-engine 在钩子后重读 getMessages() 即得压缩后消息（请求消息派生自会话 surface）。
    *
    * 顺序：微压缩（本地、便宜）先跑——生效后占用通常降到 LLM 阈值以下，
    * LLM 压缩自然 didRun=false 跳过；微压缩收益不足时 LLM 同一步照常评估。
@@ -306,7 +306,7 @@ export class CompactionCoordinatorService {
       force: true,
       reason: "overflow",
     });
-    // 只有 surface 真被替换才重试原请求（对齐 DSH：压缩失败/无进展时保留原始 provider 错误）
+    // 只有 surface 真被替换才重试原请求（压缩失败/无进展时保留原始 provider 错误）
     if (outcome.replaced) {
       this.overflowRetries.set(sessionId, retries + 1);
       return { kind: "retry" };

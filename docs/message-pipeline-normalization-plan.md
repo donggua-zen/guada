@@ -2,7 +2,7 @@
 
 > 状态：方案评审稿 v1（2026-08-30）
 > 范围：backend-ts 消息流转链路（上下文组装 → 序列化 → adapter）
-> 参照：deepseek-harness（下称 DSH）核心/适配器分层 + 旧版 master（数据库版本）统一转换逻辑
+> 参照：核心/适配器分层 + 旧版 master（数据库版本）统一转换逻辑
 >
 > **后续变更（2026-09）**：附件引用形态与落点已统一（新增 `FileRef.refType`：
 > store / workspace / local，普通文件落会话工作目录、不再预解析内容），
@@ -34,9 +34,6 @@
 | `common/persistence/jsonl-message.service.ts` L341-355 | `loadContext` 忽略 `supportsImageInput`（死参数）；`replayer.ts deriveMessages` 纯投影 |
 | 旧版 `master:.../chat/message.service.ts` | `loadMessages(L516)` → `transformContentStructure(L703)` → `transformImageFile(L868-930)`：支持→base64 data URI；不支持→`[图片ID：x]` 文本 |
 | 旧版 `master:.../chat/persistent-session-context.ts` L220 | `supportsImageInput: inputCapabilities?.includes("image")`（现行同款判断仍在 L181，只是断了下游） |
-| DSH `packages/llm/llm/src/index.ts` L930-936 | `adapterStream`：按 `inputModalities` 在 **dispatch 前**统一调 `projectImagesForTextModel` 投影，所有 provider 共享单条管线 |
-| DSH `packages/llm/llm/src/content.ts` | 唯一共享转换层：`contentHasImage` / `projectImagesForTextModel` / `textOnlyImageText` / offload 预算算法 |
-| DSH 各 adapter | 只做 wire 格式映射 + fail-loud 二次校验；provider 特有细节（reasoning_content、空 content）全部 adapter 私有，核心包零 provider 分支 |
 
 ## 3. 设计决策：base64 转换应该放在哪
 
@@ -81,11 +78,11 @@ L3 adapter（薄）
 1. **层次混淆**base64 是传输形态而非语义形态。Anthropic/Gemini 需要拆开 mime 和 raw base64，OpenAI 需要 data URL——在 L1 产出任何一种"半成品"都会让另一侧 adapter 再拆一遍（现状 anthropic/gemini 里重复的正则拆分就是这么来的）。
 2. **损失可缓存性**L1 的管线结果（含 reasoning 策略、图片投影）可以做会话级缓存；一旦混入大体积 base64 就不可缓存。字节解析留在 L2/L3 边界，配合 `attachmentToPart` 的磁盘缓存（attachment.util.ts 已有 TODO），每个附件每次进程生命周期只读一次盘。
 
-DSH 也是同样的分界：核心管线只做「去留投影」，字节解析（Files API vs base64）留在靠近 adapter 复用核心算法。我们比 DSH 更进一步：把字节解析收敛为**一个**中性助手（因为 GuaDa 五个 adapter 全走 base64，不存在 Files API 分叉），adapter 侧连「读文件」都不再做。
+本项目的分层遵循同一原则：核心管线只做「去留投影」，字节解析（Files API vs base64）留在靠近 adapter 的共享层复用核心算法。更进一步：把字节解析收敛为**一个**中性助手（因为 GuaDa 五个 adapter 全走 base64，不存在 Files API 分叉），adapter 侧连「读文件」都不再做。
 
 ### 3.3 为什么 fail-loud 断言留在 adapter
 
-L1 管线依赖 `modelConfig`，但 adapter 是最终出口，可能被 LLMService 的其他调用方（插件、子代理、bot-gateway 直调）绕过 L1 管线使用。DSH 的做法（`llm-deepseek/adapter.ts:442` 抛 `UNSUPPORTED_CONTENT`）证明：**投影是优化，断言是正确性**。断言放 adapter 保证不变量在任何入口下都成立。
+L1 管线依赖 `modelConfig`，但 adapter 是最终出口，可能被 LLMService 的其他调用方（插件、子代理、bot-gateway 直调）绕过 L1 管线使用。适配器出口抛 `UNSUPPORTED_CONTENT` 的实践说明：**投影是优化，断言是正确性**。断言放 adapter 保证不变量在任何入口下都成立。
 
 ## 4. getMessages 后处理规范化
 
@@ -155,7 +152,7 @@ export class MessageTransformPipeline {
 
 1. 新建 `chat/message-transform.pipeline.ts`（管线骨架 + TransformContext）。
 2. 迁移 reasoning-policy、kimi 兼容两个步骤；`loadVisibleMessages` 改为组装管线调用（行为等价）。
-3. 实现 `image-projection` 步骤：不支持图像时 image 块 → `[图片已省略：当前模型仅支持文本。可用 image_recognize 工具识别，image_id: ${attachmentId}]`（占位文案引导模型主动调工具，衔接已有 image-recognition 插件；比 DSH 的纯占位更进一步）。
+3. 实现 `image-projection` 步骤：不支持图像时 image 块 → `[图片已省略：当前模型仅支持文本。可用 image_recognize 工具识别，image_id: ${attachmentId}]`（占位文案引导模型主动调工具，衔接已有 image-recognition 插件；比纯占位更进一步）。
 4. 每步一个 `spec.ts` 纯函数测试（无需启动 Nest）。
 5. 验收：DeepSeek 纯文本会话带图发消息 → 模型收到占位文本，可调 image_recognize；多模态模型行为不变。
 

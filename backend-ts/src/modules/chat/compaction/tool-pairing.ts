@@ -1,5 +1,5 @@
 /**
- * 压缩边界 tool-pairing 平衡（对齐 deepseek-harness toolPairingBalancedBefore）
+ * 压缩边界 tool-pairing 平衡
  *
  * 消息级：保证压缩边界不会切断未配对的 tool-call/result。
  * - 切点前最后一条消息若是"含 tool-call 但无 tool-result 的 assistant"（其 result 落在切点后），

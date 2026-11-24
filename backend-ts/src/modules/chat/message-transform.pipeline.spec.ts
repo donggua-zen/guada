@@ -255,7 +255,7 @@ describe('reasoning-policy step', () => {
     expect(out[0].content[1]).toMatchObject({ type: 'reasoning', summary: '' });
   });
 
-  it('思考模式：summary 为空时填充空串（对齐 DSH/pi-ai，不用空格）', () => {
+  it('思考模式：summary 为空时填充空串（不用空格）', () => {
     const msgs = [makeMsg('assistant', [reasoning(''), text('hi')])];
     const out = reasoningPolicyStep.apply(msgs, { ...baseCtx, thinkingMode: true });
     expect(out[0].content[0]).toMatchObject({ type: 'reasoning', summary: '' });

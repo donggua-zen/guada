@@ -374,7 +374,7 @@ export class ChatController {
   }
 
   /**
-   * 统一交互应答接口（审批 / 询问共用，对齐 DSH POST /api/respond）
+   * 统一交互应答接口（审批 / 询问共用）
    *
    * 前端回传 ask_requested 帧携带的凭证 requestId（uuid）与答案批。
    * 只做一件事：校验答案与挂起问题单匹配 → InteractionWaitService.resolveAnswers
@@ -405,7 +405,7 @@ export class ChatController {
     }
 
     // 轻校验：答案 id 与挂起问题单逐 id 对应，选中 label 必须是原题选项，
-    // 单选至多一项且与 custom 互斥（对齐 DSH matchesQuestions）
+    // 单选至多一项且与 custom 互斥
     const questions = this.interactionWait.getPendingQuestions(sessionId, requestId);
     if (questions) {
       const byId = new Map(questions.map((q) => [q.id, q]));

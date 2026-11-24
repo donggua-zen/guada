@@ -149,7 +149,7 @@ export const EXEC_TOKEN_ENV = "GUADA_EXEC_TOKEN";
 
 /**
  * PowerShell 5.1 默认按 OEM code page 输出，而日志由 OutputTailer 按 UTF-8 解码。
- * 与 DSH 的 ENCODING_PREAMBLE 对齐：在用户命令前固定 UTF-8 输出编码。
+ * 用户命令前固定 UTF-8 输出编码。
  * 语句放在同一行并用 `; ` 分隔，避免改变用户命令的错误行号。
  */
 const POWERSHELL_UTF8_PREAMBLE =

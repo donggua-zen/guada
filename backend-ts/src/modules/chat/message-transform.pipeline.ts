@@ -14,7 +14,7 @@
  *                          绝对物理路径）的英文占位文本（纯信息占位，不内联 base64、
  *                          不暗示调用工具；模型可凭路径调用 image_recognize）
  *   2. image-path-annotation — 多模态模型：image 块后追加只读绝对路径注解文本块
- *                          （DSH 同款 normalized-copy 文案，模型可用工具二次处理图片）
+ *                          （normalized-copy 文案，模型可用工具二次处理图片）
  *   3. file-path-bridge   — 'workspace' 形态的 file 块引用（会话工作目录相对路径）
  *                          → 绝对路径副本，使 adapter 侧的 fileBlockToText 无需会话上下文；
  *                          存储层仍保留相对引用（工作目录迁移后仍可重新桥接）
@@ -278,7 +278,7 @@ export function isFullReasoningRelayModel(modelName?: string): boolean {
  * - 思考模式（默认）→ 仅最后一轮（turnId === ctx.currentTurnId 的 assistant 消息）
  *   保留/填充，历史轮次剥离。currentTurnId 缺省时全部视为最后一轮（保守回退）。
  *
- * 填充值用空串而非空格（对齐 DSH/pi-ai）：端点要求该字段存在时，pi-ai 对缺失思考
+ * 填充值用空串而非空格：端点要求该字段存在时，对缺失思考
  * 填 `reasoning_content: ""`；空格是非空字符串，会被取思维链哈希的网关当成真实思考
  * 内容参与重建、也可能被模型当作一段（空白）思考。空串语义为"有字段、无思考"。
  *

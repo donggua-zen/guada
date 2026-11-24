@@ -1,9 +1,7 @@
-# Workflow 子代理编排方案（对齐 deepseek-harness）
+# Workflow 子代理编排方案
 
 > 状态：执行机制 v1 已实现；**进度展示已演进到方案 C（见第零节，2026-10-14）**
-> 竞品参照：`D:\AI\work\public\deepseek-harness` 的 `packages/workflow/*` + `packages/subagent/*` + `packages/client/ui-workflow-run`
->
-> 阅读提示：第一节「机制概述」、第二节「架构与数据流」、第五节「安全与继承」、第六节「与 DSH 的差异」
+> 阅读提示：第一节「机制概述」、第二节「架构与数据流」、第五节「安全与继承」
 > 描述的是**执行机制**，仍然有效；第三节「文件清单」与第四节「事件双通道」是 **v1 落地时的历史记录**，
 > 其中进度持久化与前端渲染位置已被后续两次迁移取代（见第零节）。
 
@@ -50,9 +48,9 @@ return { summary, perRepo: results };
 
 - `agent(prompt, opts?)` → RPC 回宿主 → `SubAgentManager.spawnForWorkflow` 创建独立会话子代理（同一个 AgentEngine 完整循环）→ 最终输出文本 resolve 回脚本；失败 resolve `null`（脚本 `.filter(Boolean)` 容错）
 - `parallel(thunks)` / `pipeline(items, ...stages)` 编排并发；`phase(title)` / `log(msg)` 进度叙述；`args` 为工具调用传入的 JSON
-- **fatal 错误纪律**（对齐 DSH）：脚本语法错（SCRIPT_PARSE）、meta 非法（META_INVALID）、钩子参数错（INVALID_ARGUMENT）、超总量（AGENT_CAP）、白名单拒绝（AGENT_START）等致命错误杀死整个 run 并以错误码报告；普通子代理失败仅该项为 null
+- **fatal 错误纪律**：脚本语法错（SCRIPT_PARSE）、meta 非法（META_INVALID）、钩子参数错（INVALID_ARGUMENT）、超总量（AGENT_CAP）、白名单拒绝（AGENT_START）等致命错误杀死整个 run 并以错误码报告；普通子代理失败仅该项为 null
 - 前台阻塞执行：工具调用等待整个 run 结束，`return` 值（截断 30000 字符）即工具结果；期间父模型零 LLM 参与
-- 无暂停/恢复/检查点（对齐 DSH deferred 项）；取消 = abort → 通知 worker + 中止全部在途子代理 → 5s 宽限 → `worker.terminate()` 强杀
+- 无暂停/恢复/检查点（后续可选项）；取消 = abort → 通知 worker + 中止全部在途子代理 → 5s 宽限 → `worker.terminate()` 强杀
 
 ## 二、架构与数据流
 
@@ -82,7 +80,7 @@ WorkflowEngineService.startRun (宿主)
 
 **序列化边界**：worker_threads postMessage 的 structured clone 天然拒绝函数/循环引用/BigInt——
 钩子入参显式校验（INVALID_ARGUMENT），return 值由 clone 把关（DataCloneError → RESULT_UNSERIALIZABLE），
-等价 DSH realm 物化（materializeFromRealm）。
+等价于把脚本返回值物化为可跨线程传递的宿主对象。
 
 ## 三、文件清单
 
@@ -147,22 +145,9 @@ WorkflowEngineService.startRun (宿主)
 - 子代理 `sessionType="sub_agent"` → workflow/subagent 工具包 activator 返回 none，**天然禁递归**
 - 沙盒模式/思考强度/attachments 从父会话继承（防权限逃逸）；角色模式沿用 agents 白名单（`settings.agents` 显式 true），非法 agentId → fatal AGENT_START 响亮失败
 - 脚本沙箱：无 require/fs/网络；worker 资源限额 512MB；死循环由用户停止（abort → 5s 宽限 terminate）收敛，不阻塞后端主进程
-- 子代理审批走现有统一 Ask 链路（v1 不像 DSH 钉死 never）
+- 子代理审批走现有统一 Ask 链路（v1 不走 never 策略）
 
-## 六、与 DSH 的有意差异（v1）
-
-| 项 | DSH | 本项目 v1 |
-|---|---|---|
-| 结构化输出 outputSchema | 支持 | 不做，agent() 返回文本 |
-| 多 provider（ACP/Codex/外部 CLI） | 支持 | 仅进程内 spawn（= 现有 SubAgentManager） |
-| 暂停/恢复/检查点/后台模式 | 无 | 无（前台阻塞，已确认取舍） |
-| 卡片内容边界 | 只显示身份+状态 | member 行可展开 200 字输出摘要 |
-| realm 物化 | 手写深拷贝 | postMessage structured clone 等价 |
-| 执行环境 | worker thread + vm | 相同（bootstrap 内联 eval，免构建管线改动） |
-| 并发默认值 | min(16, cores-2) | min(8, max(2, cores-1))，settings 可调 |
-| 模型面注入 | 工具常驻工具表 + 极简策略段（~720 tokens/轮常驻） | **懒加载工具包**：目录行 ~70 tokens/轮常驻，API 规格（工具描述即唯一规格）+ 使用指南在 skill_learn 时一次性下发（~720 tokens 一次），经 tool_use 包装调用 |
-
-## 七、测试
+## 六、测试
 
 - `backend-ts/test/workflow/`（`workflow-engine.spec.ts` / `workflow-file-store.spec.ts` / `workflow.controller.spec.ts`，36 用例）：同步校验、正常运行、上限与安全、取消配对、快照归档、REST 端点合并、工具调用关联键、终态收口（漏发的 run-end 由 settle 补发且只一条）
 - `frontend/src/services/modules/workflowRuns.test.ts`：reducer 幂等与累积（含 `run-start` 关联键 `toolCallId` 落进状态、旧归档无关联键）
@@ -170,13 +155,13 @@ WorkflowEngineService.startRun (宿主)
 - `frontend/src/utils/toolDisplay.test.ts`：独立成块判定（`ExitPlanMode` / `subagent_spawn` / `workflow_run`）
 - 回归：`test/chat`、`test/plugins`、`test/common` 等后端套件；前端 `pnpm --dir frontend test`（vitest）+ `typecheck` + `lint`
 
-## 八、已知边界（后续可扩展）
+## 七、已知边界（后续可扩展）
 
 - agent() 无超时（受用户停止约束）；如需单 agent 超时可在 opts 加 timeoutMs
-- 后台模式：现有信箱基建（enqueueMessage + system_reminder）可支撑"超时转后台"或显式后台参数（DSH 亦为 deferred 项）
+- 后台模式：现有信箱基建（enqueueMessage + system_reminder）可支撑"超时转后台"或显式后台参数（亦为后续可选项）
 - outputSchema 结构化输出、跨 run 持久化工作流模板（workflow 复用/分享）
 
-## 九、用户入口：`/workflow` 斜杠命令
+## 八、用户入口：`/workflow` 斜杠命令
 
 工作流原先只有模型侧 `workflow_run` 工具，界面没有任何启动入口；`workflow` 工具包的
 activator 又要求"用户显式要求"才可使用，导致用户不知道如何触发。现在由

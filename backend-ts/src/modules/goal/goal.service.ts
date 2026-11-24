@@ -2,7 +2,7 @@
  * 会话目标服务 — 状态的唯一写入口。
  *
  * 事实源是 JSONL 事件日志（`goal/change`），本服务不持有状态副本；
- * 唯一的进程内状态是 `armed`（激活态，重启即失效，须显式 resume，对齐 DSH）。
+ * 唯一的进程内状态是 `armed`（激活态，重启即失效，须显式 resume）。
  *
  * 所有写操作经 `IMessageStore.appendGoalChange` 的 CAS 门：在 runExclusive 临界区内
  * 完成「读折叠态 → 校验期望版本 → 预检状态迁移 → 追加 → 增量 fold」。
@@ -33,7 +33,7 @@ export class GoalService {
   private readonly logger = new Logger(GoalService.name);
   /**
    * 进程内激活态：只有显式 set/resume 才 arm；进程重启后自动清空。
-   * 与 DSH 的 GoalActivation 同义——恢复/fork/重启后目标存在但不会自己跑起来。
+   * 激活态语义——恢复/fork/重启后目标存在但不会自己跑起来。
    */
   private readonly armedSessions = new Set<string>();
 

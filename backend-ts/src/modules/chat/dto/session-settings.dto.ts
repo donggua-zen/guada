@@ -43,7 +43,7 @@ export class SessionSettingsDto {
 
   @IsOptional()
   @IsIn(["read-only", "workspace-write", "danger-full-access"])
-  sandboxMode?: string; // 三档安全模式（对齐 DSH SandboxMode）
+  sandboxMode?: string; // 三档安全模式
 
   @IsOptional()
   @IsBoolean()

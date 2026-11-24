@@ -1,11 +1,11 @@
 /**
  * Host ↔ Worker 消息协议（worker_threads postMessage）
  *
- * 类型化封闭双向 union（对齐 DSH worker protocol 的精简版）：
+ * 类型化封闭双向 union：
  * - 每次 workflow run 新建一个 Worker（workerData 携带 script/args），
  *   Worker ready 后等待宿主 'go' 才执行——取消可以竞速到启动之前
  * - 所有跨线程消息经 structured clone：函数/循环引用/BigInt 等直接抛
- *   DataCloneError，即 DSH realm 物化（materializeFromRealm）的等价物
+ *   DataCloneError，即跨 realm 物化（materializeFromRealm）失败
  */
 
 import type { AgentCallOptions, WorkflowErrorCode } from "../workflow.types";

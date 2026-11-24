@@ -264,7 +264,7 @@ export interface CompactionSummaryEvent {
  * 与审计事件 ask/asked 的区别：这是流内 UI 信号（eventBuffer 可重放 + SSE 直投），
  * ask/asked 是落日志的持久化审计（JSONL）。
  * 无超时：等待只有三种终结——用户应答、用户停止（abort）、重启丢表（404）。
- * 对齐 DSH：sessionId 是唯一会话锚点，无回合/消息锚点。
+ * sessionId 是唯一会话锚点，无回合/消息锚点。
  * （类型本体定义于 common/types/ask.types.ts，此处并入流事件联合。）
  */
 export type { AskRequestedEvent, AskResolvedEvent } from "../../../common/types/ask.types";

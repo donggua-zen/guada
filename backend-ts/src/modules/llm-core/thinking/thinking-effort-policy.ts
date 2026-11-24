@@ -5,7 +5,7 @@
  * - `ModelCapabilityService`（请求前校验，抛错）
  * - `JsonlSessionContext`（决定是否回传 reasoning 的 thinkingMode）
  *
- * 语义（对齐 DSH：不支持的显式选择一律报错，不做 alias；仅"存量设置与当前模型
+ * 语义（不支持的显式选择一律报错，不做 alias；仅"存量设置与当前模型
  * 不匹配"这种非用户当下的选择才静默调整）：
  * - `undefined` 请求 / 能力未知（菜单 undefined）→ 原样透传
  * - 菜单无非 off 档（不能思考）却请求非 none → `unsupported`（调用方决定抛错）

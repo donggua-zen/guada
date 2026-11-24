@@ -186,7 +186,7 @@ MessageContent（message_content 表）
 └── ai_chat.db                  // 元数据/配置（原数据库瘦身）
 ```
 
-**文件引用**（内嵌 JSONL 事件，参考 dsh）：
+**文件引用**（内嵌 JSONL 事件）：
 ```json
 "files": [{
   "fileId": "f_abc123",
@@ -200,7 +200,7 @@ MessageContent（message_content 表）
   "contentHash": "hash_xyz"
 }]
 ```
-- **不存 base64**（膨胀 33%、无法去重）——dsh 明确禁止
+- **不存 base64**（膨胀 33%、无法去重）
 - 物理文件在磁盘，消息存相对路径 + 完整元数据
 - 未来可升级内容寻址（contentHash 定位，天然去重）
 

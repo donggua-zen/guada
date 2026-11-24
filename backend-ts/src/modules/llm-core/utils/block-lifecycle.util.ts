@@ -1,7 +1,7 @@
 /**
  * StreamBlockTracker —— 无原生块边界协议的块生命周期合成器
  *
- * 参考 deepseek-harness 的 translate 模式：OpenAI / Gemini 等 wire 流没有
+ * translate 模式：OpenAI / Gemini 等 wire 流没有
  * block start/end 边界事件，由本跟踪器负责：
  * - 首个增量到达前自动合成 block_start
  * - 按"通道首见顺序"分配输出 index（text:{itemId} / reasoning / tool:{wireIndex} 各一条通道）

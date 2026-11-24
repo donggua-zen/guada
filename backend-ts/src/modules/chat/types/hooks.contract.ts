@@ -1,22 +1,22 @@
 /**
- * 全局钩子契约（对齐 deepseek-harness runtime-types.ts 扩展点清单）
+ * 全局钩子契约
  *
  * 项目所有"钩子"（生命周期拦截扩展点）统一登记于此：
  * - 事件名：单一常量来源（领域事件不再散落字符串字面量）
  * - 载荷/决策：每事件配类型化 payload 与返回 Decision 联合
  * - 调度模式：serial（全部执行，返回 undefined 放行）/ parallel（并发等全部）/ emit（fire-and-forget）
  *
- * 注册方式统一：@OnEvent 装饰器订阅（对齐 DSH ctx.on）；
- * 发射方式统一：EventBusService（emit / parallel / serial，对齐 DSH dispatch modes）。
+ * 注册方式统一：@OnEvent 装饰器订阅；
+ * 发射方式统一：EventBusService（emit / parallel / serial）。
  *
- * 决策语义（对齐 DSH 类型化 Decision）：
+ * 决策语义（类型化 Decision）：
  * - serial 钩子：订阅者做副作用后返回 undefined 放行（全部依次执行）；返回"非 undefined"即接管（短路）
  * - parallel 钩子：收集全部订阅者返回值的并集（任一决定即生效）
  * - emit 钩子：只通知，不可阻断
  *
- * 副作用管线（对齐 DSH）：PRE_STEP 订阅者（压缩等）直接改写会话存储（store 写即更新），
+ * 副作用管线：PRE_STEP 订阅者（压缩等）直接改写会话存储（store 写即更新），
  * 返回 undefined 放行；agent-engine 在钩子后重读 getMessages() 派生请求消息。
- * 流内事件发布：订阅者经 sessionContext.publishStream 直发（对齐 DSH session.append 深层直发），
+ * 流内事件发布：订阅者经 sessionContext.publishStream 直发，
  * 无回调注入、无缓冲中转。
  */
 import type { ISessionContext } from '../session-context';
@@ -103,7 +103,7 @@ export interface TurnStoppingPayload {
 
 /**
  * 回合关闭前续跑决策：订阅者返回 { kind: 'continue', messages } 时，
- * 消息作为 hidden user 注入并触发新一轮 LLM 调用（对齐 DSH agent/turn-stopping + steer）。
+ * 消息作为 hidden user 注入并触发新一轮 LLM 调用。
  * undefined = 不续跑，回合正常关闭。
  */
 export type TurnStoppingDecision =

@@ -5,7 +5,7 @@
  * - 审批是 ask 的特例：requestApproval = 预置单问题（同意/拒绝/自定义）+ 答案解释器
  * - 无超时：交互只有三种终结——用户应答、用户停止（abort）、重启丢表（404，不做兜底）
  * - 自定义回复 = 拒绝 + 反馈模型：文本以 isError tool-result 反馈给模型
- * - 类型对齐 DSH packages/interaction/user-questions/src/types.ts
+ * - 问答类型覆盖完整交互形态
  *   （AskUserQuestionItem/AnswerItem：多问题、选项列表、multiSelect、custom 自由文本）
  */
 
@@ -156,7 +156,7 @@ export interface AskSession {
     cancelled?: boolean;
   }): Promise<void>;
   /**
-   * 流事件直发（唯一发布面，对齐 DSH session.append 深层直发）：
+   * 流事件直发（唯一发布面，直接写入会话活跃流）：
    * 请求/终结帧经此进入会话活跃流（eventBuffer 可重放 + SSE 直投）。
    */
   publishStream(chunk: AskRequestedEvent | AskResolvedEvent): Promise<void>;

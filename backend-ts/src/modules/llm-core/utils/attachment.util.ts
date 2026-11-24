@@ -182,8 +182,8 @@ export function resolveRefPhysicalPath(
 }
 
 /**
- * 请求时桥接：把持久层的存储引用翻译为模型工具可读的物理路径（DSH 同款架构，见
- * DSH ADR 2026-08-21-model-readable-image-paths：引用不当路径用，路径现算现给）。
+ * 请求时桥接：把持久层的存储引用翻译为模型工具可读的物理路径
+ * （引用不当路径用，路径现算现给）。
  *
  * - 'store' 相对存储引用（uploads/images/xxx.png）→ UPLOAD_ROOT_DIR 下的绝对物理路径
  * - 'workspace' 相对引用 → <workspaceDir>/<相对路径>

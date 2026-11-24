@@ -12,7 +12,7 @@ export type SkillRegistryEvent =
   | { type: 'enabled'; skillId: string; enabled: boolean }
   | { type: 'disabled'; skillId: string; enabled: boolean };
 
-/** 技能提供方（注册式技能源，参考 DSH ctx.skills.registerProvider 简化版） */
+/** 技能提供方（注册式技能源） */
 export interface SkillProvider {
   name: string;
   /** 返回该提供方提供的技能（可含内嵌 content） */

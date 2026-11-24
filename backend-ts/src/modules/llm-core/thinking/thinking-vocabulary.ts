@@ -1,7 +1,7 @@
 /**
  * 思考档位中立词表
  *
- * 规范档位 8 档，结构对齐 pi-ai 的 ModelThinkingLevel（DSH 词表），
+ * 规范档位 8 档，结构对齐 pi-ai 的 ModelThinkingLevel 词表，
  * 禁用档保留本项目历史拼写 `none`（pi-ai 为 `off`，YAML 加载时归一）。
  *
  * `on`（"思考模式"）是正典档位：表达"纯开关承载"的思考——开启但不指定
@@ -26,7 +26,7 @@ export type ThinkingEffort =
 export type AnyThinkingEffort = ThinkingEffort;
 
 /**
- * 漂移门控（对齐 DSH THINKING_LEVEL_GATE 模式）：
+ * 漂移门控：
  * 词表增删时此处编译报错，强制同步顺序表与派生类型。
  */
 const THINKING_EFFORT_GATE: Record<ThinkingEffort, true> = {
@@ -69,7 +69,7 @@ export function normalizeThinkingEffort(
  */
 
 /**
- * thinkingFormat：开关字段的 wire 拼法（逐字对齐 DSH/pi-ai 的
+ * thinkingFormat：开关字段的 wire 拼法（即
  * `compat.thinkingFormat`，行为见 openai.adapter 的分派表）。
  *
  * 只编码「关闭/开启写到哪个字段」；强度值一律走 reasoning_effort（是否上
@@ -89,7 +89,7 @@ export type ThinkingFormat =
   | 'qwen-chat-template' // chat_template_kwargs:{enable_thinking, preserve_thinking}
   | 'chat-template'; // chat_template_kwargs: <声明值>
 
-/** 漂移门控（对齐 DSH THINKING_FORMAT_GATE）：词汇增删在此编译报错 */
+/** 漂移门控：词汇增删在此编译报错 */
 const THINKING_FORMAT_GATE: Record<ThinkingFormat, true> = {
   openai: true,
   deepseek: true,
@@ -131,7 +131,7 @@ export function normalizeThinkingFormat(
 }
 
 /**
- * format 级的 supportsReasoningEffort 默认（对齐 DSH detectCompat 的厂商默认：
+ * format 级的 supportsReasoningEffort 默认（厂商默认：
  * grok/zai/moonshot/together/cloudflare/nvidia/ant-ling 不发强度值）。
  * 我们按 format 归类：纯开关型与"未知厂家"归 false，其余 true；实例/模型可覆盖。
  */
@@ -155,7 +155,7 @@ export function defaultSupportsReasoningEffort(format: ThinkingFormat): boolean 
 }
 
 /**
- * wire 兼容开关（对齐 DSH `compat` 块；provider 级与模型条目级均可声明，
+ * wire 兼容开关（即 `compat` 块；provider 级与模型条目级均可声明，
  * 模型条目 > 实例 provider > 类型卡）。只收思考域开关，非思考 compat
  * （maxTokensField/supportsStore 等）不在此列。
  */
@@ -166,7 +166,7 @@ export interface ThinkingCompatConfig {
   supportsReasoningEffort?: boolean;
   /**
    * 助手消息必须携带 reasoning_content（缺则补空串）。
-   * 对齐 DSH 的 requiresReasoningContentOnAssistantMessages（DeepSeek 系跨轮回传）。
+   * requiresReasoningContentOnAssistantMessages 的语义（DeepSeek 系跨轮回传）。
    */
   requiresReasoningContentOnAssistantMessages?: boolean;
   /** baseten 的 chat_template_args（原样写入请求体） */
@@ -175,7 +175,7 @@ export interface ThinkingCompatConfig {
   chatTemplateKwargs?: Record<string, unknown>;
   /**
    * Responses 协议是否请求 `include: ['reasoning.encrypted_content']`
-   * （对齐 DSH 的无条件 include；默认关，OpenAI 官方系开启，第三方
+   * （无条件 include；默认关，OpenAI 官方系开启，第三方
    * responses 端点可能不认该字段）。
    */
   includeEncryptedReasoning?: boolean;
@@ -274,7 +274,7 @@ export function mergeThinkingCompat(
 export type ModelThinkingDeclaration = boolean | AnyThinkingEffort[];
 
 /**
- * 档位 → wire 值映射（对齐 DSH thinkingLevelMap）
+ * 档位 → wire 值映射（thinkingLevelMap）
  *
  * 前端菜单只显示中立档位，本表决定实际发给网关的字符串：
  * - 值 = 非空字符串：该档可选，wire 写该字符串（改名/钳制）

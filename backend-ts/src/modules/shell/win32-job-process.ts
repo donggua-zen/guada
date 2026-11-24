@@ -1,7 +1,7 @@
 /**
  * Windows Job Object + suspended CreateProcessW primitives.
  *
- * Why this exists (aligned with DSH `packages/subprocess/win32-process`):
+ * Why this exists:
  * - Create the child with `CREATE_SUSPENDED`, assign it to a kill-on-close Job,
  *   then resume. This closes the race where a shell spawns descendants before
  *   the parent gets a chance to attach it to the Job.
@@ -83,10 +83,9 @@ export class Win32JobError extends Error {
 // ── Pure helpers (exported for tests) ────────────────────────────────────────
 
 /**
- * Quote one argument according to CommandLineToArgvW parsing (the same
- * algorithm used by DSH). This is correct for Git Bash / PowerShell argv
- * handoff; cmd.exe has its own `/s /c` rules and should stay on the legacy
- * spawn path.
+ * Quote one argument according to CommandLineToArgvW parsing. This is
+ * correct for Git Bash / PowerShell argv handoff; cmd.exe has its own
+ * `/s /c` rules and should stay on the legacy spawn path.
  */
 export function quoteArg(argument: string): string {
   if (argument === "") return '""';

@@ -267,7 +267,7 @@ export class ShellPlugin extends PluginBase {
           },
         );
 
-        // 标记契约（对齐 DSH）：stdout 裸文本 + 行级 [...] 标记；
+        // 标记契约：stdout 裸文本 + 行级 [...] 标记；
         // [exit code: N, uptime: X] 恒为末行且恒输出（uptime 供模型判断命令耗时），
         // 前端解析器按末行锚定剥离元数据（见 frontend utils/terminalOutput.ts）。
         const truncatedNote =

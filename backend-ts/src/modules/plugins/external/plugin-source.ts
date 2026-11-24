@@ -1,7 +1,7 @@
 /**
  * 插件分发源（source）解析层
  *
- * 支持的分发协议（参考 DSH 的 pnpm 风格，但适配 GuaDa 的"目录插件"形态）：
+ * 支持的分发协议（pnpm 风格，适配本项目的"目录插件"形态）：
  *   github:owner/repo[#ref]        -> https://github.com/owner/repo.git
  *   gitee:owner/repo[#ref]         -> https://gitee.com/owner/repo.git
  *   git:https://host/path.git[#ref]-> 任意 git 仓库

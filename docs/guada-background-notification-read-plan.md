@@ -3,7 +3,7 @@
 - 日期：2026-10-23
 - 仓库：`D:\AI\ai_chat`（分支 `local-dev`）
 - 当前阶段：**通知 + 读取能力**
-- 状态：**Phase A/B/C 已执行（2026-10-23）**；全量测试 3237 passed / 1 known scheduler flake；见第 10 节执行记录。
+- 状态：**Phase A/B/C 已执行（2026-10-23）**；全量测试 3237 passed / 1 known scheduler flake；见第 9 节执行记录。
 - 本文用途：上下文压缩后恢复进度，避免重新分析、避免重复已完成改造。
 
 ---
@@ -11,10 +11,9 @@
 ## 0. 压缩后如何继续
 
 1. 先读第 1 节「已完成改造」，确认不要重做。
-2. 再读第 2 节「DSH 对比结论」，这是后续决策依据。
-3. 当前要执行的是第 3 节「当前阶段计划」；按 Phase A/B/C 做。
-4. 第 4 节是已定决策；第 5 节是测试与验证命令；第 6 节是风险；第 7 节是后续路线。
-5. 不要重新做 DSH 全量勘察；关键结论已收敛在第 2 节。
+2. 当前要执行的是第 2 节「当前阶段计划」；按 Phase A/B/C 做。
+3. 第 3 节是已定决策；第 4 节是测试与验证命令；第 5 节是风险；第 6 节是后续路线。
+4. 前期调研结论已并入本文，无需重新做全量勘察。
 
 ---
 
@@ -85,111 +84,7 @@
 
 ---
 
-## 2. DSH 对比结论（后续决策依据）
-
-### 2.1 DSH 的分层
-
-| 层 | 作用 |
-|---|---|
-| 一次性 shell（`bash-local` / `pwsh-local`） | 每条命令一个新进程；前台 `run()`，后台 `start()` |
-| 持久 shell（`tool-bash-persistent` / `tool-pwsh-persistent`） | 每个 agent 一个 PTY；只有 `command`；无 `run_in_background` |
-| Terminal 工具 | open/send/read/signal/close/list；`terminal_send(run_in_background)` → `pty-send` job |
-| `ctx.jobs` | 通用后台任务注册表：bash/pwsh/pty-send/subagent 共用 |
-| `subprocess-local` | OS 进程与输出管道 |
-
-**一个宿主只挂一套 shell**：Windows = PowerShell，POSIX = bash。没有 cmd 执行器。
-
-### 2.2 DSH 后台进程
-
-- `run_in_background: true` → `ctx.jobs.start({kind,label,owner,run,cancel,done,readOutput})` → 返回 `{kind:'background', jobId}`（**不是 PID**）。
-- 注册表在 `jobs-local` 内存：`Map<JobId, TrackedTask>`；状态 `running|stopping|completed|killed|failed`；无队列；每 owner 最多 10 个并发；first-wins settlement；owner 销毁时 cancel + await。
-- 后台进程无 executor timeout；`job_output(wait)` 只有观察超时。
-- 后台进程由 `subprocess-local` 持有，executor 重载不杀；composition teardown 整树终止；host exit 同步强杀。
-- 持久 shell **不接 jobs**：`sleep 10 &` / `Start-Job` 不返回 jobId、不通知、输出只在 PTY scrollback。
-
-### 2.3 DSH 读取
-
-- 模型侧：`job_output(job_id, wait?, timeout_ms?)`
-  - 默认非阻塞；
-  - `wait: true` 最多 30s（默认）/10min（上限），超时返回 `[status: running]`，不杀 job；
-  - stream job 返回自上次读取的增量（单消费游标）；
-  - final-output job 结算后幂等返回；
-  - 每条响应末尾 `[status: ...]`；
-  - 空增量 `(no new output)`。
-- 配套：`job_list()`、`job_kill(job_id, reason?)`。
-- 系统提示：完成会推送，不要 busy-poll。
-
-### 2.4 DSH 通知
-
-```text
-producer done
-  → LocalJobRegistry.settle()
-  → onJobDone listeners
-  → tool-jobs createUserMessage({
-       text: "background job <id> (<kind>: <label>) finished [status: ...]. Read its output with job_output.",
-       source: { kind:'plugin', plugin:'tool-jobs', form:'notice', summary }
-     })
-  → owner.inject(message) 或 owner.followup(message)
-  → Agent inbox (next-step / next-turn)
-  → 下一次 pre-step claim 成 user/message
-```
-
-- **user-role notice，不是 system message**；`source.form='notice'` 只给 UI/策略。
-- busy → `inject` 到 next-step，不唤醒，延长当前 turn；
-- idle → `followup` 唤醒新 turn；
-- wake 预算默认 3 次，用完退化为 inject，用户真实输入才重置；
-- `reported` 抑制：kill/read/wait/teardown 都标记 reported；
-- 无 debounce/合并；合并只发生在 next-step claim 边界；
-- 取消中的 turn：inject 不唤醒（不重开用户刚停止的 turn）；
-- 已知竞态：settlement 在 turn loop 最后检查与 driver 提交 idle 之间，误判 busy，通知等下一次用户输入。
-- Stop **不杀后台 job**；`job_kill` 才取消；owner dispose/composition teardown 才 kill。
-- UI：`onJobsChanged` → `{type:'jobs', sessionId, jobs}` 快照流；只读，不读输出。
-
-### 2.5 DSH 输出通道
-
-- 主通道是 **pipe**；
-- `OutputCollector` 内存尾部（pwsh-local 默认 64KB），超过才创建 **spill file**（默认上限 64MB）；
-- spill 文件私有 0700 目录、0600、`wx` 随机名；超上限即删；
-- 小输出不落盘；持久 PTY 用内存 scrollback（4MB / 10k 行）。
-
-### 2.6 GuaDa 现状
-
-- 工具：`run_command(command, encoding?, background?, workspace?)`；`process(kill|poll|write, processId, params?)`。
-- 前台默认，60s 自动转后台；显式 `background: true` 立即返回 processId。
-- `ProcessManagerService` 进程表；native/legacy 双路径；spool 文件 + cleaned log；`readOffset` + `OutputTailer`。
-- `process poll`：agent 侧最小 30s；完成即 `cleanupProcess` 删除 entry；输出 10KB/10K 字符/80 行 head-tail 截断。
-- 完成通知两条路径：
-  1. `process_monitor` → `ChatRunner.enqueueMessage` → idle 立即新 turn；busy 排队；
-  2. `turn.stopping` 正常收尾时 `drainCompleted` 直接注入 hidden `<system-reminder>` 到当前 turn；entry 删除后队列通知 `isValid` 失败被丢弃。
-- `user_cancel/error/timeout/rate_limited` 后 `processQueue` 不 drain，通知可能一直挂着。
-- 没有 `list`/`read`/`wait`/`close` action；显式 background 不返回 logPath。
-- UI：`process_changed` SSE → REST 重拉列表；`ProcessLogPanel` 每 2s 轮询日志。
-
-### 2.7 关键差异
-
-| 维度 | DSH | GuaDa |
-|---|---|---|
-| 后台启动 | jobId | processId |
-| 状态归属 | 通用 jobs registry，owner-bound | shell 专用进程表 |
-| 输出读取 | `job_output` 非阻塞/可 wait；final 幂等 | `process poll` 最小 30s；完成即删 entry |
-| 完成通知 | 短 notice（不含输出），模型再 `job_output` | `<system_reminder>` 直接带输出 |
-| busy | inject 到 next-step | 队列 + turn.stopping 注入 |
-| idle | followup 唤醒，wake 预算 3 | 队列立即新 turn，无预算 |
-| 去重 | `reported` + 单消费游标 | `isValid` + entry 删除；双路径 |
-| Stop | 不杀 job | kill 显式；子 agent 流结束杀本地 |
-| 重启 | job registry 丢失 | 进程表/队列丢失 |
-| UI | jobs 快照推送，只读 | process_changed + REST 重拉 + 日志轮询 |
-| 持久 shell | 有 PTY | 独立 terminal 服务，run_command 不接 |
-
-### 2.8 术语
-
-- **spool**：主输出捕获文件。子进程 stdout/stderr 直接写；父进程按偏移读并转写。GuaDa 每条命令都有。
-- **spill**：溢出文件。内存主缓冲放不下时才落盘；DSH `OutputCollector` 的兜底，不是主通道。
-- 记忆：spool = 收集箱；spill = 溢写盘。
-
----
-
-## 3. 当前阶段计划：通知 + 读取能力
+## 2. 当前阶段计划：通知 + 读取能力
 
 > 只做通知链路和模型侧读取；不抽通用 Job Registry，不改持久 Shell，不动远程推送。
 
@@ -230,7 +125,7 @@ producer done
 - `runAgentEngine.finally`：
   - 正常收尾（`stop/undefined/plan_rejected`）→ 立即 `processQueue`（现有行为）；
   - `error/timeout/rate_limited` → `scheduleQueueRetry`（最多 3 次，1s/3s/9s 退避）；
-  - `user_cancel` → **不自动重开 turn**（对齐 DSH）；通知留在队列，下一次用户主动回合正常结束时消费；日志记录 pending 数量。
+  - `user_cancel` → **不自动重开 turn**；通知留在队列，下一次用户主动回合正常结束时消费；日志记录 pending 数量。
 - `processQueue` 遇到 `SESSION_BUSY`/`STREAM_START_FAILED`：
   - 批次放回队头后，再 `scheduleQueueRetry`。
 - `startStream` 成功开启新 turn 时 `clearQueueRetry(sessionId)`，重置预算。
@@ -305,13 +200,13 @@ producer done
 
 ---
 
-## 4. 已定决策 / 需要坚持的语义
+## 3. 已定决策 / 需要坚持的语义
 
 1. `reported` 抑制策略：
    - read **running** 不抑制完成通知；
    - read **终态** 抑制；
    - poll 终态、drainCompleted、kill 抑制。
-2. `user_cancel` 不自动重开 turn（对齐 DSH）；通知保留，等下一次用户主动回合。
+2. `user_cancel` 不自动重开 turn；通知保留，等下一次用户主动回合。
 3. `error/timeout/rate_limited` 有界自动重试（3 次，1/3/9s）。
 4. `read` 默认读尾部；要增量就传上一次的 `nextOffset`。
 5. `list`/`read` 本地-only；远程 `read` 明确报错，远程继续用 `poll` 或 `read` 工具读远端日志。
@@ -320,7 +215,7 @@ producer done
 
 ---
 
-## 5. 测试 / 验证命令
+## 4. 测试 / 验证命令
 
 ```bash
 cd D:/AI/ai_chat/backend-ts
@@ -341,7 +236,7 @@ pnpm test --runInBand
 
 ---
 
-## 6. 风险
+## 5. 风险
 
 1. `reported` 抑制过头 → 模型收不到完成通知。必须坚持“read running 不抑制”。
 2. `user_cancel` 不自动重开 → 通知可能等到下一次用户输入；需要日志/文档说明。
@@ -352,18 +247,18 @@ pnpm test --runInBand
 
 ---
 
-## 7. 后续路线（本阶段之后）
+## 6. 后续路线（本阶段之后）
 
 > 详细开发计划已拆到 `docs/guada-job-registry-roadmap.md`（M1-M5，含排期、文件改动、验收与风险）。
 
-1. **通用 Job Registry**：shell/subagent/scheduler/remote 统一 jobId + `job_output/job_list/job_kill`；owner-bound 生命周期；DSH 式 notice + read。
+1. **通用 Job Registry**：shell/subagent/scheduler/remote 统一 jobId + `job_output/job_list/job_kill`；owner-bound 生命周期；notice + read 形态。
 2. **持久 Shell / PTY**：复用现有 terminal 服务，给 `run_command` 增加持久会话模式；或引入 `bash`/`pwsh` persistent 工具。
 3. **远程推送 + 收尾**：remote workspace 完成推送；shutdown reaping；keep-awake 感知后台进程。
 4. **可选**：`keepDescendants` 选项；UI jobs 快照流替代 REST 重拉/日志轮询。
 
 ---
 
-## 8. 关键文件索引
+## 7. 关键文件索引
 
 ### 已完成
 
@@ -401,35 +296,23 @@ pnpm test --runInBand
   - `backend-ts/test/plugins/shell.plugin.spec.ts`
   - 新增/扩展 chat-runner 通知用例（若已有测试文件则加）
 
-### DSH 参考（只读，不修改）
-
-- `D:/AI/work/public/deepseek-harness/packages/jobs/tool-jobs/src/index.ts`
-- `D:/AI/work/public/deepseek-harness/packages/jobs/jobs-local/src/index.ts`
-- `D:/AI/work/public/deepseek-harness/packages/shell/tool-bash/src/index.ts`
-- `D:/AI/work/public/deepseek-harness/packages/shell/tool-pwsh/src/index.ts`
-- `D:/AI/work/public/deepseek-harness/packages/shell/tool-bash-persistent/src/index.ts`
-- `D:/AI/work/public/deepseek-harness/packages/shell/tool-pwsh-persistent/src/index.ts`
-- `D:/AI/work/public/deepseek-harness/packages/terminal/terminal-bash/src/session.ts`
-- `D:/AI/work/public/deepseek-harness/packages/subprocess/subprocess-local/src/spawn.ts`
-- `D:/AI/work/public/deepseek-harness/packages/api/session-controller/src/control.ts`
-
 ---
 
-## 9. 当前状态 / 下一步
+## 8. 当前状态 / 下一步
 
 - 当前分支：`local-dev`。
 - 已完成改造未提交（工作区有 modified/untracked）。
 - 当前阶段计划已出；用户要求先存档（本文），存档后暂停。
 - 压缩后下一步：
   1. 读本文；
-  2. 确认第 3 节计划；
+  2. 确认第 2 节计划；
   3. 等用户明确说「开始执行」后按 Phase A → B → C 实施；
-  4. 每阶段跑第 5 节对应测试。
-- 如果用户改变方向，优先看第 7 节路线，不要推倒第 1 节已完成改造。
+  4. 每阶段跑第 4 节对应测试。
+- 如果用户改变方向，优先看第 6 节路线，不要推倒第 1 节已完成改造。
 
 ---
 
-## 10. 执行记录（2026-10-23）
+## 9. 执行记录（2026-10-23）
 
 ### Phase A：通知链路
 

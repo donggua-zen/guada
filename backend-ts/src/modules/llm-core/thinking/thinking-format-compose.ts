@@ -2,7 +2,7 @@
  * 思考字段拼装（thinkingFormat 分派）
  *
  * 从 openai.adapter 抽取的纯函数：把中立档位翻译为各家 wire 字段，
- * 逐行对齐 DSH/pi-ai 的 openai-completions 分派。抽出的目的：
+ * openai-completions 分派规则的单一实现。抽出的目的：
  * 1) 适配器只做「解析依赖 → 合并字段」，拼装规则可独立单测；
  * 2) 「拼法模板」（thinking-patch-templates）用等价性测试锁定——
  *    每个模板表达式在各档位的输出必须与这里的默认 compat 输出逐字段相等。

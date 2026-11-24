@@ -5,14 +5,14 @@
  * worker 内先 post ready 等宿主 'go' 启动门，然后创建 vm context 注入
  * 编排钩子（agent/parallel/pipeline/phase/log + args）执行脚本。
  *
- * 错误纪律（对齐 DSH）：
+ * 错误纪律：
  * - fatal 错误（宿主注入的钩子产生的 WorkflowError 同构对象）杀死整个脚本
  * - 普通子代理失败 → agent() resolve null，parallel()/pipeline() 内普通异常 → null
  * - 取消在下一个钩子边界生效（checkCancel）；所有 pending agent 调用立即 reject
  *
  * 序列化边界：postMessage structured clone 拒绝函数/循环引用——钩子入参在
  * 投递前显式校验（INVALID_ARGUMENT），脚本 return 值由 clone 自然把关
- * （DataCloneError → RESULT_UNSERIALIZABLE），等价 DSH realm 物化。
+ * （DataCloneError → RESULT_UNSERIALIZABLE），等价跨 realm 物化。
  */
 
 /** 脚本初始同步切片的 vm 超时（await 之后的同步段由宿主取消宽限兜底） */

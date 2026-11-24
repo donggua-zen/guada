@@ -1,7 +1,7 @@
 /**
  * LLM 摘要提供器（SummaryProvider 的 LLM 实现）
  *
- * 对齐 deepseek-harness summarizer：
+ * 摘要生成的关键约束：
  * - COMPACTION_INSTRUCTION 作为**最后一条 user 消息**（非独立 system prompt）
  * - 前缀缓存可复用时（同模型、上一次主请求即当前模型）走 KV 缓存友好模式：
  *   `[...prelude, ...被压缩区域消息, 指令]` + 相同的工具定义，命中 warm prefix cache；

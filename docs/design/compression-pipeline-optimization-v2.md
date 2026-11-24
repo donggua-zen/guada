@@ -2,7 +2,6 @@
 
 > 调查日期：2026-08-31
 > 调查范围：`backend-ts/src/modules/chat/compaction/*`、`jsonl-session-context.ts`、`common/persistence/*`、`agent-engine.service.ts`
-> 参照系：`D:\AI\work\public\deepseek-harness`（下称 DSH）
 > 结论：5 条问题**全部成立**，其中第 4 条附带一个被单元测试掩盖的**确凿 bug（P0）**。
 
 ---
@@ -15,7 +14,7 @@
 | 2 | 层级复杂，各层直接操作 messageStore | 成立 | 写入边界分散在 5 处；`appendPrune/appendCompact` 不返回 revision，违反自身版本号契约 | 中（架构债，阻塞 1 的优化） |
 | 3 | shadowedMessageIds 离散 ids 浪费 | 成立 | 语义是连续前缀，折叠只用最后一个 id（`replayer.ts:216-220`） | 低-中（存储/重放/元数据三重浪费） |
 | 4 | 二级用一级后结果 → 前缀缓存失效 | 成立，**且更严重** | 内容层：确实用裁剪后内容；**测量层：`afterPrune` 命中 contentId 级过期缓存，返回裁剪前数值 → 一级后几乎必然级联二级** | **P0（bug）** |
-| 5 | 1/2 级触发与目标阈值一致 | 成立 | `targetRatio` 同时承担"prune 后验收线"与"保留预算"两个语义；DSH 拆成 threshold(验收) + retain(预算) | 中（过度压缩 + 无收敛闭环） |
+| 5 | 1/2 级触发与目标阈值一致 | 成立 | `targetRatio` 同时承担"prune 后验收线"与"保留预算"两个语义；需要拆成 threshold(验收) + retain(预算) | 中（过度压缩 + 无收敛闭环） |
 
 ---
 
@@ -99,14 +98,14 @@ prefixTokens = 重算前缀和
 
    但 `appendPrune`（`:142`）与 `appendCompact`（`:154`）返回 `void`，而 `appendMessages` / `addUserMessage` / `beginTurn` / `finalizeTurn` 都返回 revision。**压缩路径是唯一违反该契约的写入口**——这正是问题 1 无法做增量更新的根因之一（拿不到压缩后的 revision，只能作废快照）。
 
-### DSH 对照
+### 写入边界对照
 
-DSH 只有一个写入边界：`session`。
-- `prune.pruneSession(agent.session)`（`compaction-tool-result-pruner/src/index.ts:136`）
-- `session.append(...)`（`compaction-basic` 内）
+参考实现只有一个写入边界：`session`。
+- 裁剪经 `prune.pruneSession(agent.session)` 写入；
+- 压缩追加经 `session.append(...)` 写入。
 
 压缩能力不持有 store，只通过 session API 写；session 的 `replaceGeneration` 递增即驱动投影缓存失效。
-更关键的一点：DSH 派生出的 Message 对象是 **deep-frozen**（`session/src/index.ts:720-723` 注释：*"the `Message` objects in it are SHARED and **deep-frozen**"*），prune 通过**新增替换事件节点**（`surfaceOp: {op:'replace', start, end}`）实现，天然产生新的缓存身份；而我们是**就地改写**且 `contentId` 不变，这才埋下问题 4 的缓存污染。
+更关键的一点：派生出的 Message 对象是 **deep-frozen**，prune 通过**新增替换事件节点**（`surfaceOp: {op:'replace', start, end}`）实现，天然产生新的缓存身份；而我们是**就地改写**且 `contentId` 不变，这才埋下问题 4 的缓存污染。
 
 ### 优化方案（P2，架构收敛）
 
@@ -150,10 +149,10 @@ for (let i = 0; i < state.messages.length; i++) {
 2. **重放/折叠**：O(N) 建 Set + O(n) 扫描（本可 O(1) 或单次 findIndex）；
 3. **元数据膨胀**：`replayer.ts:241-244` 把整个 id 数组塞进 `compactInfo`，随摘要消息进入视图与前端快照。
 
-### DSH 对照
+### 折叠语义对照
 
-- 权威态是**位置数组 + 代际**：`SessionSurface { nodes: readonly number[]; replaceGeneration: number }`（`core/session/src/surface.ts:137-142`）；
-- 持久化是**区间**：`surfaceOp: { op: 'replace', start, end }`（`surface.ts:151-182`）；
+- 权威态是**位置数组 + 代际**：`SessionSurface { nodes: readonly number[]; replaceGeneration: number }`；
+- 持久化是**区间**：`surfaceOp: { op: 'replace', start, end }`；
 - 离散 `shadowedSeqs` 只写进 log-only 的 `compaction/summary` 事件，作**审计/计价**用，不参与折叠。
 
 ### 优化方案（P2，含兼容）
@@ -191,7 +190,7 @@ data: {
 摘要请求 = `system + tools + [裁剪后的遮蔽区] + 指令`，而"上一次主请求"= `system + tools + [未裁剪的遮蔽区 + 保留区]`。
 一旦第一条被裁剪的消息出现，其后全部失配 → **摘要请求无法命中 warm prefix cache**（`llm-summary.provider.ts:6-9` 的设计目标落空）。
 
-放大因素：裁剪阈值 `PRUNING_TOOL_RESULT_MAX_LENGTH = 1000` 字符（`compression-engine.ts:29`），而 DSH 是 **8192 字符**（`compaction-tool-result-pruner/src/config.ts:10-14`）。我们的阈值低 8 倍 → 大量 tool-result 被裁剪 → 前缀扰动面极大，且 prune 事件数量膨胀。
+放大因素：裁剪阈值 `PRUNING_TOOL_RESULT_MAX_LENGTH = 1000` 字符（`compression-engine.ts:29`），量级偏小 → 大量 tool-result 被裁剪 → 前缀扰动面极大，且 prune 事件数量膨胀。
 
 ### 4.2 测量层：**P0 bug —— `afterPrune` 读到的是裁剪前的数值**
 
@@ -239,15 +238,15 @@ const afterPrune = historyTokens - prunedTokenDelta + envelopeDelta;   // O(1)�
 
 实施要点：把 prune 的**落盘与改写推迟到摘要之后**（引擎阶段纯计算，最后统一写），与 P2 的"engine 返回 plan、会话统一写入"方向一致。
 
-**P0-3：裁剪阈值对齐 DSH**
+**P0-3：提高裁剪阈值**
 
 `maxLength` 1000 → 8192 字符量级，并纳入 `CompactionConfig.pruning` 按模型路由（`compression-engine.ts:94-102` 已有参数化入口，只是没接配置）。副作用：prune 事件数量大幅下降，前缀扰动面收窄。
 
 ---
 
-## 5. 问题五：1/2 级阈值设计（DSH 怎么做的）
+## 5. 问题五：1/2 级阈值设计（参考做法）
 
-### 5.1 DSH 实测（已核实源码）
+### 5.1 实测基线（已核实源码）
 
 **一级 pruner —— 无 ratio，只有字符阈值**（`compaction-tool-result-pruner/src/config.ts:10-14`）：
 ```ts
@@ -282,16 +281,16 @@ throw new Error(`compaction still above threshold ...`)   // 压不够 → 显�
 | `triggerRatio` | 0.8 | 触发门（`:149`） |
 | `targetRatio` | 0.5 | ① prune 后验收线（`:167`）② 二级保留预算 `retainBudget`（`:304`） |
 
-**一个 targetRatio 同时扮演两个角色**，与 DSH 的三参数解耦相比有四处后果：
+**一个 targetRatio 同时扮演两个角色**，与三参数解耦相比有四处后果：
 
-1. **过度触发摘要**：prune 后验收线是 0.5 而非 0.8。常见情况是 prune 把 0.85 降到 0.6——DSH 到此收手，我们继续走 LLM 摘要。叠加 4.2 的测量 bug，实际是**每次压力压缩都走摘要**。
-2. **压缩过于频繁**：保留 50% 意味着压缩后距 80% 只有 30% 空间；DSH 保留 16%，间隔 64%。**我们的压缩频率约为 DSH 的 2 倍以上**，每次都是真金白银 + 上下文信息损失。
+1. **过度触发摘要**：prune 后验收线是 0.5 而非 0.8。常见情况是 prune 把 0.85 降到 0.6——验收线 0.5 意味着还要继续走 LLM 摘要。叠加 4.2 的测量 bug，实际是**每次压力压缩都走摘要**。
+2. **压缩过于频繁**：保留 50% 意味着压缩后距 80% 只有 30% 空间；若保留 16%，间隔可达 64%。**压缩频率因此高出一倍以上**，每次都是真金白银 + 上下文信息损失。
 3. **无收敛闭环**：压缩后不重测、不重试、不报错。若压缩后仍 ≥ 0.8（`envelopeDelta` 大时可能，如超长 system/tools），下一步 `pre_step` 会**再压一次** → 逐步摘要风暴。自动路径完全没有保护（`compaction-coordinator.service.ts:52` 的 `MAX_OVERFLOW_RETRIES=1` 只覆盖溢出路径）。
-4. **`maxSummaryTokens` 固定 2000**（`compaction.service.ts:149,199`），不随窗口缩放（DSH 默认 8192 且可按 `modelPolicies` 路由）。
+4. **`maxSummaryTokens` 固定 2000**（`compaction.service.ts:149,199`），不随窗口缩放（建议默认 8192 且可按模型路由）。
 
 ### 5.3 优化方案（P1）
 
-把三个语义拆开，默认值向 DSH 看齐：
+把三个语义拆开，默认值按下列基准设定：
 
 | 参数 | 建议默认 | 角色 |
 |------|---------|------|
@@ -300,7 +299,7 @@ throw new Error(`compaction still above threshold ...`)   // 压不够 → 显�
 | `compressionRetainRatio` | 0.16 ~ 0.2 | 仅保留预算（选区用） |
 | `maxSummaryTokens` | 随窗口缩放（≈ 窗口 × 0.06，下限 2000） | 摘要输出上限 |
 
-配套闭环（对齐 DSH `index.ts:313-330`）：
+配套闭环（压缩后重测 → 重试 → 仍超则抑制）：
 
 ```ts
 // 压缩后重测 → 未达 accept 则循环重试 → 仍超则告警并抑制
@@ -312,7 +311,7 @@ for (let attempt = 0; attempt <= compactionRetries; attempt++) {
 logger.warn('[compress] 压缩后仍超阈值，抑制本轮，避免逐步摘要风暴');
 ```
 
-注意 DSH 最终选择 **throw**；我们建议先 warn + 抑制（避免把已有会话打断），稳定后再评估是否改为显式失败。
+这里不选择显式 **throw**，而是先 warn + 抑制（避免把已有会话打断），稳定后再评估是否改为显式失败。
 
 ---
 

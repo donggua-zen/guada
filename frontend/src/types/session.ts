@@ -258,7 +258,7 @@ export interface SessionState {
      */
     streamEpoch?: number
     /**
-     * 会话级统一交互卡**队列**（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合
+     * 会话级统一交互卡**队列**（审批/询问共用，sessionId 唯一锚点，不挂回合
      * ——ask_requested 事件按 requestId 入队，ask_resolved 只摘对应那一个）。
      *
      * 为什么是队列而不是单个槽位：一个助手消息里的多个工具调用是**并发**执行的

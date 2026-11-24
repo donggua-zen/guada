@@ -54,10 +54,10 @@ const SUB_AGENT_DEFAULT_PROMPT = `You are a Sub Agent, delegated by the main Age
 - Do not ask the user questions; make decisions and execute the task independently`;
 
 /**
- * 子代理停止原因（对齐 DSH SubagentStopReason）
+ * 子代理停止原因
  *
  * merge-extensible：新增原因不破坏既有消费者；
- * 未知/缺失原因一律按 error 处理（DSH 原则：未知原因不误报成功）。
+ * 未知/缺失原因一律按 error 处理（未知原因不误报成功）。
  */
 export type SubAgentStopReason =
   | "completed"
@@ -703,7 +703,7 @@ export class SubAgentManager implements OnModuleInit {
   }
 
   /**
-   * 为 Workflow 编排引擎创建并执行子代理（对齐 DSH workflow host → subagents.start）
+   * 为 Workflow 编排引擎创建并执行子代理
    *
    * 与 spawn() 的差异：
    * - 不走 states Map / completer / 信箱：workflow 引擎自己就是等待者，
@@ -1580,7 +1580,7 @@ export class SubAgentManager implements OnModuleInit {
   }
 
   /**
-   * 子 Agent 结算单通道（对齐 DSH run-settlement）
+   * 子 Agent 结算单通道
    *
    * 完成与失败统一为一条 SubAgentResult（含结构化 stopReason），
    * 由 finalizeSubAgent 决定交付方式（completer 直传 / 信箱投递）。
@@ -1725,7 +1725,7 @@ export class SubAgentManager implements OnModuleInit {
   }
 
   /**
-   * P1：子 Agent 结果从会话日志重放推导（对齐 DSH finalAssistantOutput）
+   * P1：子 Agent 结果从会话日志重放推导
    *
    * 以子会话 JSONL 为单一事实源：取最后一条非空 assistant 消息的可见文本与推理内容。
    * - 取消/截断后部分内容仍落库（agent-engine 中断路径照常 appendMessages）→ 部分答案可回传
@@ -1771,7 +1771,7 @@ export class SubAgentManager implements OnModuleInit {
   /**
    * 运行子 Agent 流式执行（内部方法）
    *
-   * P1（对齐 DSH）：流回调只负责中止/状态/原因，结果内容由子会话日志重放推导
+   * P1：流回调只负责中止/状态/原因，结果内容由子会话日志重放推导
    * （readSubAgentResult）。不再依赖 messageId 变化的时序启发式；
    * 取消/截断后部分内容仍落库，可稳定回传。重放失败时降级到流累积文本。
    */

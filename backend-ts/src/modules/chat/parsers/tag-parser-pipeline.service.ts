@@ -27,7 +27,7 @@ export interface PipelineResult {
  * 标签解析器管道
  *
  * 从原始文本中提取 [/type:name attr="val"] 标签，按 type 派发给命令提供者的
- * parse 方法，把解析产物冻结为消息伴随注入块（对齐 DSH skill-invocation：
+ * parse 方法，把解析产物冻结为消息伴随注入块（技能调用语义：
  * 用户正文原样保留，技能/代理内容以独立注入上下文跟随，写入时一次成形、
  * 历史不再依赖插件存活）。
  *

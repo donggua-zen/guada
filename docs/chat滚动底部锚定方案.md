@@ -169,7 +169,7 @@
 
 不是锚点保持器：`scheduleAnchorRestore()` 在 `following=true` 时直接早退，拖拽中 `following` 从未改变；真正把人拉回底部的是宽度稳定窗里的 `scrollToBottomImmediate()`。
 
-**对标 deepseek-harness**：它在 pinned 态不做宽度特判——ResizeObserver 观察内容列，每次尺寸变化（含宽度重排）都同步 `scrollTop = scrollHeight` 并记账；用 `observedTopRef` 账目过滤 scroll 事件，落点与账目一致就不改跟随权。离底阅读它没有自研宽度锚定，依赖原生 `overflow-anchor`，其 `ui-layout/README.md` 明确承认「No scroll anchoring during squeeze reflow」。本项目因 sticky 输入区必须 `overflow-anchor: none`，所以离底仍由 `ChatPanel` 的内容锚点保持器负责，只借鉴 pinned 这一半。
+**pinned 态不做宽度特判**：ResizeObserver 观察内容列，每次尺寸变化（含宽度重排）都同步 `scrollTop = scrollHeight` 并记账；用 `observedTopRef` 账目过滤 scroll 事件，落点与账目一致就不改跟随权。离底阅读不做自研宽度锚定，依赖原生 `overflow-anchor`；本项目因 sticky 输入区必须 `overflow-anchor: none`，原生锚定在挤压重排时不可用，所以离底仍由 `ChatPanel` 的内容锚点保持器负责，宽度重排只处理 pinned 这一半。
 
 **修法**：
 

@@ -1,7 +1,7 @@
 /**
  * 内容检查工具 — adapter 序列化边界的 fail-loud 最终防线。
  *
- * 对齐 DSH 原则（docs/message-pipeline-normalization-plan.md §3.3）：
+ * 设计原则（docs/message-pipeline-normalization-plan.md §3.3）：
  * 「投影是优化（L1 管线），断言是正确性（adapter 出口）」。
  * L1 管线已在不支持图片的模型上把 image 块投影为占位文本；若此处仍发现
  * image 块，说明有调用方绕过了管线（插件 / 子代理 / bot-gateway 直调），

@@ -1,10 +1,10 @@
 import { ThinkingFormat } from '../llm-core/thinking/thinking-vocabulary';
 
 /**
- * apiUrl → thinkingFormat 推荐（对齐 DSH detectCompat 的 URL 识别面）。
+ * apiUrl → thinkingFormat 推荐（按 URL 形态识别）。
  *
  * 仅作**前端提示**用——用户在供应商/模型编辑界面输入 API 地址后给出建议值，
- * 由用户确认写入，绝不自动生效（与 DSH 的运行时隐式探测刻意不同）。
+ * 由用户确认写入，绝不自动生效（刻意不做运行时隐式探测）。
  */
 
 const URL_FORMAT_PATTERNS: ReadonlyArray<{

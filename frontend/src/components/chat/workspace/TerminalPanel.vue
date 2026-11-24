@@ -147,7 +147,7 @@ async function initTerminal() {
     // 卸载时取消未执行的帧（否则容器一直没尺寸时 RAF 会无限排队空转）
     disposers.push(() => cancelAnimationFrame(rafId));
 
-    // 先注册所有 xterm 监听，再 open/fit/连接 WS；对齐 DSH 的初始化顺序。
+    // 初始化顺序：先注册所有 xterm 监听，再 open/fit/连接 WS。
     // 否则切换会话/刷新时 xterm 产生的 DA 应答可能在监听器建立前丢失，
     // 造成 shell 与终端状态不同步。
     disposers.push(

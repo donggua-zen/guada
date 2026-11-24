@@ -2,7 +2,7 @@
 
 - 日期：2026-10-23
 - 仓库：`D:\AI\ai_chat`（分支 `local-dev`）
-- 上游文档：`docs/guada-background-notification-read-plan.md` 第 7 节
+- 上游文档：`docs/guada-background-notification-read-plan.md` 第 6 节
 - 状态：路线已批准；**M1、M2、M4、M5 已执行（2026-10-23）**；M3（持久 PTY）暂缓。见第 8/9/10 节。
 
 ---
@@ -152,7 +152,7 @@ interface JobStartSpec {
 
 **目标**：给模型一个跨命令保留 cwd/env 的持久 shell，同时不改变 `run_command` 契约。
 
-**方案选择**：新增独立工具 `persistent_shell`，不采用 `run_command(persistent:true)`。理由：一次性命令的超时/截断/远程/sandbox 语义太多，改契约回归面过大；独立工具风险隔离，且可对齐 DSH 的 persistent shell。
+**方案选择**：新增独立工具 `persistent_shell`，不采用 `run_command(persistent:true)`。理由：一次性命令的超时/截断/远程/sandbox 语义太多，改契约回归面过大；独立工具风险隔离。
 
 **改动**
 
@@ -294,7 +294,7 @@ cd guada-agent && go test ./...
 
 1. jobId 稳定，processId 仅作 handle；日志命名 M1 不改，避免破坏磁盘回退。
 2. shell/remote/pty 完成通知继续用 `process_monitor` source，UI 不改；subagent 继续用 `sub_agent`。
-3. `job_output` 沿用 GuaDa 已定的非破坏性 tail/offset 语义，不引入 DSH 式隐藏单消费游标，避免和 `turn.stopping` 抢输出。
+3. `job_output` 沿用 GuaDa 已定的非破坏性 tail/offset 语义，不引入隐藏单消费游标，避免和 `turn.stopping` 抢输出。
 4. 远程推送带 `clientJobId` 回显，解决“完成事件早于 job 注册”的竞态；旧 agent 用 poller 兜底。
 5. 退出默认终止本地运行中 job，并尽力 kill 远程已登记 job；保留环境变量逃生开关。
 6. 持久 shell 用独立工具，不改 `run_command` 契约。
@@ -354,7 +354,7 @@ cd guada-agent && go test ./...
 
 - Registry 仍为内存表，重启后 job 丢失；日志文件仍可读。
 - 现有 `process` 工具/UI 未改，shell 后台通知 source 仍是 `process_monitor`。
-- `job_output` 是非破坏性 tail/offset 读取，与 DSH 的隐藏单消费游标有意不同。
+- `job_output` 是非破坏性 tail/offset 读取，有意不使用隐藏单消费游标。
 - M1 时子 Agent / Workflow / Scheduler / Remote / PTY 尚未接入；其中前三项已在 M2 完成，Remote/PTY 按 M3/M4 继续。
 
 ---

@@ -29,7 +29,7 @@ JSONL 目录名、bot externalId 映射全部原样有效，零引用改写。
 itemId，所以改名不需要搬字节。）
 
 > 新建实体则不再沿用 cuid：会话 id 由 `SessionFileStore.create` 铸造为
-> `session-<uuid v4>`（DSH 同款，前缀常量 `SESSION_ID_PREFIX`），bot/mcp/分组沿用
+> `session-<uuid v4>`（前缀常量 `SESSION_ID_PREFIX`），bot/mcp/分组沿用
 > `c` + base36 短 id。id 只被精确字符串匹配，无任何格式/长度假设，新旧形态可长期共存；
 > store 侧统一做路径安全校验（拒绝分隔符、`..`、字面量 `undefined`/`null`）。
 

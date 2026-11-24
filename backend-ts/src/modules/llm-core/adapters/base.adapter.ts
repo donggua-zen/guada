@@ -42,7 +42,7 @@ export interface EmbeddingResult {
 }
 
 /**
- * 调用前快照（对齐 DSH prepareCall）
+ * 调用前快照
  *
  * 适配器可在 prepareCall 中把「模型能力解析」与「本次 dispatch 的连接配置」
  * 绑定到同一代快照，避免热更新/配置切换导致能力与 endpoint 混代。

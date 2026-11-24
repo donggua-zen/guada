@@ -8,7 +8,7 @@ import type { Session, SessionListResponse } from './session'
 import type { Message } from './message'
 
 /**
- * wire 兼容开关（对齐 DSH 的 compat 块；与后端 ThinkingCompatConfig 同构）
+ * wire 兼容开关（compat 块；与后端 ThinkingCompatConfig 同构）
  */
 export interface ThinkingCompatConfig {
     /** 开关字段的 wire 拼法；缺省 = openai */

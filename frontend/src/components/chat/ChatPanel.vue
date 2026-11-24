@@ -101,7 +101,7 @@
                 </div>
               </Transition>
 
-              <!-- 会话级全局卡：审批卡 / 询问卡（对齐 DSH：sessionId 唯一锚点，不挂回合）。
+              <!-- 会话级全局卡：审批卡 / 询问卡（sessionId 唯一锚点，不挂回合）。
                    卡片「忽略」= 不回答并停止当前轮 → 复用停止按钮的取消路径（后端仅有
                    "用户停止"能终结一次待答；此刻输入区已隐藏，这也是唯一的停止入口） -->
               <SessionCards :session-id="currentSessionId || undefined" @ignore="abortResponse" />

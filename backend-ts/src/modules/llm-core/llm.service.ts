@@ -130,8 +130,8 @@ export class LLMService {
 
     const userSignal = params.abortSignal || RequestContext.abortSignal();
 
-    // 按 wire 协议取适配器（供应商差异经 providerConfig.compat 传入，
-    // 对齐 DSH thinkingFormat；供应商类型仅用于日志与协议兜底）。
+    // 按 wire 协议取适配器（供应商差异经 providerConfig.compat 传入；
+    // 供应商类型仅用于日志与协议兜底）。
     // 插件协议与内置协议走同一张注册表：未注册 / 已禁用分别给出稳定 code。
     const entry = this.adapterRegistry.getEntry(protocol);
     if (!entry) {

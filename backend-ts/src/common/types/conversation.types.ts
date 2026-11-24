@@ -1,5 +1,5 @@
 /**
- * 三层对话模型 — 统一类型定义（命名对齐 deepseek-harness）
+ * 三层对话模型 — 统一类型定义
  *
  * 结构：
  *   Turn（回合外壳，一次输入回合）→ Message[]（真实消息：一次 LLM 调用 / 一次注入）→ ContentBlock[]（内容块）
@@ -165,19 +165,19 @@ export type ContentBlockType = ContentBlock['type'];
 // ==================== Message（真实消息 = 一次 LLM 调用 / 一次注入） ====================
 
 /** 协议值（role）：转 OpenAI 等协议时直接映射 system / user / assistant / tool；
- *  'event' 已废弃使用（2026-08-30：检查点改为 user + source.plugin='compact'，对齐 DSH
- *  MessageRole=system/user/assistant；保留类型值以兼容旧数据/代码） */
+ *  'event' 已废弃使用（2026-08-30：检查点改为 user + source.plugin='compact'；
+ *  MessageRole 实际只用 system/user/assistant；保留类型值以兼容旧数据/代码） */
 export type MessageRole = 'system' | 'user' | 'assistant' | 'tool' | 'event';
 
 /** 逻辑归属（kind）：真实用户 / 模型工作流（含注入的系统提示、图片、工具结果） */
 export type MessageKind = 'user' | 'model';
 
 /**
- * 消息来源判别（对齐 DSH MessageSourceMap）
+ * 消息来源判别
  *
  * 【单一真相】“这条消息是不是人类输入”唯一由 source.kind 决定，
  * 判断请用 isUserFacingMessage()，不要再读 metadata.hidden
- * （metadata.hidden 为历史兼容字段，DSH 决策笔记已否决 origin 判别字段）。
+ * （metadata.hidden 为历史兼容字段，origin 判别字段已否决）。
  *
  * 各写入点约定：
  * - user    ：终端用户真实输入（前端可见）

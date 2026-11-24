@@ -29,7 +29,7 @@ import {
 } from "./worker/worker-protocol";
 import { WORKER_BOOTSTRAP_SOURCE } from "./worker/worker-bootstrap";
 
-// ─── 默认配置（对齐 DSH 默认策略，规模按个人应用收敛）───
+// ─── 默认配置（规模按个人应用收敛）───
 
 /** 默认并发子代理上限 */
 const DEFAULT_MAX_CONCURRENT = Math.min(8, Math.max(2, os.cpus().length - 1));
@@ -52,7 +52,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-/** meta 纯 JSON 校验（绝不求值；格式错误立即失败，对齐 DSH validateMeta） */
+/** meta 纯 JSON 校验（绝不求值；格式错误立即失败） */
 function validateMeta(meta: unknown): WorkflowMeta {
   if (!isPlainObject(meta)) {
     throw new WorkflowError("META_INVALID", "meta must be a plain JSON object");
@@ -88,7 +88,7 @@ function validateMeta(meta: unknown): WorkflowMeta {
   };
 }
 
-/** 脚本预解析（与 worker 相同的 wrapper；语法错误立即失败，对齐 DSH assertBodyParses） */
+/** 脚本预解析（与 worker 相同的 wrapper；语法错误立即失败） */
 function assertBodyParses(script: string): void {
   if (typeof script !== "string" || script.trim() === "") {
     throw new WorkflowError("SCRIPT_PARSE", "script must be a non-empty string");
@@ -771,7 +771,7 @@ export class WorkflowEngineService {
    *
    * 格式错误（META_INVALID/SCRIPT_PARSE/INVALID_ARGUMENT）同步抛 WorkflowError，
    * 由工具层转为 error 结果回给模型重试；运行期失败不抛（结果以 status/errorCode 表达，
-   * 对齐 DSH WorkflowRun.result never rejects）。
+   * 即 WorkflowRun.result never rejects）。
    */
   async startRun(
     parentContext: ISessionContext,

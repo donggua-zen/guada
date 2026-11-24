@@ -1,11 +1,11 @@
 /**
  * Workflow 子代理编排 — 类型定义
  *
- * 对齐 DSH（deepseek-harness）workflow seam：
+ * workflow 设计要点：
  * - WorkflowMeta 是纯 JSON 数据（绝不求值），随 workflow_run 工具调用传入
  * - 脚本是模型现场生成的 JS 函数体（顶层 await + return <JSON>），由引擎在
  *   worker thread + vm 沙箱中执行，经 agent()/parallel()/phase()/log()
- *   钩子编排子代理（对齐 DSH dynamic workflows）
+ *   钩子编排子代理
  * - WorkflowEventData 是进度事件的统一载荷：经 workflow_event SSE 实时广播，
  *   引擎同步折叠进内存快照（WorkflowRunSnapshot）——进度不落 JSONL，
  *   前端以 REST 快照为基线、SSE 为增量（方案 B）
@@ -13,7 +13,7 @@
 
 // ─── Workflow 元信息（纯 JSON，永不求值）───
 
-/** 声明的阶段（纯观察用途，不施加任何执行结构——对齐 DSH meta.phases 语义） */
+/** 声明的阶段（纯观察用途，不施加任何执行结构） */
 export interface WorkflowPhaseMeta {
   title: string;
   detail?: string;
@@ -25,7 +25,7 @@ export interface WorkflowMeta {
   phases?: WorkflowPhaseMeta[];
 }
 
-/** 脚本内 agent(prompt, opts) 的选项（对齐 DSH AgentCallOptions 的进程内子集） */
+/** 脚本内 agent(prompt, opts) 的选项 */
 export interface AgentCallOptions {
   /** 子代理智能体 id（generic 或白名单智能体；缺省 generic） */
   agentId?: string;
@@ -108,7 +108,7 @@ export interface WorkflowEventData {
     | WorkflowRunEndPayload;
 }
 
-// ─── 致命错误码（machine-routable，对齐 DSH WorkflowErrorCode）───
+// ─── 致命错误码（machine-routable）───
 
 export type WorkflowErrorCode =
   | "SCRIPT_PARSE"

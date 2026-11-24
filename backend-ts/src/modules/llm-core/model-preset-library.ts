@@ -59,15 +59,15 @@ const Dim3072 = { vectorDimensions: 3072 };
  * 匹配策略：按数组顺序遍历，第一个匹配即返回。
  * 因此更具体的模式应排在前面。
  *
- * 思考声明规则（能力与档位分离，对齐 DSH reasoning + thinkingLevelMap）：
+ * 思考声明规则（能力与档位分离）：
  *   supportsThinking: true = 能思考；未声明 thinkingEfforts 时默认菜单
  *   [none, on]（最小诚实开关）；强度可调的模型显式声明档位数组；
  *   强制思考模型（不可关）声明不含 none 的菜单（如 ['on']、['low','high','max']）；
  *   supportsThinking: false = 不能思考（无需档位字段）。
  *
  * 数据截至 2026-10，覆盖各供应商最新在售模型系列。
- * V4.1 / GLM-5.3 / Step 5 系的数据取自 DSH（deepseek-harness）所用
- * @earendil-works/pi-ai 模型目录与阶跃星辰官方文档。
+ * V4.1 / GLM-5.3 / Step 5 系的数据取自 @earendil-works/pi-ai
+ * 模型目录与阶跃星辰官方文档。
  */
 export const MODEL_PRESETS: ModelPreset[] = [
   // ════════════════════════════════════════════════════════

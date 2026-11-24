@@ -65,7 +65,7 @@ export interface ProviderFileModel {
   /** 模型能力配置（contextWindow/maxOutputTokens/features/inputCapabilities/temperature 等） */
   config?: Record<string, any>;
   /**
-   * 能力声明：能不能思考（对齐 DSH `reasoning` 布尔；与档位菜单正交）。
+   * 能力声明：能不能思考（与档位菜单正交）。
    * false = 不能思考；true = 能思考（未声明档位时默认 [none, on] 开关菜单）；
    * 缺省 = fail-safe 按不能思考处理（legacy thinkingEfforts 声明在解析时折叠）。
    */
@@ -120,7 +120,7 @@ export interface LoadError {
 const MODEL_TYPES = new Set(['text', 'embedding', 'image']);
 
 /**
- * 供应商配置文件存储（对齐 DSH「供应商就是数据」）
+ * 供应商配置文件存储（「供应商就是数据」）
  *
  * 目录约定：PROVIDERS_DIR 环境变量（Electron 注入）|| USERDATA_DIR/providers
  * || cwd()/data/providers。每实例一个 YAML 文件，文件名（去扩展名）即实例 id。
@@ -425,7 +425,7 @@ export class ProviderFileStore {
   /**
    * 实例模型解析：类型目录（bundled）继承 + 实例条目覆盖
    *
-   * 合并语义（对齐 DSH「route inherits catalog, user layer overrides」）：
+   * 合并语义（route inherits catalog, user layer overrides）：
    * - 目录条目：未覆盖时按目录原样继承（目录随应用升级自动流到实例）
    * - 实例覆盖条目（modelName 匹配目录）：字段级覆盖（name/config/thinkingEfforts/
    *   thinking/isFavorite/isActive），`deleted: true` 表示用户删除了该继承模型
@@ -571,7 +571,7 @@ export class ProviderFileStore {
   }
 
   /**
-   * 生效的 wire 兼容开关（对齐 DSH：compat 逐字段合并，模型条目 > 实例 > 卡片）。
+   * 生效的 wire 兼容开关（compat 逐字段合并，模型条目 > 实例 > 卡片）。
    * - format：链上未声明 → 默认 `openai`（平铺 reasoning_effort）
    * - supportsReasoningEffort：链上未声明 → 按 format 的厂商默认
    * - requiresReasoningContentOnAssistantMessages / 模板参数：链上未声明即缺省

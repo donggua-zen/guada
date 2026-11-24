@@ -3,7 +3,7 @@
 > 状态：**已实施完成**（2026-08-30）。tsc 零错误；test/chat + test/agent-engine + test/llm-core **16 套件 136 用例全绿**。
 > 实施：检查点消息 `role: 'event' → 'user'`（=system/user/assistant）；删除 cleanRegion 过滤（遮蔽区原样 → 前缀逐字节一致 → KV 缓存命中）；extractPreviousSummary 改按 source.plugin='compact' 识别；serializeMessages 不再跳过检查点（旧摘要进序列化文本）。wire 层零变化（四 adapter 对 event/user 本映射为同一 role）。
 > **前端零影响**前端（frontend/src/services/modules/streamProjector.ts）是独立事件流折叠体系——从 `compaction/summary` 事件自己投影（移除遮蔽消息 + 自生成 `role:'event'` 占位块，`:355-368`），replay 页与 live 共用同一折叠器（`:705`）；本次只改后端折叠产物，落库事件未动。
-> **第七章完善已实施**LLMSummaryProvider 新增 buildParams 选项（compaction.service 注入 buildSessionLlmParams）→ 摘要请求 thinkingEffort/temperature/modelCapabilities 与主请求同源（思考模式一致，前缀缓存不失效）；COMPACTION_INSTRUCTION 改英文（DSH 结构）+ `<system_reminder>` 标签包裹 + "Do NOT call any tool" 规则；新增 buildParams 复用测试（参数同源 + system/tools/maxTokens override 断言）。
+> **第七章完善已实施**LLMSummaryProvider 新增 buildParams 选项（compaction.service 注入 buildSessionLlmParams）→ 摘要请求 thinkingEffort/temperature/modelCapabilities 与主请求同源（思考模式一致，前缀缓存不失效）；COMPACTION_INSTRUCTION 改英文（结构化检查点）+ `<system_reminder>` 标签包裹 + "Do NOT call any tool" 规则；新增 buildParams 复用测试（参数同源 + system/tools/maxTokens override 断言）。
 
 ## 一、现状缺陷（已确认）
 
@@ -25,7 +25,7 @@ const cleanRegion = shadowed.filter((m) => m.role !== 'event'); // ← 过滤 ev
 
 ## 二、目标形态
 
-DSH（`deepseek-harness/packages/compaction/compaction-basic/src/summarizer.ts`）：
+目标形态（接口与主请求前缀对齐）：
 
 ```ts
 export interface SummarizationInput {
@@ -50,12 +50,12 @@ GuaDa 对应目标：
 
 **为什么 event 消息必须保留**1. 主请求 view 含 event 摘要消息（`replayer.ts:426` 构造，wire 层被 openai adapter 映射为 `role:'user'`，`:275`），是主请求前缀的一部分。
 2. 摘要请求若过滤 → 前缀与主请求不一致 → 缓存 miss（现状缺陷）。
-3. 保留 → 前缀逐字节一致 → 命中；且 event 消息文本（旧摘要）经 wire 转换后模型**直接看到旧检查点**增量合并（DSH 检查点式），`extractPreviousSummary` 退化为双保险。
+3. 保留 → 前缀逐字节一致 → 命中；且 event 消息文本（旧摘要）经 wire 转换后模型**直接看到旧检查点**增量合并（检查点式），`extractPreviousSummary` 退化为双保险。
 
 **为什么保留区（不被遮蔽的消息）不参与**（用户强调点）：
 - 保留区在主请求中位于遮蔽区**之后**（遮蔽 = 头部连续前缀，保留 = 尾部）。
 - 摘要请求前缀只延伸到遮蔽区边界——**缓存命中要求前缀一致，不要求后缀一致**；保留区既不在前缀内（放进去不提升命中），也不是后缀（instruction 才是），放进摘要请求只会浪费 token。
-- 与 DSH 一致：`SummarizationInput.messages` = shadowed region only。
+- 摘要请求的 `messages` 只含遮蔽区（shadowed region），不含保留区。
 
 ## 三、与记忆同步影子轮次的对照
 
@@ -100,9 +100,9 @@ return {
 
 5. **测试**二次压缩场景——摘要请求遮蔽区含 event 摘要消息，且 wire 前缀与主请求前缀逐字节一致（断言 `call.messages` 前缀 = view 头部同序消息）。
 
-## 五、DSH 对照结论
+## 五、结论
 
-DSH 的 `SummarizationInput` 天然无 event 过滤（其检查点是**可见 plugin 消息**`source.plugin='compact'`，在 region 内）。GuaDa 的检查点是 `role='event'` 事件消息（fold 可见但 wire 前被误过滤）——**去掉过滤后，GuaDa 摘要请求的 wire 形态与 DSH 完全一致**`{ system, tools, [region..., instruction] }`。这是向 DSH 形态收敛的一步，无需改动检查点表示。
+检查点是遮蔽区的一部分，摘要输入按遮蔽区原样传入即可，不需要按来源（`source.plugin`）过滤。GuaDa 的检查点是 `role='event'` 事件消息（fold 可见，但此前在 wire 前被误过滤）——**去掉过滤后，摘要请求的 wire 形态即为 `{ system, tools, [region..., instruction] }`**，无需改动检查点表示。
 
 ## 七、完善：摘要请求对齐主请求（复用 builder + 思考一致 + 工具限制 + 英文指令）
 
@@ -152,13 +152,13 @@ const stream = await this.llmService.completions(params);
 
 **现状**摘要请求传 tools（前缀一致必需），但中文指令无明确禁止工具。
 
-**修正**指令加 DSH 原文规则——**"Do NOT call any tool or take any other action."**；摘要调用是单次 stream（无工具执行循环），tools 照传只为前缀一致，模型不会真正执行（DSH 同款：不设 tool_choice，指令禁止）。
+**修正**指令加明确规则——**"Do NOT call any tool or take any other action."**；摘要调用是单次 stream（无工具执行循环），tools 照传只为前缀一致，模型不会真正执行（不设 tool_choice，靠指令禁止）。
 
 ### 7.4 英文指令 + `<system_reminder>` 标签
 
 **现状**`COMPACTION_INSTRUCTION` 是中文、无标签包裹。
 
-**修正**（参考 DSH 结构 + GuaDa `<system_reminder>` 惯例）：
+**修正**（结构化检查点 + GuaDa `<system_reminder>` 惯例）：
 
 ```ts
 const COMPACTION_INSTRUCTION = [
@@ -190,7 +190,7 @@ const instructionText =
 
 标签约定：
 - **`<system_reminder>`**包裹摘要指令（GuaDa 既有惯例，系统级注入提示）
-- **`<compacted-summary>`**旧检查点/输出包裹（DSH 式，保留现状）
+- **`<compacted-summary>`**旧检查点/输出包裹（保留现状）
 
 ### 7.5 改动清单
 

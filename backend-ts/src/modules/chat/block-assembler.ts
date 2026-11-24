@@ -1,7 +1,7 @@
 /**
  * BlockAssembler —— 全仓唯一的 StreamChunk → ContentBlock[] 组装器
  *
- * 参考 deepseek-harness 的同名设计：
+ * 设计要点：
  * - agent 循环与测试共用这一个实现，杜绝多处各写一遍参数累加
  * - block_end 携带的权威终态优先（first close wins，闭合后忽略迟到 delta）
  * - 中断/截断语义：文本保留非空前缀，工具调用参数经 partialParse 修复，
@@ -298,7 +298,7 @@ export class BlockAssembler {
   /**
    * 组装为三层 assistant Message。
    *
-   * 【DSH 对齐（agent.ts:354-390）】空内容（assembler 未累加任何有效 chunk）返回 null——
+   * 【关键约定】空内容（assembler 未累加任何有效 chunk）返回 null——
    * 立即报错/中止无任何产出时不应落库空 assistant 消息；业务错误归拢 turn 级（finalizeTurn）。
    * 调用方以 null 判定"无有效消息"，跳过落库与一切消息后处理（工具注入等）。
    *

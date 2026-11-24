@@ -95,7 +95,7 @@
 > provider 类退役，协议适配器收敛为 AdapterRegistry（5 协议单例），thinking
 > 差异经 thinkingStyle 枚举 + 中立档位词表收敛（见 bundled-providers/README.md）。
 
-**总览**：llm-core 为核心，ProviderFileStore 读取 providers/*.yaml 供应商实例（对齐 DSH「供应商就是数据」），AdapterRegistry 是**动态协议注册表**（内置 openai/openai-response/anthropic/gemini/mock + 插件贡献协议），BundledCatalogService 合并「bundled 类型卡 + 插件类型卡」，ProviderContributionCoordinator 负责插件贡献的原子提交与启停联动，LLMService 唯一运行时 seam，SSE + StreamChunk 统一词汇流式输出。
+**总览**：llm-core 为核心，ProviderFileStore 读取 providers/*.yaml 供应商实例（供应商即数据），AdapterRegistry 是**动态协议注册表**（内置 openai/openai-response/anthropic/gemini/mock + 插件贡献协议），BundledCatalogService 合并「bundled 类型卡 + 插件类型卡」，ProviderContributionCoordinator 负责插件贡献的原子提交与启停联动，LLMService 唯一运行时 seam，SSE + StreamChunk 统一词汇流式输出。
 
 **供应商包（Provider Pack）**：供应商能力已插件化。声明式包只提供 YAML 类型卡（同协议新品牌，无代码执行）；代码包通过 `PluginApi.registerProtocolAdapter()` 贡献新 wire 协议（如 Ollama 原生）。协议名与内置 type 是保留位，插件覆盖会被拒绝。详见 [`provider-packs.md`](provider-packs.md)。
 

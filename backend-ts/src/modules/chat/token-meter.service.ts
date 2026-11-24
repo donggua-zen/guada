@@ -1,5 +1,5 @@
 /**
- * 会话级 Token 计量服务（对齐 deepseek-harness token-meter）
+ * 会话级 Token 计量服务
  *
  * 统一消息级 token 估算入口：
  * - **无缓存**：每次估算直接委托 TokenizerService 计数，不持有任何会话状态。

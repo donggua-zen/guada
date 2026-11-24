@@ -7,8 +7,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
  * 对 @nestjs/event-emitter 的薄封装，供业务模块使用。
  * 避免业务代码直接依赖 EventEmitter2，便于未来替换底层实现。
  *
- * 提供三种调度模式（对齐 deepseek-harness / Cordis dispatch modes，
- * 钩子事件清单见 hooks.contract.ts）：
+ * 提供三种调度模式（钩子事件清单见 hooks.contract.ts）：
  * - emit：fire-and-forget 通知（不阻塞、不 veto）
  * - parallel：并发 await 全部监听器，收集返回值（如 turn.stopping 收集续跑消息）
  * - serial：串行 await，首个返回"非 undefined"者接管（短路），undefined 旁路

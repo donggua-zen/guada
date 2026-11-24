@@ -1,5 +1,5 @@
 /**
- * 规范流式词汇表（参考 deepseek-harness StreamChunk 设计）
+ * 规范流式词汇表
  *
  * 一套词表贯穿 adapter → agent 循环 → SSE 广播 → 前端 reducer，各环节零语义转换：
  * - 块生命周期三段式：block_start 开块 → *_delta 增量 → block_end 闭块（携带组装完成的权威块）

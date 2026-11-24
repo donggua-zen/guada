@@ -6,7 +6,7 @@
  * - 只依赖 CompactionDataSource 窄接口操作会话，不感知 ISessionContext
  * - 压缩模型解析（SK_MOD_COMPRESS_MODEL）与 LLM 摘要、DB 历史、事件广播全部内聚于此
  *
- * 与 deepseek-harness 的能力缝合层对齐：本服务即 compaction-basic 的等价物，
+ * 压缩能力缝合层：压缩逻辑集中在本服务，
  * 会话（Session 等价物）只暴露数据，不含任何压缩语义。
  */
 import { Injectable, Logger } from "@nestjs/common";

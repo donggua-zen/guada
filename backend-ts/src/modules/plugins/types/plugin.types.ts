@@ -149,7 +149,7 @@ export interface PromptSectionDef {
   toolkitId?: string;
   /** 是否允许同作用域同名覆盖（默认 false） */
   shadowable?: boolean;
-  /** 接管整段系统提示词（等价 DSH complete:true） */
+  /** 接管整段系统提示词 */
   complete?: boolean;
   /** 文本或动态文本；返回空串表示本轮不注入 */
   text: string | ((ctx: PluginContext) => string | Promise<string>);

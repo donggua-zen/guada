@@ -59,7 +59,7 @@ interface AskRequest {
 自动放行；`AskService` 按 `cardKind` 映射"本轮内自动放行"选项的 label，调用方不再直接传 label。
 `/chat/pending-asks` 的 `PendingAskView` 也带 `cardKind`（`autoAllowLabel` 是内部字段，不外泄）。
 
-DSH 对照:`AskUserQuestionItem`(user-questions/src/types.ts:35-50)同构;差异:DSH 审批与提问是两个并行服务(approval waterfall / question provider),本项目按需求统一为一个 AskService,审批即预置问题的 ask;DSH question 无持久审计,本项目统一带 ask/asked|answered 审计对。
+**问题模型**：提问项与既有 `AskUserQuestionItem` 同构（`cardKind` + 选项结构）；本项目按需求把审批与提问统一为一个 AskService（审批即预置问题的 ask），不做两套并行服务；审批与提问统一带 ask/asked|answered 审计对。
 
 ## 三、架构与数据流
 

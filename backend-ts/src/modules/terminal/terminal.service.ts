@@ -255,7 +255,7 @@ export class TerminalService
     try {
       // macOS：helper 缺 x 位会让原生层 std::terminate（后端进程直接 abort），必须前置拦住
       ensureSpawnHelperExecutable();
-      // 与 DSH 完全一致的 ConPTY 配置：不传 useConptyDll，
+      // ConPTY 配置：不传 useConptyDll，
       // 保证 resize 能正确传递到 shell（useConptyDll 会破坏 resize）。
       pty = this.loadNodePty().spawn(shell.file, shell.args, {
         name: "xterm-256color",

@@ -31,7 +31,7 @@ import { SettingsStorage } from "../../common/utils/settings-storage.util";
 const AGENT_OVERRIDES_GROUP = "agent-overrides";
 
 /**
- * 智能体文件存储（对齐 DSH「预设就是文件」与本项目 providers/*.yaml 的既有范式）
+ * 智能体文件存储（「预设就是文件」，沿用本项目 providers/*.yaml 的既有范式）
  *
  * 目录约定（一个智能体 = 一个目录，目录名即 id）：
  *   <AGENTS_DATA_DIR>/<id>/AGENT.md    定义（YAML frontmatter + Markdown 正文）

@@ -1,4 +1,4 @@
-# 工具审批与断点续传设计 — 对齐 deepseek-harness
+# 工具审批与断点续传设计
 
 > **已被统一 Ask 体系取代（2026-08-29）**：审批/询问/迭代暂停合并为单一 ask 闭环（无超时、
 > 审批为 ask 特例、自定义回复=拒绝+反馈模型），本文件仅作历史设计记录。
@@ -28,7 +28,7 @@
     → 拒绝/超时/中止：抛 ApprovalDeniedError（EscalationDeniedError 继承之）→ isError tool-result 反馈模型
 ```
 
-- **逐工具审批**：一次消息多个需审批工具 = 顺序逐个审批，每张卡一个工具（DSH pre-execute 式）
+- **逐工具审批**：一次消息多个需审批工具 = 顺序逐个审批，每张卡一个工具
 - 引擎不再有任何审批逻辑：删除 `classifyToolsByApproval` / `isToolRequiresApproval` /
   `normalizeApprovalDecisions` / `awaitApprovalDecision` / 主循环审批分支 / `metadata.approvalContext`；
   `executeToolsAndBuildParts` 退化为纯执行（一次调用，直接 executeBatch 全部合法工具）
@@ -38,9 +38,9 @@
   接口、前端类型、TurnItem legacy 分支（finishReason=approval_required 读 approvalContext）一并移除；
   历史 JSONL 中的 message/meta 事件重放时走默认分支忽略（兼容）
 
-### 0.9.2 会话级全局卡（对齐 DSH wire 契约）
+### 0.9.2 会话级全局卡（wire 契约）
 
-DSH 源码事实（`packages/host/apiproxy/src/api/events.schema.ts:46-47`）：
+wire 契约（`packages/host/apiproxy/src/api/events.schema.ts:46-47`）：
 
 ```
 approval/requested 帧: { sessionId, approvalId, toolName, callId?, reason? }
@@ -50,7 +50,7 @@ approval/resolved 帧:  { sessionId, approvalId, outcome }
 core `ApprovalRequest` = `{ agent, toolName, callId?, reason?, signal? }`——**无 turnId / messageId**；
 审计事件 log-only（非 UI 事件）。呈现锚点 = sessionId + approvalId，会话级提示，`resolved` 收尾。
 
-本项目对齐改造：
+本项目改造：
 - 审批链路删除 `turnId` / `messageId` 锚点（`PluginContext`、`executeBatch` ctxMeta、审批服务参数、
   Event payload、SSE 事件类型全清；`PluginContext` 只剩 `session + toolCallId`）
 - 前端状态从 `turn.state.approval/paused` 迁移为 `SessionState.approval/paused`（sessionStore 访问器
@@ -151,10 +151,10 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
 
 ---
 
-## 0.7 v1.7 变更：沙盒提权审批（对齐 DSH escalation.ts）
+## 0.7 v1.7 变更：沙盒提权审批
 
 > 设计动机：v1.6 的审批触发源（`requiresApproval` 名单）默认为空，机制休眠。v1.7 给
-> 本项目已有的沙盒（`sandbox` 二进制 + 运行模式 normal/sandbox/plan/free）接入 DSH 式
+> 本项目已有的沙盒（`sandbox` 二进制 + 运行模式 normal/sandbox/plan/free）接入
 > **调用级提权审批**——模型在普通工具调用里带 `sandbox_permissions` + `justification` 参数，
 > 严格放宽校验命中后触发审批，让审批有了真实、自动的触发源。
 
@@ -168,7 +168,7 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
   read-only → [workspace-write, danger-full-access]
   workspace-write → [danger-full-access]
   danger-full-access → []
-  非严格放宽请求（平级/降级）→ 直接抛错，永不打扰人（对齐 DSH "非放宽永不问"）
+  非严格放宽请求（平级/降级）→ 直接抛错，永不打扰人（非放宽永不问）
 
 批准 → 该模式应用这一次调用（one-shot，不持久化）：
   read-only → {enabled, readOnly:true} | workspace-write → {enabled, readOnly:false} | danger-full-access → 无沙盒执行
@@ -229,7 +229,7 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
 
 ### 0.7.7 明确不做
 
-- **网络隔离**：本项目与 DSH 一样只约束文件系统写，任何平台不拦网络
+- **网络隔离**：本项目只约束文件系统写，任何平台不拦网络
 - **escalation 持久化恢复**：瞬态请求，崩溃即作废（沙盒会再次拒绝、模型可重试）
 - **默认危险名单 / hook 三态决策**：独立演进项，本次范围外
 
@@ -239,16 +239,16 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
 
 > 设计动机：本项目传输层已是全局长会话（前端常驻 SSE + HTTP 触发 RPC + 后台 agent 循环），
 > 不存在"挂连接"约束——真正的差异是 agent 循环生命周期。v1.6 让循环在审批时**原地 await 决策**，
-> 与 DSH 的 step 内同步挂起完全对齐。
+> 即 step 内同步挂起。
 
 ### 0.1 机制对比
 
-| 维度 | v1.5（终止+resume） | v1.6（原地阻塞，对齐 DSH） |
+| 维度 | v1.5（终止+resume） | v1.6（原地阻塞） |
 |---|---|---|
 | 审批时 | `businessReason="approval_required"`、`needToContinue=false`、`turn_end` 收尾 | 落库 pending 态消息 → `yield approval_requested` → **原地 await 决策**（turn 保持 open、无 turn_end） |
 | 续跑方式 | 前端点"继续" → 重新触发 `/chat/stream`（resume） | 前端只调 `approve` → 按 approvalId 凭证 `ApprovalWaitService.resolveDecision` 唤醒在等待的循环 → 原地重分类执行（不调 LLM） |
 | 超时 | 仅 resume 路径自动拒绝 | 原地 await 与剩余超时竞速（fail-closed），自动拒绝并补审计 decided |
-| 中止 | — | await 与 abortSignal 竞速 → 撤回审批 → `user_cancel` 收尾（DSH signal→cancelled） |
+| 中止 | — | await 与 abortSignal 竞速 → 撤回审批 → `user_cancel` 收尾（signal→cancelled） |
 | resume 分支 | 主路径 | **降级为崩溃/循环已死兜底**（决策已写回 JSONL，resume 仍可消费） |
 
 ### 0.2 实现要点
@@ -311,15 +311,15 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
 |---|--------|------|
 | A | **resume 消费 decisions 断链** | `approve-tools` 写 decisions 到 DB message 表（消息已在 JSONL）；resume 分支不重建 assistantMessage（`:687` NPE 隐患）→ decisions 无法被 `classifyToolsByApproval` 消费，审批死循环 |
 | B | **前端零审批 UI** | 无 approve-tools 封装、无 `approval_required` 分支展示 |
-| C | **崩溃修复缺口** | torn-tail 只合成 `turn/finish(interrupted)`，不合成未配对 tool-call 的错误结果（DSH 会补） |
+| C | **崩溃修复缺口** | torn-tail 只合成 `turn/finish(interrupted)`，不合成未配对 tool-call 的错误结果 |
 
-另：审批状态无事件溯源（DSH 有 `approval/asked` + `approval/decided` 日志事件，跨重启可恢复）。
+另：审批状态无事件溯源，跨重启无法恢复。
 
 ---
 
-## 2. DSH 机制（对齐依据）
+## 2. 机制依据
 
-### 2.1 审批生命周期（DSH）
+### 2.1 审批生命周期
 
 ```
 模型流结束 → assistant/message(含 tool-call) → tools runtime prepareExecution
@@ -336,7 +336,7 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
 **关键特征**：审批在 step 内**同步 await 挂起**（turn 保持 open、agent 状态 running），
 决策后**同一轮次原地继续**（不需要重启回合）；事件落日志跨重启可恢复；fail-closed 默认拒绝。
 
-### 2.2 崩溃修复（DSH interruptedTurnClosers）
+### 2.2 崩溃修复
 
 扫描未闭合 `turn/start` → 对未配对 `tool/call` 合成**显式错误 tool/result**
 （`TOOL_OUTCOME_UNKNOWN` / `TOOL_NOT_STARTED`，指导模型"只重试只读/幂等操作"）
@@ -344,11 +344,11 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
 
 ---
 
-## 3. 本项目实施（对齐改造）
+## 3. 本项目实施
 
 ### 3.1 审批闭环（后端）
 
-**事件溯源（对齐 DSH approval/*）**
+**事件溯源（approval/*）**
 - 新事件 `approval/asked`（messageId/**approvalId**/toolCallIds/expiresAt）、
   `approval/decided`（messageId/**approvalId**/decisions）——approvalId 为发起时生成的 uuid 凭证
 - 写入：agent-engine pending 时 `appendApprovalAsked`（经 ISessionContext 透传）；决策落地统一由
@@ -362,7 +362,7 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
   完成；统一端点 `POST /chat/approve` 只负责按 approvalId 凭证 `resolveDecision` 唤醒等待者
   （无等待者抛 404），不再落库
 
-**resume 原地继续（对齐 DSH step 内挂起语义）**
+**resume 原地继续（step 内挂起语义）**
 - resume 且最后消息为 assistant：`assembler.seed` 后**重建 assistantMessage**（`toMessage` + 继承
   `lastMessage.metadata.approvalContext`），`skipLLM` 不调模型——直接进入工具分类/执行：
   - `completed`（前端已决策）→ `classifyToolsByApproval` 按 decisions → approve 组执行 /
@@ -370,19 +370,19 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
   - `pending`（未决策）→ 重新 `approval_required` 终止
 - 同时修复原 resume+assistant-last 路径 `assistantMessage=null` 的 NPE 隐患
 
-**fail-closed（对齐 DSH 应答者竞速/policy）**
+**fail-closed（应答者竞速/policy）**
 - `approvalContext.expiresAt`（默认 10 分钟）：pending 挂起超时 → 自动拒绝（isError "审批超时，已自动拒绝"）
 - `enabled:false` → 全部放行（gate 默许语义）
 - `isToolRequiresApproval` 补 `prefix__*` 前缀通配（注释承诺未实现，现已补齐）
 
-### 3.2 前端审批 UI（对齐 DSH 应答者）
+### 3.2 前端审批 UI
 
 - `MessageApi.approve(sessionId, approvalId, decisions)`（`POST /chat/approve`，统一工具审批与提权）
 - `TurnItem` 审批卡显示待审批工具名（toolCallIds → metadata.toolCalls 映射）+ "全部允许 / 全部拒绝"
   按钮 → `approve`（按 approval_requested 事件携带的 approvalId 凭证回传，不依赖 messageId）
 - i18n：`chat.turn.toolApprovalRequired / approveAll / rejectAll`
 
-### 3.3 崩溃修复补 tool 错误结果（对齐 interruptedTurnClosers）
+### 3.3 崩溃修复补 tool 错误结果
 
 - `repairActiveSegmentIfNeeded`：合成 `turn/finish(interrupted)` 前，为该回合内**未配对 tool-call**
   （assistant 消息含 tool-call 块但无对应 tool-result）追加错误 `tool/result` 事件
@@ -411,5 +411,5 @@ chat 相关 15 套件 166 例全绿；前端改动文件 `vue-tsc` 无新错误�
 ## 6. 明示不做（标注远期）
 
 - **KV 缓存续传（requestHeader/replayState）**：需 adapter 层支持（pi-ai 类原生缓存引用），远期
-- **max-tokens/轮次上限续跑**：沿用"继续按钮 resume"形态（与 DSH turn-stopping 钩子语义等价）
+- **max-tokens/轮次上限续跑**：沿用"继续按钮 resume"形态
 - **inbox durable 排队**：本项目无多消息排队模型（前端单条发送）

@@ -292,7 +292,7 @@ export function buildRetryMessage(errorType: RetryableErrorType, attempt: number
 }
 
 /**
- * 检测"上下文窗口溢出"错误（对齐 DSH CONTEXT_WINDOW_EXCEEDED_CODE）。
+ * 检测"上下文窗口溢出"错误。
  *
  * 这类错误不可通过退避重试解决，正确动作是强制压缩上下文后重试请求
  * （见 agent-engine 溢出恢复路径）。各 provider 的错误形态不同，这里按

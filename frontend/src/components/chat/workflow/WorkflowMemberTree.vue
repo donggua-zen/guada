@@ -61,7 +61,7 @@ function subText(agent: WorkflowAgentState): string {
   display: block;
   width: 100%;
 }
-/* 成员行树形线（对齐 DSH 任务管理）：竖线画在行盒内部（hover 含线列），
+/* 成员行树形线：竖线画在行盒内部（hover 含线列），
    横肘线连到圆点；末成员竖线止于横肘。
    注意 :last-child 须取在 GdTooltip 包装层上（每个 .wf-agent 都是其包装器的唯一子元素） */
 .wf-agent::before {

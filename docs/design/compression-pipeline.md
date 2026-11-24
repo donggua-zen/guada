@@ -1,4 +1,4 @@
-# 压缩管线设计 — 现状修复与 DSH 对齐
+# 压缩管线设计 — 现状修复与重构
 
 > 版本：1.4 | 日期：2026-08-26 | 状态：已实施（统一 LLM seam：撤销过度封装，重试回归 agent 层）
 
@@ -13,8 +13,8 @@
 
 本设计文档记录：
 1. 断裂点清单与修复方式
-2. 与 deepseek-harness（DSH）压缩管线的对比与对齐点
-3. 已实施的对齐改造
+2. 压缩管线的机制分层与改造重点
+3. 已实施的改造
 4. 消息传入统一（全数据输入）与消息级遮蔽（v1.2）
 5. 钩子插件化：压缩与记忆同步统一事件接入（v1.2）
 
@@ -35,9 +35,9 @@
 
 ---
 
-## 3. 与 DSH 压缩管线对比
+## 3. 压缩管线机制对比
 
-### 3.1 DSH 架构（deepseek-harness）
+### 3.1 参考架构（能力分层）
 
 ```
 packages/compaction/           能力缝合层（独立可选能力，对话循环零压缩逻辑）
@@ -67,12 +67,12 @@ message-store.interface.ts     appendPrune / appendCompact（compaction 括号�
 replayer.ts                    compaction/* 折叠（遮蔽回合 + 摘要事件消息）
 ```
 
-持久化层**已天然对齐 DSH 事件模型**：`message/prune`、`compaction/start|summary|end`
-与 DSH 几乎一一对应，replayer 支持遮蔽回放——这是重构保留下来的最大资产。
+持久化层**已具备统一事件模型**：`message/prune`、`compaction/start|summary|end`
+与参考分层几乎一一对应，replayer 支持遮蔽回放——这是重构保留下来的最大资产。
 
 ### 3.3 差距对照表
 
-| 维度 | DSH | 本项目重构后 | 对齐动作 |
+| 维度 | 参考实现 | 本项目重构后 | 改造动作 |
 |------|-----|-------------|---------|
 | 触发解耦 | 钩子事件订阅 | 循环内嵌直接调用 | 已收敛为窄接口（shouldCompress/compress 两方法）；溢出恢复即 request-error 钩子的等价物 |
 | 溢出恢复 | context-overflow → 强制压缩 → retry | 无 | **已实施**：`isContextWindowExceeded()` + 主循环 catch 中强制压缩（force）→ 重试（每轮最多一次） |
@@ -82,11 +82,11 @@ replayer.ts                    compaction/* 折叠（遮蔽回合 + 摘要事件
 | 收敛检查 | 摘要 < 被遮蔽 token，超限重压 | 无 | **已实施**：`compactMessages` 收敛校验 + `compactionRetries` |
 | 一级裁剪 | 全表面节点预算化 pruner + 影子价格事件 | 只裁剪 tool-result（>1000/头尾500） | **已实施**：`pruning` 参数注入（maxLength/protectedRecent/headTailChars）；影子价格事件列为后续演进 |
 | 锁语义 | start-end 日志锁 + 孤儿恢复 | 原子批量写入 + torn-tail 修复（天然无孤儿） | **已实施**：replayer 孤儿括号审计（`openCompactionSeq`，不阻断） |
-| 持久化事件模型 | compaction/* + surface replace | compaction/* + 遮蔽回放 ✓ | 已对齐，不重写 |
+| 持久化事件模型 | compaction/* + surface replace | compaction/* + 遮蔽回放 ✓ | 已一致，不重写 |
 
 ---
 
-## 4. 已实施的对齐（阶段 1+2）
+## 4. 已实施的改造（阶段 1+2）
 
 ### 4.1 新文件
 
@@ -110,17 +110,17 @@ replayer.ts                    compaction/* 折叠（遮蔽回合 + 摘要事件
 - **前端**：`streamProjector.ts` 消费压缩事件（置/清 isCompressing）；`ChatPanel.vue` 删旧分支；
   `EventCard.vue` 压缩卡片增强；`event-chunk.types.ts` 前后端同步新增压缩事件类型。
 
-### 4.3 摘要调用设计（对齐 DSH summarizer）
+### 4.3 摘要调用设计
 
 - 摘要模型：`SK_MOD_COMPRESS_MODEL` 配置优先，回退会话当前模型（`resolveCompressionModel`）
 - 调用方式（v1.1 起）：`LLMService.completions({ stream: true, temperature: 0.4, maxTokens: 2000, thinkingEffort: none })`
-  + `BlockAssembler` 累积（对齐 DSH `ctx.llm.stream()`），捕获 `usage` 记录到 `compaction/summary` 事件
+  + `BlockAssembler` 累积（单次流式调用），捕获 `usage` 记录到 `compaction/summary` 事件
 - Prompt：`COMPACTION_INSTRUCTION`（固定 Markdown 结构，中文适配）+ 旧 `<compacted-summary>` 检查点（从历史 compaction 事件提取）→ 增量合并
 - 收敛：摘要 token 必须 < 被遮蔽内容 token，超限在 `compactionRetries` 内重压
 
 ---
 
-## 5. 后续演进（v1.1 全部实施，对齐 deepseek-harness）
+## 5. 后续演进（v1.1 全部实施）
 
 ### 5.1 TokenMeter 服务化（`token-meter.service.ts`）
 
@@ -140,12 +140,12 @@ replayer.ts                    compaction/* 折叠（遮蔽回合 + 摘要事件
 ### 5.3 compaction/prune 影子价格事件
 
 `MessagePruneData` 加可选 `prunedTokens`（被裁剪内容的估算 token，原 − 新），经 `appendPrune`
-透传落盘。供 token 计量消费方减去被遮蔽价格（对齐 DSH compaction/prune；本项目扩展 `message/prune`
+透传落盘。供 token 计量消费方减去被遮蔽价格（compaction/prune 语义；本项目扩展 `message/prune`
 数据而非新增事件类型，schema 表面最小）。
 
 ### 5.4 KV 缓存友好摘要前缀 + 流式调用
 
-机制（已核实 DSH `summarizer.ts`/`region.ts`）：摘要调用是**压缩事务内的一次性直接 LLM 调用**
+机制：摘要调用是**压缩事务内的一次性直接 LLM 调用**
 （不起新 agent 循环、不利用主循环）；复用目标是**压缩前最后一次主请求**的 prefix cache——
 head-anchored 压缩使 `system + tools + 被压缩区域` = 上次请求真前缀；retained 不参与摘要请求。
 
@@ -179,13 +179,13 @@ head-anchored 压缩使 `system + tools + 被压缩区域` = 上次请求真前�
 
 ## 7. v1.2：消息传入统一 + 消息级遮蔽 + 钩子插件化
 
-### 7.1 消息传入机制（对齐 DSH 单一数据源 + 统一派生）
+### 7.1 消息传入机制（单一数据源 + 统一派生）
 
-**DSH 机制**（已核实源码）：
+**参考机制**：
 - 单一事实源：append-only 日志，消息入日志时 `deepFreeze`（不可变）
 - 唯一投影规则：请求侧 `deriveMessages` 与压缩侧 `deriveEventMessage` 共用**同一个纯函数**，
-  返回**同一批冻结对象引用** → 逐字节一致（`surface.ts:83-114`）
-- 请求零过滤零改写：`buildRequest` 直接把派生结果放进 `request.messages`（`agent.ts:507`）
+  返回**同一批冻结对象引用** → 逐字节一致
+- 请求零过滤零改写：`buildRequest` 直接把派生结果放进 `request.messages`
 - 缓存只是快照加速：`derivedNodes` 水位 + `replaceGeneration` 失效，不是另一条派生路径
 
 **本项目**：
@@ -201,10 +201,10 @@ head-anchored 压缩使 `system + tools + 被压缩区域` = 上次请求真前�
 - 引擎成为纯计算 + 写引擎（只经 `appendPrune`/`appendCompact` 写入），最利插件化与测试
 
 **附带修复——摘要进入 LLM 上下文**：此前 `loadContext` 过滤全部 `role='event'`，导致压缩摘要
-从不进入 LLM 上下文（DSH 是把摘要作为可见节点注入的）。现放行 `eventType='compaction'` 的摘要
+从不进入 LLM 上下文（摘要本应作为可见节点注入上下文）。现放行 `eventType='compaction'` 的摘要
 事件消息 → 摘要进入请求列表，旧检查点亦可从请求列表提取（`extractPreviousSummary` 闭环）。
 
-### 7.2 消息级遮蔽（对齐 DSH surface 节点级）
+### 7.2 消息级遮蔽（surface 节点级）
 
 - `shadowedMessageIds` 语义从 turnId 改为 **messageId**
 - `replayer` compaction/summary：展示链路标记 `metadata.shadowed=true`（保留原文）、
@@ -215,7 +215,7 @@ head-anchored 压缩使 `system + tools + 被压缩区域` = 上次请求真前�
 
 ### 7.3 钩子插件化（压缩与记忆同步统一事件接入）
 
-**机制**（对齐 DSH agent/pre-step · agent/request-error）：
+**机制**（agent/pre-step · agent/request-error）：
 - `EventBusService` 扩展 `waterfall`（串行 await 监听器，首个非 undefined 接管/短路，错误 fail-open）
   与 `emitAsync`（串行 await 全部，供记忆同步等待）
 - 新 `types/agent-hooks.contract.ts`：`AGENT_HOOKS`（PRE_STEP / REQUEST_ERROR / BEFORE_COMPACTION / AFTER_COMPACTION）
@@ -273,7 +273,7 @@ CompactionCoordinatorService
 
 ### 8.1 目标与结果
 
-ISessionContext 不再承载任何压缩语义（对齐 DSH：Session 无压缩方法）——压缩成为
+ISessionContext 不再承载任何压缩语义（Session 无压缩方法）——压缩成为
 完全自包含、可插拔的能力：决策 + 编排 + Provider 工厂 + 持久化 + 插件事件全部内聚于压缩侧。
 
 ### 8.2 接口与职责归位
@@ -298,7 +298,7 @@ MemorySyncService：订阅 compaction.before（payload 携带全量 ISessionCont
   getHistory（引擎输入）、getModelConfig（压缩模型回退）、getTokenCount、getEffectiveContextWindow、
   getCompressionConfig（合并后配置）、getPrelude/getTools（KV 前缀）、refreshAfterCompaction（会话恢复）
 - **DIP**：coordinator/ComActionService 只依赖窄接口，不感知 ISessionContext；
-  钩子 payload 保持全量（与 DSH { agent, ... } 一致），内部窄化使用
+  钩子 payload 保持全量（`{ agent, ... }`），内部窄化使用
 - **会话侧保留**：refreshAfterCompaction（缓存失效+重载是会话状态职责）、设置合并（session>character>全局）
 
 ### 8.4 文件变更（v1.3）
@@ -329,8 +329,8 @@ v1.2 曾把 agent-engine 私有 `executeLLMStream`（重试壳）抽为 `LlmStre
 动机是"主循环与影子轮次共用"。审查后判定**前提不成立**：
 
 - **影子轮次不需要重试**：它是失败容忍的辅助调用（记忆没保存只是继续压缩），重试退避反而拖慢压缩（记忆同步是同步等待的）
-- **摘要调用不需要重试**：对齐 DSH——`summarizeWithLlm` 单次 `ctx.llm.stream`，压缩的"重试"是收敛循环（compactionRetries，再压缩），不是请求重试
-- **DSH 的重试只在 agent 层**：`retryPolicy` 请求级构造、`agent/request-error` 钩子执行；`ctx.llm` 是无重试的低层 seam
+- **摘要调用不需要重试**：`summarizeWithLlm` 单次 `ctx.llm.stream`，压缩的"重试"是收敛循环（compactionRetries，再压缩），不是请求重试
+- **重试只在 agent 层**：`retryPolicy` 请求级构造、`agent/request-error` 钩子执行；`ctx.llm` 是无重试的低层 seam
 
 裁决：**LLMService.completions 就是唯一 LLM seam**（本项目已有的 ctx.llm 等价物），
 通用重试服务（LlmRequestService/LlmStreamRunnerService）是过度封装，撤销。
@@ -340,9 +340,9 @@ v1.2 曾把 agent-engine 私有 `executeLLMStream`（重试壳）抽为 `LlmStre
 ```
 LLMService.completions                    ← 唯一 seam（路由/序列化/流式/超时/purpose）
   ├─ 主对话循环：SessionLlmRequestBuilder 组装 → agent-engine 私有 streamWithRetry
-  │      （重试 10 次 + retry 信号 yield → SSE；对齐 DSH retryPolicy 在 agent 层）
+  │      （重试 10 次 + retry 信号 yield → SSE；retryPolicy 在 agent 层）
   ├─ 影子轮次：SessionLlmRequestBuilder 组装 → 单次 completions（无重试，fail-open）
-  └─ 压缩摘要：自组装 + purpose:'compaction' → 单次 completions（无重试，对齐 DSH）
+  └─ 压缩摘要：自组装 + purpose:'compaction' → 单次 completions（无重试）
 ```
 
 ### 9.3 文件变更（v1.4）

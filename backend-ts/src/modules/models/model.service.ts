@@ -215,7 +215,7 @@ export class ModelService {
 
   /**
    * 按 apiUrl 推荐思考格式（仅供前端提示，用户确认后才写入 compat）。
-   * 对齐 DSH detectCompat 的 URL 识别面，但不做运行时隐式探测。
+   * 按 URL 形态识别，但不做运行时隐式探测。
    */
   getThinkingFormatSuggestion(apiUrl?: string) {
     return { suggestion: suggestThinkingFormat(apiUrl) };

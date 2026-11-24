@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ProviderFileStore } from './provider-file.store';
 import { ThinkingEffort } from './thinking/thinking-vocabulary';
 import { clampThinkingEffort } from './thinking/thinking-effort-policy';
-/** 调用方可恢复的「档位不受支持」错误（fail-loud，对齐 DSH UNSUPPORTED_REASONING_EFFORT） */
+/** 调用方可恢复的「档位不受支持」错误（fail-loud） */
 export class UnsupportedReasoningEffortError extends Error {
   readonly code = 'UNSUPPORTED_REASONING_EFFORT';
   constructor(
@@ -22,11 +22,11 @@ export class UnsupportedReasoningEffortError extends Error {
  *
  * 能力的唯一所有者是数据层（实例文件 → bundled 目录 → preset → 协议默认），
  * 由 ProviderFileStore 的合并视图解析。本服务把它暴露给两个消费者：
- * - LLMService：校验选择值并给出最终生效档位（对齐 DSH resolveCallWithInfo 的职责）
+ * - LLMService：校验选择值并给出最终生效档位
  * - 协议适配器：取档位的 wire 值（vendor 词汇映射），拼请求体
  *
  * 菜单与映射都不出服务边界：调用方只递交「选择值」，拿走「生效档位 / wire 值」。
- * （对齐 DSH seam：请求只带 opaque 选择，能力由所有者按需解析。）
+ * （请求只带 opaque 选择，能力由所有者按需解析。）
  */
 @Injectable()
 export class ModelCapabilityService {
@@ -49,7 +49,7 @@ export class ModelCapabilityService {
   }
 
   /**
-   * 关闭态信息（对齐 DSH：能不能关由菜单决定，关了发什么由映射值决定）。
+   * 关闭态信息（能不能关由菜单决定，关了发什么由映射值决定）。
    * - supported：菜单含 `none`（能关）
    * - wire：`thinkingEffortsMap.none` 的映射字符串（缺省 = 用 format 的原生关闭）
    */

@@ -12,7 +12,7 @@
 ## 0. 目标与设计原则
 
 1. **主对话永不被替换**：点击子Agent，在侧边栏工作目录以标签形式打开其对话记录（只读）。
-2. **移除"关闭=删除"概念**（参考 deepseek-harness 模式）：子Agent 生命周期只有 start / finished 两个状态边缘，会话记录永久留存；删除只发生在主会话删除时级联执行。
+2. **移除"关闭=删除"概念**：子Agent 生命周期只有 start / finished 两个状态边缘，会话记录永久留存；删除只发生在主会话删除时级联执行。
 3. **关闭标签 ≠ 关闭子Agent**：用户关标签只是"不看了"。
 4. **数据零 API 校验**：标签恢复校验全部使用本地 `sessionStore.sessionsMap`。
 5. **agent 标签不做 LRU 淘汰**、无数量上限压力。
@@ -167,7 +167,7 @@ function openAgentTab(agent: { sessionId: string; name: string; status: ...; ava
 - **不传 `#aside` slot**（约束 2）——侧边栏视图无 OverviewPanel。
 - 消息历史：ChatPanel watch session.id 自动 load；实时流：SSE 按 sessionId 写 sessionStore，自动续流。
 - 注意：不传 `agent-tabs` props（不嵌套子Agent面板）。
-- **与 DSH 对照**（调研结论）：DSH 侧边栏只放导航树（名称/类型/运行状态/token，无对话无输入框），子代理对话在主区域整页切换且**带输入框**（因其子代理 continuable、支持人续聊）。GuaDa 侧边栏标签只读方案与之兼容：未来若要支持子Agent 续聊，把 `hideInput` 关掉即可平滑升级，架构已预留（会话永久留存 + 流式写入）。
+- **可续聊形态的兼容性**（调研结论）：GuaDa 侧边栏标签只读方案不阻塞后续支持子Agent 续聊——未来把 `hideInput` 关掉即可平滑升级，架构已预留（会话永久留存 + 流式写入）。
 - 二期优化（可选）：抽出轻量只读消息视图（复用 `message-item` / `TurnItem` 渲染层），避免 1316 行重组件进侧边栏。**不阻塞一期上线**。
 
 ### 3.4 WorkspaceSidebar 渲染分支（~50 行）

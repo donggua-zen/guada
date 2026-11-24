@@ -16,7 +16,7 @@ export interface ThinkingAwareModelEntry {
   modelName: string;
   modelType?: string;
   /**
-   * 能力声明：能不能思考（与档位菜单正交，对齐 DSH `reasoning` 布尔）。
+   * 能力声明：能不能思考（与档位菜单正交）。
    * - false → 不能思考（菜单强制空）
    * - true → 能思考；档位来自 thinkingEfforts 声明，未声明时走通用兜底
    * - undefined → 未声明（由通用兜底决定，见 resolveEfforts）
@@ -97,7 +97,7 @@ function fallbackMenu(
 /**
  * 解析一个模型的思考档位菜单（含"是否走了通用兜底"）
  *
- * 能力与档位分离（对齐 DSH `reasoning` + `thinkingLevelMap`）：
+ * 能力与档位分离：
  * - `supportsThinking: false` / `thinkingEfforts: false` / embedding → 空菜单
  * - 档位链：模型条目显式数组 > 实例 defaultEfforts > preset（按模型名匹配）
  * - 三级全空 / legacy `true` → 通用兜底：

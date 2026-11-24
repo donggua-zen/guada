@@ -157,7 +157,7 @@ export function parseProviderTypeCard(
 }
 
 /**
- * 供应商类型目录服务（对齐 DSH pi-ai catalog）
+ * 供应商类型目录服务
  *
  * bundled-providers/*.yaml 是随应用版本分发的**类型目录数据**：
  * 「可添加供应商」模板与模型目录的唯一权威来源。用户实例文件不复制目录，

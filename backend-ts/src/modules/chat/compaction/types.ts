@@ -3,7 +3,7 @@
  *
  * - CompactionConfig：合并后的压缩配置（会话侧负责设置合并，压缩侧只消费）
  * - CompactionDataSource：会话向压缩能力暴露的窄接口——压缩侧（CompactionService/协调器）
- *   只依赖此接口操作会话，ISessionContext 不再承载任何压缩方法（对齐 DSH：Session 无压缩语义）。
+ *   只依赖此接口操作会话，ISessionContext 不再承载任何压缩方法（Session 无压缩语义）。
  *
  * 数据流：
  * - 引擎输入 = getHistory()（请求消息列表，与主请求逐字节一致，不含 prelude）
@@ -20,7 +20,7 @@ import type {
   ToolImagePruneData,
 } from '../../../common/persistence/types';
 
-/** 合并后的压缩配置（档位折算产物；对齐 DSH thresholdRatio + retainRatio） */
+/** 合并后的压缩配置（档位折算产物） */
 export interface CompactionConfig {
   /** 压缩总开关（关闭档=false：自动/溢出路径旁路；缺省视为启用，向后兼容） */
   enabled?: boolean;

@@ -745,7 +745,7 @@ export const useSessionStore = defineStore('session', () => {
         getSessionState(sessionId).isCompressing = isCompressing
     }
 
-    // ─── 会话级统一交互卡队列（审批/询问共用，对齐 DSH：sessionId 唯一锚点，不挂回合）───
+    // ─── 会话级统一交互卡队列（审批/询问共用，sessionId 唯一锚点，不挂回合）───
     //
     // 一个助手消息里的多个工具调用是并发执行的，每个都可能触发审批 → 队列（按 requestId 入队）。
     // 单槽会让后一个覆盖前一个，被覆盖的等待者永远没人应答（后端无超时）→ 回合永久挂起。

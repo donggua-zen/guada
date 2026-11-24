@@ -1,7 +1,7 @@
 /**
  * 终端模块类型定义
  *
- * 协议（WebSocket，对齐 DSH better-sidebar）：
+ * 协议（WebSocket）：
  *  客户端 → 服务端：
  *    { type: "input", text: string }        输入（原始文本）
  *    { type: "resize", cols: number, rows: number }  resize

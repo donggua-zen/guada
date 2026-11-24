@@ -1,11 +1,11 @@
 /**
- * 压缩引擎（二级：LLM 摘要遮蔽；对齐 DSH compaction-basic）
+ * 压缩引擎（二级：LLM 摘要遮蔽）
  *
  * 纯计算 + 写入引擎：消息数据由调用方传入（请求消息列表），引擎不读存储、不改写消息。
  * 一级微压缩（工具结果裁剪 + 思考剥离）已拆分为独立模块（microcompact.ts / MicrocompactService）：
  * 本引擎不做任何 prune，单次压缩只走一级或二级（手动/溢出路径只走二级）。
  *
- * 阈值设计对齐 DSH（compaction-basic）：
+ * 阈值设计：
  *   - 触发 = 验收 = thresholdRatio（0.8）：达到即摘要遮蔽
  *   - retainRatio（0.2）：压缩时保留的最近尾预算（遮蔽区之外原样保留）
  *   - 遮蔽表示：shadowedEndId（分界点消息 id）+ shadowedCount（前端标记、replayer O(1) 头删除）
@@ -310,7 +310,7 @@ export interface SummaryInput {
   instructions?: string;
 }
 
-/** 摘要生成结果（流式累积可取 usage，对齐 DSH SummaryResult） */
+/** 摘要生成结果（流式累积可取 usage） */
 export interface SummaryResult {
   summary: string;
   usage?: import('../../../common/types/stream-chunk.types').StreamUsage;
@@ -325,7 +325,7 @@ export interface CompressionOptions {
   /** 请求消息列表（context.history，与主请求逐字节一致）——引擎唯一的消息数据源 */
   messages: Message[];
   contextWindow: number;
-  /** 触发 = 验收线（默认 0.8，对齐 DSH thresholdRatio） */
+  /** 触发 = 验收线（默认 0.8） */
   triggerRatio?: number;
   /** 压缩保留尾预算（默认 0.2；遮蔽区之外原样保留） */
   retainRatio?: number;
@@ -358,7 +358,7 @@ export interface CompressionOptions {
   trigger?: 'auto' | 'manual' | 'overflow';
   /**
    * 当前完整请求 token（prelude + 视图，provider 锚点，由调用方经 ds.getTokenCount() 传入）。
-   * 引擎据此把"history-only"测量补足为完整请求占用（对齐 DSH measure = envelope + surface，
+   * 引擎据此把"history-only"测量补足为完整请求占用（measure = envelope + surface，
    * 避免门控少算 system/tools/userPrompt）；缺省退化为纯历史口径（envelopeDelta=0）。
    */
   requestTokens?: number;
@@ -483,7 +483,7 @@ export class CompressionEngine {
   }
 
   /**
-   * 执行二级压缩（对齐 DSH compactIfNeeded）：
+   * 执行二级压缩：
    * ① 触发判断（原文测量，force 跳过）→ ② 摘要可用性 → ③ 遮蔽边界（保留尾预算 + tool-pairing）
    * → ④ 摘要（读原消息，前缀命中）→ 写 compaction 括号事件。
    * @param sessionId 会话 ID
@@ -1135,7 +1135,7 @@ export class CompressionEngine {
   }
 
   /**
-   * 计算遮蔽边界：从尾部往回累计 token 到 retainTokens 预算（对齐 DSH selectCompactableRange），
+   * 计算遮蔽边界：从尾部往回累计 token 到 retainTokens 预算，
    * 预算过小强制保留最近 MIN_RETAINED_MESSAGES 条；tool-pairing 平衡不切断配对。
    * 只保证工具配对，不保证轮次完整（轮次保护由一级微压缩负责）。
    */

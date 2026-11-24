@@ -1,7 +1,7 @@
 /**
  * 沙盒策略纯函数（从 SandboxEscalationService 拆出，不含任何交互逻辑）。
  *
- * 三档安全模式词表（与 DSH SandboxMode 同构，会话持久化于 settings.sandboxMode，
+ * 三档安全模式词表（会话持久化于 settings.sandboxMode，
  * shell 与文件工具同时生效）：read-only < workspace-write < danger-full-access。
  *
  * 模型不能自我提权：越界一律由系统询问用户（命令策略弹窗 / 文件写入审批卡），

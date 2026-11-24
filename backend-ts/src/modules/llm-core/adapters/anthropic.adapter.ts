@@ -166,7 +166,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
       maxRetries: 0, // 禁用 SDK 内置重试，由 AgentEngine 统一处理重试
     });
 
-    // system 为请求 envelope 独立字段（对齐 DSH LlmCallConfig.system；Anthropic 顶层 system 槽）
+    // system 为请求 envelope 独立字段（Anthropic 顶层 system 槽）
     const anthropicMessages = await this.formatMessages(params.messages);
 
     // 构建请求参数

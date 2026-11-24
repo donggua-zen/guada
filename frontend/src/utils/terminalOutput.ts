@@ -1,5 +1,5 @@
 /**
- * 终端类工具结果解析（标记契约，对齐 DSH parseExitStatus 的思路）
+ * 终端类工具结果解析（标记契约：从模型文本剥离 [...] 标记）
  *
  * 后端 shell 工具（run_command / job_read）的模型文本契约：
  *   stdout 裸文本（空则 "(no output)"）+ 行级 [...] 标记；[exit code: N, uptime: X] 恒为末行。
@@ -9,7 +9,7 @@
  * 与结构化状态。新会话优先用工具结果 meta（见 ToolCustomView），本解析器是剥离正文与
  * 历史会话兜底的统一入口。
  *
- * 剥离语义（对齐 DSH）：exit/status 标记剥掉（UI 有 pill，避免重复显示）；
+ * 剥离语义：exit/status 标记剥掉（UI 有 pill，避免重复显示）；
  * timeout/sandbox 提示行无对应 pill，直接丢弃；截断提示剥出 logFilePath 单独成条。
  */
 

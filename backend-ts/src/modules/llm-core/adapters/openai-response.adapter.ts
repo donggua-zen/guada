@@ -338,11 +338,11 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       requestParams.tool_choice = "auto";
     }
 
-    // 处理思考强度（对齐 DSH/pi-ai 的 openai-responses 分派）：
+    // 处理思考强度（openai-responses 分派）：
     // - 强度档（非 none/on）→ reasoning:{effort: 映射值 ?? 档位名}
     // - 关闭（none，且模型声明可关）→ reasoning:{effort: off 映射值 ?? 'none'}
     //   Responses 协议没有独立开关字段，"关闭"就是一个 effort 值；
-    //   不提供 thinkingFormat（DSH 的 responses 门控不含它）。
+    //   不提供 thinkingFormat（responses 门控不含它）。
     // 拼法表达式接管时（thinkingPatchReplacesFormat）跳过内置写入，完全由表达式输出决定
     const compat = resolveEffectiveThinkingCompat(params.providerConfig);
     if (!params.thinkingPatchReplacesFormat) {

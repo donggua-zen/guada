@@ -236,10 +236,10 @@ SessionService.deleteSession
 
 | 不做 | 原因 |
 |---|---|
-| 附件内容寻址（sha256 去重） | DSH 的做法，但与本项目「目录即会话」语义冲突，收益不足 |
+| 附件内容寻址（sha256 去重） | 与本项目「目录即会话」语义冲突，收益不足 |
 | 对象存储驱动 / presigned URL | 「仅本机可见」不需要 |
 | 跨机附件寻址（引用带 host） | 拓扑已排除；前端 `toResourceUrl` 与后端 `attachmentToPart` 的绝对 URL 通道保留但不启用 |
-| 附件孤儿 GC | DSH 亦 deferred（`attachment-local/README.md:146-148` 明确 "Both directions are undecided"）；当前删会话即删附件，不产生孤儿 |
+| 附件孤儿 GC | 当前删会话即删附件，不产生孤儿；双向回收尚未定论，暂不实现 |
 | 混合部署下的附件同步 | 若将来要「A 机器看 B 机器的图」，须先改拓扑（中央服务器 + 本地 sidecar），属架构变更而非接缝改造 |
 
 ### 6.4 若拓扑将来改变
