@@ -396,7 +396,9 @@ jobs:
   publish-mirrors:
     name: Gitee / GitCode release
     needs: [build-macos, build-windows]
-    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+    # 发布源开关：仓库变量 PUBLISH_MIRRORS=false 时本次只发 GitHub，
+    # 跳过 Gitee/GitCode（官网改版期间用；改版完成后把变量置回 true/删除即可）。
+    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-') && vars.PUBLISH_MIRRORS != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
