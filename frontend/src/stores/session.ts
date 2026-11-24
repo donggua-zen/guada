@@ -488,6 +488,7 @@ export const useSessionStore = defineStore('session', () => {
      * @param count - 已加载数量
      */
     const setLoadedCount = (groupId: string, count: number): void => {
+        if (loadedCounts.value.get(groupId) === count) return
         loadedCounts.value.set(groupId, count)
     }
 
@@ -524,6 +525,7 @@ export const useSessionStore = defineStore('session', () => {
      * @param hasMore - 是否还有更多
      */
     const setHasMore = (groupId: string, hasMore: boolean): void => {
+        if (hasMoreMap.value.get(groupId) === hasMore) return
         hasMoreMap.value.set(groupId, hasMore)
     }
 

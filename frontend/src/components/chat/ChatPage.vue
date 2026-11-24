@@ -248,6 +248,7 @@ import { isMobileDevice } from '@/composables/useDevice';
 import { writeTextToClipboard } from '@/utils/clipboard';
 import { previewFile } from '@/utils/workspacePreview';
 import { beginSessionOpenTrace, traceSessionOpen, perfStart } from '@/utils/perf';
+import { getApiErrorStatus } from '@/utils/errorMessage';
 import type { Session, CreateSessionRequest, InputMessageState } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { SessionEvent } from '@/services/modules/SessionEventsService';
@@ -654,10 +655,41 @@ let lastFetchedSessionId: string | null = null;
 /**
  * 根据会话 ID 从 API 获取会话详情
  */
+/** 会话详情中会影响聊天页布局/状态的字段；全相同则跳过写入，避免回前台无变化刷新触发重排 */
+const SESSION_DETAIL_FIELDS = [
+  'title',
+  'avatarUrl',
+  'modelId',
+  'modelSource',
+  'agentId',
+  'agent',
+  'workspacePath',
+  'groupId',
+  'pinned',
+  'archived',
+  'isStreaming',
+  'closeReason',
+  'lastActiveAt',
+  'updatedAt',
+  'settings',
+  'subSessions',
+] as const
+
+function sameSessionDetail(left: Session, right: Session): boolean {
+  return SESSION_DETAIL_FIELDS.every(
+    (field) =>
+      JSON.stringify((left as unknown as Record<string, unknown>)[field]) ===
+      JSON.stringify((right as unknown as Record<string, unknown>)[field]),
+  )
+}
+
 const applySessionSnapshot = (
   session: Session,
   epochsAtRequest?: Map<string, number>,
 ) => {
+  const existing = sessionStore.getSession(session.id)
+  if (existing && sameSessionDetail(existing, session)) return
+
   sessionStore.mergeSession(session);
   // 本地 running → 快照 not-running = 后台期间回合已结束：走统一校准
   // （复位瞬态/侧栏/待答卡 + 失效历史触发强制重拉），不能只写标志。
@@ -677,7 +709,10 @@ const applySessionSnapshot = (
   subSessions.value = session.subSessions || [];
 };
 
-const fetchSession = async (sessionId: string) => {
+const fetchSession = async (
+  sessionId: string,
+  options: { silent?: boolean } = {},
+) => {
   const generation = ++sessionFetchGeneration;
   // 请求发出时的回合代数快照：响应落地时据此判断"期间是否又开了新回合"，
   // 避免把已过期的 not-running 写成终态。
@@ -696,8 +731,11 @@ const fetchSession = async (sessionId: string) => {
     // 路由已切走时不要用旧会话的失败把用户重定向到新建页
     if (generation !== sessionFetchGeneration || routeSessionId.value !== sessionId) return;
     console.error('获取会话详情失败:', error);
-    toast.error(t('common.error.loadFailed'));
-    goChatRoute(null);
+    const status = getApiErrorStatus(error);
+    if (!options.silent) toast.error(t('common.error.loadFailed'));
+    // 只有会话确实不存在才跳新建页。网络抖动/超时（移动端回前台的首个请求
+    // 高发）如果也走 goChatRoute，会触发路由导航和 NProgress，看起来像整页刷新。
+    if (status === 404) goChatRoute(null);
   }
 };
 
@@ -1017,8 +1055,14 @@ watch(
 
 // 生命周期监听同步注册，避免异步 onMounted 之后才调用 onUnmounted。
 const refreshCurrentParent = () => {
+  // 后台重连（onConnected）时不要发详情请求：移动端后台请求可能被系统挂起/中止，
+  // 失败后 old 代码会 goChatRoute(null)，回前台就看到一次路由导航 + NProgress。
+  // 回到前台后由 visibility 路径统一刷新。
+  if (document.hidden) return;
   const id = mainSession.value?.id;
-  if (id) void fetchSession(id);
+  // 回前台/重连的刷新失败只记录，不弹 toast、不跳路由：此时网络可能尚未恢复，
+  // 下一次 onConnected/visibility 会再试；路由导航会误触发 NProgress。
+  if (id) void fetchSession(id, { silent: true });
 };
 unsubscribeParentConnected = apiService.onConnected?.(refreshCurrentParent) ?? null;
 const onParentVisibility = () => {

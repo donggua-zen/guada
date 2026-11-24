@@ -55,6 +55,40 @@ export interface SidebarSnapshotStores {
 /**
  * 应用一次侧栏快照，返回被剪除的会话 id（便于调用方清理其它旁路缓存）。
  */
+/** 参与侧栏渲染/排序的会话字段；全部相同则跳过 merge，避免无变化对账触发重渲染 */
+const SESSION_SNAPSHOT_FIELDS = [
+  "id",
+  "title",
+  "avatarUrl",
+  "groupId",
+  "pinned",
+  "archived",
+  "workspacePath",
+  "workspaceKey",
+  "lastActiveAt",
+  "updatedAt",
+  "sessionType",
+  "isStreaming",
+  "closeReason",
+  "modelId",
+  "agentId",
+  "agent",
+  "settings",
+  "subSessions",
+] as const;
+
+function sameSessionSnapshot(left: Session, right: Session): boolean {
+  for (const field of SESSION_SNAPSHOT_FIELDS) {
+    if (
+      JSON.stringify((left as unknown as Record<string, unknown>)[field]) !==
+      JSON.stringify((right as unknown as Record<string, unknown>)[field])
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function applySidebarSnapshot(
   stores: SidebarSnapshotStores,
   input: SidebarSnapshotInput,
@@ -87,12 +121,13 @@ export function applySidebarSnapshot(
     }
   }
 
-  // 3. 应用会话：已存在的合并（保留前端注入字段），新的走 setSession
+  // 3. 应用会话：已存在且内容未变的直接跳过；变化的合并（保留前端注入字段），新的走 setSession
   const applySession = (session: Session): void => {
-    if (sessionStore.sessionsMap.has(session.id)) {
-      sessionStore.mergeSession(session);
-    } else {
+    const existing = sessionStore.sessionsMap.get(session.id);
+    if (!existing) {
       sessionStore.setSession(session);
+    } else if (!sameSessionSnapshot(existing, session)) {
+      sessionStore.mergeSession(session);
     }
     if (session.isStreaming) {
       sessionStore.syncStreamingState(session.id, true);

@@ -139,10 +139,37 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
     }
   }
 
+  /** 分组行仅这些字段参与侧栏渲染；相同则无需替换数组触发重渲染 */
+  const sameGroupRows = (
+    left: ReadonlyArray<Pick<SessionGroup, 'id' | 'name' | 'sortOrder' | 'icon'>>,
+    right: ReadonlyArray<Pick<SessionGroup, 'id' | 'name' | 'sortOrder' | 'icon'>>,
+  ): boolean => {
+    if (left.length !== right.length) return false
+    for (let i = 0; i < left.length; i += 1) {
+      const a = left[i]
+      const b = right[i]
+      if (
+        a.id !== b.id ||
+        a.name !== b.name ||
+        a.sortOrder !== b.sortOrder ||
+        (a.icon ?? null) !== (b.icon ?? null)
+      ) {
+        return false
+      }
+    }
+    return true
+  }
+
   /**
    * 直接设置分组列表（从侧边栏批量接口获取，无需额外请求）
+   *
+   * 对账会周期性调用：内容不变时直接返回，避免替换数组触发整段侧栏重渲染。
    */
   const setGroups = (data: SessionGroup[]): void => {
+    if (sameGroupRows(groups.value, data || [])) {
+      hasLoaded.value = true
+      return
+    }
     groups.value = data || []
     hasLoaded.value = true
 
@@ -289,19 +316,44 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
 
   // ========== 目录分组（按工作目录） ==========
 
+  const sameProjectGroupRows = (
+    left: ReadonlyArray<ProjectGroup>,
+    right: ReadonlyArray<ProjectGroup>,
+  ): boolean => {
+    if (left.length !== right.length) return false
+    for (let i = 0; i < left.length; i += 1) {
+      const a = left[i]
+      const b = right[i]
+      if (
+        a.id !== b.id ||
+        a.name !== b.name ||
+        a.path !== b.path ||
+        a.pathKey !== b.pathKey ||
+        a.sortOrder !== b.sortOrder ||
+        a.isOverridden !== b.isOverridden ||
+        (a.icon ?? null) !== (b.icon ?? null) ||
+        a.kind !== b.kind
+      ) {
+        return false
+      }
+    }
+    return true
+  }
+
   /**
    * 设置目录分组投影（来自侧栏目录模式接口）。
    * 末尾追加虚拟「通用」桶；它的名称留空，由组件按 i18n 渲染。
+   *
+   * 对账会周期性调用：内容不变时直接返回，避免替换数组触发整段侧栏重渲染。
    */
   const setProjectGroups = (
     data: Array<Omit<ProjectGroup, 'kind'>>,
   ): void => {
-    const saved = loadExpandedState()
-    const list: ProjectGroup[] = (data || []).map((g) => ({
+    const next: ProjectGroup[] = (data || []).map((g) => ({
       ...g,
       kind: 'workspace' as const,
     }))
-    list.push({
+    next.push({
       id: GENERAL_PROJECT_GROUP_ID,
       name: '',
       path: null,
@@ -311,9 +363,14 @@ export const useSessionGroupStore = defineStore('sessionGroup', () => {
       icon: null,
       kind: 'general',
     })
-    projectGroups.value = list
+    if (sameProjectGroupRows(projectGroups.value, next)) {
+      projectGroupsLoaded.value = true
+      return
+    }
+    projectGroups.value = next
     projectGroupsLoaded.value = true
-    for (const group of list) {
+    const saved = loadExpandedState()
+    for (const group of next) {
       expandedState.value.set(group.id, saved[group.id] ?? true)
     }
   }
