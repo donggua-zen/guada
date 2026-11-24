@@ -41,6 +41,15 @@ const RETIRED_TOOL_REPLACEMENTS: Record<string, string> = {
   browser_close:
     'Use browser_run with `browser.tabs.close(index?)` instead.',
   browser_windows: 'Use browser_run with `browser.tabs.list()` instead.',
+  // Computer Use 收敛为 computer_run 单入口（脚本 + computer-use 技能）。
+  computer_observe:
+    'Use computer_run with `await computer.screenshot()`, `await computer.windows()`, `await computer.apps()`, or `await computer.cursor()` instead. Call skill_learn("computer-use") for the full API.',
+  computer_a11y_observe:
+    'Use computer_run with `await computer.a11y({ pid? })` instead. Call skill_learn("computer-use") for the full API.',
+  computer_input:
+    "Use computer_run with `await computer.click(...)`, `setValue(...)`, `type(...)`, `key(...)`, `scroll(...)`, `focusWindow(...)`, `move(...)`, or `drag(...)` instead. Call skill_learn(\"computer-use\") for the full API.",
+  computer_launch:
+    'Use computer_run with `await computer.launch(path)` instead. Call skill_learn("computer-use") for the full API.',
 };
 
 const RETIRED_TOOLKIT_REPLACEMENTS: Record<string, string> = {

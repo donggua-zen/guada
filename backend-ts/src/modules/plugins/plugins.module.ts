@@ -102,7 +102,12 @@ export class PluginsModule implements OnModuleInit {
 
     if (process.env.ELECTRON_APP === "true") {
       await this.pluginManager.registerPlugin(this.moduleRef.get(BrowserScriptPlugin));
-      if (process.platform === "win32") {
+      // Windows x64 + macOS arm64 are the platforms with a pinned sidecar binary.
+      // Intel macs have no pinned binary, so the toolkit stays hidden there.
+      if (
+        process.platform === "win32" ||
+        (process.platform === "darwin" && process.arch === "arm64")
+      ) {
         await this.pluginManager.registerPlugin(this.moduleRef.get(ComputerPlugin));
       }
     }

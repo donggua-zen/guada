@@ -91,7 +91,7 @@ GuaDa 是一个**本地优先**的开源 AI 工作站——它不只是聊天框
 | **👥 子 Agent 系统** | 角色/模型/工具/MCP/Skills 独立配置，复杂任务自动拆解 → 委派执行 → 结果归集 | [→ 详情](docs/sub-agent.md) |
 | **🧭 工作流编排** | 输入 `/workflow` 显式发起多子代理编排：模型现场生成脚本，按阶段并行/串行调度并汇总结果 | [→ 设计文档](docs/workflow-subagent-plan.md) |
 | **📱 移动端远程控制** | 手机/平板浏览器接管桌面端完整 Web UI：对话、审批、终端、文件、会话；局域网扫码或公网 SSH 反向隧道，息屏/断网自动重连 | [→ 详情](docs/mobile-access.md) |
-| **🖥️ Computer Use（Windows）** | Agent 截屏、点击、输入、操作窗口；默认关闭，动作需审批，仅 Windows x64 | [→ 详情](docs/COMPUTER_USE.md) |
+| **🖥️ Computer Use（Windows / macOS）** | Agent 截屏、点击、输入、操作窗口；`computer_run` 脚本化驱动，完整 API 走 `computer-use` 技能；默认关闭，动作需审批，支持 Windows x64 / macOS Apple Silicon | [→ 详情](docs/COMPUTER_USE.md) |
 | **🔌 插件系统** | 核心功能插件化（浏览器/文件/搜索/定时任务/Computer Use 等），PluginBase 生命周期 + 热插拔即时生效，工具包级权限过滤 | — |
 | **📚 知识库 (RAG)** | 语义 + 关键词双混合检索，Agent 自助多轮搜索与写入，支持 **40+ 文件格式**（含 OCR） | [→ 详情](docs/knowledge-base.md) |
 | **🛠️ 技能管理** | 文件即技能，chokidar 热更新即时生效，渐进式加载省 Token | [→ 详情](docs/skills.md) |
@@ -128,7 +128,7 @@ GuaDa 是一个**本地优先**的开源 AI 工作站——它不只是聊天框
 - 息屏、切后台或断网后 SSE 自动重连；恢复可见时校准会话状态并重拉历史，不会卡在「流式中」；
 - 强制访问密码：未设密码不能开启；公网期间要求 12 位以上、字母/数字/符号三类齐全；SSH 密码 AES-256-GCM 加密落盘，主机指纹 TOFU。
 
-**边界**：这是「手机远程操作 GuaDa 工作台」，不是投屏或远程桌面，没有实时屏幕流。要让 Agent 直接操作 Windows 桌面（截屏、点击、输入、切换窗口），用 **Computer Use**：默认关闭，鼠标键盘动作默认需要审批，目前仅支持 Windows x64。
+**边界**：这是「手机远程操作 GuaDa 工作台」，不是投屏或远程桌面，没有实时屏幕流。要让 Agent 直接操作本机桌面（截屏、点击、输入、切换窗口），用 **Computer Use**：默认关闭，鼠标键盘动作默认需要审批，支持 Windows x64 与 macOS Apple Silicon。
 
 文档：[移动访问](docs/mobile-access.md) · [Computer Use](docs/COMPUTER_USE.md)
 

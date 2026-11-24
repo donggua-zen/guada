@@ -6,11 +6,17 @@ renderer or the NestJS backend process.
 
 ## Scope
 
-- Platform: Windows x64 (win32-x64), macOS arm64 (darwin-arm64)
+- Platform: Windows x64 (win32-x64), macOS arm64 (darwin-arm64). The plugin is
+  registered only on these two targets; Intel macs have no pinned sidecar and
+  the toolkit stays hidden there.
 - Observe: screenshot, cursor position, window list, per-application window
   groups, accessibility tree (UI Automation on Windows, AX on macOS)
 - Act: element click (by ref or accessible name), element value set, pixel
   click, type, key, scroll, drag, focus window, app launch by absolute path
+- Model entry point: one eager tool, `computer_run`, which executes a
+  JavaScript script against the `computer.*` API. The complete API guide is
+  registered as the `computer-use` skill and loaded on demand with
+  `skill_learn("computer-use")`. See [computer-script.md](./computer-script.md).
 - Out of scope for this release: Linux, Set-of-Marks overlays, OCR
 
 The capability is opt-in. The plugin is registered as an `extended` plugin, so
@@ -23,9 +29,10 @@ second execution gate.
 ## Architecture
 
 ```
-LLM tool call
-  -> backend-ts ComputerPlugin (lazy toolkit, Electron only)
-  -> BridgeClient.request("computer_*")
+LLM
+  -> computer_run (computer toolkit, eager)
+  -> ComputerScriptRuntime (NestJS backend, Worker + vm sandbox)
+  -> BridgeClient.request("computer_observe" / "computer_a11y_observe" / "computer_input" / "launch_app")
   -> Electron BridgeServer exact handler
   -> ComputerSidecarClient (spawn + NDJSON JSON-RPC)
   -> guada-computer[.exe|-darwin-arm64] --stdio
@@ -36,6 +43,13 @@ LLM tool call
 The Electron main process owns the sidecar lifecycle. The NestJS backend never
 spawns it and never needs to know the packaged resources path. The sidecar
 listens on stdio only: no TCP port, no token, no network surface.
+
+The script runs in a `worker_threads` worker with a `vm` context. The sandbox
+only exposes `computer`, `log`, `sleep`, `args`, `console` and host timers:
+there is no `require`, `process`, `fs`, `fetch` or child process. The model
+script can perform many actions in one call (loops, conditions, re-observing),
+which replaces the old multi-round-trip tool chain.
+
 
 ## Repository and version lock
 
@@ -182,6 +196,12 @@ input must carry `expected_generation` and the kind must match:
 | `type`, `key`, `scroll` without coordinates | any |
 | `scroll` with coordinates | screenshot |
 
+In script mode the model never supplies `expected_generation`: the runtime
+stores the generation returned by the last observation, fills it into the next
+`computer_input`, and rejects the call with `NO_OBSERVATION` /
+`WRONG_OBSERVATION_KIND` before the sidecar is touched when it is missing or of
+the wrong kind.
+
 Any input clears the lease and the sidecar's native caches. The next input must
 observe again. Reusing an old ref or coordinate is rejected with
 `STALE_REFERENCE`.
@@ -249,15 +269,23 @@ Settings group `computerUse`:
 }
 ```
 
-- `launch_app` is a separate tool (`computer_launch`) with its own policy key;
-  it only accepts absolute executable paths and never forwards arguments.
+- `launch_app` is its own policy key, used by `computer.launch(path)`; it only
+  accepts absolute executable paths and never forwards arguments.
 - `allow`: execute without a card.
 - `ask`: show the `computer-use-approval` card. Options are "allow once",
-  "allow for this turn" and "deny".
-- `deny`: reject before touching the sidecar.
+  "allow for this turn" and "deny". Choosing "allow for this turn" covers the
+  rest of the desktop actions in the current turn, so a multi-action script
+  produces at most one card.
+- `deny`: reject before touching the sidecar. A denied action aborts the whole
+  script; the model must not retry it unchanged.
+- Observation policy keys (`screenshot`, `a11y_observe`, `list_windows`) are
+  enforced by the script runtime too, not just exposed in the settings UI.
 
 Sessions without an answer surface (sub-agents, bots) fail closed for `ask`
-actions. Read-only tools are allowed in plan mode; `computer_input` is not.
+actions; only `allow` actions can run there. In plan mode, observation calls
+run and every input/launch call is rejected by the runtime with
+`PLAN_MODE_DENIED`; the tool itself stays visible so the model can still
+screenshot and inspect the desktop.
 
 ## Permissions and safety
 
@@ -275,8 +303,18 @@ actions. Read-only tools are allowed in plan mode; `computer_input` is not.
   after granting. The packaged sidecar binary is codesigned together with the
   app so the TCC attribution sticks.
 - The sidecar does not open a network listener.
-- Screenshots are written to the session workspace under
-  `computer-screenshots/` and are not uploaded automatically.
+- Model scripts run in a Worker + vm sandbox with a 256MB heap, a 5s
+  synchronous slice and an overall timeout; timeouts terminate the worker.
+- One process-wide desktop lock serializes scripts (the sidecar's observation
+  generation is global). A second session waits up to 15s, then gets
+  `COMPUTER_BUSY` instead of interleaving observations.
+- Screenshots are written by the sidecar to a temporary path, imported into
+  the session image store (`sessions/<id>/images/`) and the temporary file is
+  removed. Up to 6 recent distinct screenshots are attached to the tool result;
+  all paths are listed.
+- Approval detail and the step trace never include full typed text or
+  `set_value` content (only character counts), so passwords do not leak into
+  logs or meta.
 - Foreground activation uses the standard Win32 path plus a bounded fallback
   that temporarily clears the foreground-lock timeout and restores it
   immediately.
@@ -298,20 +336,33 @@ Main repository:
 pnpm run verify:sidecar
 pnpm run test:computer-sidecar
 pnpm run test:computer-sidecar:electron   # Electron client + real sidecar + screenshot/a11y
-pnpm --dir backend-ts exec jest test/computer test/plugins/computer.plugin.spec.ts --runInBand
+pnpm --dir backend-ts exec jest test/computer test/plugins/computer.plugin.spec.ts test/plugins/computer-script.runtime.spec.ts --runInBand
 pnpm --dir frontend exec vitest run src/utils/computerUse.test.ts
 ```
 
 Manual acceptance:
 
-1. Enable Computer Use in Settings.
-2. Open Notepad.
-3. Ask the agent to observe the screen, click the editor, type two lines, and
-   take a screenshot.
-4. Verify the text appears and the screenshot shows it.
-5. Repeat at 125% / 150% display scaling and on a secondary monitor.
-6. Remove the sidecar binary and confirm the tool reports "unavailable"
+1. Enable Computer Use in Settings and grant the `computer` toolkit to an
+   agent; `skill_learn("computer-use")` returns the full guide.
+2. Ask the agent to observe the screen (screenshot + accessibility tree) and
+   confirm the tool result contains the attached screenshot and the element
+   list.
+3. Open Notepad and ask the agent to launch it, click the editor, type two
+   lines, set a value, and take a screenshot. Verify the approval card, the
+   "allow once / allow for this turn / deny" options, and the final screen.
+4. Deny an action and confirm the whole script stops with `POLICY_DENIED` and
+   the model does not retry it unchanged.
+5. Enable plan mode: an observation-only script must run, while
+   `click`/`type`/`launch` must fail with `PLAN_MODE_DENIED`.
+6. Spawn a sub-agent: observation-only scripts run; `ask` actions fail closed
+   with `APPROVAL_UNAVAILABLE` unless the corresponding policy is `allow`.
+7. Start two computer scripts from different sessions: the second must report
+   `COMPUTER_BUSY` after the 15s wait, not interleave.
+8. Repeat at 125% / 150% display scaling and on a secondary monitor.
+9. Remove the sidecar binary and confirm the tool reports "unavailable"
    without crashing the app.
+10. macOS arm64: grant Screen Recording + Accessibility, repeat steps 2-3,
+    and verify `verify:sidecar` plus the packaged signature.
 
 ## Packaging
 
@@ -340,9 +391,11 @@ Manual acceptance:
 - Notarized builds + hardened-runtime entitlements for the mac sidecar
 - Screenshot retention controls
 - Optional Set-of-Marks overlay and OCR
-- Batched multi-step actions with automatic re-verification (a `run_steps`
-  style tool that carries window, screenshot and snapshot state across steps)
 - Window-scoped coordinates and window-relative screenshots
+- A shared script runner extracted from browser-script / computer-script /
+  workflow (the three currently duplicate the Worker + vm bootstrap)
 
-Drag and application launch shipped in v0.1.0 of the sidecar's second
-revision. The remaining items are deliberately outside the current release.
+Multi-step batching is now delivered by `computer_run` itself: the script can
+observe, act, re-observe and branch inside one tool call. Drag and application
+launch shipped in v0.1.0 of the sidecar's second revision. The remaining items
+are deliberately outside the current release.

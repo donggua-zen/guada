@@ -24,6 +24,12 @@ export class ComputerLeaseRegistry {
     this.leases.delete(sessionId);
   }
 
+  /** 只读当前租约，供脚本运行时自动携带 expected_generation。 */
+  peek(sessionId: string): ObservationLease | undefined {
+    if (!sessionId) return undefined;
+    return this.leases.get(sessionId);
+  }
+
   require(
     sessionId: string,
     action: ComputerPolicyKey,
@@ -33,7 +39,7 @@ export class ComputerLeaseRegistry {
     const lease = this.leases.get(sessionId);
     if (!lease) {
       throw new Error(
-        "No computer observation is available. Call computer_observe or computer_a11y_observe before sending input."
+        "No computer observation is available. Call computer.screenshot() or computer.a11y() in a computer_run script before sending input."
       );
     }
     if (

@@ -133,7 +133,7 @@ uploadFile(sessionId, file)
 
 ### 3.2 工具产出图片：落库不拆，请求时派生
 
-工具（`image_view` / `browser_run` 截图 / `computer_observe` / MCP image content）产出的
+工具（`image_view` / `browser_run` 截图 / `computer_run` 截图 / MCP image content）产出的
 图片，物化后以 `FileRef[]` 内嵌在 `tool/result` 事件的 `images` 字段，与
 `name`/`toolCallId` 同一条记录——图片归属可直接追溯，不再落库时拆成一条隐藏 user 消息。
 

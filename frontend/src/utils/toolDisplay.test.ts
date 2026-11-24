@@ -579,12 +579,12 @@ describe("hasToolAggregate（是否声明了带 {n} 的聚合模板）", () => {
 
   it("聚合模板没有 {n}（单项式文案）：false，保留工具自己的动作文案", () => {
     setPluginToolDisplays({
-      computer_observe: {
-        text: { executing: "正在观察桌面", completed: "已观察桌面" },
-        aggregate: { executing: "观察桌面", completed: "已观察桌面" },
+      computer_run: {
+        text: { executing: "正在执行桌面脚本", completed: "已执行桌面脚本" },
+        aggregate: { executing: "执行桌面脚本", completed: "已执行桌面脚本" },
       },
     });
-    expect(hasToolAggregate({ name: "computer_observe" })).toBe(false);
+    expect(hasToolAggregate({ name: "computer_run" })).toBe(false);
   });
 
   it("未注册工具：false（getToolConfig 的通用兜底不算聚合）", () => {
