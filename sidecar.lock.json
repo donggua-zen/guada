@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/donggua-zen/guada-computer.git",
   "tag": "v0.2.0",
-  "commit": "22396cff189aa5cac1d1e4253a5bd028692c82a1",
+  "commit": "3999665af3836c4b110c49d14c72b24b12aa8d90",
   "protocol": "1",
   "binaries": {
     "win32-x64": {
@@ -10,7 +10,7 @@
     },
     "darwin-arm64": {
       "path": "build-resources/computer-sidecar/guada-computer-darwin-arm64",
-      "sha256": "f78ae77cc2a418df9f71a7d4df4ab55fa94319a38c0c531f3cfebaeee97fe1ac"
+      "sha256": "226c575b491034a98a8a68edac997eaf7416cf1b90c00b618b2bc5aaf35f3b2a"
     }
   }
 }
