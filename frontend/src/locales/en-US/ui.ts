@@ -139,6 +139,8 @@
     noTasks: 'No tasks',
     loadingMore: 'Loading...',
     loadMore: 'Click to load more',
+    showMore: 'Show more',
+    showLess: 'Show less',
     // ── Sidebar grouping mode (groups / by working directory) ──
     groupingByGroup: 'Groups',
     groupingByProject: 'Folders',

@@ -353,6 +353,72 @@ describe("sessionStore 分组分页窗口", () => {
     expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(2);
   });
 
+  it("目录模式桶：显式传入 hasLocalMore 才复位 hasMore（groupId 无法推断桶归属）", () => {
+    const store = useSessionStore();
+    // 目录桶的会话 groupId 多为 null，旧实现按 getSessionsByGroup 判断会恒为空
+    for (let i = 0; i < 4; i++) {
+      store.setSession(
+        mkSession(`pg-${i}`, { lastActiveAt: `2026-03-0${i + 1}T00:00:00.000Z` }),
+      );
+    }
+    store.setLoadedCount("pg-a", 4);
+    store.setHasMore("pg-a", false);
+
+    // 不传 hasLocalMore：退回手工分组语义 → 判不出桶内还有会话，hasMore 保持 false
+    store.resetGroupPagination("pg-a", 2);
+    expect(store.getLoadedCount("pg-a")).toBe(2);
+    expect(store.groupHasMore("pg-a")).toBe(false);
+
+    // 显式传 true：hasMore 复位，展开后可继续「加载更多」
+    store.setLoadedCount("pg-a", 4);
+    store.setHasMore("pg-a", false);
+    store.resetGroupPagination("pg-a", 2, true);
+    expect(store.getLoadedCount("pg-a")).toBe(2);
+    expect(store.groupHasMore("pg-a")).toBe(true);
+  });
+
+  it("shrinkGroupWindowsTo 把所有窗口压到新档位并复位 hasMore", () => {
+    const store = useSessionStore();
+    seedGroup(store, 10);
+    // 另一个分组也建立一个更深的窗口
+    for (let i = 0; i < 8; i++) {
+      store.setSession(
+        mkSession(`h${i}`, {
+          groupId: "g2",
+          lastActiveAt: `2026-02-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`,
+        }),
+      );
+    }
+    store.setLoadedCount("g1", 10);
+    store.setLoadedCount("g2", 8);
+    store.setHasMore("g1", false);
+    store.setHasMore("g2", false);
+
+    store.shrinkGroupWindowsTo(5);
+
+    expect(store.getLoadedCount("g1")).toBe(5);
+    expect(store.getLoadedCount("g2")).toBe(5);
+    expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(5);
+    expect(store.getVisibleSessionsByGroup("g2")).toHaveLength(5);
+    // 被收起的会话仍在本地，hasMore 置回 true 以便重新展开
+    expect(store.getSessionsByGroup("g1")).toHaveLength(10);
+    expect(store.groupHasMore("g1")).toBe(true);
+    expect(store.groupHasMore("g2")).toBe(true);
+  });
+
+  it("shrinkGroupWindowsTo 不放大较浅的窗口，也不动未建窗口的分组", () => {
+    const store = useSessionStore();
+    seedGroup(store, 3);
+    store.setLoadedCount("g1", 2);
+    store.setLoadedCount("g-empty", 0);
+
+    store.shrinkGroupWindowsTo(5);
+
+    expect(store.getLoadedCount("g1")).toBe(2);
+    expect(store.getVisibleSessionsByGroup("g1")).toHaveLength(2);
+    expect(store.getLoadedCount("g-empty")).toBe(0);
+  });
+
   it("未分组使用 UNGROUPED_ID 作为分页 key", () => {
     const store = useSessionStore();
     for (let i = 0; i < 3; i++) {

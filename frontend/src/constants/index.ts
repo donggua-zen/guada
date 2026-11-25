@@ -39,3 +39,32 @@ export const COMPRESSION_TIER_OPTIONS = [
  * 后续做移动端适配时沿用本常量，不要再另起一套断点。
  */
 export const SIDEBAR_AUTO_COLLAPSE_WIDTH = 1024
+
+/**
+ * 侧栏每组首屏展示条数的收敛档位（按可见分组/项目数自适应）。
+ *
+ * 项目一多，每组分 10~15 条会把侧栏撑得极长（N 个项目 × 10 行），远超视口预算。
+ * 这里按分组数分档收敛：少分组可以宽松（10），多分组收紧（5），使侧栏总行数大致
+ * 恒定在当前视口能容纳的范围内。所有档位只在 resolveSidebarPageSize 一处解释。
+ */
+export const SIDEBAR_SESSION_PAGE_TIERS = [
+  { maxGroups: 3, size: 10 },
+  { maxGroups: 6, size: 7 },
+  { maxGroups: Number.POSITIVE_INFINITY, size: 5 },
+] as const
+
+/**
+ * 「已置顶」分区一次最多渲染的条数。
+ *
+ * 置顶区不参与分页窗口（置顶会话本就不占分组配额），但全量渲染会让置顶多的用户
+ * 看不到下面的项目区，因此收在 20 条，其余走「显示更多 / 显示更少」切换。
+ */
+export const SIDEBAR_PINNED_SECTION_LIMIT = 20
+
+/**
+ * 上次已知的侧栏可见分组数（localStorage key）。
+ *
+ * 冷启动时分组清单还没回来，先用上次的值估算首屏条数，避免先用 10 条拉一波、
+ * 快照到达后再收紧造成可见跳动。
+ */
+export const SIDEBAR_GROUP_COUNT_STORAGE_KEY = 'sidebarGroupCount'

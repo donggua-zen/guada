@@ -139,6 +139,8 @@ export default {
     noTasks: '暂无任务',
     loadingMore: '加载中...',
     loadMore: '点击加载更多',
+    showMore: '显示更多',
+    showLess: '显示更少',
     // ── 侧栏分组模式（普通分组 / 按工作目录） ──
     groupingByGroup: '分组',
     groupingByProject: '目录',

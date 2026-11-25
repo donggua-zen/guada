@@ -505,16 +505,42 @@ export const useSessionStore = defineStore('session', () => {
      *
      * 仅当已经「加载更多」过（count > initialCount）才收缩窗口，避免无谓改动；
      * 收缩后若本地仍有被截掉的会话，保持 hasMore 以便展开后能重新加载。
+     *
+     * 注意：目录模式下桶 id 不是 session.groupId，本 store 无法自行判断桶内是否还有
+     * 被截断的会话，必须由调用方按桶口径传入 `hasLocalMore`；不传时退回手工分组语义。
+     *
      * @param groupId - 分组ID（未分组传 UNGROUPED_ID）
      * @param initialCount - 首屏每组加载数量
+     * @param hasLocalMore - 本地该桶是否仍有被截断的会话（目录模式必传）
      */
-    const resetGroupPagination = (groupId: string, initialCount: number): void => {
+    const resetGroupPagination = (
+        groupId: string,
+        initialCount: number,
+        hasLocalMore?: boolean,
+    ): void => {
         const current = loadedCounts.value.get(groupId)
         if (current === undefined || current <= initialCount) return
         loadedCounts.value.set(groupId, initialCount)
 
-        const targetGroupId = groupId === UNGROUPED_ID ? null : groupId
-        if (getSessionsByGroup(targetGroupId).length > initialCount) {
+        const more = hasLocalMore ?? getSessionsByGroup(
+            groupId === UNGROUPED_ID ? null : groupId,
+        ).length > initialCount
+        if (more) {
+            hasMoreMap.value.set(groupId, true)
+        }
+    }
+
+    /**
+     * 把所有分组的可见窗口收缩到 `count`（分组数变多、首屏档位收紧时调用）。
+     *
+     * 纯本地操作，不发请求：被收起的会话仍在 sessionsMap 里，只是暂时不渲染，
+     * 并把 hasMore 置回 true，用户可以再点「加载更多」重新展开。
+     * 分组尚未建立窗口（count 为 undefined/0）时保持原样——此时不做截断。
+     */
+    const shrinkGroupWindowsTo = (count: number): void => {
+        for (const [groupId, current] of loadedCounts.value) {
+            if (current <= count) continue
+            loadedCounts.value.set(groupId, count)
             hasMoreMap.value.set(groupId, true)
         }
     }
@@ -1164,6 +1190,7 @@ export const useSessionStore = defineStore('session', () => {
         setLoadedCount,
         getLoadedCount,
         resetGroupPagination,
+        shrinkGroupWindowsTo,
         setHasMore,
         groupHasMore,
         setProjectBucketResolver,

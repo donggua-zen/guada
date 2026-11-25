@@ -211,10 +211,15 @@
                   </div>
               </div>
 
-              <!-- 分组内加载更多 -->
+              <!-- 分组底部入口：置顶分区是「显示更多/更少」切换，其它分组是分页「加载更多」 -->
               <div v-if="groupHasMoreSessions(group.id) || sessionGroupStore.loadingMoreGroupId === group.id"
                 class="py-1 px-5 text-left">
-                <div v-if="sessionGroupStore.loadingMoreGroupId === group.id"
+                <div v-if="group.id === PINNED_GROUP_ID"
+                  class="text-xs text-gray-400 cursor-pointer hover:text-blue-500 transition-colors"
+                  @click="togglePinnedShowAll">
+                  {{ pinnedToggleLabel }}
+                </div>
+                <div v-else-if="sessionGroupStore.loadingMoreGroupId === group.id"
                   class="flex items-center justify-center gap-2 text-xs text-gray-500">
                   
                     <ArrowSync16Regular class="animate-spin w-3.5 h-3.5"  />
@@ -356,10 +361,12 @@
 import { getApiErrorStatus, getErrorMessage } from '@/utils/errorMessage'
 import { resolveProjectBucketId } from '@/utils/projectGroupBucket'
 import { resolveGroupWorkspacePath } from '@/utils/newSessionEntry'
-import { NEW_SESSION_ID } from '@/constants'
+import { NEW_SESSION_ID, SIDEBAR_PINNED_SECTION_LIMIT, SIDEBAR_GROUP_COUNT_STORAGE_KEY } from '@/constants'
+import { resolveSidebarPageSize } from '@/utils/sidebarPaging'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, markRaw, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
+import { useStorage } from '@vueuse/core'
 import { useAuthStore } from '../stores/auth'
 import { useLayoutStore } from '../stores/layout'
 import { useSessionStore } from '../stores/session'
@@ -461,6 +468,8 @@ const { t } = useI18n()
 const PINNED_GROUP_ID = '__pinned__'
 /** 置顶分区折叠态（本地，不落分组 store） */
 const pinnedExpanded = ref(true)
+/** 置顶分区是否已「显示更多」（超过上限时才有意义） */
+const pinnedShowAll = ref(false)
 
 /**
  * 侧栏分组渲染项：手工分组、目录分组与虚拟分区共用同一套模板。
@@ -512,13 +521,15 @@ const toggleAllGroups = (): void => {
   for (const group of displayGroups.value) {
     if (group.id === PINNED_GROUP_ID) {
       pinnedExpanded.value = expand
+      // 收起置顶区同时丢弃「显示更多」，再展开时回到上限内的收敛状态
+      if (!expand) pinnedShowAll.value = false
       continue
     }
     if (isGroupExpanded(group.id) === expand) continue
     sessionGroupStore.setExpand(group.id, expand)
     if (!expand) {
       groupCollapseEpoch.set(group.id, (groupCollapseEpoch.get(group.id) ?? 0) + 1)
-      sessionStore.resetGroupPagination(group.id, initialPageSize.value)
+      collapseGroupPagination(group.id)
     }
   }
 }
@@ -701,8 +712,21 @@ const bumpLocalSidebarMutation = (): void => {
 const currentSidebarMutationEpoch = (): number =>
   sessionGroupStore.mutationEpoch + localSidebarMutationEpoch.value
 
-/** 首屏每组加载条数（折叠分组时把可见数量重置回该值） */
-const initialPageSize = ref(window.innerHeight > 1080 ? 15 : 10)
+/**
+ * 上次已知的侧栏可见分组数（落 localStorage）。
+ * 冷启动时分组清单还没回来，先用它估算首屏条数，避免「先按 10 条拉一波、快照到达后再收紧」
+ * 造成的可见跳动；快照到达后由 loadSessions 校正。
+ */
+const lastKnownGroupCount = useStorage(SIDEBAR_GROUP_COUNT_STORAGE_KEY, 0)
+
+/**
+ * 首屏每组加载条数（按可见分组数自适应当前档位）。
+ * 既是首屏请求的 limit，也是「加载更多」步长与折叠时的回收目标，三处必须同源。
+ */
+const initialPageSize = ref(resolveSidebarPageSize(lastKnownGroupCount.value))
+
+/** 档位收紧/放宽触发的补拉是否在途（防重入，避免两条路径互相触发） */
+const isTierReloading = ref(false)
 
 /** 分组折叠代数：用于丢弃请求期间被折叠的「加载更多」结果 */
 const groupCollapseEpoch = new Map<string, number>()
@@ -875,7 +899,11 @@ const displayGroups = computed((): SidebarGroupItem[] => {
 
 // 获取分组内的会话（从 sessionStore 统一数据源获取，受分页可见窗口截断）
 const getGroupSessions = (groupId: string): Session[] => {
-  if (groupId === PINNED_GROUP_ID) return sessionStore.getPinnedSessions()
+  if (groupId === PINNED_GROUP_ID) {
+    // 置顶区不占分组分页配额，但全量渲染会把项目区挤出视口：超过上限先只渲染前 N 条
+    const pinned = sessionStore.getPinnedSessions()
+    return pinnedShowAll.value ? pinned : pinned.slice(0, SIDEBAR_PINNED_SECTION_LIMIT)
+  }
   if (sessionGroupStore.groupingMode === 'workspace') {
     return sessionStore.getVisibleSessionsByProjectGroup(
       groupId,
@@ -884,6 +912,61 @@ const getGroupSessions = (groupId: string): Session[] => {
   }
   const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
   return sessionStore.getVisibleSessionsByGroup(groupIdParam)
+}
+
+/** 参与首屏档位计算的分组数（排除「已置顶」虚拟分区：它不占分组配额） */
+const sidebarGroupCount = (): number =>
+  displayGroups.value.filter((group) => group.id !== PINNED_GROUP_ID).length
+
+/**
+ * 计算首屏档位用的分组数。
+ *
+ * 分组清单尚未加载时（冷启动首帧）live 计数只剩「任务列表」一项，会把档位误判成最宽松档，
+ * 因此此时退回 localStorage 里上次已知的分组数；清单到位后一律以 live 为准。
+ */
+const effectiveGroupCount = (): number => {
+  const live = sidebarGroupCount()
+  const groupsLoaded =
+    sessionGroupStore.groupingMode === 'workspace'
+      ? sessionGroupStore.projectGroupsLoaded
+      : sessionGroupStore.hasLoaded
+  return groupsLoaded ? live : lastKnownGroupCount.value
+}
+
+// 置顶数回落到上限内时复位「显示更多」，避免取消置顶后曾残留的展开态把按钮判据弄反
+watch(
+  () => sessionStore.getPinnedSessions().length,
+  (count) => {
+    if (count <= SIDEBAR_PINNED_SECTION_LIMIT) pinnedShowAll.value = false
+  },
+)
+
+/**
+ * 本地该桶是否仍有被分页窗口截断的会话。
+ *
+ * 目录模式下桶 id 不是 session.groupId，store 无法自行判断，必须由这里按桶口径算好再传入
+ * resetGroupPagination，否则折叠后 hasMore 不会复位、「加载更多」入口会消失。
+ */
+const hasLocalSessionsBeyond = (groupId: string, count: number): boolean => {
+  if (sessionGroupStore.groupingMode === 'workspace') {
+    return sessionStore.getSessionsByProjectGroup(
+      groupId,
+      sessionGroupStore.projectGroups,
+    ).length > count
+  }
+  return sessionStore.getSessionsByGroup(
+    groupId === UNGROUPED_ID ? null : groupId,
+  ).length > count
+}
+
+/** 把某个分组的可见窗口回收到首屏数量（折叠分组时调用） */
+const collapseGroupPagination = (groupId: string): void => {
+  if (groupId === PINNED_GROUP_ID) return
+  sessionStore.resetGroupPagination(
+    groupId,
+    initialPageSize.value,
+    hasLocalSessionsBeyond(groupId, initialPageSize.value),
+  )
 }
 
 // ===== 目录分组拖拽排序（原生 HTML5 DnD；只有真实目录分组可拖） =====
@@ -937,6 +1020,8 @@ const isGroupExpanded = (groupId: string): boolean => {
 const toggleGroupExpand = (groupId: string): void => {
   if (groupId === PINNED_GROUP_ID) {
     pinnedExpanded.value = !pinnedExpanded.value
+    // 收起置顶区同时丢弃「显示更多」，再展开时回到上限内的收敛状态
+    if (!pinnedExpanded.value) pinnedShowAll.value = false
     return
   }
   const wasExpanded = isGroupExpanded(groupId)
@@ -944,14 +1029,33 @@ const toggleGroupExpand = (groupId: string): void => {
   if (wasExpanded) {
     // 折叠即丢弃「加载更多」出来的会话：可见数量缩回首屏数量
     groupCollapseEpoch.set(groupId, (groupCollapseEpoch.get(groupId) ?? 0) + 1)
-    sessionStore.resetGroupPagination(groupId, initialPageSize.value)
+    collapseGroupPagination(groupId)
   }
 }
 
-// 分组是否还有更多会话（置顶分区不分页）
+/**
+ * 分组底部入口是否显示。
+ *
+ * - 置顶分区：只在超过上限时显示「显示更多 / 显示更少」切换（不接分页接口）
+ * - 其它分组：只在服务端仍报告 hasMore 时显示「点击加载更多」
+ */
 const groupHasMoreSessions = (groupId: string): boolean => {
-  if (groupId === PINNED_GROUP_ID) return false
+  if (groupId === PINNED_GROUP_ID) {
+    return sessionStore.getPinnedSessions().length > SIDEBAR_PINNED_SECTION_LIMIT
+  }
   return sessionStore.groupHasMore(groupId)
+}
+
+/** 置顶分区的底部按钮文案（未超上限时不会渲染） */
+const pinnedToggleLabel = computed(() =>
+  pinnedShowAll.value
+    ? t('ui.sidebar.showLess')
+    : t('ui.sidebar.showMore'),
+)
+
+/** 置顶分区底部按钮：在「上限内」与「全部」之间切换（纯本地，无请求） */
+const togglePinnedShowAll = (): void => {
+  pinnedShowAll.value = !pinnedShowAll.value
 }
 
 type SidebarLoadMode = 'initial' | 'reconcile'
@@ -991,13 +1095,10 @@ const loadSessions = async (
     (mode === 'reconcile' ? sessionStore.sidebarEventEpoch : 0)
   const startEpoch = epochOf()
   try {
-    const pageSize =
-      mode === 'initial'
-        ? window.innerHeight > 1080
-          ? 15
-          : 10
-        : initialPageSize.value
-    if (mode === 'initial') initialPageSize.value = pageSize
+    // 首屏条数由可见分组数决定（见 resolveSidebarPageSize）。分组清单未就绪时用上次已知值，
+    // 避免冷启动先按最宽松档拉一波、快照到达后再收紧造成可见跳动。
+    const pageSize = resolveSidebarPageSize(effectiveGroupCount())
+    initialPageSize.value = pageSize
 
     const workspaceMode = sessionGroupStore.groupingMode === 'workspace'
     // 分组区与置顶区并行拉取：initial 时置顶失败不拖垮主列表；
@@ -1090,6 +1191,10 @@ const loadSessions = async (
       },
     )
     stateSync.markApplied(startKey)
+
+    // 记住权威分组数：下次冷启动在分组清单到达前就能用正确档位发首个请求。
+    // 档位本身的切换由下方 watch 负责（分组增删、切换分组模式都经过它），这里不重复处理。
+    lastKnownGroupCount.value = sidebarGroupCount()
     return true
   } catch (error) {
     console.error(
@@ -1130,6 +1235,40 @@ onMounted(() => {
   stateSync.start()
 })
 
+/**
+ * 首屏档位随可见分组数变化（分组/项目增删、切换分组模式都会经过这里）。
+ *
+ * 只在「跨档」时动作，停留同一档位不做任何事——否则每次对账都会把用户已经
+ * 「加载更多」出来的深度抹掉。
+ * - 收紧：本地把各组窗口压到新档位（会话数据仍在，随即把 hasMore 置回 true 可再展开）
+ * - 放宽：本地现有数据不够填满新档位，补拉一次首屏快照
+ *
+ * source 用 effectiveGroupCount 而不是 sidebarGroupCount：切换分组模式时目标清单还没加载，
+ * live 计数是 0，直接取会把「清单未就绪」误判成「分组变少 → 放宽」并触发无谓补拉。
+ */
+watch(
+  () => effectiveGroupCount(),
+  async (count, previous) => {
+    if (previous === undefined || count === previous) return
+    const desired = resolveSidebarPageSize(count)
+    if (desired === initialPageSize.value) return
+    const tightened = desired < initialPageSize.value
+    initialPageSize.value = desired
+    if (tightened) {
+      sessionStore.shrinkGroupWindowsTo(desired)
+      return
+    }
+    // 放宽：正在首屏/对账/补拉时不叠加请求，下一次快照会自然带上新档位
+    if (isInitializing.value || isReconciling.value || isTierReloading.value) return
+    isTierReloading.value = true
+    try {
+      await loadSessions({ mode: 'initial', reason: 'page-size-tier' })
+    } finally {
+      isTierReloading.value = false
+    }
+  },
+)
+
 onBeforeUnmount(() => {
   stateSync.stop()
 })
@@ -1150,10 +1289,12 @@ const loadMoreForGroup = async (groupId: string) => {
 
   sessionGroupStore.setLoadingMore(groupId)
   try {
+    // 步长 = 当前档位（与首屏一致）：一次「加载更多」正好多出一个首屏页
+    const step = initialPageSize.value
     const data = workspaceMode
       ? await apiService.fetchSessions(
           currentSessions.length,
-          15,
+          step,
           undefined,
           undefined,
           false,
@@ -1161,7 +1302,7 @@ const loadMoreForGroup = async (groupId: string) => {
         )
       : await apiService.fetchSessions(
           currentSessions.length,
-          15,
+          step,
           groupId === UNGROUPED_ID ? null : groupId,
         )
 
@@ -1185,6 +1326,10 @@ const loadMoreForGroup = async (groupId: string) => {
           sessionStore.syncStreamingState(session.id, true)
         }
       }
+    } else {
+      // 空返回：服务端没有更多了。不写这里的话 hasMore 保持 Map 缺省值 true，
+      // 「加载更多」入口会永久残留，用户反复点击却什么都拿不到。
+      sessionStore.setHasMore(groupId, false)
     }
   } catch (error) {
     console.error(`加载分组 ${groupId} 更多会话失败:`, error)
@@ -1540,7 +1685,11 @@ const handleArchiveProjectGroup = async (group: SidebarGroupItem) => {
     router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
   }
 
-  sessionStore.resetGroupPagination(group.id, initialPageSize.value)
+  sessionStore.resetGroupPagination(
+    group.id,
+    initialPageSize.value,
+    hasLocalSessionsBeyond(group.id, initialPageSize.value),
+  )
   await loadSessions({ mode: 'reconcile', reason: 'project-archived' })
   toast.success(t('ui.sidebar.projectArchived', { count: result.archived }))
   if (result.skipped > 0) {
@@ -1598,7 +1747,11 @@ const handleDeleteProjectGroup = async (group: SidebarGroupItem) => {
     router.replace({ name: 'Chat', params: { sessionId: NEW_SESSION_ID } })
   }
 
-  sessionStore.resetGroupPagination(group.id, initialPageSize.value)
+  sessionStore.resetGroupPagination(
+    group.id,
+    initialPageSize.value,
+    hasLocalSessionsBeyond(group.id, initialPageSize.value),
+  )
   await loadSessions({ mode: 'reconcile', reason: 'project-deleted' })
   toast.success(t('ui.sidebar.projectDeleted', { count: result.deleted }))
 }
