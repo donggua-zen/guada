@@ -270,7 +270,7 @@
             </div>
           </div>
           <DropdownMenuItem command="settings">
-            <Settings16Filled class="w-4 h-4 mr-2" />
+            <Settings16Regular class="w-4 h-4 mr-2" />
             {{ t('ui.sidebar.settingsCenter') }}
           </DropdownMenuItem>
           <DropdownMenuItem v-if="authStore.passwordSet" command="logout" class="border-t border-(--gd-color-border)">
@@ -293,7 +293,7 @@
           :class="currentActiveTab === 'setting'
             ? 'bg-(--gd-color-sidebar-bg-active) text-(--gd-color-sidebar-text-active)'
             : 'text-(--gd-color-text-gray) hover:bg-(--gd-color-sidebar-bg-hover) hover:text-(--gd-color-sidebar-text-hover)'">
-          <component :is="Settings16Filled" class="w-4 h-4" />
+          <component :is="Settings16Regular" class="w-4 h-4" />
         </div>
     </div>
   </div>
@@ -425,7 +425,7 @@ import {
   WeatherSunny20Regular,
   WeatherMoon20Filled,
   Desktop16Regular,
-  Settings16Filled,
+  Settings16Regular,
 } from '@vicons/fluent'
 import { MoreHorizontal20Filled, ArrowSync16Regular } from '@vicons/fluent'
 import TitlebarLeftPanel from './TitlebarLeftPanel.vue'

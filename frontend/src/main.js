@@ -198,6 +198,12 @@ const routes = [
     component: () => import("./components/test/InputTest.vue"),
   },
   {
+    path: "/icon-candidates",
+    name: "SidebarIconCandidates",
+    meta: { title: "侧边栏图标候选" },
+    component: () => import("./components/test/SidebarIconCandidates.vue"),
+  },
+  {
     path: "/empty",
     name: "Empty",
     component: () => import("./components/BackendWaitingOverlay.vue"),
