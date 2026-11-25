@@ -17,6 +17,11 @@ import {
   extractFailedRequestId,
   hasStreamRecoveryBudget,
   isRetryableStreamRecoveryFailure,
+  classifyStreamFailureContinuation,
+  createStreamContinuationMessage,
+  MAX_STREAM_FAILURE_CONTINUATIONS,
+  STREAM_FAILURE_CONTINUATION_MIN_CHARS,
+  STREAM_FAILURE_CONTINUE_PROMPT,
   summarizeAssistantPartial,
 } from '../../src/modules/chat/stream-recovery';
 
@@ -54,6 +59,69 @@ describe('stream-recovery', () => {
     it('error 模式预算一开始就耗尽', () => {
       const state = createStreamRecoveryState('error');
       expect(hasStreamRecoveryBudget(state)).toBe(false);
+    });
+  });
+
+  describe('断流续写判定', () => {
+    const base = {
+      completeToolCallCount: 0,
+      incompleteToolCallCount: 0,
+      textChars: STREAM_FAILURE_CONTINUATION_MIN_CHARS,
+      retryable: true,
+      continuationCount: 0,
+    };
+
+    it('纯文本且超过阈值 → continue', () => {
+      expect(classifyStreamFailureContinuation(base)).toBe('continue');
+    });
+
+    it('正文低于阈值 → none（重开更干净）', () => {
+      expect(
+        classifyStreamFailureContinuation({
+          ...base,
+          textChars: STREAM_FAILURE_CONTINUATION_MIN_CHARS - 1,
+        }),
+      ).toBe('none');
+    });
+
+    it('有任何工具调用（完整或残缺）→ none', () => {
+      expect(
+        classifyStreamFailureContinuation({ ...base, completeToolCallCount: 1 }),
+      ).toBe('none');
+      expect(
+        classifyStreamFailureContinuation({ ...base, incompleteToolCallCount: 1 }),
+      ).toBe('none');
+    });
+
+    it('不可重试 → none', () => {
+      expect(
+        classifyStreamFailureContinuation({ ...base, retryable: false }),
+      ).toBe('none');
+    });
+
+    it('断流续写提示词不冒充输出上限，隐藏消息带独立 scope', () => {
+      expect(STREAM_FAILURE_CONTINUE_PROMPT).not.toContain('Output token limit');
+      expect(STREAM_FAILURE_CONTINUE_PROMPT).toContain('stream failure');
+      const msg = createStreamContinuationMessage('m-cont');
+      expect(msg.role).toBe('user');
+      expect(msg.metadata?.hidden).toBe(true);
+      expect(msg.metadata?.queryScope).toBe('stream_failure_continuation');
+      expect((msg.content[0] as any).text).toBe(STREAM_FAILURE_CONTINUE_PROMPT);
+    });
+
+    it('预算耗尽 → exhausted', () => {
+      expect(
+        classifyStreamFailureContinuation({
+          ...base,
+          continuationCount: MAX_STREAM_FAILURE_CONTINUATIONS,
+        }),
+      ).toBe('exhausted');
+      expect(
+        classifyStreamFailureContinuation({
+          ...base,
+          continuationCount: MAX_STREAM_FAILURE_CONTINUATIONS - 1,
+        }),
+      ).toBe('continue');
     });
   });
 

@@ -78,14 +78,18 @@ import {
 } from "../llm-core/utils/retry-on-error.util";
 import {
   beginStreamRecoveryAttempt,
+  buildStreamFailureContinuationMessage,
   buildStreamRecoveryMessage,
+  classifyStreamFailureContinuation,
   classifyStreamRecoveryFailure,
   createPreviousMessageAnchorId,
+  createStreamContinuationMessage,
   createStreamRecoveryState,
   createToolResultAnchorId,
   extractFailedRequestId,
   hasStreamRecoveryBudget,
   isRetryableStreamRecoveryFailure,
+  MAX_STREAM_FAILURE_CONTINUATIONS,
   STREAM_RECOVERY_DISCARDED_ERROR_NAME,
   STREAM_RECOVERY_DISCARDED_FINISH,
   summarizeAssistantPartial,
@@ -361,6 +365,8 @@ export class AgentEngine {
    *
    * 返回：
    * - retry：无完整工具，丢弃半截消息并从上一消息 anchor 重开（step 已收口）
+   * - continue：无任何工具且正文已超阈值，保留正文 + 隐藏续写提示，下一轮接着写
+   * - continuation_exhausted：续写预算耗尽，保留正文并以当前错误结束（step 未收口）
    * - committed：有完整工具，只提交/执行完整工具，丢弃正文与残缺工具（step 已收口）
    * - terminal：不恢复（不可重试/预算为 0/耗尽），审计消息已落库，调用方按错误结束
    * - none：没有可恢复内容（零可见输出且无残缺工具），走原有空消息路径
@@ -375,9 +381,17 @@ export class AgentEngine {
     abortSignal?: AbortSignal;
     lastRequestMedia?: LLMRequestMediaStats;
     state: StreamRecoveryState;
+    /** 断流续写已用次数（回合级，仅连续失败累计） */
+    streamFailureContinuationCount: number;
     preserveRawArguments: boolean;
   }): Promise<{
-    outcome: "retry" | "committed" | "terminal" | "none";
+    outcome:
+      | "retry"
+      | "continue"
+      | "continuation_exhausted"
+      | "committed"
+      | "terminal"
+      | "none";
     stepHandle: StepHandle | null;
   }> {
     const {
@@ -640,6 +654,96 @@ export class AgentEngine {
       return { outcome: "terminal", stepHandle: input.stepHandle };
     }
 
+    // 断流续写：纯文本（无任何工具）且正文已超阈值时，保留正文接着写，
+    // 而不是丢掉几千字重开。预算与输出长度续写分开计（各 3 次）。
+    const continuation = classifyStreamFailureContinuation({
+      completeToolCallCount: summary.completeToolCalls.length,
+      incompleteToolCallCount: summary.incompleteToolCalls.length,
+      textChars: summary.textChars,
+      retryable,
+      continuationCount: input.streamFailureContinuationCount,
+    });
+
+    if (continuation === "continue") {
+      const continuationAttempt = input.streamFailureContinuationCount + 1;
+      this.logger.warn(
+        `[LLM] stream failure continuation (message=${messageId}, ` +
+          `attempt=${continuationAttempt}/${MAX_STREAM_FAILURE_CONTINUATIONS}, ` +
+          `textChars=${summary.textChars}, failure=${failureKind})`,
+      );
+      // 正文保留为正常消息（进上下文）；只记审计元数据，方便前端/轨迹识别拼接段。
+      assistantMessage.metadata.finishReason = "stream_interrupted";
+      assistantMessage.metadata.streamContinuation = {
+        attempt: continuationAttempt,
+        maxAttempts: MAX_STREAM_FAILURE_CONTINUATIONS,
+        failureKind,
+        ...(failedRequestId ? { failedRequestId } : {}),
+      };
+      await sessionContext.appendMessages([assistantMessage]);
+      await this.publishContextStats(sessionContext, turnId, lastRequestMedia);
+      // 关闭该 messageId 的流式态（上游没有 finish 事件）
+      await sessionContext.publishStream({
+        type: "finish",
+        messageId,
+        turnId,
+        finishReason: "stream_interrupted",
+      } as SessionStreamEvent);
+      // 隐藏 user 消息隔开前后 assistant，提示模型接着写（断流专用提示词）
+      const continuationMessage = createStreamContinuationMessage(
+        sessionContext.generateMessageId(),
+      );
+      await sessionContext.appendMessages([continuationMessage]);
+      await sessionContext.publishStream({
+        type: "retry",
+        turnId,
+        messageId,
+        retrySource: "stream_recovery",
+        retryReason: "network_error",
+        retryAttempt: continuationAttempt,
+        retryMaxAttempts: MAX_STREAM_FAILURE_CONTINUATIONS,
+        retryDelayMs: 0,
+        ...(failedRequestId ? { failedRequestId } : {}),
+        message: buildStreamFailureContinuationMessage(
+          continuationAttempt,
+          MAX_STREAM_FAILURE_CONTINUATIONS,
+        ),
+      } as SessionStreamEvent);
+
+      await input.stepHandle?.end({
+        finishReason: "stream_interrupted",
+        error: { name: streamError.name, message: streamError.message },
+        streamRecovery: {
+          branch: "continuation",
+          attempt: continuationAttempt,
+          maxAttempts: MAX_STREAM_FAILURE_CONTINUATIONS,
+          failureKind,
+          ...(failedRequestId ? { failedRequestId } : {}),
+        },
+      });
+      return { outcome: "continue", stepHandle: null };
+    }
+
+    if (continuation === "exhausted") {
+      // 续写预算耗尽：保留最后一段正文，按当前错误结束（不再回头丢弃）。
+      this.logger.error(
+        `[LLM] stream failure continuation exhausted ` +
+          `(message=${messageId}, attempts=${input.streamFailureContinuationCount}, ` +
+          `textChars=${summary.textChars}, failure=${failureKind}); stopping`,
+      );
+      assistantMessage.metadata.finishReason = "stream_interrupted";
+      assistantMessage.metadata.streamContinuation = {
+        attempt: input.streamFailureContinuationCount,
+        maxAttempts: MAX_STREAM_FAILURE_CONTINUATIONS,
+        exhausted: true,
+        failureKind,
+        ...(failedRequestId ? { failedRequestId } : {}),
+      };
+      return {
+        outcome: "continuation_exhausted",
+        stepHandle: input.stepHandle,
+      };
+    }
+
     const attempt = beginStreamRecoveryAttempt(state);
     this.logger.warn(
       `[LLM] discarding partial assistant output and retrying ` +
@@ -852,6 +956,8 @@ export class AgentEngine {
       createStreamRecoveryState(incompleteOutputAction);
     /** 输出长度续写次数（与流恢复分开计数；正常完成/工具边界时重置） */
     let outputTokenContinuationCount = 0;
+    /** 断流续写次数（正文已超阈值时保留并续写；仅连续失败累计，流正常即复位） */
+    let streamFailureContinuationCount = 0;
     let finalError: string | undefined;
     let finalUsage: any;
     /** 最近一次 LLM 请求的媒体投影统计（每轮重置；用于 context_stats 展示） */
@@ -1308,21 +1414,39 @@ export class AgentEngine {
             abortSignal,
             lastRequestMedia,
             state: streamRecoveryState,
+            streamFailureContinuationCount,
             preserveRawArguments,
           });
           stepHandle = recovery.stepHandle;
           if (
             recovery.outcome === "retry" ||
-            recovery.outcome === "committed"
+            recovery.outcome === "committed" ||
+            recovery.outcome === "continue"
           ) {
             if (recovery.outcome === "committed") {
-              // 工具已结算/执行：输出长度续写链重新起算，
+              // 工具已结算/执行：两条续写链都重新起算，
               // 且下一次迭代处于真实的工具批次边界（inject 交接唯一合法时机）。
               outputTokenContinuationCount = 0;
+              streamFailureContinuationCount = 0;
               completedToolBatch = true;
+            }
+            if (recovery.outcome === "continue") {
+              streamFailureContinuationCount += 1;
             }
             needToContinue = true;
             continue;
+          }
+          if (recovery.outcome === "continuation_exhausted") {
+            // 续写预算耗尽：正文保留并落库，businessReason/finalError 沿用 catch 里的
+            // 上游错误分类；这里只负责把该 messageId 的流式态收口。
+            await sessionContext.publishStream({
+              type: "finish",
+              messageId,
+              turnId,
+              finishReason: "stream_interrupted",
+            } as SessionStreamEvent);
+            businessReason = businessReason ?? "error";
+            finalError = finalError ?? streamFailure.message;
           }
           if (
             recovery.outcome === "terminal" ||
@@ -1332,6 +1456,9 @@ export class AgentEngine {
             // 两种情况都跳过普通落库/工具执行。
             assistantMessage = null;
           }
+        } else if (!streamFailure) {
+          // 流正常结束（含长度截断）：断流续写链复位——它只统计「连续」流失败。
+          streamFailureContinuationCount = 0;
         }
 
         // 空消息（toMessage 返回 null）已在上方跳过；此处无需 token 统计

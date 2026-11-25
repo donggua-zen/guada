@@ -203,7 +203,7 @@ export interface StepStartData {
  */
 /** 流恢复摘要（step/end 审计） */
 export interface StepStreamRecoverySummary {
-  branch: "no_tool_committed" | "tool_settlement";
+  branch: "no_tool_committed" | "tool_settlement" | "continuation";
   attempt: number;
   maxAttempts: number;
   failureKind?: string;

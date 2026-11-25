@@ -21,9 +21,19 @@ import {
   UpstreamTimeoutError,
 } from "../llm-core/utils/upstream-errors";
 import { isUserAbort } from "../llm-core/utils/retry-on-error.util";
+import { createContinuationMessage } from "./output-token-continuation";
 
 /** 每回合流恢复预算 */
 export const STREAM_RECOVERY_MAX_RETRIES = 10;
+
+/**
+ * 断流续写：正文达到该字符数才值得保留续写。
+ * 低于阈值时重开更干净（不会把「Sure, I'll」这类开头硬接上），丢弃成本也不高。
+ */
+export const STREAM_FAILURE_CONTINUATION_MIN_CHARS = 800;
+
+/** 断流续写次数上限（与输出长度续写对齐）。 */
+export const MAX_STREAM_FAILURE_CONTINUATIONS = 3;
 
 /** 被丢弃的 assistant 尝试的审计标记（落库 metadata.error.name） */
 export const STREAM_RECOVERY_DISCARDED_ERROR_NAME = "StreamRecoveryDiscarded";
@@ -200,6 +210,62 @@ export function isRetryableStreamRecoveryFailure(error: unknown): boolean {
   // 显式 retryable=false 但没有命中任何可重试信号 → 保守不重试。
   void sawExplicitNonRetryable;
   return false;
+}
+
+export type StreamFailureContinuationDecision =
+  | "continue"
+  | "exhausted"
+  | "none";
+
+/**
+ * 断流后是否改为「保留正文 + 隐式续写」。
+ *
+ * 只在纯文本、无任何工具调用（完整或残缺）且正文超过阈值时成立：
+ * - 有工具调用：断点可能落在参数中间，续写会让模型误以为调用已经成立；
+ * - 正文太短：重开更干净，丢弃成本也低；
+ * - 不可重试：续写只会再失败一次。
+ *
+ * 与「断流一律丢弃重开」的取舍：不稳定模型动辄输出几千字后断开，重开的 token
+ * 与时间成本过高；续写最多 3 次，耗尽后保留正文并以错误结束。
+ */
+export function classifyStreamFailureContinuation(input: {
+  completeToolCallCount: number;
+  incompleteToolCallCount: number;
+  textChars: number;
+  retryable: boolean;
+  continuationCount: number;
+}): StreamFailureContinuationDecision {
+  if (!input.retryable) return "none";
+  if (input.completeToolCallCount > 0 || input.incompleteToolCallCount > 0) {
+    return "none";
+  }
+  if (input.textChars < STREAM_FAILURE_CONTINUATION_MIN_CHARS) return "none";
+  return input.continuationCount < MAX_STREAM_FAILURE_CONTINUATIONS
+    ? "continue"
+    : "exhausted";
+}
+
+export function buildStreamFailureContinuationMessage(
+  attempt: number,
+  maxAttempts: number,
+): string {
+  return `上游流中断，继续生成 ${attempt}/${maxAttempts}...`;
+}
+
+/**
+ * 断流续写提示词。与「输出长度截断」分开写：断因不同，不能告诉模型
+ * “Output token limit hit”（会误导它压缩篇幅）。
+ */
+export const STREAM_FAILURE_CONTINUE_PROMPT =
+  "Your previous response was interrupted by a stream failure. Continue from exactly where it stopped — no apology, no recap, do not repeat text already written. Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.";
+
+/** 断流续写的隐藏 user 消息（隔开前后 assistant，进上下文、前端隐藏）。 */
+export function createStreamContinuationMessage(messageId: string): Message {
+  return createContinuationMessage(
+    messageId,
+    STREAM_FAILURE_CONTINUE_PROMPT,
+    "stream_failure_continuation",
+  );
 }
 
 export type StreamRecoveryFailureKind =

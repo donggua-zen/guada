@@ -143,3 +143,205 @@ describe('stream recovery integration', () => {
     ).toBe(true);
   });
 });
+
+describe('stream recovery continuation integration', () => {
+  it('纯文本且正文超阈值 → 保留正文 + 隐藏续写提示，不丢弃', async () => {
+    const adapter = new OpenAIResponseAdapter({} as any);
+    let calls = 0;
+    // 超过 STREAM_FAILURE_CONTINUATION_MIN_CHARS(800) 的已输出正文
+    const longText = '甲'.repeat(1000);
+
+    const mocks = createAllMocks({});
+    (mocks.llmService as any).completions = jest.fn(() => {
+      calls += 1;
+      if (calls === 1) {
+        return (adapter as any).handleStreamResponse(
+          eventStream([
+            {
+              type: 'response.output_item.added',
+              output_index: 0,
+              item: { type: 'message', id: 'msg_1' },
+            },
+            {
+              type: 'response.output_text.delta',
+              item_id: 'msg_1',
+              output_index: 0,
+              delta: longText,
+            },
+            {
+              type: 'response.failed',
+              response: {
+                status: 'failed',
+                error: {
+                  code: 'server_error',
+                  message: 'upstream stream interrupted',
+                  type: 'server_error',
+                },
+              },
+            },
+          ]),
+        );
+      }
+      return (adapter as any).handleStreamResponse(
+        eventStream([
+          {
+            type: 'response.output_item.added',
+            output_index: 0,
+            item: { type: 'message', id: 'msg_2' },
+          },
+          {
+            type: 'response.output_text.delta',
+            item_id: 'msg_2',
+            output_index: 0,
+            delta: '续写完成',
+          },
+          {
+            type: 'response.completed',
+            response: {
+              output: [],
+              usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
+            },
+          },
+        ]),
+      );
+    });
+
+    const engine = new AgentEngine(
+      mocks.toolExecutor as any,
+      mocks.llmService as any,
+      {
+        serial: jest.fn(
+          async (_e: string, _p: unknown, fallback: () => unknown) =>
+            fallback(),
+        ),
+        parallel: jest.fn(async () => []),
+      } as any,
+    );
+
+    await engine.run(mocks.sessionContext, { id: 'msg-cont-1' });
+
+    const events = mocks.publishedEvents;
+    expect(calls).toBe(2);
+    expect(events.find((e) => e.type === 'turn_end')?.finishReason).toBe('stop');
+    expect(
+      events.some(
+        (e) =>
+          e.type === 'retry' &&
+          (e as any).retrySource === 'stream_recovery' &&
+          (e as any).retryAttempt === 1 &&
+          String((e as any).message).includes('继续生成 1/3'),
+      ),
+    ).toBe(true);
+
+    const appended = (
+      mocks.sessionContext.appendMessages as jest.Mock
+    ).mock.calls.flatMap((c: any[]) => c[0]);
+    // 半截正文保留为正常消息（进上下文），不是 discarded
+    const kept = appended.find(
+      (m: any) =>
+        m.role === 'assistant' &&
+        m.content?.some((b: any) => b.text === longText),
+    );
+    expect(kept).toBeTruthy();
+    expect(kept.metadata?.excludedFromContext).not.toBe(true);
+    expect(kept.metadata?.finishReason).toBe('stream_interrupted');
+    expect(kept.metadata?.streamContinuation?.attempt).toBe(1);
+    // 隐藏续写提示
+    expect(
+      appended.some(
+        (m: any) =>
+          m.role === 'user' &&
+          m.metadata?.hidden === true &&
+          m.metadata?.queryScope === 'stream_failure_continuation',
+      ),
+    ).toBe(true);
+    // 不应存在 discarded 的 assistant
+    expect(
+      appended.some(
+        (m: any) =>
+          m.role === 'assistant' && m.metadata?.excludedFromContext === true,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('stream recovery continuation exhausted', () => {
+  it('连续 3 次续写后仍断流 → 保留正文，以错误结束', async () => {
+    const adapter = new OpenAIResponseAdapter({} as any);
+    let calls = 0;
+    const longText = '乙'.repeat(1000);
+
+    const mocks = createAllMocks({});
+    (mocks.llmService as any).completions = jest.fn(() => {
+      calls += 1;
+      const id = `msg_fail_${calls}`;
+      return (adapter as any).handleStreamResponse(
+        eventStream([
+          {
+            type: 'response.output_item.added',
+            output_index: 0,
+            item: { type: 'message', id },
+          },
+          {
+            type: 'response.output_text.delta',
+            item_id: id,
+            output_index: 0,
+            delta: longText,
+          },
+          {
+            type: 'response.failed',
+            response: {
+              status: 'failed',
+              error: {
+                code: 'server_error',
+                message: 'upstream stream interrupted',
+                type: 'server_error',
+              },
+            },
+          },
+        ]),
+      );
+    });
+
+    const engine = new AgentEngine(
+      mocks.toolExecutor as any,
+      mocks.llmService as any,
+      {
+        serial: jest.fn(
+          async (_e: string, _p: unknown, fallback: () => unknown) =>
+            fallback(),
+        ),
+        parallel: jest.fn(async () => []),
+      } as any,
+    );
+
+    await engine.run(mocks.sessionContext, { id: 'msg-cont-exhausted' });
+
+    const events = mocks.publishedEvents;
+    // 首次请求 + 3 次续写
+    expect(calls).toBe(4);
+    expect(events.find((e) => e.type === 'turn_end')?.finishReason).toBe(
+      'network_error',
+    );
+    const retries = events.filter(
+      (e) =>
+        e.type === 'retry' && (e as any).retrySource === 'stream_recovery',
+    );
+    expect(retries).toHaveLength(3);
+    expect(retries.map((e) => (e as any).retryAttempt)).toEqual([1, 2, 3]);
+
+    const appended = (
+      mocks.sessionContext.appendMessages as jest.Mock
+    ).mock.calls.flatMap((c: any[]) => c[0]);
+    const assistants = appended.filter((m: any) => m.role === 'assistant');
+    // 4 段正文全部保留（不是 discarded）
+    expect(assistants).toHaveLength(4);
+    expect(
+      assistants.every(
+        (m: any) => m.metadata?.excludedFromContext !== true,
+      ),
+    ).toBe(true);
+    // 最后一段标 exhausted
+    expect(assistants[3].metadata?.streamContinuation?.exhausted).toBe(true);
+  });
+});

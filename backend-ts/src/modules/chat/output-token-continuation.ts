@@ -69,20 +69,35 @@ export function isOutputTokenLimitFinishReason(
 /**
  * 隐藏续写消息：落库成 user 消息，隔开前后两条 assistant（避免连续 assistant
  * 被部分 provider 拒绝）；前端按 metadata.hidden / queryScope 隐藏。
+ *
+ * 由两条续写链共用：输出长度截断（output_token_continuation）与断流续写
+ * （stream_failure_continuation）。提示词由调用方给——两条链断因不同，不能共用文案。
  */
-export function createOutputContinuationMessage(
+export function createContinuationMessage(
   messageId: string,
+  prompt: string,
+  queryScope: string,
 ): Message {
   return {
     id: messageId,
     role: "user",
     kind: "model",
-    source: { kind: "plugin", plugin: "output-token-continuation" },
+    source: { kind: "plugin", plugin: queryScope },
     metadata: {
       hidden: true,
       synthetic: true,
-      queryScope: "output_token_continuation",
+      queryScope,
     },
-    content: [{ type: "text", text: OUTPUT_TOKEN_CONTINUE_PROMPT }],
+    content: [{ type: "text", text: prompt }],
   };
+}
+
+export function createOutputContinuationMessage(
+  messageId: string,
+): Message {
+  return createContinuationMessage(
+    messageId,
+    OUTPUT_TOKEN_CONTINUE_PROMPT,
+    "output_token_continuation",
+  );
 }
