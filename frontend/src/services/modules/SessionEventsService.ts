@@ -10,6 +10,7 @@
  */
 import { getClientId } from "@/utils/clientId";
 import { streamEventHub } from "./StreamEventHub";
+import { SessionWatchRegistry } from "./sessionWatchRegistry";
 
 export type SessionEventType =
   | "connected"
@@ -111,6 +112,17 @@ export class SessionEventsService {
 
   /** 本连接关注（期望接收内容帧）的会话；重连后重放 */
   private readonly desiredSessions = new Set<string>();
+  /** 所有 pane 共用同一计数；重连只重放期望集合，不重新 acquire。 */
+  private readonly sessionWatches = new SessionWatchRegistry(
+    (sessionId) => {
+      this.desiredSessions.add(sessionId);
+      this.send({ kind: "watch", sessionIds: [sessionId] });
+    },
+    (sessionId) => {
+      this.desiredSessions.delete(sessionId);
+      this.send({ kind: "unwatch", sessionIds: [sessionId] });
+    },
+  );
 
   /** 等待中的带内快照（requestId → waiter） */
   private readonly snapshotWaiters = new Map<
@@ -573,16 +585,14 @@ export class SessionEventsService {
 
   // ── watch / 快照 ──
 
-  /** 声明关注某会话（内容帧只下发给关注者）；重连后自动重放 */
+  /** 每个消费者配对申请/释放；第一个消费者订阅，重连后自动重放。 */
   watchSession(sessionId: string): void {
-    if (!sessionId || this.desiredSessions.has(sessionId)) return;
-    this.desiredSessions.add(sessionId);
-    this.send({ kind: "watch", sessionIds: [sessionId] });
+    this.sessionWatches.acquire(sessionId);
   }
 
-  unwatchSession(sessionId: string): void {
-    if (!this.desiredSessions.delete(sessionId)) return;
-    this.send({ kind: "unwatch", sessionIds: [sessionId] });
+  /** 仅最后一个消费者释放时取消订阅；返回是否真正停止接收内容。 */
+  unwatchSession(sessionId: string): boolean {
+    return this.sessionWatches.release(sessionId);
   }
 
   private replayWatchSet(): void {

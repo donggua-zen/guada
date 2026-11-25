@@ -469,8 +469,9 @@ class ApiService {
     this.sessionEventsService.watchSession(sessionId);
   }
 
-  unwatchSession(sessionId: string): void {
-    this.sessionEventsService.unwatchSession(sessionId);
+  /** 返回 true 表示已无消费者，该会话的内容订阅已停止。 */
+  unwatchSession(sessionId: string): boolean {
+    return this.sessionEventsService.unwatchSession(sessionId);
   }
 
   /** workspace 控制面（文件/git 订阅范围） */

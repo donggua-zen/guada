@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("@/services/ApiService", () => ({ apiService: {} }));
 
 import { applySessionSnapshot, type SessionSnapshotPayload } from "./sessionSnapshot";
+import { invalidateSessionHistory, isSessionHistoryStale, clearSessionHistoryStale } from "@/utils/sessionResync";
 import type { ProjectorSessionState } from "./streamProjector";
 import type { Turn } from "@/types/message";
 
@@ -78,6 +79,26 @@ describe("applySessionSnapshot", () => {
     store.state.turns = [{ id: "old", messages: [], state: { isWorking: false } } as any];
     store.state.eventLog = [{ type: "turn/start", seq: 99 } as any];
     store.state.appliedSeq = 99;
+  });
+
+  it("停止订阅只标脏，重新打开用快照替换残缺缓存并接续在飞尾部", () => {
+    store.state.loaded = true;
+    invalidateSessionHistory(store, "s1");
+    expect(store.state.loaded).toBe(false); // 下次打开绕过 ChatPanel 的缓存门禁
+    expect(isSessionHistoryStale("s1")).toBe(true);
+    expect(store.state.turns[0].id).toBe("old"); // 保留旧树，无立即清屏或重拉
+    try {
+      applySessionSnapshot(store as any, "s1", snapshot({
+        tail: [{ type: "text_delta", sessionId: "s1", turnId: "t1", messageId: "m2", index: 0, logSeq: 2, text: "在飞" }] as any,
+      }));
+      const bundles = store.state.turns[0].messages;
+      expect(bundles.map((m: any) => m.blocks[0].content)).toEqual(["落盘内容", "在飞"]);
+      expect(store.state.loaded).toBe(true);
+      // 快照成功前失效标记不提前消除，由面板成功分支清理。
+      expect(isSessionHistoryStale("s1")).toBe(true);
+    } finally {
+      clearSessionHistoryStale("s1");
+    }
   });
 
   it("替换事件数组、fold 重建、写入分页/水位", () => {

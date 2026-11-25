@@ -22,16 +22,18 @@ export class SessionWatchRegistry {
     if (next === 1) this.watch(sessionId);
   }
 
-  release(sessionId: string | null | undefined): void {
-    if (!sessionId) return;
+  /** 返回 true 表示最后一个持有者已释放，内容订阅真正停止。 */
+  release(sessionId: string | null | undefined): boolean {
+    if (!sessionId) return false;
     const current = this.counts.get(sessionId);
-    if (!current) return;
+    if (!current) return false;
     if (current > 1) {
       this.counts.set(sessionId, current - 1);
-      return;
+      return false;
     }
     this.counts.delete(sessionId);
     this.unwatch(sessionId);
+    return true;
   }
 
   /** 测试/诊断：当前被持有的会话数 */

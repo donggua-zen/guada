@@ -113,6 +113,46 @@ describe("SessionEventsService（WebSocket）连接", () => {
     service.disconnect();
   });
 
+  it("两个 pane 共享同一订阅，最后一个释放才 unwatch，重连不增加引用数", () => {
+    const service = createService();
+    service.connect();
+    lastSocket().ready();
+    service.watchSession("s1");
+    service.watchSession("s1");
+    expect(lastSocket().sent.filter((m: any) => m.kind === "watch")).toHaveLength(1);
+
+    expect(service.unwatchSession("s1")).toBe(false);
+    expect(lastSocket().sent.some((m: any) => m.kind === "unwatch")).toBe(false);
+
+    service.reconnect("test reconnect");
+    lastSocket().ready();
+    expect(lastSocket().sent.filter((m: any) => m.kind === "watch")).toEqual([
+      { kind: "watch", sessionIds: ["s1"] },
+    ]);
+    expect(service.unwatchSession("s1")).toBe(true);
+    expect(lastSocket().sent.filter((m: any) => m.kind === "unwatch")).toEqual([
+      { kind: "unwatch", sessionIds: ["s1"] },
+    ]);
+    expect(service.unwatchSession("s1")).toBe(false);
+    service.disconnect();
+  });
+
+  it("不同会话独立计数，释放空会话不发请求", () => {
+    const service = createService();
+    service.connect();
+    lastSocket().ready();
+    service.watchSession("s1");
+    service.watchSession("s2");
+    expect(service.unwatchSession("")).toBe(false);
+    expect(service.unwatchSession("missing")).toBe(false);
+    expect(service.unwatchSession("s1")).toBe(true);
+    expect(lastSocket().sent.filter((m: any) => m.kind === "unwatch")).toEqual([
+      { kind: "unwatch", sessionIds: ["s1"] },
+    ]);
+    expect(service.unwatchSession("s2")).toBe(true);
+    service.disconnect();
+  });
+
   it("watch 在 ready 后重放（重连语义）", () => {
     const service = createService();
     service.watchSession("s1"); // 未连接：只记期望

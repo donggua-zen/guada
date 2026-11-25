@@ -8,6 +8,7 @@ import {
   applyLiveChunk,
   type ProjectorSessionState,
 } from "./streamProjector";
+import { StreamEventHub } from "./StreamEventHub";
 import { catchUpIncrementally, type CatchUpStore, type EventsTailBatch } from "./streamIncremental";
 import type { Turn } from "@/types/message";
 import type { PendingAsk } from "@/types/session";
@@ -108,6 +109,62 @@ beforeEach(() => {
 });
 
 describe("applyEventsIncremental：就地修复现有树", () => {
+  it("询问通知越过缺失内容后，补发与领域增量恢复工具、正文和思考终态", async () => {
+    const store = createStore();
+    const hub = new StreamEventHub();
+    hub.subscribeAll((chunk) => applyLiveChunk(store, "s1", chunk));
+    const route = (type: string, baseSeq: number, chunkSeq: number, extra = {}) =>
+      hub.route({ type, sessionId: "s1", streamBootId: "boot", baseSeq, chunkSeq, turnId: "t1", ...extra } as any);
+    route("turn_start", 1, 1);
+    store.setAppliedSeq("s1", 1);
+    for (const [messageId, baseSeq] of [["m1", 1], ["m2", 2]] as const) {
+      route("block_start", baseSeq, 2, { messageId, index: 0, blockType: "reasoning" });
+      route("reasoning_delta", baseSeq, 3, { messageId, index: 0, text: messageId });
+    }
+    // 未 watch 期间内容丢失，但全局通知仍可打开卡片。
+    route("ask_requested", 5, 1, { requestId: "q1", kind: "ask", questions: [] });
+    expect(store.state.pendingAsks?.q1).toBeDefined();
+    // 旧内容可以补发；通知不能把它当成重复事件吞掉。
+    route("block_end", 2, 4, { messageId: "m2", index: 2, block: { type: "tool-call", toolCallId: "ask", name: "ask_user", arguments: "{}" } });
+    route("finish", 2, 5, { messageId: "m2" });
+    expect(store.state.turns[0].messages[1].blocks[1].metadata.toolCalls[0].name).toBe("ask_user");
+    route("ask_resolved", 6, 1, { requestId: "q1" });
+    route("ask_requested", 5, 1, { requestId: "q1", kind: "ask", questions: [] });
+    expect(store.state.pendingAsks).toBeUndefined();
+    expect(store.getAppliedSeq()).toBe(1);
+
+    const events = [
+      assistantMessage("t1", "m1", 2, [
+        { type: "reasoning", summary: "first", timing: { startedAt: 1000, finishedAt: 2000 } },
+        { type: "tool-call", toolCallId: "c1", name: "run_command", arguments: "{}" },
+        { type: "tool-call", toolCallId: "c2", name: "run_command", arguments: "{}" },
+      ]),
+      ...["c1", "c2"].map((id, index) => ({ type: "tool/result", seq: 3 + index, data: { toolCallId: id, name: "run_command", content: "ok" } })),
+      assistantMessage("t1", "m2", 5, [
+        { type: "reasoning", summary: "second", timing: { startedAt: 2000, finishedAt: 3000 } },
+        { type: "text", text: "探查完成" },
+        { type: "tool-call", toolCallId: "ask", name: "ask_user", arguments: "{}" },
+      ]),
+      { type: "tool/result", seq: 6, data: { toolCallId: "ask", name: "ask_user", content: "answered" } },
+    ];
+    const fetchTail = vi.fn(async () => batch(events));
+    expect((await catchUpIncrementally({ store, sessionId: "s1", fetchTail })).status).toBe("applied");
+    expect(fetchTail).toHaveBeenCalledWith(expect.objectContaining({ afterSeq: 1 }));
+    const bundles = store.state.turns[0].messages;
+    expect(bundles.map((m: any) => m.blocks.length)).toEqual([3, 3]);
+    expect(bundles[1].blocks[1].content).toBe("探查完成");
+    const tools = bundles.flatMap((m: any) => m.blocks.filter((b: any) => b.metadata?.toolCalls?.length));
+    expect(tools.map((b: any) => b.metadata.toolCalls[0].name)).toEqual(["run_command", "run_command", "ask_user"]);
+    expect(tools.map((b: any) => b.metadata.toolCallsResponse[0].content)).toEqual(["ok", "ok", "answered"]);
+    expect(bundles.every((m: any) => m.blocks.every((b: any) => !b.state.isThinking))).toBe(true);
+    expect(store.state.turns[0].state.isWorking).toBe(true); // 无需等整轮结束
+    expect(store.getAppliedSeq()).toBe(6);
+    // 再次读到相同领域事件不会重复工具行或思考时长。
+    applyEventsIncremental(store, "s1", events, { startTurnId: "t1" });
+    expect(bundles.map((m: any) => m.blocks.length)).toEqual([3, 3]);
+    expect(bundles[0].blocks[0].thinkingDurationMs).toBe(1000);
+  });
+
   it("live 截断的 assistant 消息被落盘完整事件修复（文本补全 + 元数据合并）", () => {
     const store = createStore();
 

@@ -248,18 +248,9 @@ export function useSessionEvents() {
             );
           }
         }
+        // live 帧只更新投影与交互状态；logSeq 是发布时的日志位置，
+        // 不能证明此前的持久化领域事件均已应用。水位仅由快照或连续领域事件确认。
         projectChunk(sessionStore, sid, chunk);
-
-        // 已应用水位保守推进：logSeq 是发布时刻**未钳制**的真实落库游标
-        // （baseSeq 被 manager 单调钳制，日志清空/截断后仍停在旧高值，不能当水位用）。
-        // 补发缺口未清前不推进——否则会把"没收到的那段"当成已应用，永久跳过缺口；
-        // 裸运行时帧（无 logSeq）不推进。
-        //
-        // 顺序：必须在 projectChunk **之后**。投影抛错时 hub 的 try/catch 会吞掉异常，
-        // 若水位先推进，这条事件就既没进树、也不会被下次增量补拉取回——静默永久丢失。
-        if (typeof chunk.logSeq === "number" && !streamEventHub.hasPendingGap(sid)) {
-          sessionStore.setAppliedSeq(sid, chunk.logSeq);
-        }
 
         // 审批/询问到达 = 有人在等你操作：非当前会话或窗口隐藏时置未读。
         // 桌面任务栏红点由 useTrayStats 轮询 unread 派生（与侧边栏蓝点/待答胶囊同源）；
@@ -465,7 +456,7 @@ export function useSessionEvents() {
     // 后端在补发前缀的第一帧（connected）里带上各活跃流 buffer 首帧的传输位置。
     // 起点 baseSeq 越过本地游标的 baseSeq = 本次补发没有覆盖我缺的那段
     // （缓冲区滚动 / cleanup 后起点前移），中间可能丢了落库事件：
-    // 冻结水位推进（见上方 live 订阅），并让当前会话改走整页重拉。
+    // 让当前会话改走整页重拉，由快照重新确认已应用水位。
     unsubscribers.push(
       apiService.onSessionEvent("connected", (event) => {
         const positions = event.payload?.streamPositions;

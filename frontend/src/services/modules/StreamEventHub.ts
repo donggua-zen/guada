@@ -14,9 +14,11 @@
  * - `baseSeq`(线上字段名 prevSeq) = **传输区间基座**。后端 publish 为每条帧盖戳
  *   (baseSeq, chunkSeq) + streamBootId(进程标识)。按会话连续、跨回合不重置。
  *   注意 baseSeq 被后端单调钳制(抵御并发 publish 乱序)，**不代表真实日志尾**。
- * - `logSeq` = 发布时刻未钳制的真实落库 seq，**已应用水位**只认它(见 useSessionEvents)。
+ * - `logSeq` = 发布时刻未钳制的真实落库 seq，用于快照尾部覆盖判断；
+ *   历史确认水位只由权威事件页/连续增量批次推进，收到 live 帧不代表此前日志已完整应用。
  *
- * 去重:SSE 重连补发会重放整个 eventBuffer;同 bootId 下位置 <= 游标的帧在此直接丢弃,
+ * 去重:内容与全局通知分别维护游标，避免未 watch 期间的通知越过内容缺口。
+ * SSE 重连补发会重放整个 eventBuffer;同通道、同 bootId 下位置 <= 游标的帧在此丢弃,
  * 防止 delta 重复追加导致文本翻倍。bootId 变化(后端重启)则接受并重置游标。
  * 缺任一位置字段的帧 fail-open(不去重),兼容旧后端/异常帧。
  */
@@ -31,6 +33,13 @@ import { generateUuid } from "@/utils/uuid";
 
 export type HubStreamEvent = WireStreamEvent;
 
+const GLOBAL_NOTIFICATION_TYPES: ReadonlySet<WireStreamEvent["type"]> = new Set([
+  "ask_requested",
+  "ask_resolved",
+  "workflow_event",
+  "compression_error",
+]);
+
 /** 会话流式订阅者 */
 interface SessionSubscriber {
   id: string;
@@ -40,8 +49,13 @@ interface SessionSubscriber {
 export class StreamEventHub {
   /** 全局订阅者:常驻消费所有会话的流式事件(接收链路独立的基础) */
   private globalSubscribers: SessionSubscriber[] = [];
-  /** 每会话幂等游标(后端盖戳的传输位置 baseSeq/chunkSeq + streamBootId;重连补发去重依据) */
+  /** 内容帧游标；不受未 watch 时仍能收到的全局通知影响。 */
   private readonly streamCursor = new Map<
+    string,
+    { bootId?: string; baseSeq: number; chunkSeq: number }
+  >();
+  /** 与后端 ALWAYS_BROADCAST_STREAM_TYPES 对齐，独立去重避免通知跨过内容缺口。 */
+  private readonly notificationCursor = new Map<
     string,
     { bootId?: string; baseSeq: number; chunkSeq: number }
   >();
@@ -73,14 +87,17 @@ export class StreamEventHub {
       typeof ord === "number" &&
       Number.isFinite(ord)
     ) {
-      const cursor = this.streamCursor.get(sessionId);
+      const cursors = GLOBAL_NOTIFICATION_TYPES.has(event.type)
+        ? this.notificationCursor
+        : this.streamCursor;
+      const cursor = cursors.get(sessionId);
       if (cursor && cursor.bootId === event.streamBootId) {
         const duplicate =
           baseSeq < cursor.baseSeq ||
           (baseSeq === cursor.baseSeq && ord <= cursor.chunkSeq);
         if (duplicate) return;
       }
-      this.streamCursor.set(sessionId, {
+      cursors.set(sessionId, {
         bootId: event.streamBootId,
         baseSeq: baseSeq,
         chunkSeq: ord,
@@ -163,6 +180,7 @@ export class StreamEventHub {
   /** 清理会话状态（会话删除/清空/日志换代时）：释放幂等游标与缺口标记 */
   cleanup(sessionId: string): void {
     this.streamCursor.delete(sessionId);
+    this.notificationCursor.delete(sessionId);
     this.gapSessions.delete(sessionId);
   }
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 import { useSessionStore } from "@/stores/session";
 
@@ -79,6 +79,10 @@ vi.mock("@/composables/usePopup", () => ({
   }),
 }));
 
+vi.mock("@/components/ui/toastService", () => ({
+  toast: { info: vi.fn(), error: vi.fn() },
+}));
+
 vi.mock("vue-router", () => ({
   useRouter: () => ({
     afterEach: (cb: () => void) => {
@@ -92,6 +96,7 @@ vi.mock("vue-router", () => ({
 
 import { useSessionEvents } from "./useSessionEvents";
 import { apiService } from "@/services/ApiService";
+import { toast } from "@/components/ui/toastService";
 import { SESSION_RESYNC_EVENT, clearSessionHistoryStale } from "@/utils/sessionResync";
 import type { UserQueueSnapshot } from "@/types/session";
 import type { Turn } from "@/types/message";
@@ -135,7 +140,16 @@ function emitStreamStatus(payload: Record<string, any>, source?: string) {
 }
 
 describe("useSessionEvents 统一订阅器", () => {
+  let stopSubscriptions: Array<() => void>;
   beforeEach(() => {
+    // 每个测试都初始化常驻接收器；必须释放真实 Hub 订阅，避免跨测试扇出。
+    stopSubscriptions = [];
+    const subscribeAll = streamEventHub.subscribeAll.bind(streamEventHub);
+    vi.spyOn(streamEventHub, "subscribeAll").mockImplementation((onEvent) => {
+      const stop = subscribeAll(onEvent);
+      stopSubscriptions.push(stop);
+      return stop;
+    });
     setActivePinia(createPinia());
     registeredHandlers.clear();
     connectHandlers.length = 0;
@@ -157,6 +171,10 @@ describe("useSessionEvents 统一订阅器", () => {
       bufferedEventCount: 0,
     });
     vi.mocked(apiService.chat).mockResolvedValue({ ok: true });
+  });
+  afterEach(() => {
+    for (const stop of stopSubscriptions) stop();
+    vi.mocked(streamEventHub.subscribeAll).mockRestore();
   });
 
   it("init 注册 stream_status_changed 唯一订阅", () => {
@@ -205,16 +223,18 @@ describe("useSessionEvents 统一订阅器", () => {
     expect(store.sessionPendingAsk("boot-s2")?.requestId).toBe("req1");
   });
 
-  it("补发缺口未清前，live 帧不推进已应用水位", () => {
+  it("补发缺口出现及清除后，live 帧都不推进已应用水位", () => {
     useSessionEvents().init();
     const store = useSessionStore();
+    // 基线由已确认的快照/领域事件路径播种，live 帧不能确认持久化历史。
+    store.setAppliedSeq("gap-s1", 5);
 
     streamEventHub.route({
       type: "text_delta",
       sessionId: "gap-s1",
       text: "a",
       baseSeq: 5,
-      logSeq: 5,
+      logSeq: 6,
       chunkSeq: 1,
       streamBootId: "boot-gap",
     } as any);
@@ -235,9 +255,9 @@ describe("useSessionEvents 统一订阅器", () => {
       chunkSeq: 1,
       streamBootId: "boot-gap",
     } as any);
-    expect(store.getAppliedSeq("gap-s1")).toBe(5); // 冻结
+    expect(store.getAppliedSeq("gap-s1")).toBe(5);
 
-    // 整页重拉后缺口清除，水位恢复推进
+    // 清除传输缺口也不能授权 live 帧推进领域事件水位。
     streamEventHub.clearStreamGap("gap-s1");
     streamEventHub.route({
       type: "text_delta",
@@ -248,14 +268,15 @@ describe("useSessionEvents 统一订阅器", () => {
       chunkSeq: 1,
       streamBootId: "boot-gap",
     } as any);
-    expect(store.getAppliedSeq("gap-s1")).toBe(7);
+    expect(store.getAppliedSeq("gap-s1")).toBe(5);
   });
 
-  it("已应用水位只认未钳制的 logSeq（传输 baseSeq 超前不推进，裸帧不推进）", () => {
+  it("live 帧的 logSeq、超前的传输 baseSeq 和裸帧都不推进已应用水位", () => {
     useSessionEvents().init();
     const store = useSessionStore();
+    store.setAppliedSeq("logseq-s1", 2);
 
-    // 日志回绕后传输基座仍停在旧高值：水位必须跟真实落库游标走
+    // 日志回绕后传输基座仍停在旧高值；真实 logSeq 也不能证明历史已连续应用。
     streamEventHub.route({
       type: "text_delta",
       sessionId: "logseq-s1",
@@ -265,7 +286,7 @@ describe("useSessionEvents 统一订阅器", () => {
       chunkSeq: 1,
       streamBootId: "boot-logseq",
     } as any);
-    expect(store.getAppliedSeq("logseq-s1")).toBe(3);
+    expect(store.getAppliedSeq("logseq-s1")).toBe(2);
 
     // 裸运行时帧（如 error）没有 logSeq：不能把水位推到 baseSeq
     streamEventHub.route({
@@ -276,32 +297,20 @@ describe("useSessionEvents 统一订阅器", () => {
       chunkSeq: 2,
       streamBootId: "boot-logseq",
     } as any);
-    expect(store.getAppliedSeq("logseq-s1")).toBe(3);
+    expect(store.getAppliedSeq("logseq-s1")).toBe(2);
   });
 
   it("投影抛错时水位不推进（否则该事件既没进树、也不会被增量补拉取回）", () => {
     useSessionEvents().init();
     const store = useSessionStore();
     const sid = "throw-s1";
-
-    // 先建立水位基线（正常帧）
-    streamEventHub.route({
-      type: "text_delta",
-      sessionId: sid,
-      text: "ok",
-      baseSeq: 9,
-      logSeq: 9,
-      chunkSeq: 1,
-      streamBootId: "boot-throw",
-    } as any);
-    expect(store.getAppliedSeq(sid)).toBe(9);
+    store.setAppliedSeq(sid, 9);
 
     // 让投影内部抛错（ask_requested 在 projectChunk 的 try 内直写交互卡），
     // hub 的 try/catch 会吞掉异常 → 水位必须停在 9，不能前进到 20。
-    const original = store.upsertSessionPendingAsk;
-    store.upsertSessionPendingAsk = () => {
+    const upsert = vi.spyOn(store, "upsertSessionPendingAsk").mockImplementation(() => {
       throw new Error("projection boom");
-    };
+    });
     try {
       expect(() =>
         streamEventHub.route({
@@ -316,10 +325,149 @@ describe("useSessionEvents 统一订阅器", () => {
           streamBootId: "boot-throw",
         } as any),
       ).not.toThrow();
+      expect(upsert).toHaveBeenCalled();
       expect(store.getAppliedSeq(sid)).toBe(9);
     } finally {
-      store.upsertSessionPendingAsk = original;
+      upsert.mockRestore();
     }
+  });
+
+  it.each([undefined, 9])("无缓存会话收到 live 帧不建树、不推进水位（基线 %s）", (baseline) => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    const sid = `uncached-watermark-${baseline}`;
+    if (baseline !== undefined) store.setAppliedSeq(sid, baseline);
+
+    streamEventHub.route({
+      type: "turn_start",
+      sessionId: sid,
+      turnId: "t1",
+      baseSeq: 20,
+      logSeq: 20,
+      chunkSeq: 1,
+      streamBootId: "boot-uncached-watermark",
+    } as any);
+
+    expect(store.getTurns(sid)).toEqual([]);
+    expect(store.getSessionState(sid).eventLog ?? []).toEqual([]);
+    expect(store.getAppliedSeq(sid)).toBe(baseline);
+  });
+
+  it.each([
+    { label: "缺少回合 ID", messageId: "m1" },
+    { label: "缺少消息 ID", turnId: "t1" },
+    { label: "目标回合不存在", turnId: "missing", messageId: "m1" },
+  ])("投影无目标时不推进水位：$label", ({ label, ...target }) => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    const sid = `missing-target-${label}`;
+    store.setTurns(sid, [{ id: "t1", messages: [] } as unknown as Turn]);
+    store.setAppliedSeq(sid, 9);
+
+    streamEventHub.route({
+      type: "text_delta",
+      sessionId: sid,
+      ...target,
+      text: "unapplied",
+      baseSeq: 20,
+      logSeq: 20,
+      chunkSeq: 1,
+      streamBootId: "boot-missing-target",
+    } as any);
+
+    expect(store.getTurns(sid)?.[0].messages).toEqual([]);
+    expect(store.getAppliedSeq(sid)).toBe(9);
+  });
+
+  it("正常 live 投影仍创建回合并更新文本，但不推进水位", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    const sid = "projected-watermark";
+    store.getSessionState(sid).loaded = true;
+    store.setAppliedSeq(sid, 9);
+
+    streamEventHub.route({
+      type: "turn_start",
+      sessionId: sid,
+      turnId: "t1",
+      baseSeq: 20,
+      logSeq: 20,
+      chunkSeq: 1,
+      streamBootId: "boot-projected-watermark",
+    } as any);
+    streamEventHub.route({
+      type: "text_delta",
+      sessionId: sid,
+      turnId: "t1",
+      messageId: "m1",
+      index: 0,
+      text: "live text",
+      baseSeq: 20,
+      logSeq: 20,
+      chunkSeq: 2,
+      streamBootId: "boot-projected-watermark",
+    } as any);
+
+    expect(store.getTurns(sid)?.[0].id).toBe("t1");
+    expect(store.getTurns(sid)?.[0].messages[0].blocks[0].content).toBe("live text");
+    expect(store.getAppliedSeq(sid)).toBe(9);
+  });
+
+  it.each([false, true])("压缩通知仍显示提示且不推进水位（取消 %s）", (cancelled) => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    const sid = `notification-watermark-${cancelled}`;
+    store.getSessionState(sid).loaded = true;
+    store.setAppliedSeq(sid, 9);
+
+    streamEventHub.route({
+      type: "compression_error",
+      sessionId: sid,
+      cancelled,
+      error: "compression failed",
+      baseSeq: 20,
+      logSeq: 20,
+      chunkSeq: 1,
+      streamBootId: "boot-notification-watermark",
+    } as any);
+
+    expect(cancelled ? toast.info : toast.error).toHaveBeenCalledTimes(1);
+    expect(store.getAppliedSeq(sid)).toBe(9);
+  });
+
+  it("无缓存会话的交互卡仍可到达、提醒和收起，且不推进水位", () => {
+    useSessionEvents().init();
+    const store = useSessionStore();
+    const sid = "ask-watermark";
+    store.setAppliedSeq(sid, 9);
+
+    streamEventHub.route({
+      type: "ask_requested",
+      sessionId: sid,
+      requestId: "r1",
+      kind: "approval",
+      questions: [],
+      baseSeq: 20,
+      logSeq: 20,
+      chunkSeq: 1,
+      streamBootId: "boot-ask-watermark",
+    } as any);
+    expect(store.peekSessionPendingAsk(sid)?.requestId).toBe("r1");
+    expect(store.getSidebarState(sid).unread).toBe(true);
+    expect(store.getAppliedSeq(sid)).toBe(9);
+
+    streamEventHub.route({
+      type: "ask_resolved",
+      sessionId: sid,
+      requestId: "r1",
+      baseSeq: 21,
+      logSeq: 21,
+      chunkSeq: 1,
+      streamBootId: "boot-ask-watermark",
+    } as any);
+    expect(store.peekSessionPendingAsk(sid)).toBeUndefined();
+    expect(store.getTurns(sid)).toEqual([]);
+    expect(store.getAppliedSeq(sid)).toBe(9);
   });
 
   it("session_cleared（他源）：清树/水位/邮箱并派发 resync", () => {

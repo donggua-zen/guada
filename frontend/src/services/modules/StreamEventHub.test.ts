@@ -95,6 +95,50 @@ describe("StreamEventHub 入口幂等((baseSeq, chunkSeq) 元组去重)", () => 
     expect(onEvent.mock.calls[3][0].chunkSeq).toBe(4);
   });
 
+  it("全局通知先到不会阻止较旧内容补发，各通道重复投递仍去重", () => {
+    const seen: string[] = [];
+    hub.subscribeAll((event) => seen.push(event.type));
+    hub.route(seqEv("reasoning_delta", "s1", 100, 1));
+    hub.route(seqEv("ask_requested", "s1", 102, 1));
+    hub.route(seqEv("tool_call_delta", "s1", 100, 2));
+    hub.route(seqEv("block_end", "s1", 100, 3));
+    hub.route(seqEv("finish", "s1", 101, 1));
+    hub.route(seqEv("ask_requested", "s1", 102, 1));
+    hub.route(seqEv("tool_call_delta", "s1", 100, 2));
+    expect(seen).toEqual([
+      "reasoning_delta", "ask_requested", "tool_call_delta", "block_end", "finish",
+    ]);
+    expect(hub.getCursor("s1")?.baseSeq).toBe(101);
+  });
+
+  it("ask_resolved 之后补发旧询问不会复活卡片，内容先到也不吞通知", () => {
+    const seen: string[] = [];
+    hub.subscribeAll((event) => seen.push(event.type));
+    hub.route(seqEv("text_delta", "s1", 110, 1));
+    hub.route(seqEv("ask_resolved", "s1", 109, 2));
+    hub.route(seqEv("ask_requested", "s1", 109, 1));
+    hub.route(seqEv("ask_resolved", "s1", 109, 2));
+    expect(seen).toEqual(["text_delta", "ask_resolved"]);
+  });
+
+  it.each(["workflow_event", "compression_error"])("%s 不推进内容游标或隐藏内容缺口", (type) => {
+    hub.route(seqEv("text_delta", "s1", 5, 1));
+    hub.route(seqEv(type, "s1", 20, 1));
+    hub.noteCatchupPositions([{ sessionId: "s1", baseSeq: 6, chunkSeq: 1 }]);
+    expect(hub.getCursor("s1")?.baseSeq).toBe(5);
+    expect(hub.hasPendingGap("s1")).toBe(true);
+  });
+
+  it("cleanup 和后端重启分别重置通知去重", () => {
+    const onEvent = vi.fn();
+    hub.subscribeAll(onEvent);
+    hub.route(seqEv("ask_resolved", "s1", 10, 1));
+    hub.route(seqEv("ask_requested", "s1", 1, 1, "boot2"));
+    hub.cleanup("s1");
+    hub.route(seqEv("ask_requested", "s1", 1, 1, "boot2"));
+    expect(onEvent).toHaveBeenCalledTimes(3);
+  });
+
   it("元组边界:同区间递增通过、同元组与低区间丢弃、区间前进接受", () => {
     const onEvent = vi.fn();
     hub.subscribeAll(onEvent);

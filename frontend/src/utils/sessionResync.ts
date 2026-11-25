@@ -29,18 +29,23 @@ export function emitSessionResync(sessionId: string): void {
   );
 }
 
-/**
- * 标记会话历史失效并派发强制重拉。
- *
- * 总是派发（不因已标记而跳过）：这是"现在重拉一次"的强制信号，重拉失败需要下次
- * 触发点（回前台/重连）继续重试；去重由调用方按场景决定。
- */
-export function markSessionHistoryStale(
+/** 停止订阅后仅使缓存失效，切换/卸载过程中不触发旧面板立即重拉。 */
+export function invalidateSessionHistory(
   store: StaleHistoryStore,
   sessionId: string,
 ): void {
   staleSessionHistory.add(sessionId);
   store.getSessionState(sessionId).loaded = false;
+}
+
+/**
+ * 标记失效并立即派发重拉；失败后可重复触发，去重由调用方按场景决定。
+ */
+export function markSessionHistoryStale(
+  store: StaleHistoryStore,
+  sessionId: string,
+): void {
+  invalidateSessionHistory(store, sessionId);
   emitSessionResync(sessionId);
 }
 

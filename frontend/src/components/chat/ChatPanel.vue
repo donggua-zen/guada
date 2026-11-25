@@ -225,13 +225,13 @@ import { writeTextToClipboard } from "@/utils/clipboard"
 import {
   SESSION_RESYNC_EVENT,
   clearSessionHistoryStale,
+  invalidateSessionHistory,
 } from "@/utils/sessionResync"
 import {
   foldEvents,
 } from "@/services/modules/streamProjector"
 import { catchUpIncrementally } from "@/services/modules/streamIncremental"
 import { applySessionSnapshot } from "@/services/modules/sessionSnapshot"
-import { SessionWatchRegistry } from "@/services/modules/sessionWatchRegistry"
 import type { InputMessageState, Session, QueuedMessage, QueuePauseReason, ChatFileView } from '@/types/session';
 import type { Agent } from '@/types/agent';
 import type { Turn, TurnContent, MessageBundle } from '@/types/message';
@@ -291,18 +291,16 @@ const { confirm } = usePopup();
 // 队列补发：打开会话时若后端已空闲但队列非空（错过终态事件）则补一次消费
 const { refreshQueue } = useSessionEvents();
 
-// 会话 watch 注册表：多 pane 共享引用计数；传输侧只保存期望集合，重连自动重放
-const sessionWatchRegistry = new SessionWatchRegistry(
-  (sid) => apiService.watchSession(sid),
-  (sid) => apiService.unwatchSession(sid),
-)
-// 本组件实例当前持有的 watch（切换/卸载时释放）
+// 每个 pane 配对持有 watch；引用计数由共享传输服务统一管理。
 let watchedSessionId: string | null = null
 function syncWatchedSession(next: string | null) {
   if (next === watchedSessionId) return
-  if (watchedSessionId) sessionWatchRegistry.release(watchedSessionId)
+  if (watchedSessionId && apiService.unwatchSession(watchedSessionId)) {
+    // 离开后不再持续收内容，下次打开必须通过快照校准缓存。
+    invalidateSessionHistory(sessionStore, watchedSessionId)
+  }
   watchedSessionId = next
-  if (next) sessionWatchRegistry.acquire(next)
+  if (next) apiService.watchSession(next)
 }
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
