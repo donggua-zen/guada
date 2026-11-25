@@ -141,6 +141,14 @@ export interface MarkdownOptions {
   resolveImageUrl?: (src: string) => string;
   /** When true, raw HTML tags in markdown are escaped (displayed as text) instead of being rendered. */
   escapeHtml?: boolean;
+  /**
+   * 正文图片渲染：给了它就由调用方决定图片标记（路径解析 + 卡片 + 事件委托），
+   * 否则退回普通 `<img>`。返回空串表示「该图片不渲染」（例如已被安全策略拒绝）。
+   *
+   * 注意 useMarkdown() 是模块单例，只有首次调用的 options 生效；需要独立上下文的
+   * 消费方应当直接用 createMarkedInstance() 建自己的实例。
+   */
+  renderImage?: (image: { src: string; alt: string; title?: string }) => string;
 }
 
 /** 代码块超过该行数即折叠为 --gd-md-code-max-height 高度，出现底部展开条 */
@@ -267,7 +275,12 @@ export function createMarkedInstance(options?: MarkdownOptions): Marked {
     image(token: Tokens.Image): string {
       const href = token.href;
       const text = token.text || "";
-      const title = token.title ? ` title="${token.title}"` : "";
+      const title = token.title ? ` title="${escapeHtmlAttribute(token.title)}"` : "";
+
+      // 调用方接管图片渲染（正文卡片：工作目录解析 + 预览 + 失败重试）
+      if (options?.renderImage) {
+        return options.renderImage({ src: href, alt: text, title: token.title || undefined });
+      }
 
       let resolvedUrl = href;
 
@@ -276,7 +289,8 @@ export function createMarkedInstance(options?: MarkdownOptions): Marked {
         resolvedUrl = options.resolveImageUrl(href);
       }
 
-      return `<img src="${resolvedUrl}" alt="${text}"${title} style="max-width: 100%;" />`;
+      // src/alt 都来自模型输出，必须逐项转义（裸拼接会让引号提前结束属性）
+      return `<img src="${escapeHtmlAttribute(resolvedUrl)}" alt="${escapeHtmlAttribute(text)}"${title} style="max-width: 100%;" />`;
     },
     html(token: Tokens.HTML | Tokens.Tag): string {
       if (options?.escapeHtml) {

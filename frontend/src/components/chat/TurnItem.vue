@@ -84,7 +84,8 @@
             <template v-if="group.type === 'content'">
               <template v-for="item in group.items" :key="item.id">
                 <MarkdownContent class="message-item__text markdown-text" :content="item.content || ''"
-          :streaming="streamingState.isStreaming" />
+          :streaming="streamingState.isStreaming" :session-id="sessionId"
+          @preview-image="handleMarkdownImagePreview" />
               </template>
             </template>
             <div v-else class="process-group">
@@ -956,7 +957,7 @@ const tokenUsage = computed(() => {
 // ============================================
 // 图片预览
 // ============================================
-const previewList = computed(() => {
+const attachmentPreviewList = computed(() => {
   const files = userFiles.value || [];
   // 仅可内联的位图进入大图预览（svg/ico 等 image/* 前缀但不渲染的类型排除），
   // 绝对化后取原图 url（无缩略图路径时回退）
@@ -964,6 +965,12 @@ const previewList = computed(() => {
     .filter((f) => isVisionImageMediaType(f.type))
     .map((f) => toResourceUrl(f.url || f.previewUrl));
 });
+
+/**
+ * 查看器当前展示的列表：正文图片与用户附件共用同一个查看器，
+ * 两者互斥触发（点正文图只带正文图，点附件只带附件图）。
+ */
+const previewList = ref<string[]>([]);
 
 /**
  * 打开大图预览。
@@ -975,7 +982,19 @@ const handleImageClick = (file: FileAttachment) => {
   const images = (userFiles.value || []).filter((f) => isVisionImageMediaType(f.type));
   const index = images.indexOf(file);
   if (index < 0) return;
+  previewList.value = attachmentPreviewList.value;
   currentPreViewIndex.value = index;
+  showImageViewer.value = true;
+};
+
+/**
+ * 正文 Markdown 图片的预览：地址已在渲染阶段解析成工作区取图 URL，
+ * 这里只负责把同组图片交给查看器（同组左右切换，独立图片只预览自身）。
+ */
+const handleMarkdownImagePreview = (urls: string[], index: number) => {
+  if (!urls.length) return;
+  previewList.value = urls;
+  currentPreViewIndex.value = Math.min(Math.max(index, 0), urls.length - 1);
   showImageViewer.value = true;
 };
 
