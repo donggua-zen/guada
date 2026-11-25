@@ -115,6 +115,18 @@ describe('stream-recovery', () => {
       expect(isRetryableStreamRecoveryFailure(wrapped)).toBe(false);
     });
 
+    it('空闲超时（AbortError 在 cause 里）仍可重试', () => {
+      // 复现 session-e9821bc1：180s 无数据触发 idle timeout，内部 controller abort
+      // 让 SDK 抛 AbortError 并作为 cause 挂在 UpstreamTimeoutError 上。它不能被
+      // 误判成用户中止，否则恢复层直接 stopping、不重试。
+      const idle = new UpstreamTimeoutError(
+        'Stream idle timeout: no data received for 180s',
+        createAbortError('aborted'),
+      );
+      expect(isRetryableStreamRecoveryFailure(idle)).toBe(true);
+      expect(classifyStreamRecoveryFailure(idle)).toBe('provider_timeout');
+    });
+
     it('结构化 upstream 错误', () => {
       expect(
         isRetryableStreamRecoveryFailure(

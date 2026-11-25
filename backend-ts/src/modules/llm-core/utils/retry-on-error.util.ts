@@ -126,6 +126,16 @@ export function normalizeTransportError(error: any): any {
  */
 export function isUserAbort(error: any): boolean {
   if (!error || typeof error !== "object") return false;
+
+  // 顶层已是明确的超时结论 → 不是用户中止，不再沿 cause 找 AbortError。
+  // 空闲超时（stream-timeout.util）是通过 abort 内部 controller 打断 SDK 的，
+  // SDK 抛出的 AbortError 会作为 cause 挂在 UpstreamTimeoutError 上；若继续沿
+  // cause 走，会把「上游 180s 没数据」误判成「用户点了停止」，恢复层直接终止
+  // 而不重试。用户中止不会被包装成 UpstreamTimeoutError——所有构造点都是
+  // 空闲超时 / SDK 连接超时（见 stream-timeout.util.ts、llm.service.ts、
+  // 各 adapter 的 APIConnectionTimeoutError 分支）。
+  if (error instanceof UpstreamTimeoutError) return false;
+
   let cur: any = error;
   for (let depth = 0; cur && depth < 4; depth += 1) {
     if (cur.name === "AbortError" || cur.name === "APIUserAbortError") {

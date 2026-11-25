@@ -2,7 +2,7 @@ import {
   APIConnectionError,
   APIConnectionTimeoutError,
 } from "openai";
-import { classifyError, isPayloadTooLarge } from "./retry-on-error.util";
+import { classifyError, isPayloadTooLarge, isUserAbort } from "./retry-on-error.util";
 import {
   UpstreamNetworkError,
   UpstreamRequestError,
@@ -59,6 +59,21 @@ describe("classifyError", () => {
     expect(classifyError(makeError("bad gateway", { status: 502 }))).toBe(
       "network_error",
     );
+  });
+
+  it("空闲超时（AbortError 挂在 cause）仍归类为可重试 timeout", () => {
+    const idle = new UpstreamTimeoutError(
+      "Stream idle timeout: no data received for 180s",
+      Object.assign(new Error("aborted"), { name: "AbortError" }),
+    );
+    // 关键：不能因为 cause 是 AbortError 就判成用户中止
+    expect(isUserAbort(idle)).toBe(false);
+    expect(classifyError(idle)).toBe("timeout");
+  });
+
+  it("真正的用户中止仍不可重试", () => {
+    expect(isUserAbort(Object.assign(new Error("aborted"), { name: "AbortError" }))).toBe(true);
+    expect(classifyError(Object.assign(new Error("aborted"), { name: "AbortError" }))).toBeNull();
   });
 
   it("保留 Upstream 类型的既有分类", () => {
