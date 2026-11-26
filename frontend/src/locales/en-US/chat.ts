@@ -367,6 +367,7 @@
     imageCount: '{count} images',
     openSubAgentPanel: 'Open sub-agent panel',
     subAgentLabel: 'Sub-agent',
+    subAgentStopped: 'Stopped',
     remote: 'Remote',
     remoteWorkspace: 'Remote workspace: {name}',
   },

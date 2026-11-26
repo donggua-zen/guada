@@ -72,8 +72,39 @@ describe("resolveSubAgentFailure", () => {
     expect(resolveSubAgentFailure(res(raw))).toBe(raw);
   });
 
-  it("无包装的纯文本原因原样返回", () => {
-    expect(resolveSubAgentFailure(res("spawn 被中止"))).toBe("spawn 被中止");
+  // ── 成功文案绝不能被当成失败原因（本次 bug 的回归锚）──
+  // 后台派发成功的结果正文与失败标签同样以方括号呈现；一旦裁决口径把正常
+  // 结束原因误判成失败，「解析不出就原样返回」会把这段 ACK 用红块摊进对话流。
+
+  it("后台派发成功的 ACK 文本不当作失败原因", () => {
+    expect(
+      resolveSubAgentFailure(
+        res(
+          "[Sub-agent running. Job ID: job-51c533f0-ca8a-4cc6-a74e-376327c0129c. Use job_read job-51c533f0-ca8a-4cc6-a74e-376327c0129c to read the result, job_send to continue its conversation, or job_stop to cancel.]",
+        ),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("正常完成标签不当作失败原因", () => {
+    expect(resolveSubAgentFailure(res("[Sub-agent completed.]"))).toBeUndefined();
+    expect(
+      resolveSubAgentFailure(res("结论正文\n[Sub-agent completed.]")),
+    ).toBeUndefined();
+  });
+
+  it("执行器包装但正文是成功 ACK：仍不返回（原因不该是「它成功了」）", () => {
+    expect(
+      resolveSubAgentFailure(
+        res("Tool execution failed: [Sub-agent completed.]"),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("认不出的自由文本返回 undefined（白名单制，不再原样透出）", () => {
+    // 无包装的裸文本可能是工具正常输出，无法与失败区分 → 交给结构化字段承载
+    expect(resolveSubAgentFailure(res("spawn 被中止"))).toBeUndefined();
+    expect(resolveSubAgentFailure(res("some normal tool output"))).toBeUndefined();
   });
 
   it("结果缺失或为空 → undefined（调用方只渲染标题）", () => {

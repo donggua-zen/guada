@@ -75,11 +75,14 @@ const openSubAgent = inject<((subSessionId: string) => void) | null>(
 
 function dotStatus(item: SubagentItem): WorkflowMemberStatus {
   if (item.status === "error") return "failed";
+  // 主动停止用「已取消」档：中性态，不冒充失败
+  if (item.status === "stopped") return "cancelled";
   return item.status;
 }
 
 function statusText(item: SubagentItem): string {
   if (item.status === "error") return t("chat.workspace.wfFailed");
+  if (item.status === "stopped") return t("chat.workspace.wfCancelled");
   if (item.status === "running") return t("chat.workspace.wfRunning");
   return t("chat.workspace.wfCompleted");
 }

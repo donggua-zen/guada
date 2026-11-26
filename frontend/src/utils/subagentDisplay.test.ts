@@ -58,6 +58,20 @@ describe("buildSubagentItems", () => {
     );
     expect(items.map((i) => i.status)).toEqual(["completed", "error"]);
   });
+
+  it("closeReason=stopped 还原为中性的 stopped，不落进失败（主动停止不是出错）", () => {
+    const items = buildSubagentItems(
+      [
+        sub({ id: "stopped", closeReason: "stopped" }),
+        // 对照：其它非 completed 原因仍是失败
+        sub({ id: "aborted", closeReason: "aborted" }),
+      ],
+      peekFrom({}),
+      "子代理",
+    );
+    expect(items.map((i) => i.status)).toEqual(["stopped", "error"]);
+    expect(items[0]!.ended).toBe(true);
+  });
 });
 
 describe("splitSubagents / countRunningSubagents", () => {

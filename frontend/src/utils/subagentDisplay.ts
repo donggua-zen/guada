@@ -11,7 +11,7 @@
  */
 import type { Session } from "@/types/session";
 
-export type SubagentStatus = "running" | "completed" | "error";
+export type SubagentStatus = "running" | "completed" | "error" | "stopped";
 
 export interface SubagentItem {
   id: string;
@@ -44,8 +44,11 @@ export function buildSubagentItems(
       // 流状态表是主判据；基线拉取时它可能尚未写入，用会话自带的 isStreaming 兜底，
       // 避免刚 fetchSession 回来的运行中子代理被瞬间误判成「已结束」。
       const running = streamStatus === "running" || (streamStatus === undefined && s.isStreaming === true);
+      // 主动停止既非完成也非失败：单独一档，不能落进下面的「非 completed 即 error」
+      const endedAsStopped = !running && streamStatus === undefined && s.closeReason === "stopped";
       // 刷新后流状态表为空，用后端记下的「上次运行结束原因」还原失败态
-      const endedAsError = !running && streamStatus === undefined && !!s.closeReason && s.closeReason !== "completed";
+      const endedAsError =
+        !running && streamStatus === undefined && !!s.closeReason && s.closeReason !== "completed";
       return {
         id: s.id,
         title: s.title || fallbackTitle,
@@ -54,9 +57,11 @@ export function buildSubagentItems(
         ended: !running,
         status: running
           ? ("running" as const)
-          : streamStatus === "error" || endedAsError
-            ? ("error" as const)
-            : ("completed" as const),
+          : endedAsStopped
+            ? ("stopped" as const)
+            : streamStatus === "error" || endedAsError
+              ? ("error" as const)
+              : ("completed" as const),
       };
     });
 }

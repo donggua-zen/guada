@@ -72,6 +72,10 @@ export type SubAgentStopReason =
  *
  * error 场景由调用方显式置位（event.error / onError / abort），不走本映射；
  * 无显式原因（undefined/空）视为正常完成。
+ *
+ * handoff 必须算正常收尾：它是「本轮在工具边界让位给排队消息」（chat-runner 的
+ * NORMAL_FINISH 同口径），子会话队列消费后以新回合继续跑，整次运行并未失败。
+ * 漏掉它会落到 default → error，把一次正常派生记成失败（子代理行整行转红）。
  */
 export function mapFinishReason(reason?: string): SubAgentStopReason {
   if (!reason) return "completed";
@@ -79,6 +83,7 @@ export function mapFinishReason(reason?: string): SubAgentStopReason {
     case "stop":
     case "tool-calls":
     case "tool_calls":
+    case "handoff":
       return "completed";
     case "length":
     case "max_tokens":
@@ -235,6 +240,14 @@ export class SubAgentManager implements OnModuleInit {
     string,
     Set<{ resolve: () => void; settled: boolean }>
   >();
+  /**
+   * 子会话 → 最近一次回合的结束原因（`chat.turn_finished` 的 reason）。
+   *
+   * 用来以「最后一轮」裁决整次运行的成败：`runSubAgentStream` 的首轮 Promise 在
+   * handoff 让位后就 resolve 了，后续轮次由 chat-runner 另起流完成，结果对象停在
+   * 首轮快照上。只看快照会把「首轮正常、末轮失败」误报为完成（以及 handoff 的镜面）。
+   */
+  private readonly lastTurnReason = new Map<string, string | undefined>();
 
   constructor(
     @Inject(SESSION_STORE_TOKEN) private sessionStore: SessionStoreFacade,
@@ -335,8 +348,12 @@ export class SubAgentManager implements OnModuleInit {
   handleSubAgentTurnFinished(event: {
     sessionId: string;
     sessionType?: string;
+    reason?: string;
   }): void {
     if (event.sessionType !== "sub_agent") return;
+    // 先记末轮原因、再判静默：唤醒后 settle 在同一微任务里就会读这张表定裁决，
+    // 顺序颠倒会让结算读到上一轮（甚至读不到）的结束原因。
+    this.lastTurnReason.set(event.sessionId, event.reason);
     if (!this.quiesceWaiters.has(event.sessionId)) return;
     if (this.isSubAgentQuiescent(event.sessionId)) {
       this.releaseQuiesceWaiters(event.sessionId);
@@ -790,12 +807,14 @@ export class SubAgentManager implements OnModuleInit {
 
     // 直接等待流执行结果：不走 settle/信箱（workflow 引擎是唯一等待者）；
     // abortSignal 中止时 runSubAgentStream 内部联动 cancelStream 并以 aborted 结算
-    const result = await this.runSubAgentStream(
+    const finished = await this.runSubAgentStream(
       subSession.id,
       params.task,
       parentSessionId,
       abortSignal,
     );
+    // 与 spawn 路径同口径：workflow 成员同样是「首轮快照 + 可能的后续轮次」
+    const result = this.resolveFinalVerdict(subSession.id, finished);
 
     // 本轮结束即记录运行结束（只写时间戳，不删除，仍可回放）。
     // 本路径绕过 executeSubAgentStream 与 settle，是唯一没有收尾调用点的分支，
@@ -940,13 +959,15 @@ export class SubAgentManager implements OnModuleInit {
         // abort 时 runSubAgentStream 的监听器已 cancelStream + resolve error result
         state.running.delete(subSessionId);
         this.cleanupParentStateIfEmpty(parentSessionId);
+        // 与 settle 同口径裁决（前台通常只有一轮，此处多为等值通过）
+        const verdict = this.resolveFinalVerdict(subSessionId, raceResult.result);
         // 前台不经过 settle：在这里即时回传终态，先完成的子代理行不必等整批结果
         await this.publishToolStatus(
           subSessionId,
-          isSubAgentError(raceResult.result) ? "error" : "completed",
+          isSubAgentError(verdict) ? "error" : "completed",
           {
-            stopReason: raceResult.result.stopReason,
-            error: raceResult.result.error,
+            stopReason: verdict.stopReason,
+            error: verdict.error,
           },
         );
         // 结果已作为工具结果交付，记录本次运行结束（fire-and-forget，失败仅告警）。
@@ -954,9 +975,9 @@ export class SubAgentManager implements OnModuleInit {
         void this.markRunEnded(
           subSessionId,
           parentSessionId,
-          raceResult.result,
+          verdict,
         ).finally(() => this.releaseLifecycle(subSessionId, lifecycle));
-        return raceResult.result;
+        return verdict;
       }
 
       if (raceResult.kind === "error") {
@@ -1062,6 +1083,8 @@ export class SubAgentManager implements OnModuleInit {
     const lifecycle = this.lifecycles.get(subSessionId);
     if (!lifecycle || (expected && lifecycle !== expected)) return;
     this.lifecycles.delete(subSessionId);
+    // 本次 run 的回合表随之释放（未释放新 run 的条目，语义与屏障一致）
+    this.lastTurnReason.delete(subSessionId);
     lifecycle.resolveDone();
   }
 
@@ -1394,8 +1417,11 @@ export class SubAgentManager implements OnModuleInit {
       let status = "completed";
       if (this.isSubAgentRunning(session.id)) {
         status = "running";
+      } else if (session.closeReason === "stopped") {
+        // 主动停止既不是完成也不是失败：单独一档，避免调用方把它渲染成报错
+        status = "stopped";
       } else if (session.closeReason && session.closeReason !== "completed") {
-        // 上一次运行非正常收尾（error/aborted/max_tokens/refusal/stopped）
+        // 上一次运行非正常收尾（error/aborted/max_tokens/refusal）
         status = "error";
       } else if (state) {
         const completed = state.completed.find(
@@ -1580,6 +1606,35 @@ export class SubAgentManager implements OnModuleInit {
   }
 
   /**
+   * 按「最后一轮」校正整次运行的裁决
+   *
+   * `runSubAgentStream` 只跑首轮：handoff 让位、job_send 注入续跑等后续轮次由
+   * chat-runner 另起流完成，返回的 result 停在首轮快照上。单看快照会两头出错：
+   * - 首轮 handoff（正常让位）+ 末轮 stop → 误报失败
+   * - 首轮 stop + 末轮 error → 误报完成
+   * 因此结算前用 `chat.turn_finished` 记下的末轮原因覆盖裁决。
+   *
+   * 只在末轮原因与快照口径不一致时覆写，避免把首轮已捕获的真实错误
+   * （如 onError 置位的 errorMsg）抹平——此时末轮原因通常也是 error，口径一致。
+   */
+  private resolveFinalVerdict(
+    subSessionId: string,
+    result: SubAgentResult,
+  ): SubAgentResult {
+    if (!this.lastTurnReason.has(subSessionId)) return result;
+    const lastReason = this.lastTurnReason.get(subSessionId);
+    const verdict = mapFinishReason(lastReason);
+    if (verdict === result.stopReason) return result;
+    const isError = verdict !== "completed";
+    return {
+      ...result,
+      status: isError ? "error" : "completed",
+      stopReason: verdict,
+      finishReason: lastReason ?? result.finishReason,
+    };
+  }
+
+  /**
    * 子 Agent 结算单通道
    *
    * 完成与失败统一为一条 SubAgentResult（含结构化 stopReason），
@@ -1606,18 +1661,21 @@ export class SubAgentManager implements OnModuleInit {
     const jobId = this.jobIds.get(subSessionId);
     if (jobId) result.jobId = jobId;
 
+    // 结算前按末轮校正裁决（quiesce 已排空后续轮次，此刻末轮原因才是最终事实）
+    const verdict = this.resolveFinalVerdict(subSessionId, result);
+
     // 即时转态：同批其它子代理可能还在跑，不能等整批 tool_calls_response
-    const isError = isSubAgentError(result);
+    const isError = isSubAgentError(verdict);
     await this.publishToolStatus(
       subSessionId,
       isError ? "error" : "completed",
-      { stopReason: result.stopReason, error: result.error },
+      { stopReason: verdict.stopReason, error: verdict.error },
     );
 
-    state.completed.push({ subSessionId, name, result, jobId });
+    state.completed.push({ subSessionId, name, result: verdict, jobId });
 
     await this.finalizeSubAgent(subSessionId, parentSessionId, state, name, {
-      result,
+      result: verdict,
       jobId,
     });
   }

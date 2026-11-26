@@ -13,6 +13,8 @@
       <span v-if="task" class="sa-link sa-task"
         :class="{ 'is-clickable': clickable, 'is-shimmer': running }"
         @click.stop="onClick">{{ task }}</span>
+      <!-- 主动停止：中性灰文字，不转红也不挂失败原因（停止不是失败） -->
+      <span v-if="stopped" class="sa-stopped">{{ t('chat.toolCalls.subAgentStopped') }}</span>
     </div>
 
     <!-- 失败原因：子代理是独立渲染行（standaloneRows），既不套通用失败横幅、也走不到
@@ -89,14 +91,17 @@ const task = computed(() => {
 /** 后端 settle() 即时下发的终态；早于整批 tool_calls_response 到达 */
 const streamedStatus = computed(() => props.tool.subAgentStatus);
 
-/** 失败：工具结果失败，或结算事件先到 */
+/** 用户主动停止：本次运行被中止，既非完成也非失败 */
+const stopped = computed(() => props.tool.subAgentStopReason === 'stopped');
+
+/** 失败：工具结果失败，或结算事件先到。主动停止不算失败（否则整行转红 + 弹原因块） */
 const isFailed = computed(
-  () => props.failed || streamedStatus.value === 'error',
+  () => (props.failed || streamedStatus.value === 'error') && !stopped.value,
 );
 
 /** 完成徽标：结算事件优先；否则沿用「有结果且不是后台 job」的旧判定。 */
 const done = computed(() => {
-  if (isFailed.value) return false;
+  if (isFailed.value || stopped.value) return false;
   if (streamedStatus.value === 'completed') return true;
   if (props.executing || props.tool.outcome === 'aborted') return false;
   if (props.response?.meta?.jobId) return false;
@@ -105,17 +110,18 @@ const done = computed(() => {
 
 /** 运行中：等整批结果期间，先完成的子代理立即停止动画 */
 const running = computed(
-  () => !!props.executing && !isFailed.value && streamedStatus.value !== 'completed',
+  () => !!props.executing && !isFailed.value && !stopped.value && streamedStatus.value !== 'completed',
 );
 
 const rowLabel = computed(() =>
   [t('chat.toolCalls.subAgentLabel'), displayName.value, task.value].filter(Boolean).join(' · '),
 );
 
-/** 失败原因：优先解析工具结果正文；结果还没到时用结算事件里的错误摘要兜底 */
+/** 失败原因：结算事件的结构化错误摘要优先（比工具结果正文更新、且不会混入成功文案），
+ *  正文只在命中已知失败形态时才作为回落 */
 const failureReason = computed(() => {
   if (!isFailed.value) return undefined;
-  return resolveSubAgentFailure(props.response) ?? props.tool.subAgentError;
+  return props.tool.subAgentError ?? resolveSubAgentFailure(props.response);
 });
 
 /** 点击名称/任务摘要 → 打开该子代理会话面板（无唯一目标会话时不可点） */
@@ -191,6 +197,17 @@ html.dark .subagent-block {
 
 .sa-task.is-clickable:hover {
   color: var(--gd-color-text);
+}
+
+/* 主动停止：最弱一档灰，与「失败」的红色明确区分——停止不是出错，
+   不占据视觉注意力，只说明这一行不会再动了 */
+.sa-stopped {
+  flex-shrink: 0;
+  margin-left: 2px;
+  color: var(--gd-color-text-subtlest);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 /* 失败原因块：红色微底等宽正文，视觉对齐工作流卡的 .wf-card-error；

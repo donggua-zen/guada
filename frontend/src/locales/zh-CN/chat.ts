@@ -367,6 +367,7 @@ export default {
     imageCount: '{count} 张图片',
     openSubAgentPanel: '打开子代理面板',
     subAgentLabel: '子智能体',
+    subAgentStopped: '已停止',
     remote: '远程',
     remoteWorkspace: '远程工作区：{name}',
   },
