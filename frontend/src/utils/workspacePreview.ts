@@ -15,7 +15,7 @@ import { useLayoutStore } from '@/stores/layout'
 import { useTabStore } from '@/stores/tab'
 import { useWorkspaceTreeStore } from '@/stores/workspaceTree'
 import { openInExternalBrowser } from '@/utils/browserUtils'
-import { baseNameOf, extensionOf, fileUrlToPath, isAbsoluteLocalPath, toWorkspaceRelative } from '@/utils/localPath'
+import { baseNameOf, extensionOf, fileUrlToPath, isAbsoluteLocalPath, localPathFromHref, toWorkspaceRelative } from '@/utils/localPath'
 import { openModal } from '@/components/ui/modalService'
 import { t } from '@/locales'
 
@@ -154,15 +154,13 @@ export async function previewFile(filePath: string): Promise<void> {
     let targetPath = filePath
     if (isAbsoluteLocalPath(filePath)) {
         const workspaceDir = await useWorkspaceTreeStore().ensureWorkspacePath(sessionStore.activeSessionId)
-        if (workspaceDir) {
-            const relativePath = toWorkspaceRelative(filePath, workspaceDir)
-            // "" / null：指向工作区根目录本身或工作区外，都无法作为文件标签预览
-            if (!relativePath) {
-                await previewExternalFile(filePath)
-                return
-            }
-            targetPath = relativePath
+        const relativePath = workspaceDir ? toWorkspaceRelative(filePath, workspaceDir) : null
+        // "" / null：指向工作区根目录本身、工作区外，或工作目录不可知，都无法作为文件标签预览
+        if (!relativePath) {
+            await previewExternalFile(filePath)
+            return
         }
+        targetPath = relativePath
     }
 
     const name = baseNameOf(targetPath) || targetPath
@@ -204,28 +202,18 @@ export async function openLocalFileLink(url: string): Promise<void> {
         openInExternalBrowser(url)
         return
     }
+    await openLocalAbsolutePath(absolutePath)
+}
 
-    let sessionId: string | null = null
-    try {
-        sessionId = useSessionStore().activeSessionId
-    } catch {
-        // store 未初始化：按工作区外处理
-    }
-
-    if (sessionId) {
-        // 已在缓存中直接命中，未缓存时才发一次请求
-        const workspaceDir = await useWorkspaceTreeStore().ensureWorkspacePath(sessionId)
-        if (workspaceDir) {
-            const relativePath = toWorkspaceRelative(absolutePath, workspaceDir)
-            // "" 表示指向工作区根目录本身，按工作区外处理（面板无法预览目录）
-            if (relativePath) {
-                await previewFile(relativePath)
-                return
-            }
-        }
-    }
-
-    await previewExternalFile(absolutePath)
+/**
+ * 打开本机绝对路径（file:// 链接 / markdown 里的裸绝对路径共用）。
+ *
+ * 工作区内 → 转相对路径走工作区预览；工作区外 → 外部文件预览
+ * （图片等可直出类型仍可展示，其余给「用系统程序打开」入口）。
+ * 归属判定统一收敛在 previewFile（它本身就接受绝对路径）。
+ */
+export async function openLocalAbsolutePath(absolutePath: string): Promise<void> {
+    await previewFile(absolutePath)
 }
 
 /**
@@ -285,9 +273,20 @@ export async function previewUrl(url: string): Promise<void> {
  */
 export async function openLink(url: string): Promise<void> {
     if (!url) return
+    // 页内锚点：没有可打开的目标（此前会被当成非法外链，白白报一次协议错误）
+    if (url.startsWith('#')) return
 
     if (/^file:/i.test(url)) {
         await openLocalFileLink(url)
+        return
+    }
+
+    // markdown 里的本机绝对路径（`/D:/a.png`、`D:\a.png`、UNC）：
+    // 浏览器会当成非法 scheme，交给外部浏览器只会被协议白名单拒绝，
+    // 因此必须在协议判定前拦下，走本地文件预览链路。
+    const localPath = localPathFromHref(url)
+    if (localPath) {
+        await openLocalAbsolutePath(localPath)
         return
     }
 

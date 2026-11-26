@@ -198,6 +198,53 @@ export function toSessionAttachmentStoragePath(
 }
 
 /**
+ * markdown 链接 href → 本机绝对路径；不是本地文件路径返回 null。
+ *
+ * 模型常把本地文件写成这些形态，都会被浏览器当成「非 http(s) 协议」：
+ * - `/D:/a/b.png`（前导斜杠 + 盘符，markdown 站内根路径的写法）
+ * - `D:/a/b.png`、`D:\\a\\b.png`（盘符被解析成 URL scheme `d:`）
+ * - `\\\\server\\share\\a.png`（UNC，反斜杠形态）
+ * - POSIX `/home/u/a.png`
+ * - `file:///D:/a/b.png`（交给 fileUrlToPath）
+ *
+ * 其余协议（http/https/mailto/data/vscode…）一律 null，保持原有外链行为。
+ */
+export function localPathFromHref(
+  href: string,
+  isWindows: boolean = IS_WINDOWS_PATH_STYLE,
+): string | null {
+  if (typeof href !== "string") return null;
+  const trimmed = href.trim();
+  if (!trimmed) return null;
+
+  if (/^file:/i.test(trimmed)) return fileUrlToPath(trimmed, isWindows);
+
+  // 单字母 `C:` 是盘符而不是协议；长度 ≥2 的 scheme 一律按外链处理
+  const scheme = trimmed.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
+  if (scheme && scheme[1].length > 1) return null;
+
+  // 行号片段与查询串不属于磁盘路径（与 fileUrlToPath 同一语义）
+  let candidate = stripFragmentAndQuery(trimmed);
+  if (!candidate) return null;
+
+  if (isWindows) {
+    // `/D:/...` → `D:/...`（只裁掉紧跟盘符的那一条前导斜杠）
+    if (/^\/[A-Za-z]:([/\\]|$)/.test(candidate)) candidate = candidate.slice(1);
+
+    if (WINDOWS_DRIVE_RE.test(candidate)) {
+      return safeDecode(candidate).replace(/\\/g, "/");
+    }
+    // UNC：只认反斜杠形态。`//host/path` 与 protocol-relative URL 同形，
+    // 交给外链流程处理，避免把网页链接误开成本地文件。
+    if (candidate.startsWith("\\\\")) return safeDecode(candidate);
+    return null;
+  }
+
+  // POSIX：只有前导斜杠才是本地绝对路径
+  return candidate.startsWith("/") ? safeDecode(candidate) : null;
+}
+
+/**
  * 绝对路径 → 相对工作区根目录的路径（工作区外返回 null）。
  *
  * 返回值统一用 "/" 且不带前导分隔符，可直接作为 workspace 接口的 path 参数。

@@ -6,6 +6,7 @@ import {
   fileUrlToPath,
   isAbsoluteLocalPath,
   isPathInside,
+  localPathFromHref,
   toSessionAttachmentStoragePath,
   toWorkspaceRelative,
 } from './localPath'
@@ -221,6 +222,57 @@ describe('toSessionAttachmentStoragePath', () => {
     expect(toSessionAttachmentStoragePath('', sid, true)).toBeNull()
     expect(toSessionAttachmentStoragePath(`C:/x/sessions/${sid}`, sid, true)).toBeNull()
     expect(toSessionAttachmentStoragePath(`C:/x/sessions/${sid}/`, sid, true)).toBeNull()
+  })
+})
+
+describe('localPathFromHref', () => {
+  it('前导斜杠 + 盘符（markdown 根路径写法）还原为 Windows 绝对路径', () => {
+    expect(localPathFromHref('/D:/AI/game/preview.png', true)).toBe('D:/AI/game/preview.png')
+    expect(localPathFromHref('/c:/ws/a.ts', true)).toBe('c:/ws/a.ts')
+  })
+
+  it('裸盘符 / 反斜杠路径统一为正斜杠', () => {
+    expect(localPathFromHref('D:/AI/game/preview.png', true)).toBe('D:/AI/game/preview.png')
+    expect(localPathFromHref('D:\\AI\\game\\preview.png', true)).toBe('D:/AI/game/preview.png')
+  })
+
+  it('UNC（反斜杠形态）归一保留', () => {
+    expect(localPathFromHref('\\\\server\\share\\a.png', true)).toBe('\\\\server\\share\\a.png')
+    // //host/path 与 protocol-relative URL 同形，按外链处理
+    expect(localPathFromHref('//server/share/a.png', true)).toBeNull()
+  })
+
+  it('file:// 复用 fileUrlToPath', () => {
+    expect(localPathFromHref('file:///D:/AI/a.png', true)).toBe('D:/AI/a.png')
+    expect(localPathFromHref('file://server/share/a.png', true)).toBe('\\\\server\\share\\a.png')
+  })
+
+  it('外链协议一律不是本地路径', () => {
+    expect(localPathFromHref('https://example.com/a.png', true)).toBeNull()
+    expect(localPathFromHref('http://example.com', true)).toBeNull()
+    expect(localPathFromHref('mailto:a@b.com', true)).toBeNull()
+    expect(localPathFromHref('vscode://file/C:/a.ts', true)).toBeNull()
+    expect(localPathFromHref('obsidian://open?vault=x', true)).toBeNull()
+    expect(localPathFromHref('data:image/png;base64,AAA', true)).toBeNull()
+  })
+
+  it('相对路径与锚点不当作本地绝对路径', () => {
+    expect(localPathFromHref('src/index.ts', true)).toBeNull()
+    expect(localPathFromHref('./docs/a.md', true)).toBeNull()
+    expect(localPathFromHref('#section', true)).toBeNull()
+    expect(localPathFromHref('', true)).toBeNull()
+  })
+
+  it('忽略 #L42 行号片段与查询串，并还原 %20', () => {
+    expect(localPathFromHref('D:/AI/a.ts#L42', true)).toBe('D:/AI/a.ts')
+    expect(localPathFromHref('D:/AI/a.ts?x=1', true)).toBe('D:/AI/a.ts')
+    expect(localPathFromHref('D:/AI/%E6%8A%A5%E5%91%8A%201.png', true)).toBe('D:/AI/报告 1.png')
+  })
+
+  it('POSIX 只认前导斜杠，Windows 下 POSIX 形态不当本地路径', () => {
+    expect(localPathFromHref('/home/u/a.png', false)).toBe('/home/u/a.png')
+    expect(localPathFromHref('home/u/a.png', false)).toBeNull()
+    expect(localPathFromHref('/home/u/a.png', true)).toBeNull()
   })
 })
 
