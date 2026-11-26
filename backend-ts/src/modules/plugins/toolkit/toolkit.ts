@@ -20,7 +20,7 @@ import {
 const MAX_SCHEMA_DEPTH = 3;
 
 /** 只搬运模型理解参数形状所需的关键字，丢掉 $schema/$defs 等噪音 */
-function flattenJsonSchema(
+export function flattenJsonSchema(
   node: any,
   depth: number,
   defs?: Record<string, any>,

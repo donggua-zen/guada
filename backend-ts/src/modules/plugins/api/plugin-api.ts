@@ -26,7 +26,7 @@ import {
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
 import { PluginAgentRegistry } from "../registry/plugin-agent.registry";
-import { Toolkit } from "../toolkit/toolkit";
+import { Toolkit, flattenJsonSchema } from "../toolkit/toolkit";
 import { SkillRegistry } from "../../skills/core/skill-registry.service";
 import { createHash } from "crypto";
 import { z } from "zod";
@@ -468,14 +468,14 @@ export class PluginApiImpl implements PluginApi {
       const required: string[] = root.required || [];
       const properties: Record<string, any> = {};
       const rawProps = root.properties || {};
+      const defs = rawJson.$defs as Record<string, any> | undefined;
       for (const [key, val] of Object.entries(rawProps)) {
-        const p = val as any;
-        const clean: Record<string, any> = {
-          type: p.type || "string",
-          description: p.description || key,
-        };
-        if (p.enum) clean.enum = p.enum;
-        if (p.default !== undefined) clean.default = p.default;
+        // 复用工具包的限深展平器：顶层 registerTool 此前只留 type/description，
+        // 数组元素与子对象的形状会整个丢掉（模型只能靠猜）。两处共用一份实现，
+        // 避免「工具包正确、顶层工具失真」的分裂行为。
+        const clean = flattenJsonSchema(val, 1, defs);
+        if (!clean.description) clean.description = key;
+        if (!clean.type && !clean.anyOf) clean.type = "string";
         properties[key] = clean;
       }
 

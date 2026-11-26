@@ -35,6 +35,11 @@ export interface SlotItem {
   meta?: Record<string, unknown>
   /** 插件资源版本号，拼静态资源 URL 用 */
   rev?: string
+  /**
+   * 前端产物目录（相对插件根），由后端按 manifest.entries.frontend 下发。
+   * 缺省（旧后端）时按 frontend/dist 处理。
+   */
+  assetDir?: string
 }
 
 /** resolve() 返回项：component 已解析为可渲染组件 */
@@ -247,12 +252,13 @@ export const usePluginSlots = defineStore('pluginSlots', {
       if (!item.component || item.component.startsWith('builtin:')) return
       // apiService.baseURL：web dev = "/api/v1"，Electron = "http://localhost:PORT/api/v1"
       const base = String(apiService.baseURL || '/api/v1').replace(/\/$/, '')
-      // slot 组件产物约定位于插件 frontend/dist/（相对插件根），显式带上前缀；
-      // 插件主题 CSS 由 syncThemes → themeCssUrl 按 cssFile 相对插件根拼接
+      // 产物目录由后端按 manifest.entries.frontend 下发（缺省 frontend/dist）；
+      // 旧后端不返回该字段，这里兜底，保证前后端版本不必严格同步
+      const dir = (item.assetDir || 'frontend/dist').replace(/^\/+|\/+$/g, '')
       moduleLoader().prepare({
         id: `${item.pluginId}:${item.component}`,
-        url: `${base}/plugins/${item.pluginId}/assets/frontend/dist/${item.component}.js?rev=${item.rev || ''}`,
-        cssUrl: `${base}/plugins/${item.pluginId}/assets/frontend/dist/${item.component}.css?rev=${item.rev || ''}`,
+        url: `${base}/plugins/${item.pluginId}/assets/${dir}/${item.component}.js?rev=${item.rev || ''}`,
+        cssUrl: `${base}/plugins/${item.pluginId}/assets/${dir}/${item.component}.css?rev=${item.rev || ''}`,
       })
     },
 

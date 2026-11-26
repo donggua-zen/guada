@@ -109,6 +109,10 @@ export class PluginManager {
     this.hookRegistry?.setEnabledResolver((pluginId) => this.isPluginEnabled(pluginId));
     // HTTP 路由同理：禁用后请求 404，但保留注册避免反复启停抖动
     this.httpRegistry?.setEnabledResolver((pluginId) => this.isPluginEnabled(pluginId));
+    // 本地命令同理：禁用后不列出、也不可执行（此前只查注册表，禁用形同虚设）
+    this.localCommandRegistry?.setEnabledResolver?.((pluginId) =>
+      this.isPluginEnabled(pluginId),
+    );
     // v4：插件智能体的可见性跟随插件全局启停（checker 注入，避免 agents 模块反向依赖）
     PluginAgentRegistry.setAvailabilityChecker((pluginId) =>
       this.isPluginEnabled(pluginId),
