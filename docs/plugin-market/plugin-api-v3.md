@@ -1,5 +1,8 @@
 # PluginApi v3：HTTP 路由 / 模型调用 / 页面槽位
 
+> ⚠️ 本文只覆盖 v3 新增能力，且宿主已到 **v4**。
+> 权威文档：[`../plugin-api.md`](../plugin-api.md)。本文保留作专题说明。
+>
 > 适用：`PLUGIN_API_VERSION = 3`（2026-11 起）
 > 示例插件：`plugins/hello-plugin`（工具 / 提示词 / 路由 / 模型 / 两个槽位全覆盖）
 > 完整契约见 `third-party-plugin-api.md`

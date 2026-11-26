@@ -1,5 +1,13 @@
 # GuaDa 三方插件开发契约（PluginApi v2）
 
+> ⚠️ **本文已过时，请勿作为开发依据。**
+> 当前权威文档：[`../plugin-api.md`](../plugin-api.md)（PluginApi **v4**，含完整能力矩阵与陷阱清单）。
+>
+> 本文保留仅作历史演进参考。已知与实现不符之处：
+> - 版本：本文写 v2，宿主实际为 **v4**（新增工具包/能力包、插件智能体、技能、`visibleTo`）
+> - `entries` 字段：本文称"可选：显式入口"，实际宿主**两端都不读**，写了不生效
+> - 仅登记了 9 个能力小节，实际 `PluginApi` 有 30+ 公开方法
+>
 > 适用：`backend-ts` 插件系统 v2（2026-11 起）
 > 参考实现：[`donggua-zen/guada-purge`](https://github.com/donggua-zen/guada-purge)
 > 本文是三方插件作者的唯一契约来源；宿主内部实现细节不构成契约。

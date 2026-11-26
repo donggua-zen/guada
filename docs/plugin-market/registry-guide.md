@@ -8,7 +8,7 @@
 
 ## 1. 上架前提
 
-插件必须满足 `docs/plugin-market/third-party-plugin-api.md` 的全部契约,额外要求:
+插件必须满足 `docs/plugin-api.md`（PluginApi v4 完整契约）的全部要求,额外要求:
 
 | 项 | 要求 |
 |---|---|
