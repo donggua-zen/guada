@@ -133,6 +133,7 @@ interface Props {
     kbId: string
     currentFolderPath?: string | null  // 当前文件夹路径（可选）
     getCurrentFiles?: () => KBFile[]  // 获取当前目录文件列表的函数（可选）
+    beforeUpload?: (files: File[]) => Promise<File[] | null>
 }
 
 const props = defineProps<Props>()
@@ -171,6 +172,7 @@ const ALLOWED_EXTENSIONS = [
     '.proto', '.graphql', '.sol', '.pdf',
     '.docx',  // Word 文档
     '.xlsx',  // Excel 文档
+    '.png', '.jpg', '.jpeg', '.bmp', // 后端支持的 OCR 图片格式
     '.dts', '.dtsi'   // 设备树源文件
 ]
 
@@ -480,6 +482,13 @@ async function handleFolderSelect(event: Event) {
  * 统一上传逻辑(带相对路径)
  */
 async function uploadFilesWithPaths(filesWithPath: Array<{ file: File, relativePath: string }>) {
+    if (props.beforeUpload) {
+        const approvedFiles = await props.beforeUpload(filesWithPath.map(item => item.file))
+        if (!approvedFiles?.length) return
+        const approved = new Set(approvedFiles)
+        filesWithPath = filesWithPath.filter(item => approved.has(item.file))
+        if (!filesWithPath.length) return
+    }
     // 关键修复:上传前检查冲突
     if (props.getCurrentFiles) {
         const currentItems = props.getCurrentFiles()

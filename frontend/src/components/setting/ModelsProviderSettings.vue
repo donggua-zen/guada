@@ -6,6 +6,9 @@
         <div class="min-w-0">
           <h1 class="text-xl font-bold text-gray-900 dark:text-[#e8e9ed]">{{ t('settings.models.providers') }}</h1>
           <p class="text-sm text-gray-500 dark:text-[#8b8d95] mt-1">{{ t('settings.models.providersDesc') }}</p>
+          <p v-if="isKnowledgeBaseSetup && !showDetail" class="text-sm text-gray-500 dark:text-[#8b8d95] mt-2">
+            {{ t('knowledge.setup.providerGuide') }}
+          </p>
         </div>
         <GdButton type="primary" @click="handleCreateGroup">
           <template #icon><Add16Regular /></template>
@@ -32,6 +35,7 @@
         :provider="currentProvider"
         :models="currentModels"
         :model-presets="modelPresets"
+        :knowledge-base-setup="isKnowledgeBaseSetup"
         @back="showDetail = false"
         @changed="reloadProvidersAndModels"
       />
@@ -112,10 +116,19 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ModelsProviderList from './ModelsProviderList.vue'
 
 const { t } = useI18n()
+const route = useRoute()
+const isKnowledgeBaseSetup = computed(() =>
+  route.query.source === 'knowledge-base' && route.query.modelType === 'embedding'
+)
+const requestedProviderId = computed(() => {
+  const value = route.query.providerId
+  return typeof value === 'string' && value.length > 0 ? value : null
+})
 const { confirm } = usePopup()
 import ModelsProviderDetail from '../models/ModelsProviderDetail.vue'
 import { Add16Regular, Link16Regular } from '@vicons/fluent'
@@ -269,6 +282,14 @@ const initData = async () => {
     }
     providers.value.push(provider)
   })
+
+  const providerId = requestedProviderId.value
+  if (!providerId) return
+  const provider = providers.value.find((item) => item.id === providerId)
+  if (provider) {
+    currentProviderId.value = provider.id
+    showDetail.value = true
+  }
 }
 
 // 重新加载供应商和模型数据

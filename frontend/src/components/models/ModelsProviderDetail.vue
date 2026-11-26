@@ -19,8 +19,12 @@
     <!-- 内容区（独立滚动，满屏宽度） -->
     <div class="flex-1 overflow-auto" style="scrollbar-gutter: stable both-edges;">
       <div class="px-4 pb-4 w-full md:max-w-220 md:mx-auto">
+        <div v-if="knowledgeBaseSetup" class="mb-4 space-y-2">
+          <p class="text-sm text-(--gd-color-text-secondary)">{{ t('knowledge.setup.providerGuide') }}</p>
+          <GdCheckbox v-model="embeddingOnly">{{ t('knowledge.setup.embeddingOnly') }}</GdCheckbox>
+        </div>
         <!-- 空状态 -->
-        <div v-if="models.length === 0" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
+        <div v-if="visibleModels.length === 0" class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) p-12 text-center">
           
             <Box16Regular class="text-gray-300 dark:text-[#3e4046] mb-3 w-12 h-12 mx-auto"  />
           
@@ -37,7 +41,7 @@
         <!-- 模型列表 -->
         <div v-else class="rounded-[var(--gd-size-surface-radius)] border border-(--gd-color-surface-border) bg-(--gd-color-surface) px-3 py-1 mb-4">
           <ul>
-            <li v-for="model in models" :key="model.id"
+            <li v-for="model in visibleModels" :key="model.id"
               class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors rounded px-3 -mx-3">
               <div class="flex items-center flex-1 min-w-0 mr-4">
                 <Avatar class="w-10 h-10 shrink-0 mr-3" :src="getModelAvatarForSetting(model)"
@@ -445,7 +449,11 @@ const props = defineProps<{
   provider: ModelProvider
   models: Model[]
   modelPresets: ModelPreset[]
+  knowledgeBaseSetup?: boolean
 }>()
+const embeddingOnly = ref(props.knowledgeBaseSetup === true)
+const visibleModels = computed(() => embeddingOnly.value
+  ? props.models.filter(model => model.modelType === 'embedding') : props.models)
 
 const currentEditModelId = ref<string | null>(null)
 
@@ -798,7 +806,7 @@ const handleAddModel = () => {
   defaultParamsExpanded.value = false
   editModelForm.value = {
     modelName: '',
-    modelType: 'text',
+    modelType: props.knowledgeBaseSetup ? 'embedding' : 'text',
     thinkingMode: 'auto',
     thinkingEffortsMenu: [],
     thinkingPatchExpr: '',

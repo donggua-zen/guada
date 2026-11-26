@@ -29,6 +29,12 @@
       <!-- 内容区（独立滚动） -->
       <div class="flex-1 overflow-auto pb-4" style="scrollbar-gutter: stable both-edges;">
         <div class="py-3 px-4 w-full md:max-w-260 md:mx-auto">
+          <div class="mb-3">
+            <KBSetupStatus :embedding-state="modelsState" :embedding-status="currentEmbedding.status"
+              :model-name="currentEmbedding.model?.modelName" :has-current-kb="!!currentKB"
+              :ocr-state="ocrState" :ocr-status="ocrStatus" :ocr-provider="ocrProvider"
+              @configure="openKnowledgeSettings" @refresh="refreshSetup" @edit-model="currentKB && handleEdit(currentKB)" />
+          </div>
           <!-- 知识库卡片网格 -->
           <div v-if="filteredKnowledgeBases.length > 0" class="grid gap-y-4 gap-x-3" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
             <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
@@ -90,12 +96,18 @@
       </div>
       <div class="flex-1 overflow-auto min-h-0" @scroll="handleScroll">
         <div class="max-w-260 mx-auto w-full">
+          <div class="px-4 pt-1 pb-2">
+            <KBSetupStatus :embedding-state="modelsState" :embedding-status="currentEmbedding.status"
+              :model-name="currentEmbedding.model?.modelName" :has-current-kb="!!currentKB"
+              :ocr-state="ocrState" :ocr-status="ocrStatus" :ocr-provider="ocrProvider"
+              @configure="openKnowledgeSettings" @refresh="refreshSetup" @edit-model="currentKB && handleEdit(currentKB)" />
+          </div>
           <!-- 文件列表 Tab -->
           <div v-show="activeTab === 'files'" class="flex-1 flex flex-col min-h-0">
             <!-- 上传区域 -->
             <div class="px-4 pt-1 pb-1">
               <KBFileUploader :kb-id="store.activeKnowledgeBaseId!" :current-folder-path="getCurrentFolderPath()"
-                :get-current-files="getCurrentFiles" @uploaded="handleUploadComplete"
+                :get-current-files="getCurrentFiles" :before-upload="checkUploadSetup" @uploaded="handleUploadComplete"
                 @show-upload-task="showUploadTaskModal = true" @folder-created="handleFolderCreated" />
             </div>
 
@@ -132,12 +144,25 @@
       </GdFormField>
 
       <GdFormField :label="t('knowledge.page.embeddingModel')" label-width="140px" required>
-        <GdSelect v-model="dialogForm.embeddingModelId" :placeholder="t('knowledge.page.embeddingModelPlaceholder')" class="w-full">
-          <template v-for="provider in embeddingProviders" :key="provider.id">
-            <GdOption :label="provider.name" :value="''" disabled />
-            <GdOption v-for="model in provider.models" :key="model.id" :label="model.modelName" :value="model.id" />
-          </template>
-        </GdSelect>
+        <div class="w-full space-y-2">
+          <GdSelect v-model="dialogForm.embeddingModelId" :placeholder="t('knowledge.page.embeddingModelPlaceholder')"
+            :disabled="modelsState !== 'loaded' || !embeddingProviders.length" class="w-full">
+            <GdOption v-if="dialogForm.embeddingModelId && dialogEmbedding.status === 'unavailable'"
+              :label="t('knowledge.setup.modelUnavailable', { name: dialogEmbedding.model?.modelName || t('knowledge.setup.selectedModel') })"
+              :value="dialogForm.embeddingModelId" disabled />
+            <template v-for="provider in embeddingProviders" :key="provider.id">
+              <GdOption :label="provider.name" :value="''" disabled />
+              <GdOption v-for="model in provider.models" :key="model.id" :label="model.modelName" :value="model.id" />
+            </template>
+          </GdSelect>
+          <p class="text-xs text-(--gd-color-text-secondary)" role="status">
+            {{ t(modelsState === 'loading' ? 'knowledge.setup.loading' : modelsState === 'error' ? 'knowledge.setup.modelsLoadFailed' : dialogEmbedding.status === 'unavailable' ? 'knowledge.setup.modelUnavailableHint' : !embeddingProviders.length ? 'knowledge.setup.noEmbeddingHint' : 'knowledge.setup.embeddingHint') }}
+          </p>
+          <div class="flex gap-3">
+            <GdButton link size="small" @click="openKnowledgeSettings('providers')">{{ t(embeddingProviders.length ? 'knowledge.setup.manageEmbedding' : 'knowledge.setup.addEmbedding') }}</GdButton>
+            <GdButton v-if="modelsState === 'error'" link size="small" @click="refreshSetup">{{ t('knowledge.setup.refresh') }}</GdButton>
+          </div>
+        </div>
       </GdFormField>
 
       <GdDivider />
@@ -174,9 +199,21 @@
     <template #footer>
       <div class="flex justify-end gap-3">
         <GdButton @click="showKbDialog = false">{{ t('common.cancel') }}</GdButton>
-        <GdButton type="primary" @click="handleKbSave" :loading="store.loading">
+        <GdButton type="primary" @click="handleKbSave" :loading="store.loading"
+          :disabled="modelsState !== 'loaded' || (dialogMode === 'create' && (!dialogForm.embeddingModelId || dialogEmbedding.status !== 'configured'))">
           {{ dialogMode === 'create' ? t('common.create') : t('common.save') }}
         </GdButton>
+      </div>
+    </template>
+  </GdDialog>
+
+  <GdDialog v-model="showOcrUploadDialog" :title="t('knowledge.setup.ocrRequiredTitle')" size="sm" append-to-body :close-on-click-modal="false">
+    <p class="text-sm text-(--gd-color-text-secondary)">{{ t(ocrUploadHasImages ? 'knowledge.setup.imageOcrWarning' : 'knowledge.setup.pdfOcrWarning') }}</p>
+    <template #footer>
+      <div class="flex flex-wrap justify-end gap-2">
+        <GdButton @click="finishOcrUpload('cancel')">{{ t('common.cancel') }}</GdButton>
+        <GdButton @click="finishOcrUpload('configure')" :type="ocrUploadCanContinue ? 'default' : 'primary'">{{ t('knowledge.setup.configureOcr') }}</GdButton>
+        <GdButton v-if="ocrUploadCanContinue" type="primary" @click="finishOcrUpload('continue')">{{ t(ocrUploadHasImages ? 'knowledge.setup.uploadOtherFiles' : 'knowledge.setup.continueUpload') }}</GdButton>
       </div>
     </template>
   </GdDialog>
@@ -207,7 +244,6 @@ import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { useFileUploadStore } from '@/stores/fileUpload'
 import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
 import type { UploadTask } from '@/stores/fileUpload'
-import type { Model } from '@/types/api'
 import type { KBSearchResult, KBSearchResultMetadata } from '@/services/modules/knowledge-base.api'
 import type ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import { FileChunksViewer, KBFileUploader, KBFileTree, KBSearchPanel, UploadTaskModal } from './index'
@@ -219,6 +255,9 @@ import { apiService } from '@/services/ApiService'
 import { openInExternalBrowser } from '@/utils/browserUtils'
 import CardAvatar from '@/components/ui/CardAvatar.vue'
 import GdDialog from '@/components/ui/GdDialog.vue'
+import KBSetupStatus from './KBSetupStatus.vue'
+import { useKnowledgeSetup } from '@/composables/useKnowledgeSetup'
+import { getKnowledgeSettingsLocation, getOcrFileRequirements } from '@/utils/knowledgeSetup'
 
 // 初始化组合式函数
 const { confirm } = usePopup()
@@ -230,6 +269,17 @@ const router = useRouter()
 
 // ========== 状态 ==========
 const showKbDialog = ref(false)
+const showOcrUploadDialog = ref(false)
+const ocrUploadHasImages = ref(false)
+const ocrUploadCanContinue = ref(false)
+let resolveOcrUpload: ((action: 'cancel' | 'configure' | 'continue') => void) | null = null
+function finishOcrUpload(action: 'cancel' | 'configure' | 'continue') {
+  const resolve = resolveOcrUpload
+  resolveOcrUpload = null
+  showOcrUploadDialog.value = false
+  resolve?.(action)
+}
+watch(showOcrUploadDialog, open => { if (!open) finishOcrUpload('cancel') })
 const dialogMode = ref<'create' | 'edit'>('create')
 const showFileChunksModal = ref(false)  // 文件分块查看弹窗
 // 预览弹窗初始 Tab 与定位（检索结果点击直达分块；普通查看由 handleViewFile 重置为原文）
@@ -244,14 +294,7 @@ const kbTabs = [
 ]
 const viewMode = ref<'list' | 'detail'>('list')  // 视图模式：列表或详情
 const searchKeyword = ref('')  // 知识库搜索关键词
-/** 嵌入模型供应商分组（loadEmbeddingModels 过滤出 embedding 模型后的产物） */
-type EmbeddingProviderGroup = {
-  id: string
-  name: string
-  models: Model[]
-}
-const embeddingModels = ref<Model[]>([]) // 嵌入模型列表
-const embeddingProviders = ref<EmbeddingProviderGroup[]>([]) // 嵌入模型供应商列表
+const { modelsState, ocrState, ocrStatus, ocrProvider, embeddingProviders, embeddingStatus, refresh: refreshSetup } = useKnowledgeSetup()
 
 // 上传任务列表(独立于文件列表)
 const uploadTasksList = ref<KBFile[]>([])
@@ -288,9 +331,11 @@ const dialogForm = reactive({
  * 当前选中的知识库对象
  */
 const currentKB = computed(() => {
-  if (!store.activeKnowledgeBaseId) return null
+  if (viewMode.value !== 'detail' || !store.activeKnowledgeBaseId) return null
   return store.knowledgeBases.find(kb => kb.id === store.activeKnowledgeBaseId) || null
 })
+const currentEmbedding = computed(() => embeddingStatus(currentKB.value?.embeddingModelId))
+const dialogEmbedding = computed(() => embeddingStatus(dialogForm.embeddingModelId))
 
 /**
  * 过滤后的知识库列表（支持搜索）
@@ -308,30 +353,44 @@ const filteredKnowledgeBases = computed(() => {
 
 // ========== Methods ==========
 
-/**
- * 加载嵌入模型列表
- */
-const loadEmbeddingModels = async () => {
-  try {
-    const response = await apiService.fetchModels()
+async function openKnowledgeSettings(tab: 'providers' | 'ocr') {
+  const selected = showKbDialog.value ? dialogEmbedding.value : currentEmbedding.value
+  await router.push(getKnowledgeSettingsLocation(tab, selected.providerId))
+}
 
-    // 只保留 embedding 类型的模型
-    embeddingModels.value = []
-    embeddingProviders.value = response.items
-      .filter((provider) => {
-        const embeddingModels_ = provider.models?.filter(
-          (m) => m.modelType === 'embedding'
-        ) ?? []
-        return embeddingModels_.length > 0
-      })
-      .map((provider) => ({
-        id: provider.id,
-        name: provider.name,
-        models: provider.models?.filter((m) => m.modelType === 'embedding') ?? []
-      }))
-  } catch (error) {
-    console.error('获取嵌入模型列表失败:', error)
+/** Check each selected batch before creating upload tasks; ordinary text never needs OCR. */
+async function checkUploadSetup<T extends { name: string }>(files: T[]): Promise<T[] | null> {
+  await refreshSetup()
+  if (modelsState.value === 'error') {
+    toast.warning(t('knowledge.setup.modelsLoadFailed'))
+    return null
   }
+  if (currentEmbedding.value.status !== 'configured' || !currentKB.value?.embeddingModelId) {
+    const configure = await confirm(t('knowledge.setup.embedding'), t('knowledge.setup.modelUnavailableHint'), {
+      type: 'warning', confirmText: t('knowledge.setup.manageEmbedding'), cancelText: t('common.cancel'),
+    })
+    if (configure) await openKnowledgeSettings('providers')
+    return null
+  }
+  const requirements = getOcrFileRequirements(files.map(file => file.name))
+  if (!requirements.hasImages && !requirements.hasPdf) return files
+  if (ocrState.value === 'error') {
+    toast.warning(t('knowledge.setup.ocrLoadFailed'))
+    return null
+  }
+  if (ocrStatus.value === 'configured') return files
+
+  // Mixed batches can still upload PDFs/text; image-only batches need OCR first.
+  const canContinue = requirements.hasPdf || requirements.hasOtherFiles
+  ocrUploadHasImages.value = requirements.hasImages
+  ocrUploadCanContinue.value = canContinue
+  const action = await new Promise<'cancel' | 'configure' | 'continue'>(resolve => {
+    resolveOcrUpload = resolve
+    showOcrUploadDialog.value = true
+  })
+  if (action === 'continue') return files.filter(file => !getOcrFileRequirements([file.name]).hasImages)
+  if (action === 'configure') await openKnowledgeSettings('ocr')
+  return null
 }
 
 /**
@@ -392,6 +451,16 @@ async function handleKbSave() {
 
   if (dialogMode.value === 'create' && !dialogForm.embeddingModelId) {
     toast.warning(t('knowledge.page.selectModelWarning'))
+    return
+  }
+  if (modelsState.value !== 'loaded') {
+    toast.warning(t('knowledge.setup.modelsLoadFailed'))
+    return
+  }
+  const originalKb = store.knowledgeBases.find(kb => kb.id === dialogForm.id)
+  const assigningModel = dialogMode.value === 'create' || dialogForm.embeddingModelId !== originalKb?.embeddingModelId
+  if (assigningModel && dialogEmbedding.value.status !== 'configured') {
+    toast.warning(t('knowledge.setup.modelUnavailableHint'))
     return
   }
 
@@ -601,6 +670,8 @@ function handleScroll(_event: Event) {
  */
 async function handleRetryFile(file: KBFile) {
   try {
+    const approved = await checkUploadSetup([{ name: file.displayName }])
+    if (!approved?.length) return
     const confirmed = await confirm(
       t('knowledge.page.retryFileTitle'),
       t('knowledge.page.retryFileConfirm', { name: file.displayName }),
@@ -770,8 +841,7 @@ function getCurrentFiles(): KBFile[] {
 
 // ========== Lifecycle ==========
 onMounted(async () => {
-  await loadEmbeddingModels() // 加载嵌入模型列表
-  await store.fetchKnowledgeBases()
+  await Promise.all([refreshSetup(), store.fetchKnowledgeBases()])
 
   // 从路由参数读取知识库 ID
   const kbIdFromRoute = route.params.id as string
@@ -797,6 +867,7 @@ onMounted(async () => {
 
 // 关键修复:组件销毁时清理定时器,防止内存泄漏
 onUnmounted(() => {
+  finishOcrUpload('cancel')
   console.log('[DEBUG] KnowledgeBasePage 组件销毁,清理定时器')
   // 注意：文件轮询已由 KBFileTree 内部管理，无需在此清理
   stopUploadTaskPolling() // 停止上传任务轮询
