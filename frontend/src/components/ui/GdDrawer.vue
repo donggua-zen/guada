@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, useSlots, onBeforeUnmount, useId } from 'vue'
 import { t } from '@/locales'
+import { acquireOverlayZIndex, lockBodyScroll, unlockBodyScroll } from './gdOverlayState'
 
 defineOptions({ inheritAttrs: false })
 
@@ -11,31 +12,6 @@ defineOptions({ inheritAttrs: false })
  */
 
 const slots = useSlots()
-
-// 与 GdDialog 同一基线：后打开的浮层永远在上层
-const BASE_Z_INDEX = 2000
-let zIndexCounter = 0
-
-// 背景滚动锁：引用计数，支持多浮层嵌套（与 GdDialog 共享同一契约）
-let scrollLockCount = 0
-let savedBodyOverflow = ''
-
-function lockBodyScroll() {
-  if (typeof document === 'undefined') return
-  if (scrollLockCount === 0) {
-    savedBodyOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-  }
-  scrollLockCount += 1
-}
-
-function unlockBodyScroll() {
-  if (typeof document === 'undefined') return
-  scrollLockCount = Math.max(0, scrollLockCount - 1)
-  if (scrollLockCount === 0) {
-    document.body.style.overflow = savedBodyOverflow
-  }
-}
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -85,13 +61,12 @@ watch(() => props.modelValue, (val) => {
 
 watch(visible, (val) => {
   if (!val) return
-  zIndexCounter += 1
-  zIndexValue.value = BASE_Z_INDEX + zIndexCounter * 10
+  zIndexValue.value = acquireOverlayZIndex()
   if (props.lockScroll && !scrollLocked) {
     lockBodyScroll()
     scrollLocked = true
   }
-})
+}, { immediate: true })
 
 function close() {
   if (!props.modelValue) return

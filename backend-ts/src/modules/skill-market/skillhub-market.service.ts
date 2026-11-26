@@ -299,6 +299,16 @@ export class SkillHubMarketService {
         return { success: false, message: describeDownloadError(error), origin };
       }
 
+      // 图标属于市场元数据，通常不在 ZIP 内。由后端取可信详情，随来源保存；
+      // 详情不可用不能阻止已经下载成功的技能安装。
+      try {
+        const body = await fetchMarketJson<unknown>(buildSkillDetailUrl(slug), undefined, this.headers());
+        const icon = parseSkillDetailResponse(body, "zh").item.icon;
+        if (icon) origin.iconUrl = icon;
+      } catch (error) {
+        this.logger.warn(`SkillHub 图标元数据获取失败（忽略）${slug}：${describe(error)}`);
+      }
+
       await fs.mkdir(tempDir, { recursive: true });
       const zipPath = path.join(tempDir, "package.zip");
       await fs.writeFile(zipPath, buffer);

@@ -1,6 +1,12 @@
+<script lang="ts">
+// 关闭动画期间也计入打开数量，避免旧弹窗退场时抢走新弹窗的焦点。
+let openDialogCount = 0
+</script>
+
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, useSlots, onBeforeUnmount, useAttrs, useId } from 'vue'
 import { t } from '@/locales'
+import { acquireOverlayZIndex, lockBodyScroll, unlockBodyScroll } from './gdOverlayState'
 
 defineOptions({ inheritAttrs: false })
 
@@ -23,33 +29,6 @@ const FOCUSABLE_SELECTOR = [
   'select:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
-
-// 层级：模块级单调递增，保证后打开的弹窗永远在上层。声明式与命令式弹窗共用。
-const BASE_Z_INDEX = 2000
-let zIndexCounter = 0
-
-// 背景滚动锁：引用计数，支持多弹窗嵌套。
-let scrollLockCount = 0
-let savedBodyOverflow = ''
-// 当前打开的弹窗数：只有全部关闭后才归还焦点，避免关掉上层时抢走下层焦点
-let openDialogCount = 0
-
-function lockBodyScroll() {
-  if (typeof document === 'undefined') return
-  if (scrollLockCount === 0) {
-    savedBodyOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-  }
-  scrollLockCount += 1
-}
-
-function unlockBodyScroll() {
-  if (typeof document === 'undefined') return
-  scrollLockCount = Math.max(0, scrollLockCount - 1)
-  if (scrollLockCount === 0) {
-    document.body.style.overflow = savedBodyOverflow
-  }
-}
 
 const attrs = useAttrs()
 
@@ -178,8 +157,7 @@ function acquireZIndex() {
     zIndexValue.value = props.zIndex
     return
   }
-  zIndexCounter += 1
-  zIndexValue.value = BASE_Z_INDEX + zIndexCounter * 10
+  zIndexValue.value = acquireOverlayZIndex()
 }
 
 function getFocusableElements(): HTMLElement[] {

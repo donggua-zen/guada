@@ -371,6 +371,7 @@ function openRepo() {
 // ── 安装 ──
 async function handleInstall(plugin: MarketPlugin) {
     if (installing.value.has(plugin.id)) return
+    showDetailDialog.value = false
     installing.value.add(plugin.id)
     installLog.value = ''
     installPollCancelled = false

@@ -129,6 +129,7 @@
                     v-for="skill in visibleSkills"
                     :key="skill.id"
                     :name="getSkillDisplayName(skill.manifest, skill.id)"
+                    :icon-src="skill.origin?.iconUrl"
                     :description="getSkillDisplayDescription(skill.manifest) || t('plugins.skills.noDescription')"
                     :muted="skill.enabled === false"
                     :menu-items="getSkillMenuItems(skill)"

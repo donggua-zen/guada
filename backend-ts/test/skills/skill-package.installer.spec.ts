@@ -197,6 +197,18 @@ describe("skill-package.installer", () => {
     expect(content).toContain("name: safe");
   });
 
+  it.each(['javascript:alert(1)', 'http://example.com/icon.png', 'https://' + 'x'.repeat(500)])(
+    '写入来源时不保存不符合约束的图标 %s',
+    async (iconUrl) => {
+      const skillDir = path.join(tempRoot, 'invalid-icon');
+      await fs.mkdir(skillDir, { recursive: true });
+      await writeSkillOrigin(skillDir, { source: 'skillhub', itemId: 'invalid-icon', iconUrl });
+      const origin = JSON.parse(await fs.readFile(path.join(skillDir, SKILL_ORIGIN_FILE), 'utf-8'));
+      expect(origin.source).toBe('skillhub');
+      expect(origin).not.toHaveProperty('iconUrl');
+    },
+  );
+
   it("writeSkillOrigin 对无效来源静默跳过", async () => {
     const skillDir = path.join(tempRoot, "empty-origin");
     await fs.mkdir(skillDir, { recursive: true });

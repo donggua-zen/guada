@@ -39,6 +39,8 @@ export interface SkillOrigin {
     version?: string
     /** 安装时间（ISO 字符串） */
     installedAt?: string
+    /** 市场提供的 HTTPS 图标地址，仅用于 UI 展示 */
+    iconUrl?: string
 }
 
 /** 完整技能定义（列表/详情接口的条目形状） */

@@ -130,6 +130,7 @@ export class SkillLoaderService {
       const parsed = JSON.parse(await fs.readFile(file, 'utf-8')) as Record<string, unknown>;
       const source = typeof parsed?.source === 'string' ? parsed.source.trim() : '';
       const itemId = typeof parsed?.itemId === 'string' ? parsed.itemId.trim() : '';
+      const iconUrl = typeof parsed?.iconUrl === 'string' ? parsed.iconUrl.trim() : '';
       if (!source || !itemId) return undefined;
 
       return {
@@ -141,6 +142,7 @@ export class SkillLoaderService {
         ...(typeof parsed.installedAt === 'string' && parsed.installedAt
           ? { installedAt: parsed.installedAt.slice(0, 40) }
           : {}),
+        ...(iconUrl.startsWith('https://') && iconUrl.length <= 500 ? { iconUrl } : {}),
       };
     } catch {
       return undefined;

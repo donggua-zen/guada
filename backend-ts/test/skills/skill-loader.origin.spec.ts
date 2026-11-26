@@ -54,6 +54,18 @@ describe("SkillLoaderService origin", () => {
     });
   });
 
+  it.each(['javascript:alert(1)', 'http://example.com/icon.png', 'https://' + 'x'.repeat(500)])(
+    '忽略不符合市场图标约束的地址 %s',
+    async (iconUrl) => {
+      const skillDir = await createSkillDir(
+        'invalid-icon',
+        JSON.stringify({ source: 'skillhub', itemId: 'invalid-icon', iconUrl }),
+      );
+      const definition = await loader.loadManifest(skillDir, 'global', tempRoot);
+      expect(definition.origin).toEqual({ source: 'skillhub', itemId: 'invalid-icon' });
+    },
+  );
+
   it("没有 sidecar 时不带 origin", async () => {
     const skillDir = await createSkillDir("no-origin");
     const definition = await loader.loadManifest(skillDir, "global", tempRoot);

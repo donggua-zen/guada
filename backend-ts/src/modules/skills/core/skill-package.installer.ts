@@ -195,6 +195,7 @@ export async function writeSkillOrigin(
 ): Promise<void> {
   const source = typeof origin?.source === 'string' ? origin.source.trim() : '';
   const itemId = typeof origin?.itemId === 'string' ? origin.itemId.trim() : '';
+  const iconUrl = typeof origin?.iconUrl === 'string' ? origin.iconUrl.trim() : '';
   if (!source || !itemId) return;
 
   const payload = {
@@ -203,6 +204,7 @@ export async function writeSkillOrigin(
     itemId: itemId.slice(0, 200),
     ...(origin.version ? { version: String(origin.version).slice(0, 64) } : {}),
     installedAt: origin.installedAt || new Date().toISOString(),
+    ...(iconUrl.startsWith('https://') && iconUrl.length <= 500 ? { iconUrl } : {}),
   };
 
   try {
