@@ -19,14 +19,16 @@
                 </button>
             </span>
         </template>
-        <!-- 单选 label（filterable 面板打开时让位给输入框） -->
-        <span v-if="!multiple && !(filterable && show)" class="min-w-0 flex-1 truncate text-[14px] leading-none"
+        <!-- 单选 label（filterable 面板打开时让位给输入框）。
+             行高不能压到字号：`leading-none` 会让下划线 `_`、`g` 的降部被
+             overflow:hidden 裁掉（如项目名 `ai_video` 显示成 `ai video`） -->
+        <span v-if="!multiple && !(filterable && show)" class="min-w-0 flex-1 truncate text-[14px] leading-[18px]"
             :class="hasValue ? 'text-[var(--gd-color-field-text)]' : 'text-[var(--gd-color-field-text-placeholder)]'">
             {{ displayLabel || placeholder || '' }}
         </span>
         <!-- filterable 输入框：多选时始终在 chips 末尾，单选时仅面板打开期间渲染 -->
         <input v-if="filterable && (multiple || show)" ref="filterInputRef" v-model="query" type="text"
-            class="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] leading-none outline-none placeholder:text-[var(--gd-color-field-text-placeholder)]"
+            class="min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] leading-[18px] outline-none placeholder:text-[var(--gd-color-field-text-placeholder)]"
             :class="disabled ? 'cursor-not-allowed' : ''" :placeholder="hasValue ? '' : (placeholder || '')"
             :disabled="disabled" :aria-controls="`${uid}-listbox`" @click.stop @input="handleFilterInput" @keydown="handleFilterKeydown" @compositionstart="compositionStart = true" @compositionend="compositionStart = false">
         <!-- suffix：clearable 清空钮（hover 且有值时替代箭头）+ 转义箭头 -->
@@ -459,7 +461,7 @@ const triggerClasses = computed((): string => {
 const optionClasses = (entry: FlatEntry): string => {
     const highlighted = flatEntries.value[highlightIndex.value] === entry;
     return [
-        "gd-select-option relative flex min-h-[28px] w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1 text-[14px] leading-none transition-colors duration-150",
+        "gd-select-option relative flex min-h-[28px] w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1 text-[14px] leading-[18px] transition-colors duration-150",
         isSelected(entry.value)
             ? "bg-[var(--gd-color-field-option-bg-selected)] text-[var(--gd-color-field-option-text-selected,var(--gd-color-field-text))] border border-[var(--gd-color-field-option-border-selected,transparent)]"
             : entry.disabled

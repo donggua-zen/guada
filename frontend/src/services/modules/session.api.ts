@@ -1,6 +1,31 @@
 import type { ApiContext } from "./api-context";
 import type { Session, SessionGroup, SessionListResponse, SearchSessionResponse, SidebarSessionsResponse, SidebarProjectSessionsResponse, ProjectGroup, GroupStats, ArchiveSessionGroupResult, ArchiveProjectGroupResult, DeleteProjectGroupResult, CreateSessionRequest, UpdateSessionRequest, SessionPlanItem, GoalStateResponse, SessionCreatedResponse } from "@/types/session";
 
+/**
+ * 目录分组行的接口归一化。
+ *
+ * `GET /project-groups` 直接返回存储行（`position` / `nameOverridden`），
+ * 而侧栏快照用的是视图投影（`sortOrder` / `isOverridden` / `kind`）。这里统一
+ * 成前端 `ProjectGroup`，避免同一实体在不同入口拿到两套字段名。
+ */
+type ProjectGroupApiRow = Partial<ProjectGroup> & {
+  position?: number;
+  nameOverridden?: boolean;
+};
+
+function normalizeProjectGroupRow(row: ProjectGroupApiRow): ProjectGroup {
+  return {
+    id: String(row.id ?? ""),
+    name: String(row.name ?? ""),
+    path: row.path ?? null,
+    pathKey: row.pathKey ?? null,
+    icon: row.icon ?? null,
+    sortOrder: row.sortOrder ?? row.position ?? 0,
+    isOverridden: row.isOverridden ?? row.nameOverridden ?? false,
+    kind: "workspace",
+  };
+}
+
 export interface SessionApi {
   /** 创建会话；响应可能回带本次写时注册的目录分组（projectGroup） */
   createSession(data: CreateSessionRequest): Promise<SessionCreatedResponse>;
@@ -469,14 +494,17 @@ export const sessionApi: SessionApi = {
   },
 
   async fetchProjectGroups(this: ApiContext) {
-    return await this._request<ProjectGroup[]>("/project-groups");
+    // 接口返回存储行（position/nameOverridden），归一成 ProjectGroup 投影
+    const rows = await this._request<ProjectGroupApiRow[]>("/project-groups");
+    return (Array.isArray(rows) ? rows : []).map(normalizeProjectGroupRow);
   },
 
   async createProjectGroup(this: ApiContext, projectPath: string) {
-    return await this._request<ProjectGroup>("/project-groups", {
+    const row = await this._request<ProjectGroupApiRow>("/project-groups", {
       method: "POST",
       data: { path: projectPath },
     });
+    return normalizeProjectGroupRow(row);
   },
 
   async fetchPinnedSessions(this: ApiContext) {
@@ -577,10 +605,11 @@ export const sessionApi: SessionApi = {
     groupId: string,
     data: { name?: string; icon?: string | null },
   ) {
-    return await this._request<ProjectGroup>(`/project-groups/${groupId}`, {
+    const row = await this._request<ProjectGroupApiRow>(`/project-groups/${groupId}`, {
       method: "PUT",
       data,
     });
+    return normalizeProjectGroupRow(row);
   },
 
   async reorderProjectGroups(this: ApiContext, groupIds: string[]) {

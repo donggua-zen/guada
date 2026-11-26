@@ -1,5 +1,6 @@
 /// <reference types="jest" />
 
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { SkillsController } from '../../src/modules/skills/api/skills.controller';
 import { SkillOrchestrator } from '../../src/modules/skills/core/skill-orchestrator.service';
 import { SkillWatcherService } from '../../src/modules/skills/core/skill-watcher.service';
@@ -15,6 +16,15 @@ import AdmZip from 'adm-zip';
 
 function createMockOrchestrator() {
   const registry = new Map<string, SkillDefinition>();
+  // 项目作用域：projectSkills 按路径组织，供 *ForProject / resolve 系列替身使用
+  const projectSkills = new Map<string, SkillDefinition[]>();
+
+  function resolveWithScope(skillId: string, workspacePath?: string) {
+    const scoped = workspacePath
+      ? (projectSkills.get(workspacePath) ?? []).find((s) => s.id === skillId)
+      : undefined;
+    return scoped ?? registry.get(skillId) ?? null;
+  }
 
   return {
     triggerScan: jest.fn().mockResolvedValue({
@@ -35,9 +45,37 @@ function createMockOrchestrator() {
       return Array.from(registry.values());
     }),
 
+    /** 项目口径列表：全局 + 项目技能（同名覆盖，标记 overridden） */
+    listManageableSkills: jest.fn().mockImplementation(() => Array.from(registry.values())),
+    listManageableSkillsForProject: jest
+      .fn()
+      .mockImplementation((workspacePath?: string) => {
+        const base = Array.from(registry.values());
+        const ws = workspacePath ? projectSkills.get(workspacePath) ?? [] : [];
+        if (!ws.length) return base;
+        const baseIds = new Set(base.map((s) => s.id));
+        const merged = new Map(base.map((s) => [s.id, s]));
+        for (const s of ws) {
+          merged.set(s.id, baseIds.has(s.id) ? { ...s, overridden: true } : s);
+        }
+        return Array.from(merged.values());
+      }),
+
+    ensureProjectSkills: jest
+      .fn()
+      .mockImplementation(async (workspacePath: string) =>
+        projectSkills.get(workspacePath) ?? [],
+      ),
+
     getSkillDetail: jest.fn().mockImplementation((skillId: string) => {
       return registry.get(skillId) || null;
     }),
+
+    getManageableSkillDetail: jest
+      .fn()
+      .mockImplementation((skillId: string, workspacePath?: string) =>
+        resolveWithScope(skillId, workspacePath),
+      ),
 
     enableSkill: jest.fn().mockResolvedValue(undefined),
     disableSkill: jest.fn().mockResolvedValue(undefined),
@@ -45,6 +83,7 @@ function createMockOrchestrator() {
     getSkillDocumentation: jest.fn().mockResolvedValue('test doc'),
 
     _registry: registry,
+    _projectSkills: projectSkills,
   };
 }
 
@@ -59,6 +98,76 @@ function createMockConfigService(skillsDir: string) {
       return undefined;
     }),
   } as unknown as ConfigService;
+}
+
+/** 目录分组端口替身：默认无任何项目（不传 projectGroupId 时不会被访问） */
+function createMockProjectGroups(rows: Array<{ id: string; path: string }> = []) {
+  return {
+    findProjectGroup: jest.fn().mockImplementation(async (id: string) => {
+      const hit = rows.find((r) => r.id === id);
+      return hit ? { ...hit, pathKey: hit.path } : null;
+    }),
+  } as any;
+}
+
+/** 项目级技能开关配置替身：内存态，行为与真实服务一致（读/写/清） */
+/**
+ * 技能开关配置替身（全局与项目统一格式）。
+ *
+ * 行为与真实服务一致：读/写 disabled 集合，空集合时视图仍是空列表。
+ */
+function createMockSkillToggleConfig() {
+  const globalSet = new Set<string>();
+  const byProject = new Map<string, Set<string>>();
+  const setFor = (projectPath: string) => {
+    if (!byProject.has(projectPath)) byProject.set(projectPath, new Set());
+    return byProject.get(projectPath)!;
+  };
+  const view = (file: string, set: Set<string>) => ({
+    file,
+    disabled: Array.from(set).sort(),
+    warnings: [],
+  });
+  const globalFile = () => "/global/skills.yaml";
+
+  return {
+    globalFilePath: jest.fn(() => globalFile()),
+    projectFilePath: jest.fn((projectPath?: string | null) =>
+      projectPath ? path.join(projectPath, '.guada', 'skills.yaml') : null,
+    ),
+    getGlobalDisabledIds: jest.fn(() => globalSet),
+    getProjectDisabledIds: jest.fn((projectPath?: string | null) =>
+      projectPath ? setFor(projectPath) : new Set<string>(),
+    ),
+    isGlobalDisabled: jest.fn((skillId: string) =>
+      globalSet.has(String(skillId).toLowerCase()),
+    ),
+    isProjectDisabled: jest.fn(
+      (projectPath: string | null | undefined, skillId: string) =>
+        !!projectPath && setFor(projectPath).has(String(skillId).toLowerCase()),
+    ),
+    readGlobal: jest.fn(() => view(globalFile(), globalSet)),
+    readProject: jest.fn((projectPath: string) =>
+      view(path.join(projectPath, '.guada', 'skills.yaml'), setFor(projectPath)),
+    ),
+    setGlobalEnabled: jest.fn(async (skillId: string, enabled: boolean) => {
+      const id = skillId.toLowerCase();
+      if (enabled) globalSet.delete(id);
+      else globalSet.add(id);
+      return view(globalFile(), globalSet);
+    }),
+    setProjectEnabled: jest.fn(
+      async (projectPath: string, skillId: string, enabled: boolean) => {
+        const set = setFor(projectPath);
+        const id = skillId.toLowerCase();
+        if (enabled) set.delete(id);
+        else set.add(id);
+        return view(path.join(projectPath, '.guada', 'skills.yaml'), set);
+      },
+    ),
+    _global: globalSet,
+    _projects: byProject,
+  } as any;
 }
 
 // ── Helpers ──
@@ -131,6 +240,8 @@ describe('SkillsController', () => {
   let controller: SkillsController;
   let mockOrchestrator: ReturnType<typeof createMockOrchestrator>;
   let mockConfigService: ConfigService;
+  let mockProjectGroups: ReturnType<typeof createMockProjectGroups>;
+  let mockToggleConfig: ReturnType<typeof createMockSkillToggleConfig>;
   let testSkillsDir: string;
 
   beforeAll(async () => {
@@ -147,10 +258,14 @@ describe('SkillsController', () => {
   beforeEach(() => {
     mockOrchestrator = createMockOrchestrator();
     mockConfigService = createMockConfigService(testSkillsDir);
+    mockProjectGroups = createMockProjectGroups();
+    mockToggleConfig = createMockSkillToggleConfig();
     controller = new SkillsController(
       mockOrchestrator as any,
       createMockWatcher(),
       mockConfigService,
+      mockProjectGroups,
+      mockToggleConfig as any,
     );
   });
 
@@ -173,6 +288,336 @@ describe('SkillsController', () => {
       mockOrchestrator.triggerScan.mockRejectedValueOnce(new Error('Scan failed'));
       const result = await controller.triggerScan();
       expect(result).toEqual({ success: false, message: 'Scan failed' });
+    });
+  });
+
+  describe('项目作用域（?projectGroupId=）', () => {
+    const PROJECT_ID = 'pg-demo';
+    /** 项目目录在 beforeAll 之后才有值，这里惰性求值 */
+    const projectPath = () => path.join(testSkillsDir, 'demo-project');
+
+    function makeProjectSkill(id: string, extra: Partial<SkillDefinition> = {}): SkillDefinition {
+      return {
+        id,
+        baseDir: path.join(projectPath(), '.guada', 'skills'),
+        basePath: id,
+        manifest: { name: id, description: `Project skill ${id}` },
+        contentHash: `hash-${id}`,
+        source: 'workspace',
+        enabled: true,
+        ...extra,
+      };
+    }
+
+    it('列表：解析项目路径并加载项目来源，返回合并后的清单', async () => {
+      mockOrchestrator._registry.set('global-skill', {
+        id: 'global-skill',
+        baseDir: testSkillsDir,
+        basePath: 'global-skill',
+        manifest: { name: 'global-skill', description: 'g' },
+        contentHash: 'h',
+        source: 'global',
+        enabled: true,
+      });
+      const projectSkill = makeProjectSkill('proj-skill');
+      mockOrchestrator._projectSkills.set(projectPath(), [projectSkill]);
+      mockProjectGroups = createMockProjectGroups([{ id: PROJECT_ID, path: projectPath() }]);
+      controller = new SkillsController(
+        mockOrchestrator as any,
+        createMockWatcher(),
+        mockConfigService,
+        mockProjectGroups,
+        mockToggleConfig as any,
+      );
+
+      const res = await controller.listSkills(undefined, undefined, undefined, PROJECT_ID);
+
+      expect(mockOrchestrator.ensureProjectSkills).toHaveBeenCalledWith(projectPath());
+      expect(mockOrchestrator.listManageableSkillsForProject).toHaveBeenCalledWith(
+        projectPath(),
+        false,
+      );
+      expect(res.items.map((s) => s.id).sort()).toEqual(['global-skill', 'proj-skill']);
+    });
+
+    it('未知项目 id：抛 404，前端据此回落全局视图', async () => {
+      await expect(
+        controller.listSkills(undefined, undefined, undefined, 'pg-missing'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('文档：同名技能读取项目版本而不是全局版本', async () => {
+      const projectSkillsDir = path.join(projectPath(), '.guada', 'skills');
+      await fs.mkdir(path.join(projectSkillsDir, 'same-id'), { recursive: true });
+      await fs.writeFile(
+        path.join(projectSkillsDir, 'same-id', 'SKILL.md'),
+        '---\nname: same-id\ndescription: project\n---\n\nPROJECT CONTENT',
+      );
+
+      const projectSkill = makeProjectSkill('same-id', {
+        baseDir: projectSkillsDir,
+        basePath: 'same-id',
+      });
+      mockOrchestrator._projectSkills.set(projectPath(), [projectSkill]);
+      mockProjectGroups = createMockProjectGroups([{ id: PROJECT_ID, path: projectPath() }]);
+      controller = new SkillsController(
+        mockOrchestrator as any,
+        createMockWatcher(),
+        mockConfigService,
+        mockProjectGroups,
+        mockToggleConfig as any,
+      );
+
+      const res = await controller.getSkillDocumentation('same-id', PROJECT_ID);
+      expect(res.content).toContain('PROJECT CONTENT');
+    });
+
+    it('文档：项目版本文件缺失时返回 404（不是 500）', async () => {
+      mockOrchestrator._projectSkills.set(projectPath(), [
+        makeProjectSkill('missing-file', { basePath: 'missing-file' }),
+      ]);
+      mockProjectGroups = createMockProjectGroups([{ id: PROJECT_ID, path: projectPath() }]);
+      controller = new SkillsController(
+        mockOrchestrator as any,
+        createMockWatcher(),
+        mockConfigService,
+        mockProjectGroups,
+        mockToggleConfig as any,
+      );
+
+      await expect(
+        controller.getSkillDocumentation('missing-file', PROJECT_ID),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('卸载：项目技能不允许从管理页删除', async () => {
+      mockOrchestrator._projectSkills.set(projectPath(), [makeProjectSkill('proj-skill')]);
+      mockProjectGroups = createMockProjectGroups([{ id: PROJECT_ID, path: projectPath() }]);
+      controller = new SkillsController(
+        mockOrchestrator as any,
+        createMockWatcher(),
+        mockConfigService,
+        mockProjectGroups,
+        mockToggleConfig as any,
+      );
+
+      const res = await controller.uninstallSkill('proj-skill', PROJECT_ID);
+      expect(res.success).toBe(false);
+      expect(res.message).toContain('.guada/skills');
+    });
+
+    it('扫描：带项目 id 时先确保项目来源', async () => {
+      mockProjectGroups = createMockProjectGroups([{ id: PROJECT_ID, path: projectPath() }]);
+      controller = new SkillsController(
+        mockOrchestrator as any,
+        createMockWatcher(),
+        mockConfigService,
+        mockProjectGroups,
+        mockToggleConfig as any,
+      );
+
+      const res = await controller.triggerScan(PROJECT_ID);
+      expect(mockOrchestrator.ensureProjectSkills).toHaveBeenCalledWith(projectPath());
+      expect(res.success).toBe(true);
+    });
+
+    it('重载：带项目 id 时传项目路径，否则保持旧签名', async () => {
+      mockProjectGroups = createMockProjectGroups([{ id: PROJECT_ID, path: projectPath() }]);
+      controller = new SkillsController(
+        mockOrchestrator as any,
+        createMockWatcher(),
+        mockConfigService,
+        mockProjectGroups,
+        mockToggleConfig as any,
+      );
+
+      mockOrchestrator._registry.set('global-skill', {
+        id: 'global-skill',
+        baseDir: testSkillsDir,
+        basePath: 'global-skill',
+        manifest: { name: 'global-skill', description: 'g' },
+        contentHash: 'h',
+        source: 'global',
+        enabled: true,
+      });
+
+      await controller.reloadSkill('global-skill', PROJECT_ID);
+      expect(mockOrchestrator.reloadSkill).toHaveBeenCalledWith('global-skill', projectPath());
+
+      mockOrchestrator.reloadSkill.mockClear();
+      await controller.reloadSkill('global-skill');
+      expect(mockOrchestrator.reloadSkill).toHaveBeenCalledWith('global-skill');
+    });
+  });
+
+  describe('项目级技能开关（/skills/project-config）', () => {
+    const PROJECT_ID = 'pg-cfg';
+    const projectPath = () => path.join(testSkillsDir, 'config-project');
+
+    /** 装上可控的 projectGroups + 一个存在的全局技能 */
+    function setupProject() {
+      mockProjectGroups = createMockProjectGroups([
+        { id: PROJECT_ID, path: projectPath() },
+      ]);
+      mockToggleConfig = createMockSkillToggleConfig();
+      mockOrchestrator._registry.set('global-skill', {
+        id: 'global-skill',
+        baseDir: testSkillsDir,
+        basePath: 'global-skill',
+        manifest: { name: 'global-skill', description: 'g' },
+        contentHash: 'h',
+        source: 'global',
+        enabled: true,
+      });
+      controller = new SkillsController(
+        mockOrchestrator as any,
+        createMockWatcher(),
+        mockConfigService,
+        mockProjectGroups,
+        mockToggleConfig as any,
+      );
+    }
+
+    it('GET：返回该项目的禁用列表与文件路径', async () => {
+      setupProject();
+      mockToggleConfig._projects.set(projectPath(), new Set(['global-skill']));
+
+      const res = await controller.getSkillToggleConfig(PROJECT_ID);
+
+      expect(res.file).toBe(path.join(projectPath(), '.guada', 'skills.yaml'));
+      expect(res.disabled).toEqual(['global-skill']);
+    });
+
+    it('GET：文件不存在时返回空列表（不是错误）', async () => {
+      setupProject();
+
+      const res = await controller.getSkillToggleConfig(PROJECT_ID);
+
+      expect(res.disabled).toEqual([]);
+    });
+
+    it('GET：无 projectGroupId → 返回全局配置（不再是错误）', async () => {
+      setupProject();
+      mockToggleConfig._global.add('global-skill');
+
+      const res = await controller.getSkillToggleConfig();
+
+      expect(res.disabled).toEqual(['global-skill']);
+      expect(mockToggleConfig.readGlobal).toHaveBeenCalled();
+    });
+
+    it('GET：未知项目 id → 404', async () => {
+      setupProject();
+
+      await expect(
+        controller.getSkillToggleConfig('pg-missing'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('PUT：禁用某技能后写入项目配置', async () => {
+      setupProject();
+
+      const res = await controller.updateSkillToggleConfig({
+        projectGroupId: PROJECT_ID,
+        skillId: 'global-skill',
+        disabled: true,
+      });
+
+      expect(res.disabled).toEqual(['global-skill']);
+      expect(mockToggleConfig.setProjectEnabled).toHaveBeenCalledWith(
+        projectPath(),
+        'global-skill',
+        false,
+      );
+    });
+
+    it('PUT：无 projectGroupId → 写全局配置', async () => {
+      setupProject();
+
+      const res = await controller.updateSkillToggleConfig({
+        skillId: 'global-skill',
+        disabled: true,
+      });
+
+      expect(res.disabled).toEqual(['global-skill']);
+      expect(mockToggleConfig.setGlobalEnabled).toHaveBeenCalledWith(
+        'global-skill',
+        false,
+      );
+      expect(mockToggleConfig.setProjectEnabled).not.toHaveBeenCalled();
+    });
+
+    it('PUT：取消禁用（恢复继承全局状态）', async () => {
+      setupProject();
+      mockToggleConfig._projects.set(projectPath(), new Set(['global-skill']));
+
+      const res = await controller.updateSkillToggleConfig({
+        projectGroupId: PROJECT_ID,
+        skillId: 'global-skill',
+        disabled: false,
+      });
+
+      expect(res.disabled).toEqual([]);
+    });
+
+    it('PUT：全局已禁用的技能，移除项目禁用项仍然允许（写接口没有"启用"动作）', async () => {
+      setupProject();
+      mockToggleConfig._projects.set(projectPath(), new Set(['global-skill']));
+
+      const res = await controller.updateSkillToggleConfig({
+        projectGroupId: PROJECT_ID,
+        skillId: 'global-skill',
+        disabled: false,
+      });
+
+      // 移除是安全动作：它只让技能回到"继承全局（已禁用）"，不会放宽权限
+      expect(res.disabled).toEqual([]);
+    });
+
+    it('PUT：未知技能 → 400，且不写文件', async () => {
+      setupProject();
+
+      await expect(
+        controller.updateSkillToggleConfig({
+          projectGroupId: PROJECT_ID,
+          skillId: 'no-such-skill',
+          disabled: true,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockToggleConfig.setProjectEnabled).not.toHaveBeenCalled();
+      expect(mockToggleConfig.setGlobalEnabled).not.toHaveBeenCalled();
+    });
+
+    it('PUT：skillId 缺失或 disabled 非布尔 → 400', async () => {
+      setupProject();
+
+      await expect(
+        controller.updateSkillToggleConfig({ projectGroupId: PROJECT_ID, disabled: true }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      await expect(
+        controller.updateSkillToggleConfig({
+          projectGroupId: PROJECT_ID,
+          skillId: 'global-skill',
+          disabled: 'yes' as any,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('PUT：skillId 大小写归一后写小写', async () => {
+      setupProject();
+
+      await controller.updateSkillToggleConfig({
+        projectGroupId: PROJECT_ID,
+        skillId: 'Global-Skill',
+        disabled: true,
+      });
+
+      expect(mockToggleConfig.setProjectEnabled).toHaveBeenCalledWith(
+        projectPath(),
+        'global-skill',
+        false,
+      );
     });
   });
 

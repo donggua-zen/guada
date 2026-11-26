@@ -1,7 +1,14 @@
-import { Controller, Get, Post, Param, Body, Logger, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import {
+  Controller, Get, Post, Put, Param, Body, Logger, Query, UseInterceptors, UploadedFile,
+  Inject, NotFoundException, BadRequestException,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SkillOrchestrator } from '../core/skill-orchestrator.service';
 import { SkillWatcherService } from '../core/skill-watcher.service';
+import {
+  SkillToggleConfigService,
+  type SkillToggleConfig,
+} from '../core/skill-toggle-config.service';
 import { SkillDefinition, SkillOrigin } from '../interfaces/skill-manifest.interface';
 import {
   copyDirectory,
@@ -12,6 +19,8 @@ import { SkillDiscoveryResult } from '../interfaces/index';
 import { createPaginatedResponse, PaginatedResponse } from '../../../common/types/pagination';
 import { SkillMetadataValidator } from '../common/skill-metadata.validator';
 import { ConfigService } from '@nestjs/config';
+import { PROJECT_GROUP_PORT } from '../../../common/store/ports/group.port';
+import type { ProjectGroupPort } from '../../../common/store/ports/group.port';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -29,9 +38,28 @@ export class SkillsController {
     private orchestrator: SkillOrchestrator,
     private watcher: SkillWatcherService,
     private configService: ConfigService,
+    // 目录分组端口（StoreModule 为 @Global）：只查项目路径，不反向依赖 ChatModule
+    @Inject(PROJECT_GROUP_PORT) private projectGroups: ProjectGroupPort,
+    private toggleConfig: SkillToggleConfigService,
   ) {
     this.skillsDir = this.configService.get<string>('SKILLS_DIR') || 
                      path.join(process.cwd(), 'skills');
+  }
+
+  /**
+   * 把「项目分组 id」解析成项目主工作目录。
+   *
+   * 管理页的项目视图只按目录作用域工作：无 id = 全局口径（行为与历史一致）；
+   * 有 id 但分组不存在 = 404（项目可能刚被删除，前端应回落全局视图）。
+   */
+  private async resolveProjectPath(projectGroupId?: string): Promise<string | undefined> {
+    const id = typeof projectGroupId === 'string' ? projectGroupId.trim() : '';
+    if (!id) return undefined;
+    const group = await this.projectGroups.findProjectGroup(id);
+    if (!group?.path) {
+      throw new NotFoundException(`Project group ${id} not found`);
+    }
+    return group.path;
   }
 
   /**
@@ -50,16 +78,31 @@ export class SkillsController {
    *
    * `?agentId=` 时切换为**智能体配置页口径**：全局共享 + 该智能体的专属技能，
    * 供面板把专属技能以锁定态展示。
+   *
+   * `?projectGroupId=` 时切换为**项目口径**：全局共享 + 该项目 `.guada/skills`
+   * （同名覆盖，被覆盖项带 `overridden: true`）。项目分组不存在 → 404。
+   * 两者互斥：同时传入以 projectGroupId 为准（页面不会这样用）。
    */
   @Get()
-  listSkills(
+  async listSkills(
     @Query('page') page?: number,
     @Query('size') size?: number,
     @Query('agentId') agentId?: string,
-  ): PaginatedResponse<SkillDefinition> {
-    const allSkills = agentId
-      ? this.orchestrator.listSkillsForAgent(agentId, false)
-      : this.orchestrator.listManageableSkills(false);
+    @Query('projectGroupId') projectGroupId?: string,
+  ): Promise<PaginatedResponse<SkillDefinition>> {
+    const projectPath = await this.resolveProjectPath(projectGroupId);
+    let allSkills: SkillDefinition[];
+
+    if (projectPath) {
+      // 页面可能在会话从未运行过时打开：显式加载该项目来源
+      await this.orchestrator.ensureProjectSkills(projectPath);
+      allSkills = this.orchestrator.listManageableSkillsForProject(projectPath, false);
+    } else if (agentId) {
+      allSkills = this.orchestrator.listSkillsForAgent(agentId, false);
+    } else {
+      allSkills = this.orchestrator.listManageableSkills(false);
+    }
+
     const total = allSkills.length;
 
     // 如果未提供分页参数，返回全部数据
@@ -101,19 +144,97 @@ export class SkillsController {
   }
 
   /**
+   * 技能开关配置（全局或项目，格式统一为 `skills.yaml` 的 `disabled` 列表）
+   *
+   * - `?projectGroupId=` 缺省 → 全局：`<SETTINGS_DIR>/skills.yaml`
+   * - 带 `projectGroupId` → 项目：`<项目>/.guada/skills.yaml`
+   *
+   * 必须早于 `@Get(':id')`，否则会被当作 id="project-config" 的技能详情。
+   * 文件不存在时返回空列表（不代表出错——大多数项目不会配置这个文件）。
+   */
+  @Get('project-config')
+  async getSkillToggleConfig(
+    @Query('projectGroupId') projectGroupId?: string,
+  ): Promise<SkillToggleConfig> {
+    const projectPath = await this.resolveProjectPath(projectGroupId);
+    return projectPath
+      ? this.toggleConfig.readProject(projectPath)
+      : this.toggleConfig.readGlobal();
+  }
+
+  /**
+   * 开关某技能的可用性（作用域由 `projectGroupId` 决定）。
+   *
+   * `disabled` 的语义只有「禁用 / 恢复默认」两种：
+   * - `true`  → 写入 `disabled` 列表（该作用域关掉它）
+   * - `false` → 从列表移除（回到默认启用 / 项目回到继承全局）
+   *
+   * 这里**不需要**校验全局是否已禁用：项目侧用户点开关只可能是想把它从项目
+   * 列表里移除，那时移除是安全且正确的。「全局禁用无法在项目启用」是 UI 的
+   * 呈现约束（开关置灰），不是写接口的拒绝条件——写接口本来就没有「启用」
+   * 这个动作，格式上也无从表达。
+   */
+  @Put('project-config')
+  async updateSkillToggleConfig(
+    @Body() body: {
+      projectGroupId?: string;
+      skillId?: string;
+      disabled?: boolean;
+    },
+  ): Promise<SkillToggleConfig> {
+    const skillId = String(body?.skillId || '').trim().toLowerCase();
+    if (!skillId) {
+      throw new BadRequestException('skillId is required');
+    }
+    if (typeof body?.disabled !== 'boolean') {
+      throw new BadRequestException('disabled must be a boolean');
+    }
+
+    const projectPath = await this.resolveProjectPath(body?.projectGroupId);
+
+    // 技能必须真实存在（全局或该项目），否则写进去的是一条永远不生效的配置
+    if (projectPath) await this.orchestrator.ensureProjectSkills(projectPath);
+    const known =
+      this.orchestrator.getManageableSkillDetail(skillId, projectPath) !== null;
+    if (!known) {
+      throw new BadRequestException(`Skill '${skillId}' not found`);
+    }
+
+    return projectPath
+      ? await this.toggleConfig.setProjectEnabled(projectPath, skillId, !body.disabled)
+      : await this.toggleConfig.setGlobalEnabled(skillId, !body.disabled);
+  }
+
+  /**
    * 获取 Skill 详情
+   *
+   * `?projectGroupId=` 时按项目作用域解析（项目版本优先于全局同名版本）。
    */
   @Get(':id')
-  getSkillDetail(@Param('id') skillId: string): SkillDefinition | null {
-    return this.orchestrator.getManageableSkillDetail(skillId);
+  async getSkillDetail(
+    @Param('id') skillId: string,
+    @Query('projectGroupId') projectGroupId?: string,
+  ): Promise<SkillDefinition | null> {
+    const projectPath = await this.resolveProjectPath(projectGroupId);
+    if (projectPath) await this.orchestrator.ensureProjectSkills(projectPath);
+    return this.orchestrator.getManageableSkillDetail(skillId, projectPath);
   }
 
   /**
    * 获取 Skill 的文档内容（SKILL.md）
+   *
+   * 项目视图下必须读项目版本：同名技能在项目里覆盖全局时，读全局那份会让
+   * 页面显示与实际学习内容不一致。
    */
   @Get(':id/documentation')
-  async getSkillDocumentation(@Param('id') skillId: string): Promise<{ content: string }> {
-    const skill = this.orchestrator.getManageableSkillDetail(skillId);
+  async getSkillDocumentation(
+    @Param('id') skillId: string,
+    @Query('projectGroupId') projectGroupId?: string,
+  ): Promise<{ content: string }> {
+    const projectPath = await this.resolveProjectPath(projectGroupId);
+    if (projectPath) await this.orchestrator.ensureProjectSkills(projectPath);
+
+    const skill = this.orchestrator.getManageableSkillDetail(skillId, projectPath);
     if (!skill) {
       return { content: '' };
     }
@@ -127,18 +248,32 @@ export class SkillsController {
     const fs = await import('fs/promises');
     const path = await import('path');
     const skillMdPath = path.join(skill.baseDir, skill.basePath, 'SKILL.md');
-    const rawContent = await fs.readFile(skillMdPath, 'utf-8');
-
-    return { content: rawContent };
+    try {
+      const rawContent = await fs.readFile(skillMdPath, 'utf-8');
+      return { content: rawContent };
+    } catch (error: any) {
+      if (error?.code === 'ENOENT') {
+        throw new NotFoundException(`SKILL.md not found for ${skillId}`);
+      }
+      throw error;
+    }
   }
 
   /**
    * 触发手动扫描
+   *
+   * `?projectGroupId=` 时先刷新该项目来源（重建 watcher 与清单），再走全量 scan。
    */
   @Post('scan')
-  async triggerScan(): Promise<{ success: boolean; message: string }> {
+  async triggerScan(
+    @Query('projectGroupId') projectGroupId?: string,
+  ): Promise<{ success: boolean; message: string }> {
     this.logger.log('Manual scan triggered');
     try {
+      const projectPath = await this.resolveProjectPath(projectGroupId);
+      if (projectPath) {
+        await this.orchestrator.ensureProjectSkills(projectPath);
+      }
       await this.orchestrator.triggerScan();
       return { success: true, message: 'Scan completed' };
     } catch (error: any) {
@@ -147,12 +282,19 @@ export class SkillsController {
   }
 
   /**
-   * 热加载指定 Skill
+   * 热加载指定 Skill（`?projectGroupId=` 时按项目来源重载）
    */
   @Post(':id/reload')
-  async reloadSkill(@Param('id') skillId: string): Promise<SkillDefinition> {
+  async reloadSkill(
+    @Param('id') skillId: string,
+    @Query('projectGroupId') projectGroupId?: string,
+  ): Promise<SkillDefinition> {
     this.logger.log(`Reload requested for skill: ${skillId}`);
-    return this.orchestrator.reloadSkill(skillId);
+    const projectPath = await this.resolveProjectPath(projectGroupId);
+    // 只在有项目作用域时传第二参，保持全局调用的签名与历史一致
+    return projectPath
+      ? this.orchestrator.reloadSkill(skillId, projectPath)
+      : this.orchestrator.reloadSkill(skillId);
   }
 
   /**
@@ -168,6 +310,10 @@ export class SkillsController {
 
   /**
    * 启用技能
+   *
+   * 项目技能（`source=workspace`）不在注册表里，此处的 "not found" 即是拒绝；
+   * 启停状态无项目维度（`settings.plugins["skills.<id>"]`），页面也因此把项目
+   * 技能的开关置为只读，避免误改全局同名技能。
    */
   @Post(':id/enable')
   async enableSkill(@Param('id') skillId: string): Promise<{ success: boolean; message: string }> {
@@ -547,13 +693,29 @@ export class SkillsController {
 
   /**
    * 卸载技能
+   *
+   * 项目技能（`.guada/skills`）属项目资产，管理页只读，不允许从这里删除；
+   * 传 `projectGroupId` 时按项目作用域解析，避免同名时误删全局版本。
    */
   @Post(':id/uninstall')
-  async uninstallSkill(@Param('id') skillId: string): Promise<{ success: boolean; message: string }> {
+  async uninstallSkill(
+    @Param('id') skillId: string,
+    @Query('projectGroupId') projectGroupId?: string,
+  ): Promise<{ success: boolean; message: string }> {
     try {
-      const skill = this.orchestrator.getManageableSkillDetail(skillId);
+      const projectPath = await this.resolveProjectPath(projectGroupId);
+      if (projectPath) await this.orchestrator.ensureProjectSkills(projectPath);
+
+      const skill = this.orchestrator.getManageableSkillDetail(skillId, projectPath);
       if (!skill) {
         return { success: false, message: `Skill '${skillId}' not found` };
+      }
+
+      if (skill.source === 'workspace') {
+        return {
+          success: false,
+          message: `Skill '${skillId}' belongs to the project directory (.guada/skills) and cannot be uninstalled from here.`,
+        };
       }
 
       // 禁止卸载系统内置技能（source=system 现为插件注册的文本技能，无磁盘目录可删）

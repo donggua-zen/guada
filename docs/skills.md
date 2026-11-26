@@ -55,6 +55,99 @@ parameters:         # 工具参数定义（可选）
 这里是技能的使用说明和示例。
 ```
 
+## 项目作用域（项目级技能）
+
+技能除了全局目录，还可以放在**项目工作目录**下，只对该项目可见：
+
+```
+<项目目录>/.guada/skills/<技能名>/SKILL.md
+```
+
+### 优先级与合并
+
+| 来源 | 目录 | 作用域 |
+|---|---|---|
+| system | 插件注册的文本技能 | 全局 |
+| global | `SKILLS_DIR`（用户安装） | 全局 |
+| agents | `~/.agents/skills` | 全局（只读） |
+| workspace | `<项目>/.guada/skills` | 仅该项目 |
+
+合并顺序 `workspace > global > system`：同 id 时**项目版本覆盖全局版本**。管理页按项目查询时，被覆盖的项带 `overridden: true`，表示「当前展示的是项目版本，全局也有一份同名技能」。
+
+### 加载方式
+
+项目来源不依赖「会话开始运行」：查询技能列表/文档时会显式 `ensureWorkspaceSource(项目目录)`，因此从未跑过会话的项目也能看到技能。要点：
+
+- 来源键由**归一化路径**派生（`D:\a` 与 `d:/a/` 命中同一来源），不再用原始字符串拼接；
+- 目录不存在时**不注册空来源**（chokidar 对不存在的路径会永久过滤同父目录的后续新增），直接返回空清单；
+- 动态来源有 TTL（默认 3h）与容量上限（24），淘汰按「最久未续期」且只淘汰动态来源，不会误删 global/agents。
+
+### 接口
+
+```
+GET  /skills?projectGroupId=pg-xxx
+GET  /skills/:id?projectGroupId=pg-xxx
+GET  /skills/:id/documentation?projectGroupId=pg-xxx
+POST /skills/:id/reload?projectGroupId=pg-xxx
+POST /skills/scan?projectGroupId=pg-xxx
+GET  /skills/project-config?projectGroupId=pg-xxx   // 省略 projectGroupId = 全局
+PUT  /skills/project-config   { projectGroupId?, skillId, disabled }
+```
+
+- 不带 `projectGroupId`：行为与历史一致（全局管理页口径）。
+- 带 `projectGroupId`：服务端用 `project_groups` 解析项目目录；项目不存在返回 404（前端据此回落全局视图）。
+- 单技能解析（详情/文档/重载/`skill_learn`）统一走「项目优先 → 全局注册表」，保证**列表展示的那一份就是这个操作命中的那一份**。
+
+### 技能开关（统一为 `skills.yaml`）
+
+全局与项目用**同一套格式**，只有作用域不同：
+
+| 作用域 | 文件 | 生效范围 |
+|---|---|---|
+| 全局 | `<SETTINGS_DIR>/skills.yaml`（与 `account.json` / `models.json` 同目录） | 所有项目 |
+| 项目 | `<项目>/.guada/skills.yaml` | 仅该项目 |
+
+```yaml
+# 技能开关
+# - 列表中的技能被禁用；不在列表里 = 默认启用
+# - 只能禁用不能在此强制启用：启用 = 从列表移除
+disabled:
+  - browser-script
+  - my-project-skill
+```
+
+| 全局状态 | 项目文件 | 页面显示 | 会话可用 |
+|---|---|---|---|
+| 启用 | 未列出 | 启用 | 可用 |
+| 启用 | 已列出 | **本项目已禁用** | 不可用 |
+| 禁用 | 未列出 | 禁用（开关锁定） | 不可用 |
+| 禁用 | 已列出 | 本项目已禁用（可移除） | 不可用 |
+
+设计要点：
+
+- **键是技能 id**（`manifest.name.toLowerCase()`），不是 SKILL.md 路径。路径会把配置绑死到某台机器的目录布局，id 与安装位置无关。
+- **格式上无法表达「启用」**：只有 `disabled` 列表，所以项目配置永远绕不过全局禁用。全局已禁用的技能在项目视图里开关是灰的。
+- **投影而非改写**：项目命中项在返回结果里被置 `enabled: false` 并打 `projectDisabled: true`，注册表里的全局状态不受影响。
+- **读取永不抛错**：文件缺失 / YAML 损坏 / 结构不合法一律降级为「无配置」，退回默认启用。配置坏了不该让技能清单整段消失。
+- **热路径用 mtime + size 缓存**：`listSkills()` 在 prompt 构建热路径上同步调用，`statSync` 开销可忽略且无需 watcher。
+- **空列表即删文件**：不留 `disabled: []` 噪音。
+- **学习入口同口径**：`skill_learn` 命中被项目禁用的技能时返回「不存在」，避免「列表看不到但技能名可学」的后门。
+
+#### 从 `plugins.json` 迁移
+
+旧版全局开关以 `skills.<id>` 私有字段混存在 `plugins.json`（一个分组里塞了 20+ 个带前缀的键）。启动时一次性迁移到 `skills.yaml`：
+
+- 只搬 `false`（禁用）；`true` 是默认态，搬过去只是噪音；
+- 迁移后从 `plugins.json` **逐个删除**旧键（`updateSettings` 是 `Object.assign` 删不掉键，必须用 `deleteSettingValue`）；
+- `skills.yaml` 已存在时不再迁移，尊重用户手工编辑；
+- 幂等：没有旧键时是 no-op。
+
+### 已知边界
+
+- 项目配置不随仓库共享：`.guada/**` 在 `.gitignore` 中被整体忽略，这份文件只在本机生效。若将来要共享，需先加 `!.guada/skills.yaml` 例外，并重新评估「仓库能否放宽」的安全策略。
+- 命令面板 `/` 的技能列表不带工作区上下文（`CommandContext` 只有 `agentId`），因此不受项目禁用影响；但其 `parse` 阶段会走 `skill_learn`，被禁用技能在那里仍会被拒绝。
+- 项目技能的**删除**仍属项目资产：管理页可以开关，但不能卸载（避免误删项目目录内容）。
+
 ## 核心特性
 
 ### 渐进式加载 (L1 / L2)

@@ -88,6 +88,19 @@ export interface SkillDefinition {
    * 省略 = 全局可见（现状语义，仍受 settings.skills 偏好过滤）。
    */
   visibleTo?: import("../../plugins/types/plugin.types").VisibleToAgent;
+  /**
+   * 项目作用域的展示投影：该技能来自项目 `.guada/skills` 且同 id 在全局也存在
+   * （本次返回的是覆盖后的项目版本）。只在「按项目查询」时由 orchestrator 赋值，
+   * 不参与 AI 上下文，也不写回注册表。
+   */
+  overridden?: boolean;
+  /**
+   * 被当前项目配置禁用：`<项目>/.guada/skills.yaml` 的 `disabled` 列表命中该 id。
+   *
+   * 同样是投影——注册表里的 `enabled` 仍是全局状态。前端据此把开关显示为
+   * 「本项目已禁用」，会话内清单与 skill_learn 也会据此过滤。
+   */
+  projectDisabled?: boolean;
 }
 
 /**

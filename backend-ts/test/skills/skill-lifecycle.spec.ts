@@ -49,7 +49,7 @@ describe("Skill 生命周期（onAdd / onRemove → registry → listSkills）",
       buildToolSkillContent: jest.fn().mockResolvedValue(""),
     } as any;
     loader = new SkillLoaderService();
-    orchestrator = new SkillOrchestrator(mockSourceManager, registry, loader, mockVersionManager, mockPluginManager, mockToolkitCatalog);
+    orchestrator = new SkillOrchestrator(mockSourceManager, registry, loader, mockVersionManager, mockPluginManager, mockToolkitCatalog, { getProjectDisabledIds: () => new Set(), isProjectDisabled: () => false, getGlobalDisabledIds: () => new Set(), isGlobalDisabled: () => false } as any);
   });
 
   // ================================================================

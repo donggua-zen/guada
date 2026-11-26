@@ -953,7 +953,7 @@ async function loadAllData() {
     const [modelsResp, mcpsResp, skillsResp, charsResp] = await Promise.all([
       apiService.fetchModels(),
       apiService.getMcpServers(),
-      apiService.fetchSkills(agentId),
+      apiService.fetchSkills({ agentId }),
       apiService.fetchAgents(),
       loadLocalTools(),
     ])
@@ -1014,7 +1014,7 @@ watch(() => agentForm.id, () => {
  */
 async function loadSkillsForAgent() {
   try {
-    const resp = await apiService.fetchSkills(agentForm.id || undefined)
+    const resp = await apiService.fetchSkills({ agentId: agentForm.id || undefined })
     skillsList.value = Array.isArray(resp?.items)
       ? resp.items.filter((s) => s.enabled !== false)
       : []

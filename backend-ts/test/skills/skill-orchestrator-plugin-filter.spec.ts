@@ -52,6 +52,7 @@ describe("SkillOrchestrator plugin-enabled filtering", () => {
       {} as any,
       pluginManagerStub as any,
       {} as any,
+      { getProjectDisabledIds: () => new Set(), isProjectDisabled: () => false, getGlobalDisabledIds: () => new Set(), isGlobalDisabled: () => false } as any,
     );
 
     registry.register(

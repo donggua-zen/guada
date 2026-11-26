@@ -5,6 +5,7 @@ import { SkillSourceManager } from './core/skill-source.manager';
 import { SkillLoaderService } from './core/skill-loader.service';
 import { SkillVersionManager } from './core/skill-version-manager.service';
 import { SkillWatcherService } from './core/skill-watcher.service';
+import { SkillToggleConfigService } from './core/skill-toggle-config.service';
 import { SkillsController } from './api/skills.controller';
 import { ToolsModule } from '../tools/tools.module';
 import { PluginManager } from '../plugins';
@@ -17,6 +18,8 @@ import { SkillBundledPlugin } from './plugins/skill-bundled.plugin';
   providers: [
     SkillOrchestrator, SkillRegistry, SkillSourceManager,
     SkillLoaderService, SkillVersionManager, SkillWatcherService,
+    // 技能开关的统一持久化层（全局 <SETTINGS_DIR>/skills.yaml + 项目 .guada/skills.yaml）
+    SkillToggleConfigService,
     SkillPlugin, SkillBundledPlugin,
   ],
   exports: [SkillOrchestrator],

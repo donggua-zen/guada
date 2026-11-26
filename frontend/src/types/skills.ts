@@ -26,7 +26,7 @@ export interface SkillManifest {
     default_lang?: string
 }
 
-/** 技能来源：global=用户安装, system=系统内置, agents=共享目录, workspace=工作目录 */
+/** 技能来源：global=用户安装, system=系统内置, agents=共享目录, workspace=项目工作目录 */
 export type SkillSourceType = 'system' | 'agents' | 'global' | 'workspace'
 
 /** 市场来源（安装时写入技能目录内的 .skill-origin.json） */
@@ -56,6 +56,16 @@ export interface Skill {
     contentHash?: string
     /** 市场来源（手动上传/Git 安装时缺省） */
     origin?: SkillOrigin
+    /**
+     * 项目作用域投影：该技能来自项目 `.guada/skills`，且同 id 在全局也存在
+     * （当前展示的是项目覆盖版本）。仅「按项目查询」时后端下发。
+     */
+    overridden?: boolean
+    /**
+     * 被当前项目配置禁用（`<项目>/.guada/skills.yaml` 命中该 id）。
+     * 后端投影字段：注册表里的 `enabled` 仍是全局状态。
+     */
+    projectDisabled?: boolean
 }
 
 /** 命令条目（/ 命令面板数据源；label 等自定义字段由各命令提供者附加） */

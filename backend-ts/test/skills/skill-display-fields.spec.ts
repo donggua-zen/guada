@@ -94,6 +94,7 @@ describe("SKILL.md 展示扩展字段", () => {
         retiredToolkitMessage: jest.fn().mockReturnValue(undefined),
         buildToolSkillContent: jest.fn().mockResolvedValue(""),
       } as any,
+      { getProjectDisabledIds: () => new Set(), isProjectDisabled: () => false, getGlobalDisabledIds: () => new Set(), isGlobalDisabled: () => false } as any,
     );
 
     registry.register(

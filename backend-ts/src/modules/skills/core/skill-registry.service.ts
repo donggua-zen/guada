@@ -1,6 +1,6 @@
 import { Injectable, Logger, Inject, Optional } from '@nestjs/common';
-import { SettingsStorage } from '../../../common/utils/settings-storage.util';
 import { SkillDefinition } from '../interfaces/skill-manifest.interface';
+import { SkillToggleConfigService } from './skill-toggle-config.service';
 
 /**
  * 注册表事件类型
@@ -26,10 +26,11 @@ export class SkillRegistry {
   private readonly skills = new Map<string, SkillDefinition>();
   private readonly listeners: Array<(event: SkillRegistryEvent) => void> = [];
   private readonly providers = new Map<string, SkillProvider>();
-  private static SKILL_ENABLED_PREFIX = 'skills.';
 
   constructor(
-    @Optional() @Inject(SettingsStorage) private settingsStorage?: SettingsStorage,
+    // 可选注入：单测/嵌入场景不提供配置服务时退化为「全部启用」
+    @Optional() @Inject(SkillToggleConfigService)
+    private toggleConfig?: SkillToggleConfigService,
   ) {
     SkillRegistry.instance = this;
   }
@@ -92,21 +93,20 @@ export class SkillRegistry {
   }
 
   /**
-   * 更新 Skill
-   */
-  /**
-   * 从持久化存储读取技能的 enabled 状态
+   * 从配置文件读取技能的 enabled 状态（全局作用域）。
+   *
+   * 同步读：`register()` 在模块启动与热加载路径上调用，`skills.yaml` 用
+   * mtime 缓存，代价是一次 stat。
    */
   private loadPersistedEnabled(skill: SkillDefinition): void {
-    if (!this.settingsStorage) return;
+    if (!this.toggleConfig) return;
     try {
-      const key = SkillRegistry.SKILL_ENABLED_PREFIX + skill.id;
-      this.settingsStorage.getSettings('plugins').then(cfg => {
-        if (cfg && typeof cfg[key] === 'boolean') {
-          skill.enabled = cfg[key];
-        }
-      }).catch(() => {});
-    } catch { /* ignore */ }
+      if (this.toggleConfig.isGlobalDisabled(skill.id)) {
+        skill.enabled = false;
+      }
+    } catch {
+      /* 配置不可读时保持默认（启用），不阻塞注册 */
+    }
   }
 
   /**
@@ -145,27 +145,20 @@ export class SkillRegistry {
         skill.enabled = enabled;
       }
     }
-    await this.persistEnabled('*', null); // 全量保存
+    // 逐个持久化：配置文件是「禁用列表」，只能逐项增删
+    for (const id of skillIds) {
+      await this.persistEnabled(id, enabled);
+    }
     this.logger.log(`Batch toggle: ${skillIds.length} skills -> enabled=${enabled}`);
   }
 
   /**
-   * 持久化技能的启用状态到 SettingsStorage
+   * 持久化技能的启用状态到 `skills.yaml`（全局作用域）
    */
-  private async persistEnabled(skillId: string, enabled: boolean | null): Promise<void> {
-    if (!this.settingsStorage) return;
+  private async persistEnabled(skillId: string, enabled: boolean): Promise<void> {
+    if (!this.toggleConfig) return;
     try {
-      if (skillId === '*') {
-        // 全量保存所有技能的 enabled 状态
-        const update: Record<string, boolean> = {};
-        for (const [id, s] of this.skills) {
-          update[SkillRegistry.SKILL_ENABLED_PREFIX + id] = s.enabled;
-        }
-        await this.settingsStorage.updateSettings('plugins', update);
-      } else {
-        const key = SkillRegistry.SKILL_ENABLED_PREFIX + skillId;
-        await this.settingsStorage.updateSettings('plugins', { [key]: enabled });
-      }
+      await this.toggleConfig.setGlobalEnabled(skillId, enabled);
     } catch (err) {
       this.logger.error(`Failed to persist skill enabled state: ${err}`);
     }

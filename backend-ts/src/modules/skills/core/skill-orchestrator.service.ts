@@ -9,10 +9,12 @@ import { SkillSourceManager } from "./skill-source.manager";
 import { SkillRegistry } from "./skill-registry.service";
 import { SkillLoaderService } from "./skill-loader.service";
 import { SkillVersionManager } from "./skill-version-manager.service";
+import { SkillToggleConfigService } from "./skill-toggle-config.service";
 import { SkillDefinition, SkillLearnResult, SkillResourceBase } from "../interfaces/skill-manifest.interface";
 import { PluginManager } from "../../plugins/plugin.manager";
 import { isVisibleToAgent } from "../../plugins/utils/agent-visibility";
 import { ToolkitCatalogService } from "../../tools/toolkit-catalog.service";
+import { normalizeWorkspaceKey } from "../../../common/utils/workspace-key.util";
 
 /**
  * Skill 匹配结果
@@ -34,6 +36,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     private versionManager: SkillVersionManager,
     private pluginManager: PluginManager,
     private toolkitCatalog: ToolkitCatalogService,
+    private toggleConfig: SkillToggleConfigService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -69,22 +72,107 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     workspacePath?: string,
     session?: any,
   ): SkillDefinition[] {
-    // system + global（来自 Registry，按 enabled 过滤）
-    const base = filterEnabled
-      ? this.registry.getEnabled()
-      : Array.from(this.registry.getAll().values());
+    // 先取全量再统一过滤：启用过滤必须发生在「项目级禁用」之后，
+    // 否则被项目关掉的全局技能仍会留在会话清单里（enabled 已改成 false，
+    // 但 filterEnabled 那一步早就执行完了）。
+    const all = Array.from(this.registry.getAll().values());
 
-    if (!workspacePath) return this.filterByPlugins(base, session);
+    if (!workspacePath) {
+      const base = filterEnabled
+        ? all.filter((s) => s.enabled !== false)
+        : all;
+      return this.filterByPlugins(base, session);
+    }
 
-    // workspace 技能（来自 SourceManager 独立缓存）
-    const wsKey = "workspace_" + workspacePath;
-    const wsSkills = this.sourceManager.getSourceSkills(wsKey);
-    if (wsSkills.length === 0) return this.filterByPlugins(base, session);
-
+    const wsSkills = this.getWorkspaceSkills(workspacePath);
     const merged = new Map<string, SkillDefinition>();
-    for (const s of base) merged.set(s.id, s);
+    for (const s of all) merged.set(s.id, s);
     for (const s of wsSkills) merged.set(s.id, s); // 同名覆盖
-    return this.filterByPlugins(Array.from(merged.values()), session);
+
+    // 项目级禁用（`.guada/skills.yaml`）在合并之后套用：
+    // 它可能指向全局技能（继承项）也可能指向项目自带技能，必须按最终 id 判定。
+    const withProject = this.applyProjectOverrides(
+      Array.from(merged.values()),
+      workspacePath,
+    );
+    const base = filterEnabled
+      ? withProject.filter((s) => s.enabled !== false)
+      : withProject;
+    return this.filterByPlugins(base, session);
+  }
+
+  /**
+   * 套用项目级禁用：命中的技能置 `enabled = false` 并打 `projectDisabled`。
+   *
+   * 是**投影**，不写回注册表——注册表保存全局状态，项目限制只影响本次调用
+   * 的返回结果。这也保证「关掉某项目里的技能」不会改变全局视图。
+   *
+   * 语义只能收紧：全局已禁用的技能本就不在列表里，这里不会把它翻成启用。
+   */
+  private applyProjectOverrides(
+    skills: SkillDefinition[],
+    workspacePath?: string,
+  ): SkillDefinition[] {
+    if (!workspacePath) return skills;
+    const disabled = this.toggleConfig.getProjectDisabledIds(workspacePath);
+    if (disabled.size === 0) return skills;
+
+    return skills.map((s) =>
+      disabled.has(s.id)
+        ? { ...s, enabled: false, projectDisabled: true }
+        : s,
+    );
+  }
+
+  /**
+   * 该技能在某项目内的开关状态（供管理页判断开关是否可点）。
+   *
+   * - `enabled`：最终是否可用（全局状态 ∩ 项目未禁用）
+   * - `lockedByGlobal`：全局已禁用 → 项目内无法启用（只允许收紧）
+   */
+  resolveProjectEnabled(
+    skillId: string,
+    workspacePath?: string,
+  ): { enabled: boolean; lockedByGlobal: boolean; projectDisabled: boolean } {
+    const globalSkill = this.registry.get(String(skillId || "").toLowerCase());
+    const globalEnabled = globalSkill ? globalSkill.enabled !== false : false;
+    const projectDisabled = workspacePath
+      ? this.toggleConfig.isProjectDisabled(workspacePath, skillId)
+      : false;
+    return {
+      enabled: globalEnabled && !projectDisabled,
+      lockedByGlobal: !globalEnabled,
+      projectDisabled,
+    };
+  }
+
+  /**
+   * 取某工作目录的项目技能（只读缓存，不触发加载）。
+   *
+   * 键优先用归一化 pathKey（`D:\a` 与 `d:/a/` 同一来源）；找不到时回退旧实现
+   * 的原始字符串键，兼容升级前已注册的来源。
+   */
+  private getWorkspaceSkills(workspacePath: string): SkillDefinition[] {
+    // 可选调用：测试/嵌入场景的替身可能只实现 getSourceSkills
+    const byKey = this.sourceManager.getWorkspaceSkillsByPathKey?.(
+      normalizeWorkspaceKey(workspacePath),
+    ) ?? [];
+    if (byKey.length > 0) return byKey;
+    return this.sourceManager.getSourceSkills("workspace_" + workspacePath);
+  }
+
+  /**
+   * 确保某工作目录的项目技能来源已加载（目录不存在时返回空，不建目录）。
+   * 技能管理页与单技能解析都走这里，不依赖「会话开始跑」事件。
+   */
+  async ensureProjectSkills(workspacePath: string): Promise<SkillDefinition[]> {
+    if (!this.sourceManager.ensureWorkspaceSource) {
+      return this.getWorkspaceSkills(workspacePath);
+    }
+    const ensured = await this.sourceManager.ensureWorkspaceSource(workspacePath);
+    if (ensured.length > 0) return ensured;
+    // 兜底：确保过程中目录被删但旧来源仍在时，ensure 已注销，这里返回空即可
+    return this.getWorkspaceSkills(workspacePath);
   }
 
   /**
@@ -200,11 +288,74 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 管理页单条查询：智能体专属技能按「不存在」处理（详情/文档/卸载/更新一致） */
-  getManageableSkillDetail(skillId: string): SkillDefinition | null {
-    const skill = this.registry.get(skillId);
-    if (!skill || this.isAgentScopedSkill(skill)) return null;
+  /**
+   * 管理页口径 × 项目作用域：该项目可用技能（全局 + 项目 `.guada/skills`，同名覆盖）。
+   *
+   * 与全局管理页的差别只有「合并项目来源」与「覆盖标记」，智能体专属技能
+   * 仍按管理面口径排除（不因选了项目而暴露）。
+   *
+   * 覆盖标记是**投影**：`overridden: true` 表示同 id 在全局也存在、且本次返回的
+   * 是项目版本。不写回注册表，避免全局视图被污染。
+   */
+  listManageableSkillsForProject(
+    workspacePath: string | undefined,
+    filterEnabled = false,
+  ): SkillDefinition[] {
+    if (!workspacePath) return this.listManageableSkills(filterEnabled);
+
+    const base = this.listSkills(filterEnabled); // 含可见性/插件过滤
+    const baseIds = new Set(base.map((s) => s.id));
+    // listSkills 已套用项目禁用（enabled=false + projectDisabled），
+    // 这里只补「同名覆盖」标记。
+    const merged = this.listSkills(filterEnabled, workspacePath);
+
+    return merged
+      .filter((s) => !this.isAgentScopedSkill(s))
+      .map((s) =>
+        s.source === "workspace" && baseIds.has(s.id)
+          ? { ...s, overridden: true }
+          : s,
+      );
+  }
+
+  /**
+   * 解析生效版本的技能定义（项目优先 → 全局注册表）。
+   *
+   * 列表/详情/文档/重载/学习必须共用同一口径：同名技能在项目里覆盖全局时，
+   * 只要页面显示了项目版本，文档与重载就绝不能命中全局那份。
+   *
+   * @param workspacePath 项目主工作目录；缺省时等价于全局解析
+   * @param manageableOnly true 时按管理面口径排除智能体专属技能（管理页默认）
+   */
+  resolveEffectiveSkill(
+    skillId: string,
+    workspacePath?: string,
+    manageableOnly = true,
+  ): SkillDefinition | null {
+    const id = String(skillId || "").toLowerCase();
+    if (!id) return null;
+
+    let skill: SkillDefinition | undefined;
+    if (workspacePath) {
+      skill = this.getWorkspaceSkills(workspacePath).find((s) => s.id === id);
+    }
+    if (!skill) skill = this.registry.get(id);
+    if (!skill) return null;
+    if (manageableOnly && this.isAgentScopedSkill(skill)) return null;
     return skill;
+  }
+
+  /** 管理页单条查询：智能体专属技能按「不存在」处理（详情/文档/卸载/更新一致） */
+  getManageableSkillDetail(
+    skillId: string,
+    workspacePath?: string,
+  ): SkillDefinition | null {
+    return this.resolveEffectiveSkill(skillId, workspacePath, true);
+  }
+
+  /** 判断某技能是否来自项目目录（项目视图只读，前端据此禁用启停/卸载） */
+  static isProjectSkill(skill: SkillDefinition | null | undefined): boolean {
+    return !!skill && skill.source === "workspace";
   }
 
   /**
@@ -263,11 +414,28 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     name: string,
     session?: any,
   ): Promise<SkillLearnResult | null> {
-    const skill = this.registry.get(name.toLowerCase());
+    const id = name.toLowerCase();
+
+    // 项目优先：同一 id 在项目 `.guada/skills` 里存在时，学习到的必须是项目版本，
+    // 否则「清单显示项目技能、读出来却是全局同名版本」。目录不存在时 ensure 返回空，
+    // 自然回落到全局注册表。
+    let skill: SkillDefinition | undefined;
+    const workspacePath: string | undefined = session?.workspacePath;
+    if (workspacePath) {
+      const wsSkills = await this.ensureProjectSkills(workspacePath);
+      skill = wsSkills.find((s) => s.id === id);
+    }
+    if (!skill) skill = this.registry.get(id);
+
     if (skill) {
       // 对齐工具：插件关闭（当前会话岗位/智能体配置下未启用）或所属能力包
       // 本会话不可用（智能体禁用/子代理会话等）→ 该技能等同于不存在
       if (!this.isSkillVisibleInSession(skill, session)) return null;
+      // 项目级禁用：清单里已被过滤掉，学习入口也必须一致拒绝，
+      // 否则「列表看不到但技能名可学」会成为绕过开关的后门。
+      if (workspacePath && this.toggleConfig.isProjectDisabled(workspacePath, skill.id)) {
+        return null;
+      }
       return this.loadRealSkill(skill);
     }
 
@@ -348,15 +516,33 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 重新加载指定 Skill
+   * 重新加载指定 Skill（项目技能时按项目来源解析，不误碰全局同名版本）
    */
-  async reloadSkill(skillId: string): Promise<SkillDefinition> {
-    const skill = this.registry.get(skillId);
+  async reloadSkill(
+    skillId: string,
+    workspacePath?: string,
+  ): Promise<SkillDefinition> {
+    const skill = workspacePath
+      ? this.resolveEffectiveSkill(skillId, workspacePath, false)
+      : this.registry.get(skillId) || null;
     if (!skill) {
       throw new Error(`Skill ${skillId} not found`);
     }
 
     const updatedSkill = await this.loader.reloadManifest(skill);
+
+    // 项目技能不在注册表里：回写来源缓存即可（无版本记录，跳过 versionManager）
+    if (skill.source === "workspace" && workspacePath) {
+      this.sourceManager.replaceSourceSkill(
+        this.sourceManager.findWorkspaceSourceKey(
+          normalizeWorkspaceKey(workspacePath),
+        ),
+        updatedSkill,
+      );
+      this.logger.log(`Reloaded project skill: ${skillId}`);
+      return updatedSkill;
+    }
+
     this.registry.update(updatedSkill);
 
     if (updatedSkill.manifest.version) {

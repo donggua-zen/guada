@@ -105,6 +105,9 @@ function move(step: number) {
     padding: 2px;
     border-radius: 8px;
     background-color: var(--gd-color-sidebar-bg-active);
+    /* 工具栏变窄时优先让下拉/搜索收缩，切换条保持原宽：
+       否则按钮被压缩成每行一个字（中文逐字换行） */
+    flex: 0 0 auto;
     /* 与列表行图标对位：行有 -mx-2 + px-2，切换条同样左移 8px 再补回 8px 内边距 */
     /* margin-left: -8px; */
 }
@@ -139,6 +142,9 @@ function move(step: number) {
     line-height: 18px;
     color: var(--gd-color-text-gray);
     transition: color 0.15s;
+    /* 中文标签被压窄时会逐字换行；切换条整体不收缩，这里再兜一层 */
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .plugins-view-switch__item:hover {
@@ -161,6 +167,8 @@ function move(step: number) {
     gap: 12px;
     min-height: 40px;
     margin-bottom: 8px;
+    /* 窄屏时不把切换条压到逐字换行：整条工具栏换行，右侧动作落到下一行 */
+    flex-wrap: wrap;
 }
 
 .plugins-view-bar__left {
@@ -168,6 +176,9 @@ function move(step: number) {
     align-items: center;
     gap: 8px;
     min-width: 0;
+    flex-wrap: wrap;
+    /* 视图切换 + 项目下拉是一组，作为整体优先保留 */
+    flex: 1 1 auto;
 }
 
 .plugins-view-bar__right {
@@ -175,6 +186,7 @@ function move(step: number) {
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+    margin-left: auto;
 }
 
 .plugins-view-info {
