@@ -55,18 +55,13 @@
     </div>
 
     <!-- ============================================ -->
-    <!-- 事件类消息（role='event'：command/compaction 等），位置=消息顺序 -->
-    <!-- ============================================ -->
-    <template v-for="evt in events" :key="evt.messageId">
-      <EventCard class="mt-1" :event="evt" />
-    </template>
-
-    <!-- ============================================ -->
     <!-- Assistant 部分（有可渲染内容时） -->
     <!-- ============================================ -->
     <template v-if="hasAssistantDisplay">
       <div class="assistant-section">
-        <div class="text-xs text-gray-400 mb-3">
+        <!-- 表头：只有存在非事件内容时才出现。纯事件回合（如维护性压缩、通知头回合）
+             不该凭空多出一个空的助手头像行。 -->
+        <div v-if="hasAssistantContent" class="text-xs text-gray-400 mb-3">
           <div class="flex items-center">
             <div class="mr-5 flex items-center">
               <Avatar class="w-6 h-6 mr-2.5 relative top-0" :src="agentAvatar || modelAvatarPath" :round="false"
@@ -77,11 +72,13 @@
                 currentModelName }}</span>
             </div>
           </div>
-        </div>
-        <div class="message-item__card">
-          <!-- 展示分组：content / think / tool -->
+        </div>        <div class="message-item__card">
+          <!-- 展示分组：content / think / tool / 事件卡（顺序 = 消息顺序） -->
           <template v-for="(group, groupIndex) in displayGroups" :key="group.id">
-            <template v-if="group.type === 'content'">
+            <!-- 事件卡：压缩/上下文提示/截图裁剪/作业完成通知，落在它真实发生的那一步。
+                 分组规则见 doGrouping：事件卡独立成组、不可折叠、无标题行。 -->
+            <EventCard v-if="isEventGroup(group)" class="mt-1" :event="group.items[0].event" />
+            <template v-else-if="group.type === 'content'">
               <template v-for="item in group.items" :key="item.id">
                 <MarkdownContent class="message-item__text markdown-text" :content="item.content || ''"
           :streaming="streamingState.isStreaming" :session-id="sessionId"
@@ -233,8 +230,8 @@ import { FileItem, Avatar } from "../ui";
 import { formatTime } from '../../utils';
 import { toResourceUrl } from '../../utils/url';
 import { isVisionImageMediaType } from '@/utils/media-type';
-import { groupContentsForDisplay, hasVisibleText, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
-import type { Turn, MessageContent, TurnContent, FileAttachment } from '@/types/message';
+import { groupContentsForDisplay, hasVisibleText, isEventBlock, type DisplayGroup, type DisplayItem, toUserMessageView, collectReferencedKbs } from '@/utils/messageUtils';
+import type { Turn, TurnContent, FileAttachment } from '@/types/message';
 import { getToolConfig, getToolIcon, resolveToolName as _resolveToolName, getArgsText, getArgsDisplay, hasToolAggregate, type ToolCall } from '@/utils/toolDisplay';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
@@ -313,14 +310,6 @@ const isCoordinatorTurn = computed(() => isCoordinatorMessage(user.value));
 /** 协调者回合的标题文案 */
 const coordinatorLabel = computed(() => t('chat.turn.coordinatorGuidance', '主代理补充指令'));
 
-/** 回合内事件束：event 角色消息 + 工具边界注入的作业完成通知（role='user'，非回合头）。
- *  排除 user 头（通知头回合的 user 就是通知本身，已由 isNotificationTurn 分支渲染，避免双重）。 */
-const events = computed(
-  () =>
-    props.turn.messages?.filter(
-      (m) => m.role === 'event' || (m !== user.value && isInTurnJobNoticeBundle(m)),
-    ) ?? [],
-);
 /**
  * 被 Core Stream Recovery 丢弃的 attempt：只进审计/日志，不进展示流。
  * 实时路径由 finish(stream_recovery_discarded) 打标，历史路径读 assistant metadata。
@@ -333,7 +322,14 @@ const isDiscardedBundle = (m: {
   m.metadata?.streamRecoveryDiscarded === true;
 const activeBlocks = computed(() => {
   const msgs = props.turn.messages?.filter(
-    (m) => m.role !== 'user' && m.role !== 'event' && !isDiscardedBundle(m),
+    // 事件束不再从块流里剔除：它带着 role/source 戳记的块会按原顺序进入块流，
+    // 由 flattenSingleContent 识别成 event 项，位置即消息顺序（渲染见 EventCard 分支）。
+    // 作业完成通知的角色是 'user'（source.kind ∈ sub_agent/process_monitor），
+    // 同样放行；user 锚点本身排除，它在用户气泡区渲染（通知头回合也不重复画）。
+    (m) =>
+      m !== user.value &&
+      (m.role !== 'user' || isInTurnJobNoticeBundle(m)) &&
+      !isDiscardedBundle(m),
   ) ?? [];
   // 引用收集（flatMap 不复制块），供 displayGroups/useFileChanges 等按块消费的派生层
   return msgs.flatMap((m) => m.blocks);
@@ -475,19 +471,22 @@ const formatAggregateText = (template: string | undefined, n: number): string | 
 // 展示计算
 // ============================================
 /**
- * 当前回合的全部展示块（assistant + tool 块）。
+ * 当前回合的全部展示块（assistant + tool + 事件卡块）。
  * 二级结构天然平铺：事件折叠直接产出块，无需再"合并消息 contents → 拆回扁平块"。
+ * 类型保持 TurnContent（不擦窄成基类）：块上的 role/source 戳记是事件卡判定的依据。
  */
-const activeContents = computed<MessageContent[]>(() =>
+const activeContents = computed<TurnContent[]>(() =>
   (activeBlocks.value ?? []).filter((c) => c != null),
 );
 
 /**
  * 编辑/复制锚点块：取最后一条带文本内容的 assistant 块（编辑消息文本语义 = 最终回答块）；
  * 无文本块（纯工具回合）回退到最后一个展示块。
+ * 事件卡块排除在外：压缩摘要卡的正文是摘要、通知块的正文是 <system_reminder> 原文，
+ * 都不该成为"重新生成/编辑"的锚点。
  */
 const activeBlock = computed<TurnContent | null>(() => {
-  const list = activeBlocks.value;
+  const list = activeBlocks.value.filter((b) => !isEventBlock(b));
   if (list.length === 0) return null;
   for (let i = list.length - 1; i >= 0; i--) {
     const b = list[i];
@@ -500,12 +499,22 @@ const displayGroups = computed<DisplayGroup[]>(() => {
   return groupContentsForDisplay(activeContents.value);
 });
 
+/** 事件卡分组（组内唯一项为 type='event'）：单独渲染，不进过程组 */
+const isEventGroup = (group: DisplayGroup): boolean =>
+  group.items.length === 1 && group.items[0].type === 'event';
+
+/** 是否存在非事件的展示内容（决定助手表头/文件条是否出场） */
+const hasAssistantContent = computed(() =>
+  displayGroups.value.some((g) => !isEventGroup(g)),
+);
+
 /**
  * assistant 区是否有可渲染内容。
  *
  * 用分组结果而不是 activeBlocks.length 判定：上游会在正文前注入只含空格的
  * message item（GPT6 每轮都有），它会被 flattenSingleContent 过滤掉、不产生任何
  * 分组；若仍按块数开门，就会留下一个只有头像和空卡片的 assistant 区。
+ * 事件卡也算内容（回合可能只有一张压缩卡）；表头另由 hasAssistantContent 决定。
  */
 const hasAssistantDisplay = computed(() => displayGroups.value.length > 0);
 
@@ -536,17 +545,27 @@ const openFilePreview = (entry: FileChangeEntry) => {
 // 流式贴底由外层 ScrollContainer/useScrollAnchor 的 ResizeObserver 负责（高度信号）；
 // 本组件内容区没有独立滚动盒（max-height 已取消），不再本地 follow。
 
+// 流式过程中最后一个可折叠分组的下标（该组默认展开）。
+//
+// 不能用 length - 1：事件卡也成组（不可折叠的独立项），流尾部来一张通知卡会把
+// "正在跑的那一组"错判成不是最后一组，导致它瞬间塌成收起态。
+const lastCollapsibleGroupIndex = computed(() => {
+  const groups = displayGroups.value;
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i].isCollapsible) return i;
+  }
+  return -1;
+});
+
 // 流式过程中最后一组是否为进行中的过程分组（该组默认展开）
 const hasActiveGroup = computed(() => {
   if (!streamingState.value.isStreaming) return false;
-  const groups = displayGroups.value;
-  if (groups.length === 0) return false;
-  return groups[groups.length - 1].type === 'process';
+  return lastCollapsibleGroupIndex.value >= 0;
 });
 
 // 判断当前 group 是否为流式过程中的进行中分组
 const isLastActive = (groupIndex: number): boolean => {
-  return hasActiveGroup.value && groupIndex === displayGroups.value.length - 1;
+  return hasActiveGroup.value && groupIndex === lastCollapsibleGroupIndex.value;
 };
 
 /**
@@ -898,7 +917,8 @@ const modelAvatarPath = computed(() => {
 });
 
 const assistantTime = computed(() => {
-  const cache = activeContents.value;
+  // 事件卡块不参与：回合首个块若是压缩卡/通知，时间会被它带偏
+  const cache = activeContents.value.filter((c) => !isEventBlock(c));
   if (cache.length === 0) {
     return { firendly: '', full: '' };
   }

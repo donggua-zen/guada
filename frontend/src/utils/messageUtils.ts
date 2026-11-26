@@ -3,8 +3,9 @@
  */
 
 // 统一复用 types/message 的消息/内容/附件类型（避免两套 Message 类型冲突）
-import type { MessageContent, FileAttachment, MessageBundle, ToolCallResponseEntry } from "@/types/message";
+import type { MessageContent, FileAttachment, MessageBundle, ToolCallResponseEntry, StampedBlock } from "@/types/message";
 import { isStandaloneTool, type ToolCall } from "./toolDisplay";
+import { isInTurnJobNoticeBundle } from "./jobNotice";
 import { perfStart } from "./perf";
 export type { Message, MessageContent, FileAttachment, MessageBundle } from "@/types/message";
 
@@ -92,8 +93,11 @@ export type DisplayGroupType = "content" | "process";
 /**
  * 展示项类型
  * 将大 content 拆分为独立的展示单元
+ *
+ * 'event' 代表**一整条事件卡**（压缩卡 / 上下文提示 / 截图裁剪 / 作业完成通知）：
+ * 它不拆 think/content/tool，直接由 EventCard 读整条消息束渲染。
  */
-export type DisplayItemType = "content" | "think" | "tool";
+export type DisplayItemType = "content" | "think" | "tool" | "event";
 
 /**
  * 展示项接口
@@ -110,7 +114,9 @@ export interface DisplayItem {
   // metadata.toolCallsResponse 同构，条目契约见 ToolCallEntry/ToolCallResponseEntry）
   toolCalls?: ToolCall[];
   toolResponses?: ToolCallResponseEntry[];
-  // 引用原始 MessageContent，用于获取状态等元数据
+  /** event 类型的事件束（EventCard 的数据源） */
+  event?: MessageBundle;
+  // 引用原始 MessageContent，用于获取状态等元数据（event 项为事件束首块）
   source: MessageContent;
 }
 
@@ -156,9 +162,72 @@ export function hasVisibleText(text?: string | null): boolean {
 }
 
 /**
- * 将单个大 content 拆分为 DisplayItem 列表
+ * 块上的消息级戳记 —— 类型定义在 types/message（StampedBlock），此处转出供展示层引用。
+ * 展示派生只需要"有则用"，不对块做强转。
  */
-function flattenSingleContent(content: MessageContent): DisplayItem[] {
+export type { StampedBlock } from "@/types/message";
+
+/**
+ * 该块是否属于"回合中段事件卡"。
+ *
+ * 判定只看块上的戳记（转换层对每条消息的每个块都写 role/source，见
+ * services/modules/message.api.ts 的 messageToTurnContent）：
+ * - role='event'：折叠器合成的事件束（压缩卡/上下文提示/截图裁剪/上下文窗口提示）
+ * - source.kind ∈ {sub_agent, process_monitor}：工具边界注入的作业完成通知
+ *   （角色仍是 'user'，靠 source.kind 与人类输入区分，词表见 utils/jobNotice）
+ *
+ * isInTurnJobNoticeBundle 需要 role + source + metadata，这里用块级戳记拼出同形状，
+ * 保持"通知判定唯一真相"不出现第二份词表。
+ */
+export function isEventBlock(content: StampedBlock): boolean {
+  if (content.role === "event") return true;
+  return isInTurnJobNoticeBundle({
+    role: content.role,
+    source: content.source ?? null,
+    metadata: content.metadata ?? null,
+  });
+}
+
+/**
+ * 事件块 → EventCard 消费的消息束形状。
+ * EventCard 读 bundle 的 metadata（eventType/compressing/compactInfo/contextNotice…）
+ * 与 blocks（展开后的正文）；事件块与其实所属束在这些字段上等价，故就地组一个单块束。
+ */
+function toEventBundle(content: StampedBlock): MessageBundle {
+  const messageId = content.messageId ?? content.id;
+  const role = content.role ?? "event";
+  return {
+    messageId,
+    role,
+    ...(content.source ? { source: content.source } : {}),
+    metadata: content.metadata ?? {},
+    // MessageBundle.blocks 的契约是 TurnContent（戳记必填）。展示层拿到的块可能缺戳记
+    // （历史数据/外部导入），这里按块自身 id 与事件角色补齐——值是确定的，不是断言。
+    blocks: [{ ...content, role, messageId }],
+  };
+}
+
+/**
+ * 将单个大 content 拆分为 DisplayItem 列表
+ *
+ * 事件卡（压缩/上下文提示/截图裁剪/作业完成通知）整条对应一个 event 项，不拆
+ * think/content/tool：它的块级 metadata 里是卡片字段（eventType/compactInfo…），
+ * 正文虽在 content 上（压缩摘要在 content、其余为空），但由 EventCard 读整束渲染，
+ * 走块路径会被当成普通正文再画一遍。
+ */
+export function flattenSingleContent(content: StampedBlock): DisplayItem[] {
+  // 事件卡：识别依赖块上的 role/source 戳记（折叠器/转换层对每条消息的每个块都打了）
+  if (isEventBlock(content)) {
+    return [
+      {
+        id: `${content.id}-event`,
+        type: "event",
+        event: toEventBundle(content),
+        source: content,
+      },
+    ];
+  }
+
   const items: DisplayItem[] = [];
 
   // 1. think
@@ -201,7 +270,7 @@ function flattenSingleContent(content: MessageContent): DisplayItem[] {
 /**
  * 将大 content 列表拆分为扁平化的 DisplayItem 列表（全量计算）
  */
-function flattenContents(contents: MessageContent[]): DisplayItem[] {
+function flattenContents(contents: StampedBlock[]): DisplayItem[] {
   const items: DisplayItem[] = [];
   for (const content of contents) {
     items.push(...flattenSingleContent(content));
@@ -212,8 +281,9 @@ function flattenContents(contents: MessageContent[]): DisplayItem[] {
 /**
  * 执行分组逻辑
  *
- * 分隔符有两类：content 与「独立渲染工具」（isStandaloneTool，如计划卡）。
- * 后者单独成组且不可折叠：正文就是用户要看的产物，折进过程标题后默认不可见。
+ * 分隔符有三类：content、「独立渲染工具」（isStandaloneTool，如计划卡）与事件卡。
+ * 后两者单独成组且不可折叠：独立渲染工具的正文就是用户要看的产物，事件卡则是
+ * 时间线上的一次记录——折进过程标题会把"第几步发生了什么"抹平。
  */
 function doGrouping(items: DisplayItem[]): DisplayGroup[] {
   const groups: DisplayGroup[] = [];
@@ -256,6 +326,19 @@ function doGrouping(items: DisplayItem[]): DisplayGroup[] {
       });
       continue;
     }
+    // 事件卡：切断前后过程分组，单独成组且不可折叠（无标题行、直接由 EventCard 渲染）。
+    // 位置 = 该事件块在消息流里的位置，与它真实发生的那一步对齐。
+    if (item.type === "event") {
+      flushProcess();
+      groups.push({
+        id: `event-${item.id}`,
+        type: "process",
+        items: [item],
+        isCollapsible: false,
+        isExpanded: true,
+      });
+      continue;
+    }
     currentProcess.push(item);
   }
 
@@ -266,23 +349,27 @@ function doGrouping(items: DisplayItem[]): DisplayGroup[] {
 /**
  * 将消息内容列表按展示规则分组
  *
- * 核心规则：分隔符 = content（小 content）与独立渲染工具（isStandaloneTool）
- * - 先把大 content 拆分为 think/content/tool 的 DisplayItem 列表
+ * 核心规则：分隔符 = content（小 content）、独立渲染工具（isStandaloneTool）
+ * 与事件卡
+ * - 先把大 content 拆分为 think/content/tool/event 的 DisplayItem 列表
  * - 以 content 为界，把 think/tool 分别归入前后的 process 组
  * - content 自身单独成组
  * - 连续多个 think/tool 聚合成一个 process 组（一律可折叠：默认收起，点标题展开）
  * - 独立渲染工具（plan 卡等）单独成组且不可折叠，直接渲染
+ * - 事件卡单独成组且不可折叠，位置 = 它在流里的位置
  *
  * 示例：
  *   单个大 content [think + content + tool] → 【process: think】→【content】→【process: tool】
  *   tool → submit_plan → tool → content
  *   分组：【process: tool】→【standalone: plan】→【process: tool】→【content】
+ *   tool → 事件卡 → tool
+ *   分组：【process: tool】→【event】→【process: tool】
  *
  * @param contents - 消息内容数组
  * @returns 展示分组数组
  */
 export function groupContentsForDisplay(
-  contents: MessageContent[],
+  contents: StampedBlock[],
 ): DisplayGroup[] {
   if (!contents || contents.length === 0) return [];
 

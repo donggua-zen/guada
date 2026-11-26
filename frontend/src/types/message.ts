@@ -198,11 +198,31 @@ export interface MessageBundle {
 }
 
 /**
+ * 回合内容块上的消息级戳记（可选形态）。
+ *
+ * 折叠器与转换层会给每个块写一次 role/messageId/source（见 TurnContent 的必填声明），
+ * 但块也可能来自不带戳记的来源（历史数据、外部导入、展示层的合成块）。展示层判定
+ * （事件卡识别等）只需要"有则用"，因此单独声明一个全部可选的形态，避免对它做强转。
+ */
+export interface StampedBlock extends MessageContent {
+    /** 协议角色（消息级戳记） */
+    role?: MessageRole
+    /** 后端消息 id（消息级戳记） */
+    messageId?: string
+    /** 消息内块序号（流式/折叠按 (messageId, blockIndex) 寻址） */
+    blockIndex?: number
+    /** 消息来源（消息级戳记） */
+    source?: { kind: string; [key: string]: unknown }
+    /** 逻辑归属（'user' 真实用户 / 'model' 模型工作流注入） */
+    kind?: 'user' | 'model'
+}
+
+/**
  * 回合内内容块。
  * role/messageId 为创建时一次性写入的不可变戳记（引用收集/展示过滤用，不参与流式更新）；
  * 消息级可变元数据（usage/source/kind/hidden）一律读所属 MessageBundle，不落在块上。
  */
-export interface TurnContent extends MessageContent {
+export interface TurnContent extends StampedBlock {
     /** 消息级戳记（折叠器创建块时从 bundle 写入一次，之后不变） */
     role: MessageRole
     messageId: string

@@ -327,3 +327,77 @@ describe("纯空白思考块", () => {
     expect(groups[0].items[0].type).toBe("think");
   });
 });
+
+/**
+ * 事件卡：位置 = 消息顺序。
+ *
+ * 事件块（压缩卡/上下文提示/截图裁剪/作业完成通知）不再被渲染层剔除，
+ * 而是作为独立分组留在块流里它原本的位置。折进过程组会把"第几步发生了什么"抹平，
+ * 所以它必须切断前后过程分组、单独成组、不可折叠。
+ *
+ * 判定依据是块上的 role/source 戳记（转换层对每条消息的每个块都写）：
+ * role='event' 或 source.kind ∈ {sub_agent, process_monitor}。
+ */
+describe("groupContentsForDisplay：事件卡原位分组", () => {
+  const eventBlock = (id: string, role = "event") =>
+    ({
+      id,
+      content: "",
+      state: { isStreaming: false },
+      metadata: { eventType: "compaction", compressing: true },
+      role,
+      messageId: `m-${id}`,
+    }) as unknown as MessageContent;
+
+  const toolB = (id: string, name: string): MessageContent => toolBlock(id, [name]);
+
+  it("事件卡夹在两组工具之间：顺序保持、事件组不可折叠", () => {
+    const groups = groupContentsForDisplay([
+      toolB("t1", "grep"),
+      eventBlock("e1"),
+      toolB("t2", "read"),
+    ]);
+
+    expect(groups).toHaveLength(3);
+    expect(groups[0].items[0].type).toBe("tool");
+    expect(groups[1].items[0].type).toBe("event");
+    expect(groups[1].isCollapsible).toBe(false);
+    expect(groups[2].items[0].type).toBe("tool");
+  });
+
+  it("事件卡内容不被拆成 content/think（由 EventCard 读整块渲染）", () => {
+    const withText = {
+      ...eventBlock("e2"),
+      content: "# 压缩摘要正文",
+    } as unknown as MessageContent;
+    const groups = groupContentsForDisplay([withText]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].items).toHaveLength(1);
+    expect(groups[0].items[0].type).toBe("event");
+    expect(groups[0].items[0].event?.metadata?.eventType).toBe("compaction");
+  });
+
+  it("作业完成通知块（role='user' + source.kind='sub_agent'）同样识别为事件", () => {
+    const notice = {
+      id: "n1",
+      content: "<system_reminder>Background job job-x finished.</system_reminder>",
+      state: { isStreaming: false },
+      metadata: {},
+      role: "user",
+      messageId: "m-n1",
+      source: { kind: "sub_agent", subSessionId: "s-child", jobId: "job-x" },
+    } as unknown as MessageContent;
+
+    const groups = groupContentsForDisplay([notice]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].items[0].type).toBe("event");
+    expect(groups[0].isCollapsible).toBe(false);
+  });
+
+  it("连续两张事件卡：各自独立成组，中间不产生空过程组", () => {
+    const groups = groupContentsForDisplay([eventBlock("e3"), eventBlock("e4")]);
+    expect(groups).toHaveLength(2);
+    expect(groups.every((g) => g.items[0].type === "event")).toBe(true);
+  });
+});

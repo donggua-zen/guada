@@ -894,6 +894,14 @@ export class JsonlMessageService implements IMessageStore {
           kind: message.kind,
           blocks: message.content,
           metadata: message.metadata,
+          // 显式来源（结构化入站消息）：工具边界注入的作业完成通知是 role='user' 但
+          // source.kind='sub_agent'/'process_monitor'，与 addUserMessage 的 options.source
+          // 同一契约（replayer 的 userMessageFromData 本就是 data.source ?? 推导）。
+          // 不写会让冷回放把通知退化成普通用户消息，前端识别不出 job-notice 卡。
+          // 真实用户（kind='user'）不写，避免每条输入多一个冗余字段。
+          ...(message.source && message.source.kind !== 'user'
+            ? { source: message.source }
+            : {}),
         },
       });
     }
@@ -1120,6 +1128,11 @@ export class JsonlMessageService implements IMessageStore {
               // P6：重建/导入路径同样输出原生 blocks（统一格式）
               blocks: message.content,
               metadata: message.metadata ?? {},
+              // 与 appendMessages 同一契约：显式来源（非人类输入）随事件落盘，
+              // 否则导入后的通知/注入消息在冷回放时丢失 source.kind，前端无法分流形态。
+              ...(message.source && message.source.kind !== 'user'
+                ? { source: message.source }
+                : {}),
             },
           });
         }
