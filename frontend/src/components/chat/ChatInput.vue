@@ -464,13 +464,6 @@ const inputContent = computed({
   set: (value) => emit('update:value', value)
 });
 
-// Tiptap 编辑器内容同步
-watch(editorContent, (val) => {
-  if (inputContent.value !== val) {
-    inputContent.value = val;
-  }
-});
-
 /**
  * 将纯文本中的 [/type:name ...] 标记转换为 HTML 标签
  * 供 Tiptap 解析为 Command 节点
@@ -506,6 +499,8 @@ watch(() => props.value, (val) => {
     const htmlContent = parseCommandTags(val).replace(/\n/g, '<br>');
     editor.value.commands.setContent(htmlContent, { emitUpdate: false });
   }
+  // 外部恢复草稿/清空正文不会触发 onUpdate，内部缓存也要同步。
+  editorContent.value = editor.value ? editor.value.getText() : val;
 });
 
 // 当前选中的模型
@@ -1600,7 +1595,12 @@ onMounted(() => {
         },
       },
       onUpdate: ({ editor: ed }) => {
-        editorContent.value = ed.getText();
+        const content = ed.getText();
+        editorContent.value = content;
+        // 每次文档更新直接同步父层，避免相同文本被 ref/watch 去重后漏写草稿。
+        if (inputContent.value !== content) {
+          inputContent.value = content;
+        }
         checkCommandTrigger();
         nextTick(() => {
           const pmEl = document.querySelector('.message-editor .ProseMirror') as HTMLElement | null;
