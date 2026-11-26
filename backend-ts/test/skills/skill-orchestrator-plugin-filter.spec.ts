@@ -52,7 +52,7 @@ describe("SkillOrchestrator plugin-enabled filtering", () => {
       {} as any,
       pluginManagerStub as any,
       {} as any,
-      { getProjectDisabledIds: () => new Set(), isProjectDisabled: () => false, getGlobalDisabledIds: () => new Set(), isGlobalDisabled: () => false } as any,
+      { getProjectOverrides: () => new Map(), getProjectOverride: () => undefined, getGlobalOverrides: () => new Map(), getGlobalOverride: () => undefined } as any,
     );
 
     registry.register(

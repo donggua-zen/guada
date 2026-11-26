@@ -42,7 +42,7 @@ describe("SkillOrchestrator", () => {
 
   beforeEach(() => {
     registry = new SkillRegistry();
-    orchestrator = new SkillOrchestrator(mockSourceManager, registry, mockLoader, mockVersionManager, mockPluginManager, mockToolkitCatalog, { getProjectDisabledIds: () => new Set(), isProjectDisabled: () => false, getGlobalDisabledIds: () => new Set(), isGlobalDisabled: () => false } as any);
+    orchestrator = new SkillOrchestrator(mockSourceManager, registry, mockLoader, mockVersionManager, mockPluginManager, mockToolkitCatalog, { getProjectOverrides: () => new Map(), getProjectOverride: () => undefined, getGlobalOverrides: () => new Map(), getGlobalOverride: () => undefined } as any);
     (mockPluginManager.isPluginEnabled as jest.Mock).mockReturnValue(true);
   });
 

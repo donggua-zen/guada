@@ -64,10 +64,10 @@ export interface Skill {
      */
     overridden?: boolean
     /**
-     * 被当前项目配置禁用（`<项目>/.guada/skills.yaml` 命中该 id）。
-     * 后端投影字段：注册表里的 `enabled` 仍是全局状态。
+     * 项目级覆盖投影：本项目显式指定了该技能的开关（`true`/`false`）。
+     * 无此字段 = 继承全局。后端投影字段，不改变全局状态。
      */
-    projectDisabled?: boolean
+    projectOverride?: boolean
 }
 
 /** 命令条目（/ 命令面板数据源；label 等自定义字段由各命令提供者附加） */

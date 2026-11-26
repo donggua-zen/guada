@@ -109,15 +109,15 @@
                 >
                     {{ chip.label }}
                 </button>
-                <!-- 项目视图：把「本项目已禁用」做成可点的筛选入口，便于核对与恢复 -->
+                <!-- 项目视图：把「本项目有显式覆盖」做成可点的筛选入口，便于核对与恢复继承 -->
                 <button
-                    v-if="projectDisabledCount > 0"
+                    v-if="projectOverrideCount > 0"
                     type="button"
                     class="plugins-chip plugins-filter-row__spacer"
-                    :class="{ 'is-active': labelFilter === 'project-disabled' }"
-                    @click="labelFilter = labelFilter === 'project-disabled' ? '' : 'project-disabled'"
+                    :class="{ 'is-active': labelFilter === 'project-override' }"
+                    @click="labelFilter = labelFilter === 'project-override' ? '' : 'project-override'"
                 >
-                    {{ t('plugins.skills.projectDisabledCount', { count: projectDisabledCount }) }}
+                    {{ t('plugins.skills.projectOverrideCount', { count: projectOverrideCount }) }}
                 </button>
             </div>
 
@@ -144,27 +144,22 @@
                         <!-- 作用域徽标与来源徽标相互独立：插件技能也会从全局继承，
                              若用 v-else-if 串联，「插件」会把「全局」挤掉 -->
                         <GdTag
-                            v-if="selectedProjectId && skill.source !== 'workspace'"
+                            v-if="selectedProjectId && skill.source !== 'workspace' && skill.projectOverride === undefined"
                             size="small"
                             type="info"
                             effect="plain"
                         >{{ t('plugins.skills.inheritedGlobal') }}</GdTag>
                         <GdTag v-if="skill.overridden" size="small" type="info" effect="plain">{{ t('plugins.skills.overriddenGlobal') }}</GdTag>
-                        <GdTag v-if="skill.projectDisabled" size="small" type="warning" effect="light">{{ t('plugins.skills.projectDisabledBadge') }}</GdTag>
+                        <!-- 项目显式覆盖：true = 本项目已启用（即使全局关闭），false = 本项目已禁用 -->
+                        <GdTag v-if="skill.projectOverride === true" size="small" type="success" effect="light">{{ t('plugins.skills.projectEnabledBadge') }}</GdTag>
+                        <GdTag v-else-if="skill.projectOverride === false" size="small" type="warning" effect="light">{{ t('plugins.skills.projectDisabledBadge') }}</GdTag>
                         <GdTag v-if="skill.origin?.source === 'skillhub'" size="small" type="info" effect="light">{{ t('plugins.skills.originSkillHub') }}</GdTag>
                         <GdTag v-if="skill.manifest.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</GdTag>
                     </template>
                     <template #actions>
                         <GdSwitch v-if="skill.provider" v-tooltip="t('plugins.skills.pluginManaged')" :model-value="skill.enabled !== false" disabled size="small" />
-                        <!-- 全局已禁用：项目内无法启用（项目配置只能收紧），开关置灰 -->
-                        <GdSwitch
-                            v-else-if="isLockedByGlobal(skill)"
-                            v-tooltip="t('plugins.skills.projectLockedByGlobal')"
-                            :model-value="false"
-                            disabled
-                            size="small"
-                        />
-                        <!-- 项目视图：开关写项目配置文件；全局视图：写全局启停 -->
+                        <!-- 项目视图：开关写项目覆盖（可双向，能打开全局已关闭的技能）；
+                             全局视图：写全局启停 -->
                         <GdSwitch
                             v-else
                             :model-value="skill.enabled !== false"
@@ -431,7 +426,7 @@ const skillhubKeyword = ref('')
 /** 已安装的来源筛选（'' = 全部）；与市场标签筛选各自独立 */
 const sourceFilter = ref('')
 /** 额外的标签筛选：'' = 无；'project-disabled' = 只看被本项目禁用的 */
-const labelFilter = ref<'' | 'project-disabled'>('')
+const labelFilter = ref<'' | 'project-override'>('')
 const marketRef = ref<InstanceType<typeof SkillMarket> | null>(null)
 const skillHubRef = ref<InstanceType<typeof SkillHubMarket> | null>(null)
 
@@ -454,14 +449,14 @@ const visibleSkills = computed<Skill[]>(() => {
     const bySource = sourceFilter.value
         ? (skillGroups.value.find(g => g.key === sourceFilter.value)?.items ?? [])
         : skills.value
-    if (labelFilter.value !== 'project-disabled') return bySource
-    return bySource.filter(s => s.projectDisabled === true)
+    if (labelFilter.value !== 'project-override') return bySource
+    return bySource.filter(s => s.projectOverride !== undefined)
 })
 
-/** 项目视图里「被本项目禁用」的数量（仅统计当前可见集合） */
-const projectDisabledCount = computed(() =>
+/** 项目视图里「被本项目显式覆盖」的数量（启用与禁用都算） */
+const projectOverrideCount = computed(() =>
     selectedProjectId.value
-        ? skills.value.filter(s => s.projectDisabled === true).length
+        ? skills.value.filter(s => s.projectOverride !== undefined).length
         : 0,
 )
 
@@ -698,33 +693,21 @@ async function loadSkills() {
 }
 
 /**
- * 全局已禁用的技能在项目视图里锁定（项目配置只能收紧，不能放宽）。
- *
- * 只在项目视图生效：全局视图下这个技能本来就该可以点开。
- */
-function isLockedByGlobal(skill: Skill): boolean {
-    return Boolean(selectedProjectId.value) && skill.enabled === false && !skill.projectDisabled
-}
-
-/**
  * 切换技能开关：按当前作用域分流。
  *
- * - 全局视图 → 写 `settings.plugins["skills.<id>"]`（影响所有项目）
- * - 项目视图 → 写 `<项目>/.guada/skills.yaml`（仅本项目）
- *
- * 项目视图下 `enabled=true` 的语义是「恢复继承全局状态」，不是「强制启用」。
+ * - 全局视图 → 写全局配置（影响所有项目）
+ * - 项目视图 → 写项目覆盖（仅本项目，可双向：能打开全局已关闭的技能）
  */
 async function handleToggleSkill(skillId: string, enabled: boolean) {
     const skill = skills.value.find(s => s.id === skillId)
     if (!skill) return
-    if (isLockedByGlobal(skill)) return
 
     const projectGroupId = selectedProjectId.value
     const previousState = skill.enabled
-    const previousProjectDisabled = skill.projectDisabled
-    // 乐观更新
+    const previousOverride = skill.projectOverride
+    // 乐观更新：项目视图下标记为显式覆盖
     skill.enabled = enabled
-    if (projectGroupId) skill.projectDisabled = !enabled
+    if (projectGroupId) skill.projectOverride = enabled
     updatingSkills.value.add(skillId)
 
     try {
@@ -738,7 +721,7 @@ async function handleToggleSkill(skillId: string, enabled: boolean) {
     } catch (err) {
         // 失败回滚
         skill.enabled = previousState
-        skill.projectDisabled = previousProjectDisabled
+        skill.projectOverride = previousOverride
         console.error('切换技能状态失败:', err)
         toast.error(
             getErrorMessage(err) ||

@@ -76,22 +76,25 @@ function makeOrchestrator(
     ...loaderOverride,
   } as any;
 
-  // 项目级禁用：只在 PROJECT_PATH 生效，其他目录不受影响
-  const disabledSet = new Set(disabledIds.map((id) => id.toLowerCase()));
+  // 项目覆盖表：只在 PROJECT_PATH 生效，其他目录不受影响
+  const overrideMap = new Map(
+    disabledIds.map((id) => [id.toLowerCase(), false] as [string, boolean]),
+  );
   const projectConfig = {
-    getProjectDisabledIds: jest.fn((workspacePath?: string | null) =>
+    getProjectOverrides: jest.fn((workspacePath?: string | null) =>
       workspacePath && normalizeWorkspaceKey(workspacePath) === normalizeWorkspaceKey(PROJECT_PATH)
-        ? disabledSet
-        : new Set<string>(),
+        ? overrideMap
+        : new Map<string, boolean>(),
     ),
-    isProjectDisabled: jest.fn(
+    getProjectOverride: jest.fn(
       (workspacePath: string | null | undefined, skillId: string) =>
-        !!workspacePath &&
-        normalizeWorkspaceKey(workspacePath) === normalizeWorkspaceKey(PROJECT_PATH) &&
-        disabledSet.has(String(skillId).toLowerCase()),
+        workspacePath &&
+        normalizeWorkspaceKey(workspacePath) === normalizeWorkspaceKey(PROJECT_PATH)
+          ? overrideMap.get(String(skillId).toLowerCase())
+          : undefined,
     ),
-    getGlobalDisabledIds: jest.fn(() => new Set<string>()),
-    isGlobalDisabled: jest.fn(() => false),
+    getGlobalOverrides: jest.fn(() => new Map<string, boolean>()),
+    getGlobalOverride: jest.fn(() => undefined),
   } as any;
 
   const orchestrator = new SkillOrchestrator(
@@ -282,7 +285,7 @@ describe("SkillOrchestrator 项目作用域", () => {
  * - 学习入口与清单必须同口径，否则会出现"列表看不到但技能名可学"的后门。
  */
 describe("SkillOrchestrator 项目级开关", () => {
-  it("列出被项目禁用的技能：enabled=false 且打 projectDisabled", () => {
+  it("列出被项目关闭的技能：enabled=false 且打 projectOverride=false", () => {
     const { orchestrator } = makeOrchestrator(
       [makeSkill("global-a"), makeSkill("global-b")],
       [],
@@ -294,13 +297,13 @@ describe("SkillOrchestrator 项目级开关", () => {
     const byId = new Map(skills.map((s) => [s.id, s]));
 
     expect(byId.get("global-a")?.enabled).toBe(false);
-    expect(byId.get("global-a")?.projectDisabled).toBe(true);
-    // 未被禁用的不受影响
+    expect(byId.get("global-a")?.projectOverride).toBe(false);
+    // 未被覆盖的沿用全局
     expect(byId.get("global-b")?.enabled).toBe(true);
-    expect(byId.get("global-b")?.projectDisabled).toBeUndefined();
+    expect(byId.get("global-b")?.projectOverride).toBeUndefined();
   });
 
-  it("项目禁用只影响该项目：换一个目录仍可用", () => {
+  it("项目覆盖只影响该项目：换一个目录仍用全局状态", () => {
     const { orchestrator } = makeOrchestrator(
       [makeSkill("global-a")],
       [],
@@ -312,7 +315,7 @@ describe("SkillOrchestrator 项目级开关", () => {
     expect(orchestrator.listSkills(false, "/other/project")[0].enabled).toBe(true);
   });
 
-  it("filterEnabled=true（会话/prompt 口径）时被禁用技能直接消失", () => {
+  it("filterEnabled=true（会话/prompt 口径）时被关闭技能直接消失", () => {
     const { orchestrator } = makeOrchestrator(
       [makeSkill("global-a"), makeSkill("global-b")],
       [],
@@ -340,7 +343,7 @@ describe("SkillOrchestrator 项目级开关", () => {
     expect(orchestrator.listSkills(false)[0].enabled).toBe(true);
   });
 
-  it("项目自带技能也能被项目禁用（同 id 覆盖后判定）", () => {
+  it("项目自带技能也能被项目关闭（同 id 覆盖后判定）", () => {
     const { orchestrator } = makeOrchestrator(
       [],
       [makeSkill("project-only", { source: "workspace" })],
@@ -351,10 +354,10 @@ describe("SkillOrchestrator 项目级开关", () => {
     const skill = orchestrator.listManageableSkillsForProject(PROJECT_PATH, false)[0];
 
     expect(skill.enabled).toBe(false);
-    expect(skill.projectDisabled).toBe(true);
+    expect(skill.projectOverride).toBe(false);
   });
 
-  it("skillLearn：被项目禁用的技能等同不存在（关闭后门）", async () => {
+  it("skillLearn：被项目关闭的技能等同不存在（关闭后门）", async () => {
     const { orchestrator } = makeOrchestrator(
       [makeSkill("global-a")],
       [],
@@ -373,7 +376,7 @@ describe("SkillOrchestrator 项目级开关", () => {
     expect(other?.content).toBe("content:global-a@global");
   });
 
-  it("skillLearn：无项目上下文（管理页/命令面板）不受项目禁用影响", async () => {
+  it("skillLearn：无项目上下文（管理页/命令面板）不受项目覆盖影响", async () => {
     const { orchestrator } = makeOrchestrator(
       [makeSkill("global-a")],
       [],
@@ -385,51 +388,168 @@ describe("SkillOrchestrator 项目级开关", () => {
     expect(result?.content).toBe("content:global-a@global");
   });
 
-  it("resolveProjectEnabled：四种组合的可点性与实际状态", () => {
+  it("resolveSkillEnabled：四种组合的生效状态与来源", () => {
     const { orchestrator } = makeOrchestrator(
       [makeSkill("gl-on"), makeSkill("gl-off", { enabled: false })],
       [],
       {},
-      ["gl-on"],
+      [], // 项目不覆盖任何东西
     );
 
-    // 全局启用 + 项目未禁用 → 可用、可点
-    expect(orchestrator.resolveProjectEnabled("gl-on", "/other/project")).toEqual({
+    // 全局启用 + 无项目覆盖 → 可用，来源 global
+    expect(orchestrator.resolveSkillEnabled("gl-on", PROJECT_PATH)).toEqual({
       enabled: true,
-      lockedByGlobal: false,
-      projectDisabled: false,
+      source: "global",
     });
 
-    // 全局启用 + 项目禁用 → 不可用，但仍可点（点=取消禁用）
-    expect(orchestrator.resolveProjectEnabled("gl-on", PROJECT_PATH)).toEqual({
+    // 全局禁用 + 无项目覆盖 → 不可用，来源 global
+    expect(orchestrator.resolveSkillEnabled("gl-off", PROJECT_PATH)).toEqual({
       enabled: false,
-      lockedByGlobal: false,
-      projectDisabled: true,
-    });
-
-    // 全局禁用 + 项目未列出 → 不可用，锁定（项目无法放宽）
-    expect(orchestrator.resolveProjectEnabled("gl-off", PROJECT_PATH)).toEqual({
-      enabled: false,
-      lockedByGlobal: true,
-      projectDisabled: false,
-    });
-
-    // 全局禁用 + 项目也列出 → 仍不可用且锁定
-    expect(orchestrator.resolveProjectEnabled("gl-off", PROJECT_PATH)).toMatchObject({
-      enabled: false,
-      lockedByGlobal: true,
+      source: "global",
     });
   });
 
-  it("全局已禁用的技能不会被项目配置重新启用", () => {
+  it("项目覆盖为 true 时来源为 project，且能打开全局已禁用的技能", () => {
+    const { orchestrator, projectConfig } = makeOrchestrator(
+      [makeSkill("gl-off", { enabled: false })],
+      [],
+      {},
+      [],
+    );
+    // 动态写入项目覆盖 true
+    (projectConfig.getProjectOverride as jest.Mock).mockImplementation(
+      (ws: string | null | undefined, id: string) =>
+        ws && normalizeWorkspaceKey(ws) === normalizeWorkspaceKey(PROJECT_PATH) && id === "gl-off"
+          ? true
+          : undefined,
+    );
+    (projectConfig.getProjectOverrides as jest.Mock).mockImplementation(
+      (ws?: string | null) =>
+        ws && normalizeWorkspaceKey(ws) === normalizeWorkspaceKey(PROJECT_PATH)
+          ? new Map([["gl-off", true]])
+          : new Map<string, boolean>(),
+    );
+
+    expect(orchestrator.resolveSkillEnabled("gl-off", PROJECT_PATH)).toEqual({
+      enabled: true,
+      source: "project",
+      projectOverride: true,
+    });
+  });
+
+  it("全局已禁用的技能不会被项目「未覆盖」重新启用", () => {
     const { orchestrator } = makeOrchestrator(
       [makeSkill("gl-off", { enabled: false })],
       [],
       {},
-      [], // 项目未列出它
+      [], // 项目未覆盖
     );
 
     const skills = orchestrator.listSkills(false, PROJECT_PATH);
     expect(skills.find((s) => s.id === "gl-off")?.enabled).toBe(false);
+  });
+});
+
+/**
+ * 核心新能力：项目可以**打开**全局已关闭的技能。
+ *
+ * 这是「只允许收窄」放开后的主场景——覆盖表能表达 true，
+ * 因此清单、会话 prompt 与 skill_learn 三处必须同时放开。
+ */
+describe("SkillOrchestrator 项目可启用全局已关闭的技能", () => {
+  /** 造一个「全局关闭 + 项目覆盖 true」的环境 */
+  function makeEnabledInProject() {
+    const created = makeOrchestrator(
+      [makeSkill("gl-off", { enabled: false }), makeSkill("gl-on")],
+      [],
+      {},
+      [],
+    );
+    const { projectConfig } = created;
+    const map = new Map<string, boolean>([["gl-off", true]]);
+    (projectConfig.getProjectOverride as jest.Mock).mockImplementation(
+      (ws: string | null | undefined, id: string) =>
+        ws && normalizeWorkspaceKey(ws) === normalizeWorkspaceKey(PROJECT_PATH)
+          ? map.get(id)
+          : undefined,
+    );
+    (projectConfig.getProjectOverrides as jest.Mock).mockImplementation(
+      (ws?: string | null) =>
+        ws && normalizeWorkspaceKey(ws) === normalizeWorkspaceKey(PROJECT_PATH)
+          ? map
+          : new Map<string, boolean>(),
+    );
+    return created;
+  }
+
+  it("listSkills(true)：全局关闭的技能在该项目清单中出现", () => {
+    const { orchestrator } = makeEnabledInProject();
+
+    const ids = orchestrator.listSkills(true, PROJECT_PATH).map((s) => s.id);
+
+    expect(ids).toContain("gl-off");
+    expect(ids).toContain("gl-on");
+  });
+
+  it("投影：enabled=true 且 projectOverride=true", () => {
+    const { orchestrator } = makeEnabledInProject();
+
+    const skill = orchestrator
+      .listSkills(false, PROJECT_PATH)
+      .find((s) => s.id === "gl-off");
+
+    expect(skill?.enabled).toBe(true);
+    expect(skill?.projectOverride).toBe(true);
+  });
+
+  it("管理页口径（listManageableSkillsForProject）同样可见", () => {
+    const { orchestrator } = makeEnabledInProject();
+
+    const ids = orchestrator
+      .listManageableSkillsForProject(PROJECT_PATH, false)
+      .map((s) => s.id);
+
+    expect(ids).toContain("gl-off");
+  });
+
+  it("skillLearn：可以在该项目学习全局已关闭的技能", async () => {
+    const { orchestrator } = makeEnabledInProject();
+
+    const result = await orchestrator.skillLearn("gl-off", {
+      workspacePath: PROJECT_PATH,
+    });
+
+    expect(result?.content).toBe("content:gl-off@global");
+  });
+
+  it("其他项目仍不可用，全局视图也不受影响", () => {
+    const { orchestrator, registry } = makeEnabledInProject();
+
+    // 其他项目：继承全局 → 关闭
+    expect(
+      orchestrator.listSkills(true, "/other/project").map((s) => s.id),
+    ).not.toContain("gl-off");
+    // 全局视图：仍关闭
+    expect(orchestrator.listSkills(true).map((s) => s.id)).not.toContain("gl-off");
+    // 注册表未被写出
+    expect(registry.get("gl-off")?.enabled).toBe(false);
+  });
+
+  it("skillLearn：全局禁用且项目无覆盖 → 拒绝（清单与学习同口径）", async () => {
+    const { orchestrator } = makeOrchestrator(
+      [makeSkill("gl-off", { enabled: false })],
+      [],
+      {},
+      [],
+    );
+
+    // 这里验证的是顺带修掉的漏洞：以前全局禁用的技能仍能按名学习
+    const inProject = await orchestrator.skillLearn("gl-off", {
+      workspacePath: "/other/project",
+    });
+    const global = await orchestrator.skillLearn("gl-off");
+
+    expect(inProject).toBeNull();
+    expect(global).toBeNull();
   });
 });

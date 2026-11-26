@@ -144,13 +144,13 @@ export class SkillsController {
   }
 
   /**
-   * 技能开关配置（全局或项目，格式统一为 `skills.yaml` 的 `disabled` 列表）
+   * 技能开关配置（全局或项目，格式统一为 `skills.yaml` 的覆盖表）
    *
    * - `?projectGroupId=` 缺省 → 全局：`<SETTINGS_DIR>/skills.yaml`
    * - 带 `projectGroupId` → 项目：`<项目>/.guada/skills.yaml`
    *
    * 必须早于 `@Get(':id')`，否则会被当作 id="project-config" 的技能详情。
-   * 文件不存在时返回空列表（不代表出错——大多数项目不会配置这个文件）。
+   * 文件不存在时返回空覆盖表（不代表出错——大多数项目不会配置这个文件）。
    */
   @Get('project-config')
   async getSkillToggleConfig(
@@ -163,31 +163,27 @@ export class SkillsController {
   }
 
   /**
-   * 开关某技能的可用性（作用域由 `projectGroupId` 决定）。
+   * 设置某技能在该作用域的**期望状态**（作用域由 `projectGroupId` 决定）。
    *
-   * `disabled` 的语义只有「禁用 / 恢复默认」两种：
-   * - `true`  → 写入 `disabled` 列表（该作用域关掉它）
-   * - `false` → 从列表移除（回到默认启用 / 项目回到继承全局）
+   * - 全局：`enabled=true` 删除覆盖（默认态）；`false` 写显式 false
+   * - 项目：与全局状态相同 → 删除覆盖（回到继承）；不同 → 写显式覆盖
    *
-   * 这里**不需要**校验全局是否已禁用：项目侧用户点开关只可能是想把它从项目
-   * 列表里移除，那时移除是安全且正确的。「全局禁用无法在项目启用」是 UI 的
-   * 呈现约束（开关置灰），不是写接口的拒绝条件——写接口本来就没有「启用」
-   * 这个动作，格式上也无从表达。
+   * 项目可以**双向**覆盖全局：既能关掉全局已启用的技能，也能打开全局已禁用的。
    */
   @Put('project-config')
   async updateSkillToggleConfig(
     @Body() body: {
       projectGroupId?: string;
       skillId?: string;
-      disabled?: boolean;
+      enabled?: boolean;
     },
   ): Promise<SkillToggleConfig> {
     const skillId = String(body?.skillId || '').trim().toLowerCase();
     if (!skillId) {
       throw new BadRequestException('skillId is required');
     }
-    if (typeof body?.disabled !== 'boolean') {
-      throw new BadRequestException('disabled must be a boolean');
+    if (typeof body?.enabled !== 'boolean') {
+      throw new BadRequestException('enabled must be a boolean');
     }
 
     const projectPath = await this.resolveProjectPath(body?.projectGroupId);
@@ -200,9 +196,18 @@ export class SkillsController {
       throw new BadRequestException(`Skill '${skillId}' not found`);
     }
 
-    return projectPath
-      ? await this.toggleConfig.setProjectEnabled(projectPath, skillId, !body.disabled)
-      : await this.toggleConfig.setGlobalEnabled(skillId, !body.disabled);
+    if (!projectPath) {
+      return await this.toggleConfig.setGlobalEnabled(skillId, body.enabled);
+    }
+
+    // 项目作用域：与全局状态一致时不留覆盖，保持文件干净
+    const globalEnabled =
+      this.orchestrator.resolveSkillEnabled(skillId).enabled;
+    return await this.toggleConfig.setProjectOverride(
+      projectPath,
+      skillId,
+      body.enabled === globalEnabled ? undefined : body.enabled,
+    );
   }
 
   /**

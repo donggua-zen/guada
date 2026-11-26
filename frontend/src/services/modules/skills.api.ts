@@ -10,13 +10,16 @@ export interface FetchSkillsParams {
   projectGroupId?: string;
 }
 
-/** 技能开关配置（全局与项目统一格式：`skills.yaml` 的 `disabled` 列表） */
+/** 技能开关配置（全局与项目统一格式：`skills.yaml` 的覆盖表） */
 export interface SkillToggleConfig {
   /** 配置文件绝对路径 */
   file: string;
-  /** 在该作用域内被禁用的技能 id（已排序） */
-  disabled: string[];
-  /** 读取时发现的问题（前端提示用，不影响 disabled 生效） */
+  /**
+   * 该作用域的显式覆盖：`{ '<skill-id>': boolean }`。
+   * 键不存在 = 继承上层（全局的上层是「默认启用」）。
+   */
+  overrides: Record<string, boolean>;
+  /** 读取时发现的问题（前端提示用，不影响 overrides 生效） */
   warnings: string[];
 }
 
@@ -43,11 +46,12 @@ export interface SkillsApi {
   /** 读取技能开关配置（不带 projectGroupId 时为全局配置） */
   fetchSkillToggleConfig(projectGroupId?: string): Promise<SkillToggleConfig>;
   /**
-   * 设置某技能在指定作用域是否禁用。
+   * 设置某技能在指定作用域的期望状态。
    *
-   * `enabled=false` → 该作用域禁用；`enabled=true` → 从禁用列表移除
-   * （全局=默认启用；项目=恢复继承全局）。
-   * 没有「在项目内强制启用」——全局已禁用时无法通过项目配置打开。
+   * - 全局：`enabled=true` 删除覆盖（默认态）；`false` 写显式 false
+   * - 项目：与全局状态相同 → 删除覆盖（回到继承）；不同 → 写显式覆盖
+   *
+   * 项目可**双向**覆盖全局：既能关掉全局已启用的，也能打开全局已禁用的。
    */
   setSkillEnabled(
     skillId: string,
@@ -216,8 +220,7 @@ export const skillsApi: SkillsApi = {
       data: {
         ...(projectGroupId ? { projectGroupId } : {}),
         skillId,
-        // 接口用 disabled 表达：enabled=false → 禁用
-        disabled: !enabled,
+        enabled,
       },
     });
   },

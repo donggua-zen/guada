@@ -77,6 +77,27 @@ function createMockOrchestrator() {
         resolveWithScope(skillId, workspacePath),
       ),
 
+    /** 最终生效状态：项目覆盖 > 全局状态（无项目时只看全局） */
+    resolveSkillEnabled: jest.fn(
+      (skillId: string, workspacePath?: string) => {
+        const id = String(skillId).toLowerCase();
+        const projectOverride = workspacePath
+          ? (projectSkills.get(workspacePath) ?? []).some((s) => s.id === id)
+            ? // 项目技能存在即视为启用；这里只用于判定全局状态，简单处理
+              true
+            : undefined
+          : undefined;
+        if (projectOverride !== undefined) {
+          return { enabled: projectOverride, source: 'project', projectOverride };
+        }
+        const globalSkill = registry.get(id);
+        return {
+          enabled: globalSkill ? globalSkill.enabled !== false : true,
+          source: 'global' as const,
+        };
+      },
+    ),
+
     enableSkill: jest.fn().mockResolvedValue(undefined),
     disableSkill: jest.fn().mockResolvedValue(undefined),
     batchToggleSkills: jest.fn().mockResolvedValue(undefined),
@@ -112,60 +133,62 @@ function createMockProjectGroups(rows: Array<{ id: string; path: string }> = [])
 
 /** 项目级技能开关配置替身：内存态，行为与真实服务一致（读/写/清） */
 /**
- * 技能开关配置替身（全局与项目统一格式）。
+ * 技能开关配置替身（全局与项目统一覆盖表格式）。
  *
- * 行为与真实服务一致：读/写 disabled 集合，空集合时视图仍是空列表。
+ * 行为与真实服务一致：键存在即覆盖，键不存在即继承。
  */
 function createMockSkillToggleConfig() {
-  const globalSet = new Set<string>();
-  const byProject = new Map<string, Set<string>>();
-  const setFor = (projectPath: string) => {
-    if (!byProject.has(projectPath)) byProject.set(projectPath, new Set());
+  const globalMap = new Map<string, boolean>();
+  const byProject = new Map<string, Map<string, boolean>>();
+  const mapFor = (projectPath: string) => {
+    if (!byProject.has(projectPath)) byProject.set(projectPath, new Map());
     return byProject.get(projectPath)!;
   };
-  const view = (file: string, set: Set<string>) => ({
-    file,
-    disabled: Array.from(set).sort(),
-    warnings: [],
-  });
+  const view = (file: string, map: Map<string, boolean>) => {
+    const overrides: Record<string, boolean> = {};
+    for (const id of Array.from(map.keys()).sort()) overrides[id] = map.get(id) as boolean;
+    return { file, overrides, warnings: [] };
+  };
   const globalFile = () => "/global/skills.yaml";
+  const projectFile = (p: string) => path.join(p, ".guada", "skills.yaml");
 
   return {
     globalFilePath: jest.fn(() => globalFile()),
     projectFilePath: jest.fn((projectPath?: string | null) =>
-      projectPath ? path.join(projectPath, '.guada', 'skills.yaml') : null,
+      projectPath ? projectFile(projectPath) : null,
     ),
-    getGlobalDisabledIds: jest.fn(() => globalSet),
-    getProjectDisabledIds: jest.fn((projectPath?: string | null) =>
-      projectPath ? setFor(projectPath) : new Set<string>(),
+    getGlobalOverrides: jest.fn(() => globalMap),
+    getProjectOverrides: jest.fn((projectPath?: string | null) =>
+      projectPath ? mapFor(projectPath) : new Map<string, boolean>(),
     ),
-    isGlobalDisabled: jest.fn((skillId: string) =>
-      globalSet.has(String(skillId).toLowerCase()),
+    getGlobalOverride: jest.fn((skillId: string) =>
+      globalMap.get(String(skillId).toLowerCase()),
     ),
-    isProjectDisabled: jest.fn(
+    getProjectOverride: jest.fn(
       (projectPath: string | null | undefined, skillId: string) =>
-        !!projectPath && setFor(projectPath).has(String(skillId).toLowerCase()),
+        projectPath ? mapFor(projectPath).get(String(skillId).toLowerCase()) : undefined,
     ),
-    readGlobal: jest.fn(() => view(globalFile(), globalSet)),
+    readGlobal: jest.fn(() => view(globalFile(), globalMap)),
     readProject: jest.fn((projectPath: string) =>
-      view(path.join(projectPath, '.guada', 'skills.yaml'), setFor(projectPath)),
+      view(projectFile(projectPath), mapFor(projectPath)),
     ),
     setGlobalEnabled: jest.fn(async (skillId: string, enabled: boolean) => {
       const id = skillId.toLowerCase();
-      if (enabled) globalSet.delete(id);
-      else globalSet.add(id);
-      return view(globalFile(), globalSet);
+      // 与真实服务一致：启用=默认态 → 删除覆盖
+      if (enabled) globalMap.delete(id);
+      else globalMap.set(id, false);
+      return view(globalFile(), globalMap);
     }),
-    setProjectEnabled: jest.fn(
-      async (projectPath: string, skillId: string, enabled: boolean) => {
-        const set = setFor(projectPath);
+    setProjectOverride: jest.fn(
+      async (projectPath: string, skillId: string, value: boolean | undefined) => {
+        const map = mapFor(projectPath);
         const id = skillId.toLowerCase();
-        if (enabled) set.delete(id);
-        else set.add(id);
-        return view(path.join(projectPath, '.guada', 'skills.yaml'), set);
+        if (value === undefined) map.delete(id);
+        else map.set(id, value);
+        return view(projectFile(projectPath), map);
       },
     ),
-    _global: globalSet,
+    _global: globalMap,
     _projects: byProject,
   } as any;
 }
@@ -478,31 +501,31 @@ describe('SkillsController', () => {
       );
     }
 
-    it('GET：返回该项目的禁用列表与文件路径', async () => {
+    it('GET：返回该项目的覆盖表与文件路径', async () => {
       setupProject();
-      mockToggleConfig._projects.set(projectPath(), new Set(['global-skill']));
+      mockToggleConfig._projects.set(projectPath(), new Map([['global-skill', false]]));
 
       const res = await controller.getSkillToggleConfig(PROJECT_ID);
 
       expect(res.file).toBe(path.join(projectPath(), '.guada', 'skills.yaml'));
-      expect(res.disabled).toEqual(['global-skill']);
+      expect(res.overrides).toEqual({ 'global-skill': false });
     });
 
-    it('GET：文件不存在时返回空列表（不是错误）', async () => {
+    it('GET：文件不存在时返回空覆盖表（不是错误）', async () => {
       setupProject();
 
       const res = await controller.getSkillToggleConfig(PROJECT_ID);
 
-      expect(res.disabled).toEqual([]);
+      expect(res.overrides).toEqual({});
     });
 
     it('GET：无 projectGroupId → 返回全局配置（不再是错误）', async () => {
       setupProject();
-      mockToggleConfig._global.add('global-skill');
+      mockToggleConfig._global.set('global-skill', false);
 
       const res = await controller.getSkillToggleConfig();
 
-      expect(res.disabled).toEqual(['global-skill']);
+      expect(res.overrides).toEqual({ 'global-skill': false });
       expect(mockToggleConfig.readGlobal).toHaveBeenCalled();
     });
 
@@ -514,64 +537,72 @@ describe('SkillsController', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('PUT：禁用某技能后写入项目配置', async () => {
+    it('PUT：项目内关闭技能 → 写显式 false 覆盖', async () => {
       setupProject();
 
       const res = await controller.updateSkillToggleConfig({
         projectGroupId: PROJECT_ID,
         skillId: 'global-skill',
-        disabled: true,
+        enabled: false,
       });
 
-      expect(res.disabled).toEqual(['global-skill']);
-      expect(mockToggleConfig.setProjectEnabled).toHaveBeenCalledWith(
+      expect(res.overrides).toEqual({ 'global-skill': false });
+      expect(mockToggleConfig.setProjectOverride).toHaveBeenCalledWith(
         projectPath(),
         'global-skill',
         false,
       );
     });
 
-    it('PUT：无 projectGroupId → 写全局配置', async () => {
+    it('PUT：项目内启用全局已关闭的技能 → 写显式 true 覆盖', async () => {
+      setupProject();
+      // 全局关掉它
+      mockOrchestrator._registry.get('global-skill')!.enabled = false;
+
+      const res = await controller.updateSkillToggleConfig({
+        projectGroupId: PROJECT_ID,
+        skillId: 'global-skill',
+        enabled: true,
+      });
+
+      expect(res.overrides).toEqual({ 'global-skill': true });
+      expect(mockToggleConfig.setProjectOverride).toHaveBeenCalledWith(
+        projectPath(),
+        'global-skill',
+        true,
+      );
+    });
+
+    it('PUT：与全局状态相同 → 删除覆盖（保持文件干净）', async () => {
+      setupProject();
+      // 全局是启用（默认），项目也设成启用 → 不该留覆盖
+      await controller.updateSkillToggleConfig({
+        projectGroupId: PROJECT_ID,
+        skillId: 'global-skill',
+        enabled: true,
+      });
+
+      expect(mockToggleConfig.setProjectOverride).toHaveBeenCalledWith(
+        projectPath(),
+        'global-skill',
+        undefined,
+      );
+    });
+
+    it('PUT：无 projectGroupId → 写全局配置（启用即删键）', async () => {
       setupProject();
 
       const res = await controller.updateSkillToggleConfig({
         skillId: 'global-skill',
-        disabled: true,
+        enabled: false,
       });
 
-      expect(res.disabled).toEqual(['global-skill']);
+      expect(res.overrides).toEqual({ 'global-skill': false });
       expect(mockToggleConfig.setGlobalEnabled).toHaveBeenCalledWith(
         'global-skill',
         false,
       );
-      expect(mockToggleConfig.setProjectEnabled).not.toHaveBeenCalled();
-    });
-
-    it('PUT：取消禁用（恢复继承全局状态）', async () => {
-      setupProject();
-      mockToggleConfig._projects.set(projectPath(), new Set(['global-skill']));
-
-      const res = await controller.updateSkillToggleConfig({
-        projectGroupId: PROJECT_ID,
-        skillId: 'global-skill',
-        disabled: false,
-      });
-
-      expect(res.disabled).toEqual([]);
-    });
-
-    it('PUT：全局已禁用的技能，移除项目禁用项仍然允许（写接口没有"启用"动作）', async () => {
-      setupProject();
-      mockToggleConfig._projects.set(projectPath(), new Set(['global-skill']));
-
-      const res = await controller.updateSkillToggleConfig({
-        projectGroupId: PROJECT_ID,
-        skillId: 'global-skill',
-        disabled: false,
-      });
-
-      // 移除是安全动作：它只让技能回到"继承全局（已禁用）"，不会放宽权限
-      expect(res.disabled).toEqual([]);
+      expect(mockToggleConfig.setProjectOverride).not.toHaveBeenCalled();
     });
 
     it('PUT：未知技能 → 400，且不写文件', async () => {
@@ -581,25 +612,25 @@ describe('SkillsController', () => {
         controller.updateSkillToggleConfig({
           projectGroupId: PROJECT_ID,
           skillId: 'no-such-skill',
-          disabled: true,
+          enabled: false,
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(mockToggleConfig.setProjectEnabled).not.toHaveBeenCalled();
+      expect(mockToggleConfig.setProjectOverride).not.toHaveBeenCalled();
       expect(mockToggleConfig.setGlobalEnabled).not.toHaveBeenCalled();
     });
 
-    it('PUT：skillId 缺失或 disabled 非布尔 → 400', async () => {
+    it('PUT：skillId 缺失或 enabled 非布尔 → 400', async () => {
       setupProject();
 
       await expect(
-        controller.updateSkillToggleConfig({ projectGroupId: PROJECT_ID, disabled: true }),
+        controller.updateSkillToggleConfig({ projectGroupId: PROJECT_ID, enabled: false }),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       await expect(
         controller.updateSkillToggleConfig({
           projectGroupId: PROJECT_ID,
           skillId: 'global-skill',
-          disabled: 'yes' as any,
+          enabled: 'yes' as any,
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
@@ -610,10 +641,10 @@ describe('SkillsController', () => {
       await controller.updateSkillToggleConfig({
         projectGroupId: PROJECT_ID,
         skillId: 'Global-Skill',
-        disabled: true,
+        enabled: false,
       });
 
-      expect(mockToggleConfig.setProjectEnabled).toHaveBeenCalledWith(
+      expect(mockToggleConfig.setProjectOverride).toHaveBeenCalledWith(
         projectPath(),
         'global-skill',
         false,

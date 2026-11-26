@@ -101,7 +101,8 @@ export class SkillRegistry {
   private loadPersistedEnabled(skill: SkillDefinition): void {
     if (!this.toggleConfig) return;
     try {
-      if (this.toggleConfig.isGlobalDisabled(skill.id)) {
+      // 全局是顶层：显式 false 才关掉；true/未配置都保持默认启用
+      if (this.toggleConfig.getGlobalOverride(skill.id) === false) {
         skill.enabled = false;
       }
     } catch {

@@ -9,18 +9,22 @@
  * 两者格式完全一致，只有作用域不同：
  *
  * ```yaml
- * disabled:
- *   - some-skill
+ * skills:
+ *   browser-script: false   # 关掉
+ *   weread-skills: true     # 显式启用（项目可覆盖全局的 false）
  * ```
  *
  * 语义（见 docs/skills.md「技能开关」）：
- * - 只记录「被关掉」的技能 id，不在列表里 = 默认启用；
- * - 用**列表**而非 `id: false` 映射，从格式上就无法表达「启用」——
- *   这让「项目只能收紧不能放宽」成为结构上的保证，而不是靠代码约定；
- * - 空列表时删除文件（不留 `disabled: []` 噪音）。
+ * - **覆盖表**：键存在即覆盖上层状态；键不存在 = 继承上层；
+ * - 全局是顶层：继承落空时默认启用；
+ * - 项目可双向覆盖全局（既能关掉也能打开），优先级 项目 > 全局 > 默认启用；
+ * - 空表时删除文件（不留 `skills: {}` 噪音）。
  *
- * 迁移：旧版全局开关散落在 `plugins.json` 的 `skills.<id>` 键里（21 个左右
- * 的私有字段），启动时一次性搬到 `skills.yaml` 并从 plugins.json 移除。
+ * 兼容旧格式：解析同时接受 `disabled: [...]`（等价于 `skills: {id: false}`），
+ * 写入一律产出新格式——首次切换即完成该文件迁移。
+ *
+ * 历史：更早的全局开关散落在 `plugins.json` 的 `skills.<id>` 键里，
+ * 启动时一次性搬到 `skills.yaml` 并从 plugins.json 移除。
  *
  * 热路径：`listSkills()` 在 prompt 构建时同步读，故用 `statSync` + mtime/size
  * 缓存（照 policy-rules.service.ts 的做法），不挂 watcher。
@@ -47,21 +51,24 @@ const SKILL_ID_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
 export interface SkillToggleConfig {
   /** 配置文件绝对路径 */
   file: string;
-  /** 在该作用域内被禁用的技能 id（已排序） */
-  disabled: string[];
-  /** 读取时发现的问题（前端黄条提示；不影响 disabled 生效） */
+  /**
+   * 该作用域的显式覆盖：`{ '<skill-id>': boolean }`。
+   * 键不存在 = 继承上层（全局的上层是「默认启用」）。
+   */
+  overrides: Record<string, boolean>;
+  /** 读取时发现的问题（前端黄条提示；不影响 overrides 生效） */
   warnings: string[];
 }
+
+type OverrideMap = ReadonlyMap<string, boolean>;
 
 interface CacheEntry {
   mtimeMs: number;
   size: number;
-  disabled: ReadonlySet<string>;
+  overrides: OverrideMap;
 }
 
-const EMPTY_SET: ReadonlySet<string> = Object.freeze(
-  new Set<string>(),
-) as ReadonlySet<string>;
+const EMPTY_MAP: OverrideMap = Object.freeze(new Map<string, boolean>()) as OverrideMap;
 
 @Injectable()
 export class SkillToggleConfigService implements OnModuleInit {
@@ -106,38 +113,43 @@ export class SkillToggleConfigService implements OnModuleInit {
 
   // ─────────────────────────── 读取 ───────────────────────────
 
-  /** 热路径：同步取全局被禁用的技能 id */
-  getGlobalDisabledIds(): ReadonlySet<string> {
-    return this.readDisabledSync(this.globalFilePath());
+  /** 热路径：同步取全局覆盖表 */
+  getGlobalOverrides(): OverrideMap {
+    return this.readOverridesSync(this.globalFilePath());
   }
 
-  /** 热路径：同步取某项目被禁用的技能 id */
-  getProjectDisabledIds(projectPath?: string | null): ReadonlySet<string> {
+  /** 热路径：同步取某项目覆盖表 */
+  getProjectOverrides(projectPath?: string | null): OverrideMap {
     const file = this.projectFilePath(projectPath);
-    return file ? this.readDisabledSync(file) : EMPTY_SET;
+    return file ? this.readOverridesSync(file) : EMPTY_MAP;
   }
 
-  /** 单个技能是否在全局被禁用 */
-  isGlobalDisabled(skillId: string): boolean {
-    if (!skillId) return false;
-    return this.getGlobalDisabledIds().has(skillId.toLowerCase());
+  /**
+   * 全局对某技能的显式覆盖。
+   * @returns undefined = 未覆盖（默认启用）；true/false = 显式指定
+   */
+  getGlobalOverride(skillId: string): boolean | undefined {
+    if (!skillId) return undefined;
+    return this.getGlobalOverrides().get(skillId.toLowerCase());
   }
 
-  /** 单个技能是否在该项目被禁用 */
-  isProjectDisabled(projectPath: string | null | undefined, skillId: string): boolean {
-    if (!skillId) return false;
-    return this.getProjectDisabledIds(projectPath).has(skillId.toLowerCase());
+  /** 项目对某技能的显式覆盖；undefined = 继承全局 */
+  getProjectOverride(
+    projectPath: string | null | undefined,
+    skillId: string,
+  ): boolean | undefined {
+    if (!skillId) return undefined;
+    return this.getProjectOverrides(projectPath).get(skillId.toLowerCase());
   }
 
-  /** 全局配置的完整视图 */
+  /** 全局视图 */
   readGlobal(): SkillToggleConfig {
     return this.buildView(this.globalFilePath());
   }
 
-  /** 项目配置的完整视图 */
+  /** 项目视图 */
   readProject(projectPath: string): SkillToggleConfig {
-    const file = this.projectFilePath(projectPath) as string;
-    return this.buildView(file);
+    return this.buildView(this.projectFilePath(projectPath) as string);
   }
 
   // ─────────────────────────── 写入 ───────────────────────────
@@ -145,28 +157,32 @@ export class SkillToggleConfigService implements OnModuleInit {
   /**
    * 设置某技能在全局的启用状态。
    *
-   * @param enabled true = 从禁用列表移除（默认启用）；false = 加入禁用列表
+   * `enabled=true` 是默认态 → 删除覆盖（不留 `id: true` 噪音）；
+   * `enabled=false` → 写入显式 `false`。
    */
-  async setGlobalEnabled(skillId: string, enabled: boolean): Promise<SkillToggleConfig> {
+  async setGlobalEnabled(
+    skillId: string,
+    enabled: boolean,
+  ): Promise<SkillToggleConfig> {
     const file = this.globalFilePath();
-    return await this.setDisabledInFile(file, skillId, !enabled);
+    return await this.setOverrideInFile(file, skillId, enabled ? undefined : false);
   }
 
   /**
-   * 设置某技能在某项目的启用状态。
+   * 设置某技能在某项目的覆盖。
    *
-   * `enabled=true` 的语义是「恢复继承全局状态」，不是「强制启用」。
+   * @param enabled `true`/`false` = 显式覆盖全局；`undefined` = 删除覆盖（回到继承）
    */
-  async setProjectEnabled(
+  async setProjectOverride(
     projectPath: string,
     skillId: string,
-    enabled: boolean,
+    enabled: boolean | undefined,
   ): Promise<SkillToggleConfig> {
     const file = this.projectFilePath(projectPath);
     if (!file) {
       throw new Error("项目级技能开关需要项目目录，但当前没有关联项目");
     }
-    return await this.setDisabledInFile(file, skillId, !enabled);
+    return await this.setOverrideInFile(file, skillId, enabled);
   }
 
   /** 清空缓存（测试用 / 迁移后强制重读） */
@@ -176,10 +192,15 @@ export class SkillToggleConfigService implements OnModuleInit {
 
   // ─────────────────────────── 内部 ───────────────────────────
 
-  private async setDisabledInFile(
+  /**
+   * 写入单个覆盖。
+   *
+   * @param value undefined = 删除该键（回到继承）
+   */
+  private async setOverrideInFile(
     file: string,
     skillId: string,
-    disabled: boolean,
+    value: boolean | undefined,
   ): Promise<SkillToggleConfig> {
     const id = String(skillId || "").trim().toLowerCase();
     if (!SKILL_ID_PATTERN.test(id)) {
@@ -187,12 +208,12 @@ export class SkillToggleConfigService implements OnModuleInit {
     }
 
     // 读现状（绕开缓存直接读盘，避免用陈旧内容整表覆盖用户的并发编辑）
-    const current = this.readDisabledFromDisk(file);
-    const next = new Set(current);
-    if (disabled) next.add(id);
-    else next.delete(id);
+    const current = this.readOverridesFromDisk(file);
+    const next = new Map(current);
+    if (value === undefined) next.delete(id);
+    else next.set(id, value);
 
-    await this.writeDisabled(file, next);
+    await this.writeOverrides(file, next);
     this.cache.delete(this.cacheKey(file));
     return this.buildView(file);
   }
@@ -207,100 +228,114 @@ export class SkillToggleConfigService implements OnModuleInit {
     } catch {
       // 不存在：不算告警
     }
-    return {
-      file,
-      disabled: Array.from(this.readDisabledSync(file)).sort((a, b) =>
-        a.localeCompare(b),
-      ),
-      warnings,
-    };
+    const map = this.readOverridesSync(file);
+    const sorted: Record<string, boolean> = {};
+    for (const id of Array.from(map.keys()).sort((a, b) => a.localeCompare(b))) {
+      sorted[id] = map.get(id) as boolean;
+    }
+    return { file, overrides: sorted, warnings };
   }
 
-  /** 缓存键：项目路径归一化，避免 `D:\a` 与 `d:/a/` 裂成两份 */
+  /** 缓存键：路径归一化，避免 `D:\a` 与 `d:/a/` 裂成两份 */
   private cacheKey(file: string): string {
     return normalizeWorkspaceKey(file);
   }
 
   /**
-   * 同步读禁用集合（mtime + size 缓存）。
+   * 同步读覆盖表（mtime + size 缓存）。
    *
-   * 文件缺失 / stat 失败 / 解析失败 / 结构不合法 → 空集合。
+   * 文件缺失 / stat 失败 / 解析失败 / 结构不合法 → 空表（等于「全部继承」）。
    * 配置坏了不该让技能清单整段消失。
    */
-  private readDisabledSync(file: string): ReadonlySet<string> {
+  private readOverridesSync(file: string): OverrideMap {
     const key = this.cacheKey(file);
 
     let mtimeMs = -1;
     let size = -1;
     try {
       const st = fs.statSync(file);
-      if (!st.isFile()) return EMPTY_SET;
+      if (!st.isFile()) return EMPTY_MAP;
       mtimeMs = st.mtimeMs;
       size = st.size;
     } catch {
       this.cache.delete(key);
-      return EMPTY_SET;
+      return EMPTY_MAP;
     }
 
     const cached = this.cache.get(key);
     // mtime + size 双字段：Windows 上两次紧邻写入可能拿到同一 mtimeMs
     if (cached && cached.mtimeMs === mtimeMs && cached.size === size) {
-      return cached.disabled;
+      return cached.overrides;
     }
 
-    let disabled: ReadonlySet<string> = EMPTY_SET;
+    let overrides: OverrideMap = EMPTY_MAP;
     try {
       if (size <= MAX_CONFIG_BYTES) {
-        disabled = this.parseDisabled(fs.readFileSync(file, "utf-8"));
+        overrides = this.parseOverrides(fs.readFileSync(file, "utf-8"));
       }
     } catch (e: any) {
       this.logger.warn(`skill config unreadable, ignoring: ${file} (${e?.message ?? e})`);
     }
-    this.cache.set(key, { mtimeMs, size, disabled });
-    return disabled;
+    this.cache.set(key, { mtimeMs, size, overrides });
+    return overrides;
   }
 
   /** 直接读盘（不查缓存），用于「读-改-写」 */
-  private readDisabledFromDisk(file: string): string[] {
+  private readOverridesFromDisk(file: string): OverrideMap {
     try {
-      if (!fs.statSync(file).isFile()) return [];
-      return Array.from(this.parseDisabled(fs.readFileSync(file, "utf-8")));
+      if (!fs.statSync(file).isFile()) return EMPTY_MAP;
+      return this.parseOverrides(fs.readFileSync(file, "utf-8"));
     } catch {
-      return [];
+      return EMPTY_MAP;
     }
   }
 
   /**
-   * 解析 YAML：只认 `disabled` 字符串数组，其余字段忽略。
+   * 解析 YAML 覆盖表。
    *
+   * 优先读 `skills` 映射；不存在时回退旧格式 `disabled: [...]`（等价于 `false`）。
    * 逐项过滤而不是整体拒绝：一个坏条目不该让整份配置失效。
    */
-  private parseDisabled(raw: string): ReadonlySet<string> {
+  private parseOverrides(raw: string): OverrideMap {
     let doc: unknown;
     try {
       doc = yaml.load(raw);
     } catch (e: any) {
       this.logger.warn(`skill config YAML invalid: ${e?.message ?? e}`);
-      return EMPTY_SET;
+      return EMPTY_MAP;
     }
-    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return EMPTY_SET;
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return EMPTY_MAP;
 
-    const list = (doc as Record<string, unknown>).disabled;
-    if (!Array.isArray(list)) return EMPTY_SET;
+    const record = doc as Record<string, unknown>;
+    const overrides = new Map<string, boolean>();
 
-    const ids = new Set<string>();
-    for (const item of list) {
-      if (typeof item !== "string") continue;
-      const id = item.trim().toLowerCase();
-      if (!id || !SKILL_ID_PATTERN.test(id)) continue;
-      ids.add(id);
+    const skills = record.skills;
+    if (skills && typeof skills === "object" && !Array.isArray(skills)) {
+      for (const [key, value] of Object.entries(skills as Record<string, unknown>)) {
+        const id = key.trim().toLowerCase();
+        if (!id || !SKILL_ID_PATTERN.test(id)) continue;
+        if (typeof value !== "boolean") continue;
+        overrides.set(id, value);
+      }
+      return overrides;
     }
-    return ids;
+
+    // 旧格式兼容：disabled 列表 → 全部视为 false
+    const legacyDisabled = record.disabled;
+    if (Array.isArray(legacyDisabled)) {
+      for (const item of legacyDisabled) {
+        if (typeof item !== "string") continue;
+        const id = item.trim().toLowerCase();
+        if (!id || !SKILL_ID_PATTERN.test(id)) continue;
+        overrides.set(id, false);
+      }
+    }
+    return overrides;
   }
 
-  /** 原子写；空列表时删除文件 */
-  private async writeDisabled(file: string, ids: Set<string>): Promise<void> {
-    if (ids.size === 0) {
+  /** 原子写；空表时删除文件 */
+  private async writeOverrides(file: string, overrides: Map<string, boolean>): Promise<void> {
+    if (overrides.size === 0) {
       try {
         fs.unlinkSync(file);
       } catch {
@@ -310,14 +345,18 @@ export class SkillToggleConfigService implements OnModuleInit {
     }
 
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const sorted = Array.from(ids).sort((a, b) => a.localeCompare(b));
+    const sorted: Record<string, boolean> = {};
+    for (const id of Array.from(overrides.keys()).sort((a, b) => a.localeCompare(b))) {
+      sorted[id] = overrides.get(id) as boolean;
+    }
     const header = [
       "# 技能开关（全局：对所有项目生效；项目级配置在 <项目>/.guada/skills.yaml）",
-      "# - 列表中的技能被禁用；不在列表里 = 默认启用",
-      "# - 只能禁用不能在此强制启用：启用 = 从列表移除",
+      "# - 键存在即覆盖上层状态；键不存在 = 继承上层",
+      "# - 全局是顶层：继承落空时默认启用",
+      "# - 项目可双向覆盖全局（false 关掉 / true 打开）",
       "",
     ].join("\n");
-    const content = header + yaml.dump({ disabled: sorted }, { lineWidth: -1, noRefs: true });
+    const content = header + yaml.dump({ skills: sorted }, { lineWidth: -1, noRefs: true });
     await atomicWriteFile(file, content);
   }
 
@@ -347,8 +386,10 @@ export class SkillToggleConfigService implements OnModuleInit {
     if (legacyKeys.length === 0) return;
 
     if (legacyDisabled.length > 0) {
+      const overrides = new Map<string, boolean>();
+      for (const id of legacyDisabled) overrides.set(id, false);
       fs.mkdirSync(path.dirname(globalFile), { recursive: true });
-      await this.writeDisabled(globalFile, new Set(legacyDisabled));
+      await this.writeOverrides(globalFile, overrides);
       this.cache.delete(this.cacheKey(globalFile));
     }
 

@@ -36,7 +36,7 @@ describe("SkillOrchestrator 管理页可见性", () => {
       {} as any,
       { isPluginEnabled: () => true } as any,
       {} as any,
-      { getProjectDisabledIds: () => new Set(), isProjectDisabled: () => false, getGlobalDisabledIds: () => new Set(), isGlobalDisabled: () => false } as any,
+      { getProjectOverrides: () => new Map(), getProjectOverride: () => undefined, getGlobalOverrides: () => new Map(), getGlobalOverride: () => undefined } as any,
     );
     return { registry, orchestrator };
   }

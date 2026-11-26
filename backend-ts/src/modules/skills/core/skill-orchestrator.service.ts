@@ -89,8 +89,10 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     for (const s of all) merged.set(s.id, s);
     for (const s of wsSkills) merged.set(s.id, s); // 同名覆盖
 
-    // 项目级禁用（`.guada/skills.yaml`）在合并之后套用：
+    // 项目级覆盖（`.guada/skills.yaml`）在合并之后套用：
     // 它可能指向全局技能（继承项）也可能指向项目自带技能，必须按最终 id 判定。
+    // 因为覆盖可以「打开」全局已禁用的技能，所以必须从 registry 全量出发，
+    // 由覆盖结果决定最终 enabled，最后才做启用过滤。
     const withProject = this.applyProjectOverrides(
       Array.from(merged.values()),
       workspacePath,
@@ -102,48 +104,56 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 套用项目级禁用：命中的技能置 `enabled = false` 并打 `projectDisabled`。
+   * 套用项目级覆盖：命中项把 `enabled` 覆盖成项目值，并打 `projectOverride`。
    *
-   * 是**投影**，不写回注册表——注册表保存全局状态，项目限制只影响本次调用
-   * 的返回结果。这也保证「关掉某项目里的技能」不会改变全局视图。
+   * 是**投影**，不写回注册表——注册表保存全局状态，项目覆盖只影响本次调用
+   * 的返回结果。这也保证「某项目里的开关」不会改变全局视图。
    *
-   * 语义只能收紧：全局已禁用的技能本就不在列表里，这里不会把它翻成启用。
+   * 双向：项目既能 `false` 关掉全局已启用的技能，也能 `true` 打开全局已禁用的技能。
+   * 未命中的技能保持原状（继承全局）。
    */
   private applyProjectOverrides(
     skills: SkillDefinition[],
     workspacePath?: string,
   ): SkillDefinition[] {
     if (!workspacePath) return skills;
-    const disabled = this.toggleConfig.getProjectDisabledIds(workspacePath);
-    if (disabled.size === 0) return skills;
+    const overrides = this.toggleConfig.getProjectOverrides(workspacePath);
+    if (overrides.size === 0) return skills;
 
-    return skills.map((s) =>
-      disabled.has(s.id)
-        ? { ...s, enabled: false, projectDisabled: true }
-        : s,
-    );
+    return skills.map((s) => {
+      if (!overrides.has(s.id)) return s;
+      const value = overrides.get(s.id) as boolean;
+      return { ...s, enabled: value, projectOverride: value };
+    });
   }
 
   /**
-   * 该技能在某项目内的开关状态（供管理页判断开关是否可点）。
+   * 某技能在指定项目下的最终生效状态。
    *
-   * - `enabled`：最终是否可用（全局状态 ∩ 项目未禁用）
-   * - `lockedByGlobal`：全局已禁用 → 项目内无法启用（只允许收紧）
+   * 优先级：项目覆盖 > 全局覆盖 > 默认启用。
+   *
+   * @returns
+   * - `enabled`：最终是否可用
+   * - `source`：本次结论来自哪一层（`project` = 项目显式覆盖；`global` = 全局状态）
+   * - `projectOverride`：项目显式覆盖值；undefined = 继承全局
    */
-  resolveProjectEnabled(
+  resolveSkillEnabled(
     skillId: string,
     workspacePath?: string,
-  ): { enabled: boolean; lockedByGlobal: boolean; projectDisabled: boolean } {
-    const globalSkill = this.registry.get(String(skillId || "").toLowerCase());
-    const globalEnabled = globalSkill ? globalSkill.enabled !== false : false;
-    const projectDisabled = workspacePath
-      ? this.toggleConfig.isProjectDisabled(workspacePath, skillId)
-      : false;
-    return {
-      enabled: globalEnabled && !projectDisabled,
-      lockedByGlobal: !globalEnabled,
-      projectDisabled,
-    };
+  ): { enabled: boolean; source: "project" | "global"; projectOverride?: boolean } {
+    const id = String(skillId || "").toLowerCase();
+    const projectOverride = workspacePath
+      ? this.toggleConfig.getProjectOverride(workspacePath, id)
+      : undefined;
+
+    if (projectOverride !== undefined) {
+      return { enabled: projectOverride, source: "project", projectOverride };
+    }
+
+    const globalSkill = this.registry.get(id);
+    // 项目独有技能不在注册表里：存在即启用（除非项目显式关掉，上面已处理）
+    if (!globalSkill) return { enabled: true, source: "global" };
+    return { enabled: globalSkill.enabled !== false, source: "global" };
   }
 
   /**
@@ -431,11 +441,10 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
       // 对齐工具：插件关闭（当前会话岗位/智能体配置下未启用）或所属能力包
       // 本会话不可用（智能体禁用/子代理会话等）→ 该技能等同于不存在
       if (!this.isSkillVisibleInSession(skill, session)) return null;
-      // 项目级禁用：清单里已被过滤掉，学习入口也必须一致拒绝，
-      // 否则「列表看不到但技能名可学」会成为绕过开关的后门。
-      if (workspacePath && this.toggleConfig.isProjectDisabled(workspacePath, skill.id)) {
-        return null;
-      }
+      // 与清单保持同一口径：最终生效状态（项目覆盖 > 全局覆盖 > 默认启用）。
+      // 此前只校验了「项目禁用」，全局已禁用的技能仍能被按名学习——
+      // 那是「清单看不到却学得到」的后门，这里一并校验。
+      if (!this.resolveSkillEnabled(skill.id, workspacePath).enabled) return null;
       return this.loadRealSkill(skill);
     }
 

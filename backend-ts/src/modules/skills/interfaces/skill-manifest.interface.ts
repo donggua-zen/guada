@@ -97,12 +97,12 @@ export interface SkillDefinition {
    */
   overridden?: boolean;
   /**
-   * 被当前项目配置禁用：`<项目>/.guada/skills.yaml` 的 `disabled` 列表命中该 id。
+   * 项目级覆盖投影：本项目显式指定了该技能的开关（`true`/`false`）。
    *
-   * 同样是投影——注册表里的 `enabled` 仍是全局状态。前端据此把开关显示为
-   * 「本项目已禁用」，会话内清单与 skill_learn 也会据此过滤。
+   * 由 orchestrator 在「按项目查询」时赋值，不写回注册表——
+   * 注册表里的 `enabled` 仍是全局状态。无此字段 = 继承全局。
    */
-  projectDisabled?: boolean;
+  projectOverride?: boolean;
 }
 
 /**
