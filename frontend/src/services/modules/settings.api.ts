@@ -24,6 +24,13 @@ export interface SettingsApi {
   ): Promise<PluginQueryResult>;
   updateGlobalToolStatus(pluginId: string, enabled: boolean): Promise<{ success: boolean }>;
   reloadPlugin(pluginId: string): Promise<{ success: boolean }>;
+  /**
+   * 重扫插件目录（新增/变更/删除同步到运行态）。
+   *
+   * 后端只在启动时扫描一次插件目录，仅调 queryPlugins 看不到新拷进目录的插件；
+   * 「刷新」按钮因此需要先重扫。
+   */
+  rescanPlugins(): Promise<PluginRescanResult>;
   fetchToolDisplays(lang?: string): Promise<Record<string, ToolDisplayConfig>>;
   /** v4.1：单插件贡献概览（插件详情弹窗） */
   fetchPluginContributions(pluginId: string, lang?: string): Promise<PluginContributions>;
@@ -94,6 +101,15 @@ export interface PluginQueryTool {
 
 export interface PluginQueryResult {
   plugins: PluginQueryPlugin[]
+}
+
+/** 插件目录重扫结果（POST /plugins/rescan） */
+export interface PluginRescanResult {
+  added: string[]
+  reloaded: string[]
+  removed: string[]
+  unchanged: string[]
+  errors: Array<{ pluginId?: string; dir?: string; message: string }>
 }
 
 // ── v4.1：单插件贡献概览（GET /plugins/:pluginId/contributions）──
@@ -272,6 +288,12 @@ export const settingsApi: SettingsApi = {
 
   async reloadPlugin(this: ApiContext, pluginId: string) {
     return await this._request<{ success: boolean }>(`/plugins/reload/${pluginId}`, {
+      method: "POST",
+    });
+  },
+
+  async rescanPlugins(this: ApiContext) {
+    return await this._request<PluginRescanResult>("/plugins/rescan", {
       method: "POST",
     });
   },

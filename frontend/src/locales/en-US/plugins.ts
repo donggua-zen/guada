@@ -384,6 +384,9 @@ export default {
     loadFailed: 'Failed to load global tools',
     updateFailed: 'Failed to update global tool status',
     toggleFailed: 'Failed to update tool status',
+    rescanChanged:
+      'Plugin directory synced: {added} added, {reloaded} reloaded, {removed} removed',
+    rescanPartial: 'Some plugins failed to load',
   },
 
   // ── 关于面板 (AboutPanel.vue) ──

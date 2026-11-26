@@ -576,6 +576,19 @@ export class PluginsController {
   }
 
   /**
+   * 重新扫描插件目录（修复：改动目录后无需重启后端）
+   *
+   * 前端「刷新」此前只重拉 /plugins/query（读内存注册表），而目录扫描只在
+   * 后端启动时发生一次，于是手工拷进 plugins/ 的插件永远看不到。
+   * 本接口把磁盘状态同步到运行态：新增加载、指纹变化的卸载重载、目录消失的注销。
+   */
+  @UseGuards(AuthGuard)
+  @Post("rescan")
+  async rescanPlugins() {
+    return await this.externalLoader.rescanExternalPlugins();
+  }
+
+  /**
    * 重新加载插件（触发 onUnload -> onLoad 重新注册工具）
    * 外部插件优先使用 ExternalPluginLoader 的重载逻辑
    */
@@ -754,6 +767,9 @@ export class PluginsController {
               }
             : undefined,
           rev: pluginPath ? this.assetRev(pluginPath) : r.plugin.version || "1.0.0",
+          // 前端产物目录：manifest.entries.frontend 优先，缺省 frontend/dist。
+          // 历史上前端硬编码 frontend/dist，该字段写了不生效；现在下发给前端用于拼 URL。
+          assetDir: this.resolveFrontendAssetDir(r.plugin.entries?.frontend),
         });
       }
       // 插件主题注册表（v3：主题 = 皮肤；CSS/脚本/资源均走 assets 端点）
@@ -910,6 +926,15 @@ export class PluginsController {
     if (!/^[a-z][a-zA-Z0-9_]*$/.test(method)) {
       throw new BadRequestException("Invalid rpc method name");
     }
+    // 插件禁用后其能力应整体下线。工具/提示词/技能/HTTP 路由都由各自 resolver 跟随启停，
+    // 但 RPC 此前只查注册表（注册项在禁用后仍保留），导致「已禁用的插件还能被调用」。
+    const rpcInstance = this.pluginManager.getPlugin(pluginId);
+    if (!rpcInstance) {
+      throw new NotFoundException(`plugin ${pluginId} not found`);
+    }
+    if (!this.pluginManager.isPluginEnabled(pluginId)) {
+      throw new NotFoundException(`plugin ${pluginId} is disabled`);
+    }
     const handler = PluginRegistry.getRpcHandler(pluginId, method);
     if (!handler) {
       throw new BadRequestException(`rpc method ${pluginId}.${method} not found`);
@@ -972,6 +997,38 @@ export class PluginsController {
     } catch {
       return "";
     }
+  }
+
+  /**
+   * 归一化前端产物目录（manifest.entries.frontend）。
+   *
+   * 只接受「相对插件根的安全子路径」：禁止绝对路径、`..` 上跳、反斜杠与协议前缀。
+   * 非法或缺失时回退到约定的 `frontend/dist`，保证旧插件行为不变。
+   */
+  private resolveFrontendAssetDir(raw?: string): string {
+    const DEFAULT = "frontend/dist";
+    if (!raw || typeof raw !== "string") return DEFAULT;
+    const value = raw.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+    if (!value) return DEFAULT;
+    // 绝对路径 / 协议 / 上跳一律拒绝
+    if (
+      value.startsWith("/") ||
+      /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value) ||
+      value.split("/").some((seg) => seg === ".." || seg === ".")
+    ) {
+      this.logger.warn(
+        `manifest.entries.frontend 不是安全的相对路径，已回退 ${DEFAULT}: ${raw}`,
+      );
+      return DEFAULT;
+    }
+    // 与 assets 端点白名单保持一致：仅 [A-Za-z0-9_-] 段
+    if (!/^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/.test(value)) {
+      this.logger.warn(
+        `manifest.entries.frontend 含非法字符，已回退 ${DEFAULT}: ${raw}`,
+      );
+      return DEFAULT;
+    }
+    return value;
   }
 
   private assetRev(pluginPath: string): string {

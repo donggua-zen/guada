@@ -40,6 +40,15 @@ interface ExternalManifest {
   permissions?: PluginPermission[];
   /** v2：配置 schema（市场自动表单） */
   configSchema?: Record<string, any>;
+  /**
+   * 显式入口声明。
+   * - `backend`：优先于 `main`（v4 起真正生效；此前该字段未被读取）
+   * - `frontend`：前端产物目录，缺省 `frontend/dist`
+   */
+  entries?: {
+    backend?: string;
+    frontend?: string;
+  };
   providerApi?: number;
   provides?: {
     providerTypes?: string[];
@@ -51,10 +60,26 @@ interface ExternalManifest {
 /** 插件目录来源：builtin=随包分发（resources/plugins），dev=开发仓库目录，user=用户安装目录 */
 type PluginSource = "builtin" | "dev" | "user";
 
+/** 目录重扫结果：每个插件落到哪一个分组，前端据此提示 */
+export interface PluginRescanResult {
+  added: string[];
+  reloaded: string[];
+  removed: string[];
+  unchanged: string[];
+  errors: Array<{ pluginId?: string; dir?: string; message: string }>;
+}
+
 @Injectable()
 export class ExternalPluginLoader implements OnModuleInit {
   private readonly logger = new Logger(ExternalPluginLoader.name);
   private pluginPaths = new Map<string, { dir: string; source: PluginSource }>();
+  /**
+   * 已加载插件的目录指纹（manifest + 入口文件 mtime/size）。
+   * 只服务于 rescan：判断磁盘上的插件是否被改动过，避免每次重扫都重载全部插件。
+   */
+  private loadedFingerprints = new Map<string, string>();
+  /** 重扫串行化：并发点击刷新不重复加载同一目录（registerPlugin 会跳过重复 id，但 require 会重复执行） */
+  private rescanChain: Promise<unknown> = Promise.resolve();
   private requireQueue: Promise<void> = Promise.resolve();
   /** 安装 job 队列（前端轮询日志/取消） */
   private installJobs = new Map<
@@ -126,6 +151,178 @@ export class ExternalPluginLoader implements OnModuleInit {
     }
   }
 
+  /**
+   * 重新扫描插件目录，把磁盘状态同步到运行态。
+   *
+   * 启动时只扫描一次，之后新增/删除/修改目录都不会自动生效。此前前端「刷新」
+   * 只重拉 `/plugins/query`（读内存注册表），于是刚拷进 plugins/ 的插件永远看不到。
+   * 本方法补齐这一段：
+   *
+   * - 新增：目录里出现但运行态没有 → 加载；
+   * - 变更：已在运行态但目录指纹变了（manifest 或入口文件 mtime/size）→ 卸载后重载；
+   * - 删除：运行态有但磁盘上找不到（且来源不是 builtin）→ 注销并从列表移除。
+   *
+   * 单个插件失败不影响其余插件——结果里带上 errors，前端可提示。
+   */
+  async rescanExternalPlugins(): Promise<PluginRescanResult> {
+    const run = (): Promise<PluginRescanResult> => this.doRescan();
+    // 串行化：前一次扫描结束后再开始，避免两个并发请求同时 require 同一入口
+    const chained = this.rescanChain.then(run, run);
+    this.rescanChain = chained.then(
+      () => undefined,
+      () => undefined,
+    );
+    return chained;
+  }
+
+  private async doRescan(): Promise<PluginRescanResult> {
+    const result: PluginRescanResult = {
+      added: [],
+      reloaded: [],
+      removed: [],
+      unchanged: [],
+      errors: [],
+    };
+
+    /** 磁盘上仍然存在的插件目录（manifest.id → 目录） */
+    const onDisk = new Map<string, { dir: string; source: PluginSource }>();
+
+    for (const { dir, source } of this.getScanDirs()) {
+      if (!fs.existsSync(dir)) continue;
+
+      let entries: fs.Dirent[];
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      } catch (err: any) {
+        result.errors.push({ dir, message: `无法读取目录：${err.message}` });
+        continue;
+      }
+
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+        const pluginDir = path.join(dir, entry.name);
+
+        // 读 manifest 只为判断"这一目录是否已加载过"；真正的校验在 loadExternalPlugin
+        const manifest = this.readManifest(pluginDir);
+        const pluginId = manifest?.id ? String(manifest.id).trim() : "";
+        if (!pluginId) continue; // 没有 manifest 的目录由 loadExternalPlugin 记日志，这里静默跳过
+
+        // 同名 id 只认第一个（扫描顺序即优先级：builtin > user > dev）；
+        // 已被内建插件占用的 id 也不重复加载（loadExternalPlugin 内部还会再兜一次）
+        const builtinOccupied =
+          !this.pluginPaths.has(pluginId) && !!this.pluginManager.getPlugin(pluginId);
+        if (onDisk.has(pluginId) || builtinOccupied) continue;
+        onDisk.set(pluginId, { dir: pluginDir, source });
+      }
+    }
+
+    // ── 1. 新增 / 变更 ──
+    for (const [pluginId, info] of onDisk) {
+      const loaded = this.pluginPaths.get(pluginId);
+      const fingerprint = this.computeFingerprint(info.dir);
+
+      if (!loaded) {
+        // 运行态没有：新增。id 与内建插件冲突时 loadExternalPlugin 会跳过并记 warn
+        try {
+          await this.loadExternalPlugin(info.dir, info.source);
+          if (this.pluginPaths.has(pluginId)) {
+            result.added.push(pluginId);
+            this.loadedFingerprints.set(pluginId, fingerprint);
+          }
+        } catch (err: any) {
+          result.errors.push({ pluginId, dir: info.dir, message: err?.message ?? String(err) });
+        }
+        continue;
+      }
+
+      // 运行态已有：只有目录确实变了才重载（避免每次刷新都跑 onUnload/onLoad）
+      const before = this.loadedFingerprints.get(pluginId);
+      if (before === fingerprint) {
+        result.unchanged.push(pluginId);
+        continue;
+      }
+      try {
+        await this.reloadExternalPlugin(pluginId);
+        this.loadedFingerprints.set(pluginId, fingerprint);
+        result.reloaded.push(pluginId);
+        this.logger.log(`External plugin reloaded by rescan: ${pluginId}`);
+      } catch (err: any) {
+        result.errors.push({ pluginId, dir: info.dir, message: err?.message ?? String(err) });
+      }
+    }
+
+    // ── 2. 删除：运行态有、磁盘上没有 ──
+    for (const [pluginId, info] of [...this.pluginPaths]) {
+      if (onDisk.has(pluginId)) continue;
+      // 目录被删/移走后注销；builtin 随包分发，不因扫描目录变化而卸载
+      if (info.source === "builtin") continue;
+      if (fs.existsSync(info.dir)) continue; // 目录还在（只是本轮没扫到），保守保留
+      try {
+        await this.pluginManager.unregisterPlugin(pluginId);
+        this.pluginPaths.delete(pluginId);
+        this.loadedFingerprints.delete(pluginId);
+        result.removed.push(pluginId);
+        this.logger.log(`External plugin removed by rescan (dir gone): ${pluginId}`);
+      } catch (err: any) {
+        result.errors.push({ pluginId, dir: info.dir, message: err?.message ?? String(err) });
+      }
+    }
+
+    if (result.added.length || result.reloaded.length || result.removed.length) {
+      this.eventBus.emit("plugins.changed", {
+        pluginId: "*",
+        action: "rescan",
+        added: result.added,
+        reloaded: result.reloaded,
+        removed: result.removed,
+      });
+    }
+
+    this.logger.log(
+      `Plugin rescan: +${result.added.length} ~${result.reloaded.length} -${result.removed.length} ` +
+        `(${result.unchanged.length} unchanged, ${result.errors.length} error(s))`,
+    );
+    return result;
+  }
+
+  /**
+   * 目录指纹：manifest.json 与入口文件的 mtime/size。
+   *
+   * 用 mtime+size 而不是内容哈希：重扫要快，且改代码必然更新 mtime；
+   * 复制安装（保留 mtime 的工具）场景下 manifest 名称/id 变化也能被捕捉到。
+   */
+  private computeFingerprint(pluginDir: string): string {
+    const parts: string[] = [];
+    const manifestPath = path.join(pluginDir, "manifest.json");
+    const manifest = this.readManifest(pluginDir);
+    parts.push(`manifest:${this.statStamp(manifestPath)}`);
+
+    const entryCandidates = [
+      manifest?.provides?.providerAdapters,
+      manifest?.main,
+      "index.js",
+      "index.ts",
+    ].filter((x): x is string => typeof x === "string" && x.length > 0);
+
+    for (const entry of entryCandidates) {
+      const abs = path.join(pluginDir, entry);
+      if (fs.existsSync(abs)) {
+        parts.push(`entry:${entry}:${this.statStamp(abs)}`);
+        break;
+      }
+    }
+    return parts.join("|");
+  }
+
+  private statStamp(absPath: string): string {
+    try {
+      const stat = fs.statSync(absPath);
+      return `${stat.mtimeMs}-${stat.size}`;
+    } catch {
+      return "missing";
+    }
+  }
+
   async loadExternalPlugin(
     pluginDir: string,
     source: PluginSource,
@@ -174,9 +371,11 @@ export class ExternalPluginLoader implements OnModuleInit {
     // 5. 供应商包声明式类型卡（可选；纯数据包与代码包都可声明）
     const providerTypeCards = await this.loadProviderTypeCards(pluginDir, manifest);
 
-    // 6. 确定代码入口：provides.providerAdapters > main；
-    //    普通插件（无 provides）保持历史默认 index.js；纯数据包没有入口。
-    const explicitEntry = manifest.provides?.providerAdapters || manifest.main;
+    // 6. 确定代码入口：provides.providerAdapters > entries.backend > main
+    //    entries 是 v2 就写进契约的字段，但历史上两端都不读（写了不生效）。
+    //    现在后端侧真正支持：显式声明入口优先于 main，便于插件把入口放到子目录。
+    const explicitEntry =
+      manifest.provides?.providerAdapters || manifest.entries?.backend || manifest.main;
     const adapterEntryFile =
       explicitEntry ||
       (providerTypeCards.length === 0 ? "index.js" : undefined);
@@ -293,6 +492,8 @@ export class ExternalPluginLoader implements OnModuleInit {
 
     // 10. 记录路径（供 icon/uninstall 使用）
     this.pluginPaths.set(manifest.id, { dir: pluginDir, source });
+    // 10.1 记录指纹基线：rescan 据此判断目录是否被改动过
+    this.loadedFingerprints.set(manifest.id, this.computeFingerprint(pluginDir));
 
     this.logger.log(
       `External plugin loaded: ${manifest.name} (${manifest.id}) from ${source}` +
@@ -539,6 +740,7 @@ export class ExternalPluginLoader implements OnModuleInit {
 
     await fs.promises.rm(info.dir, { recursive: true, force: true });
     this.pluginPaths.delete(pluginId);
+    this.loadedFingerprints.delete(pluginId);
 
     this.logger.log(`External plugin uninstalled: ${pluginId}`);
   }

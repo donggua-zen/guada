@@ -10,7 +10,7 @@
       </div>
       <div class="plugins-view-bar__right">
         <template v-if="view === 'installed'">
-          <GdButton circle :loading="loading" v-tooltip="t('common.refresh')" @click="loadGlobalTools">
+          <GdButton circle :loading="loading" v-tooltip="t('common.refresh')" @click="refreshPlugins">
             <template #icon>
               <ArrowClockwise16Regular class="size-4" />
             </template>
@@ -313,6 +313,42 @@ async function loadGlobalTools() {
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * 刷新：先让后端重扫插件目录，再拉列表。
+ *
+ * 后端只在启动时扫描一次 plugins/ 目录，若这里只 queryPlugins（读内存注册表），
+ * 手工拷进目录的插件永远不出现。重扫是幂等的：只有新增/变更/删除才会动运行态。
+ */
+async function refreshPlugins() {
+  loading.value = true
+  error.value = null
+
+  try {
+    const rescan = await apiService.rescanPlugins()
+    const changed =
+      rescan.added.length + rescan.reloaded.length + rescan.removed.length > 0
+    if (rescan.errors.length) {
+      // 单个插件加载失败不阻塞整个列表：仍然展示已加载的插件，但要让用户知道
+      toast.error(
+        `${t('plugins.localTools.rescanPartial')}: ${rescan.errors[0].message}`,
+      )
+    } else if (changed) {
+      toast.success(
+        t('plugins.localTools.rescanChanged', {
+          added: rescan.added.length,
+          reloaded: rescan.reloaded.length,
+          removed: rescan.removed.length,
+        }),
+      )
+    }
+  } catch (err) {
+    // 重扫失败（如后端旧版本无该接口）时退化为纯刷新，不把列表卡住
+    console.warn('插件目录重扫失败，退化为仅刷新列表:', err)
+  }
+
+  await loadGlobalTools()
 }
 
 async function updateGlobalToolStatus(pluginId: string, enabled: boolean) {

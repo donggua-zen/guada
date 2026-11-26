@@ -387,6 +387,8 @@ export default {
     loadFailed: '加载全局工具失败',
     updateFailed: '更新全局工具状态失败',
     toggleFailed: '更新工具状态失败',
+    rescanChanged: '已同步插件目录：新增 {added} 个，重载 {reloaded} 个，移除 {removed} 个',
+    rescanPartial: '部分插件加载失败',
   },
 
   // ── 关于面板 (AboutPanel.vue) ──
